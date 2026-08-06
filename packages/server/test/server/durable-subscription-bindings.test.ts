@@ -109,7 +109,7 @@ describe("DurableSubscriptionBindings", () => {
       tenant: undefined,
       expiresAtMs: 1_000,
     });
-    const entered = Promise.withResolvers<void>();
+    const entered = Promise.withResolvers<undefined>();
     const firstController = new AbortController();
     const active = first.activate({
       id: binding.id,
@@ -118,10 +118,16 @@ describe("DurableSubscriptionBindings", () => {
       nowMs: 1,
       signal: firstController.signal,
       onDefinition: async (_definition, signal) => {
-        entered.resolve();
-        await new Promise<void>((resolve) =>
-          signal.addEventListener("abort", () => resolve(), { once: true }),
-        );
+        entered.resolve(undefined);
+        await new Promise<undefined>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              resolve(undefined);
+            },
+            { once: true },
+          );
+        });
       },
     });
     await entered.promise;
@@ -130,8 +136,9 @@ describe("DurableSubscriptionBindings", () => {
 
     await restarted.recoverActive({
       nowMs: 2,
-      onDefinition: async (definition) => {
+      onDefinition: (definition) => {
         definitions.push(definition.bytes.slice());
+        return Promise.resolve();
       },
     });
 
@@ -150,8 +157,9 @@ describe("DurableSubscriptionBindings", () => {
     await active;
     await restarted.recoverActive({
       nowMs: 2,
-      onDefinition: async (definition) => {
+      onDefinition: (definition) => {
         definitions.push(definition.bytes.slice());
+        return Promise.resolve();
       },
     });
     expect(definitions).toEqual([new Uint8Array([7])]);
@@ -177,7 +185,7 @@ describe("DurableSubscriptionBindings", () => {
       tenant: undefined,
       expiresAtMs: 1_000,
     });
-    const started = Promise.withResolvers<void>();
+    const started = Promise.withResolvers<undefined>();
     const controller = new AbortController();
     const active = first.activate({
       id: binding.id,
@@ -186,10 +194,16 @@ describe("DurableSubscriptionBindings", () => {
       nowMs: 1,
       signal: controller.signal,
       onDefinition: async (_definition, signal) => {
-        started.resolve();
-        await new Promise<void>((resolve) =>
-          signal.addEventListener("abort", () => resolve(), { once: true }),
-        );
+        started.resolve(undefined);
+        await new Promise<undefined>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              resolve(undefined);
+            },
+            { once: true },
+          );
+        });
       },
     });
     await started.promise;
@@ -200,16 +214,15 @@ describe("DurableSubscriptionBindings", () => {
     await expect(
       restarted.recoverActive({
         nowMs: 2,
-        onDefinition: async () => {
-          throw new Error("native rehydration failed");
-        },
+        onDefinition: () => Promise.reject(new Error("native rehydration failed")),
       }),
     ).rejects.toThrow("native rehydration failed");
     const recovered: Uint8Array[] = [];
     await restarted.recoverActive({
       nowMs: 2,
-      onDefinition: async (definition) => {
+      onDefinition: (definition) => {
         recovered.push(definition.bytes.slice());
+        return Promise.resolve();
       },
     });
     expect(recovered).toEqual([new Uint8Array([9])]);
@@ -225,7 +238,7 @@ describe("DurableSubscriptionBindings", () => {
       tenant: undefined,
       expiresAtMs: 1_000,
     });
-    const started = Promise.withResolvers<void>();
+    const started = Promise.withResolvers<undefined>();
     const active = first.activate({
       id: binding.id,
       principalFingerprint: "principal",
@@ -233,22 +246,28 @@ describe("DurableSubscriptionBindings", () => {
       nowMs: 1,
       signal: new AbortController().signal,
       onDefinition: async (_definition, signal) => {
-        started.resolve();
-        await new Promise<void>((resolve) =>
-          signal.addEventListener("abort", () => resolve(), { once: true }),
-        );
+        started.resolve(undefined);
+        await new Promise<undefined>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              resolve(undefined);
+            },
+            { once: true },
+          );
+        });
       },
     });
     await started.promise;
     await first.close();
     await active;
     const restarted = registry(factory, "recovery-cancel");
-    const rehydrating = Promise.withResolvers<void>();
-    const release = Promise.withResolvers<void>();
+    const rehydrating = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
     const recovering = restarted.recoverActive({
       nowMs: 2,
       onDefinition: async () => {
-        rehydrating.resolve();
+        rehydrating.resolve(undefined);
         await release.promise;
       },
     });
@@ -263,7 +282,7 @@ describe("DurableSubscriptionBindings", () => {
         onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "closed" });
-    release.resolve();
+    release.resolve(undefined);
     await recovering;
     await expect(
       restarted.activate({

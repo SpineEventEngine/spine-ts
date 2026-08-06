@@ -1342,7 +1342,9 @@ describe("SubscriptionGateway", () => {
       });
     fixture.options.creator.subscribe = () =>
       new Promise((resolve) => {
-        releaseBackend = () => resolve();
+        releaseBackend = () => {
+          resolve();
+        };
       });
     const subscriptionGateway = gateway(fixture);
     const pending = subscriptionGateway.handle(request("Subscribe", topic));
@@ -1507,13 +1509,14 @@ describe("SubscriptionGateway", () => {
   it("cancels the logical coordinator after durable binding persistence fails", async () => {
     const fixture = setup();
     let cancellations = 0;
-    fixture.options.creator.cancel = async () => {
+    fixture.options.creator.cancel = () => {
       cancellations++;
+      return Promise.resolve();
     };
     const subscriptionGateway = new SubscriptionGateway({
       ...fixture.options,
       bindings: {
-        create: async () => {
+        create: () => {
           throw new Error("durable binding write failed");
         },
         activate: fixture.bindings.activate.bind(fixture.bindings),

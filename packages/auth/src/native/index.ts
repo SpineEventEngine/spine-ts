@@ -28,7 +28,6 @@ import type {
   PublicSubscriptionWire,
   SubscriptionAbortSignal,
   SubscriptionCreator,
-  SubscriptionTopicWire,
   SubscriptionUpdateSink,
   SubscriptionUpdateWire,
   SubscriptionGateway,

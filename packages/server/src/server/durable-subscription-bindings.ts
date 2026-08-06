@@ -513,11 +513,14 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         throw error;
       }
       const {
-        ownerId: _ownerId,
-        leaseUntilMs: _leaseUntilMs,
-        reason: _reason,
+        ownerId,
+        leaseUntilMs,
+        reason,
         ...inactive
       } = claimed;
+      void ownerId;
+      void leaseUntilMs;
+      void reason;
       const recovered: Binding = {
         ...inactive,
         revision: claimed.revision + 1,

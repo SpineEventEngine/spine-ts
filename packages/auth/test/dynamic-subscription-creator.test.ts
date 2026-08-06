@@ -12,7 +12,9 @@ import {
 describe("DynamicSubscriptionCreator", () => {
   it("keeps native children inactive until the public activation request", async () => {
     const starts: string[] = [];
-    const owner = new DynamicUnaryForwarder({ create: async (node) => client(node.id, starts) });
+    const owner = new DynamicUnaryForwarder({
+      create: (node) => Promise.resolve(client(node.id, starts)),
+    });
     const creator = new DynamicSubscriptionCreator(owner);
     const node = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
     const wire = subscription();
@@ -22,7 +24,7 @@ describe("DynamicSubscriptionCreator", () => {
 
     expect(starts).toEqual([]);
     const controller = new AbortController();
-    const activation = creator.activate({ wire, updates: async () => {} }, controller.signal);
+    const activation = creator.activate({ wire, updates: noUpdates }, controller.signal);
     await Promise.resolve();
     expect(starts).toEqual(["a"]);
     controller.abort();
@@ -30,20 +32,27 @@ describe("DynamicSubscriptionCreator", () => {
   });
 
   it("keeps activation open and relays updates until its downstream signal aborts", async () => {
-    const entered = deferred<void>();
-    const delivered = deferred<void>();
+    const entered = deferred();
+    const delivered = deferred();
     const controller = new AbortController();
     const owner = new DynamicUnaryForwarder({
-      create: async (node) => ({
-        ...client(node.id, []),
-        activate: async (request, signal) => {
-          entered.resolve();
-          await request.updates({ kind: "subscription-update", bytes: new Uint8Array([1]) });
-          await new Promise<void>((resolve) =>
-            signal.addEventListener("abort", () => resolve(), { once: true }),
-          );
-        },
-      }),
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          activate: async (request, signal) => {
+            entered.resolve(undefined);
+            await request.updates({ kind: "subscription-update", bytes: new Uint8Array([1]) });
+            await new Promise<void>((resolve) => {
+              signal.addEventListener(
+                "abort",
+                () => {
+                  resolve();
+                },
+                { once: true },
+              );
+            });
+          },
+        }),
     });
     const creator = new DynamicSubscriptionCreator(owner);
     const wire = subscription();
@@ -53,8 +62,9 @@ describe("DynamicSubscriptionCreator", () => {
     const activation = creator.activate(
       {
         wire,
-        updates: async () => {
-          delivered.resolve();
+        updates: () => {
+          delivered.resolve(undefined);
+          return Promise.resolve();
         },
       },
       controller.signal,
@@ -72,20 +82,21 @@ describe("DynamicSubscriptionCreator", () => {
   });
 
   it("does not activate a child until its concurrent add has installed it", async () => {
-    const entered = deferred<void>();
+    const entered = deferred();
     const release = deferred<{
       readonly kind: "backend-subscription-envelope";
       readonly bytes: Uint8Array;
     }>();
     const starts: string[] = [];
     const owner = new DynamicUnaryForwarder({
-      create: async (node) => ({
-        ...client(node.id, starts),
-        subscribe: async (_request, signal) => {
-          entered.resolve();
-          return awaitAbortable(release.promise, signal);
-        },
-      }),
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, starts),
+          subscribe: async (_request, signal) => {
+            entered.resolve(undefined);
+            return awaitAbortable(release.promise, signal);
+          },
+        }),
     });
     const creator = new DynamicSubscriptionCreator(owner);
     const node = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
@@ -95,7 +106,7 @@ describe("DynamicSubscriptionCreator", () => {
     const creating = creator.subscribe(wire, new AbortController().signal);
     await entered.promise;
     const controller = new AbortController();
-    const activating = creator.activate({ wire, updates: async () => {} }, controller.signal);
+    const activating = creator.activate({ wire, updates: noUpdates }, controller.signal);
     release.resolve({ kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) });
 
     await creating;
@@ -106,7 +117,9 @@ describe("DynamicSubscriptionCreator", () => {
 
   it("retains an active definition while no nodes exist and resumes it after recovery", async () => {
     const starts: string[] = [];
-    const owner = new DynamicUnaryForwarder({ create: async (node) => client(node.id, starts) });
+    const owner = new DynamicUnaryForwarder({
+      create: (node) => Promise.resolve(client(node.id, starts)),
+    });
     const creator = new DynamicSubscriptionCreator(owner);
     const node = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
     const wire = subscription();
@@ -114,7 +127,7 @@ describe("DynamicSubscriptionCreator", () => {
     await owner.reconcile([node]);
     await creator.subscribe(wire, new AbortController().signal);
     const controller = new AbortController();
-    const activation = creator.activate({ wire, updates: async () => {} }, controller.signal);
+    const activation = creator.activate({ wire, updates: noUpdates }, controller.signal);
     await Promise.resolve();
     await owner.reconcile([]);
     await owner.reconcile([node]);
@@ -125,25 +138,32 @@ describe("DynamicSubscriptionCreator", () => {
   });
 
   it("replaces a child after an unexpected activation completion", async () => {
-    const firstActivation = deferred<void>();
-    const firstFinished = deferred<void>();
+    const firstActivation = deferred();
+    const firstFinished = deferred();
     const starts: string[] = [];
     let activations = 0;
     const owner = new DynamicUnaryForwarder({
-      create: async (node) => ({
-        ...client(node.id, starts),
-        activate: async (_request, signal) => {
-          activations++;
-          if (activations === 1) {
-            await firstActivation.promise;
-            firstFinished.resolve();
-            return;
-          }
-          await new Promise<void>((resolve) => {
-            signal.addEventListener("abort", () => resolve(), { once: true });
-          });
-        },
-      }),
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, starts),
+          activate: async (_request, signal) => {
+            activations++;
+            if (activations === 1) {
+              await firstActivation.promise;
+              firstFinished.resolve(undefined);
+              return;
+            }
+            await new Promise<void>((resolve) => {
+              signal.addEventListener(
+                "abort",
+                () => {
+                  resolve();
+                },
+                { once: true },
+              );
+            });
+          },
+        }),
     });
     const creator = new DynamicSubscriptionCreator(owner);
     const node = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
@@ -152,11 +172,11 @@ describe("DynamicSubscriptionCreator", () => {
     await owner.reconcile([node]);
     await creator.subscribe(wire, new AbortController().signal);
     const controller = new AbortController();
-    const activation = creator.activate({ wire, updates: async () => {} }, controller.signal);
+    const activation = creator.activate({ wire, updates: noUpdates }, controller.signal);
     await Promise.resolve();
     expect(activations).toBe(1);
 
-    firstActivation.resolve();
+    firstActivation.resolve(undefined);
     await firstFinished.promise;
     await Promise.resolve();
     await owner.reconcile([node]);
@@ -169,7 +189,9 @@ describe("DynamicSubscriptionCreator", () => {
   });
 
   it("rejects a new native subscription while membership is empty", async () => {
-    const owner = new DynamicUnaryForwarder({ create: async (node) => client(node.id, []) });
+    const owner = new DynamicUnaryForwarder({
+      create: (node) => Promise.resolve(client(node.id, [])),
+    });
     const creator = new DynamicSubscriptionCreator(owner);
 
     await expect(creator.subscribe(subscription(), new AbortController().signal)).rejects.toThrow(
@@ -180,16 +202,19 @@ describe("DynamicSubscriptionCreator", () => {
   it("rejects and compensates an oversized native child envelope", async () => {
     let disposals = 0;
     const owner = new DynamicUnaryForwarder({
-      create: async (node) => ({
-        ...client(node.id, []),
-        subscribe: async () => ({
-          kind: "backend-subscription-envelope" as const,
-          bytes: new Uint8Array([1, 2]),
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          subscribe: () =>
+            Promise.resolve({
+              kind: "backend-subscription-envelope" as const,
+              bytes: new Uint8Array([1, 2]),
+            }),
+          dispose: () => {
+            disposals++;
+            return Promise.resolve();
+          },
         }),
-        dispose: async () => {
-          disposals++;
-        },
-      }),
     });
     const creator = new DynamicSubscriptionCreator(owner);
 
@@ -203,13 +228,15 @@ describe("DynamicSubscriptionCreator", () => {
   it("uses the owner's default native envelope limit for direct creation", async () => {
     const owner = new DynamicUnaryForwarder({
       maxBackendEnvelopeBytes: 1,
-      create: async (node) => ({
-        ...client(node.id, []),
-        subscribe: async () => ({
-          kind: "backend-subscription-envelope" as const,
-          bytes: new Uint8Array([1, 2]),
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          subscribe: () =>
+            Promise.resolve({
+              kind: "backend-subscription-envelope" as const,
+              bytes: new Uint8Array([1, 2]),
+            }),
         }),
-      }),
     });
     const creator = new DynamicSubscriptionCreator(owner);
 
@@ -222,13 +249,15 @@ describe("DynamicSubscriptionCreator", () => {
   it("accepts a custom owner native envelope limit", async () => {
     const owner = new DynamicUnaryForwarder({
       maxBackendEnvelopeBytes: 2,
-      create: async (node) => ({
-        ...client(node.id, []),
-        subscribe: async () => ({
-          kind: "backend-subscription-envelope" as const,
-          bytes: new Uint8Array([1, 2]),
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          subscribe: () =>
+            Promise.resolve({
+              kind: "backend-subscription-envelope" as const,
+              bytes: new Uint8Array([1, 2]),
+            }),
         }),
-      }),
     });
     const creator = new DynamicSubscriptionCreator(owner);
 
@@ -245,7 +274,7 @@ describe("DynamicSubscriptionCreator", () => {
         () =>
           new DynamicUnaryForwarder({
             maxBackendEnvelopeBytes,
-            create: async (node) => client(node.id, []),
+            create: (node) => Promise.resolve(client(node.id, [])),
           }),
       ).toThrow("maxBackendEnvelopeBytes must be a positive safe integer.");
     },
@@ -254,16 +283,21 @@ describe("DynamicSubscriptionCreator", () => {
   it("compensates every installed child when one current node rejects creation", async () => {
     const disposals: string[] = [];
     const owner = new DynamicUnaryForwarder({
-      create: async (node) => ({
-        ...client(node.id, []),
-        subscribe: async () => {
-          if (node.id === "b") throw new Error("native creation failed");
-          return { kind: "backend-subscription-envelope" as const, bytes: new Uint8Array([1]) };
-        },
-        dispose: async () => {
-          disposals.push(node.id);
-        },
-      }),
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          subscribe: () => {
+            if (node.id === "b") return Promise.reject(new Error("native creation failed"));
+            return Promise.resolve({
+              kind: "backend-subscription-envelope" as const,
+              bytes: new Uint8Array([1]),
+            });
+          },
+          dispose: () => {
+            disposals.push(node.id);
+            return Promise.resolve();
+          },
+        }),
     });
     const creator = new DynamicSubscriptionCreator(owner);
 
@@ -279,7 +313,9 @@ describe("DynamicSubscriptionCreator", () => {
   });
 
   it("rejects creation after an empty desired membership snapshot before stale clients close", async () => {
-    const owner = new DynamicUnaryForwarder({ create: async (node) => client(node.id, []) });
+    const owner = new DynamicUnaryForwarder({
+      create: (node) => Promise.resolve(client(node.id, [])),
+    });
     const creator = new DynamicSubscriptionCreator(owner);
     const node = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
 
@@ -294,20 +330,21 @@ describe("DynamicSubscriptionCreator", () => {
   it("aborts a delayed start when cancellation removes its definition", async () => {
     let aborted = false;
     const owner = new DynamicUnaryForwarder({
-      create: async (node) => ({
-        ...client(node.id, []),
-        subscribe: async (_request, signal) =>
-          new Promise((_, reject) => {
-            signal.addEventListener(
-              "abort",
-              () => {
-                aborted = true;
-                reject(new Error("cancelled"));
-              },
-              { once: true },
-            );
-          }),
-      }),
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          subscribe: (_request, signal) =>
+            new Promise((_, reject) => {
+              signal.addEventListener(
+                "abort",
+                () => {
+                  aborted = true;
+                  reject(new Error("cancelled"));
+                },
+                { once: true },
+              );
+            }),
+        }),
     });
     const creator = new DynamicSubscriptionCreator(owner);
     const node = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
@@ -325,20 +362,21 @@ describe("DynamicSubscriptionCreator", () => {
   it("aborts and joins a delayed start during close", async () => {
     let aborted = false;
     const owner = new DynamicUnaryForwarder({
-      create: async (node) => ({
-        ...client(node.id, []),
-        subscribe: async (_request, signal) =>
-          new Promise((_, reject) => {
-            signal.addEventListener(
-              "abort",
-              () => {
-                aborted = true;
-                reject(new Error("closed"));
-              },
-              { once: true },
-            );
-          }),
-      }),
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          subscribe: (_request, signal) =>
+            new Promise((_, reject) => {
+              signal.addEventListener(
+                "abort",
+                () => {
+                  aborted = true;
+                  reject(new Error("closed"));
+                },
+                { once: true },
+              );
+            }),
+        }),
     });
     const creator = new DynamicSubscriptionCreator(owner);
     const node = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
@@ -355,7 +393,7 @@ describe("DynamicSubscriptionCreator", () => {
   it("uses the shared dynamic owner to reconcile added and removed native streams", async () => {
     const starts: string[] = [];
     const owner = new DynamicUnaryForwarder({
-      create: async (node) => client(node.id, starts),
+      create: (node) => Promise.resolve(client(node.id, starts)),
     });
     const creator = new DynamicSubscriptionCreator(owner);
     const a = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
@@ -365,7 +403,7 @@ describe("DynamicSubscriptionCreator", () => {
     await owner.reconcile([a]);
     await creator.subscribe(wire, new AbortController().signal);
     const controller = new AbortController();
-    const activation = creator.activate({ wire, updates: async () => {} }, controller.signal);
+    const activation = creator.activate({ wire, updates: noUpdates }, controller.signal);
     await Promise.resolve();
     await owner.reconcile([a, b]);
     await owner.reconcile([b]);
@@ -377,7 +415,9 @@ describe("DynamicSubscriptionCreator", () => {
 
   it("keeps one child per node through reordered replayed snapshots", async () => {
     const starts: string[] = [];
-    const owner = new DynamicUnaryForwarder({ create: async (node) => client(node.id, starts) });
+    const owner = new DynamicUnaryForwarder({
+      create: (node) => Promise.resolve(client(node.id, starts)),
+    });
     const creator = new DynamicSubscriptionCreator(owner);
     const a = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
     const b = new ApplicationNode({ id: "b", endpoint: "http://10.0.0.2" });
@@ -386,7 +426,7 @@ describe("DynamicSubscriptionCreator", () => {
     await owner.reconcile([a, b]);
     await creator.subscribe(wire, new AbortController().signal);
     const controller = new AbortController();
-    const activation = creator.activate({ wire, updates: async () => {} }, controller.signal);
+    const activation = creator.activate({ wire, updates: noUpdates }, controller.signal);
     await Promise.resolve();
     await owner.reconcile([b, a]);
     await owner.reconcile([a, b]);
@@ -399,21 +439,24 @@ describe("DynamicSubscriptionCreator", () => {
   it("starts one child on every discovered node without a 32-node cap", async () => {
     const starts: string[] = [];
     const owner = new DynamicUnaryForwarder({
-      create: async (node) => client(node.id, starts),
+      create: (node) => Promise.resolve(client(node.id, starts)),
       maxConcurrentStarts: 4,
     });
     const creator = new DynamicSubscriptionCreator(owner);
     const nodes = Array.from(
       { length: 40 },
       (_, index) =>
-        new ApplicationNode({ id: `node-${index.toString()}`, endpoint: `http://10.0.0.${index}` }),
+        new ApplicationNode({
+          id: `node-${String(index)}`,
+          endpoint: `http://10.0.0.${String(index)}`,
+        }),
     );
 
     const wire = subscription();
     await owner.reconcile(nodes);
     await creator.subscribe(wire, new AbortController().signal);
     const controller = new AbortController();
-    const activation = creator.activate({ wire, updates: async () => {} }, controller.signal);
+    const activation = creator.activate({ wire, updates: noUpdates }, controller.signal);
     await Promise.resolve();
 
     expect(starts).toHaveLength(40);
@@ -427,22 +470,26 @@ describe("DynamicSubscriptionCreator", () => {
     let peak = 0;
     const owner = new DynamicUnaryForwarder({
       maxConcurrentStarts: 3,
-      create: async (node) => ({
-        ...client(node.id, []),
-        subscribe: async () => {
-          active++;
-          peak = Math.max(peak, active);
-          await Promise.resolve();
-          active--;
-          return { kind: "backend-subscription-envelope" as const, bytes: new Uint8Array([1]) };
-        },
-      }),
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          subscribe: async () => {
+            active++;
+            peak = Math.max(peak, active);
+            await Promise.resolve();
+            active--;
+            return { kind: "backend-subscription-envelope" as const, bytes: new Uint8Array([1]) };
+          },
+        }),
     });
     const creator = new DynamicSubscriptionCreator(owner);
     const nodes = Array.from(
       { length: 40 },
       (_, index) =>
-        new ApplicationNode({ id: `node-${index.toString()}`, endpoint: `http://10.0.0.${index}` }),
+        new ApplicationNode({
+          id: `node-${String(index)}`,
+          endpoint: `http://10.0.0.${String(index)}`,
+        }),
     );
 
     await owner.reconcile(nodes);
@@ -455,24 +502,26 @@ describe("DynamicSubscriptionCreator", () => {
     let activationAborted = false;
     let disposals = 0;
     const owner = new DynamicUnaryForwarder({
-      create: async (node) => ({
-        ...client(node.id, []),
-        activate: async (_request, signal) => {
-          await new Promise<void>((resolve) => {
-            signal.addEventListener(
-              "abort",
-              () => {
-                activationAborted = true;
-                resolve();
-              },
-              { once: true },
-            );
-          });
-        },
-        dispose: async () => {
-          disposals++;
-        },
-      }),
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          activate: async (_request, signal) => {
+            await new Promise<void>((resolve) => {
+              signal.addEventListener(
+                "abort",
+                () => {
+                  activationAborted = true;
+                  resolve();
+                },
+                { once: true },
+              );
+            });
+          },
+          dispose: () => {
+            disposals++;
+            return Promise.resolve();
+          },
+        }),
     });
     const creator = new DynamicSubscriptionCreator(owner);
     const node = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
@@ -481,7 +530,7 @@ describe("DynamicSubscriptionCreator", () => {
     await owner.reconcile([node]);
     await creator.subscribe(wire, new AbortController().signal);
     const controller = new AbortController();
-    const activation = creator.activate({ wire, updates: async () => {} }, controller.signal);
+    const activation = creator.activate({ wire, updates: noUpdates }, controller.signal);
     await Promise.resolve();
     await owner.reconcile([]);
 
@@ -494,13 +543,15 @@ describe("DynamicSubscriptionCreator", () => {
   it("retries failed cleanup on the next membership reconciliation", async () => {
     let attempts = 0;
     const owner = new DynamicUnaryForwarder({
-      create: async (node) => ({
-        ...client(node.id, []),
-        dispose: async () => {
-          attempts++;
-          if (attempts === 1) throw new Error("temporary cleanup failure");
-        },
-      }),
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          dispose: () => {
+            attempts++;
+            if (attempts === 1) throw new Error("temporary cleanup failure");
+            return Promise.resolve();
+          },
+        }),
     });
     const creator = new DynamicSubscriptionCreator(owner);
     const node = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
@@ -509,7 +560,7 @@ describe("DynamicSubscriptionCreator", () => {
     await owner.reconcile([node]);
     await creator.subscribe(wire, new AbortController().signal);
     const controller = new AbortController();
-    const activation = creator.activate({ wire, updates: async () => {} }, controller.signal);
+    const activation = creator.activate({ wire, updates: noUpdates }, controller.signal);
     await Promise.resolve();
     await owner.reconcile([]);
     await owner.reconcile([]);
@@ -521,20 +572,28 @@ describe("DynamicSubscriptionCreator", () => {
 
   it("cancels every active native child before logical activation ends", async () => {
     let disposed = 0;
-    const entered = deferred<void>();
+    const entered = deferred();
     const owner = new DynamicUnaryForwarder({
-      create: async (node) => ({
-        ...client(node.id, []),
-        activate: async (_request, signal) => {
-          entered.resolve();
-          await new Promise<void>((resolve) =>
-            signal.addEventListener("abort", () => resolve(), { once: true }),
-          );
-        },
-        dispose: async () => {
-          disposed++;
-        },
-      }),
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          activate: async (_request, signal) => {
+            entered.resolve(undefined);
+            await new Promise<void>((resolve) => {
+              signal.addEventListener(
+                "abort",
+                () => {
+                  resolve();
+                },
+                { once: true },
+              );
+            });
+          },
+          dispose: () => {
+            disposed++;
+            return Promise.resolve();
+          },
+        }),
     });
     const creator = new DynamicSubscriptionCreator(owner);
     const wire = subscription();
@@ -542,7 +601,7 @@ describe("DynamicSubscriptionCreator", () => {
 
     await owner.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
     await creator.subscribe(wire, new AbortController().signal, 100);
-    const activation = creator.activate({ wire, updates: async () => {} }, controller.signal);
+    const activation = creator.activate({ wire, updates: noUpdates }, controller.signal);
     await entered.promise;
     await creator.cancel({ wire }, new AbortController().signal);
 
@@ -552,21 +611,23 @@ describe("DynamicSubscriptionCreator", () => {
   });
 
   it("disposes a cancelled child before a concurrent node removal closes its client", async () => {
-    const entered = deferred<void>();
-    const release = deferred<void>();
+    const entered = deferred();
+    const release = deferred();
     const order: string[] = [];
     const owner = new DynamicUnaryForwarder({
-      create: async (node) => ({
-        ...client(node.id, []),
-        dispose: async () => {
-          order.push("dispose");
-          entered.resolve();
-          await release.promise;
-        },
-        close: async () => {
-          order.push("close");
-        },
-      }),
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          dispose: async () => {
+            order.push("dispose");
+            entered.resolve(undefined);
+            await release.promise;
+          },
+          close: () => {
+            order.push("close");
+            return Promise.resolve();
+          },
+        }),
     });
     const creator = new DynamicSubscriptionCreator(owner);
     const node = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
@@ -579,31 +640,36 @@ describe("DynamicSubscriptionCreator", () => {
     const removing = owner.reconcile([]);
     await Promise.resolve();
     expect(order).toEqual(["dispose"]);
-    release.resolve();
+    release.resolve(undefined);
     await Promise.all([cancelling, removing]);
     expect(order).toEqual(["dispose", "close"]);
   });
 
   it("disposes a failed creation child before concurrent node removal closes its client", async () => {
-    const entered = deferred<void>();
-    const release = deferred<void>();
+    const entered = deferred();
+    const release = deferred();
     const order: string[] = [];
     const owner = new DynamicUnaryForwarder({
-      create: async (node) => ({
-        ...client(node.id, []),
-        subscribe: async () => {
-          if (node.id === "b") throw new Error("native creation failed");
-          return { kind: "backend-subscription-envelope" as const, bytes: new Uint8Array([1]) };
-        },
-        dispose: async () => {
-          order.push("dispose");
-          entered.resolve();
-          await release.promise;
-        },
-        close: async () => {
-          order.push("close");
-        },
-      }),
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          subscribe: () => {
+            if (node.id === "b") return Promise.reject(new Error("native creation failed"));
+            return Promise.resolve({
+              kind: "backend-subscription-envelope" as const,
+              bytes: new Uint8Array([1]),
+            });
+          },
+          dispose: async () => {
+            order.push("dispose");
+            entered.resolve(undefined);
+            await release.promise;
+          },
+          close: () => {
+            order.push("close");
+            return Promise.resolve();
+          },
+        }),
     });
     const creator = new DynamicSubscriptionCreator(owner);
     const a = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
@@ -615,7 +681,7 @@ describe("DynamicSubscriptionCreator", () => {
     const removing = owner.reconcile([]);
     await Promise.resolve();
     expect(order).toEqual(["dispose"]);
-    release.resolve();
+    release.resolve(undefined);
     await expect(creating).rejects.toThrow("native creation failed");
     await removing;
     expect(order).toEqual(["dispose", "close", "close"]);
@@ -633,28 +699,42 @@ function subscription() {
 }
 
 /**
+ * Completes an update sink that deliberately ignores native updates.
+ */
+function noUpdates(): Promise<void> {
+  return Promise.resolve();
+}
+
+/**
  * Builds a native client fixture with inert operations unrelated to each test.
  */
 function client(id: string, starts: string[]): DynamicUnaryClient {
   return {
-    forward: async () => new Uint8Array(),
-    close: async () => {},
-    subscribe: async () => ({
-      kind: "backend-subscription-envelope" as const,
-      bytes: new Uint8Array([1]),
-    }),
+    forward: () => Promise.resolve(new Uint8Array()),
+    close: () => Promise.resolve(),
+    subscribe: () =>
+      Promise.resolve({
+        kind: "backend-subscription-envelope" as const,
+        bytes: new Uint8Array([1]),
+      }),
     activate: async (_request, signal) => {
       starts.push(id);
       await new Promise<void>((resolve) => {
-        signal.addEventListener("abort", () => resolve(), { once: true });
+        signal.addEventListener(
+          "abort",
+          () => {
+            resolve();
+          },
+          { once: true },
+        );
       });
     },
-    cancel: async () => {},
-    dispose: async () => {},
+    cancel: () => Promise.resolve(),
+    dispose: () => Promise.resolve(),
   };
 }
 
-function deferred<T>() {
+function deferred<T = undefined>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
   const promise = new Promise<T>((resolvePromise, rejectPromise) => {
@@ -666,7 +746,13 @@ function deferred<T>() {
 
 function awaitAbortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    signal.addEventListener("abort", () => reject(new Error("cancelled")), { once: true });
+    signal.addEventListener(
+      "abort",
+      () => {
+        reject(new Error("cancelled"));
+      },
+      { once: true },
+    );
     promise.then(resolve, reject);
   });
 }

@@ -249,7 +249,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     const id = subscription.id?.value;
     if (id === undefined || id.length === 0) throw new Error("subscription ID is required");
     const key = id;
-    if (!this.#definitions.has(key))
+    if (this.#creationCancelled(key, signal))
       this.#definitions.set(key, {
         wire,
         maxBackendEnvelopeBytes,
@@ -262,12 +262,14 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     const definition = this.#definitions.get(key);
     if (definition === undefined) throw new Error("subscription creation was cancelled");
     await this.#schedule([...this.#nodes.values()], false);
-    if (!this.#definitions.has(key) || signal.aborted || this.#closed)
+    if (!this.#definitions.has(key))
       throw new Error("subscription creation was cancelled");
     if (definition.failure !== undefined) {
       const cleanup = this.#detachDefinitionChildren(definition);
       await this.#cleanupRetainedChildren(cleanup);
+      const cancelled = this.#creationCancelled(key, signal);
       this.#definitions.delete(key);
+      if (cancelled) throw new Error("subscription creation was cancelled");
       throw definition.failure;
     }
     if (definition.children.size !== this.#clients.size) {
@@ -386,10 +388,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     signal.addEventListener("abort", abort, { once: true });
     try {
       await this.#schedule([...this.#nodes.values()], false);
-      if (!signal.aborted)
-        await new Promise<void>((resolve) =>
-          signal.addEventListener("abort", () => resolve(), { once: true }),
-        );
+      await DynamicUnaryForwarder.waitForAbort(signal);
     } finally {
       signal.removeEventListener("abort", abort);
     }
@@ -425,11 +424,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       definition.failure = failure;
       throw failure;
     }
-    if (
-      generation !== this.#generation ||
-      this.#clients.get(id)?.incarnation !== current.incarnation ||
-      this.#closed
-    ) {
+    if (!this.#isCurrentChild(id, current.incarnation, generation)) {
       await this.#cleanupChild(
         {
           backend,
@@ -463,16 +458,39 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     child.activation = client
       .activate({ wire: definition.wire, updates: definition.updates }, child.controller.signal)
       .catch(() => undefined)
-      .then(() => this.#completeChild(definition, id, child));
+      .then(() => {
+        this.#completeChild(definition, id, child);
+      });
   }
 
-  async #completeChild(
+  #completeChild(
     definition: LogicalDefinitionState,
     id: string,
     child: SubscriptionChild,
-  ): Promise<void> {
+  ): void {
     if (definition.children.get(id) !== child || child.controller.signal.aborted) return;
     definition.children.delete(id);
+  }
+
+  #creationCancelled(key: string, signal: AbortSignal): boolean {
+    return !this.#definitions.has(key) || signal.aborted || this.#closed;
+  }
+
+  #isCurrentChild(id: string, incarnation: number, generation: number): boolean {
+    return (
+      generation === this.#generation &&
+      this.#clients.get(id)?.incarnation === incarnation &&
+      !this.#closed
+    );
+  }
+
+  static waitForAbort(signal: AbortSignal): Promise<void> {
+    return new Promise((resolve) => {
+      signal.addEventListener("abort", () => {
+        resolve();
+      }, { once: true });
+      if (signal.aborted) resolve();
+    });
   }
 
   async #removeNodeChildren(id: string, client: DynamicUnaryClient): Promise<void> {
