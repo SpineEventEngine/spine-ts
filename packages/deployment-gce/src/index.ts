@@ -44,6 +44,7 @@ export class GceRegistrar {
   readonly #now: () => number;
   #cancel: (() => void) | undefined;
   #closed = false;
+  #work = Promise.resolve();
 
   /** Creates a registrar with twenty-second renewal and sixty-second leases by default. */
   constructor(options: {
@@ -63,10 +64,12 @@ export class GceRegistrar {
   /** Confirms initial registration after the listener is ready. */
   async start(): Promise<void> {
     if (this.#closed) throw new Error("GCE registrar is closed.");
-    await this.#registry.register({
-      node: this.#node,
-      registrationId: this.#identity,
-      expiresAt: this.#now() + 60_000,
+    await this.#enqueue(async () => {
+      await this.#registry.register({
+        node: this.#node,
+        registrationId: this.#identity,
+        expiresAt: this.#now() + 60_000,
+      });
     });
     this.#schedule();
   }
@@ -76,12 +79,13 @@ export class GceRegistrar {
     if (this.#closed) return;
     this.#closed = true;
     this.#cancel?.();
+    await this.#work;
     await this.#registry.remove(this.#node.id, this.#identity);
   }
 
   #schedule(): void {
     this.#cancel = this.#scheduler.schedule(20_000, () => {
-      void this.#renew();
+      void this.#enqueue(() => this.#renew());
     });
   }
 
@@ -89,5 +93,11 @@ export class GceRegistrar {
     if (this.#closed) return;
     await this.#registry.renew(this.#node.id, this.#identity, this.#now() + 60_000);
     if (!this.#closed) this.#schedule();
+  }
+
+  #enqueue(operation: () => Promise<void>): Promise<void> {
+    const next = this.#work.then(operation, operation);
+    this.#work = next.catch(() => undefined);
+    return next;
   }
 }
