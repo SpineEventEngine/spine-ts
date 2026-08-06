@@ -1,5 +1,11 @@
 import { create } from "@bufbuild/protobuf";
-import { RecordSpec, type RecordStorage, type StorageFactory } from "@spine-event-engine/storage";
+import {
+  RecordSpec,
+  type RecordContinuation,
+  type RecordEntry,
+  type RecordStorage,
+  type StorageFactory,
+} from "@spine-event-engine/storage";
 import {
   ApplicationNodeLeaseSchema,
   type ApplicationNodeLease,
@@ -9,6 +15,7 @@ import { ApplicationNode } from "./index.js";
 
 const storageKey = "spine.deployment.ApplicationNodeLease:v1";
 const defaultCleanupBatchSize = 32;
+const readPageSize = 256;
 
 /**
  * Stores and reads live application-node leases in one caller-owned storage namespace.
@@ -105,7 +112,7 @@ export class LeasedNodeRegistry {
   read(now: number): Promise<readonly ApplicationNode[]> {
     return this.start(async () => {
       LeaseRecords.requireTime(now);
-      const leases = (await this.#storage.query()).map((record) => LeaseRecords.read(record));
+      const leases = (await this.readAll()).map(({ record }) => LeaseRecords.read(record));
       return leases.filter((lease) => lease.expiresAt > now).map((lease) => lease.node);
     });
   }
@@ -161,6 +168,23 @@ export class LeasedNodeRegistry {
       () => this.#operations.delete(pending),
     );
     return pending;
+  }
+
+  private async readAll(): Promise<readonly RecordEntry<string, ApplicationNodeLease>[]> {
+    const records: RecordEntry<string, ApplicationNodeLease>[] = [];
+    let after: RecordContinuation<string> | undefined;
+    for (;;) {
+      const page = await this.#storage.queryEntries({
+        sort: [{ field: "id" }],
+        ...(after === undefined ? {} : { after }),
+        limit: readPageSize,
+      });
+      records.push(...page);
+      if (page.length < readPageSize) return records;
+      const last = page.at(-1);
+      if (last === undefined) throw new Error("Lease page has no continuation row.");
+      after = { values: [{ field: "id", value: last.id }], id: last.id };
+    }
   }
 }
 
