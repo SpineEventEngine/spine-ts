@@ -517,7 +517,8 @@ const DatastoreQueryPushdown = Object.freeze(
         });
       }
       if (!(recordQuery.sort ?? []).some((order) => order.field === "id")) query.order("__key__");
-      if (DatastoreRecordQuery.isKeysetPage(recordQuery)) query.filter("__key__", ">", keyFor(recordQuery.after.id));
+      if (recordQuery.after !== undefined && DatastoreRecordQuery.isKeysetPage(recordQuery))
+        query.filter("__key__", ">", keyFor(recordQuery.after.id));
     }
 
     /**
@@ -653,12 +654,12 @@ const DatastoreRecordQuery = Object.freeze(
         order?.length === 1 &&
         order[0]?.field === "id" &&
         order[0].direction !== "desc" &&
-        query.after !== undefined &&
-        typeof query.after.id === "string" &&
-        query.after.values.length === 1 &&
-        query.after.values[0]?.field === "id" &&
-        typeof query.after.values[0]?.value === "string" &&
-        RecordValues.equal(query.after.values[0]?.value, query.after.id)
+        (query.after === undefined ||
+          (typeof query.after.id === "string" &&
+            query.after.values.length === 1 &&
+            query.after.values[0]?.field === "id" &&
+            typeof query.after.values[0]?.value === "string" &&
+            RecordValues.equal(query.after.values[0]?.value, query.after.id)))
       );
     }
   })(),
