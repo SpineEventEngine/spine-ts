@@ -939,7 +939,8 @@ describe("DatastoreStorageFactory", () => {
       }),
     );
 
-    client.putRaw("Tasks:google.protobuf.StringValue", "task-1", {
+    const kind = CanonicalValue.encode(["Tasks", false, "StringValueSchema:legacy"]);
+    client.putRaw(kind, "task-1", {
       "$spine.id": JSON.stringify("task-1"),
       "$spine.payload": "credential=top-secret payload=do-not-disclose",
     });
@@ -949,7 +950,7 @@ describe("DatastoreStorageFactory", () => {
     await expect(storage.read("task-1")).rejects.not.toThrow("do-not-disclose");
     await storage.delete("task-1");
 
-    client.putRaw("Tasks:google.protobuf.StringValue", "task-2", {
+    client.putRaw(kind, "task-2", {
       "$spine.id": "not-json",
       "$spine.payload": new Uint8Array([255]),
     });
@@ -958,7 +959,7 @@ describe("DatastoreStorageFactory", () => {
     );
     await expect(storage.read("task-2")).rejects.toThrow("Datastore entity cannot be decoded.");
     await storage.delete("task-2");
-    client.putRaw("Tasks:google.protobuf.StringValue", "task-3", {
+    client.putRaw(kind, "task-3", {
       "$spine.id": 3,
       "$spine.payload": new Uint8Array([10, 0]),
     });
@@ -1008,10 +1009,14 @@ describe("DatastoreStorageFactory", () => {
         }),
       );
       const id = `invalid-${String(index)}`;
-      client.putRaw("MalformedIds:google.protobuf.StringValue", id, {
-        "$spine.id": JSON.stringify(invalid),
-        "$spine.payload": new Uint8Array([10, 0]),
-      });
+      client.putRaw(
+        CanonicalValue.encode(["MalformedIds", false, "StringValueSchema:legacy"]),
+        id,
+        {
+          "$spine.id": JSON.stringify(invalid),
+          "$spine.payload": new Uint8Array([10, 0]),
+        },
+      );
 
       await expect(storage.queryEntries({})).rejects.toThrow(
         "Datastore entity has no valid Spine record identifier.",
