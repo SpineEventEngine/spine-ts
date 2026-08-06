@@ -59,7 +59,7 @@ export class LeasedNodeRegistry {
   register(lease: NodeLease): Promise<boolean> {
     return this.start(async () => {
       const record = LeaseRecords.write(lease);
-      return this.#storage.compareAndSet(lease.node.id, undefined, record);
+      return this.#storage.compareAndSet(record.nodeId, undefined, record);
     });
   }
 
