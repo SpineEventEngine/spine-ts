@@ -6,6 +6,21 @@ import { SubscriptionSchema, TopicSchema } from "@spine-event-engine/proto/clien
 import { DynamicSubscriptionCreator, DynamicUnaryForwarder } from "../src/index.js";
 
 describe("DynamicSubscriptionCreator", () => {
+  it("keeps native children inactive until the public activation request", async () => {
+    const starts: string[] = [];
+    const owner = new DynamicUnaryForwarder({ create: async (node) => client(node.id, starts) });
+    const creator = new DynamicSubscriptionCreator(owner);
+    const node = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
+    const wire = subscription();
+
+    await owner.reconcile([node]);
+    await creator.subscribe(wire, new AbortController().signal);
+
+    expect(starts).toEqual([]);
+    await creator.activate({ wire, updates: async () => {} }, new AbortController().signal);
+    expect(starts).toEqual(["a"]);
+  });
+
   it("uses the shared dynamic owner to reconcile added and removed native streams", async () => {
     const starts: string[] = [];
     const owner = new DynamicUnaryForwarder({
