@@ -221,7 +221,8 @@ export class Server {
       browser?.backend !== undefined &&
       (this.#contexts.length > 0 ||
         this.#resources.length > 0 ||
-        Object.keys(this.#services).length > 0)
+        Object.keys(this.#services).length > 0 ||
+        this.#listenerLifecycles.length > 0)
     )
       throw new Error(
         "Standalone browser server cannot own local contexts, services, or resources.",
@@ -338,12 +339,7 @@ export class Server {
       closeables,
       listenerLifecycles: this.#listenerLifecycles,
     });
-    try {
-      for (const lifecycle of this.#listenerLifecycles) await lifecycle.start();
-    } catch (error) {
-      await running.close();
-      throw error;
-    }
+    await running.startLifecycles();
     if (browser === undefined) return running;
     try {
       return await BrowserServer.open(running, {
@@ -792,6 +788,7 @@ class RunningHttp2Server implements RunningServer {
   readonly #sessions: Set<http2.ServerHttp2Session>;
   readonly #closeables: readonly unknown[];
   readonly #listenerLifecycles: readonly { close(): unknown }[];
+  readonly #startedLifecycles: { close(): unknown }[] = [];
   readonly #environment: ServerEnvironment;
   readonly #attachment: EnvironmentAttachmentHandle;
   readonly #contextTransports: ContextTransportGroup;
@@ -828,8 +825,36 @@ class RunningHttp2Server implements RunningServer {
     return this.#closed;
   }
 
+  /** Starts listener-ready attachments after the native listener accepts connections. */
+  async startLifecycles(): Promise<void> {
+    try {
+      for (const lifecycle of this.#listenerLifecycles as readonly {
+        start(): unknown;
+        close(): unknown;
+      }[]) {
+        await lifecycle.start();
+        this.#startedLifecycles.push(lifecycle);
+      }
+    } catch (error) {
+      try {
+        await this.close();
+      } catch (rollback) {
+        throw new AggregateError(
+          [error, rollback],
+          "Server listener lifecycle start and rollback failed.",
+        );
+      }
+      throw error;
+    }
+  }
+
   async #closeOnce(): Promise<void> {
-    for (const lifecycle of this.#listenerLifecycles) await lifecycle.close();
+    while (this.#startedLifecycles.length > 0) {
+      const lifecycle = this.#startedLifecycles[0];
+      if (lifecycle === undefined) break;
+      await lifecycle.close();
+      this.#startedLifecycles.shift();
+    }
     if (!this.#networkClosed) {
       await ServerValues.closeNetwork(this.#server, this.#sessions);
       this.#networkClosed = true;
