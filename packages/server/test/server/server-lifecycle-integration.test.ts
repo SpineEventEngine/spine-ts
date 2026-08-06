@@ -42,6 +42,23 @@ describe("Server lifecycle integration", () => {
     await running.close();
     expect(events).toEqual(["start", "close"]);
   });
+
+  it("retries only a failed listener lifecycle close", async () => {
+    let attempts = 0;
+    const successful = vi.fn();
+    const failing = vi.fn(() => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("close failed");
+    });
+    const running = await Server.atPort(0)
+      .addListenerLifecycle({ start: () => undefined, close: successful })
+      .addListenerLifecycle({ start: () => undefined, close: failing })
+      .start();
+    await expect(running.close()).rejects.toThrow("close failed");
+    await running.close();
+    expect(successful).toHaveBeenCalledOnce();
+    expect(failing).toHaveBeenCalledTimes(2);
+  });
   beforeEach(async () => {
     await resetServerEnvironmentForTest();
     createHttp2Server.mockReset();
