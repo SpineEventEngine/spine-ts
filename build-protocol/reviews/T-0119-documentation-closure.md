@@ -1,6 +1,6 @@
 # T-0119 Review Log
 
-Status: Draft complete; deterministic preflight pending
+Status: Deterministic preflight and reader test clean; review wave pending
 
 ## Implementation Inventory
 
@@ -41,3 +41,16 @@ metadata is not exposed, so the immutable configured profile is the accepted
 metadata evidence. One improvement was accepted: the server README now shows
 the exact `BoundedContext.singleTenant(...).persistSystemEvents().build()`
 builder chain. No runtime or Proto change was needed.
+
+## Pre-Review Evidence
+
+- `pnpm verify:task -- --no-tests` passes after the normal fresh-worktree
+  Proto/declaration build: tooling TypeScript, cleanup, TSDoc, formatting,
+  audience policy, release readiness, and 294 relative Markdown links are
+  clean.
+- A bounded `rg` audit finds no task/wave/review jargon in changed human docs
+  and no current refresh-hint or domain-EventBus placement claim. The only
+  matching domain-bus rejection text is a runtime test outside this docs task.
+- Status, changed-path inventory, and the no-runtime-change boundary are
+  current. No speculative adapter, scheduler, replay, exactly-once, or
+  cluster-complete guarantee is claimed.
