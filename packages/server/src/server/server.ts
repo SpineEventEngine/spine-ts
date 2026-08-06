@@ -53,6 +53,7 @@ export class Server {
   readonly #writeMaxBytes: number;
   readonly #contexts: ServerContext[] = [];
   readonly #resources: { close(): unknown }[] = [];
+  readonly #listenerLifecycles: { start(): unknown; close(): unknown }[] = [];
   readonly #services: Omit<SpineServicesOptions, "contexts">;
   readonly #browser: BrowserServerOptions | undefined;
   readonly #environment: ServerEnvironment;
@@ -120,6 +121,12 @@ export class Server {
    */
   addResource(resource: { close(): unknown }): this {
     this.#resources.push(resource);
+    return this;
+  }
+
+  /** Adds work that starts after listener readiness and closes before network intake. */
+  addListenerLifecycle(lifecycle: { start(): unknown; close(): unknown }): this {
+    this.#listenerLifecycles.push(lifecycle);
     return this;
   }
 
@@ -329,7 +336,14 @@ export class Server {
       host,
       port: address.port,
       closeables,
+      listenerLifecycles: this.#listenerLifecycles,
     });
+    try {
+      for (const lifecycle of this.#listenerLifecycles) await lifecycle.start();
+    } catch (error) {
+      await running.close();
+      throw error;
+    }
     if (browser === undefined) return running;
     try {
       return await BrowserServer.open(running, {
@@ -777,6 +791,7 @@ class RunningHttp2Server implements RunningServer {
   readonly #server: http2.Http2Server;
   readonly #sessions: Set<http2.ServerHttp2Session>;
   readonly #closeables: readonly unknown[];
+  readonly #listenerLifecycles: readonly { close(): unknown }[];
   readonly #environment: ServerEnvironment;
   readonly #attachment: EnvironmentAttachmentHandle;
   readonly #contextTransports: ContextTransportGroup;
@@ -792,6 +807,7 @@ class RunningHttp2Server implements RunningServer {
     this.#server = options.server;
     this.#sessions = options.sessions;
     this.#closeables = options.closeables;
+    this.#listenerLifecycles = options.listenerLifecycles;
     this.#environment = options.environment;
     this.#attachment = options.attachment;
     this.#contextTransports = options.contextTransports;
@@ -813,6 +829,7 @@ class RunningHttp2Server implements RunningServer {
   }
 
   async #closeOnce(): Promise<void> {
+    for (const lifecycle of this.#listenerLifecycles) await lifecycle.close();
     if (!this.#networkClosed) {
       await ServerValues.closeNetwork(this.#server, this.#sessions);
       this.#networkClosed = true;
@@ -866,6 +883,7 @@ interface RunningHttp2ServerOptions {
   readonly server: http2.Http2Server;
   readonly sessions: Set<http2.ServerHttp2Session>;
   readonly closeables: readonly unknown[];
+  readonly listenerLifecycles: readonly { start(): unknown; close(): unknown }[];
   readonly environment: ServerEnvironment;
   readonly attachment: EnvironmentAttachmentHandle;
   readonly contextTransports: ContextTransportGroup;
