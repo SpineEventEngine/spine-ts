@@ -88,6 +88,11 @@ this demonstrated architectural blocker only.
   and deletion of positional topology. It must not invent new requirements,
   edit code, or split T-0122 into new human-facing tasks.
 
+Result: accepted. The durable packet is
+`build-protocol/planning/T-0122_IMPLEMENTATION_PACKET.md`. Runtime
+self-introspection was unavailable; the explicit immutable role/profile is the
+accepted evidence with no visible mismatch.
+
 ## Verification
 
 - Mandatory focused RED/GREEN commands and affected-package preflight.
