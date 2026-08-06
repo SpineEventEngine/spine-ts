@@ -438,6 +438,96 @@ describe("DynamicSubscriptionCreator", () => {
     await owner.close();
   });
 
+  it("keeps an immediately aborted activation from starting installed native children", async () => {
+    const starts: string[] = [];
+    const owner = new DynamicUnaryForwarder({
+      create: (node) => Promise.resolve(client(node.id, starts)),
+    });
+    const wire = subscription();
+    await owner.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
+    await owner.subscribeDefinition(wire, new AbortController().signal);
+    const aborted = new AbortController();
+    aborted.abort();
+
+    await owner.activateDefinition(wire, noUpdates, aborted.signal);
+
+    expect(starts).toEqual([]);
+    await owner.cancelDefinition(wire, new AbortController().signal);
+    await owner.close();
+  });
+
+  it("rehydrates a durable definition before membership and installs it when a node arrives", async () => {
+    let subscriptions = 0;
+    const owner = new DynamicUnaryForwarder({
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          subscribe: () => {
+            subscriptions++;
+            return Promise.resolve({
+              kind: "backend-subscription-envelope" as const,
+              bytes: new Uint8Array([1]),
+            });
+          },
+        }),
+    });
+    const wire = subscription();
+
+    await owner.rehydrateDefinition(wire);
+    expect(subscriptions).toBe(0);
+    await owner.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
+
+    expect(subscriptions).toBe(1);
+    await owner.cancelDefinition(wire, new AbortController().signal);
+    await owner.close();
+  });
+
+  it("replaces a child when a stable node identity moves to a new endpoint", async () => {
+    const disposals: string[] = [];
+    const owner = new DynamicUnaryForwarder({
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          dispose: () => {
+            disposals.push(node.endpoint);
+            return Promise.resolve();
+          },
+        }),
+    });
+    const wire = subscription();
+
+    await owner.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
+    await owner.subscribeDefinition(wire, new AbortController().signal);
+    await owner.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.2" })]);
+
+    expect(disposals).toEqual(["http://10.0.0.1"]);
+    await owner.cancelDefinition(wire, new AbortController().signal);
+    await owner.close();
+  });
+
+  it("retries a failed client close during later membership reconciliation", async () => {
+    let closes = 0;
+    const owner = new DynamicUnaryForwarder({
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          close: () => {
+            closes++;
+            if (closes === 1) return Promise.reject(new Error("temporary close failure"));
+            return Promise.resolve();
+          },
+        }),
+    });
+    const node = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
+
+    await owner.reconcile([node]);
+    await owner.reconcile([]);
+    await owner.reconcile([]);
+
+    expect(closes).toBe(2);
+    await owner.close();
+  });
+
   it("compensates every installed child when one current node rejects creation", async () => {
     const disposals: string[] = [];
     const owner = new DynamicUnaryForwarder({
