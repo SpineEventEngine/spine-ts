@@ -206,8 +206,9 @@ binding store before listener open. The durable registry receives an explicit
 application namespace, storage factory, identifier source, disposal callback,
 and finite lease, cleanup, record, and byte limits. It owns and closes only
 its independently opened record-storage handle, not the application storage
-factory or a Spine JVM/TS backend. It copies backend envelopes on read, write,
-and callbacks and never returns them through public subscription responses.
+factory or a Spine JVM/TS backend. It stores canonical public Subscription
+definitions, never backend envelopes or membership topology, and never returns
+private native data through public subscription responses.
 
 The durable registry preserves opaque records through a process restart.
 It validates record family, version, type, storage key identity, owner

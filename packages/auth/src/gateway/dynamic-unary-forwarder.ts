@@ -126,10 +126,15 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
    * @returns Completes after the latest pending snapshot has reconciled.
    */
   reconcile(nodes: readonly ApplicationNode[]): Promise<void> {
+    return this.#schedule(nodes, true);
+  }
+
+  #schedule(nodes: readonly ApplicationNode[], abortStarts: boolean): Promise<void> {
     this.#nodes = [...nodes];
     this.#pending = { nodes: [...nodes], generation: ++this.#generation };
-    for (const definition of this.#definitions.values())
-      for (const controller of definition.starts) controller.abort();
+    if (abortStarts)
+      for (const definition of this.#definitions.values())
+        for (const controller of definition.starts) controller.abort();
     if (this.#running === undefined) {
       this.#completion = new Promise((resolve) => {
         this.#complete = resolve;
@@ -223,7 +228,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
         starts: new Set(),
         children: new Map(),
       });
-    await this.reconcile([...this.#nodes.values()]);
+    await this.#schedule([...this.#nodes.values()], false);
     if (!this.#definitions.has(key) || signal.aborted || this.#closed)
       throw new Error("subscription creation was cancelled");
     return { kind: "backend-subscription-envelope", bytes: request.bytes.slice() };
@@ -266,7 +271,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     this.#definitions.delete(key);
     if (definition === undefined) return;
     for (const controller of definition.starts) controller.abort();
-    await this.reconcile([...this.#nodes.values()]);
+    await this.#schedule([...this.#nodes.values()], false);
     await Promise.allSettled(
       [...definition.children].map(async ([id, child]) => {
         const client = this.#clients.get(id)?.client;
@@ -299,7 +304,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     if (definition === undefined) return;
     definition.updates = updates;
     definition.active = true;
-    await this.reconcile([...this.#nodes.values()]);
+    await this.#schedule([...this.#nodes.values()], false);
   }
 
   async #startChild(
