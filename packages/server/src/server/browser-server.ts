@@ -227,13 +227,17 @@ export const BrowserServer: Readonly<{
     try {
       address = await BrowserServer.listen(server, options.host, options.port);
     } catch (error) {
-      try {
-        await subscriptions.close();
-        await stopDiscovery?.();
-        await dynamic?.close();
-      } catch (closeError) {
-        throw new AggregateError([error, closeError], "Server browser startup rollback failed.");
-      }
+      const cleanup = await Promise.allSettled([
+        subscriptions.close(),
+        stopDiscovery?.(),
+        dynamic?.close(),
+        BrowserServer.closeListener(server),
+      ]);
+      const failures = cleanup.flatMap((result) =>
+        result.status === "rejected" ? [result.reason] : [],
+      );
+      if (failures.length > 0)
+        throw new AggregateError([error, ...failures], "Server browser startup rollback failed.");
       throw error;
     }
     return new RunningBrowserServer(
@@ -658,19 +662,49 @@ class RunningBrowserServer implements RunningServer {
     this.#onDrain();
     for (const controller of this.#activeAuth) controller.abort();
     const listener = this.#listenerClosed ? undefined : this.#closeListenerPhase();
-    if (!this.#subscriptionsClosed) {
-      await this.#subscriptions.close();
-      this.#subscriptionsClosed = true;
+    const failures: unknown[] = [];
+    await this.#phase(
+      this.#subscriptionsClosed ? undefined : this.#subscriptions.close(),
+      () => {
+        this.#subscriptionsClosed = true;
+      },
+      failures,
+    );
+    await this.#phase(this.#stopDiscovery?.(), () => undefined, failures);
+    await this.#phase(this.#dynamic?.close(), () => undefined, failures);
+    await this.#phase(
+      listener,
+      () => {
+        this.#listenerClosed = true;
+      },
+      failures,
+    );
+    await this.#phase(
+      this.#native === undefined || this.#nativeClosed ? undefined : this.#native.close(),
+      () => {
+        this.#nativeClosed = true;
+      },
+      failures,
+    );
+    if (failures.length > 0) {
+      const primary = failures[0];
+      if (failures.length > 1 && primary instanceof Error)
+        Object.defineProperty(primary, "cleanupErrors", { value: failures.slice(1) });
+      throw primary;
     }
-    await this.#stopDiscovery?.();
-    await this.#dynamic?.close();
-    if (listener !== undefined) {
-      await listener;
-      this.#listenerClosed = true;
-    }
-    if (this.#native !== undefined && !this.#nativeClosed) {
-      await this.#native.close();
-      this.#nativeClosed = true;
+  }
+
+  async #phase(
+    operation: Promise<void> | undefined,
+    onSuccess: () => void,
+    failures: unknown[],
+  ): Promise<void> {
+    if (operation === undefined) return;
+    try {
+      await operation;
+      onSuccess();
+    } catch (error) {
+      failures.push(error);
     }
   }
 

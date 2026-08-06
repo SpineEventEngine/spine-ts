@@ -1948,7 +1948,7 @@ describe("Server", () => {
       await expect(server.close()).rejects.toThrow("subscription cleanup failed");
       const retry = server.close();
       await delay(25);
-      expect(closed).toEqual([]);
+      expect(closed).toEqual(["native"]);
       await expect(retry).resolves.toBeUndefined();
       expect(closed).toEqual(["native"]);
     } finally {
