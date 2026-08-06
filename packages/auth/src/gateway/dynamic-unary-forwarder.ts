@@ -128,6 +128,8 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   reconcile(nodes: readonly ApplicationNode[]): Promise<void> {
     this.#nodes = [...nodes];
     this.#pending = { nodes: [...nodes], generation: ++this.#generation };
+    for (const definition of this.#definitions.values())
+      for (const controller of definition.starts) controller.abort();
     if (this.#running === undefined) {
       this.#completion = new Promise((resolve) => {
         this.#complete = resolve;
