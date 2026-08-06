@@ -38,13 +38,13 @@ export class DynamicSubscriptionCreator implements SubscriptionCreator {
   }
 
   cancel(
-    _request: { readonly wire: PublicSubscriptionWire; readonly backend: BackendSubscriptionEnvelope },
-    _signal: AbortSignal,
+    request: { readonly wire: PublicSubscriptionWire; readonly backend: BackendSubscriptionEnvelope },
+    signal: AbortSignal,
   ): Promise<void> {
-    return Promise.resolve();
+    return this.#owner.cancelDefinition(request.backend, signal);
   }
 
-  dispose(_backend: BackendSubscriptionEnvelope, _signal: AbortSignal): Promise<void> {
-    return Promise.resolve();
+  dispose(backend: BackendSubscriptionEnvelope, signal: AbortSignal): Promise<void> {
+    return this.#owner.cancelDefinition(backend, signal);
   }
 }

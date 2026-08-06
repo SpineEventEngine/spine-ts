@@ -8,11 +8,10 @@ import { createHash } from "node:crypto";
 
 import {
   createNativeGatewayServices,
+  DynamicSubscriptionCreator,
   DynamicUnaryForwarder,
-  FanInSubscriptionCreator,
   InMemorySubscriptionBindings,
   NativeSubscriptionCreator,
-  RoundRobinUnaryForwarder,
   SubscriptionGateway,
   TransportFacts,
   UnaryGateway,
@@ -24,7 +23,7 @@ import {
   Http2SessionManager,
 } from "@connectrpc/connect-node";
 import { AuthenticationService } from "@spine-event-engine/proto/auth";
-import type { ApplicationNode, NodeDiscovery } from "@spine-event-engine/deployment";
+import { ApplicationNode, type NodeDiscovery } from "@spine-event-engine/deployment";
 import {
   CommandService,
   QueryService,
@@ -106,19 +105,12 @@ export const BrowserServer: Readonly<{
             ? native
             : BrowserServerValues.requiredRunning(running).baseUrl,
         ];
-    const creators = backendBaseUrls.map(
-      (baseUrl) => new NativeSubscriptionCreator(createGrpcTransport({ baseUrl })),
+    const fixedNodes = backendBaseUrls.map(
+      (endpoint, index) => new ApplicationNode({ id: `fixed/${index.toString()}`, endpoint }),
     );
-    const firstCreator = BrowserServerValues.firstCreator(creators);
-    const creator = creators.length === 1 ? firstCreator : new FanInSubscriptionCreator(creators);
     let dynamic: DynamicUnaryForwarder | undefined;
     let stopDiscovery: (() => Promise<void>) | undefined;
-    const forwarder =
-      options.discovery === undefined
-        ? creators.length === 1
-          ? firstCreator
-          : new RoundRobinUnaryForwarder(creators)
-        : (dynamic = new DynamicUnaryForwarder({
+    const forwarder = (dynamic = new DynamicUnaryForwarder({
             create: async (node) => {
               const manager =
                 options.dynamicManagerFactory?.(node) ??
@@ -147,6 +139,8 @@ export const BrowserServer: Readonly<{
           }));
     if (options.discovery !== undefined && dynamic !== undefined)
       stopDiscovery = await BrowserServerValues.watch(options.discovery, dynamic);
+    else await dynamic.reconcile(fixedNodes);
+    const creator = new DynamicSubscriptionCreator(dynamic);
     const bindings =
       options.bindings ??
       new InMemorySubscriptionBindings({

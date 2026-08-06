@@ -78,7 +78,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     readonly topic: Uint8Array;
     readonly wire: PublicSubscriptionWire;
     readonly updates: SubscriptionUpdateSink;
-    readonly children: Set<string>;
+    readonly children: Map<string, BackendSubscriptionEnvelope>;
   }>();
 
   /**
@@ -189,7 +189,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
         topic: bytes.slice(),
         wire: { kind: "public-subscription", bytes },
         updates: async () => {},
-        children: new Set(),
+        children: new Map(),
       });
     await this.#reconcileDefinitions(this.#generation);
     return { kind: "backend-subscription-envelope", bytes };
@@ -197,7 +197,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
 
   async #reconcileDefinitions(generation: number): Promise<void> {
     for (const definition of this.#definitions.values()) {
-      for (const id of definition.children)
+      for (const [id] of definition.children)
         if (!this.#clients.has(id)) definition.children.delete(id);
       await Promise.all(
         [...this.#clients.entries()]
@@ -212,7 +212,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
               await current.client.dispose(backend, new AbortController().signal);
               return;
             }
-            definition.children.add(id);
+            definition.children.set(id, backend);
             void current.client.activate(
               { wire: definition.wire, backend, updates: definition.updates },
               new AbortController().signal,
@@ -220,6 +220,27 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
           }),
       );
     }
+  }
+
+  /**
+   * Removes one logical definition and cancels its currently installed children.
+   *
+   * @param backend Supplies the logical definition envelope.
+   * @param signal Cancels native cleanup.
+   * @returns Completes after every current child cancellation settles.
+   */
+  async cancelDefinition(backend: BackendSubscriptionEnvelope, signal: AbortSignal): Promise<void> {
+    const key = Buffer.from(backend.bytes).toString("base64");
+    const definition = this.#definitions.get(key);
+    this.#definitions.delete(key);
+    if (definition === undefined) return;
+    await Promise.allSettled(
+      [...definition.children].map(async ([id, child]) => {
+        const client = this.#clients.get(id)?.client;
+        if (client === undefined) return;
+        await client.dispose(child, signal);
+      }),
+    );
   }
 
   async #dispose(client: DynamicUnaryClient): Promise<void> {
