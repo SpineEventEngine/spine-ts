@@ -74,6 +74,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   #closing: Promise<void> | undefined;
   #generation = 0;
   readonly #failedDisposals = new Set<DynamicUnaryClient>();
+  #nodes: readonly ApplicationNode[] = [];
   readonly #definitions = new Map<string, {
     readonly topic: Uint8Array;
     wire: PublicSubscriptionWire;
@@ -103,6 +104,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
    * @returns Completes after the latest pending snapshot has reconciled.
    */
   reconcile(nodes: readonly ApplicationNode[]): Promise<void> {
+    this.#nodes = [...nodes];
     this.#pending = { nodes: [...nodes], generation: ++this.#generation };
     if (this.#running === undefined) {
       this.#completion = new Promise((resolve) => {
@@ -191,7 +193,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
         updates: async () => {},
         children: new Map(),
       });
-    await this.#reconcileDefinitions(this.#generation);
+    await this.reconcile([...this.#nodes.values()]);
     return { kind: "backend-subscription-envelope", bytes };
   }
 
@@ -234,6 +236,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     const definition = this.#definitions.get(key);
     this.#definitions.delete(key);
     if (definition === undefined) return;
+    await this.reconcile([...this.#nodes.values()]);
     await Promise.allSettled(
       [...definition.children].map(async ([id, child]) => {
         const client = this.#clients.get(id)?.client;
@@ -261,7 +264,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     definition.wire.bytes.fill(0);
     definition.wire = { kind: "public-subscription", bytes: wire.bytes.slice() };
     definition.updates = updates;
-    await this.#reconcileDefinitions(this.#generation);
+    await this.reconcile([...this.#nodes.values()]);
   }
 
   async #dispose(client: DynamicUnaryClient): Promise<void> {
