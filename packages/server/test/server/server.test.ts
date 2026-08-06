@@ -279,6 +279,49 @@ describe("Server", () => {
     expect(nativeCloses).toBe(1);
   });
 
+  it("keeps discovery and native failures retryable while preserving discovery as primary", async () => {
+    let stops = 0;
+    let nativeCloses = 0;
+    const native: RunningServer = {
+      host: "127.0.0.1",
+      port: 1,
+      baseUrl: "http://127.0.0.1:65534",
+      close: async () => {
+        nativeCloses++;
+        if (nativeCloses === 1) throw new Error("native failed");
+      },
+    };
+    const running = await BrowserServer.open(native, {
+      ...browserGateway(),
+      bindings: inMemoryBindings(),
+      discovery: {
+        watch: () => async () => {
+          stops++;
+          if (stops === 1) throw new Error("discovery failed");
+        },
+      },
+      host: "127.0.0.1",
+      port: 0,
+      readMaxBytes: 1_048_576,
+      writeMaxBytes: 1_048_576,
+      production: false,
+    });
+    let error: unknown;
+    try {
+      await running.close();
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("discovery failed");
+    expect((error as Error & { cleanupErrors?: unknown[] }).cleanupErrors?.[0]).toMatchObject({
+      message: "native failed",
+    });
+    await expect(running.close()).resolves.toBeUndefined();
+    expect(stops).toBe(2);
+    expect(nativeCloses).toBe(2);
+  });
+
   it("starts one array-configured backend and handles empty browser request facts", async () => {
     const requests = BrowserServer.requests(browserGateway());
     const requestHeader = new Headers();

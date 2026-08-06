@@ -627,6 +627,8 @@ class RunningBrowserServer implements RunningServer {
   #listenerClose: Promise<void> | undefined;
   #listenerClosed = false;
   #subscriptionsClosed = false;
+  #discoveryStopped = false;
+  #dynamicClosed = false;
   #nativeClosed = false;
 
   constructor(
@@ -673,8 +675,20 @@ class RunningBrowserServer implements RunningServer {
       },
       failures,
     );
-    await this.#phase(this.#stopDiscovery?.(), () => undefined, failures);
-    await this.#phase(this.#dynamic?.close(), () => undefined, failures);
+    await this.#phase(
+      this.#discoveryStopped ? undefined : this.#stopDiscovery?.(),
+      () => {
+        this.#discoveryStopped = true;
+      },
+      failures,
+    );
+    await this.#phase(
+      this.#dynamicClosed ? undefined : this.#dynamic?.close(),
+      () => {
+        this.#dynamicClosed = true;
+      },
+      failures,
+    );
     await this.#phase(
       listener,
       () => {
