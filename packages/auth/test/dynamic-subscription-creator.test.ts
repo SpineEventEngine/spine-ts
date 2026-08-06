@@ -31,6 +31,51 @@ describe("DynamicSubscriptionCreator", () => {
     await activation;
   });
 
+  it("rehydrates through the adapter before a native node is discovered", async () => {
+    let subscriptions = 0;
+    const owner = new DynamicUnaryForwarder({
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          subscribe: () => {
+            subscriptions++;
+            return Promise.resolve({
+              kind: "backend-subscription-envelope" as const,
+              bytes: new Uint8Array([1]),
+            });
+          },
+        }),
+    });
+    const creator = new DynamicSubscriptionCreator(owner);
+    const wire = subscription();
+
+    await creator.rehydrate(wire);
+    await owner.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
+
+    expect(subscriptions).toBe(1);
+    await creator.cancel({ wire }, new AbortController().signal);
+    await owner.close();
+  });
+
+  it("does not forward an already aborted activation through the adapter", async () => {
+    const starts: string[] = [];
+    const owner = new DynamicUnaryForwarder({
+      create: (node) => Promise.resolve(client(node.id, starts)),
+    });
+    const creator = new DynamicSubscriptionCreator(owner);
+    const wire = subscription();
+    await owner.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
+    await creator.subscribe(wire, new AbortController().signal);
+    const aborted = new AbortController();
+    aborted.abort();
+
+    await creator.activate({ wire, updates: noUpdates }, aborted.signal);
+
+    expect(starts).toEqual([]);
+    await creator.cancel({ wire }, new AbortController().signal);
+    await owner.close();
+  });
+
   it("keeps activation open and relays updates until its downstream signal aborts", async () => {
     const entered = deferred();
     const delivered = deferred();
