@@ -162,7 +162,9 @@ export class ScheduledNodeDiscovery implements NodeDiscovery {
   }
 
   /**
-   * Starts scheduled complete snapshot delivery.
+   * Starts the only scheduled complete-snapshot watch.
+   *
+   * A second active watch or a watch after `close()` is rejected.
    *
    * @param onSnapshot Receives each successful complete snapshot.
    * @returns Stops scheduling and cancels an in-flight read.
@@ -176,9 +178,12 @@ export class ScheduledNodeDiscovery implements NodeDiscovery {
   }
 
   /**
-   * Stops scheduled refresh work.
+   * Stops scheduled refresh work permanently.
    *
-   * @returns Completes after cancellation is requested.
+   * This operation is idempotent, cancels scheduling, and joins the active
+   * snapshot read after requesting its cancellation.
+   *
+   * @returns Completes after the active read settles.
    */
   async close(): Promise<void> {
     if (this.#closed) return;

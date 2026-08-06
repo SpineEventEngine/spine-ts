@@ -185,3 +185,16 @@ wording corrections except these bounded edge cases:
 
 All final reviewers used the same explicit configured profiles and reported the
 same independent-runtime-introspection limitation with no visible mismatch.
+
+## Acceptance Re-review
+
+- Performance/reliability: clean at `84c11a5d`; all final concurrency,
+  resource, retry, and failure-detail concerns are resolved.
+- Style/maintainability: runtime and module structure clean; requested one P2
+  public-TSDoc clarification for the scheduled discovery lifecycle.
+- TypeScript/API docs: runtime, TLS, exports, and compatibility clean; requested
+  the same P2 public-TSDoc clarification.
+- Documentation: final acceptance follows the deterministic TSDoc correction.
+
+The coordinator applied the shared documentation-only finding without
+reopening runtime concerns.
