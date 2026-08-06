@@ -647,6 +647,8 @@ const DatastoreRecordQuery = Object.freeze(
     /** Returns whether a legacy query is exactly an ascending identifier keyset page. */
     isKeysetPage<I>(query: RecordQuery<I>): boolean {
       const order = query.sort;
+      const continuation = query.after;
+      const continuationValue = continuation?.values[0];
       return (
         query.limit !== undefined &&
         query.ids === undefined &&
@@ -655,12 +657,12 @@ const DatastoreRecordQuery = Object.freeze(
         order?.length === 1 &&
         order[0]?.field === "id" &&
         order[0].direction !== "desc" &&
-        (query.after === undefined ||
-          (typeof query.after.id === "string" &&
-            query.after.values.length === 1 &&
-            query.after.values[0].field === "id" &&
-            typeof query.after.values[0].value === "string" &&
-            RecordValues.equal(query.after.values[0].value, query.after.id)))
+        (continuation === undefined ||
+          (typeof continuation.id === "string" &&
+            continuation.values.length === 1 &&
+            continuationValue?.field === "id" &&
+            typeof continuationValue.value === "string" &&
+            RecordValues.equal(continuationValue.value, continuation.id)))
       );
     }
   })(),
