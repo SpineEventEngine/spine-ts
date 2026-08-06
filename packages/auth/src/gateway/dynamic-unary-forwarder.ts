@@ -281,7 +281,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   }
 
   /**
-   * Rehydrates one durable logical definition without treating it as a public Subscribe request.
+   * Restores one durable logical definition without treating it as a public Subscribe request.
    *
    * @param request Supplies the canonical definition retained by durable storage.
    * @param maxBackendEnvelopeBytes Limits every per-node native envelope.
@@ -360,10 +360,11 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   }
 
   /**
-   * Associates the browser activation wire and update sink with a logical definition.
+   * Activates a logical definition and relays its native updates.
    *
    * @param wire Supplies the canonical public subscription wire.
    * @param updates Receives best-effort native updates.
+   * @param signal Ends the logical activation and native child streams.
    * @returns Completes after current membership has observed the activation.
    */
   async activateDefinition(
@@ -484,6 +485,12 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     );
   }
 
+  /**
+   * Waits until an abort signal is observed.
+   *
+   * @param signal Supplies the signal to observe.
+   * @returns Completes after the signal aborts.
+   */
   static waitForAbort(signal: AbortSignal): Promise<void> {
     return new Promise((resolve) => {
       signal.addEventListener("abort", () => {

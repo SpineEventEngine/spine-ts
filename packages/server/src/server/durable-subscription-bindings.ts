@@ -470,7 +470,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   }
 
   /**
-   * Claims and rehydrates expired active definitions while fenced, then marks each row inactive.
+   * Restores expired active definitions while fenced, then marks each row inactive.
    *
    * A restarted Gateway has no public update relay to resume. A reconnecting
    * browser Activate request immediately establishes the new relay.

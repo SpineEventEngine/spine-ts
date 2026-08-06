@@ -21,7 +21,7 @@ export class DynamicSubscriptionCreator implements SubscriptionCoordinator {
   }
 
   /**
-   * Rehydrates a retained durable definition into the current native membership.
+   * Restores a retained durable definition into the current native membership.
    *
    * @param definition Supplies the retained canonical definition.
    * @returns Completes after child creation settles.

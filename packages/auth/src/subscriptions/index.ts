@@ -286,7 +286,7 @@ export interface SubscriptionBindings {
   purgeExpired(nowMs: number): Promise<void>;
 
   /**
-   * Rehydrates active durable definitions after a Gateway restart when supported.
+   * Restores active durable definitions after a Gateway restart when supported.
    *
    * Implementations without durable storage may omit this operation.
    *
@@ -745,6 +745,7 @@ export interface SubscriptionCreator {
  * compensates any partially created native children before it rejects creation.
  */
 export interface SubscriptionCoordinator {
+
   /**
    * Creates every current native child for a logical definition.
    *
