@@ -64,7 +64,7 @@ export class LeasedNodeRegistry {
   }
 
   /**
-   * Renews a lease only when its registration identity still owns the node ID.
+   * Updates a lease only when its registration identity still owns the node ID.
    *
    * @param nodeId Supplies the stable node identity.
    * @param registrationId Supplies the opaque owning process identity.
@@ -119,7 +119,7 @@ export class LeasedNodeRegistry {
   }
 
   /**
-   * Conditionally removes one finite batch of expired leases.
+   * Deletes one finite batch of expired leases conditionally.
    *
    * @param now Supplies epoch milliseconds used for exact expiry filtering.
    * @returns The number of rows this pass removed.
@@ -147,7 +147,7 @@ export class LeasedNodeRegistry {
   }
 
   /**
-   * Fences new operations, joins started operations, then closes this handle once.
+   * Joins started operations after fencing this handle once.
    *
    * @returns Completes after every active registry operation settles.
    */
@@ -199,11 +199,21 @@ export class LeasedNodeRegistry {
  * Supplies storage ownership and finite cleanup settings for one registry.
  */
 export interface LeasedNodeRegistryOptions {
-  /** The caller-selected storage factory. */
+  // The caller controls storage ownership and namespace selection.
+
+  /**
+   * Selects the caller-owned storage factory.
+   */
   readonly factory: StorageFactory;
-  /** The caller-selected logical storage namespace. */
+
+  /**
+   * Selects the caller-owned logical storage namespace.
+   */
   readonly namespace: string;
-  /** Maximum expired rows considered by one cleanup pass. */
+
+  /**
+   * Limits expired rows considered by one cleanup pass.
+   */
   readonly cleanupBatchSize?: number;
 }
 
@@ -211,11 +221,21 @@ export interface LeasedNodeRegistryOptions {
  * Supplies the durable data owned by one registration attempt.
  */
 export interface NodeLease {
-  /** The stable reachable application node. */
+  // One durable registration attempt carries these lease values.
+
+  /**
+   * Identifies the stable reachable application node.
+   */
   readonly node: ApplicationNode;
-  /** The opaque identity of one application process. */
+
+  /**
+   * Identifies the opaque owning application process.
+   */
   readonly registrationId: string;
-  /** The epoch-millisecond time at which this lease stops being live. */
+
+  /**
+   * Specifies the epoch-millisecond expiry of this lease.
+   */
   readonly expiresAt: number;
 }
 
