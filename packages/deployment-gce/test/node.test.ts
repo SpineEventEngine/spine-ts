@@ -1,4 +1,5 @@
-/* eslint-disable @typescript-eslint/no-base-to-string, @typescript-eslint/no-confusing-void-expression, @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/no-unused-vars, @typescript-eslint/require-await */
+/* eslint-disable @typescript-eslint/require-await -- Structural registry and Gateway fixtures expose
+ * asynchronous contract methods without awaiting. */
 
 import { describe, expect, it } from "vitest";
 import { create, toBinary } from "@bufbuild/protobuf";
@@ -87,7 +88,7 @@ describe("GceApplicationNode", () => {
     const requests: (RequestInfo | URL)[] = [];
     globalThis.fetch = async (input) => {
       requests.push(input);
-      const path = String(input).split("/").slice(-2).join("/");
+      const path = requestUrl(input).split("/").slice(-2).join("/");
       const body =
         new Map([
           ["project/project-id", " project "],
@@ -127,7 +128,7 @@ describe("GceApplicationNode", () => {
         ["instance/network-interfaces/0/ip", " "],
       ]) {
         globalThis.fetch = async (input) => {
-          const requested = String(input).replace(
+          const requested = requestUrl(input).replace(
             "http://metadata.google.internal/computeMetadata/v1/",
             "",
           );
@@ -152,9 +153,15 @@ describe("GceApplicationNode", () => {
         const signal = init?.signal;
         if (!(signal instanceof AbortSignal)) throw new Error("missing abort signal");
         signals.push(signal);
-        return await new Promise<Response>((_resolve, reject) =>
-          signal.addEventListener("abort", () => reject(new Error("cancelled")), { once: true }),
-        );
+        return await new Promise<Response>((_resolve, reject) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              reject(new Error("cancelled"));
+            },
+            { once: true },
+          );
+        });
       };
       const controller = new AbortController();
       const reading = new GceMetadataService().read(controller.signal);
@@ -338,7 +345,7 @@ describe("GceApplicationNode", () => {
     const original = globalThis.fetch;
     const registrations: string[] = [];
     globalThis.fetch = async (input) => {
-      const path = String(input).split("/").slice(-2).join("/");
+      const path = requestUrl(input).split("/").slice(-2).join("/");
       const body =
         new Map([
           ["project/project-id", "project"],
@@ -382,7 +389,9 @@ describe("GceApplicationNode", () => {
       reader: new GceRegistryReader(registry, () => 0),
       scheduler: { schedule: (_delay, onTick) => ((tick = onTick), () => undefined) },
     });
-    const stop = discovery.watch((snapshot) => expect(snapshot).toHaveLength(40));
+    const stop = discovery.watch((snapshot) => {
+      expect(snapshot).toHaveLength(40);
+    });
     tick?.();
     await Promise.resolve();
     await stop();
@@ -499,8 +508,9 @@ describe("GceApplicationNode", () => {
       read: (signal: AbortSignal) =>
         new Promise<import("../src/index.js").GceMetadata>((done) => {
           signal.addEventListener("abort", () => (aborted = true));
-          resolve = () =>
+          resolve = () => {
             done({ projectId: "p", zone: "z", instanceId: "1", privateAddress: "10.0.0.1" });
+          };
         }),
     };
     const calls: string[] = [];
@@ -530,7 +540,10 @@ describe("GceApplicationNode", () => {
       register: () =>
         new Promise<boolean>((done) => {
           admitted?.();
-          resolve = () => (calls.push("register"), done(true));
+          resolve = () => {
+            calls.push("register");
+            done(true);
+          };
         }),
       remove: async () => (calls.push("remove"), true),
     } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
@@ -559,7 +572,10 @@ describe("GceApplicationNode", () => {
       renew: () =>
         new Promise<boolean>((done) => {
           admitted?.();
-          resolveRenew = () => (calls.push("renew"), done(true));
+          resolveRenew = () => {
+            calls.push("renew");
+            done(true);
+          };
         }),
       cleanup: async () => (calls.push("cleanup"), 0),
       remove: async () => (calls.push("remove"), true),
@@ -584,9 +600,11 @@ describe("GceApplicationNode", () => {
     let closed = false;
     const metadata = {
       read: (signal: AbortSignal) =>
-        new Promise<import("../src/index.js").GceMetadata>((_done, reject) =>
-          signal.addEventListener("abort", () => reject(new Error("aborted"))),
-        ),
+        new Promise<import("../src/index.js").GceMetadata>((_done, reject) => {
+          signal.addEventListener("abort", () => {
+            reject(new Error("aborted"));
+          });
+        }),
     };
     const registrar = new GceRegistrar({
       registry: {
@@ -597,7 +615,9 @@ describe("GceApplicationNode", () => {
       deadlines: {
         create: () => {
           const controller = new AbortController();
-          abort = () => controller.abort();
+          abort = () => {
+            controller.abort();
+          };
           return { signal: controller.signal, close: () => (closed = true) };
         },
       },
@@ -629,9 +649,15 @@ describe("GceApplicationNode", () => {
           expect(now).toBe(0);
           lookupSignal = signal;
           lookupStarted?.();
-          signal.addEventListener("abort", () => reject(new Error("lookup deadline")), {
-            once: true,
-          });
+          signal.addEventListener(
+            "abort",
+            () => {
+              reject(new Error("lookup deadline"));
+            },
+            {
+              once: true,
+            },
+          );
         }),
       cleanup: async () => 0,
       remove: async () => true,
@@ -701,11 +727,13 @@ describe("GceApplicationNode", () => {
     const originalSetTimeout = globalThis.setTimeout;
     const originalClearTimeout = globalThis.clearTimeout;
     let unrefs = 0;
-    globalThis.setTimeout = ((_callback: () => void, _delay: number) =>
-      ({ unref: () => (unrefs += 1) }) as unknown as ReturnType<
-        typeof setTimeout
-      >) as typeof setTimeout;
-    globalThis.clearTimeout = (() => undefined) as typeof clearTimeout;
+    globalThis.setTimeout = (() =>
+      ({
+        unref: () => {
+          unrefs += 1;
+        },
+      }) as unknown as ReturnType<typeof setTimeout>) as typeof setTimeout;
+    globalThis.clearTimeout = () => undefined;
     const registrar = new GceRegistrar({
       registry: {
         register: async () => true,
@@ -1058,4 +1086,10 @@ function gatewayClient(id: string, subscribed: Set<string>): DynamicUnaryClient 
     cancel: async () => undefined,
     dispose: async () => undefined,
   };
+}
+
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
 }
