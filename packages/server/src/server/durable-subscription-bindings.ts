@@ -246,7 +246,6 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   async create(input: {
     readonly backend: BackendSubscriptionEnvelope;
     readonly principalFingerprint: string;
-    readonly topology?: string;
     readonly tenant: string | undefined;
     readonly expiresAtMs: number;
     readonly reservation?: SubscriptionCapacityReservation;
@@ -307,7 +306,6 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   async activate(input: {
     readonly id: string;
     readonly principalFingerprint: string;
-    readonly topology?: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
     readonly onBackend: OnBackendSubscription;
@@ -325,7 +323,6 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   async #activate(input: {
     readonly id: string;
     readonly principalFingerprint: string;
-    readonly topology?: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
     readonly onBackend: OnBackendSubscription;
@@ -371,7 +368,6 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   async cancel(input: {
     readonly id: string;
     readonly principalFingerprint: string;
-    readonly topology?: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
     readonly onBackend: OnBackendSubscription;
@@ -1075,7 +1071,6 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     binding: Binding,
     input: {
       readonly principalFingerprint: string;
-      readonly topology?: string;
       readonly tenant: string | undefined;
       readonly nowMs: number;
     },

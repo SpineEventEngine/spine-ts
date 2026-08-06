@@ -2670,7 +2670,7 @@ function malformedRepairRecord(id: string): Any {
   return create(AnySchema, {
     typeUrl: "type.spine-event-engine.gateway/DurableSubscriptionBinding",
     value: new TextEncoder().encode(
-      JSON.stringify({ version: 3, family: "binding", id, revision: 1 }),
+      JSON.stringify({ version: 1, family: "binding", id, revision: 1 }),
     ),
   });
 }
