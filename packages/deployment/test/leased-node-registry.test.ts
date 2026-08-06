@@ -79,6 +79,19 @@ describe("LeasedNodeRegistry", () => {
     await expect(storage.query()).resolves.toHaveLength(1);
   });
 
+  it("fails an unknown-version snapshot without modifying its rows", async () => {
+    const factory = new InMemoryStorageFactory();
+    const registry = new LeasedNodeRegistry({ factory, namespace: "unknown-version" });
+    const storage = factory.createRecordStorage(
+      { name: "unknown-version", multitenant: false },
+      leaseRecordSpec,
+    );
+    await storage.write(leaseRecord("node/a", 2));
+
+    await expect(registry.read(0)).rejects.toThrow("unsupported version");
+    await expect(storage.query()).resolves.toHaveLength(1);
+  });
+
   it("cleans expired rows in finite repeatable batches under concurrent callers", async () => {
     const factory = new InMemoryStorageFactory();
     const first = new LeasedNodeRegistry({ factory, namespace: "cleanup", cleanupBatchSize: 2 });
@@ -100,16 +113,40 @@ describe("LeasedNodeRegistry", () => {
     await expect(first.cleanup(10)).resolves.toBe(0);
   });
 
-  it("closes its handle deterministically and rejects later work", async () => {
+  it("joins an in-flight operation before closing and rejects later work", async () => {
+    const factory = new DelayedQueryFactory();
     const registry = new LeasedNodeRegistry({
-      factory: new InMemoryStorageFactory(),
+      factory,
       namespace: "closed",
     });
-    registry.close();
-    registry.close();
+    const reading = registry.read(0);
+    await Promise.resolve();
+    const closing = registry.close();
+    let closed = false;
+    void closing.then(() => {
+      closed = true;
+    });
+    expect(closed).toBe(false);
+    await expect(registry.read(0)).rejects.toThrow("closed");
+    factory.resolveQuery();
+    await reading;
+    await closing;
+    expect(factory.storage?.isOpen()).toBe(false);
     await expect(registry.read(0)).rejects.toThrow("closed");
   });
 });
+
+function leaseRecord(nodeId: string, version: number) {
+  return create(StructSchema, {
+    fields: {
+      version: create(ValueSchema, { kind: { case: "numberValue", value: version } }),
+      nodeId: create(ValueSchema, { kind: { case: "stringValue", value: nodeId } }),
+      endpoint: create(ValueSchema, { kind: { case: "stringValue", value: "http://10.0.0.1" } }),
+      expiresAt: create(ValueSchema, { kind: { case: "numberValue", value: 100 } }),
+      registrationId: create(ValueSchema, { kind: { case: "stringValue", value: "process" } }),
+    },
+  });
+}
 
 class NonAtomicFactory extends InMemoryStorageFactory {
   override createRecordStorage<I, R extends import("@bufbuild/protobuf").Message>(
@@ -119,5 +156,33 @@ class NonAtomicFactory extends InMemoryStorageFactory {
     const storage = super.createRecordStorage(context, recordSpec);
     Object.defineProperty(storage, "atomicCompareAndSet", { value: false });
     return storage;
+  }
+}
+
+class DelayedQueryFactory extends InMemoryStorageFactory {
+  storage:
+    | import("@spine-event-engine/storage").RecordStorage<
+        string,
+        import("@bufbuild/protobuf/wkt").Struct
+      >
+    | undefined;
+  #resolve: (() => void) | undefined;
+
+  override createRecordStorage<I, R extends import("@bufbuild/protobuf").Message>(
+    context: import("@spine-event-engine/storage").StorageContext,
+    recordSpec: import("@spine-event-engine/storage").RecordSpec<I, R>,
+  ): import("@spine-event-engine/storage").RecordStorage<I, R> {
+    const storage = super.createRecordStorage(context, recordSpec);
+    if (this.storage === undefined) {
+      this.storage = storage as unknown as typeof this.storage;
+      Object.defineProperty(storage, "query", {
+        value: () => new Promise<void>((resolve) => (this.#resolve = resolve)).then(() => []),
+      });
+    }
+    return storage;
+  }
+
+  resolveQuery(): void {
+    this.#resolve?.();
   }
 }
