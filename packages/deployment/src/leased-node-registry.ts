@@ -26,6 +26,7 @@ export class LeasedNodeRegistry {
   #closed = false;
   #closing: Promise<void> | undefined;
   readonly #operations = new Set<Promise<unknown>>();
+  #cleanupAfter: RecordContinuation<string> | undefined;
 
   /**
    * Creates a leased node registry over an explicit atomic record storage handle.
@@ -126,7 +127,13 @@ export class LeasedNodeRegistry {
   cleanup(now: number): Promise<number> {
     return this.start(async () => {
       LeaseRecords.requireTime(now);
-      const records = await this.#storage.queryEntries({ limit: this.#cleanupBatchSize });
+      const records = await this.#storage.queryEntries({
+        sort: [{ field: "id" }],
+        ...(this.#cleanupAfter === undefined ? {} : { after: this.#cleanupAfter }),
+        limit: this.#cleanupBatchSize,
+      });
+      this.#cleanupAfter = records.length === 0 ? undefined : pageContinuation(records.at(-1));
+      if (records.length < this.#cleanupBatchSize) this.#cleanupAfter = undefined;
       const removals = await Promise.all(
         records.map(async ({ id, record }) => {
           const lease = LeaseRecords.read(record, id);
@@ -277,4 +284,11 @@ function recordId(record: ApplicationNodeLease): string {
   const id = record.nodeId;
   if (!id.trim()) throw new Error("Application node lease record has no node ID.");
   return id;
+}
+
+function pageContinuation(
+  entry: RecordEntry<string, ApplicationNodeLease> | undefined,
+): RecordContinuation<string> {
+  if (entry === undefined) throw new Error("Lease page has no continuation row.");
+  return { values: [{ field: "id", value: entry.id }], id: entry.id };
 }
