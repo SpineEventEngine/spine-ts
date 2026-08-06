@@ -74,6 +74,24 @@ describe("LeasedNodeRegistry", () => {
     await expect(registry.read(999)).resolves.toHaveLength(40);
   });
 
+  it("reads a complete snapshot through bounded provider pages", async () => {
+    const registry = new LeasedNodeRegistry({
+      factory: new CappedQueryFactory(),
+      namespace: "pages",
+    });
+    for (let index = 0; index < 1_002; index++) {
+      await registry.register({
+        node: new ApplicationNode({
+          id: `node/${String(index)}`,
+          endpoint: `http://10.2.${String(Math.floor(index / 250))}.${String((index % 250) + 1)}`,
+        }),
+        registrationId: `page-${String(index)}`,
+        expiresAt: 1_000,
+      });
+    }
+    await expect(registry.read(0)).resolves.toHaveLength(1_002);
+  });
+
   it("rejects an atomicity-free factory before accepting lease lifecycle work", () => {
     expect(
       () => new LeasedNodeRegistry({ factory: new NonAtomicFactory(), namespace: "no-atomic" }),
@@ -191,6 +209,19 @@ class CountingFactory extends InMemoryStorageFactory {
   ): import("@spine-event-engine/storage").RecordStorage<I, R> {
     this.created++;
     return super.createRecordStorage(context, recordSpec);
+  }
+}
+
+class CappedQueryFactory extends InMemoryStorageFactory {
+  override createRecordStorage<I, R extends import("@bufbuild/protobuf").Message>(
+    context: import("@spine-event-engine/storage").StorageContext,
+    recordSpec: import("@spine-event-engine/storage").RecordSpec<I, R>,
+  ): import("@spine-event-engine/storage").RecordStorage<I, R> {
+    const storage = super.createRecordStorage(context, recordSpec);
+    Object.defineProperty(storage, "query", {
+      value: () => Promise.reject(new Error("Provider requires a bounded page.")),
+    });
+    return storage;
   }
 }
 
