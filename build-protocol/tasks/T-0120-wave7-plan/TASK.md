@@ -1,6 +1,6 @@
 # T-0120: Wave 7 Scaling And Redeployment Plan
 
-Status: Human Q&A complete; implementation not started
+Status: Execution authorized; dependency split in progress
 
 ## Objective
 
@@ -77,8 +77,24 @@ behavior, rolling replacement, and production infrastructure templates.
 ## Human Q&A Result
 
 Every Wave 7 product decision is resolved. The final planning step may now
-produce and review the dependency-ordered implementation split. Runtime work
-still requires the human's explicit approval of that completed plan.
+produce and review the dependency-ordered implementation split. On 2026-08-06,
+the human explicitly instructed the autonomous process to start Wave 7. That
+instruction approves execution of the accepted plan without another routine
+approval pause.
+
+## Requirements-Splitter Assignment
+
+- Existing role: requirements splitter.
+- Scope: turn the accepted Wave 7 contract into small dependency-ordered tasks
+  with observable acceptance criteria, RED-first tests, documentation
+  obligations, relevant review concerns, and verification profiles.
+- Expected model: `gpt-5.6-sol`.
+- Expected reasoning: `high`.
+- Dispatch requirement: both model and reasoning must be explicit fields.
+- The prior `wave7_requirements` result is rejected as superseded because it
+  imposed a hard node ceiling and fail-closed overflow behavior contradicted by
+  the final human decision.
+- Subagents may not spawn subagents.
 
 ## Review Dispositions
 

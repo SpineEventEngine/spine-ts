@@ -1,6 +1,6 @@
 # Wave 7: Scaling And Redeployment
 
-Status: Human Q&A complete; implementation not started
+Status: Execution authorized; dependency split in progress
 
 Planning task: `T-0120`
 
@@ -138,3 +138,8 @@ The human approved the registrar lifecycle, private-address default, package
 boundaries, discovery mechanisms, timings, storage ownership, deployment
 topologies, scaling boundary, and replacement semantics. No product question
 remains before the dependency-ordered implementation split is finalized.
+
+On 2026-08-06, the human instructed the autonomous process to start Wave 7.
+This authorizes the dependency split and subsequent implementation, review,
+integration, post-merge verification, and pushes without another routine
+approval pause.
