@@ -632,9 +632,10 @@ describe("DatastoreStorageFactory", () => {
         after: { values: [{ field: "id", value: "a" }], id: "a" },
         limit: 1,
       }),
-    ).rejects.toThrow("Datastore query exceeded the client-side scan limit of 1");
-    expect(client.lastQuery?.limitValue).toBe(2);
+    ).resolves.toMatchObject([{ id: "b" }]);
+    expect(client.lastQuery?.limitValue).toBe(1);
     expect(client.lastQuery?.orders).toContainEqual(["__key__", { descending: false }]);
+    expect(client.lastQuery?.filters).toContainEqual(["__key__", ">", expect.anything()]);
   });
 
   it("does not duplicate an explicit identifier order", async () => {
