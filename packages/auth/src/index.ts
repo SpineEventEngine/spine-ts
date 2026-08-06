@@ -596,7 +596,6 @@ const TransportFactsValues = Object.freeze({
 });
 
 export { UnaryGateway } from "./gateway/index.js";
-export { FanInSubscriptionCreator, RoundRobinUnaryForwarder } from "./gateway/fan-in.js";
 export { OpaqueSessionCookies } from "./sessions/cookies.js";
 export { OpaqueSessions } from "./sessions/opaque.js";
 export { SignedSessions } from "./sessions/signed.js";
@@ -622,6 +621,7 @@ export type {
 } from "./gateway/index.js";
 export type {
   SubscriptionCreator,
+  SubscriptionCoordinator,
   SubscriptionGatewayLimits,
   SubscriptionGatewayOptions,
   SubscriptionGatewayRequest,
@@ -633,7 +633,7 @@ export type {
   SubscriptionTopicWire,
   PublicSubscriptionWire,
   BackendSubscriptionEnvelope,
-  OnBackendSubscription,
+  OnSubscriptionDefinition,
   SubscriptionUpdateSink,
   SubscriptionUpdateWire,
 } from "./subscriptions/index.js";
@@ -698,3 +698,4 @@ export {
   type DynamicUnaryClient,
   type DynamicUnaryOptions,
 } from "./gateway/dynamic-unary-forwarder.js";
+export { DynamicSubscriptionCreator } from "./gateway/dynamic-subscription-creator.js";

@@ -1,4 +1,5 @@
 import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { MessageBoardDeployment } from "../src/deployment-config.js";
@@ -123,9 +124,9 @@ describe("MessageBoard deployment configuration", () => {
     ).toThrow(expected);
   });
 
-  it("assembles a closeable durable registry over application-selected storage", async () => {
+  it("assembles a closeable durable registry over supplied local storage", async () => {
     const config = MessageBoardDeployment.combined(completeEnvironment);
-    const storage = MessageBoardDeployment.storage(config);
+    const storage = new InMemoryStorageFactory();
     const bindings = MessageBoardDeployment.bindings(config, storage);
 
     expect(bindings.durable).toBe(true);

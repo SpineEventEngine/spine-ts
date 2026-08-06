@@ -76,6 +76,46 @@ describe("Server", () => {
       ),
     ).toEqual({ baseUrl: "https://10.0.0.1", nodeOptions: { servername: "api.example.test" } });
   });
+
+  it("runs durable subscription recovery with the configured gateway clock", async () => {
+    const bindings = inMemoryBindings() as InMemorySubscriptionBindings & {
+      recoverActive: NonNullable<
+        import("@spine-event-engine/auth").SubscriptionBindings["recoverActive"]
+      >;
+    };
+    let recoveredAt: number | undefined;
+    bindings.recoverActive = async ({ nowMs }) => {
+      recoveredAt = nowMs;
+    };
+    const server = await new Server({
+      browser: { port: 0, ...browserGateway(), bindings },
+    }).start();
+
+    expect(recoveredAt).toBe(0);
+    await server.close();
+  });
+
+  it("closes subscription resources when durable recovery fails during startup", async () => {
+    const bindings = inMemoryBindings() as InMemorySubscriptionBindings & {
+      recoverActive: NonNullable<
+        import("@spine-event-engine/auth").SubscriptionBindings["recoverActive"]
+      >;
+    };
+    let closed = false;
+    const close = bindings.close.bind(bindings);
+    bindings.close = async () => {
+      closed = true;
+      await close();
+    };
+    bindings.recoverActive = async () => {
+      throw new Error("recovery failed");
+    };
+
+    await expect(
+      new Server({ browser: { port: 0, ...browserGateway(), bindings } }).start(),
+    ).rejects.toThrow("recovery failed");
+    expect(closed).toBe(true);
+  });
   beforeEach(async () => {
     await resetServerEnvironmentForTest();
   });
@@ -84,23 +124,19 @@ describe("Server", () => {
     await resetServerEnvironmentForTest();
   });
 
-  it("accepts one to thirty-two unique canonical standalone backend origins in configured order", () => {
+  it("accepts every non-empty unique canonical standalone backend origin in configured order", () => {
     expect(
       BrowserServer.backendUrls(["https://first.example.test", "https://second.example.test"]),
     ).toEqual(["https://first.example.test", "https://second.example.test"]);
     expect(
       BrowserServer.backendUrls(
-        Array.from({ length: 32 }, (_, index) => `https://node-${index.toString()}.example.test`),
+        Array.from({ length: 40 }, (_, index) => `https://node-${index.toString()}.example.test`),
       ),
-    ).toHaveLength(32);
+    ).toHaveLength(40);
   });
 
   it.each([
-    [[], "between 1 and 32"],
-    [
-      Array.from({ length: 33 }, (_, index) => `https://node-${index.toString()}.example.test`),
-      "between 1 and 32",
-    ],
+    [[], "at least one origin"],
     [["https://same.example.test", "https://same.example.test"], "unique"],
     [["https://backend.example.test/private"], "canonical HTTP(S) origin"],
   ])("rejects invalid standalone backend topology %j", (baseUrls, error) => {
@@ -682,7 +718,6 @@ describe("Server", () => {
         "/spine.client.QueryService/Read",
         "/spine.client.SubscriptionService/Subscribe",
         "/spine.client.SubscriptionService/Activate",
-        "/spine.client.SubscriptionService/Cancel",
       ]);
     } finally {
       await server.close();

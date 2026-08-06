@@ -164,10 +164,10 @@ application type registry and named durable bindings. `ResolveContext` stays in 
 Post, Read, Subscribe, Activate, and Cancel use the same authenticated policy,
 context-replacement, and native descriptors before reaching the backend.
 
-`browser.backend.baseUrls` is exclusive with `baseUrl` and configures 1–32
-ordered unique origins. Unary calls use bounded round-robin without retry;
-subscriptions fan out best-effort. Durable bindings fence the ordered topology;
-custom durable fan-in stores must declare topology-fencing support. Clients
+`browser.backend.baseUrls` is exclusive with `baseUrl` and configures a
+non-empty ordered unique static node set. Unary calls use bounded round-robin
+without retry; native streams fan out best-effort. Durable bindings retain only
+logical definitions, not topology. Clients
 re-query authoritative state after duplicate updates or generic loss notices.
 
 `browser.authRoutes` is deliberately a bounded callback seam, not a router.
@@ -206,8 +206,9 @@ binding store before listener open. The durable registry receives an explicit
 application namespace, storage factory, identifier source, disposal callback,
 and finite lease, cleanup, record, and byte limits. It owns and closes only
 its independently opened record-storage handle, not the application storage
-factory or a Spine JVM/TS backend. It copies backend envelopes on read, write,
-and callbacks and never returns them through public subscription responses.
+factory or a Spine JVM/TS backend. It stores canonical public Subscription
+definitions, never backend envelopes or membership topology, and never returns
+private native data through public subscription responses.
 
 The durable registry preserves opaque records through a process restart.
 It validates record family, version, type, storage key identity, owner
@@ -288,4 +289,4 @@ environment: attachment supervisors and their source reads are facility-owned.
 
 # Dynamic unary discovery
 
-`BrowserServerOptions.discovery` may supply changing complete application-node snapshots alongside fixed `backend` configuration. Discovery changes command/query routing; fixed backend configuration remains the subscription fan-in input.
+`BrowserServerOptions.discovery` may supply changing complete application-node snapshots alongside fixed `backend` configuration. Both unary routing and native subscription streams use the same current membership. Empty membership retains durable definitions and later nodes reactivate them; a new backend-dependent subscription is unavailable until a node exists.

@@ -4,17 +4,16 @@
 
 import * as http from "node:http";
 import type { AddressInfo } from "node:net";
-import { createHash } from "node:crypto";
 
 import {
   createNativeGatewayServices,
+  DynamicSubscriptionCreator,
   DynamicUnaryForwarder,
-  FanInSubscriptionCreator,
   InMemorySubscriptionBindings,
   NativeSubscriptionCreator,
-  RoundRobinUnaryForwarder,
   SubscriptionGateway,
   TransportFacts,
+  type SubscriptionBindings,
   UnaryGateway,
 } from "@spine-event-engine/auth";
 import type { ConnectRouter } from "@connectrpc/connect";
@@ -24,7 +23,7 @@ import {
   Http2SessionManager,
 } from "@connectrpc/connect-node";
 import { AuthenticationService } from "@spine-event-engine/proto/auth";
-import type { ApplicationNode, NodeDiscovery } from "@spine-event-engine/deployment";
+import { ApplicationNode, type NodeDiscovery } from "@spine-event-engine/deployment";
 import {
   CommandService,
   QueryService,
@@ -71,7 +70,6 @@ export const BrowserServer: Readonly<{
     readonly baseUrl: string;
     readonly nodeOptions?: { readonly servername: string };
   };
-  topologyFingerprint(values: readonly string[]): string;
   requireDurableBindings(options: BrowserServerOptions, production: boolean): void;
   authRoutes(
     routes: readonly BrowserAuthRoute[] | undefined,
@@ -106,48 +104,47 @@ export const BrowserServer: Readonly<{
             ? native
             : BrowserServerValues.requiredRunning(running).baseUrl,
         ];
-    const creators = backendBaseUrls.map(
-      (baseUrl) => new NativeSubscriptionCreator(createGrpcTransport({ baseUrl })),
+    const fixedNodes = backendBaseUrls.map(
+      (endpoint, index) => new ApplicationNode({ id: `fixed/${index.toString()}`, endpoint }),
     );
-    const firstCreator = BrowserServerValues.firstCreator(creators);
-    const creator = creators.length === 1 ? firstCreator : new FanInSubscriptionCreator(creators);
     let dynamic: DynamicUnaryForwarder | undefined;
     let stopDiscovery: (() => Promise<void>) | undefined;
-    const forwarder =
-      options.discovery === undefined
-        ? creators.length === 1
-          ? firstCreator
-          : new RoundRobinUnaryForwarder(creators)
-        : (dynamic = new DynamicUnaryForwarder({
-            create: async (node) => {
-              const manager =
-                options.dynamicManagerFactory?.(node) ??
-                new Http2SessionManager(
-                  node.endpoint,
-                  undefined,
-                  node.tlsServerName === undefined ? undefined : { servername: node.tlsServerName },
-                );
-              const client = new NativeSubscriptionCreator(
-                createGrpcTransport({
-                  ...BrowserServer.dynamicTransportOptions(node),
-                  sessionManager: manager,
-                }),
-              );
-              return {
-                forward: client.forward.bind(client),
-                close: async () => {
-                  manager.abort();
-                },
-              };
-            },
-          }));
-    if (options.discovery !== undefined && dynamic !== undefined)
+    const forwarder = (dynamic = new DynamicUnaryForwarder({
+      create: async (node) => {
+        const manager =
+          options.dynamicManagerFactory?.(node) ??
+          new Http2SessionManager(
+            node.endpoint,
+            undefined,
+            node.tlsServerName === undefined ? undefined : { servername: node.tlsServerName },
+          );
+        const client = new NativeSubscriptionCreator(
+          createGrpcTransport({
+            ...BrowserServer.dynamicTransportOptions(node),
+            sessionManager: manager,
+          }),
+        );
+        return {
+          forward: client.forward.bind(client),
+          subscribe: client.subscribe.bind(client),
+          activate: client.activate.bind(client),
+          cancel: client.cancel.bind(client),
+          dispose: client.dispose.bind(client),
+          close: async () => {
+            manager.abort();
+          },
+        };
+      },
+    }));
+    if (options.discovery !== undefined)
       stopDiscovery = await BrowserServerValues.watch(options.discovery, dynamic);
+    else await dynamic.reconcile(fixedNodes);
+    const creator = new DynamicSubscriptionCreator(dynamic);
     const bindings =
       options.bindings ??
       new InMemorySubscriptionBindings({
         nextId: () => globalThis.crypto.randomUUID(),
-        dispose: creator.dispose.bind(creator),
+        dispose: (definition, signal) => creator.cancel({ wire: definition }, signal),
       });
     const requests = BrowserServer.requests(options);
     const unary = new UnaryGateway({
@@ -166,9 +163,38 @@ export const BrowserServer: Readonly<{
       contexts: options.contexts,
       clock: options.clock,
       fingerprint: options.fingerprint,
-      topology: BrowserServer.topologyFingerprint(backendBaseUrls),
       creator,
     });
+    try {
+      const durableBindings = bindings as SubscriptionBindings;
+      if (durableBindings.recoverActive !== undefined) {
+        const now = options.clock.now();
+        const nowMs =
+          Number(now.seconds.toString()) * 1_000 +
+          Math.floor(Number(now.nanos.toString()) / 1_000_000);
+        if (Number.isSafeInteger(nowMs))
+          await durableBindings.recoverActive({
+            nowMs,
+            onDefinition: (definition: import("@spine-event-engine/auth").PublicSubscriptionWire) =>
+              creator.rehydrate(definition),
+          });
+      }
+    } catch (error) {
+      const failures = [error];
+      for (const cleanup of [
+        () => subscriptions.close(),
+        () => stopDiscovery?.(),
+        () => dynamic.close(),
+        () => running?.close(),
+      ])
+        try {
+          await cleanup();
+        } catch (cleanupError) {
+          failures.push(cleanupError);
+        }
+      if (failures.length === 1) throw error;
+      throw new AggregateError(failures, "Browser subscription recovery startup rollback failed.");
+    }
     const services = createNativeGatewayServices({ unary, subscriptions, requests });
     const handler = connectNodeAdapter({
       routes: (router: ConnectRouter) => {
@@ -237,7 +263,7 @@ export const BrowserServer: Readonly<{
       const cleanup = await Promise.allSettled([
         subscriptions.close(),
         stopDiscovery?.(),
-        dynamic?.close(),
+        dynamic.close(),
         BrowserServer.closeListener(server),
       ]);
       const failures = cleanup.flatMap((result) =>
@@ -328,8 +354,8 @@ export const BrowserServer: Readonly<{
     return value;
   },
   backendUrls(values: readonly string[]): readonly string[] {
-    if (values.length < 1 || values.length > 32)
-      throw new Error("Server browser backends must contain between 1 and 32 origins.");
+    if (values.length < 1)
+      throw new Error("Server browser backends must contain at least one origin.");
     const urls = values.map((value) => BrowserServer.backendUrl(value));
     if (new Set(urls).size !== urls.length)
       throw new Error("Server browser backends must be unique canonical HTTP(S) origins.");
@@ -342,17 +368,6 @@ export const BrowserServer: Readonly<{
         ? {}
         : { nodeOptions: { servername: node.tlsServerName } }),
     };
-  },
-  topologyFingerprint(values: readonly string[]): string {
-    const hash = createHash("sha256");
-    for (const url of BrowserServer.backendUrls(values)) {
-      const bytes = new TextEncoder().encode(url);
-      const length = new Uint8Array(4);
-      new DataView(length.buffer).setUint32(0, bytes.byteLength);
-      hash.update(length);
-      hash.update(bytes);
-    }
-    return hash.digest("hex");
   },
   requireDurableBindings(options: BrowserServerOptions, production: boolean): void {
     const supplied = options as Partial<BrowserServerOptions>;
@@ -374,13 +389,6 @@ export const BrowserServer: Readonly<{
         throw new Error("Standalone browser server requires a fingerprint function.");
       if (options.bindings === undefined)
         throw new Error("Standalone browser server requires explicit subscription bindings.");
-      if (
-        BrowserServerValues.backendUrlsFor(options.backend).length > 1 &&
-        options.bindings.topologyFencing !== true
-      )
-        throw new Error(
-          "Standalone browser fan-in requires topology-fencing subscription bindings.",
-        );
     }
     if (options.backend !== undefined && production && options.registry === undefined)
       throw new Error("Production standalone browser server requires a type registry.");

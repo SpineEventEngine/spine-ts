@@ -191,15 +191,18 @@ describe("NativeSubscriptionCreator", () => {
       value: toBinary(QueryService.method.read.input, create(QueryService.method.read.input)),
     });
     const signal = new AbortController().signal;
-    const backend = await native.subscribe(
-      { kind: "subscription-topic", bytes: toBinary(TopicSchema, create(TopicSchema)) },
-      signal,
-    );
+    const wire = {
+      kind: "public-subscription" as const,
+      bytes: toBinary(
+        SubscriptionSchema,
+        create(SubscriptionSchema, { topic: create(TopicSchema) }),
+      ),
+    };
+    const backend = await native.subscribe(wire, signal);
     const updates: Uint8Array[] = [];
     await native.activate(
       {
-        wire: { kind: "public-subscription", bytes: backend.bytes },
-        backend,
+        wire,
         updates: (update) => {
           updates.push(update.bytes);
           return Promise.resolve();
@@ -207,10 +210,7 @@ describe("NativeSubscriptionCreator", () => {
       },
       signal,
     );
-    await native.cancel(
-      { wire: { kind: "public-subscription", bytes: backend.bytes }, backend },
-      signal,
-    );
+    await native.cancel({ wire }, signal);
     await native.dispose(backend, signal);
     expect(calls.map((call) => call.method)).toEqual([
       "Post",

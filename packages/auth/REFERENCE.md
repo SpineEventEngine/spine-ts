@@ -10,15 +10,19 @@ The package supplies provider-neutral gateway building blocks. An application pl
 
 `AuthorizationPolicy.authorize()` is evaluated separately for each incoming request. `ContextResolver.resolve()` returns the trusted actor, optional tenant, timestamp, zone, and language. The caller-provided `ActorContext` must match that resolved actor and tenant, otherwise `UnaryGateway` rejects the request as `context-stale`. Backends can trust the forwarded, gateway-replaced context only when the deployment routes traffic through an application-selected gateway.
 
-## Fixed subscription topology
+## Dynamic subscription membership
 
-A standalone browser Gateway may use dynamic unary discovery for commands and
-queries. A fixed list of 1–32 backend origins remains the current positional
-subscription fan-in contract. Subscription creation and activation fan out to
-the configured nodes; merged notices can be duplicated, missing, or lost.
+A standalone browser Gateway uses one complete membership owner for commands,
+queries, and native subscription streams. A fixed backend list is static
+membership input and is not capped; dynamic discovery replaces it with later
+complete snapshots. Notices can be duplicated, missing, or lost.
 Browser code must treat notices as refresh hints and use Queries as the
-authoritative state source. The fixed subscription list is configured at
-startup; dynamic subscription reconciliation is not provided here.
+authoritative state source. The owner keeps one native child stream for every
+active logical subscription on every current node. Membership changes converge
+through one latest-only generation owner: removed or stale nodes cannot revive
+their children, while a zero-node interval retains an existing definition for
+later recovery. New subscription creation reports backend unavailability while
+membership is empty.
 
 ## Unary requests
 
@@ -38,7 +42,7 @@ ResolveContext validates the current session and returns informational actor, te
 
 ## Subscription and native adapters
 
-`SubscriptionGateway` and `InMemorySubscriptionBindings` compose subscription creation, activation, cancellation, and relaying at the gateway boundary. In-memory bindings are local to one process and have finite operation limits; they do not provide cross-machine propagation. `createNativeGatewayServices`, `NativeSubscriptionCreator`, and `SubscriptionUpdateRelay` adapt these public contracts to the native service layer. They do not make a deployment secure by themselves: applications choose how their listener accepts only gateway-routed traffic.
+`SubscriptionGateway` and `InMemorySubscriptionBindings` compose subscription creation, activation, cancellation, and relaying at the gateway boundary. The Gateway accepts a logical `SubscriptionCoordinator`; native `SubscriptionCreator` instances remain a per-node implementation seam. This is an intentional replacement of the former public native-creator input, with no compatibility adapter because Spine TS has no deployed users. In-memory bindings are local to one process and have finite operation limits; they do not provide cross-machine propagation. `createNativeGatewayServices`, `NativeSubscriptionCreator`, and `SubscriptionUpdateRelay` adapt these public contracts to the native service layer. They do not make a deployment secure by themselves: applications choose how their listener accepts only gateway-routed traffic.
 
 ## Errors, ownership, and extension
 
@@ -49,5 +53,11 @@ Read the [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTEN
 # Dynamic unary discovery
 
 `DynamicUnaryForwarder` accepts complete current application-node snapshots. It serializes reconciliation, retains only the latest pending snapshot during churn, starts clients in bounded batches, disposes departed clients, and round-robins commands and queries across the resulting set. A dispatched unary request is never retried. Empty membership reports backend unavailability until a later snapshot restores clients.
+
+Dynamic subscriptions use the same reconciliation owner. Durable bindings retain
+the logical subscription definition and ownership facts only; native streams are
+ephemeral per-node work. Nodes may be added, removed, or re-added without
+changing a durable definition. Notifications are best effort, may duplicate,
+and browser clients reconnect and re-query authoritative state after loss.
 
 Closing the forwarder aborts in-flight client creation, waits for that work to settle, and owns cleanup of current clients. Failed cleanup remains retryable on a later close.

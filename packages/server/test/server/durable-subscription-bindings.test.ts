@@ -9,7 +9,7 @@ import {
   StorageFactory,
   type StorageContext,
 } from "@spine-event-engine/storage";
-import type { OnBackendSubscription } from "@spine-event-engine/auth";
+import type { OnSubscriptionDefinition } from "@spine-event-engine/auth";
 import { describe, expect, it, vi } from "vitest";
 
 import { DurableSubscriptionBindings, isDurableSubscriptionBindings } from "../../src/index.js";
@@ -23,12 +23,12 @@ describe("DurableSubscriptionBindings", () => {
 
     expect(bindings.namespace).toBe("standalone-gateway");
   });
-  it("round-trips an owned private envelope across an independently closed registry", async () => {
+  it("round-trips an owned subscription definition across an independently closed registry", async () => {
     const factory = new InMemoryStorageFactory();
     const first = registry(factory, "messageboard");
     const backend = new Uint8Array([1, 2, 3]);
     const binding = await first.create({
-      backend: { kind: "backend-subscription-envelope", bytes: backend },
+      definition: { kind: "public-subscription", bytes: backend },
       principalFingerprint: "principal-a",
       tenant: "tenant-a",
       expiresAtMs: 1_000,
@@ -44,7 +44,7 @@ describe("DurableSubscriptionBindings", () => {
       tenant: "tenant-a",
       nowMs: 1,
       signal: new AbortController().signal,
-      onBackend: (value) => {
+      onDefinition: (value) => {
         callbackBytes = value.bytes.slice();
         value.bytes[0] = 88;
         return Promise.resolve();
@@ -57,13 +57,12 @@ describe("DurableSubscriptionBindings", () => {
     await reopened.close();
   });
 
-  it("fences durable callbacks by exact ordered topology identity", async () => {
+  it("keeps durable ownership independent of backend membership", async () => {
     const bindings = registry(new InMemoryStorageFactory(), "topology");
     const createBinding = () =>
       bindings.create({
-        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
         principalFingerprint: "principal",
-        topology: "a,b",
         tenant: undefined,
         expiresAtMs: 1_000,
       });
@@ -73,34 +72,229 @@ describe("DurableSubscriptionBindings", () => {
       bindings.activate({
         id: matching.id,
         principalFingerprint: "principal",
-        topology: "a,b",
         tenant: undefined,
         nowMs: 1,
         signal: new AbortController().signal,
-        onBackend: () => {
+        onDefinition: () => {
           callbacks++;
           return Promise.resolve();
         },
       }),
     ).resolves.toEqual({ kind: "activated" });
     const rejected = await createBinding();
-    for (const topology of ["b,a", "a,c", undefined]) {
+    for (let attempt = 0; attempt < 3; attempt++) {
       await expect(
         bindings.cancel({
           id: rejected.id,
           principalFingerprint: "principal",
-          ...(topology === undefined ? {} : { topology }),
           tenant: undefined,
           nowMs: 1,
-          onBackend: () => {
+          onDefinition: () => {
             callbacks++;
             return Promise.resolve();
           },
         }),
-      ).resolves.toEqual({ kind: "denied" });
+      ).resolves.toEqual({ kind: "closed" });
     }
-    expect(callbacks).toBe(1);
+    expect(callbacks).toBe(2);
     await bindings.close();
+  });
+
+  it("waits for a live owner lease and recovers immediately after graceful relinquishment", async () => {
+    const factory = new InMemoryStorageFactory();
+    const first = registry(factory, "restart-recovery");
+    const binding = await first.create({
+      definition: { kind: "public-subscription", bytes: new Uint8Array([7]) },
+      principalFingerprint: "principal",
+      tenant: undefined,
+      expiresAtMs: 1_000,
+    });
+    const entered = Promise.withResolvers<undefined>();
+    const firstController = new AbortController();
+    const active = first.activate({
+      id: binding.id,
+      principalFingerprint: "principal",
+      tenant: undefined,
+      nowMs: 1,
+      signal: firstController.signal,
+      onDefinition: async (_definition, signal) => {
+        entered.resolve(undefined);
+        await new Promise<undefined>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              resolve(undefined);
+            },
+            { once: true },
+          );
+        });
+      },
+    });
+    await entered.promise;
+    const restarted = registry(factory, "restart-recovery");
+    const definitions: Uint8Array[] = [];
+
+    await restarted.recoverActive({
+      nowMs: 2,
+      onDefinition: (definition) => {
+        definitions.push(definition.bytes.slice());
+        return Promise.resolve();
+      },
+    });
+
+    expect(definitions).toEqual([]);
+    await expect(
+      restarted.activate({
+        id: binding.id,
+        principalFingerprint: "principal",
+        tenant: undefined,
+        nowMs: 2,
+        signal: new AbortController().signal,
+        onDefinition: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "denied" });
+    await first.close();
+    await active;
+    await restarted.recoverActive({
+      nowMs: 2,
+      onDefinition: (definition) => {
+        definitions.push(definition.bytes.slice());
+        return Promise.resolve();
+      },
+    });
+    expect(definitions).toEqual([new Uint8Array([7])]);
+    await expect(
+      restarted.activate({
+        id: binding.id,
+        principalFingerprint: "principal",
+        tenant: undefined,
+        nowMs: 2,
+        signal: new AbortController().signal,
+        onDefinition: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "activated" });
+    await restarted.close();
+  });
+
+  it("makes failed recovery visible to a later rehydration attempt", async () => {
+    const factory = new InMemoryStorageFactory();
+    const first = registry(factory, "recovery-retry");
+    const binding = await first.create({
+      definition: { kind: "public-subscription", bytes: new Uint8Array([9]) },
+      principalFingerprint: "principal",
+      tenant: undefined,
+      expiresAtMs: 1_000,
+    });
+    const started = Promise.withResolvers<undefined>();
+    const controller = new AbortController();
+    const active = first.activate({
+      id: binding.id,
+      principalFingerprint: "principal",
+      tenant: undefined,
+      nowMs: 1,
+      signal: controller.signal,
+      onDefinition: async (_definition, signal) => {
+        started.resolve(undefined);
+        await new Promise<undefined>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              resolve(undefined);
+            },
+            { once: true },
+          );
+        });
+      },
+    });
+    await started.promise;
+    await first.close();
+    await active;
+    const restarted = registry(factory, "recovery-retry");
+
+    await expect(
+      restarted.recoverActive({
+        nowMs: 2,
+        onDefinition: () => Promise.reject(new Error("native rehydration failed")),
+      }),
+    ).rejects.toThrow("native rehydration failed");
+    const recovered: Uint8Array[] = [];
+    await restarted.recoverActive({
+      nowMs: 2,
+      onDefinition: (definition) => {
+        recovered.push(definition.bytes.slice());
+        return Promise.resolve();
+      },
+    });
+    expect(recovered).toEqual([new Uint8Array([9])]);
+    await restarted.close();
+  });
+
+  it("does not overwrite a concurrent cancellation after blocked rehydration", async () => {
+    const factory = new InMemoryStorageFactory();
+    const first = registry(factory, "recovery-cancel");
+    const binding = await first.create({
+      definition: { kind: "public-subscription", bytes: new Uint8Array([11]) },
+      principalFingerprint: "principal",
+      tenant: undefined,
+      expiresAtMs: 1_000,
+    });
+    const started = Promise.withResolvers<undefined>();
+    const active = first.activate({
+      id: binding.id,
+      principalFingerprint: "principal",
+      tenant: undefined,
+      nowMs: 1,
+      signal: new AbortController().signal,
+      onDefinition: async (_definition, signal) => {
+        started.resolve(undefined);
+        await new Promise<undefined>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              resolve(undefined);
+            },
+            { once: true },
+          );
+        });
+      },
+    });
+    await started.promise;
+    await first.close();
+    await active;
+    const restarted = registry(factory, "recovery-cancel");
+    const rehydrating = Promise.withResolvers<undefined>();
+    const release = Promise.withResolvers<undefined>();
+    const recovering = restarted.recoverActive({
+      nowMs: 2,
+      onDefinition: async () => {
+        rehydrating.resolve(undefined);
+        await release.promise;
+      },
+    });
+    await rehydrating.promise;
+
+    await expect(
+      restarted.cancel({
+        id: binding.id,
+        principalFingerprint: "principal",
+        tenant: undefined,
+        nowMs: 2,
+        onDefinition: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "closed" });
+    release.resolve(undefined);
+    await recovering;
+    await expect(
+      restarted.activate({
+        id: binding.id,
+        principalFingerprint: "principal",
+        tenant: undefined,
+        nowMs: 2,
+        signal: new AbortController().signal,
+        onDefinition: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "denied" });
+    await restarted.close();
   });
 
   it("keeps namespaces and ownership facts isolated", async () => {
@@ -108,7 +302,7 @@ describe("DurableSubscriptionBindings", () => {
     const first = registry(factory, "first");
     const second = registry(factory, "second");
     const binding = await first.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 1_000,
@@ -121,7 +315,7 @@ describe("DurableSubscriptionBindings", () => {
         tenant: undefined,
         nowMs: 1,
         signal: new AbortController().signal,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "denied" });
     await expect(
@@ -131,7 +325,7 @@ describe("DurableSubscriptionBindings", () => {
         tenant: undefined,
         nowMs: 1,
         signal: new AbortController().signal,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "denied" });
     await first.close();
@@ -198,7 +392,7 @@ describe("DurableSubscriptionBindings", () => {
       if (phase === "conversion") {
         await expect(
           bindings.create({
-            backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+            definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
             principalFingerprint: "principal-a",
             tenant: undefined,
             expiresAtMs: 1_000,
@@ -288,7 +482,7 @@ describe("DurableSubscriptionBindings", () => {
     const reservation = await bindings.reserveCapacity();
 
     const created = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 1_000,
@@ -304,7 +498,7 @@ describe("DurableSubscriptionBindings", () => {
     const first = registry(factory, "lease");
     const second = registry(factory, "lease");
     const binding = await first.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 10_000,
@@ -317,7 +511,7 @@ describe("DurableSubscriptionBindings", () => {
       tenant: undefined,
       nowMs: 1,
       signal: new AbortController().signal,
-      onBackend: (_backend, _signal, current) => {
+      onDefinition: (_backend, _signal, current) => {
         guard = current;
         return new Promise<void>((resolve) => {
           resume = resolve;
@@ -333,7 +527,7 @@ describe("DurableSubscriptionBindings", () => {
         tenant: undefined,
         nowMs: 2,
         signal: new AbortController().signal,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "denied" });
     await expect(
@@ -343,7 +537,7 @@ describe("DurableSubscriptionBindings", () => {
         tenant: undefined,
         nowMs: 2_000,
         signal: new AbortController().signal,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "activated" });
     await expect(guard?.()).resolves.toBe(false);
@@ -358,7 +552,7 @@ describe("DurableSubscriptionBindings", () => {
     const factory = new ApplyThenThrowFactory("claim");
     const bindings = capacityRegistry(factory, "claim", 2);
     const binding = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 10_000,
@@ -372,7 +566,7 @@ describe("DurableSubscriptionBindings", () => {
         tenant: undefined,
         nowMs: 1,
         signal: new AbortController().signal,
-        onBackend: () => {
+        onDefinition: () => {
           calls += 1;
           return Promise.resolve();
         },
@@ -389,7 +583,7 @@ describe("DurableSubscriptionBindings", () => {
       return Promise.resolve();
     });
     const binding = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([7]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([7]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 10_000,
@@ -402,7 +596,7 @@ describe("DurableSubscriptionBindings", () => {
         tenant: undefined,
         nowMs: 1,
         signal: new AbortController().signal,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "activated" });
 
@@ -413,7 +607,7 @@ describe("DurableSubscriptionBindings", () => {
         principalFingerprint: "principal-a",
         tenant: undefined,
         nowMs: 1,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "closed" });
     await bindings.close();
@@ -424,7 +618,7 @@ describe("DurableSubscriptionBindings", () => {
     const first = registry(factory, "cancel-fence");
     const second = registry(factory, "cancel-fence");
     const binding = await first.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 10_000,
@@ -441,7 +635,7 @@ describe("DurableSubscriptionBindings", () => {
       tenant: undefined,
       nowMs: 1,
       signal: new AbortController().signal,
-      onBackend: (_value, _signal, guard) =>
+      onDefinition: (_value, _signal, guard) =>
         new Promise<void>((resolve) => {
           activeGuard = guard;
           resumeActive = resolve;
@@ -461,7 +655,7 @@ describe("DurableSubscriptionBindings", () => {
         principalFingerprint: "principal-a",
         tenant: undefined,
         nowMs: 2_000,
-        onBackend: (_value, _signal, guard) =>
+        onDefinition: (_value, _signal, guard) =>
           new Promise<void>((resolve) => {
             calls += 1;
             expect(guard).toBeDefined();
@@ -491,7 +685,7 @@ describe("DurableSubscriptionBindings", () => {
     const first = registry(factory, "barrier-owner");
     const second = registry(factory, "barrier-owner");
     const binding = await first.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 1_000,
@@ -504,7 +698,7 @@ describe("DurableSubscriptionBindings", () => {
         tenant: undefined,
         nowMs: 1,
         signal: new AbortController().signal,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
       second.activate({
         id: binding.id,
@@ -512,7 +706,7 @@ describe("DurableSubscriptionBindings", () => {
         tenant: undefined,
         nowMs: 1,
         signal: new AbortController().signal,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ]);
     expect(outcomes.filter((outcome) => outcome.kind === "activated")).toHaveLength(1);
@@ -524,7 +718,7 @@ describe("DurableSubscriptionBindings", () => {
   it("retries a failed cancellation callback with its durable fence", async () => {
     const bindings = registry(new InMemoryStorageFactory(), "cancel-retry");
     const binding = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 10_000,
@@ -535,7 +729,7 @@ describe("DurableSubscriptionBindings", () => {
         principalFingerprint: "principal-a",
         tenant: undefined,
         nowMs: 1,
-        onBackend: () => Promise.reject(new Error("transient private failure")),
+        onDefinition: () => Promise.reject(new Error("transient private failure")),
       }),
     ).resolves.toEqual({ kind: "denied" });
     let calls = 0;
@@ -545,7 +739,7 @@ describe("DurableSubscriptionBindings", () => {
         principalFingerprint: "principal-a",
         tenant: undefined,
         nowMs: 2,
-        onBackend: () => {
+        onDefinition: () => {
           calls += 1;
           return Promise.resolve();
         },
@@ -561,7 +755,7 @@ describe("DurableSubscriptionBindings", () => {
       const factory = new ApplyThenThrowFactory(phase);
       const bindings = capacityRegistry(factory, `cancel-${phase}`, 2);
       const binding = await bindings.create({
-        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
         principalFingerprint: "principal-a",
         tenant: undefined,
         expiresAtMs: 10_000,
@@ -575,7 +769,7 @@ describe("DurableSubscriptionBindings", () => {
           principalFingerprint: "principal-a",
           tenant: undefined,
           nowMs: 1,
-          onBackend: () => {
+          onDefinition: () => {
             calls += 1;
             return Promise.resolve();
           },
@@ -591,7 +785,7 @@ describe("DurableSubscriptionBindings", () => {
     const first = timedRegistry(factory, "cancel-takeover");
     const second = timedRegistry(factory, "cancel-takeover");
     const binding = await first.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 10_000,
@@ -602,7 +796,7 @@ describe("DurableSubscriptionBindings", () => {
       principalFingerprint: "principal-a",
       tenant: undefined,
       nowMs: 1,
-      onBackend: () => new Promise<void>((resolve) => (releaseFirst = resolve)),
+      onDefinition: () => new Promise<void>((resolve) => (releaseFirst = resolve)),
     });
     await Promise.resolve();
     let secondCalls = 0;
@@ -613,7 +807,7 @@ describe("DurableSubscriptionBindings", () => {
         principalFingerprint: "principal-a",
         tenant: undefined,
         nowMs: 101,
-        onBackend: () => {
+        onDefinition: () => {
           secondCalls += 1;
           return Promise.resolve();
         },
@@ -634,7 +828,7 @@ describe("DurableSubscriptionBindings", () => {
       const first = timedRegistry(factory, "renew");
       const second = timedRegistry(factory, "renew");
       const binding = await first.create({
-        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
         principalFingerprint: "principal-a",
         tenant: undefined,
         expiresAtMs: 10_000,
@@ -647,7 +841,7 @@ describe("DurableSubscriptionBindings", () => {
         tenant: undefined,
         nowMs: 1_000,
         signal: new AbortController().signal,
-        onBackend: (_value, current) =>
+        onDefinition: (_value, current) =>
           new Promise<void>((resolve) => {
             signal = current;
             finish = resolve;
@@ -661,7 +855,7 @@ describe("DurableSubscriptionBindings", () => {
           tenant: undefined,
           nowMs: 1_101,
           signal: new AbortController().signal,
-          onBackend: () => Promise.resolve(),
+          onDefinition: () => Promise.resolve(),
         }),
       ).resolves.toEqual({ kind: "denied" });
       await vi.advanceTimersByTimeAsync(1_100);
@@ -671,7 +865,7 @@ describe("DurableSubscriptionBindings", () => {
           principalFingerprint: "principal-a",
           tenant: undefined,
           nowMs: 2_201,
-          onBackend: () => Promise.resolve(),
+          onDefinition: () => Promise.resolve(),
         }),
       ).resolves.toEqual({ kind: "closed" });
       await vi.advanceTimersByTimeAsync(51);
@@ -692,7 +886,7 @@ describe("DurableSubscriptionBindings", () => {
       const factory = new ApplyThenThrowFactory("renewal");
       const bindings = timedRegistry(factory, "renewal-fault");
       const binding = await bindings.create({
-        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
         principalFingerprint: "principal-a",
         tenant: undefined,
         expiresAtMs: 10_000,
@@ -705,7 +899,7 @@ describe("DurableSubscriptionBindings", () => {
         tenant: undefined,
         nowMs: 1_000,
         signal: new AbortController().signal,
-        onBackend: (_value, current) =>
+        onDefinition: (_value, current) =>
           new Promise<void>((resolve) => {
             signal = current;
             finish = resolve;
@@ -749,17 +943,17 @@ describe("DurableSubscriptionBindings", () => {
     void bindings.close();
   });
 
-  it("cancels and purges expired private bindings without closing the storage factory", async () => {
+  it("cancels and purges expired logical bindings without closing the storage factory", async () => {
     const factory = new InMemoryStorageFactory();
     const bindings = registry(factory, "messageboard");
     const cancelled = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: "tenant-a",
       expiresAtMs: 1_000,
     });
     const expired = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([2]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([2]) },
       principalFingerprint: "principal-a",
       tenant: "tenant-a",
       expiresAtMs: 2,
@@ -772,7 +966,7 @@ describe("DurableSubscriptionBindings", () => {
         principalFingerprint: "principal-a",
         tenant: "tenant-a",
         nowMs: 1,
-        onBackend: (backend) => {
+        onDefinition: (backend) => {
           disposed.push(backend.bytes[0] ?? 0);
           return Promise.resolve();
         },
@@ -785,7 +979,7 @@ describe("DurableSubscriptionBindings", () => {
         principalFingerprint: "principal-a",
         tenant: "tenant-a",
         nowMs: 3,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "closed" });
     expect(disposed).toEqual([1]);
@@ -837,7 +1031,7 @@ describe("DurableSubscriptionBindings", () => {
         principalFingerprint: "principal-a",
         tenant: undefined,
         nowMs: 2,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "closed" });
     await bindings.close();
@@ -859,7 +1053,7 @@ describe("DurableSubscriptionBindings", () => {
       tenant: undefined,
       nowMs: 0,
       signal: new AbortController().signal,
-      onBackend: (_value, _signal, current) =>
+      onDefinition: (_value, _signal, current) =>
         new Promise<void>((resolve) => {
           guard = current;
           resume = resolve;
@@ -1083,7 +1277,7 @@ describe("DurableSubscriptionBindings", () => {
   it("rejects expired, aborted, oversized, and unauthorised private operations", async () => {
     const bindings = registry(new InMemoryStorageFactory(), "messageboard");
     const binding = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 2,
@@ -1098,7 +1292,7 @@ describe("DurableSubscriptionBindings", () => {
         tenant: undefined,
         nowMs: 1,
         signal: aborted.signal,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "denied" });
     await expect(
@@ -1108,7 +1302,7 @@ describe("DurableSubscriptionBindings", () => {
         tenant: undefined,
         nowMs: 2,
         signal: new AbortController().signal,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "denied" });
     await expect(
@@ -1117,7 +1311,7 @@ describe("DurableSubscriptionBindings", () => {
         principalFingerprint: "principal-b",
         tenant: undefined,
         nowMs: 1,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "denied" });
     await bindings.close();
@@ -1138,7 +1332,7 @@ describe("DurableSubscriptionBindings", () => {
 
     await expect(
       bindings.create({
-        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
         principalFingerprint: "principal-a",
         tenant: undefined,
         expiresAtMs: 1,
@@ -1161,14 +1355,14 @@ describe("DurableSubscriptionBindings", () => {
 
     await expect(
       bindings.create({
-        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array() },
+        definition: { kind: "public-subscription", bytes: new Uint8Array() },
         principalFingerprint: "",
         tenant: undefined,
         expiresAtMs: 1,
       }),
     ).rejects.toThrow("subscription owner");
     await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 1,
@@ -1182,17 +1376,20 @@ describe("DurableSubscriptionBindings", () => {
     const first = limitedRegistry(factory, "first");
     const released = await first.reserveCapacity();
     await released.release();
-    const forged = { release: (): Promise<void> => Promise.resolve() };
+    const forged = {
+      id: "forged-reservation",
+      release: (): Promise<void> => Promise.resolve(),
+    };
 
     await first.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 1_000,
     });
     await expect(
       first.create({
-        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([2]) },
+        definition: { kind: "public-subscription", bytes: new Uint8Array([2]) },
         principalFingerprint: "principal-a",
         tenant: undefined,
         expiresAtMs: 1_000,
@@ -1201,7 +1398,7 @@ describe("DurableSubscriptionBindings", () => {
     ).rejects.toThrow("binding-capacity-exceeded");
     await expect(
       first.create({
-        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([3]) },
+        definition: { kind: "public-subscription", bytes: new Uint8Array([3]) },
         principalFingerprint: "principal-a",
         tenant: undefined,
         expiresAtMs: 1_000,
@@ -1218,7 +1415,7 @@ describe("DurableSubscriptionBindings", () => {
     const foreign = await second.reserveCapacity();
 
     await first.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 1_000,
@@ -1226,7 +1423,7 @@ describe("DurableSubscriptionBindings", () => {
     });
     await expect(
       second.create({
-        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([2]) },
+        definition: { kind: "public-subscription", bytes: new Uint8Array([2]) },
         principalFingerprint: "principal-a",
         tenant: undefined,
         expiresAtMs: 1_000,
@@ -1241,7 +1438,7 @@ describe("DurableSubscriptionBindings", () => {
     const bindings = limitedRegistry(new InMemoryStorageFactory(), "messageboard");
     const reservation = await bindings.reserveCapacity();
     const input = {
-      backend: { kind: "backend-subscription-envelope" as const, bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription" as const, bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 1_000,
@@ -1289,11 +1486,10 @@ describe("DurableSubscriptionBindings", () => {
         lifecycle: "inactive",
         fence: 0,
         principalFingerprint: "principal",
-        topology: "legacy",
         tenant: "tenant",
         expiresAtMs: 10,
-        backend: "AQ==",
-        backendBytes: 1,
+        definition: "AQ==",
+        definitionBytes: 1,
       }),
       durableRecord("binding", {
         id: "active",
@@ -1302,10 +1498,9 @@ describe("DurableSubscriptionBindings", () => {
         lifecycle: "active",
         fence: 1,
         principalFingerprint: "principal",
-        topology: "legacy",
         expiresAtMs: 10,
-        backend: "AQ==",
-        backendBytes: 1,
+        definition: "AQ==",
+        definitionBytes: 1,
         ownerId: "gateway",
         leaseUntilMs: 9,
       }),
@@ -1316,10 +1511,9 @@ describe("DurableSubscriptionBindings", () => {
         lifecycle: "cancelling",
         fence: 2,
         principalFingerprint: "principal",
-        topology: "legacy",
         expiresAtMs: 10,
-        backend: "AQ==",
-        backendBytes: 1,
+        definition: "AQ==",
+        definitionBytes: 1,
         ownerId: "gateway",
         leaseUntilMs: 9,
       }),
@@ -1360,8 +1554,8 @@ describe("DurableSubscriptionBindings", () => {
         fence: 0,
         principalFingerprint: "principal",
         expiresAtMs: 1,
-        backend: "AQ==",
-        backendBytes: 1,
+        definition: "AQ==",
+        definitionBytes: 1,
       }),
       durableRecord("binding", {
         id: "bad-bytes",
@@ -1371,8 +1565,8 @@ describe("DurableSubscriptionBindings", () => {
         fence: 0,
         principalFingerprint: "principal",
         expiresAtMs: 1,
-        backend: "not-base64",
-        backendBytes: 1,
+        definition: "not-base64",
+        definitionBytes: 1,
       }),
       durableRecord("binding", {
         id: "retired-private",
@@ -1449,8 +1643,8 @@ describe("DurableSubscriptionBindings", () => {
         admissionToken: "token",
         lifecycle: "inactive",
         expiresAtMs: 1,
-        backend: "AQ==",
-        backendBytes: 1,
+        definition: "AQ==",
+        definitionBytes: 1,
       }),
     ],
     [
@@ -1460,19 +1654,8 @@ describe("DurableSubscriptionBindings", () => {
         admissionToken: "token",
         lifecycle: "inactive",
         principalFingerprint: "p",
-        backend: "AQ==",
-        backendBytes: 1,
-      }),
-    ],
-    [
-      durableRecord("binding", {
-        id: "id",
-        revision: 1,
-        admissionToken: "token",
-        lifecycle: "inactive",
-        principalFingerprint: "p",
-        expiresAtMs: 1,
-        backendBytes: 1,
+        definition: "AQ==",
+        definitionBytes: 1,
       }),
     ],
     [
@@ -1483,7 +1666,7 @@ describe("DurableSubscriptionBindings", () => {
         lifecycle: "inactive",
         principalFingerprint: "p",
         expiresAtMs: 1,
-        backend: "AQ==",
+        definitionBytes: 1,
       }),
     ],
     [
@@ -1494,8 +1677,19 @@ describe("DurableSubscriptionBindings", () => {
         lifecycle: "inactive",
         principalFingerprint: "p",
         expiresAtMs: 1,
-        backend: "AQ==",
-        backendBytes: 2,
+        definition: "AQ==",
+      }),
+    ],
+    [
+      durableRecord("binding", {
+        id: "id",
+        revision: 1,
+        admissionToken: "token",
+        lifecycle: "inactive",
+        principalFingerprint: "p",
+        expiresAtMs: 1,
+        definition: "AQ==",
+        definitionBytes: 2,
       }),
     ],
     [
@@ -1506,8 +1700,8 @@ describe("DurableSubscriptionBindings", () => {
         lifecycle: "active",
         principalFingerprint: "p",
         expiresAtMs: 1,
-        backend: "AQ==",
-        backendBytes: 1,
+        definition: "AQ==",
+        definitionBytes: 1,
         ownerId: "",
         leaseUntilMs: 1,
       }),
@@ -1520,8 +1714,8 @@ describe("DurableSubscriptionBindings", () => {
         lifecycle: "active",
         principalFingerprint: "p",
         expiresAtMs: 1,
-        backend: "AQ==",
-        backendBytes: 1,
+        definition: "AQ==",
+        definitionBytes: 1,
         ownerId: "owner",
         leaseUntilMs: 0.1,
       }),
@@ -1569,11 +1763,11 @@ describe("DurableSubscriptionBindings", () => {
         principalFingerprint: "principal-a",
         tenant: undefined,
         nowMs: 1,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "closed" });
     const binding = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 100,
@@ -1584,7 +1778,7 @@ describe("DurableSubscriptionBindings", () => {
         principalFingerprint: "principal-a",
         tenant: undefined,
         nowMs: 1,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "closed" });
     await expect(
@@ -1593,7 +1787,7 @@ describe("DurableSubscriptionBindings", () => {
         principalFingerprint: "principal-a",
         tenant: undefined,
         nowMs: 1,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "closed" });
     await bindings.close();
@@ -1603,7 +1797,7 @@ describe("DurableSubscriptionBindings", () => {
     const factory = new RejectOnceFactory("cancellation");
     const bindings = registry(factory, "cancel-race");
     const binding = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 100,
@@ -1616,17 +1810,17 @@ describe("DurableSubscriptionBindings", () => {
         principalFingerprint: "principal-a",
         tenant: undefined,
         nowMs: 1,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "denied" });
     await bindings.close();
   });
 
-  it("does not run a backend callback when activation loses its atomic claim", async () => {
+  it("does not run a definition callback when activation loses its atomic claim", async () => {
     const factory = new RejectOnceFactory("claim");
     const bindings = registry(factory, "activation-race");
     const binding = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 100,
@@ -1641,7 +1835,7 @@ describe("DurableSubscriptionBindings", () => {
         tenant: undefined,
         nowMs: 1,
         signal: new AbortController().signal,
-        onBackend: backend,
+        onDefinition: backend,
       }),
     ).resolves.toEqual({ kind: "denied" });
 
@@ -1653,7 +1847,7 @@ describe("DurableSubscriptionBindings", () => {
     const factory = new RejectOnceFactory("retirement");
     const bindings = registry(factory, "retirement-race");
     const binding = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 100,
@@ -1666,7 +1860,7 @@ describe("DurableSubscriptionBindings", () => {
         principalFingerprint: "principal-a",
         tenant: undefined,
         nowMs: 1,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "denied" });
     await bindings.close();
@@ -1740,7 +1934,7 @@ describe("DurableSubscriptionBindings", () => {
 
     await expect(
       bindings.create({
-        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
         principalFingerprint: "principal-a",
         tenant: undefined,
         expiresAtMs: 100,
@@ -1757,7 +1951,7 @@ describe("DurableSubscriptionBindings", () => {
 
     await expect(
       bindings.create({
-        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
         principalFingerprint: "principal-a",
         tenant: undefined,
         expiresAtMs: 100,
@@ -1771,7 +1965,7 @@ describe("DurableSubscriptionBindings", () => {
     const factory = new VanishingFactory("binding-1", 2);
     const bindings = registry(factory, "cancel-vanished");
     const binding = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 100,
@@ -1784,7 +1978,7 @@ describe("DurableSubscriptionBindings", () => {
         principalFingerprint: "principal-a",
         tenant: undefined,
         nowMs: 1,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "closed" });
     await bindings.close();
@@ -1794,7 +1988,7 @@ describe("DurableSubscriptionBindings", () => {
     const factory = new VanishingFactory("binding-1", 2);
     const bindings = registry(factory, "activation-vanished");
     const binding = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 100,
@@ -1808,7 +2002,7 @@ describe("DurableSubscriptionBindings", () => {
         tenant: undefined,
         nowMs: 1,
         signal: new AbortController().signal,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "denied" });
     await bindings.close();
@@ -1875,11 +2069,11 @@ describe("DurableSubscriptionBindings", () => {
     await bindings.close();
   });
 
-  it("rejects non-finite operation times and empty private envelopes", async () => {
+  it("rejects non-finite operation times and empty subscription definitions", async () => {
     const bindings = registry(new InMemoryStorageFactory(), "invalid-inputs");
     await expect(
       bindings.create({
-        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array() },
+        definition: { kind: "public-subscription", bytes: new Uint8Array() },
         principalFingerprint: "principal-a",
         tenant: undefined,
         expiresAtMs: 1,
@@ -1887,7 +2081,7 @@ describe("DurableSubscriptionBindings", () => {
     ).rejects.toThrow("subscription owner and backend are required");
     await expect(
       bindings.create({
-        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
         principalFingerprint: "principal-a",
         tenant: undefined,
         expiresAtMs: -1,
@@ -1922,7 +2116,7 @@ describe("DurableSubscriptionBindings", () => {
     const factory = new RejectOnceFactory("activation-finalize");
     const bindings = registry(factory, "finalize-race");
     const binding = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 100,
@@ -1936,7 +2130,7 @@ describe("DurableSubscriptionBindings", () => {
         tenant: undefined,
         nowMs: 1,
         signal: new AbortController().signal,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "activated" });
     await bindings.close();
@@ -2044,7 +2238,7 @@ describe("DurableSubscriptionBindings", () => {
   it("saturates finite activation and cancellation leases", async () => {
     const bindings = timedRegistry(new InMemoryStorageFactory(), "saturated-lease");
     const binding = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: Number.MAX_SAFE_INTEGER,
@@ -2055,7 +2249,7 @@ describe("DurableSubscriptionBindings", () => {
         principalFingerprint: "principal-a",
         tenant: undefined,
         nowMs: Number.MAX_SAFE_INTEGER - 1,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "closed" });
     await bindings.close();
@@ -2175,7 +2369,7 @@ describe("DurableSubscriptionBindings", () => {
 
     await expect(
       bindings.create({
-        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
         principalFingerprint: "principal-a",
         tenant: undefined,
         expiresAtMs: 100,
@@ -2206,7 +2400,7 @@ describe("DurableSubscriptionBindings", () => {
   it("keeps the newer local activation while an expired callback finishes", async () => {
     const bindings = registry(new InMemoryStorageFactory(), "overlapping-activation");
     const binding = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 10_000,
@@ -2219,7 +2413,7 @@ describe("DurableSubscriptionBindings", () => {
       tenant: undefined,
       nowMs: 1,
       signal: new AbortController().signal,
-      onBackend: () =>
+      onDefinition: () =>
         new Promise<void>((resolve) => {
           started?.();
           resume = resolve;
@@ -2236,7 +2430,7 @@ describe("DurableSubscriptionBindings", () => {
         tenant: undefined,
         nowMs: 2_000,
         signal: new AbortController().signal,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "activated" });
     resume?.();
@@ -2249,7 +2443,7 @@ describe("DurableSubscriptionBindings", () => {
     const first = registry(factory, "foreign-cancellation");
     const second = registry(factory, "foreign-cancellation");
     const binding = await first.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 10_000,
@@ -2260,7 +2454,7 @@ describe("DurableSubscriptionBindings", () => {
         principalFingerprint: "principal-a",
         tenant: undefined,
         nowMs: 1,
-        onBackend: () => Promise.reject(new Error("backend failure")),
+        onDefinition: () => Promise.reject(new Error("backend failure")),
       }),
     ).resolves.toEqual({ kind: "denied" });
 
@@ -2270,7 +2464,7 @@ describe("DurableSubscriptionBindings", () => {
         principalFingerprint: "principal-a",
         tenant: undefined,
         nowMs: 2,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "denied" });
     await first.close();
@@ -2362,7 +2556,7 @@ describe("DurableSubscriptionBindings", () => {
   it("converges a deferred activation before closing its durable storage", async () => {
     const bindings = registry(new InMemoryStorageFactory(), "close-activation");
     const binding = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 10_000,
@@ -2374,7 +2568,7 @@ describe("DurableSubscriptionBindings", () => {
       tenant: undefined,
       nowMs: 1,
       signal: new AbortController().signal,
-      onBackend: (_value, signal) =>
+      onDefinition: (_value, signal) =>
         new Promise<void>((resolve) => {
           started = resolve;
           signal.addEventListener(
@@ -2400,14 +2594,14 @@ describe("DurableSubscriptionBindings", () => {
   it("aborts every overlapping activation fence when closing one binding", async () => {
     const bindings = registry(new InMemoryStorageFactory(), "close-overlapping-activation");
     const binding = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 10_000,
     });
     let started = 0;
     let aborted = 0;
-    const callback: OnBackendSubscription = (_value, signal) =>
+    const callback: OnSubscriptionDefinition = (_value, signal) =>
       new Promise<void>((resolve) => {
         started += 1;
         signal.addEventListener(
@@ -2425,7 +2619,7 @@ describe("DurableSubscriptionBindings", () => {
       tenant: undefined,
       nowMs: 1,
       signal: new AbortController().signal,
-      onBackend: callback,
+      onDefinition: callback,
     });
     await new Promise<void>((resolve) => {
       const wait = () => {
@@ -2440,7 +2634,7 @@ describe("DurableSubscriptionBindings", () => {
       tenant: undefined,
       nowMs: 1_001,
       signal: new AbortController().signal,
-      onBackend: callback,
+      onDefinition: callback,
     });
     await new Promise<void>((resolve) => {
       const wait = () => {
@@ -2457,7 +2651,7 @@ describe("DurableSubscriptionBindings", () => {
   it("converges a deferred cancellation before closing its durable storage", async () => {
     const bindings = registry(new InMemoryStorageFactory(), "close-cancellation");
     const binding = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "principal-a",
       tenant: undefined,
       expiresAtMs: 10_000,
@@ -2468,7 +2662,7 @@ describe("DurableSubscriptionBindings", () => {
       principalFingerprint: "principal-a",
       tenant: undefined,
       nowMs: 1,
-      onBackend: (_value, signal) =>
+      onDefinition: (_value, signal) =>
         new Promise<void>((resolve) => {
           started = resolve;
           signal.addEventListener(
@@ -2549,7 +2743,7 @@ function timedRegistry(
 function cleanupRegistry(
   storageFactory: StorageFactory,
   namespace: string,
-  dispose: OnBackendSubscription,
+  dispose: OnSubscriptionDefinition,
 ): DurableSubscriptionBindings {
   let nextId = 0;
   return new DurableSubscriptionBindings({
@@ -2565,13 +2759,13 @@ function cleanupRegistry(
 }
 
 function expiredInput(): {
-  readonly backend: { readonly kind: "backend-subscription-envelope"; readonly bytes: Uint8Array };
+  readonly definition: { readonly kind: "public-subscription"; readonly bytes: Uint8Array };
   readonly principalFingerprint: string;
   readonly tenant: undefined;
   readonly expiresAtMs: number;
 } {
   return {
-    backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+    definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
     principalFingerprint: "principal-a",
     tenant: undefined,
     expiresAtMs: 1,
@@ -2594,7 +2788,7 @@ function repairStore(factory: StorageFactory, namespace: string): RecordStorage<
     { name: `spine.gateway.${namespace}`, multitenant: false },
     new RecordSpec({
       schema: AnySchema,
-      storageKey: "spine.gateway.SubscriptionBinding:v3",
+      storageKey: "spine.gateway.SubscriptionBinding:v4",
       idKind: "string",
       extractId: (record) => repairId(record),
     }),
@@ -2656,7 +2850,7 @@ function repairRecord(id: string, lifecycle: "reserved" | "retired"): Any {
     typeUrl: "type.spine-event-engine.gateway/DurableSubscriptionBinding",
     value: new TextEncoder().encode(
       JSON.stringify({
-        version: 3,
+        version: 4,
         family: "binding",
         id,
         revision: 1,
@@ -2673,7 +2867,7 @@ function malformedRepairRecord(id: string): Any {
   return create(AnySchema, {
     typeUrl: "type.spine-event-engine.gateway/DurableSubscriptionBinding",
     value: new TextEncoder().encode(
-      JSON.stringify({ version: 3, family: "binding", id, revision: 1 }),
+      JSON.stringify({ version: 1, family: "binding", id, revision: 1 }),
     ),
   });
 }
@@ -2691,7 +2885,7 @@ function durableRecord(
   return create(AnySchema, {
     typeUrl,
     value: new TextEncoder().encode(
-      JSON.stringify({ version: family === "binding" ? 3 : 1, family, ...value }),
+      JSON.stringify({ version: family === "binding" ? 4 : 1, family, ...value }),
     ),
   });
 }

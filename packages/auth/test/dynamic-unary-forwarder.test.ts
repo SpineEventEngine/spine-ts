@@ -5,19 +5,20 @@
 import { describe, expect, it } from "vitest";
 import { ApplicationNode } from "@spine-event-engine/deployment";
 
-import { DynamicUnaryForwarder } from "../src/index.js";
+import { type DynamicUnaryClient, DynamicUnaryForwarder } from "../src/index.js";
 
 describe("DynamicUnaryForwarder", () => {
   it("keeps newer membership routable after an older removal waits for disposal", async () => {
     let releaseClose: (() => void) | undefined;
     const forwarder = new DynamicUnaryForwarder({
-      create: async (node) => ({
-        forward: async () => new TextEncoder().encode(node.id),
-        close: () =>
-          new Promise((resolve) => {
-            releaseClose = resolve;
-          }),
-      }),
+      create: async (node) =>
+        client(
+          async () => new TextEncoder().encode(node.id),
+          () =>
+            new Promise((resolve) => {
+              releaseClose = resolve;
+            }),
+        ),
     });
     const a = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
     await forwarder.reconcile([a]);
@@ -51,18 +52,12 @@ describe("DynamicUnaryForwarder", () => {
           if (node.id === "stall") {
             release = () => {
               active--;
-              resolve({
-                forward: async () => new TextEncoder().encode(node.id),
-                close: async () => {},
-              });
+              resolve(client(async () => new TextEncoder().encode(node.id)));
             };
             return;
           }
           active--;
-          resolve({
-            forward: async () => new TextEncoder().encode(node.id),
-            close: async () => {},
-          });
+          resolve(client(async () => new TextEncoder().encode(node.id)));
         }),
     });
     void forwarder.reconcile([
@@ -91,9 +86,9 @@ describe("DynamicUnaryForwarder", () => {
           started.push(node.id);
           if (node.id === "a")
             release = () => {
-              resolve({ forward: async () => new Uint8Array(), close: async () => {} });
+              resolve(client(async () => new Uint8Array()));
             };
-          else resolve({ forward: async () => new Uint8Array(), close: async () => {} });
+          else resolve(client(async () => new Uint8Array()));
         }),
     });
     const first = forwarder.reconcile([
@@ -118,10 +113,7 @@ describe("DynamicUnaryForwarder", () => {
     const forwarder = new DynamicUnaryForwarder({
       create: async (node) => {
         created++;
-        return {
-          forward: async () => new TextEncoder().encode(node.endpoint),
-          close: async () => {},
-        };
+        return client(async () => new TextEncoder().encode(node.endpoint));
       },
     });
     await forwarder.reconcile([new ApplicationNode({ id: "saved", endpoint: "http://10.0.0.9" })]);
@@ -142,12 +134,12 @@ describe("DynamicUnaryForwarder", () => {
     const forwarder = new DynamicUnaryForwarder({
       create: async (node) => {
         created.push(node.tlsServerName ?? "none");
-        return {
-          forward: async () => new Uint8Array(),
-          close: async () => {
+        return client(
+          async () => new Uint8Array(),
+          async () => {
             closed.push(node.tlsServerName ?? "none");
           },
-        };
+        );
       },
     });
     const first = new ApplicationNode({
@@ -166,12 +158,13 @@ describe("DynamicUnaryForwarder", () => {
   it("closes an established client exactly once across concurrent close calls", async () => {
     let closes = 0;
     const forwarder = new DynamicUnaryForwarder({
-      create: async () => ({
-        forward: async () => new Uint8Array(),
-        close: async () => {
-          closes++;
-        },
-      }),
+      create: async () =>
+        client(
+          async () => new Uint8Array(),
+          async () => {
+            closes++;
+          },
+        ),
     });
     await forwarder.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
     await Promise.all([forwarder.close(), forwarder.close(), forwarder.close()]);
@@ -208,13 +201,13 @@ describe("DynamicUnaryForwarder", () => {
           fail = false;
           throw new Error("factory");
         }
-        return {
-          forward: async () => new TextEncoder().encode(node.id),
-          close: async () => {
+        return client(
+          async () => new TextEncoder().encode(node.id),
+          async () => {
             closeAttempts++;
             if (closeAttempts < 3) throw new Error("close");
           },
-        };
+        );
       },
     });
     await forwarder.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
@@ -237,9 +230,9 @@ describe("DynamicUnaryForwarder", () => {
           started.push(node.id);
           if (node.id === "a")
             releaseA = () => {
-              resolve({ forward: async () => new Uint8Array(), close: async () => {} });
+              resolve(client(async () => new Uint8Array()));
             };
-          else resolve({ forward: async () => new Uint8Array(), close: async () => {} });
+          else resolve(client(async () => new Uint8Array()));
         }),
     });
     const a = forwarder.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
@@ -261,7 +254,7 @@ describe("DynamicUnaryForwarder", () => {
         peak = Math.max(peak, active);
         await Promise.resolve();
         active--;
-        return { forward: async () => new TextEncoder().encode(node.id), close: async () => {} };
+        return client(async () => new TextEncoder().encode(node.id));
       },
     });
     await forwarder.reconcile(
@@ -277,12 +270,13 @@ describe("DynamicUnaryForwarder", () => {
   it("routes every node in round-robin order and recovers from empty membership", async () => {
     const calls: string[] = [];
     const forwarder = new DynamicUnaryForwarder({
-      create: async (node) => ({
-        forward: async () => new TextEncoder().encode(node.id),
-        close: async () => {
-          calls.push(`close:${node.id}`);
-        },
-      }),
+      create: async (node) =>
+        client(
+          async () => new TextEncoder().encode(node.id),
+          async () => {
+            calls.push(`close:${node.id}`);
+          },
+        ),
     });
     await forwarder.reconcile(
       ["a", "b", "c"].map(
@@ -313,13 +307,10 @@ describe("DynamicUnaryForwarder", () => {
     const forwarder = new DynamicUnaryForwarder({
       create: async (node) => {
         creates++;
-        return {
-          forward: async () => {
-            if (node.id === "0") throw new Error("dispatched");
-            return new TextEncoder().encode(node.id);
-          },
-          close: async () => {},
-        };
+        return client(async () => {
+          if (node.id === "0") throw new Error("dispatched");
+          return new TextEncoder().encode(node.id);
+        });
       },
     });
     await forwarder.reconcile(
@@ -343,3 +334,23 @@ describe("DynamicUnaryForwarder", () => {
     expect(used.size).toBe(39);
   });
 });
+
+/**
+ * Builds a unary-focused client fixture with inert subscription operations.
+ */
+function client(
+  forward: DynamicUnaryClient["forward"],
+  close: DynamicUnaryClient["close"] = async () => {},
+): DynamicUnaryClient {
+  return {
+    forward,
+    close,
+    subscribe: async () => ({
+      kind: "backend-subscription-envelope",
+      bytes: new Uint8Array(),
+    }),
+    activate: async () => {},
+    cancel: async () => {},
+    dispose: async () => {},
+  };
+}

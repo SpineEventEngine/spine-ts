@@ -1,8 +1,8 @@
 import { create } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import type {
-  BackendSubscriptionEnvelope,
-  OnBackendSubscription,
+  OnSubscriptionDefinition,
+  PublicSubscriptionWire,
   SubscriptionBindingTransition,
   SubscriptionBindings,
   SubscriptionCapacityReservation,
@@ -42,7 +42,7 @@ export interface DurableSubscriptionBindingsOptions {
   /**
    * Disposes one backend subscription.
    */
-  readonly dispose: OnBackendSubscription;
+  readonly dispose: OnSubscriptionDefinition;
 
   /**
    * Limits one durable ownership lease in milliseconds.
@@ -75,11 +75,10 @@ interface Binding {
   readonly reservationOwner?: string;
   readonly reservationUntilMs?: number;
   readonly principalFingerprint?: string;
-  readonly topology?: string;
   readonly tenant?: string;
   readonly expiresAtMs?: number;
-  readonly backend?: string;
-  readonly backendBytes?: number;
+  readonly definition?: string;
+  readonly definitionBytes?: number;
   readonly ownerId?: string;
   readonly leaseUntilMs?: number | undefined;
   readonly reason?: "client" | "activation-end" | "expired" | undefined;
@@ -126,16 +125,11 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   readonly durable = true;
 
   /**
-   * Declares that durable records fence backend topology identity.
-   */
-  readonly topologyFencing = true;
-
-  /**
    * Names the validated durable registry shared by standalone gateway replicas.
    */
   readonly namespace: string;
   readonly #storage: RecordStorage<string, Any>;
-  readonly #dispose: OnBackendSubscription;
+  readonly #dispose: OnSubscriptionDefinition;
   readonly #nextId: () => string;
   readonly #leaseMs: number;
   readonly #cleanupBatchSize: number;
@@ -177,7 +171,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       { name: `spine.gateway.${options.namespace}`, multitenant: false },
       new RecordSpec({
         schema: AnySchema,
-        storageKey: "spine.gateway.SubscriptionBinding:v3",
+        storageKey: "spine.gateway.SubscriptionBinding:v4",
         idKind: "string",
         extractId: (record) => Values.id(record),
       }),
@@ -229,6 +223,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       if (admitted === undefined) continue;
       let released = false;
       const reservation: SubscriptionCapacityReservation = {
+        id,
         release: async () => {
           if (released) return;
           released = true;
@@ -243,21 +238,20 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   }
 
   /**
-   * Converts an owned reserved slot to an inactive private binding.
+   * Converts an owned reserved slot to an inactive logical binding.
    *
-   * @param input Supplies the private envelope, ownership facts, and optional slot.
+   * @param input Supplies the canonical definition, ownership facts, and optional slot.
    * @returns The public binding identifier.
    */
   async create(input: {
-    readonly backend: BackendSubscriptionEnvelope;
+    readonly definition: PublicSubscriptionWire;
     readonly principalFingerprint: string;
-    readonly topology?: string;
     readonly tenant: string | undefined;
     readonly expiresAtMs: number;
     readonly reservation?: SubscriptionCapacityReservation;
   }): Promise<{ readonly id: string }> {
     this.#open();
-    Values.input(input);
+    const definition = Values.input(input);
     const supplied =
       input.reservation === undefined ? undefined : this.#reservations.get(input.reservation);
     const acquired =
@@ -284,11 +278,10 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         lifecycle: "inactive",
         fence: 0,
         principalFingerprint: input.principalFingerprint,
-        topology: input.topology ?? "legacy",
         ...(input.tenant === undefined ? {} : { tenant: input.tenant }),
         expiresAtMs: input.expiresAtMs,
-        backend: Values.base64(input.backend.bytes),
-        backendBytes: input.backend.bytes.byteLength,
+        definition: Values.base64(definition.bytes),
+        definitionBytes: definition.bytes.byteLength,
       };
       if (!(await this.#cas(old.id, row, Values.write(next, this.#maxRecordBytes)))) {
         const applied = await this.#slot(old.id, held.token);
@@ -313,10 +306,9 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   async activate(input: {
     readonly id: string;
     readonly principalFingerprint: string;
-    readonly topology?: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
-    readonly onBackend: OnBackendSubscription;
+    readonly onDefinition: OnSubscriptionDefinition;
     readonly signal: AbortSignal;
   }): Promise<SubscriptionBindingTransition> {
     const task = this.#activate(input);
@@ -331,10 +323,9 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   async #activate(input: {
     readonly id: string;
     readonly principalFingerprint: string;
-    readonly topology?: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
-    readonly onBackend: OnBackendSubscription;
+    readonly onDefinition: OnSubscriptionDefinition;
     readonly signal: AbortSignal;
   }): Promise<SubscriptionBindingTransition> {
     if (input.signal.aborted) return { kind: "denied" };
@@ -354,12 +345,12 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     this.#active.add(active);
     this.#scheduleRenew(active);
     try {
-      await input.onBackend(Values.envelope(claimed), controller.signal, () =>
+      await input.onDefinition(Values.definition(claimed), controller.signal, () =>
         this.#current(input.id, claimed.fence, "active", Date.now()),
       );
       if (!(await this.#current(input.id, claimed.fence, "active", input.nowMs)))
         return { kind: "denied" };
-      await this.#finalizeActivation(claimed, input.nowMs);
+      if (!this.#closed) await this.#finalizeActivation(claimed, input.nowMs);
       return { kind: "activated" };
     } finally {
       clearTimeout(active.timer);
@@ -377,10 +368,9 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   async cancel(input: {
     readonly id: string;
     readonly principalFingerprint: string;
-    readonly topology?: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
-    readonly onBackend: OnBackendSubscription;
+    readonly onDefinition: OnSubscriptionDefinition;
   }): Promise<SubscriptionBindingTransition> {
     const pending = this.#cancelling.get(input.id);
     if (pending !== undefined) return pending;
@@ -400,7 +390,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     readonly principalFingerprint: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
-    readonly onBackend: OnBackendSubscription;
+    readonly onDefinition: OnSubscriptionDefinition;
   }): Promise<SubscriptionBindingTransition> {
     const row = await this.#storage.read(input.id);
     if (row === undefined) return { kind: "closed" };
@@ -433,7 +423,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     const controller = new AbortController();
     this.#cancelControllers.set(input.id, controller);
     try {
-      await input.onBackend(Values.envelope(next), controller.signal, () =>
+      await input.onDefinition(Values.definition(next), controller.signal, () =>
         this.#current(input.id, next.fence, "cancelling", Date.now()),
       );
     } catch {
@@ -479,6 +469,74 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     }
   }
 
+  /**
+   * Restores expired active definitions while fenced, then marks each row inactive.
+   *
+   * A restarted Gateway has no public update relay to resume. A reconnecting
+   * browser Activate request immediately establishes the new relay.
+   *
+   * @param input Supplies the recovery time and native-membership callback.
+   * @returns Completes after one bounded durable scan.
+   */
+  async recoverActive(input: {
+    readonly nowMs: number;
+    readonly onDefinition: (definition: PublicSubscriptionWire) => Promise<void>;
+  }): Promise<void> {
+    this.#open();
+    Values.time(input.nowMs);
+    const rows = await this.#storage.queryEntries({
+      sort: [{ field: "id" }],
+      limit: this.#recordLimit + 2,
+    });
+    for (const row of rows) {
+      if (row.id === quotaId || row.id === cleanupId) continue;
+      let active: Binding;
+      try {
+        active = Values.read(row.record, row.id, this.#maxRecordBytes) as Binding;
+      } catch {
+        continue;
+      }
+      if (
+        active.lifecycle !== "active" ||
+        active.expiresAtMs === undefined ||
+        active.expiresAtMs <= input.nowMs ||
+        (active.leaseUntilMs ?? 0) > input.nowMs
+      )
+        continue;
+      const claimed = this.#work(active, "active", input.nowMs);
+      if (!(await this.#cas(active.id, row.record, Values.write(claimed, this.#maxRecordBytes))))
+        continue;
+      try {
+        await input.onDefinition(Values.definition(claimed));
+      } catch (error) {
+        await this.#relinquish(claimed);
+        throw error;
+      }
+      const { ownerId, leaseUntilMs, reason, ...inactive } = claimed;
+      void ownerId;
+      void leaseUntilMs;
+      void reason;
+      const recovered: Binding = {
+        ...inactive,
+        revision: claimed.revision + 1,
+        lifecycle: "inactive",
+        fence: claimed.fence,
+      };
+      const claimedRow = await this.#storage.read(claimed.id);
+      if (
+        claimedRow === undefined ||
+        !this.#claimedRecovery(
+          Values.read(claimedRow, claimed.id, this.#maxRecordBytes),
+          claimed,
+        ) ||
+        !(await this.#cas(claimed.id, claimedRow, Values.write(recovered, this.#maxRecordBytes)))
+      ) {
+        await this.#relinquish(claimed);
+        continue;
+      }
+    }
+  }
+
   async #purgeExpired(nowMs: number): Promise<void> {
     this.#open();
     Values.time(nowMs);
@@ -513,7 +571,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   }
 
   /**
-   * Stops local work without removing durable rows needed by a later handle.
+   * Stops local work and relinquishes this handle's active durable leases.
    *
    * @returns Completes after local work is stopped.
    */
@@ -526,6 +584,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     for (const controller of this.#cancelControllers.values()) controller.abort();
     for (const controller of this.#cleanupControllers) controller.abort();
     await Promise.allSettled(this.#running);
+    await this.#relinquishOwned();
     this.#active.clear();
     this.#cancelling.clear();
     this.#cancelControllers.clear();
@@ -533,6 +592,52 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     this.#reservations.clear();
     this.#storage.close();
     await Promise.resolve();
+  }
+
+  async #relinquishOwned(): Promise<void> {
+    const rows = await this.#storage.queryEntries({
+      sort: [{ field: "id" }],
+      limit: this.#recordLimit + 2,
+    });
+    for (const row of rows) {
+      if (row.id === quotaId || row.id === cleanupId) continue;
+      let active: Binding;
+      try {
+        active = Values.read(row.record, row.id, this.#maxRecordBytes) as Binding;
+      } catch {
+        continue;
+      }
+      if (active.lifecycle === "active" && active.ownerId === this.#owner)
+        await this.#relinquish(active);
+    }
+  }
+
+  async #relinquish(active: Binding): Promise<void> {
+    const row = await this.#storage.read(active.id);
+    if (row === undefined) return;
+    const current = Values.read(row, active.id, this.#maxRecordBytes) as Binding;
+    if (
+      current.lifecycle !== "active" ||
+      current.ownerId !== this.#owner ||
+      current.fence !== active.fence
+    )
+      return;
+    const released: Binding = {
+      ...current,
+      revision: current.revision + 1,
+      leaseUntilMs: 0,
+    };
+    await this.#cas(current.id, row, Values.write(released, this.#maxRecordBytes));
+  }
+
+  #claimedRecovery(row: Stored, claimed: Binding): row is Binding {
+    return (
+      row.family === "binding" &&
+      row.lifecycle === "active" &&
+      row.ownerId === this.#owner &&
+      row.fence === claimed.fence &&
+      row.revision === claimed.revision
+    );
   }
 
   async #claim(
@@ -802,7 +907,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       const reread = await this.#storage.read(old.id);
       if (reread === undefined || !this.#sameBinding(reread, next)) return;
     }
-    await this.#dispose(Values.envelope(next), signal, () =>
+    await this.#dispose(Values.definition(next), signal, () =>
       this.#current(next.id, next.fence, "cancelling", nowMs),
     );
     await this.#retire(next);
@@ -824,7 +929,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       if (reread === undefined || !this.#sameBinding(reread, cancelling)) return;
     }
     try {
-      await this.#dispose(Values.envelope(cancelling), new AbortController().signal, () =>
+      await this.#dispose(Values.definition(cancelling), new AbortController().signal, () =>
         this.#current(cancelling.id, cancelling.fence, "cancelling", nowMs),
       );
     } catch {
@@ -1037,11 +1142,10 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         actual.ownerId === expected.ownerId &&
         actual.leaseUntilMs === expected.leaseUntilMs &&
         actual.reason === expected.reason &&
-        actual.backend === expected.backend &&
-        actual.backendBytes === expected.backendBytes &&
+        actual.definition === expected.definition &&
+        actual.definitionBytes === expected.definitionBytes &&
         actual.expiresAtMs === expected.expiresAtMs &&
         actual.principalFingerprint === expected.principalFingerprint &&
-        actual.topology === expected.topology &&
         actual.tenant === expected.tenant
       );
     } catch {
@@ -1082,14 +1186,12 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     binding: Binding,
     input: {
       readonly principalFingerprint: string;
-      readonly topology?: string;
       readonly tenant: string | undefined;
       readonly nowMs: number;
     },
   ): boolean {
     return (
       binding.principalFingerprint === input.principalFingerprint &&
-      binding.topology === (input.topology ?? "legacy") &&
       binding.tenant === input.tenant &&
       (binding.expiresAtMs ?? 0) > input.nowMs
     );
@@ -1138,13 +1240,14 @@ const Values = Object.freeze({
       throw new Error("Subscription registry namespace must be non-blank.");
   },
   input(input: {
-    readonly backend: BackendSubscriptionEnvelope;
+    readonly definition: PublicSubscriptionWire;
     readonly principalFingerprint: string;
     readonly expiresAtMs: number;
-  }): void {
-    if (!input.principalFingerprint.trim() || input.backend.bytes.byteLength === 0)
+  }): PublicSubscriptionWire {
+    if (!input.principalFingerprint.trim() || input.definition.bytes.byteLength === 0)
       throw new Error("subscription owner and backend are required");
     this.time(input.expiresAtMs);
+    return input.definition;
   },
   time(value: number): void {
     if (!Number.isSafeInteger(value) || value < 0)
@@ -1156,10 +1259,10 @@ const Values = Object.freeze({
   base64(bytes: Uint8Array): string {
     return Buffer.from(bytes).toString("base64");
   },
-  envelope(binding: Binding): BackendSubscriptionEnvelope {
+  definition(binding: Binding): PublicSubscriptionWire {
     return {
-      kind: "backend-subscription-envelope",
-      bytes: Uint8Array.from(Buffer.from(String(binding.backend), "base64")),
+      kind: "public-subscription",
+      bytes: Uint8Array.from(Buffer.from(String(binding.definition), "base64")),
     };
   },
   id(record: Any): string {
@@ -1171,7 +1274,7 @@ const Values = Object.freeze({
     const record = create(AnySchema, {
       typeUrl,
       value: new TextEncoder().encode(
-        JSON.stringify({ version: value.family === "binding" ? 3 : 1, ...value }),
+        JSON.stringify({ version: value.family === "binding" ? 4 : 1, ...value }),
       ),
     });
     if (record.value.byteLength > maxBytes) throw new Error("backend-envelope-too-large");
@@ -1191,7 +1294,7 @@ const Values = Object.freeze({
     const source = value as Record<string, unknown>;
     const family = source.family;
     const valid =
-      (family === "binding" && record.typeUrl === bindingType && source.version === 3) ||
+      (family === "binding" && record.typeUrl === bindingType && source.version === 4) ||
       (family === "quota" && record.typeUrl === quotaType && source.version === 1) ||
       (family === "cleanup" && record.typeUrl === cleanupType && source.version === 1);
     if (
@@ -1238,10 +1341,10 @@ const Values = Object.freeze({
     if (["inactive", "active", "cancelling"].includes(binding.lifecycle)) {
       if (
         !binding.principalFingerprint ||
-        !binding.backend ||
-        !Number.isSafeInteger(binding.backendBytes) ||
-        Buffer.from(binding.backend, "base64").toString("base64") !== binding.backend ||
-        Buffer.byteLength(binding.backend, "base64") !== binding.backendBytes ||
+        !binding.definition ||
+        !Number.isSafeInteger(binding.definitionBytes) ||
+        Buffer.from(binding.definition, "base64").toString("base64") !== binding.definition ||
+        Buffer.byteLength(binding.definition, "base64") !== binding.definitionBytes ||
         !Number.isSafeInteger(binding.expiresAtMs)
       )
         throw new Error("Durable subscription registry record is invalid.");
@@ -1253,7 +1356,7 @@ const Values = Object.freeze({
       throw new Error("Durable subscription registry record is invalid.");
     if (
       binding.lifecycle === "retired" &&
-      (binding.backend !== undefined || binding.principalFingerprint !== undefined)
+      (binding.definition !== undefined || binding.principalFingerprint !== undefined)
     )
       throw new Error("Durable subscription registry record is invalid.");
     return binding;
