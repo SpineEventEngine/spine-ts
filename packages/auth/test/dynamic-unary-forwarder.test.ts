@@ -4,6 +4,80 @@ import { ApplicationNode } from "@spine-event-engine/deployment";
 import { DynamicUnaryForwarder } from "../src/index.js";
 
 describe("DynamicUnaryForwarder", () => {
+  it("keeps newer membership routable after an older removal waits for disposal", async () => {
+    let releaseClose: (() => void) | undefined;
+    const forwarder = new DynamicUnaryForwarder({
+      create: async (node) => ({
+        forward: async () => new TextEncoder().encode(node.id),
+        close: () =>
+          new Promise((resolve) => {
+            releaseClose = resolve;
+          }),
+      }),
+    });
+    const a = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
+    await forwarder.reconcile([a]);
+    const remove = forwarder.reconcile([]);
+    await Promise.resolve();
+    const retain = forwarder.reconcile([a]);
+    releaseClose?.();
+    await Promise.all([remove, retain]);
+    expect(
+      new TextDecoder().decode(
+        await forwarder.forward({ service: "s", method: "m", value: new Uint8Array() }),
+      ),
+    ).toBe("a");
+  });
+
+  it("waits for stalled siblings before a new batch exceeds the global start limit", async () => {
+    let active = 0;
+    let peak = 0;
+    let release: (() => void) | undefined;
+    const forwarder = new DynamicUnaryForwarder({
+      maxConcurrentStarts: 2,
+      create: (node) =>
+        new Promise((resolve, reject) => {
+          active++;
+          peak = Math.max(peak, active);
+          if (node.id === "fail") {
+            active--;
+            reject(new Error("fail"));
+            return;
+          }
+          if (node.id === "stall") {
+            release = () => {
+              active--;
+              resolve({
+                forward: async () => new TextEncoder().encode(node.id),
+                close: async () => {},
+              });
+            };
+            return;
+          }
+          active--;
+          resolve({
+            forward: async () => new TextEncoder().encode(node.id),
+            close: async () => {},
+          });
+        }),
+    });
+    void forwarder.reconcile([
+      new ApplicationNode({ id: "fail", endpoint: "http://10.0.0.1" }),
+      new ApplicationNode({ id: "stall", endpoint: "http://10.0.0.2" }),
+    ]);
+    await Promise.resolve();
+    const latest = forwarder.reconcile([
+      new ApplicationNode({ id: "latest", endpoint: "http://10.0.0.3" }),
+    ]);
+    release?.();
+    await latest;
+    expect(peak).toBeLessThanOrEqual(2);
+    expect(
+      new TextDecoder().decode(
+        await forwarder.forward({ service: "s", method: "m", value: new Uint8Array() }),
+      ),
+    ).toBe("latest");
+  });
   it("coalesces heavy churn behind a stalled first create and settles every caller", async () => {
     const started: string[] = [];
     let release: (() => void) | undefined;

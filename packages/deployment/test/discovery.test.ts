@@ -13,6 +13,7 @@ describe("ApplicationNode", () => {
     "bad_label.test",
     "-leading.test",
     "trailing-.test",
+    "foo..example",
   ])("rejects invalid TLS authority %s", (tlsServerName) => {
     expect(
       () => new ApplicationNode({ id: "node", endpoint: "https://10.0.0.1", tlsServerName }),

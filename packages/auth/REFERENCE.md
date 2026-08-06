@@ -49,3 +49,5 @@ Read the [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTEN
 # Dynamic unary discovery
 
 `DynamicUnaryForwarder` accepts complete current application-node snapshots. It serializes reconciliation, retains only the latest pending snapshot during churn, starts clients in bounded batches, disposes departed clients, and round-robins commands and queries across the resulting set. A dispatched unary request is never retried. Empty membership reports backend unavailability until a later snapshot restores clients.
+
+Closing the forwarder aborts in-flight client creation, waits for that work to settle, and owns cleanup of current clients. Failed cleanup remains retryable on a later close.
