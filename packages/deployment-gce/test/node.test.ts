@@ -146,8 +146,36 @@ describe("GceApplicationNode", () => {
     const registrar = new GceRegistrar({ registry, metadata, port: 8080 });
     const starting = registrar.start();
     await Promise.resolve();
+    await Promise.resolve();
     const closing = registrar.close();
     expect(aborted).toBe(true);
+    expect(calls).toEqual([]);
+    resolve?.();
+    await starting;
+    await closing;
+    expect(calls).toEqual(["register", "remove"]);
+  });
+
+  it("joins a stalled initial registration before removal", async () => {
+    let resolve: (() => void) | undefined;
+    let admitted: (() => void) | undefined;
+    const admittedPromise = new Promise<void>((done) => (admitted = done));
+    const calls: string[] = [];
+    const registry = {
+      register: () =>
+        new Promise<boolean>((done) => {
+          admitted?.();
+          resolve = () => (calls.push("register"), done(true));
+        }),
+      remove: async () => (calls.push("remove"), true),
+    } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
+    const registrar = new GceRegistrar({
+      registry,
+      node: new ApplicationNode({ id: "node", endpoint: "http://10.0.0.1" }),
+    });
+    const starting = registrar.start();
+    await admittedPromise;
+    const closing = registrar.close();
     expect(calls).toEqual([]);
     resolve?.();
     await starting;
