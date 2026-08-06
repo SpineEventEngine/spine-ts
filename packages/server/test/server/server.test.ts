@@ -84,23 +84,19 @@ describe("Server", () => {
     await resetServerEnvironmentForTest();
   });
 
-  it("accepts one to thirty-two unique canonical standalone backend origins in configured order", () => {
+  it("accepts every non-empty unique canonical standalone backend origin in configured order", () => {
     expect(
       BrowserServer.backendUrls(["https://first.example.test", "https://second.example.test"]),
     ).toEqual(["https://first.example.test", "https://second.example.test"]);
     expect(
       BrowserServer.backendUrls(
-        Array.from({ length: 32 }, (_, index) => `https://node-${index.toString()}.example.test`),
+        Array.from({ length: 40 }, (_, index) => `https://node-${index.toString()}.example.test`),
       ),
-    ).toHaveLength(32);
+    ).toHaveLength(40);
   });
 
   it.each([
-    [[], "between 1 and 32"],
-    [
-      Array.from({ length: 33 }, (_, index) => `https://node-${index.toString()}.example.test`),
-      "between 1 and 32",
-    ],
+    [[], "at least one origin"],
     [["https://same.example.test", "https://same.example.test"], "unique"],
     [["https://backend.example.test/private"], "canonical HTTP(S) origin"],
   ])("rejects invalid standalone backend topology %j", (baseUrls, error) => {

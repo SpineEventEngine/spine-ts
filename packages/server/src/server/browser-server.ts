@@ -332,8 +332,8 @@ export const BrowserServer: Readonly<{
     return value;
   },
   backendUrls(values: readonly string[]): readonly string[] {
-    if (values.length < 1 || values.length > 32)
-      throw new Error("Server browser backends must contain between 1 and 32 origins.");
+    if (values.length < 1)
+      throw new Error("Server browser backends must contain at least one origin.");
     const urls = values.map((value) => BrowserServer.backendUrl(value));
     if (new Set(urls).size !== urls.length)
       throw new Error("Server browser backends must be unique canonical HTTP(S) origins.");
