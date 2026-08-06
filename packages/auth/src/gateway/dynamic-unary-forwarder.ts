@@ -222,7 +222,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
         children: new Map(),
       });
     await this.reconcile([...this.#nodes.values()]);
-    if (!this.#definitions.has(key) || signal.aborted)
+    if (!this.#definitions.has(key) || signal.aborted || this.#closed)
       throw new Error("subscription creation was cancelled");
     return { kind: "backend-subscription-envelope", bytes: request.bytes.slice() };
   }
