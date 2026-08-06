@@ -108,12 +108,16 @@ export class GceRegistrar {
         this.#identity,
         this.#now() + 60_000,
       );
-    else
-      this.#confirmed = await this.#registry.register({
-        node: this.#node,
-        registrationId: this.#identity,
-        expiresAt: this.#now() + 60_000,
-      });
+    else {
+      const existing = await this.#registry.lookup(this.#node.id, this.#now());
+      this.#confirmed = existing?.registrationId === this.#identity;
+      if (!this.#confirmed)
+        this.#confirmed = await this.#registry.register({
+          node: this.#node,
+          registrationId: this.#identity,
+          expiresAt: this.#now() + 60_000,
+        });
+    }
     await this.#registry.cleanup(this.#now());
     if (!this.#closed) this.#schedule();
   }

@@ -119,6 +119,23 @@ export class LeasedNodeRegistry {
   }
 
   /**
+   * Reads one validated live lease at its exact storage slot.
+   *
+   * @param nodeId Supplies the stable node identity.
+   * @param now Supplies epoch milliseconds for expiry evaluation.
+   * @returns The live lease, or undefined when absent or expired.
+   */
+  lookup(nodeId: string, now: number): Promise<NodeLease | undefined> {
+    return this.start(async () => {
+      LeaseRecords.requireTime(now);
+      const record = await this.#storage.read(nodeId);
+      if (record === undefined) return undefined;
+      const lease = LeaseRecords.read(record, nodeId);
+      return lease.expiresAt > now ? lease : undefined;
+    });
+  }
+
+  /**
    * Deletes one finite batch of expired leases conditionally.
    *
    * @param now Supplies epoch milliseconds used for exact expiry filtering.
