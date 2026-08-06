@@ -154,7 +154,9 @@ export class LeasedNodeRegistry {
   close(): Promise<void> {
     if (this.#closing !== undefined) return this.#closing;
     this.#closed = true;
-    this.#closing = Promise.allSettled([...this.#operations]).then(() => this.#storage.close());
+    this.#closing = Promise.allSettled([...this.#operations]).then(() => {
+      this.#storage.close();
+    });
     return this.#closing;
   }
 
@@ -166,7 +168,7 @@ export class LeasedNodeRegistry {
     try {
       this.requireOpen();
     } catch (error) {
-      return Promise.reject(error);
+      return Promise.reject(error instanceof Error ? error : new Error(String(error)));
     }
     const pending = operation();
     this.#operations.add(pending);
