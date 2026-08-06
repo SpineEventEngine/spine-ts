@@ -169,6 +169,19 @@ describe("LeasedNodeRegistry", () => {
     await expect(storage.query()).resolves.toHaveLength(1);
   });
 
+  it("fails a snapshot row whose embedded node ID differs from its storage slot", async () => {
+    const factory = new InMemoryStorageFactory();
+    const registry = new LeasedNodeRegistry({ factory, namespace: "wrong-slot" });
+    const storage = factory.createRecordStorage(
+      { name: "wrong-slot", multitenant: false },
+      leaseRecordSpec,
+    );
+    await storage.compareAndSet("node/a", undefined, leaseRecord("node/b", 1));
+
+    await expect(registry.read(0)).rejects.toThrow("invalid");
+    await expect(storage.read("node/a")).resolves.toBeDefined();
+  });
+
   it("returns false when a compare-and-set renewal loses its race", async () => {
     const factory = new InMemoryStorageFactory();
     const registry = new LeasedNodeRegistry({ factory, namespace: "lost-renewal" });
