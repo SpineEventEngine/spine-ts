@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-empty-function, @typescript-eslint/require-await */
+
 import * as http2 from "node:http2";
 import * as http from "node:http";
 
@@ -12,6 +14,7 @@ import {
 } from "@spine-event-engine/auth";
 import type { RequestCredential } from "@spine-event-engine/auth";
 import { TypeRegistry } from "@spine-event-engine/core";
+import { ApplicationNode } from "@spine-event-engine/deployment";
 import { AuthenticationService, ResolveContextRequestSchema } from "@spine-event-engine/proto/auth";
 import {
   ActorContextSchema,
@@ -54,6 +57,7 @@ import {
   Server,
   ServerEnvironment,
   type BrowserServerOptions,
+  type RunningServer,
   type ServerEnvironmentCloseable,
 } from "../../src/index.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
@@ -61,6 +65,17 @@ import { BrowserServer } from "../../src/server/browser-server.js";
 import { EnvironmentTests } from "../../src/server/environment.js";
 
 describe("Server", () => {
+  it("maps discovered TLS authority to the Node HTTP/2 server name", () => {
+    expect(
+      BrowserServer.dynamicTransportOptions(
+        new ApplicationNode({
+          id: "node/a",
+          endpoint: "https://10.0.0.1",
+          tlsServerName: "api.example.test",
+        }),
+      ),
+    ).toEqual({ baseUrl: "https://10.0.0.1", nodeOptions: { servername: "api.example.test" } });
+  });
   beforeEach(async () => {
     await resetServerEnvironmentForTest();
   });
@@ -161,6 +176,153 @@ describe("Server", () => {
       },
     );
     await running.close();
+  });
+
+  it("starts and stops dynamic discovery exactly once with fixed subscription assembly", async () => {
+    let watches = 0;
+    let stops = 0;
+    const discovery = {
+      watch(onSnapshot: (nodes: readonly ApplicationNode[]) => void) {
+        watches++;
+        onSnapshot([
+          new ApplicationNode({
+            id: "node/a",
+            endpoint: "https://10.0.0.1",
+            tlsServerName: "api.example.test",
+          }),
+        ]);
+        return async () => {
+          stops++;
+        };
+      },
+    };
+    const running = await BrowserServer.open("http://127.0.0.1:65534", {
+      ...browserGateway(),
+      bindings: inMemoryBindings(),
+      discovery,
+      host: "127.0.0.1",
+      port: 0,
+      readMaxBytes: 1_048_576,
+      writeMaxBytes: 1_048_576,
+      production: false,
+    });
+    expect(watches).toBe(1);
+    await Promise.all([running.close(), running.close()]);
+    expect(stops).toBe(1);
+  });
+
+  it("aborts owned dynamic session managers on removal and browser close", async () => {
+    let publish: ((nodes: readonly ApplicationNode[]) => void) | undefined;
+    const aborted: string[] = [];
+    const running = await BrowserServer.open("http://127.0.0.1:65534", {
+      ...browserGateway(),
+      bindings: inMemoryBindings(),
+      discovery: {
+        watch: (onSnapshot) => {
+          publish = onSnapshot;
+          return async () => {};
+        },
+      },
+      dynamicManagerFactory: (node) =>
+        ({
+          abort: () => {
+            aborted.push(node.id);
+          },
+        }) as never,
+      host: "127.0.0.1",
+      port: 0,
+      readMaxBytes: 1_048_576,
+      writeMaxBytes: 1_048_576,
+      production: false,
+    });
+    publish?.([
+      new ApplicationNode({ id: "a", endpoint: "https://10.0.0.1", tlsServerName: "a.test" }),
+    ]);
+    await Promise.resolve();
+    publish?.([]);
+    await Promise.resolve();
+    publish?.([
+      new ApplicationNode({ id: "b", endpoint: "https://10.0.0.2", tlsServerName: "b.test" }),
+    ]);
+    await Promise.resolve();
+    await running.close();
+    expect(aborted.sort()).toEqual(["a", "b"]);
+  });
+
+  it("retries only a failed discovery-stop phase after later cleanup runs", async () => {
+    let stops = 0;
+    let nativeCloses = 0;
+    const native: RunningServer = {
+      host: "127.0.0.1",
+      port: 1,
+      baseUrl: "http://127.0.0.1:65534",
+      close: async () => {
+        nativeCloses++;
+      },
+    };
+    const running = await BrowserServer.open(native, {
+      ...browserGateway(),
+      bindings: inMemoryBindings(),
+      discovery: {
+        watch: () => async () => {
+          stops++;
+          if (stops === 1) throw new Error("stop failed");
+        },
+      },
+      host: "127.0.0.1",
+      port: 0,
+      readMaxBytes: 1_048_576,
+      writeMaxBytes: 1_048_576,
+      production: false,
+    });
+    await expect(running.close()).rejects.toThrow("stop failed");
+    expect(nativeCloses).toBe(1);
+    await expect(running.close()).resolves.toBeUndefined();
+    expect(stops).toBe(2);
+    expect(nativeCloses).toBe(1);
+  });
+
+  it("keeps discovery and native failures retryable while preserving discovery as primary", async () => {
+    let stops = 0;
+    let nativeCloses = 0;
+    const native: RunningServer = {
+      host: "127.0.0.1",
+      port: 1,
+      baseUrl: "http://127.0.0.1:65534",
+      close: async () => {
+        nativeCloses++;
+        if (nativeCloses === 1) throw new Error("native failed");
+      },
+    };
+    const running = await BrowserServer.open(native, {
+      ...browserGateway(),
+      bindings: inMemoryBindings(),
+      discovery: {
+        watch: () => async () => {
+          stops++;
+          if (stops === 1) throw new Error("discovery failed");
+        },
+      },
+      host: "127.0.0.1",
+      port: 0,
+      readMaxBytes: 1_048_576,
+      writeMaxBytes: 1_048_576,
+      production: false,
+    });
+    let error: unknown;
+    try {
+      await running.close();
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("discovery failed");
+    expect((error as Error & { cleanupErrors?: unknown[] }).cleanupErrors?.[0]).toMatchObject({
+      message: "native failed",
+    });
+    await expect(running.close()).resolves.toBeUndefined();
+    expect(stops).toBe(2);
+    expect(nativeCloses).toBe(2);
   });
 
   it("starts one array-configured backend and handles empty browser request facts", async () => {
@@ -1903,7 +2065,7 @@ describe("Server", () => {
       await expect(server.close()).rejects.toThrow("subscription cleanup failed");
       const retry = server.close();
       await delay(25);
-      expect(closed).toEqual([]);
+      expect(closed).toEqual(["native"]);
       await expect(retry).resolves.toBeUndefined();
       expect(closed).toEqual(["native"]);
     } finally {

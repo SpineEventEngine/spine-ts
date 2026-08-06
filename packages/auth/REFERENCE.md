@@ -10,15 +10,15 @@ The package supplies provider-neutral gateway building blocks. An application pl
 
 `AuthorizationPolicy.authorize()` is evaluated separately for each incoming request. `ContextResolver.resolve()` returns the trusted actor, optional tenant, timestamp, zone, and language. The caller-provided `ActorContext` must match that resolved actor and tenant, otherwise `UnaryGateway` rejects the request as `context-stale`. Backends can trust the forwarded, gateway-replaced context only when the deployment routes traffic through an application-selected gateway.
 
-## Fixed gateway topology
+## Fixed subscription topology
 
-A standalone browser Gateway accepts a fixed list of 1–32 backend origins.
-Commands and queries select one backend with bounded round-robin forwarding and
-do not retry a failed request. Subscription creation and activation fan out to
+A standalone browser Gateway may use dynamic unary discovery for commands and
+queries. A fixed list of 1–32 backend origins remains the current positional
+subscription fan-in contract. Subscription creation and activation fan out to
 the configured nodes; merged notices can be duplicated, missing, or lost.
 Browser code must treat notices as refresh hints and use Queries as the
-authoritative state source. The list is configured at startup: there is no
-dynamic backend discovery or redeployment protocol.
+authoritative state source. The fixed subscription list is configured at
+startup; dynamic subscription reconciliation is not provided here.
 
 ## Unary requests
 
@@ -45,3 +45,9 @@ ResolveContext validates the current session and returns informational actor, te
 Public callbacks may reject; applications decide how their native listener maps those failures. Values handed to request collaborators are defensive gateway facts, while applications remain responsible for their own mutable state and cleanup. Always give gateway operations a finite request limit and make credential, provider, session, and forwarding adapters cancellation-aware.
 
 Read the [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md) for composition examples and deployment guidance.
+
+# Dynamic unary discovery
+
+`DynamicUnaryForwarder` accepts complete current application-node snapshots. It serializes reconciliation, retains only the latest pending snapshot during churn, starts clients in bounded batches, disposes departed clients, and round-robins commands and queries across the resulting set. A dispatched unary request is never retried. Empty membership reports backend unavailability until a later snapshot restores clients.
+
+Closing the forwarder aborts in-flight client creation, waits for that work to settle, and owns cleanup of current clients. Failed cleanup remains retryable on a later close.

@@ -693,3 +693,8 @@ export type {
   OidcProviderOptions,
   ProviderFetch,
 } from "./providers/index.js";
+export {
+  DynamicUnaryForwarder,
+  type DynamicUnaryClient,
+  type DynamicUnaryOptions,
+} from "./gateway/dynamic-unary-forwarder.js";

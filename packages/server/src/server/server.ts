@@ -12,6 +12,7 @@ import type {
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 import type { TypeRegistryLookup } from "@spine-event-engine/core";
 import type { StorageFactory } from "@spine-event-engine/storage";
+import type { NodeDiscovery } from "@spine-event-engine/deployment";
 
 import {
   BoundedContext,
@@ -616,6 +617,12 @@ export interface BrowserServerOptions {
    * duplicate update or generic loss notice.
    */
   readonly backend?: BrowserBackend;
+
+  /**
+   * Supplies changing complete membership for unary command and query routing.
+   * Fixed backend configuration continues to own subscription fan-in.
+   */
+  readonly discovery?: NodeDiscovery;
 
   /**
    * Application-owned, exact authentication endpoints exposed beside the fixed

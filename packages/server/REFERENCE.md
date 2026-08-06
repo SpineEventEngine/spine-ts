@@ -285,3 +285,7 @@ is used by the facility-owned environment supervisor for remote snapshots and
 shard-update hints; when absent, the existing local source remains the fallback.
 Applications configure and close only the delivery facility through the
 environment: attachment supervisors and their source reads are facility-owned.
+
+# Dynamic unary discovery
+
+`BrowserServerOptions.discovery` may supply changing complete application-node snapshots alongside fixed `backend` configuration. Discovery changes command/query routing; fixed backend configuration remains the subscription fan-in input.

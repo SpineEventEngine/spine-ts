@@ -1,9 +1,14 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/require-await */
+
 import * as http from "node:http";
 import type { AddressInfo } from "node:net";
 import { createHash } from "node:crypto";
 
 import {
   createNativeGatewayServices,
+  DynamicUnaryForwarder,
   FanInSubscriptionCreator,
   InMemorySubscriptionBindings,
   NativeSubscriptionCreator,
@@ -13,8 +18,13 @@ import {
   UnaryGateway,
 } from "@spine-event-engine/auth";
 import type { ConnectRouter } from "@connectrpc/connect";
-import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
+import {
+  connectNodeAdapter,
+  createGrpcTransport,
+  Http2SessionManager,
+} from "@connectrpc/connect-node";
 import { AuthenticationService } from "@spine-event-engine/proto/auth";
+import type { ApplicationNode, NodeDiscovery } from "@spine-event-engine/deployment";
 import {
   CommandService,
   QueryService,
@@ -34,6 +44,7 @@ interface BrowserHostOptions extends Omit<BrowserServerOptions, "host" | "port">
   readonly readMaxBytes: number;
   readonly writeMaxBytes: number;
   readonly production: boolean;
+  readonly dynamicManagerFactory?: (node: ApplicationNode) => Http2SessionManager;
 }
 
 /**
@@ -56,6 +67,10 @@ export const BrowserServer: Readonly<{
   origins(origins: readonly string[]): ReadonlySet<string>;
   backendUrl(value: string): string;
   backendUrls(values: readonly string[]): readonly string[];
+  dynamicTransportOptions(node: ApplicationNode): {
+    readonly baseUrl: string;
+    readonly nodeOptions?: { readonly servername: string };
+  };
   topologyFingerprint(values: readonly string[]): string;
   requireDurableBindings(options: BrowserServerOptions, production: boolean): void;
   authRoutes(
@@ -96,7 +111,38 @@ export const BrowserServer: Readonly<{
     );
     const firstCreator = BrowserServerValues.firstCreator(creators);
     const creator = creators.length === 1 ? firstCreator : new FanInSubscriptionCreator(creators);
-    const forwarder = creators.length === 1 ? firstCreator : new RoundRobinUnaryForwarder(creators);
+    let dynamic: DynamicUnaryForwarder | undefined;
+    let stopDiscovery: (() => Promise<void>) | undefined;
+    const forwarder =
+      options.discovery === undefined
+        ? creators.length === 1
+          ? firstCreator
+          : new RoundRobinUnaryForwarder(creators)
+        : (dynamic = new DynamicUnaryForwarder({
+            create: async (node) => {
+              const manager =
+                options.dynamicManagerFactory?.(node) ??
+                new Http2SessionManager(
+                  node.endpoint,
+                  undefined,
+                  node.tlsServerName === undefined ? undefined : { servername: node.tlsServerName },
+                );
+              const client = new NativeSubscriptionCreator(
+                createGrpcTransport({
+                  ...BrowserServer.dynamicTransportOptions(node),
+                  sessionManager: manager,
+                }),
+              );
+              return {
+                forward: client.forward.bind(client),
+                close: async () => {
+                  manager.abort();
+                },
+              };
+            },
+          }));
+    if (options.discovery !== undefined && dynamic !== undefined)
+      stopDiscovery = await BrowserServerValues.watch(options.discovery, dynamic);
     const bindings =
       options.bindings ??
       new InMemorySubscriptionBindings({
@@ -188,16 +234,31 @@ export const BrowserServer: Readonly<{
     try {
       address = await BrowserServer.listen(server, options.host, options.port);
     } catch (error) {
-      try {
-        await subscriptions.close();
-      } catch (closeError) {
-        throw new AggregateError([error, closeError], "Server browser startup rollback failed.");
-      }
+      const cleanup = await Promise.allSettled([
+        subscriptions.close(),
+        stopDiscovery?.(),
+        dynamic?.close(),
+        BrowserServer.closeListener(server),
+      ]);
+      const failures = cleanup.flatMap((result) =>
+        result.status === "rejected" ? [result.reason] : [],
+      );
+      if (failures.length > 0)
+        throw new AggregateError([error, ...failures], "Server browser startup rollback failed.");
       throw error;
     }
-    return new RunningBrowserServer(server, running, subscriptions, address, activeAuth, () => {
-      draining = true;
-    });
+    return new RunningBrowserServer(
+      server,
+      running,
+      subscriptions,
+      address,
+      activeAuth,
+      () => {
+        draining = true;
+      },
+      stopDiscovery,
+      dynamic,
+    );
   },
   requests(options: BrowserServerOptions) {
     return {
@@ -273,6 +334,14 @@ export const BrowserServer: Readonly<{
     if (new Set(urls).size !== urls.length)
       throw new Error("Server browser backends must be unique canonical HTTP(S) origins.");
     return urls;
+  },
+  dynamicTransportOptions(node: ApplicationNode) {
+    return {
+      baseUrl: node.endpoint,
+      ...(node.tlsServerName === undefined
+        ? {}
+        : { nodeOptions: { servername: node.tlsServerName } }),
+    };
   },
   topologyFingerprint(values: readonly string[]): string {
     const hash = createHash("sha256");
@@ -511,6 +580,14 @@ export const BrowserServer: Readonly<{
 });
 
 const BrowserServerValues = Object.freeze({
+  async watch(
+    source: NodeDiscovery,
+    forwarder: DynamicUnaryForwarder,
+  ): Promise<() => Promise<void>> {
+    return await source.watch((nodes) => {
+      void forwarder.reconcile(nodes);
+    });
+  },
   requiredRunning(value: RunningServer | undefined): RunningServer {
     if (value === undefined) throw new Error("Browser server local backend is absent.");
     return value;
@@ -545,6 +622,8 @@ class RunningBrowserServer implements RunningServer {
   readonly #native: RunningServer | undefined;
   readonly #activeAuth: Set<AbortController>;
   readonly #onDrain: () => void;
+  readonly #stopDiscovery: (() => Promise<void>) | undefined;
+  readonly #dynamic: DynamicUnaryForwarder | undefined;
   readonly host: string;
   readonly port: number;
   readonly baseUrl: string;
@@ -552,6 +631,8 @@ class RunningBrowserServer implements RunningServer {
   #listenerClose: Promise<void> | undefined;
   #listenerClosed = false;
   #subscriptionsClosed = false;
+  #discoveryStopped = false;
+  #dynamicClosed = false;
   #nativeClosed = false;
 
   constructor(
@@ -561,12 +642,16 @@ class RunningBrowserServer implements RunningServer {
     address: AddressInfo,
     activeAuth: Set<AbortController>,
     onDrain: () => void,
+    stopDiscovery: (() => Promise<void>) | undefined,
+    dynamic: DynamicUnaryForwarder | undefined,
   ) {
     this.#server = server;
     this.#native = native;
     this.#subscriptions = subscriptions;
     this.#activeAuth = activeAuth;
     this.#onDrain = onDrain;
+    this.#stopDiscovery = stopDiscovery;
+    this.#dynamic = dynamic;
     this.host = typeof address.address === "string" ? address.address : "127.0.0.1";
     this.port = address.port;
     const host =
@@ -586,17 +671,62 @@ class RunningBrowserServer implements RunningServer {
     this.#onDrain();
     for (const controller of this.#activeAuth) controller.abort();
     const listener = this.#listenerClosed ? undefined : this.#closeListenerPhase();
-    if (!this.#subscriptionsClosed) {
-      await this.#subscriptions.close();
-      this.#subscriptionsClosed = true;
+    const failures: unknown[] = [];
+    await this.#phase(
+      this.#subscriptionsClosed ? undefined : this.#subscriptions.close(),
+      () => {
+        this.#subscriptionsClosed = true;
+      },
+      failures,
+    );
+    await this.#phase(
+      this.#discoveryStopped ? undefined : this.#stopDiscovery?.(),
+      () => {
+        this.#discoveryStopped = true;
+      },
+      failures,
+    );
+    await this.#phase(
+      this.#dynamicClosed ? undefined : this.#dynamic?.close(),
+      () => {
+        this.#dynamicClosed = true;
+      },
+      failures,
+    );
+    await this.#phase(
+      listener,
+      () => {
+        this.#listenerClosed = true;
+      },
+      failures,
+    );
+    await this.#phase(
+      this.#native === undefined || this.#nativeClosed ? undefined : this.#native.close(),
+      () => {
+        this.#nativeClosed = true;
+      },
+      failures,
+    );
+    if (failures.length > 0) {
+      const reason = failures[0];
+      const primary = reason instanceof Error ? reason : new Error(String(reason));
+      if (failures.length > 1)
+        Object.defineProperty(primary, "cleanupErrors", { value: failures.slice(1) });
+      throw primary;
     }
-    if (listener !== undefined) {
-      await listener;
-      this.#listenerClosed = true;
-    }
-    if (this.#native !== undefined && !this.#nativeClosed) {
-      await this.#native.close();
-      this.#nativeClosed = true;
+  }
+
+  async #phase(
+    operation: Promise<void> | undefined,
+    onSuccess: () => void,
+    failures: unknown[],
+  ): Promise<void> {
+    if (operation === undefined) return;
+    try {
+      await operation;
+      onSuccess();
+    } catch (error) {
+      failures.push(error);
     }
   }
 

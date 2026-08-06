@@ -3,6 +3,7 @@
   "references": [
     { "path": "./packages/proto-tools" },
     { "path": "./packages/proto" },
+    { "path": "./packages/deployment" },
     { "path": "./packages/auth" },
     { "path": "./packages/client-web" },
     { "path": "./packages/client-react" },
