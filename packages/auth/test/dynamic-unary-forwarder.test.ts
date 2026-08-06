@@ -4,6 +4,50 @@ import { ApplicationNode } from "@spine-event-engine/deployment";
 import { DynamicUnaryForwarder } from "../src/index.js";
 
 describe("DynamicUnaryForwarder", () => {
+  it("coalesces heavy churn behind a stalled first create and settles every caller", async () => {
+    const started: string[] = [];
+    let release: (() => void) | undefined;
+    const forwarder = new DynamicUnaryForwarder({
+      create: (node) =>
+        new Promise((resolve) => {
+          started.push(node.id);
+          if (node.id === "a")
+            release = () =>
+              resolve({ forward: async () => new Uint8Array(), close: async () => {} });
+          else resolve({ forward: async () => new Uint8Array(), close: async () => {} });
+        }),
+    });
+    const first = forwarder.reconcile([
+      new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" }),
+    ]);
+    await Promise.resolve();
+    const callers = Array.from({ length: 1000 }, (_, index) =>
+      forwarder.reconcile([
+        new ApplicationNode({
+          id: `${index}`,
+          endpoint: `http://10.1.${Math.floor(index / 250)}.${(index % 250) + 1}`,
+        }),
+      ]),
+    );
+    release?.();
+    await Promise.all([first, ...callers]);
+    expect(started).toEqual(["a", "999"]);
+  });
+
+  it("rejects conflicting duplicate IDs before creating any client", async () => {
+    let created = 0;
+    const forwarder = new DynamicUnaryForwarder({
+      create: async () => {
+        created++;
+        return { forward: async () => new Uint8Array(), close: async () => {} };
+      },
+    });
+    await forwarder.reconcile([
+      new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" }),
+      new ApplicationNode({ id: "a", endpoint: "http://10.0.0.2" }),
+    ]);
+    expect(created).toBe(0);
+  });
   it("creates an equal duplicate once and replaces a TLS-only change", async () => {
     const created: string[] = [];
     const closed: string[] = [];

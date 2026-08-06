@@ -12,6 +12,7 @@ import {
 } from "@spine-event-engine/auth";
 import type { RequestCredential } from "@spine-event-engine/auth";
 import { TypeRegistry } from "@spine-event-engine/core";
+import { ApplicationNode } from "@spine-event-engine/deployment";
 import { AuthenticationService, ResolveContextRequestSchema } from "@spine-event-engine/proto/auth";
 import {
   ActorContextSchema,
@@ -61,6 +62,17 @@ import { BrowserServer } from "../../src/server/browser-server.js";
 import { EnvironmentTests } from "../../src/server/environment.js";
 
 describe("Server", () => {
+  it("maps discovered TLS authority to the Node HTTP/2 server name", () => {
+    expect(
+      BrowserServer.dynamicTransportOptions(
+        new ApplicationNode({
+          id: "node/a",
+          endpoint: "https://10.0.0.1",
+          tlsServerName: "api.example.test",
+        }),
+      ),
+    ).toEqual({ baseUrl: "https://10.0.0.1", nodeOptions: { servername: "api.example.test" } });
+  });
   beforeEach(async () => {
     await resetServerEnvironmentForTest();
   });

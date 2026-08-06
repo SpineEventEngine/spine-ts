@@ -16,7 +16,7 @@ import {
 import type { ConnectRouter } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
 import { AuthenticationService } from "@spine-event-engine/proto/auth";
-import type { NodeDiscovery } from "@spine-event-engine/deployment";
+import type { ApplicationNode, NodeDiscovery } from "@spine-event-engine/deployment";
 import {
   CommandService,
   QueryService,
@@ -58,6 +58,10 @@ export const BrowserServer: Readonly<{
   origins(origins: readonly string[]): ReadonlySet<string>;
   backendUrl(value: string): string;
   backendUrls(values: readonly string[]): readonly string[];
+  dynamicTransportOptions(node: ApplicationNode): {
+    readonly baseUrl: string;
+    readonly nodeOptions?: { readonly servername: string };
+  };
   topologyFingerprint(values: readonly string[]): string;
   requireDurableBindings(options: BrowserServerOptions, production: boolean): void;
   authRoutes(
@@ -108,12 +112,7 @@ export const BrowserServer: Readonly<{
         : (dynamic = new DynamicUnaryForwarder({
             create: async (node) => {
               const client = new NativeSubscriptionCreator(
-                createGrpcTransport({
-                  baseUrl: node.endpoint,
-                  ...(node.tlsServerName === undefined
-                    ? {}
-                    : { nodeOptions: { servername: node.tlsServerName } }),
-                }),
+                createGrpcTransport(BrowserServer.dynamicTransportOptions(node)),
               );
               return { forward: client.forward.bind(client), close: async () => {} };
             },
@@ -307,6 +306,14 @@ export const BrowserServer: Readonly<{
     if (new Set(urls).size !== urls.length)
       throw new Error("Server browser backends must be unique canonical HTTP(S) origins.");
     return urls;
+  },
+  dynamicTransportOptions(node: ApplicationNode) {
+    return {
+      baseUrl: node.endpoint,
+      ...(node.tlsServerName === undefined
+        ? {}
+        : { nodeOptions: { servername: node.tlsServerName } }),
+    };
   },
   topologyFingerprint(values: readonly string[]): string {
     const hash = createHash("sha256");
