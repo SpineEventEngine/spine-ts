@@ -48,6 +48,21 @@ describe("GceApplicationNode", () => {
     });
   });
 
+  it("uses bracketed private IPv6 defaults and fences numeric instance identities", () => {
+    expect(
+      GceApplicationNode.create(
+        { projectId: "p", zone: "z", instanceId: "2", privateAddress: "fd00::1" },
+        { port: 8080 },
+      ),
+    ).toMatchObject({ id: "gce/p/z/2", endpoint: "http://[fd00::1]:8080" });
+    expect(() =>
+      GceApplicationNode.create(
+        { projectId: "p", zone: "z", instanceId: "label", privateAddress: "10.0.0.1" },
+        { port: 0 },
+      ),
+    ).toThrow();
+  });
+
   it("registers after start, renews at twenty seconds, and removes on close", async () => {
     const calls: string[] = [];
     let tick: (() => void) | undefined;

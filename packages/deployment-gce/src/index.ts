@@ -64,6 +64,10 @@ export class GceApplicationNode {
     metadata: GceMetadata,
     options: { readonly port: number; readonly endpoint?: string; readonly tlsServerName?: string },
   ): ApplicationNode {
+    if (!metadata.projectId.trim() || !metadata.zone.trim() || !/^\d+$/.test(metadata.instanceId))
+      throw new Error("GCE metadata identity is invalid.");
+    if (!Number.isSafeInteger(options.port) || options.port < 1 || options.port > 65_535)
+      throw new RangeError("GCE node port must be a valid TCP port.");
     const endpoint =
       options.endpoint ??
       `http://${GceApplicationNode.host(metadata.privateAddress)}:${String(options.port)}`;
