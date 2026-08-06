@@ -31,6 +31,17 @@ vi.mock("node:http2", async (importOriginal) => {
 });
 
 describe("Server lifecycle integration", () => {
+  it("starts listener lifecycles after readiness and closes them before network intake", async () => {
+    const events: string[] = [];
+    const server = Server.atPort(0).addListenerLifecycle({
+      start: () => events.push("start"),
+      close: () => events.push("close"),
+    });
+    const running = await server.start();
+    expect(events).toEqual(["start"]);
+    await running.close();
+    expect(events).toEqual(["start", "close"]);
+  });
   beforeEach(async () => {
     await resetServerEnvironmentForTest();
     createHttp2Server.mockReset();
