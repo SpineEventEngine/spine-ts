@@ -732,7 +732,7 @@ describe("GceApplicationNode", () => {
         unref: () => {
           unrefs += 1;
         },
-      }) as unknown as ReturnType<typeof setTimeout>) as typeof setTimeout;
+      }) as unknown as ReturnType<typeof setTimeout>) as unknown as typeof setTimeout;
     globalThis.clearTimeout = () => undefined;
     const registrar = new GceRegistrar({
       registry: {
