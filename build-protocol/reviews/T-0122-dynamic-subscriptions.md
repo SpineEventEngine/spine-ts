@@ -1,6 +1,6 @@
 # T-0122 Review Record
 
-Status: Complete review wave; corrections required
+Status: Correction batch implemented; targeted re-review pending
 
 ## Review Range
 
@@ -97,3 +97,16 @@ The complete wave is accepted as one deduplicated batch:
 
 The unchanged pre-existing `B4` wording is recorded as out-of-scope baseline
 debt rather than a T-0122 finding.
+
+## Correction Implementation Evidence
+
+- The complete accepted batch is implemented through `e5c05ba7`. Public
+  Gateway coordination receives logical definitions only; native envelopes are
+  created, bounded, and compensated per application node.
+- Activation remains open while updates flow and terminates only when its
+  admitted lifecycle signal ends. Cancel aborts and disposes active children.
+- Durable v4 recovery is bounded, rehydrates current membership, permits
+  immediate reconnect, and rolls Browser startup resources back on failure.
+- Focused correction preflight passed 7 suites / 371 tests, generated
+  typechecking, scoped lint/TSDoc, documentation audience checks, and diff
+  validation. The next action is targeted re-review, then release verification.
