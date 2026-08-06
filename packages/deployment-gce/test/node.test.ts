@@ -453,4 +453,54 @@ describe("GceApplicationNode", () => {
     expect(schedules).toBe(2);
     await registrar.close();
   });
+
+  it("recovers a failed ownership lookup on the next scheduled tick", async () => {
+    const ticks: (() => void)[] = [];
+    let schedules = 0;
+    let secondScheduled: (() => void) | undefined;
+    const second = new Promise<void>((done) => (secondScheduled = done));
+    let thirdScheduled: (() => void) | undefined;
+    const third = new Promise<void>((done) => (thirdScheduled = done));
+    let lookupCalls = 0;
+    let cleanupDone: (() => void) | undefined;
+    const cleanup = new Promise<void>((done) => (cleanupDone = done));
+    const identities: string[] = [];
+    const registry = {
+      register: async (lease: { registrationId: string }) => {
+        identities.push(lease.registrationId);
+        if (identities.length === 1) throw new Error("lost");
+        return true;
+      },
+      lookup: async () => {
+        lookupCalls += 1;
+        if (lookupCalls === 1) throw new Error("read failed");
+        return undefined;
+      },
+      cleanup: async () => (cleanupDone?.(), 0),
+      remove: async () => true,
+    } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
+    const registrar = new GceRegistrar({
+      registry,
+      node: new ApplicationNode({ id: "node", endpoint: "http://10.0.0.1" }),
+      identity: "owner",
+      scheduler: {
+        schedule: (_delay, onTick) => (
+          (schedules += 1),
+          ticks.push(onTick),
+          schedules === 2 && secondScheduled?.(),
+          schedules === 3 && thirdScheduled?.(),
+          () => undefined
+        ),
+      },
+    });
+    await registrar.start();
+    ticks.shift()?.();
+    await second;
+    ticks.shift()?.();
+    await cleanup;
+    await third;
+    expect(identities).toEqual(["owner", "owner"]);
+    expect(schedules).toBe(3);
+    await registrar.close();
+  });
 });
