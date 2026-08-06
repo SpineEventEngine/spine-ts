@@ -1256,12 +1256,17 @@ class MemoryDatastoreClient {
       keyAfter === undefined
         ? entities
         : entities.filter(
-            (entity) => keyString(entity[this.KEY] as MemoryKey) > keyString(keyAfter),
+            (entity) =>
+              (memoryKeyId(entity[this.KEY] as MemoryKey) as string) >
+              (memoryKeyId(keyAfter) as string),
           );
-    if (query.orders.some((order) => order[0] === "__key__")) {
+    if (
+      query.orders.some((order) => order[0] === "__key__") &&
+      filtered.every((entity) => typeof memoryKeyId(entity[this.KEY] as MemoryKey) === "string")
+    ) {
       filtered.sort((left, right) =>
-        keyString(left[this.KEY] as MemoryKey).localeCompare(
-          keyString(right[this.KEY] as MemoryKey),
+        (memoryKeyId(left[this.KEY] as MemoryKey) as string).localeCompare(
+          memoryKeyId(right[this.KEY] as MemoryKey) as string,
         ),
       );
     }
@@ -1354,6 +1359,9 @@ interface MemoryReadOptions {
 }
 function keyString(key: MemoryKey): string {
   return JSON.stringify([key.namespace, ...key.path]);
+}
+function memoryKeyId(key: MemoryKey): unknown {
+  return (JSON.parse(key.path[1]) as [string, unknown])[1];
 }
 function memoryKey(serialized: string): MemoryKey {
   const [namespace, kind, id] = JSON.parse(serialized) as [string | null, string, string];

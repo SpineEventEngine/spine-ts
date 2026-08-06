@@ -204,6 +204,8 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
       columns: this.#codec.columns(entity),
     }));
 
+    if (DatastoreRecordQuery.isKeysetPage(_query))
+      return entries.map(({ id, record }) => ({ id, record }));
     return LocalQueryResults.apply(entries, _query);
   }
 
