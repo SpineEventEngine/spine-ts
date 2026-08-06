@@ -70,8 +70,7 @@ const registry = new LeasedNodeRegistry({
   namespace: "production-application-nodes",
 });
 const discovery = new ScheduledNodeDiscovery({
-  reader: new GceRegistryReader(registry, Date.now),
-  scheduler: gatewayScheduler,
+  reader: new GceRegistryReader(registry),
 });
 const gateway = Server.atPort(8081, {
   ...gatewayServerOptions,

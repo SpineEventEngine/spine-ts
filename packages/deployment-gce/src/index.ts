@@ -200,7 +200,7 @@ export interface GceRegistrarOptions {
   readonly node?: ApplicationNode;
 
   /**
-   * Supplies metadata used when `node` is omitted.
+   * Supplies metadata used when `node` is omitted; defaults to `GceMetadataService` with a port.
    */
   readonly metadata?: GceMetadataProvider;
 
@@ -303,13 +303,11 @@ export class GceRegistrar {
    */
   constructor(options: GceRegistrarOptions) {
     this.#registry = options.registry;
-    if (
-      options.node === undefined &&
-      (options.metadata === undefined || options.port === undefined)
-    )
-      throw new Error("GCE registrar requires a node or metadata provider and port.");
+    if (options.node === undefined && options.port === undefined)
+      throw new Error("GCE registrar requires a node or a metadata port.");
     this.#node = options.node;
-    this.#metadata = options.metadata;
+    this.#metadata =
+      options.metadata ?? (options.node === undefined ? new GceMetadataService() : undefined);
     this.#port = options.port;
     this.#identity = options.identity ?? randomUUID();
     this.#scheduler = options.scheduler ?? systemScheduler;
@@ -471,11 +469,11 @@ export class GceRegistryReader implements NodeSnapshotReader {
    * Creates a reader using an injected clock for deterministic expiry evaluation.
    *
    * @param registry Supplies the leased registry to read.
-   * @param now Supplies the current epoch time used for exact expiry filtering.
+   * @param now Supplies the current epoch time used for exact expiry filtering; defaults to `Date.now`.
    */
   constructor(
     private readonly registry: LeasedNodeRegistry,
-    private readonly now: () => number,
+    private readonly now: () => number = Date.now,
   ) {}
 
   /**

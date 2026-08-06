@@ -315,6 +315,58 @@ describe("GceApplicationNode", () => {
     ).resolves.toMatchObject([{ id: "7" }]);
   });
 
+  it("uses Date.now when a registry reader clock is omitted", async () => {
+    const original = Date.now;
+    Date.now = () => 7;
+    try {
+      const registry = {
+        read: async (now: number) => [
+          new ApplicationNode({ id: String(now), endpoint: "http://10.0.0.1" }),
+        ],
+      } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
+      // @ts-expect-error The default clock is the behavior under test.
+      await expect(
+        new GceRegistryReader(registry).read(new AbortController().signal),
+      ).resolves.toMatchObject([{ id: "7" }]);
+    } finally {
+      Date.now = original;
+    }
+  });
+
+  it("derives metadata-backed registration from only a registry and port", async () => {
+    const original = globalThis.fetch;
+    const registrations: string[] = [];
+    globalThis.fetch = async (input) => {
+      const path = String(input).split("/").slice(-2).join("/");
+      const body =
+        new Map([
+          ["project/project-id", "project"],
+          ["instance/zone", "projects/1/zones/zone-a"],
+          ["instance/id", "42"],
+          ["0/ip", "10.0.0.1"],
+        ]).get(path) ?? "";
+      return new Response(body, { status: 200 });
+    };
+    const registrar = new GceRegistrar({
+      registry: {
+        register: async (lease: { node: ApplicationNode }) => (
+          registrations.push(lease.node.id),
+          true
+        ),
+        remove: async () => true,
+      } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry,
+      port: 8080,
+      scheduler: { schedule: () => () => undefined },
+    });
+    try {
+      await registrar.start();
+      expect(registrations).toEqual(["gce/project/zone-a/42"]);
+    } finally {
+      await registrar.close();
+      globalThis.fetch = original;
+    }
+  });
+
   it("feeds all live registry nodes through scheduled discovery", async () => {
     let tick: (() => void) | undefined;
     const nodes = Array.from(

@@ -16,9 +16,10 @@ is inferred.
 
 ## Registrar
 
-`new GceRegistrar(options)` requires either a ready `node` or a metadata
-provider plus port. It creates a UUID registration identity unless `identity`
-is supplied. The injected `scheduler`, `now`, and `deadlines` seams make timing
+`new GceRegistrar(options)` requires either a ready `node` or a metadata port.
+When `node` and `metadata` are both omitted, it creates `GceMetadataService`
+automatically. It creates a UUID registration identity unless `identity` is
+supplied. The injected `scheduler`, `now`, and `deadlines` seams make timing
 deterministic. `operationTimeoutMs` is a positive safe integer and defaults to
 20,000 milliseconds.
 
@@ -37,8 +38,9 @@ registrar waits for the admitted promise to settle before deletion.
 ## Discovery
 
 `GceRegistryReader.read(signal)` reads the full live registry snapshot at its
-injected clock time. Use it with `ScheduledNodeDiscovery`; expired rows are
-filtered immediately, so scale-to-zero produces an empty membership snapshot.
+injected clock time, which defaults to `Date.now`. Use it with
+`ScheduledNodeDiscovery`, whose production scheduler is optional and unref'ed;
+expired rows are filtered immediately, so scale-to-zero produces an empty membership snapshot.
 A later registrar makes its node discoverable and also resumes bounded cleanup
 of abandoned expired rows. Registry-read failures retain the Gateway's previous
 valid membership until a later refresh succeeds.
