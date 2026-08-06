@@ -469,6 +469,53 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     }
   }
 
+  /**
+   * Reclaims active definitions after a Gateway restart and rehydrates their native children.
+   *
+   * A restarted Gateway has no public update relay to resume. It therefore makes
+   * each recovered binding inactive before exposing its definition; a reconnecting
+   * browser Activate request immediately establishes the new relay.
+   *
+   * @param input Supplies the recovery time and native-membership callback.
+   * @returns Completes after one bounded durable scan.
+   */
+  async recoverActive(input: {
+    readonly nowMs: number;
+    readonly onDefinition: (definition: PublicSubscriptionWire) => Promise<void>;
+  }): Promise<void> {
+    this.#open();
+    Values.time(input.nowMs);
+    const rows = await this.#storage.queryEntries({
+      sort: [{ field: "id" }],
+      limit: this.#recordLimit + 2,
+    });
+    for (const row of rows) {
+      if (row.id === quotaId || row.id === cleanupId) continue;
+      const active = Values.read(row.record, row.id, this.#maxRecordBytes) as Binding;
+      if (
+        active.lifecycle !== "active" ||
+        active.expiresAtMs === undefined ||
+        active.expiresAtMs <= input.nowMs
+      )
+        continue;
+      const {
+        ownerId: _ownerId,
+        leaseUntilMs: _leaseUntilMs,
+        reason: _reason,
+        ...inactive
+      } = active;
+      const recovered: Binding = {
+        ...inactive,
+        revision: active.revision + 1,
+        lifecycle: "inactive",
+        fence: active.fence + 1,
+      };
+      if (!(await this.#cas(active.id, row.record, Values.write(recovered, this.#maxRecordBytes))))
+        continue;
+      await input.onDefinition(Values.definition(recovered));
+    }
+  }
+
   async #purgeExpired(nowMs: number): Promise<void> {
     this.#open();
     Values.time(nowMs);

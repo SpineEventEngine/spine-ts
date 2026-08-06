@@ -196,6 +196,46 @@ describe("DynamicSubscriptionCreator", () => {
     expect(disposals).toBe(1);
   });
 
+  it("compensates every installed child when one current node rejects creation", async () => {
+    const disposals: string[] = [];
+    const owner = new DynamicUnaryForwarder({
+      create: async (node) => ({
+        ...client(node.id, []),
+        subscribe: async () => {
+          if (node.id === "b") throw new Error("native creation failed");
+          return { kind: "backend-subscription-envelope" as const, bytes: new Uint8Array([1]) };
+        },
+        dispose: async () => {
+          disposals.push(node.id);
+        },
+      }),
+    });
+    const creator = new DynamicSubscriptionCreator(owner);
+
+    await owner.reconcile([
+      new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" }),
+      new ApplicationNode({ id: "b", endpoint: "http://10.0.0.2" }),
+    ]);
+
+    await expect(
+      creator.subscribe(subscription(), new AbortController().signal, 100),
+    ).rejects.toThrow("native creation failed");
+    expect(disposals).toEqual(["a"]);
+  });
+
+  it("rejects creation after an empty desired membership snapshot before stale clients close", async () => {
+    const owner = new DynamicUnaryForwarder({ create: async (node) => client(node.id, []) });
+    const creator = new DynamicSubscriptionCreator(owner);
+    const node = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
+
+    await owner.reconcile([node]);
+    const leaving = owner.reconcile([]);
+    await expect(
+      creator.subscribe(subscription(), new AbortController().signal, 100),
+    ).rejects.toThrow("Gateway backend is absent.");
+    await leaving;
+  });
+
   it("aborts a delayed start when cancellation removes its definition", async () => {
     let aborted = false;
     const owner = new DynamicUnaryForwarder({

@@ -100,6 +100,58 @@ describe("DurableSubscriptionBindings", () => {
     await bindings.close();
   });
 
+  it("rehydrates a live durable definition without waiting for its former lease", async () => {
+    const factory = new InMemoryStorageFactory();
+    const first = registry(factory, "restart-recovery");
+    const binding = await first.create({
+      definition: { kind: "public-subscription", bytes: new Uint8Array([7]) },
+      principalFingerprint: "principal",
+      tenant: undefined,
+      expiresAtMs: 1_000,
+    });
+    const entered = Promise.withResolvers<void>();
+    const firstController = new AbortController();
+    const active = first.activate({
+      id: binding.id,
+      principalFingerprint: "principal",
+      tenant: undefined,
+      nowMs: 1,
+      signal: firstController.signal,
+      onDefinition: async (_definition, signal) => {
+        entered.resolve();
+        await new Promise<void>((resolve) =>
+          signal.addEventListener("abort", resolve, { once: true }),
+        );
+      },
+    });
+    await entered.promise;
+    const restarted = registry(factory, "restart-recovery");
+    const definitions: Uint8Array[] = [];
+
+    await restarted.recoverActive({
+      nowMs: 2,
+      onDefinition: async (definition) => {
+        definitions.push(definition.bytes.slice());
+      },
+    });
+
+    expect(definitions).toEqual([new Uint8Array([7])]);
+    await expect(
+      restarted.activate({
+        id: binding.id,
+        principalFingerprint: "principal",
+        tenant: undefined,
+        nowMs: 2,
+        signal: new AbortController().signal,
+        onDefinition: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "activated" });
+    firstController.abort();
+    await active;
+    await first.close();
+    await restarted.close();
+  });
+
   it("keeps namespaces and ownership facts isolated", async () => {
     const factory = new InMemoryStorageFactory();
     const first = registry(factory, "first");

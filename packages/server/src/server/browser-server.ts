@@ -13,6 +13,7 @@ import {
   NativeSubscriptionCreator,
   SubscriptionGateway,
   TransportFacts,
+  type SubscriptionBindings,
   UnaryGateway,
 } from "@spine-event-engine/auth";
 import type { ConnectRouter } from "@connectrpc/connect";
@@ -164,6 +165,20 @@ export const BrowserServer: Readonly<{
       fingerprint: options.fingerprint,
       creator,
     });
+    const recoverActive = (bindings as SubscriptionBindings).recoverActive;
+    if (recoverActive !== undefined) {
+      const now = options.clock?.now();
+      const nowMs =
+        now === undefined
+          ? undefined
+          : Number(now.seconds) * 1_000 + Math.floor(Number(now.nanos) / 1_000_000);
+      if (nowMs !== undefined && Number.isSafeInteger(nowMs))
+        await recoverActive({
+          nowMs,
+          onDefinition: (definition: import("@spine-event-engine/auth").PublicSubscriptionWire) =>
+            creator.rehydrate(definition, 1_048_576),
+        });
+    }
     const services = createNativeGatewayServices({ unary, subscriptions, requests });
     const handler = connectNodeAdapter({
       routes: (router: ConnectRouter) => {

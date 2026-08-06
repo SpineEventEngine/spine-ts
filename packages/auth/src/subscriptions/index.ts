@@ -286,6 +286,19 @@ export interface SubscriptionBindings {
   purgeExpired(nowMs: number): Promise<void>;
 
   /**
+   * Rehydrates active durable definitions after a Gateway restart when supported.
+   *
+   * Implementations without durable storage may omit this operation.
+   *
+   * @param input Supplies the restart time and logical-definition callback.
+   * @returns Completes after the bounded recovery pass.
+   */
+  recoverActive?(input: {
+    readonly nowMs: number;
+    readonly onDefinition: (definition: PublicSubscriptionWire) => Promise<void>;
+  }): Promise<void>;
+
+  /**
    * Closes all retained bindings.
    * @returns Completes after retained bindings close.
    */

@@ -249,6 +249,36 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     }
   }
 
+  /**
+   * Rehydrates one durable logical definition without treating it as a public Subscribe request.
+   *
+   * @param request Supplies the canonical definition retained by durable storage.
+   * @param maxBackendEnvelopeBytes Limits every per-node native envelope.
+   * @returns Completes after current membership receives native children.
+   */
+  async rehydrateDefinition(
+    request: PublicSubscriptionWire,
+    maxBackendEnvelopeBytes: number,
+  ): Promise<void> {
+    if (this.#closed) throw new Error("Gateway dynamic owner is closed.");
+    const subscription = fromBinary(SubscriptionSchema, request.bytes);
+    const id = subscription.id?.value;
+    if (id === undefined || id.length === 0) throw new Error("subscription ID is required");
+    if (!this.#definitions.has(id))
+      this.#definitions.set(id, {
+        wire: { kind: "public-subscription", bytes: request.bytes.slice() },
+        maxBackendEnvelopeBytes,
+        updates: undefined,
+        active: false,
+        starts: new Set(),
+        children: new Map(),
+        failure: undefined,
+      });
+    await this.#schedule([...this.#nodes.values()], false);
+    const definition = this.#definitions.get(id);
+    if (definition?.failure !== undefined) throw definition.failure;
+  }
+
   async #reconcileDefinitions(generation: number): Promise<void> {
     for (const definition of this.#definitions.values()) {
       for (const [id, child] of definition.children)

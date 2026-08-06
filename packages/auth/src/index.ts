@@ -621,6 +621,7 @@ export type {
 } from "./gateway/index.js";
 export type {
   SubscriptionCreator,
+  SubscriptionCoordinator,
   SubscriptionGatewayLimits,
   SubscriptionGatewayOptions,
   SubscriptionGatewayRequest,
