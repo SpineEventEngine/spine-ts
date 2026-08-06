@@ -1,6 +1,6 @@
 # T-0120: Wave 7 Scaling And Redeployment Plan
 
-Status: Execution authorized; planning corrections applied; re-review pending
+Status: Complete; ready for integration
 
 ## Objective
 
@@ -241,6 +241,32 @@ shutdown ordering, and DNS failure behavior changed substantively, the
 orchestrator must re-review the affected planning concerns before integrating
 T-0120.
 
+## Targeted Planning Re-Review Result
+
+The style/maintainability, TypeScript/API docs, and performance/reliability
+lanes re-reviewed the complete corrected plan using explicitly configured
+`gpt-5.6-terra` / `high` profiles. Their surfaces exposed no independent
+runtime metadata and showed no visible fallback or mismatch. Documentation was
+not repeated because its sole finding was the mechanically removed stale
+sentence and it was otherwise clean.
+
+Accepted final batch:
+
+1. Update the canonical completion-plan mirror to record execution approval.
+2. Define explicit/default HTTP(S) scheme selection and exact TLS server-name
+   validity, normalization, equality, and HTTP exclusion.
+3. Define empty/NXDOMAIN as immediate empty membership with the configured
+   refresh interval and no separate negative-TTL cache.
+4. Serialize initial GCE registration with renewal/cleanup; retry failed or
+   unknown initial outcomes using one process identity and confirm a lost
+   response before renewal.
+
+All prior style findings are resolved. The API lane confirmed the v4 cutover,
+internal diagnostics, leased-record policy, and positive TTL rules; reliability
+confirmed latest-snapshot generation fencing and shutdown quiescence. The four
+items above are record-only corrections and receive deterministic checks rather
+than a third substantive specialist wave.
+
 ## Dependency-Ordered Execution Queue
 
 1. T-0121: dynamic discovery and unary Gateway routing.
@@ -264,14 +290,14 @@ ordinary implementation choice.
 
 ## Review Dispositions
 
-- Style/maintainability: relevant to the final task boundaries and package
-  ownership recorded in the planning diff.
-- Documentation: relevant to the accuracy and completeness of the deployment
-  split and operator-guide obligations.
-- TypeScript/API docs: relevant to the planned discovery, registration, and
-  diagnostics contracts.
-- Performance/reliability: relevant to leases, refresh, bounded concurrency,
-  all-node reconciliation, replacement, and failure behavior.
+- Style/maintainability: accepted after targeted re-review and final
+  deterministic status correction; no P0-P2 remains.
+- Documentation: accepted after the stale unresolved marker was removed; its
+  first-wave review was otherwise clean.
+- TypeScript/API docs: accepted after targeted re-review and final deterministic
+  scheme/TLS/negative-DNS clarifications; no P0-P2 remains.
+- Performance/reliability: accepted after targeted re-review and final
+  deterministic initial-registration clarification; no P0-P2 remains.
 
 No runtime code, package scaffold, Terraform, or end-user deployment guide was
 implemented by T-0120. Its completion authorizes the orchestrator to create and

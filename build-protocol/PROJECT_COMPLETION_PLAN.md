@@ -166,10 +166,11 @@ durably closed.
 Wave 6 Q&A, its original implementation, review, release verification,
 integration, and documentation closure are complete. T-0113 records the
 subsequent System Context and payload-first correction that must precede Wave 7.
-Wave 7 Q&A is complete under T-0120. Its dependency-ordered plan must be
-finalized and explicitly approved before implementation. Do not publish
-packages to npm until all waves are complete and publication is revisited with
-the human.
+Wave 7 Q&A and its dependency-ordered T-0121 through T-0128 plan are approved
+under T-0120. T-0121 may start after T-0120 review convergence, integration,
+post-merge verification, and remote synchronization. Do not publish packages
+to npm until all waves are complete and publication is revisited with the
+human.
 
 ## Authored API And Example Quality Correction
 

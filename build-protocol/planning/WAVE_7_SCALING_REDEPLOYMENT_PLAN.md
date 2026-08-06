@@ -1,6 +1,6 @@
 # Wave 7: Scaling And Redeployment
 
-Status: Execution authorized; corrected dependency split complete
+Status: Reviewed and ready for integration
 
 Planning task: `T-0120`
 
@@ -76,17 +76,23 @@ other network layouts. Publishing a public address is not a default.
 ## Node Identity And Endpoint Canonicalization
 
 The platform-neutral node descriptor contains an opaque stable node ID, a
-canonical HTTP(S) origin, and an optional TLS server name. An endpoint is valid
-only when it is an absolute `http:` or `https:` URL with no credentials, query,
-fragment, or non-root path. Canonicalization uses the URL origin: DNS names are
-lowercase, default ports are removed, non-default ports are retained, and IPv6
-literals use brackets. Equality and replacement decisions use that canonical
-form rather than caller spelling.
+canonical HTTP(S) origin, and an optional TLS server name. Platform assembly
+selects `http` or `https` explicitly and defaults to `http`; address plus port
+alone never implies a scheme. An endpoint is valid only when it is an absolute
+`http:` or `https:` URL with no credentials, query, fragment, or non-root path.
+Canonicalization uses the URL origin: DNS names are lowercase, default ports
+are removed, non-default ports are retained, and IPv6 literals use brackets.
+Equality and replacement decisions use that canonical form rather than caller
+spelling.
 
 For HTTPS, certificate verification and SNI use the explicit normalized TLS
-server name when supplied and otherwise use the endpoint host. Resolving a DNS
-name to an IP address must not silently replace its TLS authority. HTTP may use
-private IPv4 or bracketed IPv6 literals directly.
+server name when supplied and otherwise use the endpoint host. A supplied TLS
+server name is valid only with `https`; it must be one DNS hostname without a
+scheme, port, path, trailing dot, or IP literal. URL hostname parsing converts
+international names to ASCII, then the value is lowercased for identity and
+equality. Resolving a DNS name to an IP address must not silently replace its
+TLS authority. HTTP rejects a TLS server name and may use private IPv4 or
+bracketed IPv6 literals directly.
 
 GCE derives its stable node ID as
 `gce/<project-id>/<zone>/<numeric-instance-id>` from metadata. Reuse of a
@@ -108,13 +114,15 @@ rather than causing a tight loop. The last successful answer remains usable
 only until its positive TTL expires, or until the fallback interval expires
 when TTL is zero/missing.
 
-An empty answer or NXDOMAIN is a successful empty membership snapshot. A
-resolver failure applies no replacement snapshot: the Gateway retains the last
-successful answer only until that answer's validity deadline, then reconciles
-to empty/backend-unavailable while retrying at the configured interval. A later
-successful answer resumes normal precedence. Kubernetes readiness controls
-whether a Pod appears. No storage-backed node registry or GCE-style registrar
-is involved.
+An empty answer or NXDOMAIN is a successful empty membership snapshot. It is
+applied immediately, remains the current empty membership, and schedules the
+next lookup at the configured refresh interval; Wave 7 does not add a separate
+negative-DNS TTL cache. A resolver failure applies no replacement snapshot: the
+Gateway retains the last successful answer only until that answer's validity
+deadline, then reconciles to empty/backend-unavailable while retrying at the
+configured interval. A later successful answer resumes normal precedence.
+Kubernetes readiness controls whether a Pod appears. No storage-backed node
+registry or GCE-style registrar is involved.
 
 ## Discovery Capacity
 
@@ -505,6 +513,13 @@ it does not edit GKE paths or infrastructure templates.
 - Registration starts only after the application gRPC listener reports ready.
   Defaults renew every 20 seconds with a 60-second expiry; fake-clock tests
   prove renewal cadence and expiry without sleeping.
+- Initial registration, confirmation, renewal, and cleanup share one serialized
+  registrar loop. A failed or lost-response initial write is retried after the
+  20-second interval with the same per-process registration identity. Before
+  retrying an unknown outcome, the registrar reads its node row: an identical
+  live identity confirms registration; absence or another identity causes one
+  conditional register attempt. Renewal starts only after confirmation. No
+  parallel retry/renew loop or second registration identity is created.
 - Each process creates a new opaque registration identity. Renewal, expired-row
   cleanup, and graceful conditional deletion use that identity. Graceful
   shutdown first fences new scheduled work, then aborts and waits for initial
@@ -523,10 +538,12 @@ it does not edit GKE paths or infrastructure templates.
   handles, or unhandled rejections; later refresh/renew cycles can recover while
   lease expiry remains the authoritative crash-removal mechanism.
 
-**RED-first tests:** exact GCE ID derivation; private endpoint default/override,
-TLS authority, IPv6, and invalid endpoint; listener-ready ordering; 20/60
-fake-clock cadence; restart with reused logical label but new numeric instance
-ID; stale-process renew/delete fencing; stalled initial-registration,
+**RED-first tests:** exact GCE ID derivation; explicit/default scheme, private
+endpoint override, normalized TLS authority, invalid HTTP-plus-TLS, IPv6, and
+invalid endpoint; listener-ready ordering; 20/60 fake-clock cadence; failed and
+lost-response initial registration with same-identity confirmation/retry and no
+parallel loop; restart with reused logical label but new numeric instance ID;
+stale-process renew/delete fencing; stalled initial-registration,
 renewal-versus-shutdown, and cleanup-versus-shutdown quiescence proving no late
 write after conditional delete/listener close; crash expiry; registry read
 failure and recovery; scale zero/return; and one-Gateway 40-node end-to-end
@@ -580,7 +597,8 @@ edit the GCE package or Terraform paths.
   interval and the smallest positive TTL. Zero or absent TTL falls back to the
   configured interval for both refresh and validity, avoiding a tight loop. A
   positive answer is usable only through its TTL deadline.
-- Empty/NXDOMAIN is an immediate successful empty snapshot. A resolver failure
+- Empty/NXDOMAIN is an immediate successful empty snapshot whose next lookup is
+  the configured interval; no negative-TTL cache is added. A resolver failure
   does not itself replace membership: the last successful answer remains only
   until its TTL/fallback deadline, then one empty snapshot is reconciled while
   retries continue at the configured interval. A later successful answer
@@ -599,12 +617,14 @@ edit the GCE package or Terraform paths.
 - Resolver cancellation and Gateway shutdown leave no DNS requests, timers,
   connection attempts, or streams running.
 
-**RED-first tests:** DNS normalization/deduplication/reordering; GKE node-ID,
-IPv6, TLS authority, disappearance/address-reuse fencing; configured interval
-shorter than TTL; positive TTL shorter than interval; zero/missing TTL fallback;
-empty/NXDOMAIN; resolver failure before and after the last answer's validity
-deadline; later recovery; bounded 40-address reconciliation; durable
-subscription reactivation; and shutdown cancellation.
+**RED-first tests:** DNS normalization/deduplication/reordering; explicit/default
+scheme, GKE node-ID, IPv6, normalized TLS authority, invalid HTTP-plus-TLS, and
+disappearance/address-reuse fencing; configured interval shorter than TTL;
+positive TTL shorter than interval; zero/missing TTL fallback; empty/NXDOMAIN
+immediate application plus configured-interval refresh; resolver failure before
+and after the last answer's validity deadline; later recovery; bounded
+40-address reconciliation; durable subscription reactivation; and shutdown
+cancellation.
 
 **Documentation obligations:** Add GKE package README/reference covering the
 headless Service, readiness ownership, DNS/TTL behavior, service-name and port
