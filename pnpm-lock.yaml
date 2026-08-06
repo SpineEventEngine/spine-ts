@@ -435,6 +435,12 @@ importers:
         specifier: workspace:*
         version: link:../storage
 
+  packages/deployment-gce:
+    dependencies:
+      '@spine-event-engine/deployment':
+        specifier: workspace:*
+        version: link:../deployment
+
   packages/proto:
     dependencies:
       '@bufbuild/protobuf':
