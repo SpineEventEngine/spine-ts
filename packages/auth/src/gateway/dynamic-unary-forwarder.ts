@@ -174,8 +174,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     } finally {
       this.#creating.delete(controller);
     }
-    if (this.#closed || generation !== this.#generation)
-      await client.close().catch(() => undefined);
+    if (this.#closed || generation !== this.#generation) await this.#dispose(client);
     else
       this.#clients.set(node.id, {
         endpoint: node.endpoint,
@@ -204,7 +203,10 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
    * @returns Completes after every current client is closed.
    */
   async close(): Promise<void> {
-    this.#closing ??= this.#closeOnce();
+    this.#closing ??= this.#closeOnce().catch((error: unknown) => {
+      this.#closing = undefined;
+      throw error;
+    });
     return this.#closing;
   }
 
@@ -215,5 +217,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     await Promise.all([...this.#clients.values()].map(({ client }) => this.#dispose(client)));
     this.#clients.clear();
     await this.#retryDisposals();
+    if (this.#failedDisposals.size > 0)
+      throw new Error("Gateway dynamic client cleanup remains incomplete.");
   }
 }

@@ -10,15 +10,15 @@ The package supplies provider-neutral gateway building blocks. An application pl
 
 `AuthorizationPolicy.authorize()` is evaluated separately for each incoming request. `ContextResolver.resolve()` returns the trusted actor, optional tenant, timestamp, zone, and language. The caller-provided `ActorContext` must match that resolved actor and tenant, otherwise `UnaryGateway` rejects the request as `context-stale`. Backends can trust the forwarded, gateway-replaced context only when the deployment routes traffic through an application-selected gateway.
 
-## Fixed gateway topology
+## Fixed subscription topology
 
-A standalone browser Gateway accepts a fixed list of 1–32 backend origins.
-Commands and queries select one backend with bounded round-robin forwarding and
-do not retry a failed request. Subscription creation and activation fan out to
+A standalone browser Gateway may use dynamic unary discovery for commands and
+queries. A fixed list of 1–32 backend origins remains the current positional
+subscription fan-in contract. Subscription creation and activation fan out to
 the configured nodes; merged notices can be duplicated, missing, or lost.
 Browser code must treat notices as refresh hints and use Queries as the
-authoritative state source. The list is configured at startup: there is no
-dynamic backend discovery or redeployment protocol.
+authoritative state source. The fixed subscription list is configured at
+startup; dynamic subscription reconciliation is not provided here.
 
 ## Unary requests
 

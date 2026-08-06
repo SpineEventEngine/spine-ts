@@ -56,6 +56,21 @@ describe("StaticNodeDiscovery", () => {
 });
 
 describe("ScheduledNodeDiscovery", () => {
+  it("retries after a reader failure and permits only one watch", async () => {
+    const ticks: (() => void)[] = [];
+    let reads = 0;
+    const source = new ScheduledNodeDiscovery({
+      reader: { read: async () => { reads++; if (reads === 1) throw new Error("temporary"); return []; } },
+      scheduler: { schedule: (_delay, tick) => { ticks.push(tick); return () => {}; } },
+    });
+    source.watch(() => undefined);
+    expect(() => source.watch(() => undefined)).toThrow("one active watch");
+    ticks.shift()?.();
+    await Promise.resolve();
+    ticks.shift()?.();
+    await Promise.resolve();
+    expect(reads).toBe(2);
+  });
   it("uses an injected zero then ten-second schedule", async () => {
     const delays: number[] = [];
     let tick: (() => void) | undefined;

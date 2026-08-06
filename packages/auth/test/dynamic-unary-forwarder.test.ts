@@ -113,6 +113,7 @@ describe("DynamicUnaryForwarder", () => {
 
   it("recovers after a failed factory and ignores close failure during removal", async () => {
     let fail = true;
+    let closeAttempts = 0;
     const forwarder = new DynamicUnaryForwarder({
       create: async (node) => {
         if (fail) {
@@ -122,7 +123,8 @@ describe("DynamicUnaryForwarder", () => {
         return {
           forward: async () => new TextEncoder().encode(node.id),
           close: async () => {
-            throw new Error("close");
+            closeAttempts++;
+            if (closeAttempts < 3) throw new Error("close");
           },
         };
       },
@@ -134,7 +136,9 @@ describe("DynamicUnaryForwarder", () => {
         await forwarder.forward({ service: "s", method: "m", value: new Uint8Array() }),
       ),
     ).toBe("b");
+    await expect(forwarder.close()).rejects.toThrow("cleanup remains incomplete");
     await expect(forwarder.close()).resolves.toBeUndefined();
+    expect(closeAttempts).toBe(3);
   });
   it("coalesces B behind A so only the latest pending snapshot is created", async () => {
     const started: string[] = [];
