@@ -1,6 +1,6 @@
 # T-0122: Dynamic Subscription Reconciliation
 
-Status: Open; implementation pending
+Status: Implementation complete; focused review pending
 
 ## Objective
 
@@ -98,6 +98,18 @@ accepted evidence with no visible mismatch.
 - Mandatory focused RED/GREEN commands and affected-package preflight.
 - `pnpm verify:release` after review convergence because shared subscription
   runtime, durable restart behavior, and cross-package assembly change.
+
+## Implementation Evidence
+
+- The dynamic owner retains logical definitions across zero-node intervals and
+  creates one ephemeral native child per current node only after public
+  activation.
+- Deterministic lifecycle tests cover a deferred add/Activate race, same-ID
+  node recovery, cancellation and close during delayed creation, unexpected
+  child completion followed by replay, reordering, cleanup retry, forty-node
+  fan-in, and bounded start concurrency.
+- Focused preflight remains required after this checkpoint, followed by the
+  recorded relevant review concerns and release verification after convergence.
 
 ## Review Concerns
 

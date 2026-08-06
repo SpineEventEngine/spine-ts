@@ -21,6 +21,39 @@ describe("DynamicSubscriptionCreator", () => {
     expect(starts).toEqual(["a"]);
   });
 
+  it("does not activate a child until its concurrent add has installed it", async () => {
+    const entered = deferred<void>();
+    const release = deferred<{
+      readonly kind: "backend-subscription-envelope";
+      readonly bytes: Uint8Array;
+    }>();
+    const starts: string[] = [];
+    const owner = new DynamicUnaryForwarder({
+      create: async (node) => ({
+        ...client(node.id, starts),
+        subscribe: async (_request, signal) => {
+          entered.resolve();
+          return awaitAbortable(release.promise, signal);
+        },
+      }),
+    });
+    const creator = new DynamicSubscriptionCreator(owner);
+    const node = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
+    const wire = subscription();
+
+    await owner.reconcile([node]);
+    const creating = creator.subscribe(wire, new AbortController().signal);
+    await entered.promise;
+    const activating = creator.activate(
+      { wire, updates: async () => {} },
+      new AbortController().signal,
+    );
+    release.resolve({ kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) });
+
+    await Promise.all([creating, activating]);
+    expect(starts).toEqual(["a"]);
+  });
+
   it("retains an active definition while no nodes exist and resumes it after recovery", async () => {
     const starts: string[] = [];
     const owner = new DynamicUnaryForwarder({ create: async (node) => client(node.id, starts) });
@@ -35,6 +68,46 @@ describe("DynamicSubscriptionCreator", () => {
     await owner.reconcile([node]);
 
     expect(starts).toEqual(["a", "a"]);
+  });
+
+  it("replaces a child after an unexpected activation completion", async () => {
+    const firstActivation = deferred<void>();
+    const firstFinished = deferred<void>();
+    const starts: string[] = [];
+    let activations = 0;
+    const owner = new DynamicUnaryForwarder({
+      create: async (node) => ({
+        ...client(node.id, starts),
+        activate: async (_request, signal) => {
+          activations++;
+          if (activations === 1) {
+            await firstActivation.promise;
+            firstFinished.resolve();
+            return;
+          }
+          await new Promise<void>((resolve) => {
+            signal.addEventListener("abort", resolve, { once: true });
+          });
+        },
+      }),
+    });
+    const creator = new DynamicSubscriptionCreator(owner);
+    const node = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
+    const wire = subscription();
+
+    await owner.reconcile([node]);
+    await creator.subscribe(wire, new AbortController().signal);
+    await creator.activate({ wire, updates: async () => {} }, new AbortController().signal);
+    expect(activations).toBe(1);
+
+    firstActivation.resolve();
+    await firstFinished.promise;
+    await Promise.resolve();
+    await owner.reconcile([node]);
+
+    expect(activations).toBe(2);
+    await owner.reconcile([node]);
+    expect(activations).toBe(2);
   });
 
   it("rejects a new native subscription while membership is empty", async () => {
@@ -282,4 +355,21 @@ function client(id: string, starts: string[]) {
     cancel: async () => {},
     dispose: async () => {},
   };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function awaitAbortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    signal.addEventListener("abort", () => reject(new Error("cancelled")), { once: true });
+    promise.then(resolve, reject);
+  });
 }
