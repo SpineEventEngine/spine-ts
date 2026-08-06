@@ -1,5 +1,11 @@
 import { create } from "@bufbuild/protobuf";
-import { RecordSpec, type RecordStorage, type StorageFactory } from "@spine-event-engine/storage";
+import {
+  RecordSpec,
+  type RecordContinuation,
+  type RecordEntry,
+  type RecordStorage,
+  type StorageFactory,
+} from "@spine-event-engine/storage";
 import {
   ApplicationNodeLeaseSchema,
   type ApplicationNodeLease,
@@ -9,6 +15,7 @@ import { ApplicationNode } from "./index.js";
 
 const storageKey = "spine.deployment.ApplicationNodeLease:v1";
 const defaultCleanupBatchSize = 32;
+const readPageSize = 256;
 
 /**
  * Stores and reads live application-node leases in one caller-owned storage namespace.
@@ -19,6 +26,7 @@ export class LeasedNodeRegistry {
   #closed = false;
   #closing: Promise<void> | undefined;
   readonly #operations = new Set<Promise<unknown>>();
+  #cleanupAfter: RecordContinuation<string> | undefined;
 
   /**
    * Creates a leased node registry over an explicit atomic record storage handle.
@@ -28,6 +36,9 @@ export class LeasedNodeRegistry {
   constructor(options: LeasedNodeRegistryOptions) {
     if (options.namespace.trim().length === 0)
       throw new Error("Lease storage namespace must be non-empty.");
+    const cleanupBatchSize = options.cleanupBatchSize ?? defaultCleanupBatchSize;
+    if (!Number.isSafeInteger(cleanupBatchSize) || cleanupBatchSize < 1)
+      throw new RangeError("Lease cleanup batch size must be a positive safe integer.");
     this.#storage = options.factory.createRecordStorage(
       { name: options.namespace, multitenant: false },
       leaseRecordSpec,
@@ -36,9 +47,7 @@ export class LeasedNodeRegistry {
       this.#storage.close();
       throw new Error("Leased node registry requires atomic compare-and-set storage.");
     }
-    this.#cleanupBatchSize = options.cleanupBatchSize ?? defaultCleanupBatchSize;
-    if (!Number.isSafeInteger(this.#cleanupBatchSize) || this.#cleanupBatchSize < 1)
-      throw new RangeError("Lease cleanup batch size must be a positive safe integer.");
+    this.#cleanupBatchSize = cleanupBatchSize;
   }
 
   /**
@@ -104,7 +113,7 @@ export class LeasedNodeRegistry {
   read(now: number): Promise<readonly ApplicationNode[]> {
     return this.start(async () => {
       LeaseRecords.requireTime(now);
-      const leases = (await this.#storage.query()).map((record) => LeaseRecords.read(record));
+      const leases = (await this.readAll()).map(({ record }) => LeaseRecords.read(record));
       return leases.filter((lease) => lease.expiresAt > now).map((lease) => lease.node);
     });
   }
@@ -118,7 +127,13 @@ export class LeasedNodeRegistry {
   cleanup(now: number): Promise<number> {
     return this.start(async () => {
       LeaseRecords.requireTime(now);
-      const records = await this.#storage.queryEntries({ limit: this.#cleanupBatchSize });
+      const records = await this.#storage.queryEntries({
+        sort: [{ field: "id" }],
+        ...(this.#cleanupAfter === undefined ? {} : { after: this.#cleanupAfter }),
+        limit: this.#cleanupBatchSize,
+      });
+      this.#cleanupAfter = records.length === 0 ? undefined : continuation(records.at(-1));
+      if (records.length < this.#cleanupBatchSize) this.#cleanupAfter = undefined;
       const removals = await Promise.all(
         records.map(async ({ id, record }) => {
           const lease = LeaseRecords.read(record, id);
@@ -161,6 +176,28 @@ export class LeasedNodeRegistry {
     );
     return pending;
   }
+
+  private async readAll(): Promise<readonly RecordEntry<string, ApplicationNodeLease>[]> {
+    const records: RecordEntry<string, ApplicationNodeLease>[] = [];
+    let after: RecordContinuation<string> | undefined;
+    for (;;) {
+      const page = await this.#storage.queryEntries({
+        sort: [{ field: "id" }],
+        ...(after === undefined ? {} : { after }),
+        limit: readPageSize,
+      });
+      records.push(...page);
+      if (page.length < readPageSize) return records;
+      after = continuation(page.at(-1));
+    }
+  }
+}
+
+function continuation(
+  entry: RecordEntry<string, ApplicationNodeLease> | undefined,
+): RecordContinuation<string> {
+  if (entry === undefined) throw new Error("Lease page has no continuation row.");
+  return { values: [{ field: "id", value: entry.id }], id: entry.id };
 }
 
 /**
