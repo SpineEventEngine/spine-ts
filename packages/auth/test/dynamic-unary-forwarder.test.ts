@@ -273,7 +273,9 @@ describe("DynamicUnaryForwarder", () => {
     const forwarder = new DynamicUnaryForwarder({
       create: async (node) => ({
         forward: async () => new TextEncoder().encode(node.id),
-        close: async () => calls.push(`close:${node.id}`),
+        close: async () => {
+          calls.push(`close:${node.id}`);
+        },
       }),
     });
     await forwarder.reconcile(

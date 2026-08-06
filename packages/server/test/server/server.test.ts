@@ -55,6 +55,7 @@ import {
   Server,
   ServerEnvironment,
   type BrowserServerOptions,
+  type RunningServer,
   type ServerEnvironmentCloseable,
 } from "../../src/index.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";

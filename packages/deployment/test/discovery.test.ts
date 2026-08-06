@@ -66,7 +66,7 @@ describe("ApplicationNode", () => {
 describe("StaticNodeDiscovery", () => {
   it("publishes complete immutable snapshots including an empty one", async () => {
     const source = new StaticNodeDiscovery([]);
-    const snapshots: readonly string[][] = [];
+    const snapshots: string[][] = [];
     const close = source.watch((nodes) => snapshots.push(nodes.map((node) => node.id)));
 
     source.replace([new ApplicationNode({ id: "node/a", endpoint: "http://10.0.0.1" })]);
