@@ -182,4 +182,35 @@ describe("GceApplicationNode", () => {
     await closing;
     expect(calls).toEqual(["register", "remove"]);
   });
+
+  it("joins a stalled renewal and cleanup before removal", async () => {
+    let tick: (() => void) | undefined;
+    let resolveRenew: (() => void) | undefined;
+    let admitted: (() => void) | undefined;
+    const admittedPromise = new Promise<void>((done) => (admitted = done));
+    const calls: string[] = [];
+    const registry = {
+      register: async () => true,
+      renew: () =>
+        new Promise<boolean>((done) => {
+          admitted?.();
+          resolveRenew = () => (calls.push("renew"), done(true));
+        }),
+      cleanup: async () => (calls.push("cleanup"), 0),
+      remove: async () => (calls.push("remove"), true),
+    } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
+    const registrar = new GceRegistrar({
+      registry,
+      node: new ApplicationNode({ id: "node", endpoint: "http://10.0.0.1" }),
+      scheduler: { schedule: (_delay, onTick) => ((tick = onTick), () => calls.push("cancel")) },
+    });
+    await registrar.start();
+    tick?.();
+    await admittedPromise;
+    const closing = registrar.close();
+    expect(calls).toEqual(["cancel"]);
+    resolveRenew?.();
+    await closing;
+    expect(calls).toEqual(["cancel", "renew", "cleanup", "remove"]);
+  });
 });
