@@ -503,4 +503,49 @@ describe("GceApplicationNode", () => {
     expect(schedules).toBe(3);
     await registrar.close();
   });
+
+  it("recovers a failed conditional registration on the next retry", async () => {
+    const ticks: (() => void)[] = [];
+    let schedules = 0;
+    let secondScheduled: (() => void) | undefined;
+    const second = new Promise<void>((done) => (secondScheduled = done));
+    let thirdScheduled: (() => void) | undefined;
+    const third = new Promise<void>((done) => (thirdScheduled = done));
+    let cleanupDone: (() => void) | undefined;
+    const cleanup = new Promise<void>((done) => (cleanupDone = done));
+    const identities: string[] = [];
+    const registry = {
+      register: async (lease: { registrationId: string }) => {
+        identities.push(lease.registrationId);
+        if (identities.length < 3) throw new Error("write failed");
+        return true;
+      },
+      lookup: async () => undefined,
+      cleanup: async () => (cleanupDone?.(), 0),
+      remove: async () => true,
+    } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
+    const registrar = new GceRegistrar({
+      registry,
+      node: new ApplicationNode({ id: "node", endpoint: "http://10.0.0.1" }),
+      identity: "owner",
+      scheduler: {
+        schedule: (_delay, onTick) => (
+          (schedules += 1),
+          ticks.push(onTick),
+          schedules === 2 && secondScheduled?.(),
+          schedules === 3 && thirdScheduled?.(),
+          () => undefined
+        ),
+      },
+    });
+    await registrar.start();
+    ticks.shift()?.();
+    await second;
+    ticks.shift()?.();
+    await cleanup;
+    await third;
+    expect(identities).toEqual(["owner", "owner", "owner"]);
+    expect(schedules).toBe(3);
+    await registrar.close();
+  });
 });
