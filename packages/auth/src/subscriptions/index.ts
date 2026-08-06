@@ -745,6 +745,8 @@ export interface SubscriptionCreator {
  * compensates any partially created native children before it rejects creation.
  */
 export interface SubscriptionCoordinator {
+  // Creation finishes before a browser activation starts native update streams.
+
   /**
    * Creates every current native child for a logical definition.
    *
