@@ -80,6 +80,15 @@ describe("LeasedNodeRegistry", () => {
     ).toThrow("atomic compare-and-set");
   });
 
+  it("rejects an invalid cleanup bound before allocating a storage handle", () => {
+    const factory = new CountingFactory();
+
+    expect(
+      () => new LeasedNodeRegistry({ factory, namespace: "invalid-bound", cleanupBatchSize: 0 }),
+    ).toThrow("cleanup batch size");
+    expect(factory.created).toBe(0);
+  });
+
   it("fails an entire malformed snapshot without modifying its rows", async () => {
     const factory = new InMemoryStorageFactory();
     const registry = new LeasedNodeRegistry({ factory, namespace: "invalid-row" });
@@ -170,6 +179,18 @@ class NonAtomicFactory extends InMemoryStorageFactory {
     const storage = super.createRecordStorage(context, recordSpec);
     Object.defineProperty(storage, "atomicCompareAndSet", { value: false });
     return storage;
+  }
+}
+
+class CountingFactory extends InMemoryStorageFactory {
+  created = 0;
+
+  override createRecordStorage<I, R extends import("@bufbuild/protobuf").Message>(
+    context: import("@spine-event-engine/storage").StorageContext,
+    recordSpec: import("@spine-event-engine/storage").RecordSpec<I, R>,
+  ): import("@spine-event-engine/storage").RecordStorage<I, R> {
+    this.created++;
+    return super.createRecordStorage(context, recordSpec);
   }
 }
 
