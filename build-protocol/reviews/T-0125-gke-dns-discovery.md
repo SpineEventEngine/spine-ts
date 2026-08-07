@@ -108,3 +108,15 @@ all affected typecheck, lint, TSDoc, metadata/snippet, strict snippet,
 audience/API documentation, formatting, and diff gates. The existing
 TypeScript/API and performance/reliability reviewers alone recheck their
 remaining findings, each with explicit `gpt-5.6-terra` / `high`.
+
+## Final Re-review Results
+
+- TypeScript and API documentation: clean.
+- Performance and reliability: one P1 remains. A failure from an older epoch
+  still schedules the generic retry interval and can replace a newer successful
+  answer's shorter TTL refresh timer. Stale failures must be discarded by the
+  same epoch fence as stale successes, with a late-rejection regression.
+
+Reviewer profiles matched explicit `gpt-5.6-terra` / `high` dispatches;
+runtime self-introspection was unavailable and no mismatch was visible. Only
+performance/reliability reopens after this correction.
