@@ -60,3 +60,26 @@ the dispatches and no mismatch or fallback was visible.
 
 One correction batch returns every accepted finding to the existing
 implementation context. Re-review is limited to substantively affected lanes.
+
+## Correction And Re-review Dispatch
+
+Corrections through `4d30ad1d` pass 25 focused tests with 97.47% statements,
+94.59% branches, 92.00% functions, and 99.04% lines. Package ESLint,
+typechecking, TSDoc, metadata/snippets, strict snippets, audience/API docs,
+Prettier, diff checks, and the retained stable preflight are clean.
+
+All four concerns were substantively affected, so one focused re-review checks
+only their original findings:
+
+- style and maintainability: existing role, explicit
+  `gpt-5.6-terra` / `high`;
+- documentation: existing immutable role,
+  `gpt-5.6-luna` / `medium`, selected through the role because Luna is not an
+  exposed model override;
+- TypeScript and API documentation: existing role, explicit
+  `gpt-5.6-terra` / `high`; and
+- performance and reliability: existing role, explicit
+  `gpt-5.6-terra` / `high`.
+
+Runtime self-introspection is recorded when exposed; otherwise the immutable
+configured role/profile and absence of visible mismatch are acceptance evidence.
