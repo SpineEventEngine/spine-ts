@@ -90,9 +90,9 @@ reach their listeners.
 
 ```ts
 // docs-snippet-path: packages/deployment-gke/examples/deployment-settings.ts
-type DeploymentEnvironment = Readonly<Record<string, string | undefined>>;
+export type DeploymentEnvironment = Readonly<Record<string, string | undefined>>;
 
-const DeploymentSettings = Object.freeze({
+export const DeploymentSettings = Object.freeze({
   port(environment: DeploymentEnvironment, name: "PORT" | "BACKEND_DISCOVERY_PORT"): number {
     const value = environment[name];
     const port = Number(value);
@@ -128,29 +128,29 @@ explain those application-owned integration points.
 import { GkeNodeDiscovery } from "@spine-event-engine/deployment-gke";
 import { Server, type BrowserServerOptions } from "@spine-event-engine/server";
 
-type DeploymentEnvironment = Readonly<Record<string, string | undefined>>;
-declare const DeploymentSettings: {
-  readonly port: (
-    environment: DeploymentEnvironment,
-    name: "PORT" | "BACKEND_DISCOVERY_PORT",
-  ) => number;
-  readonly serviceName: (environment: DeploymentEnvironment) => string;
-};
+import { DeploymentSettings, type DeploymentEnvironment } from "./deployment-settings.js";
 
-interface GatewayOptions {
+export interface GatewayOptions {
   readonly browser: Omit<BrowserServerOptions, "host" | "port" | "discovery">;
 }
 
-const GatewayEntrypoint = Object.freeze({
-  async run(options: GatewayOptions, environment: DeploymentEnvironment): Promise<void> {
+export const GatewayEntrypoint = Object.freeze({
+  async run(
+    options: GatewayOptions,
+    environment: DeploymentEnvironment = process.env,
+  ): Promise<void> {
     const discovery = new GkeNodeDiscovery({
       serviceName: DeploymentSettings.serviceName(environment),
       port: DeploymentSettings.port(environment, "BACKEND_DISCOVERY_PORT"),
     });
-    await Server.atPort(DeploymentSettings.port(environment, "PORT"), {
+    const server = Server.atPort(DeploymentSettings.port(environment, "PORT"), {
       host: "0.0.0.0",
-      browser: { ...options.browser, discovery },
-    }).run();
+      browser: {
+        ...options.browser,
+        discovery,
+      },
+    });
+    await server.run();
   },
 });
 ```
@@ -167,24 +167,22 @@ listener:
 // docs-snippet-path: packages/deployment-gke/examples/application.ts
 import { Server, type ServerOptions } from "@spine-event-engine/server";
 
-type DeploymentEnvironment = Readonly<Record<string, string | undefined>>;
-declare const DeploymentSettings: {
-  readonly port: (
-    environment: DeploymentEnvironment,
-    name: "PORT" | "BACKEND_DISCOVERY_PORT",
-  ) => number;
-};
+import { DeploymentSettings, type DeploymentEnvironment } from "./deployment-settings.js";
 
-interface ApplicationOptions {
+export interface ApplicationOptions {
   readonly server: Omit<ServerOptions, "host" | "port" | "browser">;
 }
 
-const ApplicationEntrypoint = Object.freeze({
-  async run(options: ApplicationOptions, environment: DeploymentEnvironment): Promise<void> {
-    await Server.atPort(DeploymentSettings.port(environment, "PORT"), {
+export const ApplicationEntrypoint = Object.freeze({
+  async run(
+    options: ApplicationOptions,
+    environment: DeploymentEnvironment = process.env,
+  ): Promise<void> {
+    const server = Server.atPort(DeploymentSettings.port(environment, "PORT"), {
       ...options.server,
       host: "0.0.0.0",
-    }).run();
+    });
+    await server.run();
   },
 });
 ```

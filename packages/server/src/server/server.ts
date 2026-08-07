@@ -223,9 +223,11 @@ export class Server {
    * use {@link start} and keep ownership of process signals themselves.
    * Concurrent calls on one builder return one managed handle. Run-managed
    * siblings share an active generation but reject while caller-managed
-   * ownership is active. The final run-managed retirement permanently closes
-   * its environment; a failed final close stays retryable through `close()` or
-   * a later process signal. Caller-managed servers never close their environment.
+   * ownership is active. The final local environment-owning run retirement
+   * permanently closes its environment; a standalone browser Gateway remains
+   * signal-managed but never owns or closes that environment. A failed final
+   * close stays retryable through `close()` or a later process signal.
+   * Caller-managed servers never close their environment.
    *
    * @returns The running server after its listener accepts requests.
    */

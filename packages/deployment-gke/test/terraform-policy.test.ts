@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
@@ -129,6 +129,11 @@ describe("the GKE deployment guide", () => {
     expect(application).toContain("process.env");
     expect(gateway).toContain('from "./deployment-settings.js"');
     expect(gateway).toContain("process.env");
+    expect(guide).toContain(
+      'import { DeploymentSettings, type DeploymentEnvironment } from "./deployment-settings.js";',
+    );
+    expect(guide).toContain("environment: DeploymentEnvironment = process.env");
+    expect(guide).not.toContain("declare const DeploymentSettings");
   });
 
   it("packs the Terraform and entrypoint deliverables", async () => {
@@ -137,10 +142,9 @@ describe("the GKE deployment guide", () => {
       await exec("pnpm", ["pack", "--pack-destination", directory], {
         cwd: new URL("../", import.meta.url),
       });
-      const { stdout } = await exec("tar", [
-        "-tzf",
-        `${directory}/spine-event-engine-deployment-gke-2.0.0-snapshot.1.tgz`,
-      ]);
+      const archive = (await readdir(directory)).find((file) => file.endsWith(".tgz"));
+      expect(archive).toBeDefined();
+      const { stdout } = await exec("tar", ["-tzf", join(directory, archive ?? "")]);
       for (const path of [
         "package/examples/deployment-settings.ts",
         "package/examples/application.ts",
