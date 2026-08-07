@@ -156,3 +156,28 @@ final verification profile is promoted to `pnpm verify:release`. Style,
 documentation, TypeScript/API, and performance/reliability receive narrow
 closure rechecks because the correction changes runtime structure, public
 snippets, and replacement semantics.
+
+## Closure Re-review Dispatch
+
+Correction `7c9f236b` passes 128 focused Server/policy tests plus Server
+typechecking, focused ESLint, TSDoc, cleanup, audience and strict snippet
+checks, Terraform formatting/validation, and diff validation. The branch is
+clean and pushed. The final release gate remains deferred until these closure
+rechecks converge.
+
+- Style checks only the new standalone classification/open seam, test
+  maintainability, and configuration-example ownership.
+- Documentation checks only injected configuration, persistent shared binding
+  storage, KEDA suspension/restoration, and direct regressions.
+- TypeScript/API checks only discovery-only standalone admission/opening,
+  required collaborator validation, backend-plus-discovery precedence, public
+  contract wording, and snippets.
+- Performance/reliability checks only environment-attachment exclusion,
+  discovery lifecycle, persistent bindings, configured ports, and stop-all
+  replacement safety.
+
+Terra closure reviewers use explicit `gpt-5.6-terra` / `high` fields. The
+documentation role remains immutable `gpt-5.6-luna` / `medium`, with `medium`
+explicit and the role selecting the fixed model. Runtime metadata will be
+recorded when exposed; otherwise configured profile and absence of a visible
+mismatch remain the acceptance evidence.
