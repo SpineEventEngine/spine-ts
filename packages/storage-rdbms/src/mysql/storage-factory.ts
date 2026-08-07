@@ -6,6 +6,7 @@ import {
   type RowDataPacket,
 } from "mysql2/promise";
 import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
   RecordStorage,
@@ -227,6 +228,58 @@ export interface MysqlStorageOptions {
 }
 
 /**
+ * Describes one native column in a resolved MySQL record table.
+ */
+export interface MysqlColumnSpec {
+  readonly name: string;
+  readonly mysqlType: string;
+  readonly nullable: boolean;
+  readonly defaultSql?: string;
+}
+
+/**
+ * Describes the final physical table selected for one record family.
+ */
+export interface MysqlTableSpec<I, R extends Message> {
+  readonly tableName: string;
+  readonly sourceType: GenMessage<Message>;
+  readonly recordType: GenMessage<R>;
+  readonly idType: I extends Message ? GenMessage<I> : string;
+  readonly groupName?: string;
+  readonly columns: readonly MysqlColumnSpec[];
+  readonly primaryKey: readonly string[];
+}
+
+/**
+ * SQL operation that creates one resolved record table.
+ */
+export interface MysqlCreateOperation {
+  readonly sql: string;
+}
+
+/**
+ * Creates the table operation for a fully resolved record family.
+ */
+export type CreateOperationFactory = <I, R extends Message>(
+  table: MysqlTableSpec<I, R>,
+) => MysqlCreateOperation;
+
+/**
+ * Configures and creates a MySQL storage factory.
+ */
+export interface MysqlStorageFactoryBuilder {
+  setOptions(options: MysqlStorageOptions): this;
+  setTableName<R extends Message>(recordType: GenMessage<R>, name: string): this;
+  setTableName<S extends Message, R extends Message>(
+    sourceType: GenMessage<S>,
+    recordType: GenMessage<R>,
+    name: string,
+  ): this;
+  useOperationFactory(factory: CreateOperationFactory): this;
+  build(): Promise<MysqlStorageFactory>;
+}
+
+/**
  * Thrown when the adapter cannot safely use the supplied MySQL configuration.
  */
 export class MysqlStorageConfigurationError extends Error {
@@ -324,11 +377,14 @@ export class MysqlStorageFactory extends StorageFactory {
   }
 
   /**
-   * Connects, creates or verifies the fixed schema, and returns a ready-to-use factory.
-   * @param options The MySQL connection and pool settings.
-   * @returns A connected storage factory.
+   * Starts a builder for one MySQL storage factory.
+   * @returns The unconfigured builder.
    */
-  static async create(options: MysqlStorageOptions): Promise<MysqlStorageFactory> {
+  static newBuilder(): MysqlStorageFactoryBuilder {
+    return new MysqlStorageFactoryBuilderImpl((options) => MysqlStorageFactory.connect(options));
+  }
+
+  private static async connect(options: MysqlStorageOptions): Promise<MysqlStorageFactory> {
     const url = MysqlOptions.validate(options);
     const pool = createPool({
       host: url.hostname,
@@ -502,6 +558,61 @@ export class MysqlStorageFactory extends StorageFactory {
     } catch {
       throw new MysqlStorageConnectionError();
     }
+  }
+}
+
+class MysqlStorageFactoryBuilderImpl implements MysqlStorageFactoryBuilder {
+  #options: MysqlStorageOptions | undefined;
+  #operationFactory: CreateOperationFactory | undefined;
+  readonly #recordNames = new Map<string, string>();
+  readonly #groupNames = new Map<string, string>();
+
+  constructor(
+    private readonly connect: (options: MysqlStorageOptions) => Promise<MysqlStorageFactory>,
+  ) {}
+
+  setOptions(options: MysqlStorageOptions): this {
+    this.#options = options;
+    return this;
+  }
+
+  setTableName<R extends Message>(recordType: GenMessage<R>, name: string): this;
+  setTableName<S extends Message, R extends Message>(
+    sourceType: GenMessage<S>,
+    recordType: GenMessage<R>,
+    name: string,
+  ): this;
+  setTableName<R extends Message>(
+    sourceOrRecordType: GenMessage<Message>,
+    recordOrName: GenMessage<R> | string,
+    maybeName?: string,
+  ): this {
+    if (typeof recordOrName === "string") {
+      this.#recordNames.set(sourceOrRecordType.typeName, recordOrName);
+      return this;
+    }
+    this.#groupNames.set(
+      `${sourceOrRecordType.typeName}\u0000${recordOrName.typeName}`,
+      maybeName ?? "",
+    );
+    return this;
+  }
+
+  useOperationFactory(factory: CreateOperationFactory): this {
+    this.#operationFactory = factory;
+    return this;
+  }
+
+  async build(): Promise<MysqlStorageFactory> {
+    if (this.#options === undefined) {
+      throw new MysqlStorageConfigurationError("MySQL storage options are required.");
+    }
+    // Registration application belongs to the per-family layout slice. Retain
+    // the builder state now so the public setters have ordinary last-call-wins semantics.
+    void this.#operationFactory;
+    void this.#recordNames;
+    void this.#groupNames;
+    return this.connect(this.#options);
   }
 }
 

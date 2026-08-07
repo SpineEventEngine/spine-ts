@@ -5,6 +5,11 @@ export {
   MysqlStorageFactory,
   MysqlStorageOperationError,
   MysqlStorageSchemaError,
+  type CreateOperationFactory,
+  type MysqlColumnSpec,
+  type MysqlCreateOperation,
+  type MysqlStorageFactoryBuilder,
   type MysqlStorageOptions,
+  type MysqlTableSpec,
 } from "./mysql/storage-factory.js";
 export type { MysqlEntityStorageHandle } from "./mysql/entity-history.js";
