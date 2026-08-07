@@ -316,3 +316,11 @@ Every canonical review concern is now closed. Runtime self-introspection was
 unavailable for the three rechecks; their explicitly configured role profiles
 matched with no visible fallback. T-0126 proceeds to its single
 `pnpm verify:release` gate.
+
+## Release Gate
+
+The complete release gate is green after deterministic local formatting
+corrections and classification of one unchanged load-sensitive fixture timeout.
+All static/generated stages passed. The failed delivery-client file passed all
+6 tests in isolation, and the repeated full coverage phase passed 199 files and
+3,963 tests with 90.16% branch coverage. T-0126 is accepted for integration.
