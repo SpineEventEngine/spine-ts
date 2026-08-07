@@ -378,6 +378,7 @@ export class Server {
       await running.startLifecycles();
     } catch (error) {
       if (running.hasListenerLifecycleCleanup()) this.#failedListenerLifecycle = running;
+      else this.#failedStartConsumed = true;
       throw error;
     }
     if (browser === undefined) return running;
@@ -905,10 +906,10 @@ class RunningHttp2Server implements RunningServer {
 
   async #closeOnce(): Promise<void> {
     while (this.#startedLifecycles.length > 0) {
-      const lifecycle = this.#startedLifecycles[0];
+      const lifecycle = this.#startedLifecycles.at(-1);
       if (lifecycle === undefined) break;
       await lifecycle.close();
-      this.#startedLifecycles.shift();
+      this.#startedLifecycles.pop();
     }
     if (!this.#networkClosed) {
       await ServerValues.closeNetwork(this.#server, this.#sessions);

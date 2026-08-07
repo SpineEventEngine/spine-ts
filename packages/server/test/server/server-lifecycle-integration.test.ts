@@ -85,6 +85,33 @@ describe("Server lifecycle integration", () => {
     expect(thirdClose).not.toHaveBeenCalled();
   });
 
+  it("rolls back admitted listener lifecycles in reverse start order", async () => {
+    const closed: string[] = [];
+    const server = Server.atPort(0)
+      .addListenerLifecycle({ start: () => undefined, close: () => closed.push("first") })
+      .addListenerLifecycle({ start: () => undefined, close: () => closed.push("second") })
+      .addListenerLifecycle({
+        start: () => {
+          throw new Error("start failed");
+        },
+        close: () => undefined,
+      });
+
+    await expect(server.start()).rejects.toThrow("start failed");
+    expect(closed).toEqual(["second", "first"]);
+  });
+
+  it("does not restart after a listener-start failure rolls back cleanly", async () => {
+    const start = vi.fn(() => {
+      throw new Error("start failed");
+    });
+    const server = Server.atPort(0).addListenerLifecycle({ start, close: () => undefined });
+
+    await expect(server.start()).rejects.toThrow("start failed");
+    await expect(server.start()).rejects.toThrow("cannot restart after failed-start cleanup");
+    expect(start).toHaveBeenCalledOnce();
+  });
+
   it("aggregates listener start and admitted rollback failures in order", async () => {
     const startFailure = new Error("start failed");
     const rollbackFailure = new Error("rollback failed");
