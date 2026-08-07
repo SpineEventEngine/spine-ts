@@ -77,6 +77,37 @@ passed 85/85, focused reliability auth tests passed 58/58, and style
 `git diff --check` passed. Corrections affect all four concerns, so each lane
 receives one focused re-review after the single implementation batch.
 
+## Focused re-review
+
+- Documentation: clean. Dynamic GKE/GCE discovery, local versus GKE container
+  settings, and measured 32/40-node claims are consistent.
+- Style/maintainability: clean. Both capacity cases route through every node
+  with a two-start bound; dead configuration is removed; private-envelope
+  naming and ownership are coherent.
+- TypeScript/API and reliability: the production correction is clean, but both
+  lanes found the same stale direct native-adapter test. `native-relay.test.ts`
+  still passes `PublicSubscriptionWire` to the newly private activation seam.
+  Vitest transpilation hides the error; strict test typechecking reports
+  `TS2322`. The test must activate with the backend envelope returned by
+  Subscribe and retain the public wire only where its public contract applies.
+- Reviewer runtime introspection remained unavailable. All immutable configured
+  role/profile metadata matched the recorded explicit dispatches.
+
+This test-only deterministic correction does not reopen documentation or style.
+API and reliability receive a final focused disposition after strict tooling
+and the native relay suite pass.
+
+## Final API/reliability disposition
+
+- Resolved. The direct `NativeSubscriptionCreator` flow now asserts that
+  Subscribe returns a `BackendSubscriptionEnvelope` with the native bytes and
+  passes that exact envelope to Activate. Its public wire remains scoped to
+  Subscribe and Cancel.
+- `pnpm typecheck:tooling` passed, eliminating the reported `TS2322`; native
+  relay plus dynamic creator/forwarder tests passed 68/68. This deterministic
+  test-only correction does not reopen the already-clean documentation or style
+  lanes.
+
 ## Review-correction evidence
 
 - The `SubscriptionCreator` native-child seam now requires a
