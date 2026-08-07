@@ -21,7 +21,7 @@ describe("the GCE deployment template", () => {
       const source = template(terraform, name);
       expect(source).toContain("docker-credential-gcr configure-docker --registries=");
       expect(source).toContain("DOCKER_CONFIG");
-      expect(source).toContain("docker --config \"$DOCKER_CONFIG\" run --rm --network host");
+      expect(source).toContain('docker --config "$DOCKER_CONFIG" run --rm --network host');
     }
     expect(resource(terraform, "google_compute_health_check", "application")).not.toBe("");
     expect(resource(terraform, "google_compute_firewall", "private_runtime")).not.toBe("");
@@ -36,7 +36,9 @@ describe("the GCE deployment template", () => {
       ["google_compute_forwarding_rule", "delivery"],
     ] as const)
       expect(resource(terraform, type, name)).not.toBe("");
-    expect(resources(terraform).some((candidate) => candidate.type === "google_cloud_run")).toBe(false);
+    expect(resources(terraform).some((candidate) => candidate.type === "google_cloud_run")).toBe(
+      false,
+    );
     expect(terraform.toLowerCase()).not.toContain("mysql");
     expect(terraform.toLowerCase()).not.toContain("datastore");
   });
@@ -54,7 +56,7 @@ describe("the GCE deployment template", () => {
     expect(variables).toContain('variable "autoscaling_target"');
     expect(variables).toContain('variable "autoscaling_min_replicas"');
     expect(variables).toContain('variable "autoscaling_max_replicas"');
-    expect(terraform).toContain('resource "google_compute_region_autoscaler" "application"');
+    expect(autoscaler(terraform)).not.toBe("");
     expect(autoscaler(terraform)).toMatch(/count\s+=\s+var\.autoscaling_enabled \? 1 : 0/u);
     expect(application(terraform)).toMatch(
       /target_size\s+=\s+var\.autoscaling_enabled \? null : var\.application_replicas/u,
@@ -67,7 +69,9 @@ describe("the GCE deployment template", () => {
     );
     expect(application(terraform)).toContain("gce_instance");
     expect(application(terraform)).toContain("resource.type other than");
-    expect(application(terraform)).toContain("minimum replicas of zero requires a whole_group Monitoring metric");
+    expect(application(terraform)).toContain(
+      "minimum replicas of zero requires a whole_group Monitoring metric",
+    );
     expect(singleton(terraform, "gateway")).toContain('type                  = "PROACTIVE"');
     expect(singleton(terraform, "gateway")).toContain("max_surge_fixed       = 0");
     expect(singleton(terraform, "delivery")).toContain("max_unavailable_fixed = 1");
@@ -76,10 +80,14 @@ describe("the GCE deployment template", () => {
   });
 
   it("rejects Monitoring metric scope combinations that cannot scale as declared", () => {
-    expect(MonitoringMetrics.matchesScope("per_instance", 'resource.type = "gce_instance"')).toBe(true);
+    expect(MonitoringMetrics.matchesScope("per_instance", 'resource.type = "gce_instance"')).toBe(
+      true,
+    );
     expect(MonitoringMetrics.matchesScope("per_instance", 'resource.type = "global"')).toBe(false);
     expect(MonitoringMetrics.matchesScope("whole_group", 'resource.type = "global"')).toBe(true);
-    expect(MonitoringMetrics.matchesScope("whole_group", 'resource.type = "gce_instance"')).toBe(false);
+    expect(MonitoringMetrics.matchesScope("whole_group", 'resource.type = "gce_instance"')).toBe(
+      false,
+    );
     expect(MonitoringMetrics.canScaleFromZero("whole_group", 0)).toBe(true);
     expect(MonitoringMetrics.canScaleFromZero("per_instance", 0)).toBe(false);
   });
@@ -109,13 +117,21 @@ EOT`;
 resource "google_compute_region_instance_group_manager" "gateway" {
 eot`;
 
-    const quoted = 'description = "resource \\"google_compute_region_instance_group_manager\\" \\"gateway\\" {"';
+    const quoted =
+      'description = "resource \\"google_compute_region_instance_group_manager\\" \\"gateway\\" {"';
+
+    const nested = `locals {
+  resource "google_compute_region_instance_group_manager" "gateway" {}
+}`;
 
     expect(resource(fixture, "google_compute_region_instance_group_manager", "gateway")).toBe("");
-    expect(resource(fixture, "google_compute_region_instance_group_manager", "application")).toBe("");
+    expect(resource(fixture, "google_compute_region_instance_group_manager", "application")).toBe(
+      "",
+    );
     expect(resource(fixture, "google_compute_region_instance_group_manager", "delivery")).toBe("");
     expect(resource(lowercase, "google_compute_region_instance_group_manager", "gateway")).toBe("");
     expect(resource(quoted, "google_compute_region_instance_group_manager", "gateway")).toBe("");
+    expect(resource(nested, "google_compute_region_instance_group_manager", "gateway")).toBe("");
   });
 });
 
@@ -149,7 +165,9 @@ describe("the GCE deployment guide", () => {
     expect(guide).toContain("docker-credential-gcr");
     expect(guide).toContain("google-startup-scripts.service");
     expect(guide).toContain("autoscaling_min_replicas = 0");
-    expect(guide).toContain("gcloud compute instance-groups managed list-instances spine-application");
+    expect(guide).toContain(
+      "gcloud compute instance-groups managed list-instances spine-application",
+    );
     expect(guide).not.toMatch(/\bT-0127\b|\bWave 7\b/u);
   });
 
@@ -216,7 +234,10 @@ function autoscaler(terraform: string): string {
 }
 
 function resource(terraform: string, type: string, name: string): string {
-  return resources(terraform).find((candidate) => candidate.type === type && candidate.name === name)?.source ?? "";
+  return (
+    resources(terraform).find((candidate) => candidate.type === type && candidate.name === name)
+      ?.source ?? ""
+  );
 }
 
 function template(terraform: string, name: string): string {
@@ -237,9 +258,25 @@ const HclResources = Object.freeze({
   read(source: string): readonly HclResource[] {
     const resources: HclResource[] = [];
     let index = 0;
+    let depth = 0;
     while (index < source.length) {
       index = this.skipTrivia(source, index);
-      if (!this.keywordAt(source, index, "resource")) {
+      if (source[index] === '"') {
+        const value = this.stringAt(source, index);
+        index = value?.end ?? source.length;
+        continue;
+      }
+      if (source[index] === "{") {
+        depth++;
+        index++;
+        continue;
+      }
+      if (source[index] === "}") {
+        depth = Math.max(0, depth - 1);
+        index++;
+        continue;
+      }
+      if (depth !== 0 || !this.keywordAt(source, index, "resource")) {
         index++;
         continue;
       }
@@ -316,10 +353,16 @@ const HclResources = Object.freeze({
   },
 
   keywordAt(source: string, index: number, keyword: string): boolean {
-    return source.startsWith(keyword, index) && !/[A-Za-z0-9_]/u.test(source[index + keyword.length] ?? "");
+    return (
+      source.startsWith(keyword, index) &&
+      !/[A-Za-z0-9_]/u.test(source[index + keyword.length] ?? "")
+    );
   },
 
-  stringAt(source: string, index: number): { readonly value: string; readonly end: number } | undefined {
+  stringAt(
+    source: string,
+    index: number,
+  ): { readonly value: string; readonly end: number } | undefined {
     if (source[index] !== '"') return undefined;
     let value = "";
     for (let cursor = index + 1; cursor < source.length; cursor++) {

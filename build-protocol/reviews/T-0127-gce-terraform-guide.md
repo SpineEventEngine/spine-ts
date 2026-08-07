@@ -154,6 +154,20 @@ explicitly configured as `gpt-5.6-terra` / `medium`; runtime metadata is
 recorded if exposed, otherwise the immutable profile and no visible mismatch
 remain the acceptance evidence.
 
+## Deterministic Final Correction Acceptance
+
+The orchestrator applied the exact mechanical batch after the completed
+implementer thread could not be reopened because this execution surface had
+reached its child-thread limit. The scanner now tracks root HCL depth, rejects
+nested resource-shaped text, and the autoscaler assertion uses the same
+scanner. `typedoc.json` now includes the public `deployment-gce` entry point.
+
+Focused evidence passed: Terraform policy tests (1 file / 8 tests), focused
+ESLint, Prettier, TypeDoc generation and API validation, and `git diff --check`.
+Only the substantively affected style and TypeScript/API concerns require one
+last confirmation; production behavior and the clean documentation/reliability
+lanes are unchanged.
+
 ## Correction Acceptance And Focused Re-review Dispatch
 
 The pushed correction endpoint is `0f77f672`. It adds the public
