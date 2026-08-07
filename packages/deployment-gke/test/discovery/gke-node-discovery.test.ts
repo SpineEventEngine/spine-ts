@@ -28,7 +28,9 @@ describe("GkeNodeDiscovery", () => {
     const controller = new AbortController();
     controller.abort();
 
-    await expect(resolver.resolve("api.default.svc.cluster.local", controller.signal)).rejects.toMatchObject({
+    await expect(
+      resolver.resolve("api.default.svc.cluster.local", controller.signal),
+    ).rejects.toMatchObject({
       name: "AbortError",
     });
 
@@ -41,11 +43,13 @@ describe("GkeNodeDiscovery", () => {
     let release: (() => void) | undefined;
     const resolver = new NodeDnsResolver(() => ({
       resolve4: async () =>
-        await new Promise<readonly { readonly address: string; readonly ttl: number }[]>((resolve) => {
-          release = () => {
-            resolve([]);
-          };
-        }),
+        await new Promise<readonly { readonly address: string; readonly ttl: number }[]>(
+          (resolve) => {
+            release = () => {
+              resolve([]);
+            };
+          },
+        ),
       resolve6: async () => [],
       cancel: () => {
         cancelled += 1;
@@ -70,9 +74,9 @@ describe("GkeNodeDiscovery", () => {
       cancel: () => undefined,
     }));
 
-    await expect(resolver.resolve("api.default.svc.cluster.local", new AbortController().signal)).rejects.toBe(
-      failure,
-    );
+    await expect(
+      resolver.resolve("api.default.svc.cluster.local", new AbortController().signal),
+    ).rejects.toBe(failure);
   });
 
   it("maps Node A and AAAA TTL answers and treats name-not-found as empty", async () => {
@@ -101,7 +105,10 @@ describe("GkeNodeDiscovery", () => {
 
   it.each([
     [{ serviceName: "not a service", port: 8080 }, undefined],
-    [{ serviceName: "api.default.svc.cluster.local", port: 0 }, "GKE node port must be a valid TCP port."],
+    [
+      { serviceName: "api.default.svc.cluster.local", port: 0 },
+      "GKE node port must be a valid TCP port.",
+    ],
     [
       { serviceName: "api.default.svc.cluster.local", port: 8080, refreshIntervalMs: 0 },
       "GKE refresh interval must be a positive safe integer.",
@@ -317,7 +324,8 @@ describe("GkeNodeDiscovery", () => {
 
   it("does not publish a stalled resolver result after discovery closes", async () => {
     const scheduler = new Scheduler();
-    let resolve: ((answer: readonly { readonly address: string; readonly ttl: number }[]) => void) | undefined;
+    let resolve:
+      ((answer: readonly { readonly address: string; readonly ttl: number }[]) => void) | undefined;
     const discovery = new GkeNodeDiscovery({
       serviceName: "api.default.svc.cluster.local",
       port: 8080,

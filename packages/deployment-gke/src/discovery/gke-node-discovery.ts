@@ -10,7 +10,16 @@ import { NodeDnsResolver } from "./node-dns-resolver.js";
  * Represents one DNS address with its optional answer TTL in seconds.
  */
 export interface GkeDnsAddress {
+  /**
+   *
+   * Provides one ready-Pod IPv4 or IPv6 address.
+   */
   readonly address: string;
+
+  /**
+   *
+   * Provides the record lifetime in seconds when DNS includes it.
+   */
   readonly ttl?: number;
 }
 
@@ -32,12 +41,48 @@ export interface GkeDnsResolver {
  * Configures GKE headless-Service discovery for one standalone Gateway.
  */
 export interface GkeNodeDiscoveryOptions {
+  /**
+   *
+   * Identifies the headless-Service DNS name.
+   */
   readonly serviceName: string;
+
+  /**
+   *
+   * Identifies the reachable application TCP port.
+   */
   readonly port: number;
+
+  /**
+   *
+   * Selects the HTTP transport scheme.
+   */
   readonly scheme?: "http" | "https";
+
+  /**
+   *
+   * Sets the maximum interval between DNS lookups in milliseconds.
+   */
   readonly refreshIntervalMs?: number;
+
+  /**
+   *
+   * Supplies the DNS lookup adapter.
+   */
   readonly resolver?: GkeDnsResolver;
+
+  /**
+   *
+   * Schedules future DNS lookups.
+   */
   readonly scheduler?: NodeScheduler;
+
+  /**
+   *
+   * Returns the current time for TTL validity.
+   *
+   * @returns The current Unix time in milliseconds.
+   */
   readonly now?: () => number;
 }
 
