@@ -1,0 +1,37 @@
+# This module never creates a public TLS/authentication edge. It creates only
+# private VM listeners, so select the existing VPC and subnetwork deliberately.
+project_id        = "my-project"
+region            = "us-central1"
+application_zones = ["us-central1-a", "us-central1-b"]
+singleton_zone    = "us-central1-a"
+network           = "projects/my-project/global/networks/private"
+subnetwork        = "projects/my-project/regions/us-central1/subnetworks/apps"
+
+# Use a least-privilege account that can access only the application-owned
+# configuration and external secret references required by these images.
+service_account_email = "spine-runtime@my-project.iam.gserviceaccount.com"
+
+# Replace each placeholder with a published immutable image digest.
+application_image = "us-docker.pkg.dev/my-project/spine/application@sha256:REPLACE"
+gateway_image     = "us-docker.pkg.dev/my-project/spine/gateway@sha256:REPLACE"
+delivery_image    = "us-docker.pkg.dev/my-project/spine/simple-delivery@sha256:REPLACE"
+
+# The images interpret these references. Terraform neither reads nor stores
+# secret values and does not select an application storage engine.
+registry_namespace         = "production-application-nodes"
+registry_storage_reference = "spine-production-storage"
+application_secret_reference = "projects/my-project/secrets/application-runtime"
+gateway_secret_reference     = "projects/my-project/secrets/gateway-runtime"
+
+# Manual capacity applies while autoscaling is disabled.
+application_replicas = 2
+
+# GCE owns capacity when this is true. Choose exactly one supported signal.
+# A CPU or per-instance metric cannot wake an empty group. To scale from zero,
+# use whole_group with a metric that exists while no application VM is running.
+autoscaling_enabled      = false
+autoscaling_metric_type  = "cpu"
+autoscaling_metric       = ""
+autoscaling_target       = 0.7
+autoscaling_min_replicas = 1
+autoscaling_max_replicas = 8

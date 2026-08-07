@@ -450,6 +450,9 @@ importers:
       '@spine-event-engine/proto':
         specifier: workspace:*
         version: link:../proto
+      '@spine-event-engine/server':
+        specifier: workspace:*
+        version: link:../server
       '@spine-event-engine/storage':
         specifier: workspace:*
         version: link:../storage

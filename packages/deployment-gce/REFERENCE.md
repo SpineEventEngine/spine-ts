@@ -1,5 +1,28 @@
 # Reference
 
+## Deployment template
+
+The packaged `terraform` directory is an editable Google Compute Engine
+reference topology. It requires existing private network/subnetwork, service
+account, external configuration/secret identifiers, immutable image digests,
+and application-selected durable storage. It creates a regional application
+MIG, a one-instance Gateway MIG, and a one-instance in-memory delivery-server
+MIG. Internal passthrough load balancers provide stable private Gateway and
+delivery addresses. It intentionally creates no public edge, TLS certificate,
+identity provider, storage engine, secret value, Cloud Run resource, or second
+Gateway.
+
+The application group has a 120-second default autohealing startup delay. Its
+manual target size is present only when `autoscaling_enabled` is false; an
+enabled regional autoscaler is the sole owner of capacity. CPU and
+per-instance Monitoring metrics cannot revive a zero-instance group. A
+whole-group Monitoring metric can, if the operator supplies one that continues
+to exist at zero capacity.
+
+The template uses Compute-Optimized OS plus a `docker run` startup script. It
+does not use the deprecated container startup agent or a
+`gce-container-declaration` metadata value.
+
 ## Metadata and node identity
 
 `GceMetadataService.read(signal)` requests project ID, zone, numeric instance

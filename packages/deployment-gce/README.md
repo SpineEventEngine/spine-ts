@@ -1,110 +1,231 @@
-# GCE registration and discovery
+# Deploy a Spine TS application on GCE
 
-`@spine-event-engine/deployment-gce` lets a GCE application process publish its
-ready gRPC listener in a caller-owned leased registry. A standalone Gateway
-reads that registry as complete live-node snapshots for routing and durable
-subscriptions.
+`@spine-event-engine/deployment-gce` helps you run one Spine TS application
+across several Google Compute Engine (GCE) virtual machines. It includes an
+editable Terraform template and small TypeScript entrypoints. The template
+keeps application nodes, the Gateway, and the simple delivery server private;
+you provide the public TLS, authentication, and traffic-routing edge that fits
+your organisation.
 
-Read the [agent reference](REFERENCE.md) for the detailed runtime contract.
+For detailed contracts intended for coding agents, read the
+[reference for agents](REFERENCE.md).
 
-The application process owns its registrar and the Gateway process owns its
-discovery. Both processes receive the same explicit storage factory and
-registry namespace. This package does not choose a storage backend,
-authentication provider, public address, Terraform module, deployment
-procedure, or autoscale policy. Use the separate project deployment guide for
-Terraform modules and deployment procedures.
+## Before you begin
 
-## Application process
+You need an existing Google Cloud project, VPC network, regional subnetwork,
+and a service account with only the permissions required by your images and
+their application-owned configuration. Install [Google Cloud CLI](https://cloud.google.com/sdk/docs/install)
+and Terraform 1.6 or newer. Authenticate Terraform through Application Default
+Credentials:
 
-The Compute Engine metadata server is available to software running on the VM.
-It is not an identity boundary: any process that can run on that VM can request
-its metadata. Treat VM process access and the private network as trusted
-operator-controlled boundaries. `GceMetadataService` sends the required
-`Metadata-Flavor: Google` header, then derives the stable node ID
-`gce/<project-id>/<zone>/<numeric-instance-id>` from the current VM.
-
-Create the registry with your storage factory and a namespace shared by all
-application nodes and the Gateway. Attach the registrar before startup; the
-server starts it only after the gRPC listener is reachable.
-
-```ts
-import { LeasedNodeRegistry } from "@spine-event-engine/deployment";
-import { GceMetadataService, GceRegistrar } from "@spine-event-engine/deployment-gce";
-import { Server } from "@spine-event-engine/server";
-
-declare const storageFactory: import("@spine-event-engine/storage").StorageFactory;
-declare const applicationServerOptions: Omit<
-  import("@spine-event-engine/server").ServerOptions,
-  "port"
->;
-
-const registry = new LeasedNodeRegistry({
-  factory: storageFactory, // your StorageFactory
-  namespace: "production-application-nodes",
-});
-const registrar = new GceRegistrar({
-  registry,
-  metadata: new GceMetadataService(),
-  port: 8080,
-});
-const application = Server.atPort(8080, applicationServerOptions);
-application.addListenerLifecycle(registrar.lifecycle());
-const runningApplication = await application.run();
+```bash
+gcloud auth application-default login
 ```
 
-By default the published endpoint is private-address HTTP plus `port`; IPv6 is
-bracketed. For private DNS, a proxy, or HTTPS, create the node explicitly with
-`GceApplicationNode.create(metadata, { port, endpoint, tlsServerName })` and
-pass it as `node`. Public-address selection is never implicit.
+Build and publish three immutable images: your application, one standalone
+Gateway, and the in-memory simple delivery server. Use image digests such as
+`@sha256:...`, not mutable tags. The template deliberately does not publish an
+image, choose Datastore, MySQL, or another storage backend, create secrets, or
+configure an identity provider.
 
-Registration uses a new opaque identity per process, renews every 20 seconds,
-and expires after 60 seconds. An unknown initial write is read-confirmed before
-a same-identity retry. Each metadata and registry operation is deadline-bound;
-production timers do not keep Node.js alive on their own.
+## What this deployment creates
 
-## Standalone Gateway process
+The application managed instance group (MIG) is regional and distributes
+identical application nodes across your selected zones. A ready node registers
+its private listener in a durable, application-owned registry. The single
+Gateway reads the same registry every 10 seconds and routes commands, queries,
+and subscriptions to the live nodes.
 
-Give the Gateway a registry reader with the same factory/namespace and put it
-in `browser.discovery` within your existing standalone Gateway options. The
-reader publishes complete snapshots—including empty membership—to the Gateway.
-`ScheduledNodeDiscovery` refreshes every ten seconds by default.
-
-```ts
-import { LeasedNodeRegistry, ScheduledNodeDiscovery } from "@spine-event-engine/deployment";
-import { GceRegistryReader } from "@spine-event-engine/deployment-gce";
-import { Server } from "@spine-event-engine/server";
-
-declare const storageFactory: import("@spine-event-engine/storage").StorageFactory;
-declare const gatewayServerOptions: Omit<
-  import("@spine-event-engine/server").ServerOptions,
-  "port" | "browser"
-> & { browser: import("@spine-event-engine/server").BrowserServerOptions };
-
-const registry = new LeasedNodeRegistry({
-  factory: storageFactory,
-  namespace: "production-application-nodes",
-});
-const discovery = new ScheduledNodeDiscovery({
-  reader: new GceRegistryReader(registry),
-});
-const gateway = Server.atPort(8081, {
-  ...gatewayServerOptions,
-  browser: { ...gatewayServerOptions.browser, discovery },
-});
-const runningGateway = await gateway.run();
+```mermaid
+flowchart LR
+  Edge["Your TLS and authentication edge"] --> Gateway["One private Gateway"]
+  Gateway --> Registry["Durable application-owned node registry"]
+  Registry --> Gateway
+  Gateway --> AppA["Application node A"]
+  Gateway --> AppB["Application node B"]
+  AppA --> Delivery["One in-memory simple delivery server"]
+  AppB --> Delivery
 ```
 
-When every lease expires, discovery publishes an empty set and the Gateway
-reports backend unavailability while continuing refreshes. A later registered
-node restores routing and subscription reconciliation. Healthy registrars also
-perform finite cleanup of abandoned expired rows.
+The template gives the Gateway and delivery server separate one-instance MIGs
+and stable private addresses behind internal passthrough load balancers. This
+is easy to inspect and lets an operator move them to separate failure or
+resource boundaries. A smaller deployment may colocate the two processes, but
+the simple delivery server remains in-memory: it is neither durable nor highly
+available.
 
-On application shutdown, call `runningApplication.close()`: the listener
-lifecycle first stops scheduling, aborts and joins admitted work, and
-conditionally removes only its own lease before listener network close. Close
-the Gateway's running server and its registry when that process exits; close
-the storage factory only when its owning process no longer needs it.
+Every listener receives only private VPC traffic and health checks. Terraform
+does not create an external IP, public load balancer, TLS certificate,
+authentication provider, or Internet firewall rule.
 
-See [REFERENCE.md](REFERENCE.md) for API contracts and metadata failure
-semantics. The separate project deployment guide supplies Terraform modules and
-deployment procedures.
+## Configure the template
+
+Copy the values file and replace every placeholder. Keep it outside source
+control because it identifies your network and deployment, even though it
+contains no secret values.
+
+```bash
+cd packages/deployment-gce/terraform
+cp terraform.tfvars.example terraform.tfvars
+```
+
+Set the project, region, two or more application zones, VPC/subnetwork,
+least-privilege service-account email, and the three image digests. Set
+`registry_namespace` and `registry_storage_reference` identically for
+application and Gateway images. The reference tells those images how to select
+their shared durable registry storage; it is not a storage-engine choice made
+by Terraform.
+
+`application_secret_reference` and `gateway_secret_reference` are identifiers
+your images resolve through your own configuration mechanism. They are passed
+as environment values only. Terraform neither reads secret values nor writes
+them into state.
+
+## Connect your application entrypoints
+
+The application image must create its normal bounded contexts and storage
+factory. It then adds the registrar before starting the private gRPC listener.
+The server invokes the registrar only after the listener is ready.
+
+```ts
+// docs-snippet-path: packages/deployment-gce/examples/application.ts
+import { GceApplicationEntrypoint } from "./application.js";
+
+await GceApplicationEntrypoint.run({
+  server: applicationServerOptions,
+  storageFactory,
+});
+```
+
+The Gateway uses the same factory and namespace indirectly through its
+environment. It refreshes the complete live-node registry snapshot every 10
+seconds. Supply your durable subscription bindings, authentication, and browser
+collaborators in `browserOptions`.
+
+```ts
+// docs-snippet-path: packages/deployment-gce/examples/gateway.ts
+import { GceGatewayEntrypoint } from "./gateway.js";
+
+await GceGatewayEntrypoint.run({
+  browser: browserOptions,
+  storageFactory,
+});
+```
+
+The complete, packaged examples are
+[`examples/application.ts`](examples/application.ts) and
+[`examples/gateway.ts`](examples/gateway.ts). They deliberately keep business
+contexts, storage configuration, identity, and durable subscription bindings
+in your application code.
+
+## Deploy
+
+Initialize the provider, inspect the exact resources, then apply them.
+
+```bash
+terraform init
+terraform plan -out=tfplan
+terraform apply tfplan
+```
+
+The first VM can take several minutes to start. Autohealing waits for the
+configured startup delay (120 seconds by default) before treating a failed
+application listener as unhealthy.
+
+## Verify the deployment
+
+Check that GCE created the three groups and that all intended instances become
+healthy:
+
+```bash
+gcloud compute instance-groups managed list --regions=REGION
+gcloud compute instance-groups managed list-instances spine-application --region=REGION
+terraform output gateway_private_address
+```
+
+From a trusted VPC client or your operator-managed edge, reach the returned
+Gateway address. Post a command, query its Projection, and activate a durable
+subscription. The Gateway may need one 10-second refresh interval after a
+fresh application node becomes ready.
+
+Each application process obtains a unique registration identity, renews its
+lease every 20 seconds, and leases it for 60 seconds. A graceful shutdown
+removes only its own lease. A crash may leave a row behind temporarily, but it
+is ignored after expiry; healthy registrars perform finite cleanup.
+
+## Scale application nodes
+
+With the default `autoscaling_enabled = false`, Terraform owns manual capacity:
+
+```bash
+terraform apply -var='application_replicas=4'
+terraform apply -var='application_replicas=0'
+terraform apply -var='application_replicas=2'
+```
+
+At zero nodes, the registry becomes empty after at most the 60-second lease
+expiry. The Gateway remains alive but reports backend unavailability until a
+node returns; it keeps refreshing every 10 seconds.
+
+To let Compute Engine scale the same application version, set
+`autoscaling_enabled = true`, choose `cpu`, `per_instance`, or `whole_group`,
+and provide a metric, target, and min/max capacity. Terraform then omits the
+MIG size and GCE is the sole capacity owner.
+
+CPU and per-instance metrics require a running VM, so they cannot scale from
+zero. For scale-from-zero, use a `whole_group` Cloud Monitoring metric that is
+produced while no application VM exists, or use an operator action or schedule.
+Internal passthrough load-balancer utilization is not a suitable autoscaling
+signal for this topology.
+
+## Replace an application version
+
+For a compatible change, publish a new immutable application digest, set it in
+`terraform.tfvars`, and apply. The regional MIG performs a proactive rolling
+replacement with one surge instance and no planned unavailable instance. Old
+and new nodes can overlap, so they must understand the same stored data and
+messages during the rollout.
+
+For an incompatible business-logic or data change, first set application
+capacity to zero and wait until the old nodes exit, then apply the new image and
+restore capacity. This framework does not negotiate compatibility. Pending
+Inbox work may execute under the new version, so make the change safe for those
+messages before starting it.
+
+The Gateway normally stays in place during an application replacement. A
+Gateway interruption disconnects browser clients. Its durable subscription
+definitions survive only when your Gateway bindings use the same application-
+owned persistent storage. Clients reconnect and issue an authoritative query.
+
+## Roll back
+
+To roll back a compatible application image, restore the prior immutable digest
+and run `terraform apply`. GCE creates the previous instance template and
+performs the same rolling update. For an incompatible rollback, use the same
+stop-all sequence: reduce the application group to zero, wait for shutdown,
+apply the prior image, then restore capacity.
+
+## Troubleshooting
+
+| Symptom                              | Check                                                                                                                                 |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Gateway has no backend               | Confirm the application group has healthy instances, registry references and namespace match, then allow a 10-second refresh.         |
+| A node remains listed after a crash  | Wait up to 60 seconds for lease expiry; cleanup is finite and does not make expired nodes routable.                                   |
+| An application VM keeps restarting   | Check the image starts its listener on `HOST=0.0.0.0` and `PORT`, and increase the startup delay only when its real startup needs it. |
+| A client cannot reach the Gateway    | Reach the private output from the VPC or configure your own TLS/authentication edge; this module creates no public path.              |
+| Autoscaling does not wake zero nodes | CPU and per-instance metrics cannot observe an empty group; use a whole-group metric or set a manual/scheduled minimum.               |
+| Delivery state disappeared           | The supplied delivery server is in-memory. Do not describe it as durable or highly available.                                         |
+
+## Remove the deployment
+
+Remove application capacity first when you need a controlled domain shutdown,
+then destroy the infrastructure:
+
+```bash
+terraform apply -var='application_replicas=0'
+terraform destroy
+```
+
+`terraform destroy` removes only resources owned by this template. It does not
+delete the application-owned registry, application storage, externally managed
+secrets, images, VPC, or an operator-managed public edge.
