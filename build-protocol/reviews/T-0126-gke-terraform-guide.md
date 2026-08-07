@@ -29,3 +29,18 @@ Desktop surface selects the immutable documentation role because Luna is not
 an exposed override. Runtime metadata will be recorded when available;
 otherwise the immutable configured role/profile and absence of a visible
 mismatch are the acceptance evidence.
+
+## Review Wave 1 Dispatch
+
+The complete review wave examines `origin/main@c6ff000c..adc4af1a`. The branch
+is clean and pushed after Terraform 3.2.1 initialization/validation, recursive
+Terraform formatting, four focused policy tests, and the full infrastructure-
+and-docs-only `verify:task` profile passed. All results are collected before
+any correction dispatch.
+
+The concern scopes and expected profiles are exactly those recorded above.
+Terra reviewers receive explicit `gpt-5.6-terra` / `high` dispatch fields. The
+documentation reviewer receives the immutable `documentation_reviewer` role
+and explicit `medium` reasoning; the Desktop tool does not expose Luna as a
+model override, so the role's fixed `gpt-5.6-luna` profile is the model
+selection evidence.
