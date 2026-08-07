@@ -45,10 +45,17 @@ describe("DynamicSubscriptionCreator", () => {
             }),
           activate: async (request, signal) => {
             received.set(node.id, { kind: request.wire.kind, bytes: request.wire.bytes.slice() });
-            if (node.id === "a")
+            if (node.id === "a") {
               await request.updates({ kind: "subscription-update", bytes: new Uint8Array([7]) });
+            }
             await new Promise<void>((resolve) => {
-              signal.addEventListener("abort", () => resolve(), { once: true });
+              signal.addEventListener(
+                "abort",
+                () => {
+                  resolve();
+                },
+                { once: true },
+              );
             });
           },
         }),

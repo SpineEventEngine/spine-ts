@@ -63,8 +63,7 @@ The complete concern wave produced one correction batch:
    fixed 1–32 topology; reconcile it with dynamic GKE/GCE discovery and the
    measured 40-node profile.
 3. Style/maintainability: make both the 32- and 40-node capacity cases forward
-   through every discovered node, rather than proving all-node routing only at
-   40.
+   through every discovered node, rather than proving all-node routing only at 40.
 4. Style/maintainability: remove unused `LOCAL_STATIC_BACKENDS` configuration
    and its locking assertion; documentation already identifies static Compose
    as local-only.
