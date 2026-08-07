@@ -32,7 +32,7 @@ describe("DynamicSubscriptionCreator", () => {
   });
 
   it("activates every node with its private native subscription envelope", async () => {
-    const received = new Map<string, Uint8Array>();
+    const received = new Map<string, { readonly kind: string; readonly bytes: Uint8Array }>();
     const delivered = deferred();
     const owner = new DynamicUnaryForwarder({
       create: (node) =>
@@ -44,7 +44,7 @@ describe("DynamicSubscriptionCreator", () => {
               bytes: new Uint8Array([node.id === "a" ? 1 : 2]),
             }),
           activate: async (request, signal) => {
-            received.set(node.id, request.wire.bytes.slice());
+            received.set(node.id, { kind: request.wire.kind, bytes: request.wire.bytes.slice() });
             if (node.id === "a")
               await request.updates({ kind: "subscription-update", bytes: new Uint8Array([7]) });
             await new Promise<void>((resolve) => {
@@ -75,11 +75,11 @@ describe("DynamicSubscriptionCreator", () => {
 
     expect(received).toEqual(
       new Map([
-        ["a", new Uint8Array([1])],
-        ["b", new Uint8Array([2])],
+        ["a", { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) }],
+        ["b", { kind: "backend-subscription-envelope", bytes: new Uint8Array([2]) }],
       ]),
     );
-    expect(received.get("a")).not.toEqual(wire.bytes);
+    expect(received.get("a")?.bytes).not.toEqual(wire.bytes);
     controller.abort();
     await activation;
   });

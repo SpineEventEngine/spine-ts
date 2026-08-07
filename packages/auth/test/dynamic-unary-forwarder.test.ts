@@ -270,6 +270,12 @@ describe("DynamicUnaryForwarder", () => {
       );
       expect(peak).toBe(2);
       expect(created).toEqual(new Set(Array.from({ length: count }, (_, index) => `${index}`)));
+      const forwarded = await Promise.all(
+        Array.from({ length: count }, () =>
+          forwarder.forward({ service: "s", method: "m", value: new Uint8Array() }),
+        ),
+      );
+      expect(new Set(forwarded.map((value) => new TextDecoder().decode(value)))).toEqual(created);
     },
   );
 

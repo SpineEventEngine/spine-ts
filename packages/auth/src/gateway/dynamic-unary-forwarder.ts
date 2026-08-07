@@ -458,7 +458,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     child.activation = client
       .activate(
         {
-          wire: { kind: "public-subscription", bytes: child.backend.bytes.slice() },
+          wire: { kind: "backend-subscription-envelope", bytes: child.backend.bytes.slice() },
           updates: definition.updates,
         },
         child.controller.signal,

@@ -281,13 +281,13 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
 
   /**
    * Streams native Activate updates through the supplied asynchronous public-update sink.
-   * @param request The canonical subscription definition and update sink.
+   * @param request The private native subscription envelope and update sink.
    * @param signal The admitted cancellation signal.
    * @returns Completes after native activation ends.
    */
   async activate(
     request: {
-      readonly wire: PublicSubscriptionWire;
+      readonly wire: BackendSubscriptionEnvelope;
       readonly updates: SubscriptionUpdateSink;
     },
     signal: SubscriptionAbortSignal,

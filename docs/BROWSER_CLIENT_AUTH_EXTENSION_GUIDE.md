@@ -429,11 +429,14 @@ limits, gRPC-Web, and explicit binary Connect support. Its Activate route is a
 live stream. Copy and customize the template for hosts, certificates,
 observability, rate limits, and topology.
 
-A fixed gateway topology contains 1–32 ordered origins. Unary calls are
+Standalone gateways discover their application nodes dynamically: GKE uses
+service DNS and GCE uses the leased registry reader. The measured capacity
+profile exercises 32 and 40 discovered nodes with at most two concurrent
+connection starts; it is not a cloud throughput benchmark. Unary calls are
 round-robin without retry; subscriptions are best effort and can duplicate.
 Generic loss notices mean a possible gap and require an authoritative re-query.
-The legacy single-backend form remains supported; durable fan-in fencing rejects
-missing, reordered, or different backend topology before attachment.
+The legacy single-backend form remains supported for local fixtures; durable
+fan-in fencing rejects incompatible membership changes before attachment.
 
 Use this test matrix before changing an extension:
 

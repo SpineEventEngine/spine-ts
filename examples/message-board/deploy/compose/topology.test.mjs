@@ -41,7 +41,7 @@ test("declares one local-fixture gateway and two static application backends", (
   assert.match(document, /^ {2}envoy:/mu);
   assert.match(document, /^ {2}delivery:/mu);
   assert.match(document, /BACKEND_URLS: http:\/\/application-1:8080,http:\/\/application-2:8080/mu);
-  assert.match(document, /LOCAL_STATIC_BACKENDS: "true"/u);
+  assert.doesNotMatch(document, /LOCAL_STATIC_BACKENDS/u);
   assert.match(document, /SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-standalone/mu);
   assert.match(document, /DATASTORE_EMULATOR_HOST: datastore:8081/mu);
   assert.match(document, /MESSAGE_BOARD_SESSION_ISSUER: message-board/mu);
