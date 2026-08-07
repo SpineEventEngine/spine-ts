@@ -21,8 +21,9 @@ package-specific details.
 
 ```mermaid
 flowchart LR
-  Browser --> Gateway[Gateway: fixed 1–32 backend list]
-  Gateway --> Select[Unary router: selects one backend]
+  Browser --> Gateway[One standalone Gateway]
+  Gateway --> Discovery[GKE DNS or GCE leased discovery]
+  Discovery --> Select[Unary router: selects one current backend]
   Select -->|one bounded round-robin attempt| AppA[Application node A]
   Select -->|one bounded round-robin attempt| AppB[Application node B]
   AppA --> Inbox[(Entity Inbox)]
@@ -48,8 +49,13 @@ facility. System-event persistence is optional and uses separate system storage
 when enabled. Stand serves authoritative queries and routes complete entity
 payloads through the Gateway. Normal complete payloads update a client locally;
 clients query only for initial state, reconnect, a possible gap, malformed
-payload, or another explicit recovery need. Gateway backend membership is a
-configured startup list, not a discovery or redeployment protocol.
+payload, or another explicit recovery need. One standalone Gateway dynamically
+discovers application nodes on GKE or GCE: GKE headless-Service DNS or GCE
+leased discovery provides the authoritative complete membership. It reconciles
+every discovered node with bounded connection starts; the expected count of 32
+is an operational expectation, not a hard runtime maximum. The platform, not
+Spine TS, scales identical application versions. Cloud Run and multiple
+Gateways are outside this deployment model.
 
 ## Proto Contract Boundary
 

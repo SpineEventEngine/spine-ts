@@ -244,28 +244,34 @@ describe("DynamicUnaryForwarder", () => {
     expect(started).toEqual(["a", "c"]);
   });
 
-  it("limits concurrent client starts while eventually including all nodes", async () => {
-    let active = 0;
-    let peak = 0;
-    const forwarder = new DynamicUnaryForwarder({
-      maxConcurrentStarts: 2,
-      create: async (node) => {
-        active++;
-        peak = Math.max(peak, active);
-        await Promise.resolve();
-        active--;
-        return client(async () => new TextEncoder().encode(node.id));
-      },
-    });
-    await forwarder.reconcile(
-      Array.from(
-        { length: 40 },
-        (_, index) =>
-          new ApplicationNode({ id: `${index}`, endpoint: `http://10.0.2.${index + 1}` }),
-      ),
-    );
-    expect(peak).toBe(2);
-  });
+  it.each([32, 40])(
+    "limits concurrent client starts while including all %i discovered nodes",
+    async (count) => {
+      let active = 0;
+      let peak = 0;
+      const created = new Set<string>();
+      const forwarder = new DynamicUnaryForwarder({
+        maxConcurrentStarts: 2,
+        create: async (node) => {
+          active++;
+          peak = Math.max(peak, active);
+          await Promise.resolve();
+          active--;
+          created.add(node.id);
+          return client(async () => new TextEncoder().encode(node.id));
+        },
+      });
+      await forwarder.reconcile(
+        Array.from(
+          { length: count },
+          (_, index) =>
+            new ApplicationNode({ id: `${index}`, endpoint: `http://10.0.2.${index + 1}` }),
+        ),
+      );
+      expect(peak).toBe(2);
+      expect(created).toEqual(new Set(Array.from({ length: count }, (_, index) => `${index}`)));
+    },
+  );
 
   it("routes every node in round-robin order and recovers from empty membership", async () => {
     const calls: string[] = [];

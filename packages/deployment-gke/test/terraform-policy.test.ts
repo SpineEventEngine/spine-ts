@@ -73,6 +73,28 @@ describe("the GKE deployment template", () => {
 });
 
 describe("the GKE deployment guide", () => {
+  it("keeps shared Gateway guidance aligned with GKE and GCE discovery", async () => {
+    const architecture = await readFile(
+      new URL("../../../docs/architecture/README.md", import.meta.url),
+      "utf8",
+    );
+    const browserGuide = await readFile(
+      new URL("../../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md", import.meta.url),
+      "utf8",
+    );
+
+    expect(architecture).toMatch(
+      /one standalone Gateway dynamically\s+discovers application nodes on GKE or GCE/iu,
+    );
+    expect(architecture).toMatch(/GKE headless-Service DNS or GCE\s+leased discovery/u);
+    expect(architecture).not.toContain("fixed 1–32 backend list");
+    expect(browserGuide).toMatch(
+      /one standalone Gateway dynamically\s+discovers application nodes on GKE or GCE/iu,
+    );
+    expect(browserGuide).toMatch(/not a hard runtime\s+maximum/u);
+    expect(browserGuide).not.toContain("fixed 1–32 backend list");
+  });
+
   it("teaches the complete beginner workflow without internal planning language", async () => {
     const guide = await readFile(new URL("README.md", packageRoot), "utf8");
 

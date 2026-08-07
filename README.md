@@ -81,6 +81,10 @@ without cloud credentials.
 See the [Message Board guide](examples/message-board/README.md) for a beginner walkthrough.
 For the two-node, one-Gateway development topology, see the
 [Distributed Message Board](examples/distributed-message-board/README.md).
+For production-style deployment guidance, use one standalone Gateway with
+[GKE](packages/deployment-gke/README.md) headless-Service discovery or
+[GCE](packages/deployment-gce/README.md) leased discovery. Operators own
+scaling and storage selection; Cloud Run and multiple Gateways are not included.
 
 ## 📦 Workspace map
 
