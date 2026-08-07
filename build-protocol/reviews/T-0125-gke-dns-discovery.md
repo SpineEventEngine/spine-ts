@@ -34,3 +34,29 @@ an exposed override. Runtime self-introspection is recorded when available;
 otherwise the immutable configured role/profile and absence of mismatch are
 the acceptance evidence.
 
+## Review Wave 1 Results
+
+All four results were collected before correction dispatch. Runtime
+self-introspection was unavailable; configured immutable roles/profiles matched
+the dispatches and no mismatch or fallback was visible.
+
+- Style and maintainability: P1 derive identity and deduplicate only after
+  canonical endpoint construction. P2 represent and test package-internal
+  expected count 32 without limiting 40-node membership. P2 prove scheduled
+  callback cancellation with a real fake scheduler. P2 add the mandatory
+  human-imposed requirements ledger.
+- Documentation: P2 remove internal `T-0126` jargon from the public README and
+  add a copyable standalone `Server` plus `browser.discovery` plus `run()`
+  assembly example.
+- TypeScript and API documentation: the shared canonical-identity P1; P1 make
+  concurrent `close()` callers await the same shutdown; P2 export/document the
+  intentional DNS lookup injection contract or hide it from the public
+  constructor.
+- Performance and reliability: P1 expire membership and keep retries running
+  even when the current DNS lookup remains unresolved, including fatal A/AAAA
+  failure with the sibling stalled. P2 do not publish a second empty snapshot
+  when a successful empty/NXDOMAIN answer is followed by resolver failure.
+- Mechanical: remove the review record's trailing blank line.
+
+One correction batch returns every accepted finding to the existing
+implementation context. Re-review is limited to substantively affected lanes.
