@@ -3,6 +3,8 @@
 import { describe, expect, it } from "vitest";
 import { DynamicUnaryForwarder, type DynamicUnaryClient } from "@spine-event-engine/auth";
 import { ApplicationNode } from "@spine-event-engine/deployment";
+import { create, toBinary } from "@bufbuild/protobuf";
+import { SubscriptionSchema, TopicSchema } from "@spine-event-engine/proto/client";
 
 import { GkeNodeDiscovery } from "../../src/index.js";
 
@@ -264,6 +266,43 @@ describe("GkeNodeDiscovery", () => {
     ).toBe("http://10.0.3.2:8080");
     await forwarder.close();
     await stop();
+  });
+
+  it("reconciles one durable native child per DNS node across removal and address reuse", async () => {
+    const created: string[] = [];
+    const disposed: string[] = [];
+    const forwarder = new DynamicUnaryForwarder({
+      create: async (node) => ({
+        ...client(node.id),
+        subscribe: async () => {
+          created.push(node.id);
+          return { kind: "backend-subscription-envelope" as const, bytes: new Uint8Array() };
+        },
+        dispose: async () => {
+          disposed.push(node.id);
+        },
+      }),
+    });
+    const node = new ApplicationNode({
+      id: "gke/http://10.0.4.1:8080/",
+      endpoint: "http://10.0.4.1:8080",
+    });
+    const wire = {
+      kind: "public-subscription" as const,
+      bytes: toBinary(
+        SubscriptionSchema,
+        create(SubscriptionSchema, { id: { value: "board" }, topic: create(TopicSchema) }),
+      ),
+    };
+
+    await forwarder.reconcile([node]);
+    await forwarder.rehydrateDefinition(wire);
+    await forwarder.reconcile([]);
+    await forwarder.reconcile([node]);
+
+    expect(created).toEqual([node.id, node.id]);
+    expect(disposed).toEqual([node.id]);
+    await forwarder.close();
   });
 });
 

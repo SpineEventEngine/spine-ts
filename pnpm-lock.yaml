@@ -460,9 +460,15 @@ importers:
         specifier: workspace:*
         version: link:../deployment
     devDependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
       '@spine-event-engine/auth':
         specifier: workspace:*
         version: link:../auth
+      '@spine-event-engine/proto':
+        specifier: workspace:*
+        version: link:../proto
 
   packages/proto:
     dependencies:
