@@ -221,6 +221,50 @@ describe("GkeNodeDiscovery", () => {
     await forwarder.close();
     await stop();
   });
+
+  it("makes unary routing unavailable for an empty DNS answer and restores it on recovery", async () => {
+    const scheduler = new Scheduler();
+    const answers: (readonly { readonly address: string; readonly ttl: number }[])[] = [
+      [{ address: "10.0.3.1", ttl: 30 }],
+      [],
+      [{ address: "10.0.3.2", ttl: 30 }],
+    ];
+    const forwarder = new DynamicUnaryForwarder({
+      create: async (node) => client(node.endpoint),
+    });
+    const discovery = new GkeNodeDiscovery({
+      serviceName: "api.default.svc.cluster.local",
+      port: 8080,
+      resolver: { resolve: async () => answers.shift() ?? [] },
+      scheduler,
+    });
+    const pending: Promise<void>[] = [];
+    const stop = discovery.watch((nodes) => {
+      pending.push(forwarder.reconcile(nodes));
+    });
+
+    await scheduler.tick();
+    await Promise.all(pending.splice(0));
+    expect(
+      new TextDecoder().decode(
+        await forwarder.forward({ service: "s", method: "m", value: new Uint8Array() }),
+      ),
+    ).toBe("http://10.0.3.1:8080");
+    await scheduler.tick();
+    await Promise.all(pending.splice(0));
+    await expect(
+      forwarder.forward({ service: "s", method: "m", value: new Uint8Array() }),
+    ).rejects.toThrow("absent");
+    await scheduler.tick();
+    await Promise.all(pending.splice(0));
+    expect(
+      new TextDecoder().decode(
+        await forwarder.forward({ service: "s", method: "m", value: new Uint8Array() }),
+      ),
+    ).toBe("http://10.0.3.2:8080");
+    await forwarder.close();
+    await stop();
+  });
 });
 
 function client(id: string): DynamicUnaryClient {
