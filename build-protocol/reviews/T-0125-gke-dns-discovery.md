@@ -127,3 +127,14 @@ Correction `a4dc32d7` passes 28 focused tests with 96.29% branch coverage and
 the affected lint, tooling typecheck, formatting, and diff gates. The existing
 performance/reliability reviewer alone rechecks stale failure fencing with
 explicit `gpt-5.6-terra` / `high`.
+
+## Final Disposition
+
+The final performance/reliability re-review is clean. The stale failure path is
+abort/epoch fenced before any snapshot, expiry, or retry scheduling mutation,
+preserving the newer success and its TTL timer. All four specialist concerns
+are closed. Dedicated per-task security remains N/A for the recorded
+trust-boundary reason.
+
+The reviewer used explicit `gpt-5.6-terra` / `high`; runtime
+self-introspection was unavailable and no mismatch or fallback was visible.
