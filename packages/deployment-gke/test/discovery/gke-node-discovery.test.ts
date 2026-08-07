@@ -9,6 +9,70 @@ import { SubscriptionSchema, TopicSchema } from "@spine-event-engine/proto/clien
 import { GkeNodeDiscovery, NodeDnsResolver } from "../../src/index.js";
 
 describe("GkeNodeDiscovery", () => {
+  it("cancels a Node resolver immediately when its signal is already aborted", async () => {
+    let cancelled = 0;
+    let lookups = 0;
+    const resolver = new NodeDnsResolver(() => ({
+      resolve4: async () => {
+        lookups += 1;
+        return [];
+      },
+      resolve6: async () => {
+        lookups += 1;
+        return [];
+      },
+      cancel: () => {
+        cancelled += 1;
+      },
+    }));
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(resolver.resolve("api.default.svc.cluster.local", controller.signal)).rejects.toMatchObject({
+      name: "AbortError",
+    });
+
+    expect(cancelled).toBe(1);
+    expect(lookups).toBe(0);
+  });
+
+  it("cancels a Node resolver while an address-family lookup is in flight", async () => {
+    let cancelled = 0;
+    let release: (() => void) | undefined;
+    const resolver = new NodeDnsResolver(() => ({
+      resolve4: async () =>
+        await new Promise<readonly { readonly address: string; readonly ttl: number }[]>((resolve) => {
+          release = () => resolve([]);
+        }),
+      resolve6: async () => [],
+      cancel: () => {
+        cancelled += 1;
+        release?.();
+      },
+    }));
+    const controller = new AbortController();
+    const result = resolver.resolve("api.default.svc.cluster.local", controller.signal);
+    controller.abort();
+
+    await expect(result).rejects.toMatchObject({ name: "AbortError" });
+    expect(cancelled).toBe(1);
+  });
+
+  it("propagates a non-name Node DNS failure", async () => {
+    const failure = Object.assign(new Error("temporary DNS failure"), { code: "ESERVFAIL" });
+    const resolver = new NodeDnsResolver(() => ({
+      resolve4: async () => {
+        throw failure;
+      },
+      resolve6: async () => [],
+      cancel: () => undefined,
+    }));
+
+    await expect(resolver.resolve("api.default.svc.cluster.local", new AbortController().signal)).rejects.toBe(
+      failure,
+    );
+  });
+
   it("maps Node A and AAAA TTL answers and treats name-not-found as empty", async () => {
     const resolver = new NodeDnsResolver(() => ({
       resolve4: async () => [{ address: "10.0.0.1", ttl: 12 }],
@@ -31,6 +95,34 @@ describe("GkeNodeDiscovery", () => {
       cancel: () => undefined,
     }));
     await expect(missing.resolve("missing", new AbortController().signal)).resolves.toEqual([]);
+  });
+
+  it.each([
+    [{ serviceName: "not a service", port: 8080 }, undefined],
+    [{ serviceName: "api.default.svc.cluster.local", port: 0 }, "GKE node port must be a valid TCP port."],
+    [
+      { serviceName: "api.default.svc.cluster.local", port: 8080, refreshIntervalMs: 0 },
+      "GKE refresh interval must be a positive safe integer.",
+    ],
+  ])("rejects invalid discovery configuration", (options, message) => {
+    expect(() => new GkeNodeDiscovery(options)).toThrow(message);
+  });
+
+  it("allows one watch and makes its close operation idempotent", async () => {
+    const scheduler = new Scheduler();
+    const discovery = new GkeNodeDiscovery({
+      serviceName: "api.default.svc.cluster.local",
+      port: 8080,
+      resolver: { resolve: async () => [] },
+      scheduler,
+    });
+    const stop = discovery.watch(() => undefined);
+
+    expect(() => discovery.watch(() => undefined)).toThrow("one active watch");
+    await stop();
+    await stop();
+    await expect(discovery.close()).resolves.toBeUndefined();
+    expect(() => discovery.watch(() => undefined)).toThrow("is closed");
   });
   it("publishes a deduplicated canonical IPv6 HTTPS snapshot with the Service TLS authority", async () => {
     const discovery = new GkeNodeDiscovery({
@@ -149,6 +241,40 @@ describe("GkeNodeDiscovery", () => {
     await stop();
   });
 
+  it("publishes one empty snapshot after fallback validity expires despite repeated failures", async () => {
+    const scheduler = new Scheduler();
+    let now = 0;
+    let calls = 0;
+    const discovery = new GkeNodeDiscovery({
+      serviceName: "api.default.svc.cluster.local",
+      port: 8080,
+      refreshIntervalMs: 5_000,
+      now: () => now,
+      resolver: {
+        resolve: async () => {
+          calls += 1;
+          if (calls === 1) return [{ address: "10.0.0.1" }];
+          throw new Error("temporary DNS failure");
+        },
+      },
+      scheduler,
+    });
+    const snapshots: readonly unknown[][] = [];
+    const stop = discovery.watch((nodes) => {
+      snapshots.push([...nodes]);
+    });
+
+    await scheduler.tick();
+    now = 5_000;
+    await scheduler.tick();
+    now = 10_000;
+    await scheduler.tick();
+
+    expect(snapshots).toHaveLength(2);
+    expect(snapshots[1]).toEqual([]);
+    await stop();
+  });
+
   it("cancels an admitted resolver request during shutdown", async () => {
     const scheduler = new Scheduler();
     let aborted = false;
@@ -173,6 +299,34 @@ describe("GkeNodeDiscovery", () => {
     await pending;
 
     expect(aborted).toBe(true);
+    expect(scheduler.delays).toEqual([0]);
+  });
+
+  it("does not publish a stalled resolver result after discovery closes", async () => {
+    const scheduler = new Scheduler();
+    let resolve: ((answer: readonly { readonly address: string; readonly ttl: number }[]) => void) | undefined;
+    const discovery = new GkeNodeDiscovery({
+      serviceName: "api.default.svc.cluster.local",
+      port: 8080,
+      resolver: {
+        resolve: async () =>
+          await new Promise((settle) => {
+            resolve = settle;
+          }),
+      },
+      scheduler,
+    });
+    const snapshots: readonly unknown[][] = [];
+    const stop = discovery.watch((nodes) => {
+      snapshots.push([...nodes]);
+    });
+    const pending = scheduler.tick();
+
+    const closed = stop();
+    resolve?.([{ address: "10.0.0.1", ttl: 30 }]);
+    await Promise.all([closed, pending]);
+
+    expect(snapshots).toEqual([]);
     expect(scheduler.delays).toEqual([0]);
   });
 

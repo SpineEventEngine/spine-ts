@@ -37,6 +37,10 @@ export class NodeDnsResolver implements GkeDnsResolver {
    */
   async resolve(serviceName: string, signal: AbortSignal): Promise<readonly GkeDnsAddress[]> {
     const resolver = this.#create();
+    if (signal.aborted) {
+      resolver.cancel();
+      throw new DOMException("DNS resolution was cancelled.", "AbortError");
+    }
     const cancel = () => {
       resolver.cancel();
     };
