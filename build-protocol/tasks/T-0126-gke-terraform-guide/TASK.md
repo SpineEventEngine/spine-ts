@@ -1,6 +1,6 @@
 # T-0126: GKE Terraform And Beginner Deployment Guide
 
-Status: Ready for integration
+Status: Complete
 
 ## Objective
 
