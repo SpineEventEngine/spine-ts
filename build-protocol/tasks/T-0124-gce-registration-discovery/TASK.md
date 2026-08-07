@@ -1,6 +1,6 @@
 # T-0124: GCE Registration And Discovery Runtime
 
-Status: Ready for integration
+Status: Complete
 
 ## Objective
 
@@ -87,3 +87,14 @@ and cross-package server lifecycle integration.
   functions, and 95.08% lines.
 - The task branch is ready for clean integration, post-merge verification, and
   remote synchronization of `main`.
+
+## Integration Closure
+
+- Exact task endpoint `bd1b77ca` merged without conflicts as `ed54228a` in a
+  clean integration worktree. The merged tree is byte-identical to the verified
+  task tree.
+- Fresh-worktree post-merge verification passes 273 focused tests, affected
+  deployment/GCE/server typechecks, TypeDoc/API and documentation-audience
+  checks, cleanup rules, formatting, and diff cleanliness.
+- This closure commit is the verified T-0124 endpoint for `main`; remote-ref
+  equality is checked immediately after the push.
