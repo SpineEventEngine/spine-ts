@@ -59,3 +59,59 @@ configured `gpt-5.6-terra` / `high`. The documentation reviewer uses the
 existing immutable `gpt-5.6-luna` / `medium` profile with `medium` explicit.
 Runtime metadata is recorded if exposed; otherwise configured profile and
 absence of visible mismatch remain the acceptance evidence.
+
+## Review Wave Results
+
+- Style and maintainability: P1, the required `REGISTRY_STORAGE_REFERENCE` is
+  passed to both processes but ignored by the shipped entrypoints, so it cannot
+  guarantee that application and Gateway resolve the same registry storage.
+  P2, topology policy assertions use unanchored string/slicing checks that can
+  be satisfied by comments or heredocs rather than real top-level resources.
+- TypeScript/API: P1, the application entrypoint owns a registry but registers
+  only the registrar lifecycle, leaking the registry storage handle. P1, the
+  standalone Gateway stops scheduled discovery but never closes the registry;
+  it needs a small package-owned discovery wrapper or equivalent lifecycle API.
+  P2, the guide contradicts the actual storage-factory injection contract.
+- Documentation: P1, stop-all replacement, incompatible rollback, and teardown
+  do not first disable an enabled autoscaler, so old nodes can remain or return.
+  P1, whole-group scale-from-zero omits `autoscaling_min_replicas = 0`. P2,
+  metric-name wording incorrectly includes CPU, storage-reference resolution is
+  unclear, and the beginner guide omits COS `docker run` startup/log behavior.
+- Performance and reliability: P1, a fixed regional surge of one is invalid
+  when the application MIG requires at least two zones; use the zone count.
+  P1, custom metrics lack an explicit Monitoring filter/scope and independently
+  selected target kind, so the documented whole-group zero-wakeup path is not
+  represented. P1, Gateway and delivery groups lack deterministic proactive
+  replacement policies/procedures. P2, Artifact Registry reader authorization
+  and the health-check-repair implication of `docker run --rm` are undocumented.
+
+All reviewers reported their configured roles/profiles. Runtime
+self-introspection was unavailable, and no visible mismatch or fallback
+occurred.
+
+## Correction Batch Dispatch
+
+The original implementer receives the complete accepted batch as one pass:
+
+1. Read `REGISTRY_STORAGE_REFERENCE` in typed settings and require an
+   application-owned resolver that maps it to a `StorageFactory` in both
+   entrypoints. Register the application registry as a Server resource.
+2. Add a small production `deployment-gce` discovery owner that combines
+   `GceRegistryReader`/scheduled discovery with closing its owned registry when
+   the browser server stops. Use and directly test it in the Gateway example;
+   keep the API small and avoid generic over-design.
+3. Replace false-positive-prone Terraform string extraction with anchored
+   top-level resource assertions and focused negative tests.
+4. Use regional-zone-count surge; add explicit singleton Gateway/delivery
+   proactive replacement policies; model custom metric filter/scope and target
+   kind independently; keep CPU configuration simple and scale-to-zero honest.
+5. Give exact autoscaler-aware procedures for zero, stop-all replacement,
+   rollback, Gateway/delivery replacement, and teardown. Document Artifact
+   Registry reader access, COS startup/logging, `docker run --rm` repair, storage
+   resolution, and simple delivery state loss.
+
+The runtime/API addition promotes final verification to `pnpm verify:release`.
+All four concerns receive one focused re-review after correction. The original
+implementer is explicitly configured as `gpt-5.6-terra` / `medium`; runtime
+metadata is recorded if exposed, otherwise configured profile and absence of a
+visible mismatch remain the acceptance evidence.
