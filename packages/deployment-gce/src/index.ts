@@ -399,6 +399,7 @@ export class GceRegistrar {
   }
 
   #schedule(): void {
+    if (this.#closed) return;
     this.#cancel = this.#scheduler.schedule(20_000, () => {
       void this.#enqueue(() => this.#renew()).catch(() => undefined);
     });
