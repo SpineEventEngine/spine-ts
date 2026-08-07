@@ -33,28 +33,3 @@ export interface EntityRecordStorage<I> {
    */
   query(plan: NormalizedQueryPlan<I>): Promise<readonly NormalizedQueryEntry<I, EntityRecord>[]>;
 }
-
-/**
- * Closed physical purposes used when deriving entity storage keys.
- */
-export type EntityRecordPurpose = "current" | "state-history" | "event-history";
-
-/**
- * Provides stable storage-key derivation for entity records.
- */
-export const EntityStorageKey: Readonly<{
-  // prettier-ignore
-
-  /**
-   * Creates a stable physical storage key for an Entity state type and purpose.
-   *
-   * @param stateType Fully qualified generated Entity state type name.
-   * @param purpose Closed Entity-record storage purpose.
-   * @returns The stable physical storage key.
-   */
-  of(stateType: string, purpose: EntityRecordPurpose): string;
-}> = Object.freeze({
-  of(stateType: string, purpose: EntityRecordPurpose): string {
-    return `${stateType}:${purpose}`;
-  },
-});

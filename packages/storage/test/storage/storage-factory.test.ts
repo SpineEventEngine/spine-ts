@@ -1,9 +1,13 @@
-import { create } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { AnySchema, StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import type { Event } from "@spine-event-engine/proto";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import {
+  EntityRecordSchema,
+  type EntityRecord,
+} from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -11,6 +15,7 @@ import {
   InMemoryStorageBackend,
   RecordColumn,
   RecordSpec,
+  StorageGroup,
   type StorageFactory,
 } from "../../src/index.js";
 import { EntityCommitStorageFactories } from "../../src/internal/entity-commit.js";
@@ -33,6 +38,14 @@ describe("StorageFactory", () => {
     const second = StorageScopes.canonical({ name: "a", multitenant: true, tenantId: "b:c" }, "d");
 
     expect(first).not.toBe(second);
+  });
+
+  it("length-delimits grouped source scopes without colliding with ungrouped sources", () => {
+    const context = { name: "Tasks", multitenant: false };
+
+    expect(StorageScopes.canonical(context, "tasks.State", "history:one")).not.toBe(
+      StorageScopes.canonical(context, "tasks.State:history:one"),
+    );
   });
 
   it("creates typed record storages through the JVM-like seam", () => {
@@ -59,6 +72,26 @@ describe("StorageFactory", () => {
 
     expect(first).not.toBe(second);
     await expect(second.read(create(EventIdSchema, { value: "event-1" }))).resolves.toMatchObject({
+      id: { value: "event-1" },
+    });
+  });
+
+  it("keeps explicitly grouped records separate from ungrouped records with the same spec", async () => {
+    const factory = new InMemoryStorageFactory();
+    const spec = createEventSpec();
+    const context = { name: "Tasks", multitenant: false };
+    const ungrouped = factory.createRecordStorage(context, spec);
+    const grouped = factory.createRecordStorage(context, spec, new StorageGroup("task-state"));
+
+    await ungrouped.write(createEvent("event-1", "type.spine.io/tasks.TaskCreated"));
+
+    await expect(
+      grouped.read(create(EventIdSchema, { value: "event-1" })),
+    ).resolves.toBeUndefined();
+    await grouped.write(createEvent("event-1", "type.spine.io/tasks.TaskCreated"));
+    await expect(
+      ungrouped.read(create(EventIdSchema, { value: "event-1" })),
+    ).resolves.toMatchObject({
       id: { value: "event-1" },
     });
   });
@@ -216,14 +249,8 @@ describe("StorageFactory", () => {
           context: { name: "SharedSource", multitenant: false },
         }) as {
           readonly current: {
-            read(id: string): Promise<{ readonly state: StringValue } | undefined>;
-            write(record: {
-              readonly id: string;
-              readonly state: StringValue;
-              readonly version: bigint;
-              readonly archived: boolean;
-              readonly deleted: boolean;
-            }): Promise<void>;
+            read(id: string): Promise<EntityRecord | undefined>;
+            write(record: EntityRecord): Promise<void>;
           };
         };
       const [recordStorage, entityStorage] =
@@ -235,18 +262,15 @@ describe("StorageFactory", () => {
             })();
 
       await recordStorage.write(create(StringValueSchema, { value: "record" }));
-      await entityStorage.current.write({
-        id: "task",
-        state: create(StringValueSchema, { value: "entity" }),
-        version: 1n,
-        archived: false,
-        deleted: false,
-      });
+      await entityStorage.current.write(currentRecord("task", "entity", 1));
 
       await expect(recordStorage.read("record")).resolves.toMatchObject({ value: "record" });
-      await expect(entityStorage.current.read("task")).resolves.toMatchObject({
-        state: { value: "entity" },
-      });
+      const current = await entityStorage.current.read("task");
+      expect(
+        current?.state === undefined
+          ? undefined
+          : fromBinary(StringValueSchema, current.state.value),
+      ).toEqual(create(StringValueSchema, { value: "entity" }));
     },
   );
 
@@ -303,10 +327,33 @@ function createEvent(id: string, typeUrl: string) {
 function createEntityInput(): EntityStorageInput<string, StringValue> {
   return {
     context: { name: "Tasks", multitenant: false },
-    id: { clone: (id) => id, key: (id) => id },
-    extractId: () => "task",
+    id: {
+      clone: (id) => id,
+      key: (id) => id,
+      pack: (id) => packed(create(StringValueSchema, { value: id })),
+      unpack: (id) =>
+        id.typeUrl.endsWith(`/${StringValueSchema.typeName}`)
+          ? fromBinary(StringValueSchema, id.value).value
+          : undefined,
+    },
     columns: [],
     sourceType: StringValueSchema,
     stateSchema: StringValueSchema,
   };
+}
+
+function currentRecord(id: string, value: string, version: number): EntityRecord {
+  return create(EntityRecordSchema, {
+    entityId: packed(create(StringValueSchema, { value: id })),
+    state: packed(create(StringValueSchema, { value })),
+    version: { number: version },
+    lifecycleFlags: { archived: false, deleted: false },
+  });
+}
+
+function packed(value: StringValue) {
+  return create(AnySchema, {
+    typeUrl: `type.spine.io/${StringValueSchema.typeName}`,
+    value: toBinary(StringValueSchema, value),
+  });
 }

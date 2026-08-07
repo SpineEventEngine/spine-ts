@@ -398,6 +398,7 @@ const expectedStorageExports = [
   "Storage",
   "StorageContext",
   "StorageFactory",
+  "StorageGroup",
   "StorageQueryCapabilities",
   "QueryCandidateLimitError",
   "StorageQueryFeature",

@@ -68,6 +68,39 @@ handle's later operations. Other adapters can close live handles; see their
 [MySQL reference](../storage-rdbms/REFERENCE.md) before choosing shutdown
 behavior.
 
+## 🧩 Keep compatible record families separate
+
+Most applications only need a `RecordSpec`. Sometimes two record families use
+the same source type and record type but must remain separate: for example,
+two independently retained views of the same Task state records.
+Pass a `StorageGroup` as the optional third argument to give that family its
+own physical storage group. The group is deliberately separate from the
+`RecordSpec`, because the record layout has not changed.
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import { InMemoryStorageFactory, RecordSpec, StorageGroup } from "@spine-event-engine/storage";
+
+const factory = new InMemoryStorageFactory();
+const stateHistorySpec = new RecordSpec<string, StringValue>({
+  recordType: StringValueSchema,
+  idKind: "string",
+  extractId: (state) => state.value,
+});
+
+const auditStates = factory.createRecordStorage(
+  { name: "Tasks", multitenant: false },
+  stateHistorySpec,
+  new StorageGroup("example.tasks.TaskState.audit"),
+);
+
+await auditStates.write(create(StringValueSchema, { value: "first" }));
+```
+
+Use a group only when otherwise compatible records must not share rows. The
+ordinary Event Store is intentionally ungrouped.
+
 ## 🗄️ Choose a durable adapter
 
 `@spine-event-engine/storage-datastore` provides Google Cloud Datastore

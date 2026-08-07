@@ -4,16 +4,17 @@
  */
 export type {
   EntityEventHistoryPort,
-  EntityEventHistoryRecord,
   EntityStateHistoryPort,
-  EntityStateHistoryRecord,
 } from "../entity/entity-history-storage.js";
-export type {
-  EntityRecord,
-  EntityRecordStorage,
-  EntityRecordPurpose,
-} from "../entity/entity-record.js";
-export { EntityStorageKey } from "../entity/entity-record.js";
+export {
+  disabledEventHistoryPort,
+  disabledStateHistoryPort,
+} from "../entity/entity-history-storage.js";
+export type { EntityRecord, EntityRecordStorage } from "../entity/entity-record.js";
+export {
+  entityEventHistoryRecordSpec,
+  entityStateHistoryRecordSpec,
+} from "../entity/entity-history-record-spec.js";
 export {
   EntityHistoryConformance,
   type EntityHistoryConformanceAdapter,

@@ -2,6 +2,7 @@ import type { Message } from "@bufbuild/protobuf";
 
 import type { RecordSpec } from "../record/record-spec.js";
 import type { RecordStorage } from "../record/record-storage.js";
+import type { StorageGroup } from "../record/storage-group.js";
 import type { Storage, StorageContext } from "./storage.js";
 
 /**
@@ -28,31 +29,36 @@ export abstract class StorageFactory implements Storage {
   /**
    * Creates a record storage for one context and one declarative record specification.
    *
-   * Repeated calls for the same logical context and record specification must
-   * observe the same backing records and return independently closeable storage
-   * handles.
+   * Repeated calls share backing records only when context, RecordSpec, and
+   * StorageGroup all name the same physical family; two omitted groups are the
+   * same ungrouped family. Handles remain independently closeable.
    *
    * @param context Supplies the bounded-context and tenant scope.
    * @param recordSpec Supplies the declarative physical record layout.
+   * @param group Separates records that share one source type.
    * @returns The independently closeable record storage handle.
    */
   createRecordStorage<I, R extends Message>(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
+    group?: StorageGroup,
   ): RecordStorage<I, R> {
     this.requireOpen();
-    return this.onCreateRecordStorage(context, recordSpec);
+    return this.onCreateRecordStorage(context, recordSpec, group);
   }
 
   /**
    * Creates a provider-specific record storage.
+   *
    * @param context The storage context.
    * @param recordSpec The record specification.
+   * @param group Separates records that share one source type.
    * @returns The created record storage.
    */
   protected abstract onCreateRecordStorage<I, R extends Message>(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
+    group?: StorageGroup,
   ): RecordStorage<I, R>;
 
   private requireOpen(): void {

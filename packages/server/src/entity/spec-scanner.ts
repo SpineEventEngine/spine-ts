@@ -18,6 +18,8 @@ interface EntitySpecScanner {
  * Derives the storage record specification carried by one Entity class.
  */
 export const SpecScanner: EntitySpecScanner = Object.freeze({
+  // prettier-ignore
+
   /**
    * Reads immutable generated schema metadata from an Entity class.
    *

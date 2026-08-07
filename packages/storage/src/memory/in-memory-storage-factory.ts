@@ -1,8 +1,12 @@
 import type { Message } from "@bufbuild/protobuf";
 
-import { eventStoreRecordSpec } from "../event/event-store.js";
+import {
+  entityEventHistoryRecordSpec,
+  entityStateHistoryRecordSpec,
+} from "../entity/entity-history-record-spec.js";
 import type { RecordSpec } from "../record/record-spec.js";
 import type { RecordStorage } from "../record/record-storage.js";
+import type { StorageGroup } from "../record/storage-group.js";
 import type { StorageContext } from "../storage/storage.js";
 import { StorageFactory } from "../storage/storage-factory.js";
 import { StorageScopes } from "../storage/canonical-scope.js";
@@ -46,7 +50,34 @@ export class InMemoryStorageFactory extends StorageFactory {
    */
   createEntityStorage(input: unknown): unknown {
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
-    return this.#entities.create(input as EntityStorageInput<unknown, Message>);
+    const entity = input as EntityStorageInput<unknown, Message>;
+    const stateHistory = entity.stateHistory
+      ? entityStateHistoryRecordSpec(entity.stateSchema)
+      : undefined;
+    const eventHistory = entity.eventHistory
+      ? entityEventHistoryRecordSpec(entity.stateSchema)
+      : undefined;
+    return this.#entities.create({
+      ...entity,
+      ...(stateHistory === undefined
+        ? {}
+        : {
+            stateHistoryStorage: this.createRecordStorage(
+              entity.context,
+              stateHistory.spec,
+              stateHistory.group,
+            ),
+          }),
+      ...(eventHistory === undefined
+        ? {}
+        : {
+            eventHistoryStorage: this.createRecordStorage(
+              entity.context,
+              eventHistory.spec,
+              eventHistory.group,
+            ),
+          }),
+    });
   }
 
   /**
@@ -60,33 +91,37 @@ export class InMemoryStorageFactory extends StorageFactory {
   ): EntityCommitStorage {
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
     return new MemoryEntityCommitStorage(
-      this.#backend,
       this.#entities,
-      this.tenantRecords(input.context, eventStoreRecordSpec),
+      this,
+      (context, spec, group) => this.tenantRecords(context, spec, group),
       input as unknown as EntityStorageInput<unknown, Message>,
     );
   }
 
   /**
    * Creates an in-memory record storage.
+   *
    * @param context The storage context.
    * @param recordSpec The record specification.
+   * @param group Separates records that share a source type.
    * @returns The created record storage.
    */
   protected onCreateRecordStorage<I, R extends Message>(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
+    group?: StorageGroup,
   ): RecordStorage<I, R> {
     return new InMemoryRecordStorage(context, recordSpec, () =>
-      this.tenantRecords(context, recordSpec),
+      this.tenantRecords(context, recordSpec, group),
     );
   }
 
   private tenantRecords<I, R extends Message>(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
+    group?: StorageGroup,
   ): TenantRecords<I, R> {
-    const scope = StorageScopes.canonical(context, recordSpec.sourceType.typeName);
+    const scope = StorageScopes.canonical(context, recordSpec.sourceType.typeName, group?.name);
     return InMemoryStorageBackend.bind(
       this.#backend,
       "record",

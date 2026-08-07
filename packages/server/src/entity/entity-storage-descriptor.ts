@@ -107,6 +107,7 @@ export function entityStorageDescriptor<I>(
     id: {
       clone: (id) => structuredClone(id),
       key: canonicalEntityIdKey,
+      pack: (id) => EntityIds.pack(spec.sourceType, id),
       unpack: (id): I | undefined => {
         try {
           return spec.idValueIn(create(EntityRecordSchema, { entityId: id }));
@@ -119,6 +120,15 @@ export function entityStorageDescriptor<I>(
     stateSchema: spec.sourceType,
   };
 }
+
+const EntityIds = Object.freeze({
+  pack(schema: DescriptorMessageSchema, entityId: unknown) {
+    const idField = describeEntityMetadata(schema).idField.descriptor;
+    return idField.fieldKind === "message"
+      ? AnyMessages.pack(idField.message as DescriptorMessageSchema, entityId as never)
+      : PrimitiveIds.pack(entityId as never);
+  },
+});
 
 /**
  * Creates the internal Stand storage input for a registered Entity state schema.
@@ -182,23 +192,24 @@ export function entityRecordSpec(
       ),
     ],
   };
-  return (
-    metadata.idField.descriptor.fieldKind === "message"
-      ? new RecordSpec<Message, EntityRecord>({
-          ...input,
-          idSchema: metadata.idField.descriptor.message as DescriptorMessageSchema,
-          extractId: (record) =>
-            unpackMessageId(record, metadata.idField.descriptor.message as DescriptorMessageSchema),
-        })
-      : new RecordSpec<PrimitiveId, EntityRecord>({
-          ...input,
-          idKind:
-            metadata.idField.descriptor.scalar === ScalarType.STRING
-              ? "string"
-              : String(metadata.idField.descriptor.scalar),
-          extractId: unpackPrimitiveId,
-        })
-  ) as RecordSpec<Message | PrimitiveId, EntityRecord>;
+  return metadata.idField.descriptor.fieldKind === "message"
+    ? new RecordSpec<Message, EntityRecord>({
+        ...input,
+        idSchema: metadata.idField.descriptor.message as unknown as DescriptorMessageSchema,
+        extractId: (record) =>
+          unpackMessageId(
+            record,
+            metadata.idField.descriptor.message as unknown as DescriptorMessageSchema,
+          ),
+      })
+    : new RecordSpec<PrimitiveId, EntityRecord>({
+        ...input,
+        idKind:
+          metadata.idField.descriptor.scalar === ScalarType.STRING
+            ? "string"
+            : String(metadata.idField.descriptor.scalar),
+        extractId: unpackPrimitiveId,
+      });
 }
 
 function unpackMessageId(record: EntityRecord, schema: DescriptorMessageSchema): Message {

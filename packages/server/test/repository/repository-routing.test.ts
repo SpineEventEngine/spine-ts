@@ -1756,6 +1756,41 @@ describe("repository signal routing", () => {
     }
   });
 
+  it("opens fresh history storage when aggregate retention is enabled after an initial store", async () => {
+    const factory = new InMemoryStorageFactory();
+    const repository = createExecutingRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+    });
+
+    try {
+      await context
+        .commandBus()
+        .post(createAggregateCommand("history-off", "history-transition", "First"));
+      await expect(storage.readStates("history-transition")).resolves.toEqual([]);
+      repository.setStateHistoryEnabled(true);
+      await context
+        .commandBus()
+        .post(createAggregateCommand("history-on", "history-transition", "Second"));
+      await expect(storage.readStates("history-transition")).resolves.toMatchObject([
+        { version: 2n, state: { name: "Second (applied)" } },
+      ]);
+      repository.setStateHistoryEnabled(false);
+      await context
+        .commandBus()
+        .post(createAggregateCommand("history-off-again", "history-transition", "Third"));
+      await expect(storage.readStates("history-transition")).resolves.toHaveLength(1);
+    } finally {
+      await context.close();
+    }
+  });
+
   it("rejects a non-boolean state-history switch before a storage provider is bound", () => {
     const repository = createExecutingRepository();
 
@@ -5454,15 +5489,15 @@ describe("repository signal routing", () => {
           return Promise.resolve();
         },
       })
-      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["replayed"]))
+      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["conflict"]))
       .build();
     const projection = BoundedContext.singleTenant("Tasks")
       .add(createExecutingProjectionRepository())
-      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["replayed"]))
+      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["conflict"]))
       .build();
     const processManager = BoundedContext.singleTenant("Tasks")
       .add(createProcessManagerAssignRepository())
-      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["replayed"]))
+      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["conflict"]))
       .build();
 
     try {
@@ -9317,7 +9352,7 @@ class CurrentRecordTestStorage<S extends Message = Message> {
       await storage.current.write(
         EntityRecords.pack(
           this.#stateSchema,
-          current.entityId as never,
+          current.entityId,
           current.state,
           current.version,
           current.lifecycle,

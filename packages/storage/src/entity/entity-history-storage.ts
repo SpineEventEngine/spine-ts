@@ -1,6 +1,7 @@
 import type { Message } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { Event } from "@spine-event-engine/proto";
+import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 
 /**
  * Represents application-managed maintenance for retained entity state history.
@@ -68,7 +69,7 @@ export interface EntityStateHistoryPort<I, S extends Message> extends EntityStat
    * @param record The state-history record to append.
    * @returns Completes when the record is stored.
    */
-  append(record: EntityStateHistoryRecord<I, S>): Promise<void>;
+  append(record: EntityRecord): Promise<void>;
 
   /**
    * Reads versioned states backward from an optional version.
@@ -81,7 +82,7 @@ export interface EntityStateHistoryPort<I, S extends Message> extends EntityStat
     entityId: I,
     depth: number,
     startingFromVersion?: bigint,
-  ): Promise<readonly EntityStateHistoryRecord<I, S>[]>;
+  ): Promise<readonly EntityRecord[]>;
 
   /**
    * Reads the state current at a specific time.
@@ -90,6 +91,11 @@ export interface EntityStateHistoryPort<I, S extends Message> extends EntityStat
    * @returns The state at that time, if retained.
    */
   stateAt(entityId: I, time: Timestamp): Promise<S | undefined>;
+
+  /**
+   * Closes the state-history storage.
+   */
+  close(): void;
 }
 
 /**
@@ -103,7 +109,7 @@ export interface EntityEventHistoryPort<I> extends EntityEventStorage<I> {
    * @param record The event-history record to append.
    * @returns Completes when the record is stored.
    */
-  append(record: EntityEventHistoryRecord<I>): Promise<void>;
+  append(record: Event): Promise<void>;
 
   /**
    * Reads diagnostic events backward from an optional version.
@@ -113,58 +119,37 @@ export interface EntityEventHistoryPort<I> extends EntityEventStorage<I> {
    * @returns The matching events in reverse version order.
    */
   backward(entityId: I, depth: number, startingFromVersion?: bigint): Promise<readonly Event[]>;
+
+  /**
+   * Closes the event-history storage.
+   */
+  close(): void;
 }
 
 /**
- * Immutable versioned state-history row.
+ * Creates a history port that deliberately allocates no backing storage.
+ * @returns The disabled state-history port.
  */
-export interface EntityStateHistoryRecord<I, S extends Message> {
-  // prettier-ignore
-
-  /**
-   * Identifies the entity that owns this state record.
-   */
-  readonly entityId: I;
-
-  /**
-   * Holds the recorded entity state.
-   */
-  readonly state: S;
-
-  /**
-   * Holds the entity version represented by this record.
-   */
-  readonly version: bigint;
-
-  /**
-   * Records when this state was stored.
-   */
-  readonly createdAt: Timestamp;
+export function disabledStateHistoryPort<I, S extends Message>(): EntityStateHistoryPort<I, S> {
+  return {
+    append: () => Promise.reject(new Error("Entity state history is disabled.")),
+    backward: () => Promise.resolve(Object.freeze([])),
+    stateAt: () => Promise.resolve(undefined),
+    trim: () => Promise.resolve(),
+    truncate: () => Promise.resolve(),
+    close: () => undefined,
+  };
 }
 
 /**
- * Immutable diagnostic event-history row correlated to its producing entity.
+ * Creates a diagnostic event-history port that deliberately allocates no backing storage.
+ * @returns The disabled event-history port.
  */
-export interface EntityEventHistoryRecord<I> {
-  // prettier-ignore
-
-  /**
-   * Identifies the entity that produced this event.
-   */
-  readonly entityId: I;
-
-  /**
-   * Holds the recorded diagnostic event.
-   */
-  readonly event: Event;
-
-  /**
-   * Holds the producing entity version.
-   */
-  readonly producerVersion: bigint;
-
-  /**
-   * Records when this event was stored.
-   */
-  readonly createdAt: Timestamp;
+export function disabledEventHistoryPort<I>(): EntityEventHistoryPort<I> {
+  return {
+    append: () => Promise.reject(new Error("Entity event history is disabled.")),
+    backward: () => Promise.resolve(Object.freeze([])),
+    truncate: () => Promise.resolve(),
+    close: () => undefined,
+  };
 }

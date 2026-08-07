@@ -8,6 +8,7 @@ import type {
 } from "../record/record-query.js";
 import type { RecordSpec } from "../record/record-spec.js";
 import type { RecordEntry } from "../record/record-storage.js";
+import { CanonicalUtf8 } from "./canonical-utf8.js";
 
 const tenantRecordsHost = globalThis as typeof globalThis & {
   structuredClone<Value>(value: Value): Value;
@@ -158,6 +159,13 @@ const TenantRecordQuery = {
     spec: RecordSpec<I, R>,
     query: RecordQuery<I>,
   ): readonly RecordEntry<I, R>[] {
+    const bounded = TenantRecordQuery.selectBounded(entries, spec, query);
+    if (bounded !== undefined) {
+      return bounded.map((entry) => ({
+        id: entry.slotId,
+        record: entry.stored.record,
+      }));
+    }
     const matching = [...entries].filter((entry) => TenantRecordQuery.matches(spec, entry, query));
     const sorted = matching.sort((left, right) =>
       TenantRecordQuery.compareEntries(left, right, query.sort ?? []),
@@ -167,6 +175,67 @@ const TenantRecordQuery = {
       id: entry.slotId,
       record: entry.stored.record,
     }));
+  },
+
+  /**
+   * Selects the finite ordered window without retaining every matching entry.
+   */
+  selectBounded<I, R extends Message>(
+    entries: Iterable<StoredEntry<I, R>>,
+    spec: RecordSpec<I, R>,
+    query: RecordQuery<I>,
+  ): readonly StoredEntry<I, R>[] | undefined {
+    if (query.limit === undefined || !Number.isFinite(query.limit)) return undefined;
+    const offset = query.offset ?? 0;
+    const windowSize = offset + query.limit;
+    if (
+      !Number.isInteger(offset) ||
+      !Number.isInteger(query.limit) ||
+      offset < 0 ||
+      query.limit < 0
+    ) {
+      return undefined;
+    }
+    if (windowSize === 0) return [];
+
+    const orders = query.sort ?? [];
+    const selected: StoredEntry<I, R>[] = [];
+    for (const entry of entries) {
+      if (
+        !TenantRecordQuery.matches(spec, entry, query) ||
+        (query.after !== undefined &&
+          TenantRecordQuery.compareToContinuation(entry, orders, query.after) <= 0)
+      ) {
+        continue;
+      }
+      TenantRecordQuery.insertSelected(selected, entry, windowSize, orders);
+    }
+    return selected.slice(offset);
+  },
+
+  /**
+   * Inserts an entry into a bounded, ordered top window.
+   */
+  insertSelected<I, R extends Message>(
+    selected: StoredEntry<I, R>[],
+    entry: StoredEntry<I, R>,
+    windowSize: number,
+    orders: readonly RecordOrder[],
+  ): void {
+    const comparison = (candidate: StoredEntry<I, R>): number =>
+      TenantRecordQuery.compareEntries(candidate, entry, orders);
+    let low = 0;
+    let high = selected.length;
+    while (low < high) {
+      const middle = low + Math.floor((high - low) / 2);
+      const candidate = selected[middle];
+      if (candidate === undefined) throw new Error("Bounded record selection is sparse.");
+      if (comparison(candidate) <= 0) low = middle + 1;
+      else high = middle;
+    }
+    if (low === windowSize) return;
+    selected.splice(low, 0, entry);
+    if (selected.length > windowSize) selected.pop();
   },
 
   /**
@@ -205,13 +274,16 @@ const TenantRecordQuery = {
     orders: readonly RecordOrder[],
   ): number {
     for (const order of orders) {
-      const comparison = StoredValues.compare(
-        TenantRecordQuery.resolveValue(left.stored, order.field),
-        TenantRecordQuery.resolveValue(right.stored, order.field),
-      );
+      const comparison =
+        order.field === "id"
+          ? StoredValues.compareIdentity(left.slotId, right.slotId)
+          : StoredValues.compare(
+              TenantRecordQuery.resolveValue(left.stored, order.field),
+              TenantRecordQuery.resolveValue(right.stored, order.field),
+            );
       if (comparison !== 0) return order.direction === "desc" ? comparison * -1 : comparison;
     }
-    return StoredValues.compare(left.slotId, right.slotId);
+    return StoredValues.compareIdentity(left.slotId, right.slotId);
   },
 
   /**
@@ -225,13 +297,16 @@ const TenantRecordQuery = {
     for (let index = 0; index < orders.length; index += 1) {
       const order = orders[index];
       if (order === undefined) throw new Error("Record query continuation sort order is invalid.");
-      const comparison = StoredValues.compare(
-        TenantRecordQuery.resolveValue(entry.stored, order.field),
-        after.values[index]?.value,
-      );
+      const comparison =
+        order.field === "id"
+          ? StoredValues.compareIdentity(entry.slotId, after.values[index]?.value)
+          : StoredValues.compare(
+              TenantRecordQuery.resolveValue(entry.stored, order.field),
+              after.values[index]?.value,
+            );
       if (comparison !== 0) return order.direction === "desc" ? comparison * -1 : comparison;
     }
-    return StoredValues.compare(entry.slotId, after.id);
+    return StoredValues.compareIdentity(entry.slotId, after.id);
   },
 
   /**
@@ -310,6 +385,16 @@ const StoredValues = {
   },
 
   /**
+   * Compares storage slot identities with canonical UTF-8 text ordering.
+   */
+  compareIdentity(left: unknown, right: unknown): number {
+    return StoredValues.compareIdentityNormalized(
+      StoredValues.normalize(left),
+      StoredValues.normalize(right),
+    );
+  },
+
+  /**
    * Reads a dot-separated path from an object value.
    */
   readPath(value: unknown, path: string): unknown {
@@ -355,6 +440,46 @@ const StoredValues = {
         );
       case "object":
         return StoredValues.compareObjects(left as NormalizedObject, right as NormalizedObject);
+    }
+  },
+
+  /**
+   * Compares normalized storage identities, treating text as canonical UTF-8 bytes.
+   */
+  compareIdentityNormalized(left: NormalizedValue, right: NormalizedValue): number {
+    const leftKind = StoredValues.kind(left);
+    const rightKind = StoredValues.kind(right);
+    if (leftKind !== rightKind) return StoredValues.compareText(leftKind, rightKind);
+    switch (leftKind) {
+      case "undefined":
+      case "null":
+        return 0;
+      case "boolean":
+        return left === right ? 0 : left === false ? -1 : 1;
+      case "number":
+        return StoredValues.compareNumbers(left as number, right as number);
+      case "string":
+        return CanonicalUtf8.compare(left as string, right as string);
+      case "bigint":
+        return StoredValues.compareBigInts(
+          StoredValues.payload(left as NormalizedBigInt),
+          StoredValues.payload(right as NormalizedBigInt),
+        );
+      case "bytes":
+        return StoredValues.compareLists(
+          StoredValues.payload(left as NormalizedBytes),
+          StoredValues.payload(right as NormalizedBytes),
+        );
+      case "array":
+        return StoredValues.compareIdentityLists(
+          left as readonly NormalizedValue[],
+          right as readonly NormalizedValue[],
+        );
+      case "object":
+        return StoredValues.compareIdentityObjects(
+          left as NormalizedObject,
+          right as NormalizedObject,
+        );
     }
   },
 
@@ -412,6 +537,35 @@ const StoredValues = {
    */
   compareText(left: string, right: string): number {
     return left < right ? -1 : left > right ? 1 : 0;
+  },
+
+  /**
+   * Compares identity-value lists recursively.
+   */
+  compareIdentityLists(
+    left: readonly NormalizedValue[],
+    right: readonly NormalizedValue[],
+  ): number {
+    for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
+      const comparison = StoredValues.compareIdentityNormalized(left[index], right[index]);
+      if (comparison !== 0) return comparison;
+    }
+    return StoredValues.compareNumbers(left.length, right.length);
+  },
+
+  /**
+   * Compares object-shaped identities by canonical keys and values.
+   */
+  compareIdentityObjects(left: NormalizedObject, right: NormalizedObject): number {
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+    const keyComparison = StoredValues.compareIdentityLists(leftKeys, rightKeys);
+    if (keyComparison !== 0) return keyComparison;
+    for (const key of leftKeys) {
+      const comparison = StoredValues.compareIdentityNormalized(left[key], right[key]);
+      if (comparison !== 0) return comparison;
+    }
+    return 0;
   },
 
   /**

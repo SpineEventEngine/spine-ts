@@ -492,7 +492,6 @@ const frameworkConstructionToken: FrameworkConstructionToken = Object.freeze({
 const dispatchFailureLimit = 10;
 const dispatchErrorMessageLimit = 500;
 const dispatchErrorStackLimit = 2_000;
-let catchUpCommitSequence = 0;
 const generatedRegistryFile = "generated/handler/generated-handler-registry.js";
 const moduleSchemeRe = /^[A-Za-z][A-Za-z\d+.-]*:/;
 const internalStoragePrefix = "__spine/";
@@ -940,7 +939,6 @@ export class BoundedContext {
     const clearedStateTypes: string[] = [];
     let clearedEntityCount = 0;
     let replayedEventCount = 0;
-    const commitScope = ContextParts.nextCatchUpScope();
 
     for (const target of clearTargets) {
       clearedEntityCount += await this.#stand.clear(target.schema, tenantOptions);
@@ -955,7 +953,7 @@ export class BoundedContext {
         replayedEventCount += await ContextParts.dispatchStoredProjectionEvent(
           projections,
           event,
-          commitScope,
+          true,
         );
       } catch (error) {
         throw ContextParts.catchUpReplayError(event, error);
@@ -2588,7 +2586,7 @@ const ContextParts = Object.freeze({
   async dispatchStoredProjectionEvent(
     projections: readonly ProjectionDispatch[],
     event: Event,
-    commitScope: string,
+    rebuild: boolean,
   ): Promise<number> {
     const typeUrl = event.message?.typeUrl;
 
@@ -2605,16 +2603,11 @@ const ContextParts = Object.freeze({
       await repositoryAccess.dispatchProjectionDirect(
         projection.repository,
         clone(EventSchema, event),
-        commitScope,
+        rebuild,
       );
     }
 
     return matching.length > 0 ? 1 : 0;
-  },
-
-  nextCatchUpScope(): string {
-    catchUpCommitSequence += 1;
-    return `catch-up-${String(Date.now())}-${String(catchUpCommitSequence)}`;
   },
 
   catchUpReplayError(event: Event, cause: unknown): Error {

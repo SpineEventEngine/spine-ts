@@ -797,13 +797,14 @@ filter chain, storage write, dispatcher, delivery mechanism, tenant/message
 validator, service, transport, or handler invocation.
 
 Storage exports include `Storage`, `StorageContext`, `StorageFactory`,
+`StorageGroup`,
 `RecordStorage`, `RecordEntry`, `RecordSpec`, `RecordColumn`, `RecordQuery`,
 `RecordContinuation`, `RecordContinuationValue`, `RecordFilter`,
 `RecordOrder`, `RecordReadOptions`, `RecordMask`, `InMemoryStorageFactory`,
 `InMemoryStorageBackend`, `InMemoryRecordStorage`, `EventStore`,
 `OnEventAccepted`, `EntityStateHistoryStorage`, and `EntityEventStorage`.
 `StorageFactory` owns one mandatory adapter seam,
-`createRecordStorage(context, spec)`.
+`createRecordStorage(context, spec, group?)`.
 `RecordStorage` persists identified Protobuf records with deterministic
 ID/column/path queries, stable continuations after sorted row keys,
 non-negative offsets, positive limits, and simple field masks over cloned
@@ -811,9 +812,12 @@ results. The in-memory adapter is process-local, tenant-aware through
 `StorageContext`, and non-durable. A factory without an
 `InMemoryStorageBackend` owns an isolated backend; independently constructed
 factories deliberately share compatible canonical scopes only when supplied
-the same backend token. Storage adapters must make repeated
-`createRecordStorage(context, spec)` calls in one logical backend observe the
-same records while returning independently closeable storage handles.
+the same backend token.
+`StorageGroup` is an optional named identity that separates record families
+with the same source type. Calls in one logical backend share backing records
+only when their context, source type, and group identity match; two omitted
+groups identify the same ungrouped family. Each call still returns an
+independently closeable storage handle.
 `RecordStorage.delete(id)`, `read(id)`, and
 `compareAndSet(id, expected, next)` address actual storage slot IDs.
 `RecordStorage.query()` and `RecordStorage.queryEntries()` also filter
@@ -823,12 +827,9 @@ validation or repair. `RecordStorage.index()` is the deliberate exception: it
 returns logical record IDs derived from each record body through the
 `RecordSpec`.
 `RecordSpec` rejects duplicate declared `RecordColumn` names in its constructor,
-before a factory or adapter receives the specification.
-It requires a stable, nonblank `storageKey` and exactly one ID descriptor:
-either Protobuf `idSchema` or a nonblank primitive `idKind`. Every
-`RecordColumn` requires a nonblank `valueType` descriptor. These declarations
-form the deterministic layout-compatibility fingerprint that adapters bind and
-check before row access.
+before a factory or adapter receives the specification. It requires exactly one
+ID descriptor: either Protobuf `idSchema` or a nonblank primitive `idKind`.
+Every `RecordColumn` requires a nonblank `valueType` descriptor.
 `RecordStorage.compareAndSet(id, expected, next)` must be atomic across those
 handles for one logical backing store; `next: undefined` is a conditional
 delete, and `false` means the expected value did not match so no mutation was
@@ -933,19 +934,19 @@ TypeDoc output and are not broadly re-exported from the package root.
 
 ### Storage identity and maintenance
 
-`@spine-event-engine/storage` requires a stable, nonblank `RecordSpec.storageKey`
-for every physical record layout. Providers bind its length-delimited context,
-tenant-mode, and storage-key scope to a deterministic compatibility fingerprint
-before accessing rows; an incompatible reopen fails before any read or write.
+`@spine-event-engine/storage` identifies a record family by its source type and
+optional `StorageGroup`. Use the same named group whenever handles must access
+the same grouped backing; use distinct groups to separate otherwise equal
+source-type families. Omitting the group selects the ungrouped family.
 `InMemoryStorageBackend` is a root-exported opaque token for deliberate
 in-memory sharing: factories constructed without one are isolated, while
 factories supplied the same token share only compatible canonical scopes.
 Closing one such factory does not clear the backend for its siblings.
 The public entity-history surface is deliberately limited to
 `EntityStateHistoryStorage` (`trim`, `truncate`) and `EntityEventStorage`
-(`truncate`). Entity row ports, purpose keys, and in-memory conformance seams
-remain internal provider implementation details until the repository/provider
-milestones freeze their SPI. Provider adapters use the explicitly marked
+(`truncate`). Entity row ports and in-memory conformance seams remain internal
+provider implementation details until the repository/provider milestones freeze
+their SPI. Provider adapters use the explicitly marked
 `@spine-event-engine/storage/internal/entity-history` subpath; it is a narrow
 cross-package SPI, not an end-user root export.
 

@@ -6,8 +6,9 @@ This reference is for agents working with the Spine TS storage contract.
 
 Import public types from `@spine-event-engine/storage`. The entry point exports
 `StorageFactory`, `RecordStorage`, `RecordSpec`, `RecordColumn`, `RecordQuery`,
-`RecordMask`, `InMemoryStorageFactory`, `InMemoryStorageBackend`, event-store
-types, normalized query policy/evaluator types, and entity history interfaces.
+`RecordMask`, `StorageGroup`, `InMemoryStorageFactory`,
+`InMemoryStorageBackend`, event-store types, normalized query policy/evaluator
+types, and entity history interfaces.
 The `./internal/entity-history` subpath supplies Entity records, source-type
 inputs, and current/state/event-history ports. The separate
 `./internal/entity-commit` subpath supplies atomic commit input/result types,
@@ -16,16 +17,20 @@ framework/provider seams, not application-facing remote APIs.
 
 ## Record storage
 
-`StorageFactory.createRecordStorage(context, spec)` returns an independently
-closeable `RecordStorage`. A context contains a bounded-context name,
-multitenancy flag, and optional tenant ID. A `RecordSpec` fixes the source type,
-stored record type, identity extractor, ID schema or primitive ID kind, and
-materialized columns. `sourceType` defaults to `recordType`; Entity record
-specifications use the entity state type as their source type. The in-memory
-provider keys its physical scope by the backend, context name, tenancy mode,
-tenant slice, and `RecordSpec.sourceType`. It keeps different source types
-separate even when they use the same stored record type. `idType`,
-`recordType`, `sourceType`, and `columns` are read-only accessors.
+`StorageFactory.createRecordStorage(context, spec, group?)` returns an
+independently closeable `RecordStorage`. A context contains a bounded-context
+name, multitenancy flag, and optional tenant ID. A `RecordSpec` fixes the
+source type, stored record type, identity extractor, ID schema or primitive ID
+kind, and materialized columns. `sourceType` defaults to `recordType`; Entity
+record specifications use the entity state type as their source type.
+
+`StorageGroup` is an optional external physical-family identity. It is not part
+of `RecordSpec`: use it only when records with an otherwise compatible layout
+must remain distinct. The in-memory provider keys physical identity by backend,
+context name, tenancy mode, tenant slice, source type, and either the named
+group or the explicit ungrouped value. It keeps different source types and
+different groups separate even when they use the same stored record type.
+`idType`, `recordType`, `sourceType`, and `columns` are read-only accessors.
 
 `RecordStorage` supports `write`, `writeAll`, `read`, `delete`, `compareAndSet`,
 `index`, `query`, `queryEntries`, `queryPlan`, and `queryPlanEntries`. It clones
@@ -63,9 +68,22 @@ its scoped rows.
 
 ## Entity storage
 
-The `internal/entity-history` seam supplies current state plus immutable state
-and event history for framework repositories. The separate
-`internal/entity-commit` port is the only way repositories combine current
-state, retained histories, framework delivery events, and a commit receipt.
-Standalone EventStore and history operations stay separate operations; they
-are not a substitute transaction boundary.
+The `./internal/entity-history` seam supplies the framework's Entity storage
+ports. Current Entity state is a generated `spine.server.entity.EntityRecord`.
+Retained state history stores generated `EntityStateKey`/`EntityRecord` rows in
+a `StorageGroup` named after the Entity state type. Retained diagnostic event
+history stores generated `EventId`/`Event` rows in that same state-type-named
+group. The framework Event Store is a separate, ungrouped `EventId`/`Event`
+record family.
+
+History ports are lazy. When a history is disabled, the in-memory provider does
+not open or allocate its grouped records. Current Entity loading always uses
+the current record, never retained history. Event history is diagnostic data,
+not a source for rebuilding current state.
+
+The separate `./internal/entity-commit` port combines one current record with
+the nonempty enabled history families and delivery events. For the in-memory
+provider only, that operation stages and atomically publishes its touched
+families. Its outcomes are `"committed"` and `"conflict"`; it has no receipt or
+`"replayed"` outcome. Other providers define and document their own atomicity
+guarantees.

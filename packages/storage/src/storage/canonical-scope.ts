@@ -7,13 +7,15 @@ const storageScopes = {
    * Creates a length-delimited storage scope.
    * @param context Supplies the bounded-context and tenant scope.
    * @param sourceType Supplies the physical source-type identity.
+   * @param group Supplies the optional external record-storage group identity.
    * @returns The canonical storage scope key.
    */
-  canonical(context: StorageContext, sourceType: string): string {
+  canonical(context: StorageContext, sourceType: string, group?: string): string {
     const values = [
       context.name,
       context.multitenant ? storageScopes.tenant(context) : "single-tenant",
       sourceType,
+      group === undefined ? "group:ungrouped" : `group:named:${group}`,
     ];
     return values.map((value) => `${String(storageScopes.utf8Length(value))}:${value}`).join(":");
   },

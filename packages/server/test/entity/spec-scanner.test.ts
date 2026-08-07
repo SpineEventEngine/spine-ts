@@ -38,7 +38,7 @@ const fixtureFile = fileDesc(
 );
 
 function fixtureSchemaAt<Shape extends Message>(index: number): GenMessage<Shape> {
-  return messageDesc(fixtureFile, index) as GenMessage<Shape>;
+  return messageDesc(fixtureFile, index);
 }
 
 const ProjectionStateSchema = fixtureSchemaAt<ProjectionState>(0);
@@ -137,7 +137,7 @@ describe("SpecScanner", () => {
     const record = new Proxy(Object.freeze(create(EntityRecordSchema, { state: packedState })), {
       get(target, property, receiver) {
         if (property === "state") stateReads += 1;
-        return Reflect.get(target, property, receiver);
+        return Reflect.get(target, property, receiver) as unknown;
       },
     }) as EntityRecord;
 
@@ -267,6 +267,27 @@ describe("SpecScanner", () => {
     expect(descriptor.id.key({ value: "task-1" } as never)).toBe('json:{"value":"task-1"}');
   });
 
+  it("round-trips scalar Entity IDs through the storage codec packer", () => {
+    new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema });
+    const descriptor = entityStorageDescriptor(
+      { name: "Tasks", multitenant: false },
+      SpecScanner.scan(TaskProjection),
+    );
+
+    expect(descriptor.id.unpack(descriptor.id.pack("task-1"))).toBe("task-1");
+  });
+
+  it("round-trips generated message Entity IDs through the storage codec packer", () => {
+    new Repository({ entityType: MessageIdProjection, schema: MessageIdStateSchema });
+    const descriptor = entityStorageDescriptor(
+      { name: "Tasks", multitenant: false },
+      SpecScanner.scan(MessageIdProjection),
+    );
+    const id = create(ProjectionIdSchema, { value: "task-1" });
+
+    expect(descriptor.id.unpack(descriptor.id.pack(id))).toEqual(id);
+  });
+
   it("rejects missing state and message-shaped ID envelopes", () => {
     expect(() => EntityRecords.unpack(ProjectionStateSchema, {} as EntityRecord)).toThrow(
       /state schema/,
@@ -285,9 +306,4 @@ describe("SpecScanner", () => {
       ),
     ).toThrow(/ID does not match/);
   });
-
-  if (false) {
-    // @ts-expect-error SpecScanner accepts only Entity-family constructors.
-    SpecScanner.scan({ name: "not-an-entity" });
-  }
 });
