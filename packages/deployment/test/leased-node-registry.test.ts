@@ -114,7 +114,9 @@ describe("LeasedNodeRegistry", () => {
 
   it("stops pagination when cancellation arrives between lease pages", async () => {
     const controller = new AbortController();
-    const factory = new AbortBetweenPagesFactory(() => controller.abort());
+    const factory = new AbortBetweenPagesFactory(() => {
+      controller.abort();
+    });
     const registry = new LeasedNodeRegistry({ factory, namespace: "cancel-between-pages" });
     for (let index = 0; index < 257; index++) {
       await registry.register({
