@@ -96,3 +96,18 @@ One deduplicated batch returns to the existing implementer:
 The P0 and all accepted P1/P2 findings block integration. Corrections reopen
 all four concerns because the Terraform, policy tests, public snippets, and
 operational guide are substantively affected.
+
+## Focused Re-review Dispatch
+
+Correction `97d0af92` implements the complete aggregated batch. Recursive
+Terraform formatting and validation, strict TypeScript snippet checking, four
+focused policy tests, and the infrastructure/docs-only `verify:task` profile
+all pass. The branch is clean and pushed.
+
+All four original concerns recheck only their recorded findings. Style,
+TypeScript/API, and performance/reliability use explicit
+`gpt-5.6-terra` / `high`. Documentation uses its immutable
+`gpt-5.6-luna` / `medium` role, with `medium` explicit and the role selecting
+the fixed model because the Desktop tool does not expose Luna as an override.
+Runtime metadata is recorded if exposed; otherwise the configured role/profile
+and absence of a visible mismatch remain the acceptance evidence.
