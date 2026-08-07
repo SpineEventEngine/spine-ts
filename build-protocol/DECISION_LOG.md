@@ -4,6 +4,20 @@ Navigation: [README](README.md)
 
 Future implementation must append every decision here or to a task-specific decision file linked from here.
 
+## D-0125: Use Node DNS promises for GKE DNS discovery
+
+Status: Accepted
+
+Date: 2026-08-07
+
+Decision: `@spine-event-engine/deployment-gke` uses Node's maintained
+`node:dns/promises` `Resolver` directly. It returns A and AAAA records with
+TTL metadata, and `Resolver.cancel()` cancels the admitted lookup. The resolver
+is injectable for deterministic tests and operator-owned integration.
+
+Rationale: Node LTS already supplies the only needed DNS behavior, so a
+third-party DNS dependency would add surface without capability.
+
 ## D-0064: Execute Local Runtime Routes Through SignalTransport
 
 Status: Accepted
