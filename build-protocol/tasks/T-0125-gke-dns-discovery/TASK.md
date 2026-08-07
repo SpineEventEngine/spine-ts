@@ -1,6 +1,6 @@
 # T-0125: GKE DNS Discovery Runtime
 
-Status: In progress
+Status: Ready for integration
 
 ## Objective
 
@@ -82,3 +82,14 @@ recovery.
   worktree, post-merge verify, push `main`, and remove completed branches and
   worktrees.
 - Push every feature-branch commit to `origin` immediately.
+
+## Integration Readiness
+
+- All four specialist review concerns are clean after the recorded correction
+  and focused re-review waves. Dedicated per-task security remains N/A for the
+  recorded trust-boundary reason.
+- The final `pnpm verify:release` passes 198 test files with 3 skipped and 3,953
+  tests with 26 skipped. Coverage is 94.07% statements, 90.15% branches, 94.57%
+  functions, and 95.10% lines.
+- The task branch is ready for clean integration, post-merge verification, and
+  remote synchronization of `main`.
