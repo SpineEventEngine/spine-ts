@@ -238,3 +238,18 @@ documentation snippets; Prettier; Terraform `fmt -check` and `validate`; and
 `gpt-5.6-terra` / `medium`. Runtime self-introspection is unavailable; the
 configured profile and absence of a visible mismatch are the available metadata
 evidence. The endpoint is ready for the required final focused re-review.
+
+## Final Focused Re-review Dispatch
+
+The exact pushed endpoint is `c75610c6`. The final re-review is limited to the
+substantively affected concerns: HCL scanner false-positive resistance and
+maintainability; the public `GceNodeDiscovery` lifecycle reference; COS private
+Artifact Registry authentication and zero-state deployment procedures; and
+Monitoring resource-scope enforcement, per-zone surge wording, and dual-close
+failure retention.
+
+Style, TypeScript/API, and reliability use their existing roles with explicit
+`gpt-5.6-terra` / `high`. Documentation uses its immutable existing
+`gpt-5.6-luna` / `medium` role with `medium` explicit. Runtime metadata is
+recorded if exposed; otherwise immutable configured profiles and absence of a
+visible mismatch remain the acceptance evidence.
