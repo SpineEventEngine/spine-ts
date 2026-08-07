@@ -546,6 +546,7 @@ const expectedServerExports = [
   "InboxStorageOptions",
   "InboxWriteResult",
   "isDurableSubscriptionBindings",
+  "ListenerLifecycle",
   "MessageId",
   "PlainEntityVersionMetadata",
   "PrimitiveId",
