@@ -7,6 +7,7 @@ import { DeploymentSettings, type DeploymentEnvironment } from "./deployment-set
  * Supplies application-owned browser collaborators for one Gateway process.
  */
 export interface GatewayOptions {
+  // prettier-ignore
 
   /**
    * Configures browser authentication, authorization, context, registry, and bindings.
@@ -18,6 +19,7 @@ export interface GatewayOptions {
  * Starts one GKE-reachable standalone Gateway.
  */
 export const GatewayEntrypoint = Object.freeze({
+  // prettier-ignore
 
   /**
    * Starts the Gateway with injected process settings.

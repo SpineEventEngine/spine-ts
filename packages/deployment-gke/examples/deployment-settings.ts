@@ -7,6 +7,7 @@ export type DeploymentEnvironment = Readonly<Record<string, string | undefined>>
  * Reads and validates settings shared by application and Gateway entrypoints.
  */
 export const DeploymentSettings = Object.freeze({
+  // prettier-ignore
 
   /**
    * Reads one listener port.
