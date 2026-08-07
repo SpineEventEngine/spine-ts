@@ -86,3 +86,22 @@ checks only their original findings:
 Runtime self-introspection must be recorded when available. Otherwise the
 immutable configured role/profile and absence of visible mismatch are the
 acceptance evidence.
+
+## Re-review Wave 2 Results
+
+- Style and maintainability: clean. LIFO rollback, semantic production/test
+  ownership, cleanup rules, and moved-file maintainability are accepted.
+- Documentation: clean. The beginner guide states the separate Terraform and
+  deployment-guide boundary without task jargon or stale paths.
+- TypeScript and API documentation: clean. Root exports, registrar option
+  union, lifecycle contract, TSDoc, and generated API surface are accepted.
+- Performance and reliability: four original corrections are clean. One P1
+  remains: after lifecycle rollback succeeds, a later network, transport,
+  detachment, or resource cleanup failure can mark the Server terminal because
+  no started lifecycle remains, preventing a subsequent `start()` from retrying
+  unfinished cleanup. A focused regression must prove cleanup retries first
+  and terminal rejection follows only after cleanup completes.
+
+All configured reviewer profiles matched their dispatches; runtime
+self-introspection was unavailable and no mismatch or fallback was visible.
+Only the performance/reliability lane reopens after the focused P1 correction.
