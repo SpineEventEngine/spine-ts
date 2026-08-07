@@ -134,7 +134,9 @@ export class LeasedNodeRegistry {
     return this.start(async () => {
       signal?.throwIfAborted();
       LeaseRecords.requireTime(now);
-      const leases = (await this.readAll()).map(({ id, record }) => LeaseRecords.read(record, id));
+      const leases = (await this.readAll(signal)).map(({ id, record }) =>
+        LeaseRecords.read(record, id),
+      );
       signal?.throwIfAborted();
       return leases.filter((lease) => lease.expiresAt > now).map((lease) => lease.node);
     });
@@ -225,15 +227,19 @@ export class LeasedNodeRegistry {
     return pending;
   }
 
-  private async readAll(): Promise<readonly RecordEntry<string, ApplicationNodeLease>[]> {
+  private async readAll(
+    signal: AbortSignal | undefined,
+  ): Promise<readonly RecordEntry<string, ApplicationNodeLease>[]> {
     const records: RecordEntry<string, ApplicationNodeLease>[] = [];
     let after: RecordContinuation<string> | undefined;
     for (;;) {
+      signal?.throwIfAborted();
       const page = await this.#storage.queryEntries({
         sort: [{ field: "id" }],
         ...(after === undefined ? {} : { after }),
         limit: readPageSize,
       });
+      signal?.throwIfAborted();
       records.push(...page);
       if (page.length < readPageSize) return records;
       const last = page.at(-1);

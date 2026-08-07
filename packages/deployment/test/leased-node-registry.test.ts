@@ -112,6 +112,25 @@ describe("LeasedNodeRegistry", () => {
     expect(factory.limits).toEqual([256, 256, 256, 256]);
   });
 
+  it("stops pagination when cancellation arrives between lease pages", async () => {
+    const controller = new AbortController();
+    const factory = new AbortBetweenPagesFactory(() => controller.abort());
+    const registry = new LeasedNodeRegistry({ factory, namespace: "cancel-between-pages" });
+    for (let index = 0; index < 257; index++) {
+      await registry.register({
+        node: new ApplicationNode({
+          id: `node/${String(index)}`,
+          endpoint: `http://10.4.0.${String((index % 250) + 1)}`,
+        }),
+        registrationId: `process-${String(index)}`,
+        expiresAt: 1_000,
+      });
+    }
+
+    await expect(registry.read(0, controller.signal)).rejects.toThrow("aborted");
+    expect(factory.queries).toBe(1);
+  });
+
   it("rejects an atomicity-free factory before accepting lease lifecycle work", () => {
     expect(
       () => new LeasedNodeRegistry({ factory: new NonAtomicFactory(), namespace: "no-atomic" }),
@@ -396,5 +415,30 @@ class DelayedQueryFactory extends InMemoryStorageFactory {
 
   resolveQuery(): void {
     this.#resolve?.();
+  }
+}
+
+class AbortBetweenPagesFactory extends InMemoryStorageFactory {
+  queries = 0;
+
+  constructor(private readonly abortAfterFirstPage: () => void) {
+    super();
+  }
+
+  override createRecordStorage<I, R extends import("@bufbuild/protobuf").Message>(
+    context: import("@spine-event-engine/storage").StorageContext,
+    recordSpec: import("@spine-event-engine/storage").RecordSpec<I, R>,
+  ): import("@spine-event-engine/storage").RecordStorage<I, R> {
+    const storage = super.createRecordStorage(context, recordSpec);
+    const queryEntries = storage.queryEntries.bind(storage);
+    Object.defineProperty(storage, "queryEntries", {
+      value: async (query: import("@spine-event-engine/storage").RecordQuery<I>) => {
+        const page = await queryEntries(query);
+        this.queries += 1;
+        if (this.queries === 1) this.abortAfterFirstPage();
+        return page;
+      },
+    });
+    return storage;
   }
 }
