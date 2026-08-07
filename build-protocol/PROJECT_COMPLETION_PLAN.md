@@ -163,7 +163,8 @@ durably closed.
   subscription, and authenticated-subscription Proto records; implement the
   controlling JVM-style `DeliveryMonitor`; upgrade `validation-ts`; migrate all
   examples and affected documentation; and finish with a repository-wide
-  invention audit. T-0129 owns the frozen plan and dependency split.
+  invention audit. T-0129 owns the
+  [frozen plan and dependency split](planning/WAVE_8_STORAGE_CORRECTION_PLAN.md).
 - **Wave 9:** framework operational logging, a Google Cloud Logging adapter,
   and repository-wide copyright-header correction. Its Q&A will also decide
   the deferred logging questions and the application-node discovery overflow

@@ -1,6 +1,6 @@
 # T-0129: Wave 8 Storage Correction Plan
 
-Status: Planning review pending
+Status: Complete
 
 ## Objective
 
@@ -177,12 +177,21 @@ defers broad example/documentation work until runtime contracts stabilize.
 
 ## Review Dispositions
 
-- Style/maintainability: pending; relevant to task decomposition and removal of
-  overlapping abstractions.
-- Documentation: pending; relevant to the plan, ledger, and future doc scope.
-- TypeScript/API docs: pending; relevant to public and serialized contracts.
-- Performance/reliability: pending; relevant to provider layout, transactions,
-  delivery failures, and persistent lifecycle behavior.
+- Style/maintainability: accepted after two waves. Its final P2 naming omitted
+  Gateway integration paths is corrected explicitly in T-0138.
+- Documentation: clean final targeted result under the immutable Luna/medium
+  role after conditional validation prose, canonical navigation, and exact
+  `RemovalQuarantine` deletion were proved.
+- TypeScript/API docs: accepted after two waves. The final P1 batch is resolved
+  by literal descriptor evidence, public generated/facet classification, exact
+  constructor/builder contracts, precedence, and non-throwing monitor outcomes.
+- Performance/reliability: accepted after two waves. The final P1/P2 batch is
+  resolved by the complete durable-family matrix, engine-specific write/failure
+  behavior, hook-specific fallbacks, and in-flight stop ownership rule.
+
+No P0/P1 remains and every accepted P2 is resolved. A third complete wave is
+not opened under the protocol's review-round limit; deterministic verification
+proves the record-only final corrections.
 
 ## Verification Profile
 
@@ -190,3 +199,7 @@ Planning uses `verify:task -- --no-tests` after deterministic Markdown checks.
 The completed Wave 8 runtime sequence uses `verify:release` once after review
 convergence because it changes shared runtime, dependencies, generated types,
 and serialized storage contracts.
+
+The planning profile passed on 2026-08-07 after the standard ignored Proto
+output was generated. The initial clean-worktree attempt failed only because
+those derived files were absent; the repeated canonical command passed.

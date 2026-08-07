@@ -1,6 +1,6 @@
 # Wave 8 Storage Correction Plan
 
-Status: Planning review pending
+Status: Reviewed and ready for implementation
 
 Navigation: [Completion plan](../PROJECT_COMPLETION_PLAN.md) | [Task ledger](../tasks/T-0129-wave8-storage-correction/TASK.md)
 
@@ -62,14 +62,28 @@ Freezes every Wave 8 serialized record before runtime migration.
   names, numbers, labels/cardinality, scalar or message types, `type_name`,
   oneof/map membership, source order, and file/package type-URL options for node
   discovery, `SubscriptionRecord`, and `GatewayAuthenticatedSubscription`.
-  Public facets export the client and auth records; node discovery remains an
-  internal generated import. Compile/import tests reject obsolete
-  `spine.system.*` paths and accidental root/facet exposure of internal records.
+  Public facets export the client, auth, and deployment records. The package's
+  existing `generated/*.js` compatibility subpath remains a public low-level
+  surface; curated root/facet tests freeze the intended convenient imports.
+  Compile/import tests reject obsolete `spine.system.*` paths and old names.
   The checker rejects authored
   `optional` fields and incorrect declaration/comment spacing while preserving
   manifest-frozen copied Proto unchanged.
 - Removal boundary: no aliases, legacy packages, version fields, primitive IDs,
   revision/generation fields, or extra persisted messages.
+- Descriptor evidence is a checked-in literal expectation, not values copied
+  from the generated descriptor under test. It pins:
+  `spine.deployment.NodeRegistrationId.value = 1`;
+  `ApplicationNodeEndpoint.origin = 1` and non-optional
+  `tls_server_name = 2`; `ApplicationNodeLease.node_id = 1`, `endpoint = 2`,
+  `when_expires = 3`, and `registration_id = 4`;
+  `spine.client.SubscriptionRecord.id = 1`, `subscription = 2`, `status = 3`,
+  `when_created = 4`, and `when_activation_expires = 5`, with
+  `SubscriptionStatus.SS_UNSPECIFIED = 0`, `PENDING = 1`, and `ACTIVE = 2`;
+  and `spine.auth.GatewayAuthenticatedSubscription.id = 1`, `subscription = 2`,
+  and `when_expires = 3`. The fixture also pins message/scalar types, required
+  and validation options, packages, type-URL prefixes, source order, and the
+  absence of optional/oneof/map/reserved members unless this ledger says so.
 - Review: style/maintainability for checker code, documentation, and
   TypeScript/API docs. Reliability is N/A because this slice has no runtime
   persistence consumer.
@@ -88,10 +102,12 @@ type, ID extraction, and columns that define a JVM-style record specification.
   physically distinct; ordinary records default their source to their record
   type; column materialization, context and tenant isolation, queries, compare-
   and-set, and batch behavior remain correct.
-- Public contract: `RecordSpec` remains exported from
-  `@spine-event-engine/storage`. Its constructor takes `recordType`, the
-  existing message-ID schema or primitive-ID kind, `extractId`, optional
-  columns, and optional `sourceType`; `sourceType` defaults to `recordType`.
+- Public contract: `RecordSpec<I, R>` remains exported from
+  `@spine-event-engine/storage`. Its sole constructor argument is exactly an
+  object containing `recordType: GenMessage<R>`, `extractId: (record: R) => I`,
+  exactly one of `idSchema: GenMessage<I & Message>` or non-blank
+  `idKind: string`, optional `columns: readonly RecordColumn<R>[]`, and optional
+  `sourceType: GenMessage<Message>`; `sourceType` defaults to `recordType`.
   Read-only `sourceType`, `idType`, `recordType`, and `columns` accessors expose
   the specification. The old `schema`, `storageKey`, and
   `compatibilityFingerprint` accessors/inputs are removed without aliases.
@@ -159,17 +175,27 @@ default names.
   operations. Live tests cover commit, rollback, and injected mid-write failure
   for MySQL InnoDB/MyISAM and MariaDB InnoDB/Aria, explicitly distinguishing
   transactional atomicity from safe, reported partial progress on
-  nontransactional engines.
+  nontransactional engines. InnoDB failure rolls the whole unit back. MyISAM
+  and Aria write immutable event/state-history and Event Store rows before the
+  current Entity row; a failure rejects with the original storage operation
+  error, leaves only that deterministic prefix, starts no automatic retry or
+  claim/receipt record, and permits an identical later retry to idempotently
+  complete the missing suffix. Divergent immutable collisions fail.
 - Public contract: `MysqlStorageFactory.newBuilder()` returns exported
   `MysqlStorageFactoryBuilder`. The builder supplies `setOptions(options)`,
   `setTableName(recordType, name)`, grouped
   `setTableName(sourceType, recordType, name)`,
-  `useOperationFactory(factory)`, and `build()`. Exported
+  `useOperationFactory(factory)`, and asynchronous
+  `build(): Promise<MysqlStorageFactory>`. Exported
   `CreateOperationFactory` receives the resolved table specification and
   returns the create-table operation. Exact source-plus-record registration
   wins over record-only registration, which wins over the JVM default name.
   Public TSDoc, REFERENCE examples, and compile-time consumer tests freeze the
-  API.
+  API. The implementation task must add the exact generic declarations for
+  both table-name overloads and `CreateOperationFactory` to its TASK before its
+  RED test; a record-only create factory applies to every matching record type,
+  while an exact source-plus-record table registration has the stated naming
+  precedence.
 - Removal boundary: delete shared records/columns tables, spec metadata, schema
   hashes, and false multi-table atomicity claims for nontransactional engines.
 - Review: all four concerns.
@@ -189,12 +215,19 @@ Replaces shared kinds with JVM-familiar per-record kinds and customization.
 - Public contract: `DatastoreStorageFactory.newBuilder()` returns exported
   `DatastoreStorageFactoryBuilder` with `setClient(client)`, record-only and
   grouped `organizeRecords(...)` overloads, `useRecordStorage(...)`,
-  `useEntityStorage(...)`, and `build()`. Exported `RecordLayout`,
+  `useEntityStorage(...)`, and synchronous
+  `build(): DatastoreStorageFactory`. Exported `RecordLayout`,
   `CreateRecordStorage`, and `CreateEntityStorage` are the callback/layout
   types. An exact custom storage creator wins over an exact grouped layout,
   which wins over a record-only layout, which wins over the JVM default kind.
   Public TSDoc, REFERENCE examples, and compile-time consumer tests freeze the
-  API.
+  API. The implementation task must freeze the exact generic callback inputs
+  and return types before RED: record creators receive the `StorageContext`,
+  resolved `RecordSpec`, Datastore client, and finite scan bound and return a
+  `RecordStorage`; entity creators receive the `EntityStorageInput` and client
+  and return the provider entity handle. Exact source-plus-record creator wins
+  over record-only creator; exact source-plus-record layout then wins over
+  record-only layout and the JVM default.
 - Removal boundary: delete shared/canonical kinds, stored compatibility
   metadata, old-layout readers, and fallback scans presented as pushdown.
 - Review: all four concerns.
@@ -214,6 +247,8 @@ Uses the corrected `spine.deployment` record directly.
   record family.
 - Provider tests prove both MySQL table customization and Datastore layout or
   custom-storage selection reach the node-discovery record.
+- README, REFERENCE, deployment guide, and stale-string tests remove the old
+  `ApplicationNodeLease:v1`, encoding-version, and versioned-key claims.
 - Removal boundary: delete encoding version and primitive node/registration
   IDs. Do not add old-lease migration, Cloud Run, logging, or Gateway scaling.
 - Review: documentation, TypeScript/API docs, and performance/reliability;
@@ -245,8 +280,10 @@ coordination records.
 
 - Dependencies: T-0137.
 - Ownership: authenticated-subscription code in `packages/auth/**`,
-  `packages/server/src/server/durable-subscription-bindings.ts` and its mirrored
-  tests, and focused Browser/Gateway tests.
+  `packages/server/src/server/durable-subscription-bindings.ts`,
+  `packages/server/src/server/browser-server.ts`, `packages/server/src/index.ts`,
+  their mirrored tests including `packages/server/test/server/server.test.ts`
+  and `packages/server/test/index.test.ts`, and focused Browser/Gateway tests.
 - RED-first acceptance: subscription ID, subscription, and `when_expires`
   round-trip directly; expiry and single-Gateway restart behavior remain
   correct; the Topic retains the resolved Actor/Tenant context; an inspected
@@ -275,6 +312,13 @@ exclusion mechanism.
   customization reaches `InboxMessage` and shard-session records. Remote
   delivery tests prove uncertain removal no longer writes or consults
   `RemovalQuarantine` or fingerprints and uses no replacement persistent type.
+- The provider conformance matrix covers every surviving durable family:
+  current `EntityRecord`, grouped state-history `EntityRecord`, grouped
+  event-history `Event`, Event Store `Event`, `InboxMessage`, shard-session
+  record, `SubscriptionRecord`, `GatewayAuthenticatedSubscription`,
+  `ApplicationNodeLease`, and TenantIndex. TenantIndex stores the existing
+  `spine.core.TenantId` directly in its own layout, replacing the generic
+  `StringValue` record without inventing another Proto.
 - Removal boundary: delete JSON-in-`Any`, message claims, dedup guards, delivery
   attempts, and quarantine persistence. T-0140 owns monitor policy.
 - Review: style/maintainability, TypeScript/API docs, and
@@ -300,7 +344,9 @@ Replaces attempt/exhaustion policy with JVM-style failure actions.
   worker acquire it without concurrent duplicate delivery. A durable mark
   failure leaves the row
   pending, stops later same-target messages, continues independent targets,
-  releases the shard, and permits a later run.
+  releases the shard, and permits a later run. Stop waits for every in-flight
+  dispatch and action to settle before releasing ownership; no replacement can
+  concurrently dispatch that shard.
 - Public contract: exported class `DeliveryMonitor` defines
   `shouldContinueAfter(stage)`, `onDeliveryStarted(shard)`,
   `onDeliveryCompleted(stats)`, `onReceptionFailure(reception)`,
@@ -311,13 +357,25 @@ Replaces attempt/exhaustion policy with JVM-style failure actions.
   `repeatDispatching()`, each returning an exported `ReceptionAction` whose
   `execute()` returns `Promise<void>`. Pickup callbacks analogously return the
   exported action supplied by `FailedPickUp` or `AlreadyPickedUp`. The default
-  monitor marks failed reception delivered, propagates genuine pickup failure,
-  and does nothing when another node owns the shard. Remove old observer-only
+  monitor marks failed reception delivered, returns a non-throwing failed
+  delivery result for genuine pickup failure, and returns a non-throwing
+  skipped result when another node owns the shard. `DeliveryMonitor` is
+  instantiable and every callback accepts either its direct result or a
+  `Promise` of it. Remove old observer-only
   callback names (`onStarted`, `onPage`, `onSkipped`, `onFailure`,
   `onCompleted`) and delivery-attempt/retry-decision exports; retain a delivery
   result/statistics type only where the new completion callback and public
   delivery method require it. Root-export and declaration tests freeze the
   cutover.
+- Deterministic fallback semantics are hook-specific: a start or continuation
+  hook failure touches no later row, stops that shard, and releases it; a
+  reception callback/action failure falls back once to mark-delivered; if that
+  durable action fails, the row remains pending and later same-target messages
+  stop while independent targets continue; pickup callback/action failure
+  returns failed without ownership; already-picked callback/action failure
+  returns skipped; completion callback failure occurs only after settled work
+  and release and cannot change persisted rows. No path rejects the scheduler
+  loop or creates an unhandled rejection.
 - Removal boundary: delete delivery attempts, exhaustion thresholds, retry
   decision machinery, quarantine/dead-letter behavior, and related public
   exports. Do not add timers, backoff, scheduler policy, or failure records.
@@ -336,13 +394,18 @@ validation.
   compatibility tests.
 - RED-first acceptance: tests expose the old package/version boundary, then
   prove constraints, packed violations, server validation, and examples use
-  the renamed current package without widening framework APIs.
+  the renamed current package without widening framework APIs. The canonical
+  target is the old-to-new mapping `@spine-event-engine/validation-ts`
+  `2.0.0-snapshot.4` to `@spine-event-engine/validation`
+  `2.0.0-snapshot.7`.
 - Dependency evidence at planning time: the npm registry exposes
   `@spine-event-engine/validation-ts` snapshot `.4`, while the upstream `dev`
   branch at `57f30687` declares `@spine-event-engine/validation`
   `2.0.0-snapshot.7`. Implementation must recheck npm and upstream. If `.7` is
   still unpublished, record the external dependency gate, continue every
-  independent Wave 8 task, and do not invent vendoring or a Git dependency.
+  independent Wave 8 task, keep current installation prose truthful, and do
+  not invent vendoring or a Git dependency. Documentation teaches the renamed
+  package/version only after the registry dependency resolves.
 - Review: TypeScript/API docs and performance/reliability; documentation if
   installation prose changes. Style is N/A for manifest-only changes.
 - Verification: focused `verify:task` across validation consumers.
@@ -378,9 +441,11 @@ Aligns every current public claim with the stabilized Wave 8 runtime.
   `@spine-event-engine/validation-ts` import/link, `RemovalQuarantine`, or false
   atomicity claim. Corrected docs
   teach per-record layouts, customization, structural validation, engine
-  limits, `DeliveryMonitor`, the package rename to
-  `@spine-event-engine/validation` `2.0.0-snapshot.7`, and the no-migration
-  cutover in beginner order. Deterministic checks also validate every
+  limits, `DeliveryMonitor`, the resolved validation package status, and the
+  no-migration cutover in beginner order. If snapshot `.7` remains externally
+  blocked, docs explicitly retain the currently installable package/version
+  and describe the pending rename only in the internal task record, never as a
+  usable end-user command. Deterministic checks also validate every
   README-to-REFERENCE link and audience statement, USER_GUIDE presence and
   navigation, example command/path, Mermaid diagram, and Markdown link.
 - Review: documentation and TypeScript/API docs; performance/reliability for

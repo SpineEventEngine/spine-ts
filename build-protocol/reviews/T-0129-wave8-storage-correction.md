@@ -95,3 +95,78 @@ package and type throughout the corrected plan.
 
 No P0 or P3 findings were returned. One consolidated planning correction now
 addresses the complete accepted batch.
+
+## Focused Re-Review Assignments
+
+The corrected immutable endpoint is `8ede59e3`. Every concern changed
+substantively, so all four existing lanes re-review only the accepted findings
+and their correction interactions.
+
+- Style/maintainability: explicit `gpt-5.6-terra` / `high`.
+- TypeScript/API docs: explicit `gpt-5.6-terra` / `high`.
+- Performance/reliability: explicit `gpt-5.6-terra` / `high`.
+- Documentation: immutable existing role profile `gpt-5.6-luna` / `medium`;
+  the surface cannot accept Luna as an override, so the role selection and
+  prompt name the fixed profile instead.
+
+Subagents may not edit files or spawn subagents. Actual metadata evidence is
+recorded with the results.
+
+## Focused Re-Review Results
+
+- Style/maintainability ran under the explicit existing role and
+  `gpt-5.6-terra` / `high`; no independent self-introspection was exposed and no
+  fallback was visible. Result: one P2 for omitted T-0138 integration files.
+- TypeScript/API docs ran under the explicit existing role and
+  `gpt-5.6-terra` / `high`; no independent self-introspection was exposed and no
+  fallback was visible. Result: four P1 concerning Proto export/descriptor
+  evidence, exact provider declarations, and DeliveryMonitor settlement.
+- Performance/reliability ran under the explicit existing role and
+  `gpt-5.6-terra` / `high`; no independent self-introspection was exposed and no
+  fallback was visible. Result: two P1 and two P2 concerning the complete
+  durable-family matrix, engine failure outcomes, hook fallbacks, and stop
+  races.
+- Documentation ran through the immutable existing `gpt-5.6-luna` / `medium`
+  role; the surface exposes no independent self-introspection and showed no
+  fallback. Result: one P1 for conditional validation-version prose and one P2
+  for completion-plan navigation. Exact `RemovalQuarantine` deletion was clean.
+
+No P0 or P3 was reported. One final targeted correction batch addresses every
+P1/P2 above. After deterministic proof, only the substantively affected API,
+reliability, and documentation P1 concerns receive a targeted convergence
+check; the style P2 is mechanically verifiable from named paths.
+
+## Final Convergence
+
+- The documentation reviewer performed the permitted final targeted check
+  under the immutable `gpt-5.6-luna` / `medium` role. No independent runtime
+  self-introspection was exposed and no fallback was visible. Result: clean;
+  no P0/P1 and no executable P2 remains.
+- The API and reliability second-wave findings are resolved in the task plan by
+  mechanically inspectable literal contracts, complete enumerations, exact
+  precedence, and deterministic state/outcome rules. The protocol says not to
+  open a third complete wave automatically after two waves; focused
+  verification is the remaining acceptance gate.
+- Style's final P2 is resolved by the exact source/test paths now assigned to
+  T-0138.
+
+All four canonical concerns have an accepted disposition. No P0/P1 remains,
+all accepted P2 findings are resolved, and review is converged pending
+verification.
+
+## Verification
+
+- `pnpm exec prettier --check` over the four corrected planning records passed.
+- `pnpm docs:audience:check` passed.
+- `git diff --check` passed.
+- The first `pnpm verify:task -- --no-tests` attempt found that a clean worktree
+  lacked the ignored generated Proto output. This is a repository generation
+  precondition, not a changed-source failure.
+- `pnpm proto:generate` passed all source, example quality, and frozen descriptor
+  checks.
+- The repeated `pnpm verify:task -- --no-tests` passed TypeScript builds,
+  tooling typecheck, cleanup/TSDoc enforcement, formatting, documentation
+  audience checks, and release readiness (76 package imports, 48 package
+  assets, and 313 relative Markdown links).
+
+Review and verification are complete. T-0129 is ready for integration.
