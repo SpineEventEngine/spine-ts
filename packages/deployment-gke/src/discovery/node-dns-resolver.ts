@@ -39,7 +39,7 @@ export class NodeDnsResolver implements GkeDnsResolver {
     const resolver = this.#create();
     if (signal.aborted) {
       resolver.cancel();
-      throw new DOMException("DNS resolution was cancelled.", "AbortError");
+      signal.throwIfAborted();
     }
     const cancel = () => {
       resolver.cancel();
@@ -50,7 +50,7 @@ export class NodeDnsResolver implements GkeDnsResolver {
         resolver.resolve4(serviceName, { ttl: true }),
         resolver.resolve6(serviceName, { ttl: true }),
       ]);
-      if (signal.aborted) throw new DOMException("DNS resolution was cancelled.", "AbortError");
+      signal.throwIfAborted();
       const records = [ipv4, ipv6].flatMap((result) => {
         if (result.status === "fulfilled") return result.value;
         if (NodeDnsResolver.empty(result.reason)) return [];

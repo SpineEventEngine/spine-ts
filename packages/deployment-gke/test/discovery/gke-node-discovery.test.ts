@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/require-await */
 
 import { describe, expect, it } from "vitest";
 import { DynamicUnaryForwarder, type DynamicUnaryClient } from "@spine-event-engine/auth";
@@ -42,12 +42,14 @@ describe("GkeNodeDiscovery", () => {
     const resolver = new NodeDnsResolver(() => ({
       resolve4: async () =>
         await new Promise<readonly { readonly address: string; readonly ttl: number }[]>((resolve) => {
-          release = () => resolve([]);
+          release = () => {
+            resolve([]);
+          };
         }),
       resolve6: async () => [],
       cancel: () => {
         cancelled += 1;
-        release?.();
+        if (release !== undefined) release();
       },
     }));
     const controller = new AbortController();
