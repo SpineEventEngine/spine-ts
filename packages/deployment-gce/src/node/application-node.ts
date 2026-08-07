@@ -1,18 +1,44 @@
 import { ApplicationNode } from "@spine-event-engine/deployment";
 
-import type { GceMetadata } from "./metadata.js";
+import type { GceMetadata } from "../metadata/gce-metadata-service.js";
 
-/** Configures the reachable application endpoint derived from GCE metadata. */
+/**
+ * Configures the reachable application endpoint derived from GCE metadata.
+ */
 export interface GceApplicationNodeOptions {
+  // prettier-ignore
+
+  /**
+   * Supplies the reachable gRPC TCP port.
+   */
   readonly port: number;
+
+  /**
+   * Overrides the default private HTTP origin for private DNS or a proxy.
+   */
   readonly endpoint?: string;
+
+  /**
+   * Supplies the TLS authority required by an HTTPS endpoint.
+   */
   readonly tlsServerName?: string;
 }
 
-/** Builds one canonical application node from trusted GCE metadata. */
+/**
+ * Builds one canonical application node from trusted GCE metadata.
+ */
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class
 export class GceApplicationNode {
-  /** Creates a stable GCE node using the private HTTP address by default. */
+  // prettier-ignore
+
+  /**
+   * Creates a stable GCE node using the private HTTP address by default.
+   *
+   * @param metadata Supplies trusted project, zone, numeric instance ID, and private address.
+   * @param options Supplies the port and optional canonical endpoint/TLS override.
+   * @returns A canonical application node whose ID is `gce/<project>/<zone>/<instance>`.
+   * @throws Error When metadata identity or endpoint/TLS values are invalid.
+   */
   static create(metadata: GceMetadata, options: GceApplicationNodeOptions): ApplicationNode {
     if (!metadata.projectId.trim() || !metadata.zone.trim() || !/^\d+$/.test(metadata.instanceId))
       throw new Error("GCE metadata identity is invalid.");

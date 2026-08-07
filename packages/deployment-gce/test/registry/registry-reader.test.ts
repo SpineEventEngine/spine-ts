@@ -12,7 +12,7 @@ import { SubscriptionSchema, TopicSchema } from "@spine-event-engine/proto/clien
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
-import { GceRegistrar, GceRegistryReader } from "../src/index.js";
+import { GceRegistrar, GceRegistryReader } from "../../src/index.js";
 
 describe("GceRegistryReader", () => {
   it("keeps discovery active through crash expiry, zero, and later return", async () => {

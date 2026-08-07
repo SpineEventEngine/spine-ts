@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { GceMetadataService } from "../src/index.js";
+import { GceMetadataService } from "../../src/index.js";
 
 describe("GceMetadataService", () => {
   it("reads documented GCE metadata paths with the required header", async () => {

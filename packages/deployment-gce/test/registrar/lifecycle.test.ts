@@ -4,7 +4,7 @@
 import { ApplicationNode } from "@spine-event-engine/deployment";
 import { describe, expect, it } from "vitest";
 
-import { GceRegistrar } from "../src/index.js";
+import { GceRegistrar } from "../../src/index.js";
 
 describe("GceRegistrar lifecycle", () => {
   it("requires either an explicit node or a metadata port", () => {
@@ -151,7 +151,7 @@ describe("GceRegistrar lifecycle", () => {
     let aborted = false;
     const metadata = {
       read: (signal: AbortSignal) =>
-        new Promise<import("../src/index.js").GceMetadata>((done) => {
+        new Promise<import("../../src/index.js").GceMetadata>((done) => {
           signal.addEventListener("abort", () => (aborted = true));
           resolve = () => {
             done({ projectId: "p", zone: "z", instanceId: "1", privateAddress: "10.0.0.1" });
@@ -271,7 +271,7 @@ describe("GceRegistrar lifecycle", () => {
     let closed = false;
     const metadata = {
       read: (signal: AbortSignal) =>
-        new Promise<import("../src/index.js").GceMetadata>((_done, reject) => {
+        new Promise<import("../../src/index.js").GceMetadata>((_done, reject) => {
           signal.addEventListener("abort", () => {
             reject(new Error("aborted"));
           });

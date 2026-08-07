@@ -1,10 +1,10 @@
 import { type ApplicationNode, type LeasedNodeRegistry } from "@spine-event-engine/deployment";
 import { randomUUID } from "node:crypto";
 
-import { GceApplicationNode } from "./application-node.js";
-import { GceMetadataService, type GceMetadataProvider } from "./metadata.js";
+import { GceMetadataService, type GceMetadataProvider } from "../metadata/gce-metadata-service.js";
+import { GceApplicationNode } from "../node/application-node.js";
 import {
-  runGceOperation,
+  GceOperationRunner,
   systemGceDeadlines,
   systemGceScheduler,
   type GceDeadlineFactory,
@@ -20,13 +20,13 @@ interface GceRegistrarBaseOptions {
   readonly operationTimeoutMs?: number;
 }
 
-interface ExplicitGceRegistrarNodeOptions extends GceRegistrarBaseOptions {
+interface ExplicitRegistrarOptions extends GceRegistrarBaseOptions {
   readonly node: ApplicationNode;
   readonly metadata?: never;
   readonly port?: never;
 }
 
-interface MetadataGceRegistrarNodeOptions extends GceRegistrarBaseOptions {
+interface MetadataRegistrarOptions extends GceRegistrarBaseOptions {
   readonly node?: undefined;
   readonly metadata?: GceMetadataProvider;
   readonly port: number;
@@ -37,16 +37,26 @@ interface MetadataGceRegistrarNodeOptions extends GceRegistrarBaseOptions {
  *
  * Supply either an explicit node or a metadata-derived node with its port.
  */
-export type GceRegistrarOptions = ExplicitGceRegistrarNodeOptions | MetadataGceRegistrarNodeOptions;
+export type GceRegistrarOptions = ExplicitRegistrarOptions | MetadataRegistrarOptions;
 
 /**
  * Couples registrar lifecycle work to an application listener lifecycle.
  */
 export interface GceRegistrarLifecycle {
-  /** Starts registration only after the listener is reachable. */
+  // prettier-ignore
+
+  /**
+   * Starts registration only after the listener is reachable.
+   *
+   * @returns Completes after the initial registration attempt settles.
+   */
   start(): Promise<void>;
 
-  /** Removes the owned lease before listener network shutdown. */
+  /**
+   * Removes the owned lease before listener network shutdown.
+   *
+   * @returns Completes after all admitted work and removal settle.
+   */
   close(): Promise<void>;
 }
 
@@ -63,6 +73,7 @@ export class GceRegistrar {
   readonly #now: () => number;
   readonly #deadlines: GceDeadlineFactory;
   readonly #operationTimeoutMs: number;
+  readonly #operations: GceOperationRunner;
   #cancel: (() => void) | undefined;
   #closed = false;
   #started = false;
@@ -93,6 +104,11 @@ export class GceRegistrar {
     )
       throw new RangeError("GCE registrar operation timeout must be a positive safe integer.");
     this.#operationTimeoutMs = options.operationTimeoutMs ?? 20_000;
+    this.#operations = new GceOperationRunner(
+      this.#deadlines,
+      this.#operationTimeoutMs,
+      this.#abort.signal,
+    );
   }
 
   /**
@@ -120,7 +136,11 @@ export class GceRegistrar {
     this.#confirmed = registered;
   }
 
-  /** Removes this registrar's lease after fencing scheduled work. */
+  /**
+   * Removes this registrar's lease after fencing scheduled work.
+   *
+   * @returns Completes after admitted work settles and owned-row removal is attempted.
+   */
   async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
@@ -135,7 +155,11 @@ export class GceRegistrar {
       );
   }
 
-  /** Exposes listener-ready start and pre-network-close removal to a server assembly. */
+  /**
+   * Exposes listener-ready start and pre-network-close removal to a server assembly.
+   *
+   * @returns The lifecycle callbacks accepted by `Server.addListenerLifecycle()`.
+   */
   lifecycle(): GceRegistrarLifecycle {
     return { start: () => this.start(), close: () => this.close() };
   }
@@ -191,12 +215,7 @@ export class GceRegistrar {
     operation: (signal: AbortSignal) => Promise<Result>,
     includeShutdown = true,
   ): Promise<Result> {
-    return runGceOperation(
-      this.#deadlines,
-      this.#operationTimeoutMs,
-      includeShutdown ? this.#abort.signal : undefined,
-      operation,
-    );
+    return this.#operations.run(operation, includeShutdown);
   }
 
   async #resolveNode(): Promise<void> {
@@ -206,12 +225,7 @@ export class GceRegistrar {
     if (metadata === undefined || port === undefined)
       throw new Error("GCE registrar has no node source.");
     this.#node = GceApplicationNode.create(
-      await runGceOperation(
-        this.#deadlines,
-        this.#operationTimeoutMs,
-        this.#abort.signal,
-        (signal) => metadata.read(signal),
-      ),
+      await this.#operations.run((signal) => metadata.read(signal)),
       { port },
     );
   }

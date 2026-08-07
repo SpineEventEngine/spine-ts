@@ -4,7 +4,7 @@
 import { ApplicationNode } from "@spine-event-engine/deployment";
 import { describe, expect, it } from "vitest";
 
-import { GceRegistrar } from "../src/index.js";
+import { GceRegistrar } from "../../src/index.js";
 
 describe("GceRegistrar recovery", () => {
   it("confirms a lost initial write through the same owner before renewing", async () => {

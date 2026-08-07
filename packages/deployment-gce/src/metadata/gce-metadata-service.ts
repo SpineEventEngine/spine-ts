@@ -2,21 +2,57 @@
  * Supplies the trusted GCE metadata used to derive one stable application node.
  */
 export interface GceMetadata {
+  // prettier-ignore
+
+  /**
+   * Identifies the Google Cloud project containing the instance.
+   */
   readonly projectId: string;
+
+  /**
+   * Identifies the GCE zone containing the instance.
+   */
   readonly zone: string;
+
+  /**
+   * Identifies the numeric GCE instance.
+   */
   readonly instanceId: string;
+
+  /**
+   * Supplies the instance's private IPv4 or IPv6 address.
+   */
   readonly privateAddress: string;
 }
 
-/** Retrieves trusted instance metadata from the GCE metadata service. */
+/**
+ * Retrieves trusted instance metadata from the GCE metadata service.
+ */
 export interface GceMetadataProvider {
-  /** Reads the identity and private address of the current instance. */
+  // prettier-ignore
+
+  /**
+   * Reads the identity and private address of the current instance.
+   *
+   * @param signal Cancels the metadata request during registrar shutdown.
+   * @returns The validated metadata values.
+   */
   read(signal: AbortSignal): Promise<GceMetadata>;
 }
 
-/** Reads GCE metadata using the required metadata-service request header. */
+/**
+ * Reads GCE metadata using the required metadata-service request header.
+ */
 export class GceMetadataService implements GceMetadataProvider {
-  /** Reads and validates the instance identity and private address. */
+  // prettier-ignore
+
+  /**
+   * Reads and validates the instance identity and private address.
+   *
+   * @param signal Cancels all four metadata-service reads.
+   * @returns The normalized GCE metadata.
+   * @throws Error When a response is unsuccessful or contains invalid identity data.
+   */
   async read(signal: AbortSignal): Promise<GceMetadata> {
     const root = "http://metadata.google.internal/computeMetadata/v1";
     const requests = new AbortController();

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { GceApplicationNode } from "../src/index.js";
+import { GceApplicationNode } from "../../src/index.js";
 
 describe("GceApplicationNode", () => {
   it("derives a stable private node and preserves canonical overrides", () => {
