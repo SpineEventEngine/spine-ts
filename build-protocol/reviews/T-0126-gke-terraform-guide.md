@@ -283,3 +283,18 @@ The implementer is dispatched with explicit configured `gpt-5.6-terra` /
 `medium`. Runtime self-introspection is recorded if exposed; otherwise the
 immutable configured profile and absence of visible mismatch are the available
 acceptance evidence.
+
+## Final Correction Result And Recheck
+
+Correction `80509531` is pushed. Six focused GKE policy tests plus Server/GKE
+typechecks, the unchanged snippet checker, ESLint, TSDoc, cleanup, audience,
+and diff checks pass. The guide now mirrors and links the shipped entrypoints,
+the lifecycle TSDoc distinguishes environment owners, and the archive test
+discovers the generated filename.
+
+Style, documentation, and TypeScript/API receive one narrow recheck of only
+their accepted findings. Style and API use explicit configured
+`gpt-5.6-terra` / `high`; documentation uses its immutable configured
+`gpt-5.6-luna` / `medium` role with `medium` explicit. Runtime metadata is
+recorded if exposed; otherwise the configured profile and absence of visible
+mismatch remain the acceptance evidence. Reliability remains closed.
