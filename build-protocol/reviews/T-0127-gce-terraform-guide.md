@@ -168,6 +168,21 @@ Only the substantively affected style and TypeScript/API concerns require one
 last confirmation; production behavior and the clean documentation/reliability
 lanes are unchanged.
 
+## Deterministic Correction Disposition
+
+No further specialist round is required. The canonical protocol states that
+deterministic corrections do not reopen review lanes. The two style findings
+are closed directly by the focused scanner regression suite: it now rejects a
+nested resource header and the autoscaler assertion calls the same scanner.
+The TypeScript/API finding is closed by successful TypeDoc generation and API
+validation with the `deployment-gce` entry point present.
+
+The execution surface also reported its child-thread limit when an unnecessary
+confirmation dispatch was attempted. This is recorded as a tooling limitation,
+not a task blocker, because the correction class and deterministic evidence
+fully satisfy the protocol. All four canonical concerns now have accepted
+dispositions. T-0127 proceeds to its one post-convergence release gate.
+
 ## Correction Acceptance And Focused Re-review Dispatch
 
 The pushed correction endpoint is `0f77f672`. It adds the public
