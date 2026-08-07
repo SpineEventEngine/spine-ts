@@ -234,8 +234,8 @@ export class GkeNodeDiscovery implements NodeDiscovery {
       );
       if (nodes.length > 0) this.#scheduleExpiry(ttlMs);
     } catch {
+      if (controller.signal.aborted || epoch !== this.#epoch) return;
       if (
-        !controller.signal.aborted &&
         this.#validUntilMs !== undefined &&
         this.#now() >= this.#validUntilMs &&
         !this.#expired &&
@@ -245,7 +245,7 @@ export class GkeNodeDiscovery implements NodeDiscovery {
         this.#expired = true;
         this.#empty = true;
       }
-      if (!controller.signal.aborted) this.#schedule(this.#refreshIntervalMs);
+      this.#schedule(this.#refreshIntervalMs);
     } finally {
       this.#controllers.delete(controller);
     }

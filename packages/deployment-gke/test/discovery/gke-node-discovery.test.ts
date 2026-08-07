@@ -496,6 +496,50 @@ describe("GkeNodeDiscovery", () => {
     await stop();
   });
 
+  it("discards an older rejection after a newer short-TTL answer succeeds", async () => {
+    const scheduler = new Scheduler();
+    let now = 0;
+    let calls = 0;
+    let rejectOlder: ((reason: Error) => void) | undefined;
+    const discovery = new GkeNodeDiscovery({
+      serviceName: "api.default.svc.cluster.local",
+      port: 8080,
+      refreshIntervalMs: 5_000,
+      now: () => now,
+      resolver: {
+        resolve: async () => {
+          calls += 1;
+          if (calls === 1) return [{ address: "10.0.0.1", ttl: 2 }];
+          if (calls === 2)
+            return await new Promise<readonly never[]>((_resolve, reject) => {
+              rejectOlder = reject;
+            });
+          return [{ address: "10.0.0.2", ttl: 1 }];
+        },
+      },
+      scheduler,
+    });
+    const snapshots: ApplicationNode[][] = [];
+    const stop = discovery.watch((nodes) => snapshots.push([...nodes]));
+
+    await scheduler.tick();
+    now = 2_000;
+    await scheduler.tick();
+    await scheduler.tick();
+    await scheduler.tick();
+    rejectOlder?.(new Error("late DNS failure"));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(scheduler.delays.slice(-1)).toEqual([1_000]);
+    expect(snapshots.map((nodes) => nodes[0]?.endpoint ?? "empty")).toEqual([
+      "http://10.0.0.1:8080",
+      "empty",
+      "http://10.0.0.2:8080",
+    ]);
+    await stop();
+  });
+
   it("does not repeat an empty snapshot when an empty answer is followed by failure", async () => {
     const scheduler = new Scheduler();
     let now = 0;
