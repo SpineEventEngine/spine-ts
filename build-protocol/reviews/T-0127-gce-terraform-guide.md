@@ -116,6 +116,44 @@ implementer is explicitly configured as `gpt-5.6-terra` / `medium`; runtime
 metadata is recorded if exposed, otherwise configured profile and absence of a
 visible mismatch remain the acceptance evidence.
 
+## Final Focused Re-review Results
+
+- Style and maintainability: P2, the scanner accepts a `resource` header nested
+  inside another HCL block because it does not track root depth. P2, the
+  autoscaler existence assertion still uses a raw header search instead of the
+  scanner. All other scanner cases and maintainability concerns are clean.
+- TypeScript/API: P2, `typedoc.json` omits the public
+  `packages/deployment-gce/src/index.ts` entry point. The lifecycle reference,
+  declarations, examples, exports, and package archive are otherwise clean.
+- Documentation: clean. COS private-image authentication, zero-instance
+  replacement/rollback checks, per-zone surge wording, and discovery lifecycle
+  guidance are accurate and beginner-usable.
+- Performance and reliability: clean. Metric scope/zero constraints, regional
+  update capacity, credential lifecycle, and failure-safe discovery closure
+  match current primary documentation and the recorded contracts. The focused
+  2-file / 13-test suite passed.
+
+All reviewers reported the exact intended existing roles and explicit
+profiles: Terra/high for style, TypeScript/API, and reliability; immutable
+Luna/medium for documentation. Runtime self-introspection was unavailable in
+all lanes and no visible mismatch occurred.
+
+## Deterministic Final Correction Dispatch
+
+The original implementer receives one non-substantive correction batch:
+
+1. Make the HCL scanner accept resource blocks only at root depth and add a
+   nested-resource negative fixture.
+2. Route the autoscaler-existence assertion through that scanner.
+3. Add `packages/deployment-gce/src/index.ts` to the TypeDoc entry points and
+   run the API documentation check.
+
+These deterministic test/documentation corrections reopen only the affected
+style and TypeScript/API concerns. The existing implementer role remains
+explicitly configured as `gpt-5.6-terra` / `medium`; runtime metadata is
+recorded if exposed, otherwise the immutable profile and no visible mismatch
+remain the acceptance evidence.
+
 ## Correction Acceptance And Focused Re-review Dispatch
 
 The pushed correction endpoint is `0f77f672`. It adds the public
