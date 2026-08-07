@@ -34,3 +34,30 @@ orchestrator will record exposed runtime metadata before accepting each result;
 when self-introspection is unavailable, it will record the immutable configured
 role/profile and that limitation, rejecting only a visible mismatch or fallback.
 
+## Review Wave 1 Results
+
+All four results were collected before correction dispatch. The Desktop
+surface exposed no independent runtime self-introspection. The configured
+immutable roles/profiles matched every explicit dispatch, and no fallback or
+visible mismatch occurred.
+
+- Style and maintainability (`gpt-5.6-terra` / `high`): P1 reverse-order
+  listener rollback is implemented FIFO; P2 split the 499-line GCE entrypoint
+  and 1,095-line test monolith by metadata, registrar, discovery, and package
+  entrypoint semantics.
+- Documentation (`gpt-5.6-luna` / `medium`): P2 state in beginner-facing terms
+  that Terraform modules and deployment procedures are supplied by the
+  separate deployment guide. All other reviewed claims were clean.
+- TypeScript and API documentation (`gpt-5.6-terra` / `high`): the shared P1
+  rollback defect; P2 export `ListenerLifecycle`; P2 make registrar options a
+  truthful union requiring either an explicit node or metadata port.
+- Performance and reliability (`gpt-5.6-terra` / `high`): P1 abort sibling
+  metadata requests after one fails; P1 prevent post-close renewal scheduling;
+  P1 observe cancellation between leased-registry pages; the shared P1 LIFO
+  rollback defect; and P1 make a fully rolled-back listener-start failure
+  terminal rather than restartable.
+- Mechanical: remove the trailing blank line reported by `git diff --check`.
+
+One correction batch returns every accepted P1/P2 finding to the existing
+implementation owner. Re-review is limited to the lanes substantively affected
+by the corrections.
