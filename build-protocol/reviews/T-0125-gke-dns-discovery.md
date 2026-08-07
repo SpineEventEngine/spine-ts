@@ -83,3 +83,20 @@ only their original findings:
 
 Runtime self-introspection is recorded when exposed; otherwise the immutable
 configured role/profile and absence of visible mismatch are acceptance evidence.
+
+## Re-review Wave 2 Results
+
+- Style and maintainability: clean.
+- Documentation: clean.
+- TypeScript and API documentation: one P2 remains. `DnsLookup` is exposed by
+  the public `NodeDnsResolver` constructor but is absent from the package-root
+  export and reference documentation.
+- Performance and reliability: two P1 findings remain. An expiry-triggered
+  retry that also stalls leaves no later retry scheduled; and an older stalled
+  lookup can resolve after a newer successful retry and overwrite current
+  membership. Add continuing bounded retry scheduling plus an ordering/epoch
+  fence that discards obsolete completions.
+
+All configured reviewer profiles matched their dispatches; runtime
+self-introspection was unavailable and no mismatch or fallback was visible.
+Only API and performance/reliability reopen after the focused correction.
