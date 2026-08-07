@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package spine.auth;
+
+import "google/protobuf/timestamp.proto";
+import "spine/client/subscription.proto";
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.io";
+option java_multiple_files = true;
+
+// A subscription accepted through an authenticated Gateway request.
+message GatewayAuthenticatedSubscription {
+
+    // The identifier used to store this record.
+    spine.client.SubscriptionId id = 1 [(required) = true, (validate) = true];
+
+    // The authenticated subscription, including its Actor and Tenant context.
+    spine.client.Subscription subscription = 2 [(required) = true, (validate) = true];
+
+    // The time after which the authenticated subscription is no longer valid.
+    google.protobuf.Timestamp when_expires = 3 [(required) = true];
+}

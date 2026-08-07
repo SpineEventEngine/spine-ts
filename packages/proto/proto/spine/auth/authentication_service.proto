@@ -5,9 +5,14 @@ package spine.auth;
 import "google/protobuf/timestamp.proto";
 import "spine/core/tenant_id.proto";
 import "spine/core/user_id.proto";
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.io";
+option java_multiple_files = true;
 
 // The provider-neutral gateway contract for informational browser context.
 service AuthenticationService {
+
   // Resolves the current actor, tenant, and application-session expiry.
   rpc ResolveContext(ResolveContextRequest) returns (ResolveContextResponse);
 }
@@ -17,7 +22,13 @@ message ResolveContextRequest {}
 
 // Informational session context; each later request is independently authorized.
 message ResolveContextResponse {
+
+  // The user represented by the authenticated request.
   spine.core.UserId actor = 1;
+
+  // The tenant in whose scope the request is authorized.
   spine.core.TenantId tenant = 2;
+
+  // The time after which the resolved session is no longer valid.
   google.protobuf.Timestamp expires_at = 3;
 }

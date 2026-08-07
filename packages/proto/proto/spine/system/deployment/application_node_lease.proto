@@ -15,7 +15,7 @@ message ApplicationNodeEndpoint {
     string origin = 1;
 
     // The normalized HTTPS TLS server name, when explicitly configured.
-    optional string tls_server_name = 2;
+    string tls_server_name = 2;
 }
 
 // The version-1 durable lease for one application node registration.

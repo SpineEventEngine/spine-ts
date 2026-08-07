@@ -46,7 +46,7 @@ export function normalizedDescriptorDigest(descriptorSet) {
   return createHash("sha256").update(normalizeDescriptorSet(descriptorSet)).digest("hex");
 }
 
-export function buildDescriptorSet(root = repoRoot) {
+function buildDescriptorSetFor(root, paths) {
   const temporaryDirectory = mkdtempSync(join(tmpdir(), "spine-descriptor-set-"));
   const outputPath = join(temporaryDirectory, "frozen.binpb");
   const localBuf = join(
@@ -67,6 +67,7 @@ export function buildDescriptorSet(root = repoRoot) {
         "--exclude-source-info",
         "-o",
         outputPath,
+        ...paths.flatMap((path) => ["--path", path]),
       ],
       { cwd: root, encoding: "utf8" },
     );
@@ -84,8 +85,29 @@ export function buildDescriptorSet(root = repoRoot) {
   }
 }
 
+export function buildDescriptorSet(root = repoRoot) {
+  return buildDescriptorSetFor(root, []);
+}
+
+export function frozenSourcePaths(root = repoRoot) {
+  const manifest = JSON.parse(
+    readFileSync(resolve(root, "packages/proto/proto/spine-sources.json"), "utf8"),
+  );
+  const prefix = "packages/proto/proto/";
+  return manifest.sources.map(({ localPath }) => {
+    if (typeof localPath !== "string" || !localPath.startsWith(prefix)) {
+      throw new Error("Frozen descriptor source has an invalid local path.");
+    }
+    return localPath;
+  });
+}
+
+export function buildFrozenDescriptorSet(root = repoRoot) {
+  return buildDescriptorSetFor(root, frozenSourcePaths(root));
+}
+
 export function verifyFrozenDescriptorCompatibility(root = repoRoot) {
-  const descriptorSet = buildDescriptorSet(root);
+  const descriptorSet = buildFrozenDescriptorSet(root);
   const expectedDigest = readFileSync(
     resolve(root, "packages/proto/proto/frozen-descriptor-set.sha256"),
     "utf8",

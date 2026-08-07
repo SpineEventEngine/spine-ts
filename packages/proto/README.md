@@ -41,10 +41,21 @@ The package root exports commonly used Spine schemas such as `CommandSchema`,
 `EventSchema`, `ActorContextSchema`, `TenantIdSchema`, and the Spine option
 extensions.
 
-Some generated schemas are internal runtime plumbing. For example, the system
-entity-change and Stand subscription records are available to framework
-packages through their generated paths, but are deliberately not part of the
-curated package API for application code.
+Named subpaths group contracts used by a particular framework area. For
+example, subscription records are available from
+`@spine-event-engine/proto/client`, authenticated subscription records from
+`@spine-event-engine/proto/auth`, and application-node discovery records from
+`@spine-event-engine/proto/deployment`.
+
+The generated wildcard subpath is a low-level compatibility surface used by
+framework packages and advanced model tooling. Prefer the package root or a
+named subpath when one exports the schema you need.
+
+The old `spine/system/server/stand_subscription.proto` and
+`spine/system/deployment/application_node_lease.proto` files are temporary
+private build inputs while their server consumers move to the records above.
+They are not supported compatibility contracts or application APIs and will be
+removed with those consumer migrations.
 
 ## 📦 Depend on it from an application model
 
