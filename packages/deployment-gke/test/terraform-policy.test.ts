@@ -37,7 +37,12 @@ describe("the GKE deployment template", () => {
     expect(variables).toContain('variable "autoscaling_min_replicas"');
     expect(variables).toContain('variable "autoscaling_max_replicas"');
     expect(terraform).toContain("count = var.autoscaling_enabled ? 1 : 0");
+    expect(terraform).toContain(
+      "replicas = var.autoscaling_enabled ? null : tostring(var.application_replicas)",
+    );
+    expect(terraform).toContain("var.autoscaling_min_replicas <= var.autoscaling_max_replicas");
     expect(variables).toMatch(/variable "autoscaling_enabled"[\s\S]*?default\s+=\s+false/u);
+    expect(variables).toContain("Application port must be an integer from 1 through 65535.");
   });
 
   it("uses references for secrets and does not select application storage", async () => {

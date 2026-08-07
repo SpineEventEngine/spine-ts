@@ -34,6 +34,8 @@ application command. Application code configures `GkeNodeDiscovery` and its
 own storage, identity, and public-edge integration.
 
 `autoscaling_enabled` defaults to `false`. When true, the module creates one
-external-metric HPA with the operator's metric, target, minimum, and maximum.
-The HPA is not a scale-to-zero mechanism; external request or queue activation
-such as operator-managed KEDA is required for that behavior on Standard GKE.
+external-metric HPA with the operator's metric, target, minimum, and maximum
+and omits the Deployment replica value, leaving capacity ownership with the
+HPA. When false, Terraform manages `application_replicas`. The HPA is not a
+scale-to-zero mechanism; external request or queue activation such as
+operator-managed KEDA is required for that behavior on Standard GKE.

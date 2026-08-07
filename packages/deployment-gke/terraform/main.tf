@@ -84,8 +84,15 @@ resource "kubernetes_deployment_v1" "application" {
     labels    = local.labels
   }
 
+  lifecycle {
+    precondition {
+      condition     = var.autoscaling_min_replicas <= var.autoscaling_max_replicas
+      error_message = "Autoscaling minimum replicas must not exceed the maximum."
+    }
+  }
+
   spec {
-    replicas = var.application_replicas
+    replicas = var.autoscaling_enabled ? null : tostring(var.application_replicas)
 
     selector {
       match_labels = merge(local.labels, { "app.kubernetes.io/component" = "application" })

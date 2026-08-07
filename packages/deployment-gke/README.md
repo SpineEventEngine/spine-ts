@@ -136,8 +136,8 @@ kubectl get endpointslice --namespace spine-app \
 kubectl logs --namespace spine-app deployment/gateway
 ```
 
-A ready application Pod appears in the EndpointSlice and therefore becomes a
-candidate Gateway backend. An unready Pod is not published because the Service
+A ready application Pod appears in the EndpointSlice and therefore becomes an
+available Gateway backend. An unready Pod is not published because the Service
 sets `publishNotReadyAddresses` to `false`. The Gateway refreshes the DNS
 answer and reconciles its backend connections. A Gateway log or your own
 metrics should show the expected ready backend count.
@@ -163,6 +163,9 @@ terraform apply -var-file=terraform.tfvars -var=application_replicas=2
 The optional HPA is disabled by default. When your platform team already
 operates an external-metrics adapter, set `autoscaling_enabled = true` and
 choose its metric name, target, minimum, and maximum in `terraform.tfvars`.
+When it is enabled, Terraform deliberately omits the Deployment replica value
+so routine applies do not reset changes made by the HPA. To return to manual
+capacity, disable autoscaling and set `application_replicas` in the same apply.
 CPU alone cannot wake an application Deployment from zero because no Pod is
 running to report CPU. On Standard GKE, Google documents KEDA as the scale from
 zero path: an external request or queue metric activates one Pod, after which
@@ -192,9 +195,10 @@ terraform apply -var-file=terraform.tfvars \
   -var=application_replicas=2
 ```
 
-Replacing the single Gateway interrupts connected clients. Durable subscription
-definitions survive in application-selected storage, but clients reconnect and
-re-query authoritative state after the Gateway is ready again.
+Replacing the single Gateway interrupts connected clients. The
+Gateway-configured durable subscription registry preserves definitions across
+the replacement; clients reconnect and re-query authoritative state after the
+Gateway is ready again.
 
 ## Roll back
 
