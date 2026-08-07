@@ -90,12 +90,16 @@ describe("the GKE deployment guide", () => {
     expect(guide).toContain("terraform apply");
     expect(guide).toMatch(/durable subscription/iu);
     expect(guide).toContain('host: "0.0.0.0"');
+    expect(guide).toContain('"BACKEND_DISCOVERY_PORT"');
+    expect(guide).toContain("BACKEND_DISCOVERY_SERVICE");
     expect(guide).toContain("DurableSubscriptionBindings");
+    expect(guide).toContain("shared persistent storage across Gateway replacements");
     expect(guide).toMatch(/production\s+startup rejects missing or volatile bindings/iu);
     expect(guide).toContain("kubectl rollout status deployment/application");
     expect(guide).toContain("kubectl rollout status deployment/gateway");
     expect(guide).toContain("kubectl rollout status deployment/delivery");
     expect(guide).toContain("sole autoscaler");
+    expect(guide).toContain("suspend or remove the KEDA policy");
     expect(guide).not.toMatch(/\bT-0126\b|\bWave 7\b/);
   });
 });

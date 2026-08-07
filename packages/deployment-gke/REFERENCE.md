@@ -18,6 +18,12 @@ membership until its deadline, then publish one empty snapshot while retries
 continue. `close()` cancels timers and resolver work, waits for admitted work,
 and prevents later snapshots.
 
+Supplying discovery through `ServerOptions.browser` selects standalone Gateway
+hosting. The Server does not build or attach local contexts in that mode, and
+closing the Gateway stops discovery. When an application supplies both fixed
+`backend` URLs and discovery, discovery is the active membership source; fixed
+URLs are not reconciled.
+
 ## Terraform template
 
 `terraform/` targets an existing Kubernetes context. It does not provision a
@@ -41,4 +47,6 @@ HPA. When false, Terraform manages `application_replicas`. The HPA is not a
 scale-to-zero mechanism; external request or queue activation such as
 operator-managed KEDA is required for that behavior on Standard GKE. KEDA is
 the sole autoscaler for its target Deployment: set `autoscaling_enabled` to
-`false` before applying a KEDA policy.
+`false` before applying a KEDA policy. Suspend or remove KEDA before an
+incompatible stop-all replacement or rollback, and restore it only after the
+selected version is ready.

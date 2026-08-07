@@ -250,10 +250,11 @@ export class Server {
 
   async #startOnce(ownership: EnvironmentOwnership): Promise<RunningServer> {
     const browser = this.#browser;
+    const standalone = ServerValues.isStandaloneBrowser(browser);
     if (browser?.backend !== undefined)
       BrowserServer.backendUrls(ServerValues.browserBackendUrls(browser.backend));
     if (
-      browser?.backend !== undefined &&
+      standalone &&
       (this.#contexts.length > 0 ||
         this.#resources.length > 0 ||
         Object.keys(this.#services).length > 0 ||
@@ -267,9 +268,11 @@ export class Server {
         browser,
         this.#environment.environment.type === EnvironmentType.Production,
       );
-    if (browser?.backend !== undefined)
+    if (standalone && browser !== undefined)
       return BrowserServer.open(
-        BrowserServer.backendUrls(ServerValues.browserBackendUrls(browser.backend)),
+        browser.backend === undefined
+          ? undefined
+          : BrowserServer.backendUrls(ServerValues.browserBackendUrls(browser.backend)),
         {
           ...browser,
           host: browser.host ?? this.#host,
@@ -678,7 +681,10 @@ export interface BrowserServerOptions {
 
   /**
    * Supplies changing complete membership for unary routing and native streams.
-   * Fixed backend configuration is a static complete membership input.
+   * Supplying discovery makes this a standalone Gateway, so the server does
+   * not assemble or own local contexts, services, resources, or listener
+   * lifecycles. When both backend and discovery are supplied, discovery is the
+   * active membership source and fixed backend values are not reconciled.
    */
   readonly discovery?: NodeDiscovery;
 
@@ -1194,6 +1200,10 @@ const ServerValues = Object.freeze({
       return values as readonly string[];
     }
     throw new Error("Server browser backend must configure exactly one of baseUrl or baseUrls.");
+  },
+
+  isStandaloneBrowser(browser: BrowserServerOptions | undefined): boolean {
+    return browser?.backend !== undefined || browser?.discovery !== undefined;
   },
 
   normalizeMessageMaxBytes(value: number, name: "readMaxBytes" | "writeMaxBytes"): number {

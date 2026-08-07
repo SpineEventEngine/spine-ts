@@ -81,23 +81,33 @@ replica counts are intentionally fixed at one in this topology.
 Your application and Gateway entrypoints remain application code. The template
 uses `HOST=0.0.0.0` and the matching `PORT` value for every container so its
 private Kubernetes Service can reach the process. Keep that listener convention
-in your image entrypoints. An application node can use the configured listener
-like this:
+in your image entrypoints. Put one small configuration owner beside the two
+entrypoints, then have each entrypoint read its injected settings rather than
+hard-coding the Terraform defaults:
 
 ```ts
-import { Server } from "@spine-event-engine/server";
+type Environment = Readonly<Record<string, string | undefined>>;
 
-declare const applicationOptions: Omit<
-  import("@spine-event-engine/server").ServerOptions,
-  "port" | "host"
->;
+const DeploymentSettings = Object.freeze({
+  port(environment: Environment, name: "PORT" | "BACKEND_DISCOVERY_PORT"): number {
+    const value = environment[name];
+    const port = Number(value);
+    if (typeof value !== "string" || !Number.isInteger(port) || port < 1 || port > 65_535)
+      throw new Error(`${name} must be an integer from 1 through 65535.`);
+    return port;
+  },
 
-const application = Server.atPort(8080, {
-  ...applicationOptions,
-  host: "0.0.0.0",
+  serviceName(environment: Environment): string {
+    const value = environment.BACKEND_DISCOVERY_SERVICE?.trim();
+    if (value === undefined || value.length === 0)
+      throw new Error("BACKEND_DISCOVERY_SERVICE must not be blank.");
+    return value;
+  },
 });
-await application.run();
 ```
+
+In each Node.js entrypoint, supply `process.env` as `environment` to that
+configuration owner.
 
 The standalone Gateway uses the headless Service name and application port from
 the module. In production it also supplies sessions, authorization, trusted
@@ -111,12 +121,24 @@ explain those application-owned integration points.
 import { GkeNodeDiscovery } from "@spine-event-engine/deployment-gke";
 import { DurableSubscriptionBindings, Server } from "@spine-event-engine/server";
 
+declare const DeploymentSettings: {
+  readonly port: (
+    environment: Readonly<Record<string, string | undefined>>,
+    name: "PORT" | "BACKEND_DISCOVERY_PORT",
+  ) => number;
+  readonly serviceName: (environment: Readonly<Record<string, string | undefined>>) => string;
+};
+declare const environment: Readonly<Record<string, string | undefined>>;
 declare const sessions: import("@spine-event-engine/auth").SessionResolver;
 declare const authorize: import("@spine-event-engine/auth").AuthorizationPolicy["authorize"];
 declare const contexts: import("@spine-event-engine/auth").ContextResolver;
 declare const clock: import("@spine-event-engine/auth").Clock;
 declare const registry: import("@spine-event-engine/core").TypeRegistryLookup;
 declare const registryStorage: import("@spine-event-engine/storage").StorageFactory;
+declare const applicationOptions: Omit<
+  import("@spine-event-engine/server").ServerOptions,
+  "host" | "port"
+>;
 
 const bindings = new DurableSubscriptionBindings({
   storageFactory: registryStorage,
@@ -130,10 +152,11 @@ const bindings = new DurableSubscriptionBindings({
 });
 
 const discovery = new GkeNodeDiscovery({
-  serviceName: "application.spine-app.svc.cluster.local",
-  port: 8080,
+  serviceName: DeploymentSettings.serviceName(environment),
+  port: DeploymentSettings.port(environment, "BACKEND_DISCOVERY_PORT"),
 });
-const gateway = Server.atPort(8081, {
+const gateway = Server.atPort(DeploymentSettings.port(environment, "PORT"), {
+  ...applicationOptions,
   host: "0.0.0.0",
   browser: {
     discovery,
@@ -150,12 +173,39 @@ const gateway = Server.atPort(8081, {
 await gateway.run();
 ```
 
+The application entrypoint uses the same configuration owner for its own
+listener:
+
+```ts
+import { Server } from "@spine-event-engine/server";
+
+declare const DeploymentSettings: {
+  readonly port: (
+    environment: Readonly<Record<string, string | undefined>>,
+    name: "PORT" | "BACKEND_DISCOVERY_PORT",
+  ) => number;
+};
+declare const environment: Readonly<Record<string, string | undefined>>;
+declare const applicationOptions: Omit<
+  import("@spine-event-engine/server").ServerOptions,
+  "host" | "port"
+>;
+
+const application = Server.atPort(DeploymentSettings.port(environment, "PORT"), {
+  ...applicationOptions,
+  host: "0.0.0.0",
+});
+await application.run();
+```
+
 The ConfigMap in the template exposes matching service and port values as a
 simple convention. Adapt the names or use your own configuration loader; Spine
 TS does not require a particular environment-variable format. Production
 startup rejects missing or volatile bindings before opening its browser
 listener. `DurableSubscriptionBindings` is the supplied durable option; give
 it a stable namespace and storage factory configured by the Gateway process.
+Use shared persistent storage across Gateway replacements; an in-memory store
+does not preserve bindings when a Gateway is replaced.
 
 ## Deploy
 
@@ -253,7 +303,9 @@ terraform apply -var-file=terraform.tfvars \
 Keep manual capacity by leaving `autoscaling_enabled = false`. Restore the
 module HPA by applying `autoscaling_enabled = true` only when KEDA is absent.
 For KEDA, leave the module HPA disabled and restore the operator-managed KEDA
-policy after the application Deployment returns.
+policy only after the new application version is ready. Before the stop-all
+step, suspend or remove the KEDA policy so it cannot create a node while the
+replacement is intentionally at zero.
 
 Replacing the single Gateway interrupts connected clients. The
 Gateway-configured durable subscription registry preserves definitions across
@@ -267,7 +319,8 @@ count. For an incompatible rollback, first disable the module HPA, use the
 same stop-all, apply-old-image, start sequence, then restore exactly one of
 manual replicas, the module HPA, or the operator-managed KEDA policy. Confirm
 ready application endpoints and a successful Gateway connection before
-declaring the rollback complete.
+declaring the rollback complete. Suspend or remove the KEDA policy before the
+stop-all step, then restore it only after the old version is ready.
 
 ## Troubleshooting
 
