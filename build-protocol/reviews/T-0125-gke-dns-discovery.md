@@ -120,3 +120,10 @@ remaining findings, each with explicit `gpt-5.6-terra` / `high`.
 Reviewer profiles matched explicit `gpt-5.6-terra` / `high` dispatches;
 runtime self-introspection was unavailable and no mismatch was visible. Only
 performance/reliability reopens after this correction.
+
+## Reliability Closure Dispatch
+
+Correction `a4dc32d7` passes 28 focused tests with 96.29% branch coverage and
+the affected lint, tooling typecheck, formatting, and diff gates. The existing
+performance/reliability reviewer alone rechecks stale failure fencing with
+explicit `gpt-5.6-terra` / `high`.
