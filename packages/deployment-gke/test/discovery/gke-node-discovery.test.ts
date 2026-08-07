@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
+
 import { describe, expect, it } from "vitest";
 
 import { GkeNodeDiscovery } from "../../src/index.js";
@@ -27,7 +29,9 @@ describe("GkeNodeDiscovery", () => {
       readonly tlsServerName?: string;
     }[])[] = [];
 
-    const stop = discovery.watch((nodes) => snapshots.push(nodes));
+    const stop = discovery.watch((nodes) => {
+      snapshots.push(nodes);
+    });
     await Promise.resolve();
     await Promise.resolve();
 
@@ -70,7 +74,9 @@ describe("GkeNodeDiscovery", () => {
       scheduler,
     });
     const snapshots: readonly unknown[][] = [];
-    const stop = discovery.watch((nodes) => snapshots.push([...nodes]));
+    const stop = discovery.watch((nodes) => {
+      snapshots.push([...nodes]);
+    });
 
     await scheduler.tick();
     await scheduler.tick();
@@ -100,7 +106,9 @@ describe("GkeNodeDiscovery", () => {
       scheduler,
     });
     const snapshots: readonly unknown[][] = [];
-    const stop = discovery.watch((nodes) => snapshots.push([...nodes]));
+    const stop = discovery.watch((nodes) => {
+      snapshots.push([...nodes]);
+    });
 
     await scheduler.tick();
     now = 1_000;
@@ -154,7 +162,9 @@ describe("GkeNodeDiscovery", () => {
       scheduler,
     });
     const snapshots: readonly unknown[][] = [];
-    const stop = discovery.watch((nodes) => snapshots.push([...nodes]));
+    const stop = discovery.watch((nodes) => {
+      snapshots.push([...nodes]);
+    });
 
     await scheduler.tick();
 
