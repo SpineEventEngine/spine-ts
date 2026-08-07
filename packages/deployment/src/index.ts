@@ -58,6 +58,16 @@ export interface NodeSnapshotReader {
   read(signal: AbortSignal): Promise<readonly ApplicationNode[]>;
 }
 
+const systemNodeScheduler: NodeScheduler = {
+  schedule(delayMs, onTick) {
+    const timer = setTimeout(onTick, delayMs);
+    timer.unref();
+    return () => {
+      clearTimeout(timer);
+    };
+  },
+};
+
 /**
  * Publishes complete snapshots on an injected, cancellable schedule.
  */
@@ -74,11 +84,11 @@ export class ScheduledNodeDiscovery implements NodeDiscovery {
   /**
    * Creates a scheduled source with a ten-second default refresh interval.
    *
-   * @param options Supplies the snapshot reader, scheduler, and interval.
+   * @param options Supplies the snapshot reader, optional scheduler, and interval.
    */
   constructor(options: {
     readonly reader: NodeSnapshotReader;
-    readonly scheduler: NodeScheduler;
+    readonly scheduler?: NodeScheduler;
     readonly intervalMs?: number;
   }) {
     if (
@@ -87,7 +97,7 @@ export class ScheduledNodeDiscovery implements NodeDiscovery {
     )
       throw new RangeError("Node refresh interval must be a positive safe integer.");
     this.#reader = options.reader;
-    this.#scheduler = options.scheduler;
+    this.#scheduler = options.scheduler ?? systemNodeScheduler;
     this.#intervalMs = options.intervalMs ?? 10_000;
   }
 

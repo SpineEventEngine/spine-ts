@@ -112,6 +112,27 @@ describe("LeasedNodeRegistry", () => {
     expect(factory.limits).toEqual([256, 256, 256, 256]);
   });
 
+  it("stops pagination when cancellation arrives between lease pages", async () => {
+    const controller = new AbortController();
+    const factory = new AbortBetweenPagesFactory(() => {
+      controller.abort();
+    });
+    const registry = new LeasedNodeRegistry({ factory, namespace: "cancel-between-pages" });
+    for (let index = 0; index < 257; index++) {
+      await registry.register({
+        node: new ApplicationNode({
+          id: `node/${String(index)}`,
+          endpoint: `http://10.4.0.${String((index % 250) + 1)}`,
+        }),
+        registrationId: `process-${String(index)}`,
+        expiresAt: 1_000,
+      });
+    }
+
+    await expect(registry.read(0, controller.signal)).rejects.toThrow("aborted");
+    expect(factory.queries).toBe(1);
+  });
+
   it("rejects an atomicity-free factory before accepting lease lifecycle work", () => {
     expect(
       () => new LeasedNodeRegistry({ factory: new NonAtomicFactory(), namespace: "no-atomic" }),
@@ -132,6 +153,24 @@ describe("LeasedNodeRegistry", () => {
       registry.register({ node, registrationId: "owner", expiresAt: -1 }),
     ).rejects.toThrow("expiry");
     await expect(registry.read(-1)).rejects.toThrow("expiry");
+  });
+
+  it("renews the current owner and distinguishes live from expired lookup", async () => {
+    const registry = new LeasedNodeRegistry({
+      factory: new InMemoryStorageFactory(),
+      namespace: "renew-and-lookup",
+    });
+    const node = new ApplicationNode({ id: "node/a", endpoint: "http://10.0.0.1" });
+
+    await registry.register({ node, registrationId: "owner", expiresAt: 10 });
+    await expect(registry.renew(node.id, "owner", 20)).resolves.toBe(true);
+    await expect(registry.lookup(node.id, 19)).resolves.toMatchObject({
+      registrationId: "owner",
+      expiresAt: 20,
+      node,
+    });
+    await expect(registry.lookup(node.id, 20)).resolves.toBeUndefined();
+    await expect(registry.lookup("missing", 0)).resolves.toBeUndefined();
   });
 
   it("revalidates structurally supplied nodes before persisting a lease", async () => {
@@ -378,5 +417,30 @@ class DelayedQueryFactory extends InMemoryStorageFactory {
 
   resolveQuery(): void {
     this.#resolve?.();
+  }
+}
+
+class AbortBetweenPagesFactory extends InMemoryStorageFactory {
+  queries = 0;
+
+  constructor(private readonly abortAfterFirstPage: () => void) {
+    super();
+  }
+
+  override createRecordStorage<I, R extends import("@bufbuild/protobuf").Message>(
+    context: import("@spine-event-engine/storage").StorageContext,
+    recordSpec: import("@spine-event-engine/storage").RecordSpec<I, R>,
+  ): import("@spine-event-engine/storage").RecordStorage<I, R> {
+    const storage = super.createRecordStorage(context, recordSpec);
+    const queryEntries = storage.queryEntries.bind(storage);
+    Object.defineProperty(storage, "queryEntries", {
+      value: async (query: import("@spine-event-engine/storage").RecordQuery<I>) => {
+        const page = await queryEntries(query);
+        this.queries += 1;
+        if (this.queries === 1) this.abortAfterFirstPage();
+        return page;
+      },
+    });
+    return storage;
   }
 }

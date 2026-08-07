@@ -39,6 +39,27 @@ const gracefulSessionDrainMs = 100;
 type ServerContext = BoundedContext | BoundedContextBuilder;
 
 /**
+ * Performs work coupled to listener readiness and network shutdown.
+ */
+export interface ListenerLifecycle {
+  // prettier-ignore
+
+  /**
+   * Starts after the native listener accepts connections.
+   *
+   * @returns A value or promise that settles after readiness work.
+   */
+  start(): unknown;
+
+  /**
+   * Completes before the native listener stops accepting connections.
+   *
+   * @returns A value or promise that settles after shutdown work.
+   */
+  close(): unknown;
+}
+
+/**
  * Configures and starts local Spine Connect/gRPC-compatible services.
  *
  * A server assembles its bounded contexts, completes finite environment
@@ -53,6 +74,7 @@ export class Server {
   readonly #writeMaxBytes: number;
   readonly #contexts: ServerContext[] = [];
   readonly #resources: { close(): unknown }[] = [];
+  readonly #listenerLifecycles: ListenerLifecycle[] = [];
   readonly #services: Omit<SpineServicesOptions, "contexts">;
   readonly #browser: BrowserServerOptions | undefined;
   readonly #environment: ServerEnvironment;
@@ -60,6 +82,7 @@ export class Server {
   #startingOwnership: EnvironmentOwnership | undefined;
   #run: Promise<RunningServer> | undefined;
   #failedStartCleanup: FailedStartCleanup | undefined;
+  #failedListenerLifecycle: RunningHttp2Server | undefined;
   #failedStartConsumed = false;
 
   /**
@@ -124,6 +147,20 @@ export class Server {
   }
 
   /**
+   * Adds work that starts after listener readiness and closes before network intake stops.
+   *
+   * Failed starts roll back admitted lifecycles in reverse admission order. A
+   * failed close remains retryable and prevents network shutdown until it settles.
+   *
+   * @param lifecycle Supplies listener-coupled lifecycle work, such as GCE registration.
+   * @returns This server builder.
+   */
+  addListenerLifecycle(lifecycle: ListenerLifecycle): this {
+    this.#listenerLifecycles.push(lifecycle);
+    return this;
+  }
+
+  /**
    * Starts the server after completing assembly and delivery recovery.
    *
    * Built contexts open their transport registrations in deterministic input
@@ -159,8 +196,13 @@ export class Server {
       );
     }
     const cleanup = this.#failedStartCleanup;
+    const lifecycle = this.#failedListenerLifecycle;
     const starting =
-      cleanup === undefined ? this.#startOnce(ownership) : this.#retryFailedStartCleanup(cleanup);
+      lifecycle !== undefined
+        ? this.#retryFailedListenerLifecycle(lifecycle)
+        : cleanup === undefined
+          ? this.#startOnce(ownership)
+          : this.#retryFailedStartCleanup(cleanup);
     this.#starting = starting;
     this.#startingOwnership = ownership;
     void starting.then(
@@ -214,7 +256,8 @@ export class Server {
       browser?.backend !== undefined &&
       (this.#contexts.length > 0 ||
         this.#resources.length > 0 ||
-        Object.keys(this.#services).length > 0)
+        Object.keys(this.#services).length > 0 ||
+        this.#listenerLifecycles.length > 0)
     )
       throw new Error(
         "Standalone browser server cannot own local contexts, services, or resources.",
@@ -329,7 +372,15 @@ export class Server {
       host,
       port: address.port,
       closeables,
+      listenerLifecycles: this.#listenerLifecycles,
     });
+    try {
+      await running.startLifecycles();
+    } catch (error) {
+      if (running.hasPendingClose()) this.#failedListenerLifecycle = running;
+      else this.#failedStartConsumed = true;
+      throw error;
+    }
     if (browser === undefined) return running;
     try {
       return await BrowserServer.open(running, {
@@ -363,6 +414,13 @@ export class Server {
     if (errors.length > 0) {
       ServerValues.throwCleanupErrors(errors);
     }
+    throw new Error("Server deferred cleanup completed after an earlier failed start.");
+  }
+
+  async #retryFailedListenerLifecycle(running: RunningHttp2Server): Promise<never> {
+    await running.close();
+    this.#failedListenerLifecycle = undefined;
+    this.#failedStartConsumed = true;
     throw new Error("Server deferred cleanup completed after an earlier failed start.");
   }
 
@@ -777,6 +835,8 @@ class RunningHttp2Server implements RunningServer {
   readonly #server: http2.Http2Server;
   readonly #sessions: Set<http2.ServerHttp2Session>;
   readonly #closeables: readonly unknown[];
+  readonly #listenerLifecycles: readonly { close(): unknown }[];
+  readonly #startedLifecycles: { close(): unknown }[] = [];
   readonly #environment: ServerEnvironment;
   readonly #attachment: EnvironmentAttachmentHandle;
   readonly #contextTransports: ContextTransportGroup;
@@ -792,6 +852,7 @@ class RunningHttp2Server implements RunningServer {
     this.#server = options.server;
     this.#sessions = options.sessions;
     this.#closeables = options.closeables;
+    this.#listenerLifecycles = options.listenerLifecycles;
     this.#environment = options.environment;
     this.#attachment = options.attachment;
     this.#contextTransports = options.contextTransports;
@@ -812,7 +873,44 @@ class RunningHttp2Server implements RunningServer {
     return this.#closed;
   }
 
+  /**
+   * Starts listener-ready attachments after the native listener accepts connections.
+   *
+   * @returns Completes after all attachments start or their admitted rollback settles.
+   */
+  async startLifecycles(): Promise<void> {
+    try {
+      for (const lifecycle of this.#listenerLifecycles as readonly {
+        start(): unknown;
+        close(): unknown;
+      }[]) {
+        await lifecycle.start();
+        this.#startedLifecycles.push(lifecycle);
+      }
+    } catch (error) {
+      try {
+        await this.close();
+      } catch (rollback) {
+        throw new AggregateError(
+          [error, rollback],
+          "Server listener lifecycle start and rollback failed.",
+        );
+      }
+      throw error;
+    }
+  }
+
+  hasPendingClose(): boolean {
+    return this.#closed === undefined;
+  }
+
   async #closeOnce(): Promise<void> {
+    while (this.#startedLifecycles.length > 0) {
+      const lifecycle = this.#startedLifecycles.at(-1);
+      if (lifecycle === undefined) break;
+      await lifecycle.close();
+      this.#startedLifecycles.pop();
+    }
     if (!this.#networkClosed) {
       await ServerValues.closeNetwork(this.#server, this.#sessions);
       this.#networkClosed = true;
@@ -866,6 +964,7 @@ interface RunningHttp2ServerOptions {
   readonly server: http2.Http2Server;
   readonly sessions: Set<http2.ServerHttp2Session>;
   readonly closeables: readonly unknown[];
+  readonly listenerLifecycles: readonly { start(): unknown; close(): unknown }[];
   readonly environment: ServerEnvironment;
   readonly attachment: EnvironmentAttachmentHandle;
   readonly contextTransports: ContextTransportGroup;

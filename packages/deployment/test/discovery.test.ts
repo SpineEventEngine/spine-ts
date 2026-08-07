@@ -101,7 +101,6 @@ describe("ScheduledNodeDiscovery", () => {
     ).toThrow("positive safe integer");
     const source = new ScheduledNodeDiscovery({
       reader: { read: async () => [] },
-      scheduler: { schedule: () => () => {} },
     });
     await source.close();
   });

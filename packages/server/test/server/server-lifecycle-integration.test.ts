@@ -3,7 +3,14 @@ import * as http2 from "node:http2";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TransportTopics } from "@spine-event-engine/transport";
 
-import { BoundedContext, EnvironmentType, Server, ServerEnvironment } from "../../src/index.js";
+import {
+  BoundedContext,
+  type BrowserServerOptions,
+  EnvironmentType,
+  type ListenerLifecycle,
+  Server,
+  ServerEnvironment,
+} from "../../src/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import type { EnvironmentAttachmentHandle } from "../../src/server/environment-attachment.js";
 import { serverEnvironmentAccess } from "../../src/server/server-environment.js";
@@ -31,6 +38,172 @@ vi.mock("node:http2", async (importOriginal) => {
 });
 
 describe("Server lifecycle integration", () => {
+  it("exports the listener lifecycle contract", () => {
+    const lifecycle: ListenerLifecycle = { start: () => undefined, close: () => undefined };
+    expect(lifecycle).toBeDefined();
+  });
+
+  it("starts listener lifecycles after readiness and closes them before network intake", async () => {
+    const events: string[] = [];
+    const server = Server.atPort(0).addListenerLifecycle({
+      start: () => events.push("start"),
+      close: () => events.push("close"),
+    });
+    const running = await server.start();
+    expect(events).toEqual(["start"]);
+    await running.close();
+    expect(events).toEqual(["start", "close"]);
+  });
+
+  it("retries only a failed listener lifecycle close", async () => {
+    let attempts = 0;
+    const successful = vi.fn();
+    const failing = vi.fn(() => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("close failed");
+    });
+    const running = await Server.atPort(0)
+      .addListenerLifecycle({ start: () => undefined, close: successful })
+      .addListenerLifecycle({ start: () => undefined, close: failing })
+      .start();
+    await expect(running.close()).rejects.toThrow("close failed");
+    await running.close();
+    expect(successful).toHaveBeenCalledOnce();
+    expect(failing).toHaveBeenCalledTimes(2);
+  });
+
+  it("rolls back only listener lifecycles admitted before a start failure", async () => {
+    const firstClose = vi.fn();
+    const secondClose = vi.fn();
+    const thirdClose = vi.fn();
+    const server = Server.atPort(0)
+      .addListenerLifecycle({ start: () => undefined, close: firstClose })
+      .addListenerLifecycle({
+        start: () => {
+          throw new Error("start failed");
+        },
+        close: secondClose,
+      })
+      .addListenerLifecycle({ start: () => undefined, close: thirdClose });
+    await expect(server.start()).rejects.toThrow("start failed");
+    expect(firstClose).toHaveBeenCalledOnce();
+    expect(secondClose).not.toHaveBeenCalled();
+    expect(thirdClose).not.toHaveBeenCalled();
+  });
+
+  it("rolls back admitted listener lifecycles in reverse start order", async () => {
+    const closed: string[] = [];
+    const server = Server.atPort(0)
+      .addListenerLifecycle({ start: () => undefined, close: () => closed.push("first") })
+      .addListenerLifecycle({ start: () => undefined, close: () => closed.push("second") })
+      .addListenerLifecycle({
+        start: () => {
+          throw new Error("start failed");
+        },
+        close: () => undefined,
+      });
+
+    await expect(server.start()).rejects.toThrow("start failed");
+    expect(closed).toEqual(["second", "first"]);
+  });
+
+  it("does not restart after a listener-start failure rolls back cleanly", async () => {
+    const start = vi.fn(() => {
+      throw new Error("start failed");
+    });
+    const server = Server.atPort(0).addListenerLifecycle({ start, close: () => undefined });
+
+    await expect(server.start()).rejects.toThrow("start failed");
+    await expect(server.start()).rejects.toThrow("cannot restart after failed-start cleanup");
+    expect(start).toHaveBeenCalledOnce();
+  });
+
+  it("retries later server cleanup after listener rollback before becoming terminal", async () => {
+    const startFailure = new Error("listener start failed");
+    const networkFailure = new Error("network close failed");
+    const closed: string[] = [];
+    let network: NetworkCloseProbe | undefined;
+    createHttp2Server.mockImplementationOnce((httpServer) => {
+      network = trackNetworkClose(httpServer, [networkFailure]);
+    });
+    const server = Server.atPort(0)
+      .addListenerLifecycle({ start: () => undefined, close: () => closed.push("admitted") })
+      .addListenerLifecycle({
+        start: () => {
+          throw startFailure;
+        },
+        close: () => undefined,
+      });
+
+    const first = await server.start().catch((error: unknown) => error);
+    expect(first).toBeInstanceOf(AggregateError);
+    expect((first as AggregateError).errors).toEqual([startFailure, networkFailure]);
+    expect(closed).toEqual(["admitted"]);
+    expect(network?.calls()).toBe(1);
+
+    const completion = await server.start().catch((error: unknown) => error);
+    expectDeferredCleanupCompletion(completion);
+    expect(network?.calls()).toBe(2);
+
+    const terminal = await server.start().catch((error: unknown) => error);
+    expectConsumedFailedStartServer(terminal);
+  });
+
+  it("aggregates listener start and admitted rollback failures in order", async () => {
+    const startFailure = new Error("start failed");
+    const rollbackFailure = new Error("rollback failed");
+    const laterClose = vi.fn();
+    const server = Server.atPort(0)
+      .addListenerLifecycle({
+        start: () => undefined,
+        close: vi.fn().mockImplementationOnce(() => {
+          throw rollbackFailure;
+        }),
+      })
+      .addListenerLifecycle({
+        start: () => {
+          throw startFailure;
+        },
+        close: vi.fn(),
+      })
+      .addListenerLifecycle({ start: () => undefined, close: laterClose });
+    const failure = await server.start().catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([startFailure, rollbackFailure]);
+    expect(laterClose).not.toHaveBeenCalled();
+    await expect(server.start()).rejects.toThrow("deferred cleanup");
+  });
+
+  it("keeps the listener open until a failed lifecycle close retries", async () => {
+    let attempts = 0;
+    const running = await Server.atPort(0)
+      .addListenerLifecycle({
+        start: () => undefined,
+        close: () => {
+          attempts += 1;
+          if (attempts === 1) throw new Error("close failed");
+        },
+      })
+      .start();
+    await expect(running.close()).rejects.toThrow("close failed");
+    const session = http2.connect(running.baseUrl);
+    session.on("error", () => undefined);
+    await once(session, "remoteSettings");
+    session.close();
+    await once(session, "close");
+    await running.close();
+  });
+
+  it("rejects standalone browser backends before listener lifecycle startup", async () => {
+    const start = vi.fn();
+    const close = vi.fn();
+    const server = new Server({
+      browser: { backend: { baseUrls: ["http://10.0.0.1"] } } as BrowserServerOptions,
+    }).addListenerLifecycle({ start, close });
+    await expect(server.start()).rejects.toThrow("Standalone browser server");
+    expect(start).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+  });
   beforeEach(async () => {
     await resetServerEnvironmentForTest();
     createHttp2Server.mockReset();

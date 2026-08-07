@@ -178,6 +178,17 @@ describe("Server", () => {
     }).toThrow();
   });
 
+  it("rejects non-string backend URLs before opening a standalone server", async () => {
+    await expect(
+      new Server({
+        browser: {
+          ...browserGateway(),
+          backend: { baseUrls: [123] },
+        } as unknown as BrowserServerOptions,
+      }).start(),
+    ).rejects.toThrow("Server browser backend URLs must be strings.");
+  });
+
   it("accepts ordered backend URL lists with topology-fencing bindings", async () => {
     const bindings = new DurableSubscriptionBindings({
       storageFactory: new InMemoryStorageFactory(),
