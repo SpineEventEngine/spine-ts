@@ -369,6 +369,10 @@ describe("package metadata", () => {
         types: "./dist/src/delivery-server/index.d.ts",
         default: "./dist/src/delivery-server/index.js",
       },
+      "./deployment": {
+        types: "./dist/src/deployment/index.d.ts",
+        default: "./dist/src/deployment/index.js",
+      },
       "./spine-proto-manifest.json": "./spine-proto-manifest.json",
       "./proto/*": "./proto/*",
       "./generated/*.js": {

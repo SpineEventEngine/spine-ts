@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package spine.deployment;
+
+import "google/protobuf/timestamp.proto";
+import "spine/options.proto";
+import "spine/server/server_environment.proto";
+
+option (type_url_prefix) = "type.spine.io";
+option java_multiple_files = true;
+
+// An identifier of one application-node registration.
+message NodeRegistrationId {
+
+    // The value of the identifier.
+    string value = 1 [(required) = true];
+}
+
+// A network endpoint advertised by an application node.
+message ApplicationNodeEndpoint {
+
+    // The HTTP or HTTPS origin without a trailing slash.
+    string origin = 1 [(required) = true];
+
+    // The TLS server name explicitly configured for an HTTPS endpoint.
+    //
+    // An empty value means that the endpoint origin determines the server name.
+    //
+    string tls_server_name = 2;
+}
+
+// A time-limited registration of an available application node.
+message ApplicationNodeLease {
+
+    // The application node that owns the registration.
+    spine.server.NodeId node_id = 1 [(required) = true, (validate) = true];
+
+    // The endpoint through which the node accepts requests.
+    ApplicationNodeEndpoint endpoint = 2 [(required) = true, (validate) = true];
+
+    // The time after which the registration is no longer current.
+    google.protobuf.Timestamp when_expires = 3 [(required) = true];
+
+    // The identifier that fences one registration lifetime.
+    NodeRegistrationId registration_id = 4 [(required) = true, (validate) = true];
+}

@@ -7,4 +7,5 @@ export * from "../../generated/spine/client/filters_pb.js";
 export * from "../../generated/spine/client/query_pb.js";
 export * from "../../generated/spine/client/query_service_pb.js";
 export * from "../../generated/spine/client/subscription_pb.js";
+export * from "../../generated/spine/client/subscription_record_pb.js";
 export * from "../../generated/spine/client/subscription_service_pb.js";

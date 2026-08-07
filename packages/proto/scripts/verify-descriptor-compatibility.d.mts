@@ -7,6 +7,8 @@ export function compareNormalizedDescriptorSets(
 ): { readonly equal: boolean };
 export function normalizedDescriptorDigest(descriptorSet: FileDescriptorSet): string;
 export function buildDescriptorSet(root?: string): FileDescriptorSet;
+export function frozenSourcePaths(root?: string): readonly string[];
+export function buildFrozenDescriptorSet(root?: string): FileDescriptorSet;
 export function verifyFrozenDescriptorCompatibility(root?: string): {
   readonly actualDigest: string;
   readonly fileCount: number;

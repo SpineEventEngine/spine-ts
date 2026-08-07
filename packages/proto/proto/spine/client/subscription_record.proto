@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package spine.client;
+
+import "google/protobuf/timestamp.proto";
+import "spine/client/subscription.proto";
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.io";
+option java_multiple_files = true;
+
+// A lifecycle status of a stored subscription.
+enum SubscriptionStatus {
+
+    // An unspecified status.
+    SS_UNSPECIFIED = 0;
+
+    // A subscription that is waiting for activation.
+    PENDING = 1;
+
+    // A subscription that delivers matching updates.
+    ACTIVE = 2;
+}
+
+// A stored definition of one subscription.
+message SubscriptionRecord {
+
+    // The identifier used to store this record.
+    SubscriptionId id = 1 [(required) = true, (validate) = true];
+
+    // The subscription represented by this record.
+    Subscription subscription = 2 [(required) = true, (validate) = true];
+
+    // The current lifecycle status.
+    SubscriptionStatus status = 3 [(required) = true];
+
+    // The time when the subscription was created.
+    google.protobuf.Timestamp when_created = 4 [(required) = true];
+
+    // The deadline for activating a pending subscription.
+    google.protobuf.Timestamp when_activation_expires = 5;
+}

@@ -11,16 +11,31 @@ identities, validation messages, time/network/UI support types, and options
 such as `type_url_prefix`, `entity`, `column`, and `set_once`.
 
 The package also exports `@spine-event-engine/proto/client`,
-`@spine-event-engine/proto/auth`, `@spine-event-engine/proto/delivery`, and
+`@spine-event-engine/proto/auth`, `@spine-event-engine/proto/deployment`,
+`@spine-event-engine/proto/delivery`, and
 `@spine-event-engine/proto/delivery-server` for the corresponding generated
-service contracts. `@spine-event-engine/proto/generated/*.js` is supported for
-generated schema subpaths. `./proto/*`, `spine-proto-manifest.json`, and the
-model metadata files are package assets used by model generation.
+contracts. The client facet includes `SubscriptionRecord`; the auth facet
+includes `GatewayAuthenticatedSubscription`; and the deployment facet includes
+the application-node discovery records. `@spine-event-engine/proto/generated/*.js`
+is supported for low-level generated schema subpaths. `./proto/*`,
+`spine-proto-manifest.json`, and the model metadata files are package assets
+used by model generation.
 
 Generated wildcard paths also contain internal `spine/system/server` schemas
 used by the server runtime. They are intentionally absent from the root and
 named public subpaths: application code must not depend on them as a stable
 API.
+
+Two old generated paths remain temporarily for an intermediate framework
+build: `spine/system/server/stand_subscription.proto` and
+`spine/system/deployment/application_node_lease.proto`. They are private
+scaffolding, not compatibility aliases; the Stand and deployment consumer
+migrations delete them when they adopt the new records.
+
+Spine TS-owned Proto sources must not use the Proto `optional` keyword. Their
+documented declarations are separated by blank lines, and a multi-paragraph
+`//` comment ends with a blank `//` line before its declaration. Frozen copied
+JVM sources retain their upstream formatting and syntax.
 
 ## Model modules
 

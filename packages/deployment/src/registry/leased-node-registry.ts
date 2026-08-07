@@ -328,7 +328,8 @@ const LeaseRecords = Object.freeze({
       const node = new ApplicationNode({
         id,
         endpoint,
-        ...(record.endpoint?.tlsServerName === undefined
+        ...(record.endpoint?.tlsServerName === undefined ||
+        record.endpoint.tlsServerName.length === 0
           ? {}
           : { tlsServerName: record.endpoint.tlsServerName }),
       });
@@ -354,7 +355,10 @@ const LeaseRecords = Object.freeze({
     return create(ApplicationNodeLeaseSchema, {
       encodingVersion: 1,
       nodeId: node.id,
-      endpoint: { origin: node.endpoint, tlsServerName: node.tlsServerName },
+      endpoint: {
+        origin: node.endpoint,
+        ...(node.tlsServerName === undefined ? {} : { tlsServerName: node.tlsServerName }),
+      },
       expiresAtMillis: BigInt(lease.expiresAt),
       registrationId: lease.registrationId,
     });

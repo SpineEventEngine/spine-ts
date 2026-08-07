@@ -92,6 +92,14 @@ export function main(argv = process.argv.slice(2)) {
     return verifyStatus;
   }
 
+  const ownedStyleStatus = runCommand("authored framework Proto style", process.execPath, [
+    join(repoRoot, "scripts/check-owned-proto-style.mjs"),
+  ]);
+
+  if (ownedStyleStatus !== 0) {
+    return ownedStyleStatus;
+  }
+
   const exampleQualityStatus = runCommand("authored example Proto quality", process.execPath, [
     join(repoRoot, "scripts/check-example-proto-quality.mjs"),
   ]);

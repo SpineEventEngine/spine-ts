@@ -70,7 +70,10 @@ Freezes every Wave 8 serialized record before runtime migration.
   `optional` fields and incorrect declaration/comment spacing while preserving
   manifest-frozen copied Proto unchanged.
 - Removal boundary: no aliases, legacy packages, version fields, primitive IDs,
-  revision/generation fields, or extra persisted messages.
+  revision/generation fields, or extra persisted messages in the new contracts.
+  The two old private sources remain only as intermediate build inputs until
+  T-0136 and T-0137 migrate their consumers; they are not exported aliases and
+  T-0144 rejects either one in the completed Wave.
 - Descriptor evidence is a checked-in literal expectation, not values copied
   from the generated descriptor under test. It pins:
   `spine.deployment.NodeRegistrationId.value = 1`;
@@ -250,7 +253,9 @@ Uses the corrected `spine.deployment` record directly.
 - README, REFERENCE, deployment guide, and stale-string tests remove the old
   `ApplicationNodeLease:v1`, encoding-version, and versioned-key claims.
 - Removal boundary: delete encoding version and primitive node/registration
-  IDs. Do not add old-lease migration, Cloud Run, logging, or Gateway scaling.
+  IDs and delete the old private
+  `spine/system/deployment/application_node_lease.proto`. Do not add old-lease
+  migration, Cloud Run, logging, or Gateway scaling.
 - Review: documentation, TypeScript/API docs, and performance/reliability;
   style if production structure changes.
 - Verification: focused `verify:task`.
@@ -268,8 +273,10 @@ Persists one `spine.client.SubscriptionRecord` per subscription.
 - Provider tests prove MySQL and Datastore customization reaches
   `SubscriptionRecord`.
 - Removal boundary: delete revision, generation, control/staging records,
-  JSON-in-`Any`, and arbitrary global capacity coordination. Do not promise
-  complete update delivery or multiple-Gateway behavior.
+  JSON-in-`Any`, the old private
+  `spine/system/server/stand_subscription.proto`, and arbitrary global capacity
+  coordination. Do not promise complete update delivery or multiple-Gateway
+  behavior.
 - Review: all four concerns.
 - Verification: coverage-enabled focused `verify:task`.
 

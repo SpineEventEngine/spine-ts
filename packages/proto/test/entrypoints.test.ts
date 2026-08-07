@@ -24,6 +24,7 @@ describe("@spine-event-engine/proto package entrypoints", () => {
         "./client",
         "./delivery",
         "./delivery-server",
+        "./deployment",
         "./spine-proto-manifest.json",
         "./proto/*",
         "./generated/*.js",
@@ -38,6 +39,7 @@ describe("@spine-event-engine/proto package entrypoints", () => {
       "@spine-event-engine/proto/client",
       "@spine-event-engine/proto/delivery",
       "@spine-event-engine/proto/delivery-server",
+      "@spine-event-engine/proto/deployment",
       "@spine-event-engine/proto/generated/proto-module.js",
     ]) {
       expect(resolveEntrypoint(supported).status, supported).toBe(0);
