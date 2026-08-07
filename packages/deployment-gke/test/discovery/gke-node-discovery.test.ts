@@ -6,9 +6,32 @@ import { ApplicationNode } from "@spine-event-engine/deployment";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { SubscriptionSchema, TopicSchema } from "@spine-event-engine/proto/client";
 
-import { GkeNodeDiscovery } from "../../src/index.js";
+import { GkeNodeDiscovery, NodeDnsResolver } from "../../src/index.js";
 
 describe("GkeNodeDiscovery", () => {
+  it("maps Node A and AAAA TTL answers and treats name-not-found as empty", async () => {
+    const resolver = new NodeDnsResolver(() => ({
+      resolve4: async () => [{ address: "10.0.0.1", ttl: 12 }],
+      resolve6: async () => [{ address: "2001:db8::1", ttl: 4 }],
+      cancel: () => undefined,
+    }));
+    await expect(
+      resolver.resolve("api.default.svc.cluster.local", new AbortController().signal),
+    ).resolves.toEqual([
+      { address: "10.0.0.1", ttl: 12 },
+      { address: "2001:db8::1", ttl: 4 },
+    ]);
+    const missing = new NodeDnsResolver(() => ({
+      resolve4: async () => {
+        throw Object.assign(new Error("missing"), { code: "ENOTFOUND" });
+      },
+      resolve6: async () => {
+        throw Object.assign(new Error("missing"), { code: "ENODATA" });
+      },
+      cancel: () => undefined,
+    }));
+    await expect(missing.resolve("missing", new AbortController().signal)).resolves.toEqual([]);
+  });
   it("publishes a deduplicated canonical IPv6 HTTPS snapshot with the Service TLS authority", async () => {
     const discovery = new GkeNodeDiscovery({
       serviceName: "api.default.svc.cluster.local",

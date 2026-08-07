@@ -2,10 +2,32 @@ import { Resolver } from "node:dns/promises";
 
 import type { GkeDnsAddress, GkeDnsResolver } from "./gke-node-discovery.js";
 
+interface DnsLookup {
+  resolve4(
+    name: string,
+    options: { readonly ttl: true },
+  ): Promise<readonly { readonly address: string; readonly ttl: number }[]>;
+  resolve6(
+    name: string,
+    options: { readonly ttl: true },
+  ): Promise<readonly { readonly address: string; readonly ttl: number }[]>;
+  cancel(): void;
+}
+
 /**
  * Resolves IPv4 and IPv6 headless-Service records through Node DNS.
  */
 export class NodeDnsResolver implements GkeDnsResolver {
+  readonly #create: () => DnsLookup;
+
+  /**
+   * Creates the Node DNS adapter.
+   *
+   * @param create Supplies a resolver factory for deterministic integration tests.
+   */
+  constructor(create: () => DnsLookup = () => new Resolver()) {
+    this.#create = create;
+  }
   /**
    * Resolves both address families and exposes DNS TTLs when Node supplies them.
    *
@@ -14,7 +36,7 @@ export class NodeDnsResolver implements GkeDnsResolver {
    * @returns All successful A and AAAA records, or an empty name-not-found answer.
    */
   async resolve(serviceName: string, signal: AbortSignal): Promise<readonly GkeDnsAddress[]> {
-    const resolver = new Resolver();
+    const resolver = this.#create();
     const cancel = () => {
       resolver.cancel();
     };
