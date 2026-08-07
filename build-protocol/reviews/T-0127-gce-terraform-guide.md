@@ -115,3 +115,42 @@ All four concerns receive one focused re-review after correction. The original
 implementer is explicitly configured as `gpt-5.6-terra` / `medium`; runtime
 metadata is recorded if exposed, otherwise configured profile and absence of a
 visible mismatch remain the acceptance evidence.
+
+## Correction Acceptance And Focused Re-review Dispatch
+
+The pushed correction endpoint is `0f77f672`. It adds the public
+`GceNodeDiscovery` lifecycle owner, application-supplied registry-storage
+resolution in both packaged entrypoints, explicit Server resource ownership,
+anchored Terraform policy extraction with false-positive regression coverage,
+regional and singleton replacement policies, independently configurable custom
+metric scope/filter/target kind, and the exact autoscaler-aware operational
+procedures required by the accepted findings.
+
+The original implementer reported 11 focused tests passing together with the
+composite build typecheck, ESLint, TSDoc, strict snippet verification, Terraform
+formatting and validation, Prettier, and diff checks. The worktree and pushed
+branch are clean. The implementer was explicitly dispatched as the existing
+implementer role with `gpt-5.6-terra` / `medium`. Runtime self-introspection was
+unavailable; the immutable configured role/profile and absence of a visible
+mismatch are the available acceptance evidence.
+
+The focused re-review covers only substantively affected concerns:
+
+- Style and maintainability: storage resolver seams, discovery-owner depth,
+  anchored policy-test durability, naming, and package shape.
+- Documentation: autoscaler-aware zero/replacement/rollback/teardown steps,
+  custom metric wording, Artifact Registry access, COS startup/logging and
+  repair behavior, storage resolution, and Gateway/delivery replacement.
+- TypeScript/API: `GceNodeDiscovery` lifecycle/error/idempotence contract,
+  application registry ownership and closure ordering, settings, examples, and
+  exports.
+- Performance and reliability: failure-safe resource closure, registry
+  lifecycle, regional surge, custom metric scope/filter/target kind, singleton
+  replacement policies, and exact autoscaler state transitions.
+
+Style, TypeScript/API, and reliability reviewers are dispatched as their
+existing roles with explicit `gpt-5.6-terra` / `high`. Documentation uses the
+existing immutable documentation-reviewer profile `gpt-5.6-luna` / `medium`,
+with `medium` explicit. Runtime metadata will be recorded if exposed;
+otherwise, the immutable configured profiles and absence of a visible mismatch
+remain the acceptance evidence under the protocol.
