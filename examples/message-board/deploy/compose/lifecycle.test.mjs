@@ -47,7 +47,7 @@ test("combined Compose serves signed MessageBoard behavior through Envoy", () =>
       ["combined", "delivery", "envoy"],
       new Map([["combined", /MessageBoard combined server ready/u]]),
     );
-    const output = client(project, "envoy", "full");
+    const output = client(project, "envoy", "distributed-full");
     assert.match(output, /query-ok/u);
     assert.match(output, /full-ok/u);
     assert.equal(
@@ -80,7 +80,15 @@ test("standalone Compose recovers its one Gateway from an expected client interr
       ]),
     );
 
-    assert.match(client(project, "envoy", "full"), /full-ok/u);
+    let output;
+    try {
+      output = client(project, "envoy", "distributed-full");
+    } catch (error) {
+      throw new Error(
+        `Standalone public subscription failed. ${String(error)}\n${serviceLogs(project, standalone, ["gateway", "application-1", "application-2"])}`,
+      );
+    }
+    assert.match(output, /full-ok/u);
     const subscription = client(project, "gateway", "subscribe").trim();
     assert.notEqual(subscription, "");
 
@@ -94,6 +102,7 @@ test("standalone Compose recovers its one Gateway from an expected client interr
       ["gateway"],
       new Map([["gateway", /MessageBoard gateway ready/u]]),
     );
+    assert.match(client(project, "gateway", "cancel", subscription), /cancel-ok/u);
     assert.match(client(project, "gateway", "assert-cancelled", subscription), /cancelled-ok/u);
     assert.match(client(project, "envoy", "query"), /query-ok/u);
 
@@ -190,6 +199,14 @@ function diagnostics(project, compose) {
     return run(project, compose, ["ps", "--all", "--format", "json"]);
   } catch (error) {
     return `Could not collect running-service diagnostics: ${String(error)}`;
+  }
+}
+
+function serviceLogs(project, compose, services) {
+  try {
+    return run(project, compose, ["logs", "--tail", "200", ...services]);
+  } catch (error) {
+    return `Could not collect service logs: ${String(error)}`;
   }
 }
 
