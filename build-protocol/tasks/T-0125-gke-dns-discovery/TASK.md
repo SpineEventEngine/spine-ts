@@ -1,6 +1,6 @@
 # T-0125: GKE DNS Discovery Runtime
 
-Status: Ready for integration
+Status: Complete
 
 ## Objective
 
@@ -93,3 +93,15 @@ recovery.
   functions, and 95.10% lines.
 - The task branch is ready for clean integration, post-merge verification, and
   remote synchronization of `main`.
+
+## Integration Closure
+
+- The reviewed task endpoint `62138350` merged into clean integration commit
+  `2f2a6031`. The task and merge trees are identical at
+  `c17fc222eed35f99e1ea68a2e7649d7da97312fa`.
+- Post-merge verification passes 42 focused tests, the deployment package
+  typecheck, package metadata and TypeScript snippet checks, API and audience
+  documentation checks, cleanup lint, and `git diff --check`.
+- The integration branch is pushed. The remaining closure action is advancing
+  and verifying `origin/main`, followed by removal of completed task branches
+  and worktrees.
