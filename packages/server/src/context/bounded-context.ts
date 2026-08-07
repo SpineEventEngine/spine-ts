@@ -728,7 +728,6 @@ export class BoundedContext {
       }
       for (const preparedRepository of preparedRepositories) {
         this.#stand.register(preparedRepository.snapshot.stateSchema, {
-          idField: preparedRepository.snapshot.idField.localName,
           columns: ContextParts.repositoryColumns(preparedRepository.snapshot),
         });
         preparedRepository.commit();

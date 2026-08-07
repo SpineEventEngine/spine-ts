@@ -152,12 +152,23 @@ Makes each Entity class derive and use its own current-state record
 specification.
 
 - Dependencies: T-0131.
-- Ownership: Entity record/scanning code in storage and
-  `packages/server/src/{entity,repository,context}/**`, plus focused tests.
+- Ownership: Entity record/scanning code in storage,
+  `packages/server/src/{entity,repository,context}/**`, the exact frozen JVM
+  `spine/server/entity/entity.proto` source plus its Proto manifest/export
+  integration, and focused tests. The frozen source is copied unchanged from
+  analyzed core-jvm commit `0779b5fa42ca5cebd0d2935fc3a3489ab47846dc`;
+  no JVM build is required.
+- Supporting ownership includes only the handler metadata/generated-registry
+  paths needed to attach hidden immutable state-schema metadata to the Entity
+  class. Applications do not declare that static property themselves.
 - RED-first acceptance: `SpecScanner` accepts only the Entity class and derives
   its ID and state schemas, lifecycle/version fields, and `(column)` metadata;
   multiple columns unpack the state once; repositories persist and restore the
   approved `EntityRecord`; provider queries can consume materialized columns.
+- TypeScript erases the Entity generic schema at runtime. Deterministic build
+  tooling may therefore attach immutable schema metadata to the Entity class
+  itself. It must not create a separate runtime metadata registry or require
+  end-user storage-descriptor boilerplate.
 - Removal boundary: no caller-supplied schemas, metadata registry, compatibility
   hash, JSON-in-`Any`, or alternative current-state record.
 - Review: all four concerns because public Entity storage and query semantics

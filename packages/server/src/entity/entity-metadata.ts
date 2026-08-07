@@ -1,6 +1,7 @@
 import { getOption, hasOption } from "@bufbuild/protobuf";
 import type { DescField, DescFile, Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import type { Entity } from "./entity.js";
 import {
   column,
   entity,
@@ -16,6 +17,55 @@ import {
  * Protobuf-ES message schema accepted by the server descriptor metadata APIs.
  */
 export type DescriptorMessageSchema = GenMessage<Message>;
+
+/**
+ * Constructible class from the Spine Entity family.
+ *
+ * @internal
+ */
+export type EntityConstructor = typeof Entity;
+
+const entitySchema = Symbol("spine-ts.entity-schema");
+
+/**
+ * Attaches generated state-schema metadata directly to an Entity class.
+ *
+ * @internal
+ * @param entityType The Entity class that owns the schema metadata.
+ * @param schema The generated Entity state schema.
+ */
+export function attachEntitySchema(
+  entityType: EntityConstructor,
+  schema: DescriptorMessageSchema,
+): void {
+  const current = Object.prototype.hasOwnProperty.call(entityType, entitySchema)
+    ? Reflect.get(entityType, entitySchema)
+    : undefined;
+  if (current !== undefined && current !== schema) {
+    throw new Error("Entity class already has different generated state schema metadata.");
+  }
+  if (current === undefined) {
+    Object.defineProperty(entityType, entitySchema, {
+      configurable: false,
+      enumerable: false,
+      value: schema,
+      writable: false,
+    });
+  }
+}
+
+/**
+ * Reads generated state-schema metadata from an Entity class.
+ *
+ * @internal
+ * @param entityType The Entity class whose metadata is read.
+ * @returns The attached generated state schema, when present.
+ */
+export function entitySchemaOf(entityType: EntityConstructor): DescriptorMessageSchema | undefined {
+  return Object.prototype.hasOwnProperty.call(entityType, entitySchema)
+    ? (Reflect.get(entityType, entitySchema) as DescriptorMessageSchema)
+    : undefined;
+}
 
 /**
  * Normalized Spine entity kind derived from `(entity).kind`.

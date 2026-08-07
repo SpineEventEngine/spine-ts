@@ -5,6 +5,7 @@ import {
   FileDescriptorProtoSchema,
   FileDescriptorSetSchema,
   StringValueSchema,
+  TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
 import { EventSchema, VersionSchema, file_spine_options } from "@spine-event-engine/proto";
@@ -30,6 +31,10 @@ import {
 } from "../../src/index.js";
 import { SubscriptionIdSchema, SubscriptionSchema } from "@spine-event-engine/proto/client";
 import { standAccess } from "../../src/stand/stand.js";
+import {
+  EntityRecords,
+  standEntityStorageDescriptor,
+} from "../../src/entity/entity-storage-descriptor.js";
 import { SubscriptionRuntime } from "../../src/stand/subscription-runtime.js";
 import {
   eventBusAccess,
@@ -124,6 +129,41 @@ describe("Stand", () => {
     expect("startSubscriptions" in standAccess).toBe(false);
     expect("consumeSubscription" in standAccess).toBe(false);
     expect("reconcileSubscriptions" in standAccess).toBe(false);
+  });
+
+  it("rejects invalid access-seam and closed Stand operations", async () => {
+    const invalid = {} as Stand;
+    expect(() => standAccess.observedState(invalid, "type.spine.io/example.State")).toThrow(
+      /Stand instance/,
+    );
+    expect(() =>
+      standAccess.observeState(invalid, {} as never, {} as never, {} as never, () => {}),
+    ).toThrow(/Stand instance/);
+    expect(() => standAccess.readCurrent(invalid, ProjectionStateSchema, "task", {})).toThrow(
+      /Stand instance/,
+    );
+    expect(() =>
+      standAccess.deferUpdate(invalid, ProjectionStateSchema, createState("task", "First"), {}),
+    ).toThrow(/Stand instance/);
+
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    stand.register(ProjectionStateSchema);
+    expect(standAccess.observedState(stand, undefined)).toBeUndefined();
+    await expect(
+      standAccess.readCurrent(stand, ProjectionStateSchema, "missing", {}),
+    ).resolves.toBeUndefined();
+    const deferred = await standAccess.deferUpdate(
+      stand,
+      ProjectionStateSchema,
+      createState("deferred", "Deferred"),
+      {},
+    );
+    deferred.cancel();
+    await stand.close();
+    expect(() => stand.register(ProjectionStateSchema)).toThrow(/closed/);
   });
 
   it("does not attach a deleted definition after its snapshot is released", async () => {
@@ -821,16 +861,19 @@ describe("Stand", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("rejects updates whose registered ID field is absent from the state", async () => {
+  it("always derives updates from the state schema's first ID field", async () => {
     const stand = new Stand({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    stand.register(ProjectionStateSchema, { idField: "missingId" });
+    stand.register(ProjectionStateSchema);
 
     await expect(
       stand.update(ProjectionStateSchema, createState("task-1", "First")),
-    ).rejects.toThrow(/requires ID field/);
+    ).resolves.toBeUndefined();
+    await expect(stand.read(ProjectionStateSchema, "task-1")).resolves.toMatchObject({
+      id: "task-1",
+    });
   });
 
   it("cleans up subscribers explicitly and deterministically", async () => {
@@ -888,7 +931,10 @@ describe("Stand", () => {
     });
     first.register(ProjectionStateSchema);
     await first.update(ProjectionStateSchema, createState("task-versioned", "Persisted"), {
-      version: create(VersionSchema, { number: 9 }),
+      version: create(VersionSchema, {
+        number: 9,
+        timestamp: create(TimestampSchema, { seconds: 42n, nanos: 7 }),
+      }),
     });
     await first.close();
 
@@ -901,7 +947,10 @@ describe("Stand", () => {
     await expect(restarted.readVersioned(ProjectionStateSchema, "task-versioned")).resolves.toEqual(
       {
         state: createState("task-versioned", "Persisted"),
-        version: create(VersionSchema, { number: 9 }),
+        version: create(VersionSchema, {
+          number: 9,
+          timestamp: create(TimestampSchema, { seconds: 42n, nanos: 7 }),
+        }),
       },
     );
   });
@@ -1263,14 +1312,10 @@ async function writeStandCurrent(
   version: bigint,
   lifecycle: { readonly archived: boolean; readonly deleted: boolean },
 ): Promise<void> {
-  const input: EntityStorageInput<string, ProjectionState> = {
-    context: { name: "Tasks", multitenant: false },
-    id: {
-      clone: (id) => id,
-      fingerprint: `${ProjectionStateSchema.typeName}:entity-id:id:v1`,
-      key: (id) => `string:${id}`,
-    },
-    columns: ProjectionStateSchema.fields.map(
+  const input = standEntityStorageDescriptor(
+    { name: "Tasks", multitenant: false },
+    ProjectionStateSchema,
+    ProjectionStateSchema.fields.map(
       (field) =>
         new RecordColumn(
           field.localName,
@@ -1278,32 +1323,18 @@ async function writeStandCurrent(
           "protobuf",
         ),
     ),
-    extractId: (state) => state.id,
-    layout: "spine-ts.entity-record.v2",
-    stateSchema: ProjectionStateSchema,
-    storageKey: `${ProjectionStateSchema.typeName}:current`,
-  };
+  );
   const storage = factory.createEntityStorage(input) as {
     readonly current: {
-      write(record: {
-        readonly id: string;
-        readonly state: ProjectionState;
-        readonly version: bigint;
-        readonly archived: boolean;
-        readonly deleted: boolean;
-      }): Promise<void>;
+      write(record: Message): Promise<void>;
     };
     close(): void;
   };
 
   try {
-    await storage.current.write({
-      id: state.id,
-      state,
-      version,
-      archived: lifecycle.archived,
-      deleted: lifecycle.deleted,
-    });
+    await storage.current.write(
+      EntityRecords.pack(ProjectionStateSchema, state.id, state, version, lifecycle),
+    );
   } finally {
     storage.close();
   }

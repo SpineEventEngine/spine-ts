@@ -10,6 +10,7 @@ import {
   FileDescriptorProtoSchema,
   FileDescriptorSetSchema,
   StringValueSchema,
+  TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
@@ -52,6 +53,7 @@ import {
   type StorageContext,
 } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
+import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import type {
   EntityCommitInput,
   EntityCommitResult,
@@ -83,11 +85,16 @@ import {
   type EntityHandlersMetadata,
   type EventDispatcher,
   type InboxMessage,
+  SpecScanner,
 } from "../../src/index.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { Delivery } from "../../src/delivery/delivery.js";
 import { describeEntityMetadata } from "../../src/entity/entity-metadata.js";
-import { entityStorageDescriptor } from "../../src/entity/entity-storage-descriptor.js";
+import {
+  EntityRecords,
+  entityStorageDescriptor,
+  standEntityStorageDescriptor,
+} from "../../src/entity/entity-storage-descriptor.js";
 import { standAccess } from "../../src/stand/stand.js";
 import { SystemClock } from "../../src/runtime/signal-metadata.js";
 import { repositoryAccess, type RepositoryView } from "../../src/repository/repository.js";
@@ -1399,25 +1406,25 @@ describe("repository signal routing", () => {
   });
 
   it("derives stable current-record identity from every supported ID representation", () => {
-    const descriptor = entityStorageDescriptor(
-      { name: "Tasks", multitenant: false },
-      ProjectionStateSchema,
-      "id",
-      [],
-    );
-    const alternate = entityStorageDescriptor(
-      { name: "Tasks", multitenant: false },
-      ProjectionStateSchema,
-      "name",
-      [],
-    );
+    new Repository({ entityType: ExecutingTaskProjection, schema: ProjectionStateSchema });
+    const spec = SpecScanner.scan(ExecutingTaskProjection);
+    const descriptor = entityStorageDescriptor({ name: "Tasks", multitenant: false }, spec);
     const structured = { value: "task-1" };
+    const record = EntityRecords.pack(
+      ProjectionStateSchema,
+      "task-1",
+      create(ProjectionStateSchema, { id: "state-id-must-not-route", name: "First" }),
+      1n,
+      { archived: false, deleted: false },
+    );
 
-    expect(
-      descriptor.extractId(create(ProjectionStateSchema, { id: "task-1", name: "First" })),
-    ).toBe("task-1");
-    expect(descriptor.storageKey).toBe(`${ProjectionStateSchema.typeName}:current`);
-    expect(descriptor.id.fingerprint).not.toBe(alternate.id.fingerprint);
+    expect(spec.sourceType).toBe(ProjectionStateSchema);
+    expect(spec.recordType.typeName).toBe("spine.server.entity.EntityRecord");
+    expect(spec.idValueIn(record)).toBe("task-1");
+    expect(record.entityId).toBeDefined();
+    expect(descriptor.id.unpack(record.entityId as NonNullable<typeof record.entityId>)).toBe(
+      "task-1",
+    );
     expect(descriptor.id.key(null)).toBe("null");
     expect(descriptor.id.key("task-1")).toBe("string:task-1");
     expect(descriptor.id.key(1)).toBe("number:1");
@@ -7222,6 +7229,55 @@ describe("repository signal routing", () => {
     });
   });
 
+  it("atomically updates a timestamped current Version after repository read-modify-write", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .withStorageFactory(factory)
+      .build();
+    const initialVersion = create(VersionSchema, {
+      number: 1,
+      timestamp: create(TimestampSchema, { seconds: 41n, nanos: 7 }),
+    });
+    const nextVersion = create(VersionSchema, {
+      number: 2,
+      timestamp: create(TimestampSchema, { seconds: 42n, nanos: 8 }),
+    });
+
+    try {
+      await context.stand().update(
+        ProjectionStateSchema,
+        create(ProjectionStateSchema, {
+          id: "timestamped-cas",
+          name: "Before",
+          priority: 1,
+        }),
+        { version: initialVersion },
+      );
+
+      await expect(
+        context.eventBus().post(
+          createProjectionEvent("timestamped-cas-event", "timestamped-cas", {
+            version: nextVersion,
+          }),
+        ),
+      ).resolves.toBeUndefined();
+
+      await expect(
+        context.stand().readVersioned(ProjectionStateSchema, "timestamped-cas"),
+      ).resolves.toEqual({
+        state: create(ProjectionStateSchema, {
+          id: "timestamped-cas",
+          name: "Task (projected)",
+          priority: 2,
+        }),
+        version: nextVersion,
+      });
+    } finally {
+      await context.close();
+    }
+  });
+
   it("routes projection events without writing Stand when no subscriber is registered", async () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createReactingProjectionRepository())
@@ -8920,6 +8976,7 @@ function createProjectionEvent(
     readonly pastMessageTenantId?: string;
     readonly pastMessageTenantKind?: TenantKind;
     readonly includeVersion?: boolean;
+    readonly version?: import("@spine-event-engine/proto").Version;
   } = {},
 ) {
   const origin = projectionEventOrigin(options);
@@ -8931,7 +8988,7 @@ function createProjectionEvent(
       producerId: projectionProducerId(options),
       ...(options.includeVersion === false
         ? {}
-        : { version: create(VersionSchema, { number: 1 }) }),
+        : { version: options.version ?? create(VersionSchema, { number: 1 }) }),
     }),
     schema: ProjectionStateSchema,
     message: create(ProjectionStateSchema, {
@@ -9171,6 +9228,7 @@ async function waitForFailure(
 class CurrentRecordTestStorage<S extends Message = Message> {
   readonly #factory: InMemoryStorageFactory;
   readonly #input: EntityStorageInput<unknown, S>;
+  readonly #stateSchema: GenMessage<S>;
 
   constructor(options: {
     readonly context: StorageContext;
@@ -9178,11 +9236,11 @@ class CurrentRecordTestStorage<S extends Message = Message> {
     readonly stateSchema: GenMessage<S>;
   }) {
     this.#factory = options.storageFactory;
+    this.#stateSchema = options.stateSchema;
     const metadata = describeEntityMetadata(options.stateSchema);
-    this.#input = entityStorageDescriptor(
+    this.#input = standEntityStorageDescriptor(
       options.context,
       options.stateSchema,
-      metadata.idField.localName,
       metadata.columns.map(
         (field) =>
           new RecordColumn(
@@ -9191,7 +9249,7 @@ class CurrentRecordTestStorage<S extends Message = Message> {
             "protobuf",
           ),
       ),
-    ) as unknown as EntityStorageInput<unknown, S>;
+    ) as EntityStorageInput<unknown, S>;
   }
 
   async readCurrent(id: unknown): Promise<
@@ -9206,14 +9264,19 @@ class CurrentRecordTestStorage<S extends Message = Message> {
     const storage = this.#open();
     try {
       const current = await storage.current.read(id);
-      return current === undefined
-        ? undefined
-        : {
-            entityId: current.id,
-            lifecycle: { archived: current.archived, deleted: current.deleted },
-            state: current.state,
-            version: current.version,
-          };
+      if (current === undefined) return undefined;
+      if (current.entityId === undefined)
+        throw new Error("EntityRecord current record has no packed entity ID.");
+      const entityId = this.#input.id.unpack(current.entityId);
+      if (entityId === undefined)
+        throw new Error("EntityRecord current record ID does not match its Entity schema.");
+      const unpacked = EntityRecords.unpack(this.#stateSchema, current);
+      return {
+        entityId,
+        lifecycle: { archived: unpacked.archived, deleted: unpacked.deleted },
+        state: unpacked.state as S,
+        version: unpacked.version,
+      };
     } finally {
       storage.close();
     }
@@ -9251,13 +9314,15 @@ class CurrentRecordTestStorage<S extends Message = Message> {
   }): Promise<void> {
     const storage = this.#open();
     try {
-      await storage.current.write({
-        id: current.entityId,
-        state: current.state,
-        version: current.version,
-        archived: current.lifecycle.archived,
-        deleted: current.lifecycle.deleted,
-      });
+      await storage.current.write(
+        EntityRecords.pack(
+          this.#stateSchema,
+          current.entityId as never,
+          current.state,
+          current.version,
+          current.lifecycle,
+        ),
+      );
     } finally {
       storage.close();
     }
@@ -9266,23 +9331,8 @@ class CurrentRecordTestStorage<S extends Message = Message> {
   #open() {
     return this.#factory.createEntityStorage(this.#input) as {
       readonly current: {
-        read(id: unknown): Promise<
-          | {
-              readonly id: unknown;
-              readonly state: S;
-              readonly version: bigint;
-              readonly archived: boolean;
-              readonly deleted: boolean;
-            }
-          | undefined
-        >;
-        write(record: {
-          readonly id: unknown;
-          readonly state: S;
-          readonly version: bigint;
-          readonly archived: boolean;
-          readonly deleted: boolean;
-        }): Promise<void>;
+        read(id: unknown): Promise<EntityRecord | undefined>;
+        write(record: EntityRecord): Promise<void>;
       };
       readonly events: {
         backward(id: unknown, depth: number): Promise<readonly SpineEvent[]>;

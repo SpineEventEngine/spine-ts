@@ -13,7 +13,11 @@ import type {
   EntityRecordStorage,
   EntityStorageInput,
 } from "@spine-event-engine/storage/internal/entity-history";
-import { entityStorageDescriptor } from "../entity/entity-storage-descriptor.js";
+import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+import {
+  EntityRecords,
+  standEntityStorageDescriptor,
+} from "../entity/entity-storage-descriptor.js";
 import { SubscriptionObservers, type StandObservedState } from "./subscription-observer.js";
 import type { EventBus, EventSubscription } from "../bus/event-bus.js";
 import type { Subscription, SubscriptionUpdate } from "@spine-event-engine/proto/client";
@@ -40,11 +44,6 @@ export interface StandOptions {
  */
 export interface StandRegisterOptions {
   // prettier-ignore
-
-  /**
-   * Generated local property name for the entity ID field. Defaults to the schema's first field.
-   */
-  readonly idField?: string;
 
   /**
    * Queryable columns materialized for this state type.
@@ -227,7 +226,7 @@ export class Stand {
   readonly #registrations = new Map<string, Registration>();
   readonly #entityHandles = new Map<
     string,
-    { readonly current: EntityRecordStorage<unknown, Message>; close(): void }
+    { readonly current: EntityRecordStorage<unknown>; close(): void }
   >();
   readonly #inFlight = new Set<Promise<void>>();
   #closing = false;
@@ -252,7 +251,7 @@ export class Stand {
    * Registers one entity state schema. Re-registering the same schema is idempotent.
    *
    * @param schema The entity state schema to register.
-   * @param options The ID field and materialized columns for the state type.
+   * @param options The materialized columns for the state type.
    */
   register(schema: MessageSchema, options: StandRegisterOptions = {}): void {
     this.#requireOpen();
@@ -261,7 +260,7 @@ export class Stand {
       return;
     }
 
-    const idField = options.idField ?? schema.fields[0]?.localName;
+    const idField = schema.fields[0]?.localName;
     if (idField === undefined || idField.trim().length === 0) {
       throw new Error(`Stand state "${schema.typeName}" requires an entity ID field.`);
     }
@@ -349,7 +348,7 @@ export class Stand {
       const tenantId = this.#tenantId(options.tenantId);
       {
         const stored = await this.#openCurrent(registration, tenantId).read(id);
-        if (stored === undefined || stored.deleted) {
+        if (stored === undefined || EntityRecords.unpack(registration.schema, stored).deleted) {
           return undefined;
         }
         return this.#currentResult(registration, stored);
@@ -423,9 +422,7 @@ export class Stand {
       const registration = this.#registration(schema, "read");
       const tenantId = this.#tenantId(options.tenantId);
       {
-        const stored = await this.#openCurrent(registration, tenantId).query(
-          Stand.#normalizePlan(plan),
-        );
+        const stored = await this.#openCurrent(registration, tenantId).query(plan);
         const results = stored.map((entry) =>
           this.#entryResult(registration, entry.record, plan.mask?.paths),
         );
@@ -460,7 +457,15 @@ export class Stand {
         const current = this.#openCurrent(registration, tenantId);
         for (const id of ids) {
           const stored = await current.read(id);
-          if (stored !== undefined) await current.write({ ...stored, deleted: true });
+          if (stored !== undefined) {
+            const value = EntityRecords.unpack(registration.schema, stored);
+            await current.write(
+              EntityRecords.pack(registration.schema, id, value.state, value.versionMessage, {
+                archived: value.archived,
+                deleted: true,
+              }),
+            );
+          }
         }
         return ids.length;
       }
@@ -511,18 +516,21 @@ export class Stand {
       const tenantId = this.#tenantId(options.tenantId);
       const stateCopy = clone(schema, state);
       const id = Stand.#readStateId(stateCopy, registration);
-      const previousState = this.#hasTenantSubscribers(registration, tenantId)
-        ? ((await this.#openCurrent(registration, tenantId).read(id))?.state as
-            MessageShape<Schema> | undefined)
+      const previous = this.#hasTenantSubscribers(registration, tenantId)
+        ? await this.#openCurrent(registration, tenantId).read(id)
         : undefined;
+      const previousState =
+        previous === undefined
+          ? undefined
+          : (EntityRecords.unpack(registration.schema, previous).state as MessageShape<Schema>);
       const subscribers = [...this.#tenantSubscribers(registration, this.#tenantKey(tenantId))];
-      const record = {
+      const record = EntityRecords.pack(
+        registration.schema,
         id,
-        state: stateCopy,
-        version: BigInt(options.version?.number ?? 0),
-        archived: options.lifecycle?.archived ?? false,
-        deleted: options.lifecycle?.deleted ?? false,
-      };
+        stateCopy,
+        options.version ?? 0n,
+        options.lifecycle ?? { archived: false, deleted: false },
+      );
       let settled = false;
       const settle = () => {
         if (!settled) {
@@ -571,11 +579,13 @@ export class Stand {
       const tenantId = this.#tenantId(options.tenantId);
       const stored = await this.#openCurrent(registration, tenantId).read(id);
       if (stored === undefined) return undefined;
+      const value = EntityRecords.unpack(registration.schema, stored);
       return Object.freeze({
-        state: clone(schema, stored.state as MessageShape<Schema>),
-        version: stored.version,
-        archived: stored.archived,
-        deleted: stored.deleted,
+        state: clone(schema, value.state as MessageShape<Schema>),
+        versionMessage: clone(VersionSchema, value.versionMessage),
+        version: value.version,
+        archived: value.archived,
+        deleted: value.deleted,
       });
     } finally {
       finish();
@@ -666,16 +676,15 @@ export class Stand {
   #openCurrent(
     registration: Registration,
     tenantId: string | undefined,
-  ): EntityRecordStorage<unknown, Message> {
+  ): EntityRecordStorage<unknown> {
     const key = `${registration.typeUrl}\u0000${tenantId ?? ""}`;
     const existing = this.#entityHandles.get(key);
     if (existing !== undefined) return existing.current;
     const handle = Stand.#openStorage(
       this.#storageFactory,
-      entityStorageDescriptor(
+      standEntityStorageDescriptor(
         this.#storageContext(tenantId),
         registration.schema,
-        registration.idField,
         registration.columns,
       ),
     );
@@ -685,20 +694,21 @@ export class Stand {
 
   #entryResult<Schema extends MessageSchema>(
     registration: Registration<Schema>,
-    current: { readonly state: Message; readonly version: bigint; readonly deleted: boolean },
+    current: EntityRecord,
     maskPaths?: readonly string[],
   ): StandReadResult<Schema> | undefined {
-    if (current.deleted) return undefined;
+    const value = EntityRecords.unpack(registration.schema, current);
+    if (value.deleted) return undefined;
     const version =
-      current.version === 0n
+      value.version === 0n && value.versionMessage.timestamp === undefined
         ? undefined
-        : create(VersionSchema, { number: Number(current.version) });
+        : value.versionMessage;
 
     return Object.freeze({
       state: Object.assign(
         create(registration.schema),
         RecordMask.apply(
-          clone(registration.schema, current.state as MessageShape<Schema>),
+          clone(registration.schema, value.state as MessageShape<Schema>),
           maskPaths,
         ),
       ),
@@ -708,7 +718,7 @@ export class Stand {
 
   #currentResult<Schema extends MessageSchema>(
     registration: Registration<Schema>,
-    current: { readonly state: Message; readonly version: bigint; readonly deleted: boolean },
+    current: EntityRecord,
   ): StandReadResult<Schema> | undefined {
     return this.#entryResult(registration, current);
   }
@@ -881,31 +891,10 @@ export class Stand {
     };
   }
 
-  static #normalizePlan(plan: NormalizedQueryPlan<unknown>): NormalizedQueryPlan<unknown> {
-    const normalize = (
-      predicate: NonNullable<NormalizedQueryPlan<unknown>["predicate"]>,
-    ): NonNullable<NormalizedQueryPlan<unknown>["predicate"]> => {
-      if (predicate.kind === "comparison" && predicate.column === "version") {
-        const value = predicate.value;
-        return typeof value === "object" &&
-          value !== null &&
-          "number" in value &&
-          typeof value.number === "number"
-          ? { ...predicate, value: BigInt(value.number) }
-          : predicate;
-      }
-      if (predicate.kind === "all" || predicate.kind === "either") {
-        return { ...predicate, predicates: predicate.predicates.map(normalize) };
-      }
-      return predicate;
-    };
-    return plan.predicate === undefined ? plan : { ...plan, predicate: normalize(plan.predicate) };
-  }
-
   static #openStorage<I, S extends Message>(
     factory: StorageFactory,
     input: EntityStorageInput<I, S>,
-  ): { readonly current: EntityRecordStorage<I, S>; close(): void } {
+  ): { readonly current: EntityRecordStorage<I>; close(): void } {
     const candidate = factory as StorageFactory & Partial<EntityStorageFactory>;
     if (candidate.createEntityStorage === undefined) {
       throw new Error("StorageFactory does not provide the required entity-record storage seam.");
@@ -922,7 +911,7 @@ interface EntityStorageFactory {
   createEntityStorage<I, S extends Message>(
     input: EntityStorageInput<I, S>,
   ): {
-    readonly current: EntityRecordStorage<I, S>;
+    readonly current: EntityRecordStorage<I>;
     close(): void;
   };
 }
@@ -938,6 +927,11 @@ interface PreparedStandUpdate extends DeferredStandUpdate {
 
 interface StandCurrentRecord<Schema extends MessageSchema> {
   readonly state: MessageShape<Schema>;
+
+  /**
+   * Complete persisted envelope used for storage compare-and-set.
+   */
+  readonly versionMessage: Version;
   readonly version: bigint;
   readonly archived: boolean;
   readonly deleted: boolean;

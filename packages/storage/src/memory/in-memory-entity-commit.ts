@@ -1,5 +1,6 @@
 import { clone, toBinary, type Message } from "@bufbuild/protobuf";
 import { EventSchema } from "@spine-event-engine/proto";
+import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 
 import { eventStoreRecordSpec } from "../event/event-store.js";
 import type { EntityRecord } from "../entity/entity-record.js";
@@ -99,7 +100,7 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
     stagedEvents.replace(this.#events.snapshot());
     try {
       const current = await entity.current.read(input.entityId);
-      if (!InMemoryCommitValues.sameCurrent(current, input.expected, input.entity.stateSchema)) {
+      if (!InMemoryCommitValues.sameCurrent(current, input.expected)) {
         return "conflict";
       }
       const delivery = [...(input.events ?? [])].map((event) =>
@@ -176,8 +177,8 @@ const InMemoryCommitValues = Object.freeze({
       context: input.context,
       id: input.id,
       entityId: input.entity.id.key(input.entityId),
-      expected: InMemoryCommitValues.record(input.expected, input.entity.stateSchema),
-      next: InMemoryCommitValues.record(input.next, input.entity.stateSchema),
+      expected: InMemoryCommitValues.record(input.expected),
+      next: InMemoryCommitValues.record(input.next),
       states: (input.states ?? []).map((state) => ({
         entityId: input.entity.id.key(state.entityId),
         state: InMemoryCommitValues.hex(toBinary(input.entity.stateSchema, state.state)),
@@ -196,35 +197,21 @@ const InMemoryCommitValues = Object.freeze({
     });
   },
 
-  record<I, S extends Message>(
-    record: EntityRecord<I, S> | undefined,
-    schema: EntityCommitInput<I, S>["entity"]["stateSchema"],
-  ): unknown {
+  record(record: EntityRecord | undefined): string | undefined {
     return record === undefined
       ? undefined
-      : {
-          state: InMemoryCommitValues.hex(toBinary(schema, record.state)),
-          version: record.version.toString(),
-          archived: record.archived,
-          deleted: record.deleted,
-        };
+      : InMemoryCommitValues.hex(toBinary(EntityRecordSchema, record));
   },
 
   time(value: { readonly seconds: bigint; readonly nanos: number }): readonly [string, number] {
     return [value.seconds.toString(), value.nanos];
   },
 
-  sameCurrent<I, S extends Message>(
-    actual: EntityRecord<I, S> | undefined,
-    expected: EntityRecord<I, S> | undefined,
-    schema: EntityCommitInput<I, S>["entity"]["stateSchema"],
-  ): boolean {
+  sameCurrent(actual: EntityRecord | undefined, expected: EntityRecord | undefined): boolean {
     if (actual === undefined || expected === undefined) return actual === expected;
-    return (
-      actual.version === expected.version &&
-      actual.archived === expected.archived &&
-      actual.deleted === expected.deleted &&
-      InMemoryCommitValues.equal(toBinary(schema, actual.state), toBinary(schema, expected.state))
+    return InMemoryCommitValues.equal(
+      toBinary(EntityRecordSchema, actual),
+      toBinary(EntityRecordSchema, expected),
     );
   },
 

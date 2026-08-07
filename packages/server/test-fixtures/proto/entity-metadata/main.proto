@@ -69,3 +69,21 @@ message OptionalSetOnceState {
   optional string explicit_id = 2 [(set_once) = true];
   string mutable_note = 3;
 }
+
+// Identifies a Projection state with a message-shaped ID.
+message ProjectionId {
+
+  // The identifier value.
+  string value = 1;
+}
+
+// Provides a Projection state identified by a Proto message.
+message MessageIdProjectionState {
+  option (entity).kind = PROJECTION;
+
+  // The Projection identifier.
+  ProjectionId id = 1 [(set_once) = true];
+
+  // A queryable name.
+  string name = 2 [(column) = true];
+}

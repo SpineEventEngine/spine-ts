@@ -146,6 +146,8 @@ export {
   isEntitySchema,
 } from "./entity/entity-metadata.js";
 
+export { SpecScanner } from "./entity/spec-scanner.js";
+
 export {
   createEntityTransaction,
   EntityTransaction,

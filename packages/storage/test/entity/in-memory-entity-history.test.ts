@@ -1,7 +1,11 @@
-import { create } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import {
+  EntityRecordSchema,
+  type EntityRecord,
+} from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -14,25 +18,28 @@ import { InMemoryStorageBackend } from "../../src/index.js";
 import { EntityHistoryConformance } from "../../src/internal/entity-history.js";
 
 describe("InMemoryEntityHistory", () => {
+  it("stores the JVM EntityRecord envelope without losing packed current fields", async () => {
+    const storage = new MemoryEntityRecordStorage({
+      columns: [],
+      idKey: (id: string) => id,
+      unpackId: unpackStringId,
+    });
+    const expected = currentRecord("task", "current", 3, true, false);
+
+    await storage.write(expected);
+
+    await expect(storage.read("task")).resolves.toEqual(expected);
+  });
+
   it("uses isolated default current-record storage and ID cloning", async () => {
     const storage = new MemoryEntityRecordStorage({
       columns: [],
-      extractId: () => "task",
-      stateSchema: StringValueSchema,
       idKey: (id: string) => id,
+      unpackId: unpackStringId,
     });
     await expect(storage.read("missing")).resolves.toBeUndefined();
-    await storage.write({
-      id: "task",
-      state: createString("current"),
-      version: 1n,
-      archived: false,
-      deleted: false,
-    });
-    await expect(storage.read("task")).resolves.toMatchObject({
-      id: "task",
-      state: { value: "current" },
-    });
+    await storage.write(currentRecord("task", "current", 1));
+    await expect(storage.read("task")).resolves.toEqual(currentRecord("task", "current", 1));
   });
 
   it("passes the shared adapter conformance fixture", async () => {
@@ -90,21 +97,14 @@ describe("InMemoryEntityHistory", () => {
     const secondFactory = new MemoryEntityStorageFactory();
     const input = {
       context: { name: "Tasks", multitenant: false },
-      id: { clone: (id: string) => id, key: (id: string) => id },
-      extractId: () => "task",
+      id: { clone: (id: string) => id, key: (id: string) => id, unpack: unpackStringId },
       columns: [],
       sourceType: StringValueSchema,
       stateSchema: StringValueSchema,
     };
     const first = firstFactory.create(input);
     const second = secondFactory.create(input);
-    await first.current.write({
-      id: "task",
-      state: create(StringValueSchema, { value: "current" }),
-      version: 1n,
-      archived: true,
-      deleted: false,
-    });
+    await first.current.write(currentRecord("task", "current", 1, true));
     await expect(second.current.read("task")).resolves.toBeUndefined();
   });
   it("shares entity rows with one backend token and isolates distinct source types", async () => {
@@ -114,17 +114,9 @@ describe("InMemoryEntityHistory", () => {
     const input = entityStorageInput();
     const first = firstFactory.create(input);
     const second = secondFactory.create(input);
-    await first.current.write({
-      id: "task",
-      state: createString("current"),
-      version: 1n,
-      archived: false,
-      deleted: false,
-    });
+    await first.current.write(currentRecord("task", "current", 1));
 
-    await expect(second.current.read("task")).resolves.toMatchObject({
-      state: { value: "current" },
-    });
+    await expect(second.current.read("task")).resolves.toEqual(currentRecord("task", "current", 1));
     const otherSource = secondFactory.create({ ...input, sourceType: AnySchema });
     await expect(otherSource.current.read("task")).resolves.toBeUndefined();
   });
@@ -147,13 +139,7 @@ describe("InMemoryEntityHistory", () => {
       }),
     );
     const otherSource = factory.create({ ...entityStorageInput(), sourceType: AnySchema });
-    await first.current.write({
-      id: "task",
-      state: createString("current"),
-      version: 1n,
-      archived: false,
-      deleted: false,
-    });
+    await first.current.write(currentRecord("task", "current", 1));
 
     await expect(tupleCollision.current.read("task")).resolves.toBeUndefined();
     await expect(otherTenant.current.read("task")).resolves.toBeUndefined();
@@ -175,17 +161,11 @@ describe("InMemoryEntityHistory", () => {
     const singleTenant = factory.create(
       entityStorageInput({ context: { name: "TenantScopeTest", multitenant: false } }),
     );
-    await firstTenant.current.write({
-      id: "task",
-      state: createString("tenantless"),
-      version: 1n,
-      archived: false,
-      deleted: false,
-    });
+    await firstTenant.current.write(currentRecord("task", "tenantless", 1));
 
-    await expect(sameTenant.current.read("task")).resolves.toMatchObject({
-      state: { value: "tenantless" },
-    });
+    await expect(sameTenant.current.read("task")).resolves.toEqual(
+      currentRecord("task", "tenantless", 1),
+    );
     await expect(singleTenant.current.read("task")).resolves.toBeUndefined();
   });
 
@@ -768,6 +748,37 @@ function timestamp(seconds: number) {
 function createString(value: string) {
   return create(StringValueSchema, { value });
 }
+
+function currentRecord(
+  id: string,
+  value: string,
+  version: number,
+  archived = false,
+  deleted = false,
+): EntityRecord {
+  return create(EntityRecordSchema, {
+    entityId: packed(StringValueSchema, createString(id)),
+    lifecycleFlags: { archived, deleted },
+    state: packed(StringValueSchema, createString(value)),
+    version: { number: version },
+  });
+}
+
+function packed<Schema extends typeof StringValueSchema>(
+  schema: Schema,
+  message: ReturnType<Schema["create"]>,
+) {
+  return create(AnySchema, {
+    typeUrl: `type.spine.io/${schema.typeName}`,
+    value: toBinary(schema, message),
+  });
+}
+
+function unpackStringId(id: { readonly typeUrl: string; readonly value: Uint8Array }) {
+  if (id.typeUrl !== "type.spine.io/google.protobuf.StringValue") return undefined;
+  return fromBinary(StringValueSchema, id.value).value;
+}
+
 function event(value: string) {
   return create(EventSchema, { id: create(EventIdSchema, { value }) });
 }
@@ -791,8 +802,7 @@ function entityStorageInput(
 ) {
   return {
     context: { name: "Tasks", multitenant: false },
-    id: { clone: (id: string) => id, key: (id: string) => id },
-    extractId: () => "task",
+    id: { clone: (id: string) => id, key: (id: string) => id, unpack: unpackStringId },
     columns: [],
     sourceType: StringValueSchema,
     stateSchema: StringValueSchema,

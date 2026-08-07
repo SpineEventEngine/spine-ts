@@ -1,9 +1,12 @@
-import { clone, toBinary } from "@bufbuild/protobuf";
-import type { Message } from "@bufbuild/protobuf";
+import { clone, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { Event } from "@spine-event-engine/proto";
 import { EventSchema } from "@spine-event-engine/proto";
+import {
+  EntityRecordSchema,
+  type EntityRecord,
+} from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 
 import type {
   EntityEventHistoryPort,
@@ -11,7 +14,7 @@ import type {
   EntityStateHistoryPort,
   EntityStateHistoryRecord,
 } from "../entity/entity-history-storage.js";
-import type { EntityRecord, EntityRecordStorage } from "../entity/entity-record.js";
+import type { EntityRecordStorage } from "../entity/entity-record.js";
 import type { StorageContext } from "../storage/storage.js";
 import { StorageScopes } from "../storage/canonical-scope.js";
 import { InMemoryStorageBackend } from "./in-memory-storage-backend.js";
@@ -80,7 +83,7 @@ export class InMemoryEntityStorage<I, S extends Message> {
   /**
    * Provides current-record storage for this entity scope.
    */
-  readonly current: MemoryEntityRecordStorage<I, S>;
+  readonly current: MemoryEntityRecordStorage<I>;
 
   /**
    * Provides event-history storage for this entity scope.
@@ -103,9 +106,8 @@ export class InMemoryEntityStorage<I, S extends Message> {
       idKey: input.id.key,
       idClone: input.id.clone,
       columns: input.columns,
-      extractId: input.extractId,
-      stateSchema: input.stateSchema,
-      records: backend.current as unknown as Map<string, EntityRecord<I, S>>,
+      unpackId: input.id.unpack,
+      records: backend.current as Map<string, EntityRecord>,
     });
     this.events = new MemoryEntityEventHistory({
       idKey: input.id.key,
@@ -147,17 +149,9 @@ export interface EntityStorageInput<I, S extends Message> {
   readonly id: EntityIdCodec<I>;
 
   /**
-   * Returns the canonical entity identifier from durable state.
-   *
-   * @param state Supplies the durable entity state.
-   * @returns Returns the state entity identifier.
+   * Descriptor-owned current-record columns, including lifecycle and state fields.
    */
-  readonly extractId: (state: S) => I;
-
-  /**
-   * Descriptor-owned declared state columns; lifecycle columns are supplied by storage.
-   */
-  readonly columns: readonly RecordColumn<S>[];
+  readonly columns: readonly RecordColumn<EntityRecord>[];
 
   /**
    * Identifies the Entity source type represented by these records.
@@ -183,6 +177,14 @@ export interface EntityIdCodec<I> {
    * @returns Returns an independent identifier copy.
    */
   readonly clone: (id: I) => I;
+
+  /**
+   * Unpacks one JVM EntityRecord ID envelope into the Entity identifier.
+   *
+   * @param id The packed EntityRecord ID.
+   * @returns The unpacked entity ID, when it matches the configured schema.
+   */
+  readonly unpack: (id: NonNullable<EntityRecord["entityId"]>) => I | undefined;
 
   /**
    * Converts an entity identifier into its storage-map key.
@@ -236,12 +238,8 @@ const EntitySnapshots = {
   /**
    * Copies an immutable latest-state record.
    */
-  copyCurrent<I, S extends Message>(
-    record: EntityRecord<I, S>,
-    schema: GenMessage<S>,
-    idClone: (id: I) => I,
-  ): EntityRecord<I, S> {
-    return { ...record, id: idClone(record.id), state: clone(schema, record.state) };
+  copyCurrent(record: EntityRecord): EntityRecord {
+    return clone(EntityRecordSchema, record);
   },
 
   /**
@@ -264,13 +262,12 @@ const EntitySnapshots = {
 /**
  * In-memory latest-state storage used by all entity families.
  */
-export class MemoryEntityRecordStorage<I, S extends Message> implements EntityRecordStorage<I, S> {
+export class MemoryEntityRecordStorage<I> implements EntityRecordStorage<I> {
   readonly #idKey: (id: I) => string;
   readonly #idClone: (id: I) => I;
-  readonly #records: Map<string, EntityRecord<I, S>>;
-  readonly #stateSchema: GenMessage<S>;
-  readonly #extractId: (state: S) => I;
-  readonly #columns: readonly RecordColumn<S>[];
+  readonly #records: Map<string, EntityRecord>;
+  readonly #unpackId: (id: NonNullable<EntityRecord["entityId"]>) => I | undefined;
+  readonly #columns: readonly RecordColumn<EntityRecord>[];
 
   /**
    * Creates a current-record adapter over supplied or fresh record storage.
@@ -278,18 +275,16 @@ export class MemoryEntityRecordStorage<I, S extends Message> implements EntityRe
    * @param input Supplies state, ID, column, and record-storage configuration.
    */
   constructor(input: {
-    readonly stateSchema: GenMessage<S>;
     readonly idKey: (id: I) => string;
     readonly idClone?: (id: I) => I;
-    readonly records?: Map<string, EntityRecord<I, S>>;
-    readonly extractId: (state: S) => I;
-    readonly columns: readonly RecordColumn<S>[];
+    readonly records?: Map<string, EntityRecord>;
+    readonly unpackId: (id: NonNullable<EntityRecord["entityId"]>) => I | undefined;
+    readonly columns: readonly RecordColumn<EntityRecord>[];
   }) {
     this.#idKey = input.idKey;
     this.#idClone = input.idClone ?? ((id) => EntitySnapshots.cloneId(id));
-    this.#stateSchema = input.stateSchema;
-    this.#records = input.records ?? new Map<string, EntityRecord<I, S>>();
-    this.#extractId = input.extractId;
+    this.#records = input.records ?? new Map<string, EntityRecord>();
+    this.#unpackId = input.unpackId;
     this.#columns = input.columns;
   }
 
@@ -299,12 +294,10 @@ export class MemoryEntityRecordStorage<I, S extends Message> implements EntityRe
    * @param id Supplies the entity identifier to read.
    * @returns Resolves to an independent current record, when present.
    */
-  read(id: I): Promise<EntityRecord<I, S> | undefined> {
+  read(id: I): Promise<EntityRecord | undefined> {
     return Promise.resolve().then(() => {
       const record = this.#records.get(this.#idKey(id));
-      return record === undefined
-        ? undefined
-        : EntitySnapshots.copyCurrent(record, this.#stateSchema, this.#idClone);
+      return record === undefined ? undefined : EntitySnapshots.copyCurrent(record);
     });
   }
 
@@ -314,15 +307,12 @@ export class MemoryEntityRecordStorage<I, S extends Message> implements EntityRe
    * @param record Supplies the current record to store.
    * @returns Completes when the record is stored.
    */
-  write(record: EntityRecord<I, S>): Promise<void> {
+  write(record: EntityRecord): Promise<void> {
     return Promise.resolve().then(() => {
-      if (this.#idKey(record.id) !== this.#idKey(this.#extractId(record.state))) {
-        throw new Error("Entity current record ID does not match its state ID.");
-      }
-      this.#records.set(
-        this.#idKey(record.id),
-        EntitySnapshots.copyCurrent(record, this.#stateSchema, this.#idClone),
-      );
+      const id = record.entityId === undefined ? undefined : this.#unpackId(record.entityId);
+      if (id === undefined)
+        throw new Error("Entity current record ID does not match its Entity ID schema.");
+      this.#records.set(this.#idKey(id), EntitySnapshots.copyCurrent(record));
     });
   }
 
@@ -335,7 +325,7 @@ export class MemoryEntityRecordStorage<I, S extends Message> implements EntityRe
   query(
     plan: NormalizedQueryPlan<I>,
   ): Promise<
-    readonly import("../query/query-execution.js").NormalizedQueryEntry<I, EntityRecord<I, S>>[]
+    readonly import("../query/query-execution.js").NormalizedQueryEntry<I, EntityRecord>[]
   > {
     return Promise.resolve().then(() => {
       StorageQueryPolicy.validate(plan, {
@@ -343,9 +333,9 @@ export class MemoryEntityRecordStorage<I, S extends Message> implements EntityRe
         features: ["either", "nested", "order", "mask", "limit"],
       });
       const limit = plan.candidateLimit ?? 10_000;
-      const candidates: EntityRecord<I, S>[] = [];
+      const candidates: EntityRecord[] = [];
       for (const record of this.#records.values()) {
-        if (record.deleted) continue;
+        if (record.lifecycleFlags?.deleted) continue;
         candidates.push(record);
         if (candidates.length > limit) break;
       }
@@ -353,24 +343,21 @@ export class MemoryEntityRecordStorage<I, S extends Message> implements EntityRe
         throw new Error(`Storage query exceeded the candidate limit of ${String(limit)}.`);
       }
       const entries = candidates.flatMap((record) => {
-        const copied = EntitySnapshots.copyCurrent(record, this.#stateSchema, this.#idClone);
-        if (this.#idKey(copied.id) !== this.#idKey(this.#extractId(copied.state))) {
-          throw new Error("Entity current record ID does not match its state ID.");
-        }
-        return copied.deleted
+        const copied = EntitySnapshots.copyCurrent(record);
+        const id = copied.entityId === undefined ? undefined : this.#unpackId(copied.entityId);
+        if (id === undefined)
+          throw new Error("Entity current record ID does not match its Entity ID schema.");
+        return copied.lifecycleFlags?.deleted
           ? []
           : [
               {
-                id: copied.id,
+                id: this.#idClone(id),
                 record: copied,
                 columns: new Map<string, unknown>([
                   ...this.#columns.map((column): readonly [string, unknown] => [
                     column.name,
-                    column.valueIn(copied.state),
+                    column.valueIn(copied),
                   ]),
-                  ["version", copied.version],
-                  ["archived", copied.archived],
-                  ["deleted", copied.deleted],
                 ]),
               },
             ];

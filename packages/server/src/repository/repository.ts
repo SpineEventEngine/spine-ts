@@ -27,13 +27,9 @@ import {
 } from "@spine-event-engine/proto";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import { EntityTypeNameSchema } from "@spine-event-engine/proto/generated/spine/system/server/entity_type_pb.js";
-import {
-  RecordColumn,
-  type StorageContext,
-  type StorageFactory,
-} from "@spine-event-engine/storage";
+import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+import { type StorageContext, type StorageFactory } from "@spine-event-engine/storage";
 import type {
-  EntityRecord,
   EntityEventHistoryPort,
   EntityRecordStorage,
   EntityStateHistoryPort,
@@ -61,12 +57,15 @@ import {
 } from "../entity/entity.js";
 import {
   describeEntityMetadata,
+  attachEntitySchema,
   type DescriptorFieldMetadata,
   type DescriptorMessageSchema,
   type EntityMetadata,
+  type EntityConstructor,
   type FirstFieldRoutingHint,
 } from "../entity/entity-metadata.js";
-import { entityStorageDescriptor } from "../entity/entity-storage-descriptor.js";
+import { EntityRecords, entityStorageDescriptor } from "../entity/entity-storage-descriptor.js";
+import { SpecScanner } from "../entity/spec-scanner.js";
 import {
   CommandRegistrationReadiness,
   type CommandRegistrationReadinessLookup,
@@ -464,6 +463,8 @@ export class Repository<
           "the supplied state schema.",
       );
     }
+
+    attachEntitySchema(entityType as EntityConstructor, schema);
 
     this.#entityType = entityType as EntityType;
     this.#entityFamily = entityFamily;
@@ -1084,7 +1085,7 @@ const inboxDedupMs = 30_000;
 
 interface LoadedAggregate {
   readonly commits: EntityCommitStorage;
-  readonly current: EntityRecord<unknown, Message> | undefined;
+  readonly current: EntityRecord | undefined;
   readonly entity: object;
   readonly oldState: Message | undefined;
   readonly states: EntityStateHistoryPort<unknown, Message>;
@@ -1095,7 +1096,7 @@ interface LoadedAggregate {
 
 interface LoadedRepositoryEntity {
   readonly commits: EntityCommitStorage;
-  readonly current: EntityRecord<unknown, Message> | undefined;
+  readonly current: EntityRecord | undefined;
   readonly entity: object;
   readonly storageInput: EntityStorageInput<unknown, Message>;
 }
@@ -1141,13 +1142,13 @@ class AggregateExecutionSupport {
       current:
         current === undefined
           ? undefined
-          : {
-              id: entityId,
-              state: clone(this.#repository.stateSchema, current.state as never),
-              version: current.version,
-              archived: current.archived,
-              deleted: current.deleted,
-            },
+          : EntityRecords.pack(
+              this.#repository.stateSchema,
+              entityId,
+              current.state as Message,
+              current.versionMessage,
+              { archived: current.archived, deleted: current.deleted },
+            ),
       entity,
       oldState:
         current === undefined
@@ -1202,13 +1203,7 @@ class AggregateExecutionSupport {
         id: commitId,
         entityId,
         ...(loaded.current === undefined ? {} : { expected: loaded.current }),
-        next: {
-          id: entityId,
-          state,
-          version,
-          archived: lifecycle.archived,
-          deleted: lifecycle.deleted,
-        },
+        next: EntityRecords.pack(this.#repository.stateSchema, entityId, state, version, lifecycle),
         ...(RepositoryStorage.historyConfiguration(this.#repository).stateHistory
           ? {
               states: [
@@ -1448,7 +1443,10 @@ class AggregateCommandExecution {
           loaded.oldState,
           loaded.current === undefined
             ? undefined
-            : { archived: loaded.current.archived, deleted: loaded.current.deleted },
+            : {
+                archived: loaded.current.lifecycleFlags?.archived ?? false,
+                deleted: loaded.current.lifecycleFlags?.deleted ?? false,
+              },
           RepositoryEntities.repositoryState(loaded.entity) as Message,
           RepositoryEntities.repositoryLifecycle(loaded.entity),
           RepositorySignals.eventVersionNumber(committedVersion),
@@ -1667,7 +1665,10 @@ class AggregateEventExecution {
             loaded.oldState,
             loaded.current === undefined
               ? undefined
-              : { archived: loaded.current.archived, deleted: loaded.current.deleted },
+              : {
+                  archived: loaded.current.lifecycleFlags?.archived ?? false,
+                  deleted: loaded.current.lifecycleFlags?.deleted ?? false,
+                },
             RepositoryEntities.repositoryState(loaded.entity) as Message,
             RepositoryEntities.repositoryLifecycle(loaded.entity),
             RepositorySignals.eventVersionNumber(loaded.version + BigInt(produced.events.length)),
@@ -1914,7 +1915,14 @@ class ProjectionEventExecution {
 
     HandlerDispatchPublisher.subscriber(this.#runtime, this.#repository, this.#event, entityId);
     await this.#invokeSubscribers(loaded.entity, subscribers, packedMessage);
-    await this.#storeIfChanged(loaded, tenantOptions, loaded.current?.state, mode);
+    await this.#storeIfChanged(
+      loaded,
+      tenantOptions,
+      loaded.current === undefined
+        ? undefined
+        : EntityRecords.unpack(this.#repository.stateSchema, loaded.current).state,
+      mode,
+    );
   }
 
   #readIntake(): {
@@ -1966,13 +1974,13 @@ class ProjectionEventExecution {
             : `${RepositorySignals.requireEventId(this.#event).value}.${this.#commitScope}`,
         entityId,
         ...(loaded.current === undefined ? {} : { expected: loaded.current }),
-        next: {
-          id: entityId,
+        next: EntityRecords.pack(
+          this.#repository.stateSchema,
+          entityId,
           state,
-          version,
-          archived: lifecycle.archived,
-          deleted: lifecycle.deleted,
-        },
+          this.#event.context?.version ?? version,
+          lifecycle,
+        ),
         ...(RepositoryStorage.historyConfiguration(this.#repository).stateHistory
           ? {
               states: [
@@ -2010,7 +2018,10 @@ class ProjectionEventExecution {
         ? lifecycle
         : loaded.current === undefined
           ? undefined
-          : { archived: loaded.current.archived, deleted: loaded.current.deleted },
+          : {
+              archived: loaded.current.lifecycleFlags?.archived ?? false,
+              deleted: loaded.current.lifecycleFlags?.deleted ?? false,
+            },
       state,
       lifecycle,
       this.#event.context?.version?.number ?? 0,
@@ -2101,13 +2112,13 @@ class ProjectionEventExecution {
       current:
         stored === undefined
           ? undefined
-          : {
-              id: entityId,
-              state: clone(this.#repository.stateSchema, stored.state as never),
-              version: stored.version,
-              archived: stored.archived,
-              deleted: stored.deleted,
-            },
+          : EntityRecords.pack(
+              this.#repository.stateSchema,
+              entityId,
+              stored.state as Message,
+              stored.versionMessage,
+              { archived: stored.archived, deleted: stored.deleted },
+            ),
       entity,
       storageInput,
     });
@@ -2181,13 +2192,13 @@ class ProcessManagerExecutionSupport {
       current:
         stored === undefined
           ? undefined
-          : {
-              id: entityId,
-              state: clone(this.#repository.stateSchema, stored.state as never),
-              version: stored.version,
-              archived: stored.archived,
-              deleted: stored.deleted,
-            },
+          : EntityRecords.pack(
+              this.#repository.stateSchema,
+              entityId,
+              stored.state as Message,
+              stored.versionMessage,
+              { archived: stored.archived, deleted: stored.deleted },
+            ),
       entity,
       storageInput,
     });
@@ -2207,7 +2218,7 @@ class ProcessManagerExecutionSupport {
     const lifecycle = RepositoryEntities.repositoryLifecycle(loaded.entity);
     const version = changed
       ? BigInt(RepositoryStand.processManagerVersion(loaded.entity))
-      : (loaded.current?.version ?? 0n);
+      : BigInt(loaded.current?.version?.number ?? 0);
     const deferred = changed
       ? await standAccess.deferUpdate(
           this.#runtime.stand,
@@ -2228,13 +2239,7 @@ class ProcessManagerExecutionSupport {
         id: commitId,
         entityId,
         ...(loaded.current === undefined ? {} : { expected: loaded.current }),
-        next: {
-          id: entityId,
-          state,
-          version,
-          archived: lifecycle.archived,
-          deleted: lifecycle.deleted,
-        },
+        next: EntityRecords.pack(this.#repository.stateSchema, entityId, state, version, lifecycle),
         ...(changed && history.stateHistory
           ? { states: [{ entityId, state, version, createdAt }] }
           : {}),
@@ -2353,10 +2358,15 @@ class ProcessManagerCommandExecution {
         this.#repository,
         this.#command,
         route.entityId,
-        loaded.current?.state,
         loaded.current === undefined
           ? undefined
-          : { archived: loaded.current.archived, deleted: loaded.current.deleted },
+          : EntityRecords.unpack(this.#repository.stateSchema, loaded.current).state,
+        loaded.current === undefined
+          ? undefined
+          : {
+              archived: loaded.current.lifecycleFlags?.archived ?? false,
+              deleted: loaded.current.lifecycleFlags?.deleted ?? false,
+            },
         RepositoryEntities.repositoryState(loaded.entity) as Message,
         RepositoryEntities.repositoryLifecycle(loaded.entity),
         RepositoryStand.processManagerVersion(loaded.entity),
@@ -2560,10 +2570,15 @@ class ProcessManagerEventExecution {
         this.#repository,
         this.#event,
         entityId,
-        loaded.current?.state,
         loaded.current === undefined
           ? undefined
-          : { archived: loaded.current.archived, deleted: loaded.current.deleted },
+          : EntityRecords.unpack(this.#repository.stateSchema, loaded.current).state,
+        loaded.current === undefined
+          ? undefined
+          : {
+              archived: loaded.current.lifecycleFlags?.archived ?? false,
+              deleted: loaded.current.lifecycleFlags?.deleted ?? false,
+            },
         RepositoryEntities.repositoryState(loaded.entity) as Message,
         RepositoryEntities.repositoryLifecycle(loaded.entity),
         RepositoryStand.processManagerVersion(loaded.entity),
@@ -2729,7 +2744,7 @@ interface EntityStorageFactory {
   createEntityStorage<I, S extends Message>(
     input: EntityStorageInput<I, S>,
   ): {
-    readonly current: EntityRecordStorage<I, S>;
+    readonly current: EntityRecordStorage<I>;
     readonly states: EntityStateHistoryPort<I, S>;
     readonly events: EntityEventHistoryPort<I>;
     close(): void;
@@ -2737,7 +2752,7 @@ interface EntityStorageFactory {
 }
 
 interface RepositoryEntityStorage<I, S extends Message> {
-  readonly current: EntityRecordStorage<I, S>;
+  readonly current: EntityRecordStorage<I>;
   readonly states: EntityStateHistoryPort<I, S>;
   readonly events: EntityEventHistoryPort<I>;
   readonly commits: EntityCommitStorage;
@@ -4196,12 +4211,7 @@ const RepositoryStorage = {
     input: EntityStorageInput<I, S>,
   ): RepositoryEntityStorage<I, S> {
     const handle = RepositoryStorage.openEntityStorage(factory, input);
-    const key = JSON.stringify({
-      context: input.context,
-      layout: input.layout,
-      state: input.stateSchema.typeName,
-      storageKey: input.storageKey,
-    });
+    const key = JSON.stringify({ context: input.context, state: input.sourceType.typeName });
     let handles = repositoryEntityHandles.get(repository);
     if (handles === undefined) {
       handles = new Map();
@@ -4222,17 +4232,8 @@ const RepositoryStorage = {
   ): EntityStorageInput<unknown, Message> {
     return entityStorageDescriptor(
       context,
-      repository.stateSchema,
-      repository.idField.localName,
-      repository.metadata.columns.map(
-        (field) =>
-          new RecordColumn(
-            field.name,
-            (state) => (state as Record<string, unknown>)[field.localName],
-            "protobuf",
-          ),
-      ),
-    );
+      SpecScanner.scan(repository.entityType),
+    ) as EntityStorageInput<unknown, Message>;
   },
 
   readHistoryConfiguration(

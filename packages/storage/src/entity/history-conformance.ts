@@ -1,6 +1,15 @@
-import { create } from "@bufbuild/protobuf";
-import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import {
+  AnySchema,
+  StringValueSchema,
+  TimestampSchema,
+  type StringValue,
+} from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import {
+  EntityRecordSchema,
+  type EntityRecord,
+} from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import type { Message } from "@bufbuild/protobuf";
 
 import type { EntityEventHistoryPort, EntityStateHistoryPort } from "./entity-history-storage.js";
@@ -17,7 +26,7 @@ export interface EntityStorageConformance<I, S extends Message> {
   /**
    * Provides latest-state record storage.
    */
-  readonly current: EntityRecordStorage<I, S>;
+  readonly current: EntityRecordStorage<I>;
 
   /**
    * Provides retained entity event history.
@@ -162,53 +171,44 @@ const EntityHistoryFixture = {
   ): Promise<EntityStorageConformance<string, StringValue>> {
     const input: EntityStorageInput<string, StringValue> = {
       context: { name: "EntityHistoryConformance", multitenant: false },
-      id: { clone: (id) => id, key: (id) => id },
-      extractId: (state) => state.value,
-      columns: [new RecordColumn<StringValue, string>("value", (state) => state.value, "string")],
+      id: { clone: (id) => id, key: (id) => id, unpack: EntityHistoryFixture.unpackId },
+      columns: [
+        new RecordColumn<EntityRecord, string>(
+          "value",
+          (record) => EntityHistoryFixture.state(record).value,
+          "string",
+        ),
+        new RecordColumn<EntityRecord, boolean>(
+          "archived",
+          (record) => record.lifecycleFlags?.archived ?? false,
+          "boolean",
+        ),
+        new RecordColumn<EntityRecord, number>(
+          "version",
+          (record) => record.version?.number ?? 0,
+          "number",
+        ),
+      ],
       sourceType: StringValueSchema,
       stateSchema: StringValueSchema,
     };
     const storage = adapter.create(input);
-    const current = create(StringValueSchema, { value: "task" });
-    await storage.current.write({
-      id: "task",
-      state: current,
-      version: 3n,
-      archived: false,
-      deleted: false,
-    });
-    current.value = "mutated";
+    const current = EntityHistoryFixture.current("task", "task", 3);
+    await storage.current.write(current);
+    current.state!.value[0] = 0;
     const currentRecord = await storage.current.read("task");
     ConformanceAssertions.assert(
-      currentRecord?.state.value === "task",
+      EntityHistoryFixture.state(currentRecord!).value === "task",
       "current record must be cloned",
     );
     ConformanceAssertions.assert(
-      currentRecord.version === 3n,
+      currentRecord?.version?.number === 3,
       "current record version must be retained",
     );
 
-    await storage.current.write({
-      id: "z",
-      state: create(StringValueSchema, { value: "z" }),
-      version: 4n,
-      archived: true,
-      deleted: false,
-    });
-    await storage.current.write({
-      id: "a",
-      state: create(StringValueSchema, { value: "a" }),
-      version: 2n,
-      archived: false,
-      deleted: false,
-    });
-    await storage.current.write({
-      id: "deleted",
-      state: create(StringValueSchema, { value: "deleted" }),
-      version: 9n,
-      archived: false,
-      deleted: true,
-    });
+    await storage.current.write(EntityHistoryFixture.current("z", "z", 4, true));
+    await storage.current.write(EntityHistoryFixture.current("a", "a", 2));
+    await storage.current.write(EntityHistoryFixture.current("deleted", "deleted", 9, false, true));
     const currentQuery = await storage.current.query({
       predicate: { kind: "comparison", column: "archived", operator: "equal", value: false },
       order: [{ column: "value", direction: "desc" }],
@@ -219,34 +219,22 @@ const EntityHistoryFixture = {
       "current query must filter lifecycle columns, order declared columns, and exclude tombstones",
     );
     const versionQuery = await storage.current.query({
-      predicate: { kind: "comparison", column: "version", operator: "greaterOrEqual", value: 3n },
+      predicate: { kind: "comparison", column: "version", operator: "greaterOrEqual", value: 3 },
       order: [{ column: "version", direction: "asc" }],
     });
     ConformanceAssertions.assert(
       versionQuery.map((entry) => entry.id).join(",") === "task,z",
       "current query must filter and order by version",
     );
-    await storage.current.write({
-      id: "sentinel",
-      state: create(StringValueSchema, { value: "sentinel" }),
-      version: 1n,
-      archived: false,
-      deleted: false,
-    });
+    await storage.current.write(EntityHistoryFixture.current("sentinel", "sentinel", 1));
     await ConformanceAssertions.assertRejects(
       () => storage.current.query({ candidateLimit: 3 }),
       "current query must reject candidate-limit sentinel overflow",
     );
     await ConformanceAssertions.assertRejects(
       () =>
-        storage.current.write({
-          id: "physical-key",
-          state: create(StringValueSchema, { value: "state-id" }),
-          version: 1n,
-          archived: false,
-          deleted: false,
-        }),
-      "current writes must reject a physical key that disagrees with extracted state ID",
+        storage.current.write(create(EntityRecordSchema, { entityId: create(AnySchema) })),
+      "current writes must reject an EntityRecord ID that cannot be unpacked",
     );
     storage.close?.();
     const reopened = adapter.reopen(input);
@@ -258,6 +246,43 @@ const EntityHistoryFixture = {
       "current query must survive close and reopen",
     );
     return reopened;
+  },
+
+  current(
+    id: string,
+    value: string,
+    version: number,
+    archived = false,
+    deleted = false,
+  ): EntityRecord {
+    return create(EntityRecordSchema, {
+      entityId: EntityHistoryFixture.pack(
+        StringValueSchema,
+        create(StringValueSchema, { value: id }),
+      ),
+      lifecycleFlags: { archived, deleted },
+      state: EntityHistoryFixture.pack(StringValueSchema, create(StringValueSchema, { value })),
+      version: { number: version },
+    });
+  },
+
+  pack(schema: typeof StringValueSchema, message: StringValue) {
+    return create(AnySchema, {
+      typeUrl: `type.spine.io/${schema.typeName}`,
+      value: toBinary(schema, message),
+    });
+  },
+
+  unpackId(id: NonNullable<EntityRecord["entityId"]>): string | undefined {
+    return id.typeUrl === "type.spine.io/google.protobuf.StringValue"
+      ? fromBinary(StringValueSchema, id.value).value
+      : undefined;
+  },
+
+  state(record: EntityRecord): StringValue {
+    if (record.state?.typeUrl !== "type.spine.io/google.protobuf.StringValue")
+      throw new Error("Invalid state.");
+    return fromBinary(StringValueSchema, record.state.value);
   },
 };
 

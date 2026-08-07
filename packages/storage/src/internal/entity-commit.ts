@@ -43,12 +43,12 @@ export interface EntityCommitInput<I, S extends Message> {
   /**
    * Requires this current record before applying the next record.
    */
-  readonly expected?: EntityRecord<I, S>;
+  readonly expected?: EntityRecord;
 
   /**
    * Stores the next current record.
    */
-  readonly next: EntityRecord<I, S>;
+  readonly next: EntityRecord;
 
   /**
    * Appends retained Entity state-history rows.

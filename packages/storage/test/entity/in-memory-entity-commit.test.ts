@@ -1,6 +1,16 @@
-import { create, type Message } from "@bufbuild/protobuf";
-import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import {
+  AnySchema,
+  StringValueSchema,
+  TimestampSchema,
+  type Timestamp,
+} from "@bufbuild/protobuf/wkt";
+import { EventIdSchema, EventSchema, VersionSchema } from "@spine-event-engine/proto";
+import {
+  EntityRecordSchema,
+  LifecycleFlagsSchema,
+  type EntityRecord,
+} from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { describe, expect, it } from "vitest";
 
 import { EventStore } from "../../src/event/event-store.js";
@@ -32,10 +42,7 @@ describe("MemoryEntityCommitStorage", () => {
       }),
     ).resolves.toBe("committed");
 
-    await expect(entity.current.read("task")).resolves.toMatchObject({
-      state: { value: "next" },
-      version: 1n,
-    });
+    await expect(entity.current.read("task")).resolves.toEqual(current("next", 1n));
     await expect(entity.states.backward("task", 10)).resolves.toMatchObject([
       { state: { value: "next" }, version: 1n },
     ]);
@@ -136,6 +143,42 @@ describe("MemoryEntityCommitStorage", () => {
     second.close();
   });
 
+  it("compares the complete persisted Version envelope during a read-modify-write commit", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput();
+    const entity = factory.createEntityStorage(input) as EntityHandle;
+    const commits = commitStorage(factory, input);
+    const seeded = current("before", 1n, create(TimestampSchema, { seconds: 41n, nanos: 7 }));
+
+    await expect(
+      commits.commit({
+        context: input.context,
+        entity: input,
+        id: "seed:task",
+        entityId: "task",
+        next: seeded,
+      }),
+    ).resolves.toBe("committed");
+    const loaded = (await entity.current.read("task")) as EntityRecord;
+
+    await expect(
+      commits.commit({
+        context: input.context,
+        entity: input,
+        id: "update:task",
+        entityId: "task",
+        expected: loaded,
+        next: current("after", 2n, create(TimestampSchema, { seconds: 42n, nanos: 8 })),
+      }),
+    ).resolves.toBe("committed");
+    await expect(entity.current.read("task")).resolves.toEqual(
+      current("after", 2n, create(TimestampSchema, { seconds: 42n, nanos: 8 })),
+    );
+
+    commits.close();
+    entity.close();
+  });
+
   it("commits a current record when optional histories and delivery events are omitted", async () => {
     const factory = new InMemoryStorageFactory();
     const input = entityInput();
@@ -152,10 +195,7 @@ describe("MemoryEntityCommitStorage", () => {
       }),
     ).resolves.toBe("committed");
 
-    await expect(entity.current.read("task")).resolves.toMatchObject({
-      state: { value: "current-only" },
-      version: 1n,
-    });
+    await expect(entity.current.read("task")).resolves.toEqual(current("current-only", 1n));
     await expect(entity.states.backward("task", 10)).resolves.toEqual([]);
     await expect(entity.events.backward("task", 10)).resolves.toEqual([]);
     const events = new EventStore(input.context, factory);
@@ -195,8 +235,20 @@ describe("MemoryEntityCommitStorage", () => {
       ["undefined", undefined],
       ["state", current("different", 1n)],
       ["version", current("persisted", 2n)],
-      ["archived", { ...persisted, archived: true }],
-      ["deleted", { ...persisted, deleted: true }],
+      [
+        "archived",
+        create(EntityRecordSchema, {
+          ...persisted,
+          lifecycleFlags: create(LifecycleFlagsSchema, { archived: true }),
+        }),
+      ],
+      [
+        "deleted",
+        create(EntityRecordSchema, {
+          ...persisted,
+          lifecycleFlags: create(LifecycleFlagsSchema, { deleted: true }),
+        }),
+      ],
     ] as const) {
       await expect(
         commits.commit({
@@ -271,8 +323,7 @@ function commitStorage(
 function entityInput(): EntityStorageInput<string, ReturnType<typeof createString>> {
   return {
     context,
-    id: { clone: (id) => id, key: (id) => id },
-    extractId: () => "task",
+    id: { clone: (id) => id, key: (id) => id, unpack: unpackStringId },
     columns: [],
     sourceType: StringValueSchema,
     stateSchema: StringValueSchema,
@@ -283,14 +334,29 @@ function createString(value: string) {
   return create(StringValueSchema, { value });
 }
 
-function current(value: string, version: bigint) {
-  return {
-    id: "task",
-    state: createString(value),
-    version,
-    archived: false,
-    deleted: false,
-  };
+function current(value: string, version: bigint, timestamp?: Timestamp): EntityRecord {
+  return create(EntityRecordSchema, {
+    entityId: packed(createString("task")),
+    lifecycleFlags: { archived: false, deleted: false },
+    state: packed(createString(value)),
+    version: create(VersionSchema, {
+      number: Number(version),
+      ...(timestamp === undefined ? {} : { timestamp }),
+    }),
+  });
+}
+
+function packed(value: ReturnType<typeof createString>) {
+  return create(AnySchema, {
+    typeUrl: "type.spine.io/google.protobuf.StringValue",
+    value: toBinary(StringValueSchema, value),
+  });
+}
+
+function unpackStringId(id: NonNullable<EntityRecord["entityId"]>) {
+  return id.typeUrl === "type.spine.io/google.protobuf.StringValue"
+    ? fromBinary(StringValueSchema, id.value).value
+    : undefined;
 }
 
 function state(value: string, version: bigint) {
