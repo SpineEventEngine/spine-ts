@@ -1,6 +1,6 @@
 # T-0127: GCE Terraform And Beginner Deployment Guide
 
-Status: Verified; ready for integration
+Status: Integrated and post-merge verified
 
 ## Objective
 

@@ -1,6 +1,6 @@
 # T-0127 Review Record
 
-Status: Implementation in progress
+Status: Clean; integrated and post-merge verified
 
 ## Required Concerns
 
@@ -127,6 +127,18 @@ skipped. Branch coverage is 90.15% (12,537 / 13,906).
 The earlier attempts and their deterministic TSDoc/formatting corrections are
 recorded above. No review concern remains open. T-0127 is ready for clean-tree
 integration and post-merge verification.
+
+## Integration Closure
+
+The clean integration branch started from `origin/main@d5dc9864` and merged the
+reviewed task endpoint `4d34e1b4` with merge commit `28aa0fcb`. The merge tree
+exactly matched the reviewed task tree before integration-only record changes.
+
+Post-merge verification passed: offline frozen installation; generated
+workspace build and tooling typecheck; 2 focused GCE files / 13 tests; strict
+TypeScript documentation snippets; TypeDoc/API validation; and Terraform
+initialization, formatting, and validation. No implementation drift or blocker
+remains. The integration endpoint is ready to advance remote `main`.
 
 ## Final Focused Re-review Results
 
