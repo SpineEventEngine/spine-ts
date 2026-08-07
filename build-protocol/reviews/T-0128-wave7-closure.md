@@ -1,6 +1,6 @@
 # T-0128 Review Record
 
-Status: Accepted; final release verification pending
+Status: Clean; release-verified and integration pending
 
 ## Required Concerns
 
@@ -133,3 +133,12 @@ and the native relay suite pass.
   formatting, and diff checks passed. No full Docker rerun was needed because
   the correction changes a typed native envelope seam covered by the focused
   opaque-envelope behavior test.
+
+## Release verification
+
+- After the complete affected-scope preflight passed, `pnpm verify:release`
+  passed all generated, build, tooling, lint, cleanup, TSDoc, formatting,
+  documentation/API, Proto, package-readiness, test, and coverage stages.
+- Vitest reported 201 passing files / 3 skipped and 3,982 passing tests / 26
+  skipped. Coverage was 94.08% statements, 90.13% branches, 94.58% functions,
+  and 95.10% lines.
