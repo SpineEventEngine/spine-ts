@@ -191,31 +191,13 @@ export interface GceDeadlineFactory {
   create(timeoutMs: number): { readonly signal: AbortSignal; close(): void };
 }
 
-/**
- * Configures a ready-node registrar and its deterministic test seams.
- */
-export interface GceRegistrarOptions {
+interface GceRegistrarBaseOptions {
   // prettier-ignore
 
   /**
    * Supplies the caller-owned leased-node registry.
    */
   readonly registry: LeasedNodeRegistry;
-
-  /**
-   * Supplies an already-derived application node.
-   */
-  readonly node?: ApplicationNode;
-
-  /**
-   * Supplies metadata used when `node` is omitted; defaults to `GceMetadataService` with a port.
-   */
-  readonly metadata?: GceMetadataProvider;
-
-  /**
-   * Supplies the application port used with metadata-derived nodes.
-   */
-  readonly port?: number;
 
   /**
    * Supplies the opaque process identity; a UUID is created when omitted.
@@ -244,6 +226,30 @@ export interface GceRegistrarOptions {
    */
   readonly operationTimeoutMs?: number;
 }
+
+interface ExplicitGceRegistrarNodeOptions extends GceRegistrarBaseOptions {
+  /** Supplies an already-derived application node. */
+  readonly node: ApplicationNode;
+  readonly metadata?: never;
+  readonly port?: never;
+}
+
+interface MetadataGceRegistrarNodeOptions extends GceRegistrarBaseOptions {
+  readonly node?: undefined;
+
+  /** Supplies metadata used with the required application port. */
+  readonly metadata?: GceMetadataProvider;
+
+  /** Supplies the application port used with metadata-derived nodes. */
+  readonly port: number;
+}
+
+/**
+ * Configures a ready-node registrar and its deterministic test seams.
+ *
+ * Supply either an explicit node or a metadata-derived node with its port.
+ */
+export type GceRegistrarOptions = ExplicitGceRegistrarNodeOptions | MetadataGceRegistrarNodeOptions;
 
 /**
  * Couples registrar lifecycle work to an application listener lifecycle.

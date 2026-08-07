@@ -19,6 +19,11 @@ import {
 } from "../src/index.js";
 
 describe("GceApplicationNode", () => {
+  it("requires either an explicit node or a metadata port", () => {
+    // @ts-expect-error Registrar construction requires node or metadata port.
+    expect(() => new GceRegistrar({ registry: {} })).toThrow("node or a metadata port");
+  });
+
   it("keeps discovery active through crash expiry, zero, and later return", async () => {
     const factory = new InMemoryStorageFactory();
     const registry = new LeasedNodeRegistry({ factory, namespace: "gce-crash" });

@@ -8,8 +8,9 @@ subscriptions.
 The application process owns its registrar and the Gateway process owns its
 discovery. Both processes receive the same explicit storage factory and
 registry namespace. This package does not choose a storage backend,
-authentication provider, public address, Terraform configuration, or autoscale
-policy.
+authentication provider, public address, Terraform module, deployment
+procedure, or autoscale policy. Use the separate project deployment guide for
+Terraform modules and deployment procedures.
 
 ## Application process
 
@@ -91,5 +92,5 @@ the Gateway's running server and its registry when that process exits; close
 the storage factory only when its owning process no longer needs it.
 
 See [REFERENCE.md](REFERENCE.md) for API contracts and metadata failure
-semantics. Infrastructure and end-to-end deployment guidance belongs in the
-project's deployment guide.
+semantics. The separate project deployment guide supplies Terraform modules and
+deployment procedures.

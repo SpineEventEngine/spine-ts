@@ -7,6 +7,7 @@ import {
   BoundedContext,
   type BrowserServerOptions,
   EnvironmentType,
+  type ListenerLifecycle,
   Server,
   ServerEnvironment,
 } from "../../src/index.js";
@@ -37,6 +38,11 @@ vi.mock("node:http2", async (importOriginal) => {
 });
 
 describe("Server lifecycle integration", () => {
+  it("exports the listener lifecycle contract", () => {
+    const lifecycle: ListenerLifecycle = { start: () => undefined, close: () => undefined };
+    expect(lifecycle).toBeDefined();
+  });
+
   it("starts listener lifecycles after readiness and closes them before network intake", async () => {
     const events: string[] = [];
     const server = Server.atPort(0).addListenerLifecycle({
