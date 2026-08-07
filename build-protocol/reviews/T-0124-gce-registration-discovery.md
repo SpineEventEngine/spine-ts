@@ -61,3 +61,28 @@ visible mismatch occurred.
 One correction batch returns every accepted P1/P2 finding to the existing
 implementation owner. Re-review is limited to the lanes substantively affected
 by the corrections.
+
+## Correction And Re-review Dispatch
+
+The accepted batch is corrected through `830ad1a2`; the deterministic lint
+follow-up is `f00b85c4`. The attached affected-scope preflight passes every
+generation, build, tooling, cleanup, TSDoc, formatting, documentation, API,
+Buf, generated-cleanliness, and release-readiness gate, with 258 passing tests
+and 90.65% branch coverage.
+
+All four concerns were substantively affected, so one focused re-review wave
+checks only their original findings:
+
+- style and maintainability: existing role, explicit
+  `gpt-5.6-terra` / `high`;
+- documentation: existing immutable role,
+  `gpt-5.6-luna` / `medium`; the Desktop surface selects this profile through
+  the role because it does not expose Luna as an explicit model override;
+- TypeScript and API documentation: existing role, explicit
+  `gpt-5.6-terra` / `high`; and
+- performance and reliability: existing role, explicit
+  `gpt-5.6-terra` / `high`.
+
+Runtime self-introspection must be recorded when available. Otherwise the
+immutable configured role/profile and absence of visible mismatch are the
+acceptance evidence.
