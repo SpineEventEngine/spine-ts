@@ -1,4 +1,5 @@
 import { Server } from "@spine-event-engine/server";
+import { GkeNodeDiscovery } from "@spine-event-engine/deployment-gke";
 
 import { MessageBoardDeployment } from "./deployment-config.js";
 import { BoardAccessPolicy, BoardContextResolver } from "./board-access.js";
@@ -15,7 +16,9 @@ const sessions = MessageBoardDeployment.sessions(storage, process.env);
 const server = await Server.atPort(config.port, {
   host: config.host,
   browser: {
-    backend: { baseUrls: config.backendUrls },
+    ...(config.discovery === undefined
+      ? { backend: { baseUrls: config.backendUrls ?? [] } }
+      : { discovery: new GkeNodeDiscovery(config.discovery) }),
     origins: [config.webOrigin],
     registry: typeRegistry,
     sessions,

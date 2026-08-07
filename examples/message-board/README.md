@@ -176,34 +176,26 @@ flowchart LR
   end
   Envoy -->|combined alternative| C
   subgraph Standalone[Standalone topology]
-    Envoy -->|standalone alternative| GatewaySelect[Select one Gateway]
-    GatewaySelect -->|one unary request| G1[Gateway replica]
-    GatewaySelect -->|one unary request| G2[Gateway replica]
-    G1 --> R[(Durable registry)]
-    G2 --> R
-    G1 --> G1Select[Select one private application]
-    G2 --> G2Select[Select one private application]
-    G1Select -->|one unary request| A1[Application replica]
-    G1Select -->|one unary request| A2[Application replica]
-    G2Select -->|one unary request| A1
-    G2Select -->|one unary request| A2
+    Envoy -->|standalone alternative| G[One standalone Gateway]
+    G --> R[(Durable registry)]
+    G -->|discovered unary request| A1[Application replica]
+    G -->|discovered unary request| A2[Application replica]
     A1 --> S[(Application-selected storage)]
     A2 --> S
     A1 --> D
     A2 --> D
-    G1 --> D
-    G2 --> D
+    G --> D
   end
 ```
 
-The branches leaving each selection node are alternatives, not broadcast: a
-unary request selects one Gateway and then one private application node. The
+The branches leaving the Gateway are alternatives, not broadcast: a unary
+request selects one private application node. The
 registry and delivery connections represent shared topology and subscription
 fan-in, not additional unary request routes.
 
 Application code selects and owns its storage, including logical session
 revocation records. Gateway code owns the separate durable subscription
-registry and all browser-capable replicas must share its namespace and the
+registry uses one namespace and the one browser-capable Gateway uses the
 session signing values. Operators own TLS, identity-provider setup, secrets,
 image distribution, network policy, and production delivery infrastructure.
 The reference simple delivery server is in-memory and not highly available;

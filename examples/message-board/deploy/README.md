@@ -20,8 +20,8 @@ fan-out: one command or query is sent to one selected backend without retry.
 
 Combined mode runs one Message Board application and authenticated browser
 gateway in the same process. Use it to understand the smallest browser-facing
-deployment. Standalone mode runs application replicas separately from gateway
-replicas; Envoy is the only public service and gateways reach private native
+deployment. Standalone mode runs application replicas separately from one
+Gateway; Envoy is the only public service and the Gateway reaches private native
 gRPC backends. Choose standalone mode when applications must scale separately.
 
 Both modes require application-selected storage and a delivery server. Browser
@@ -60,8 +60,9 @@ docker compose --file examples/message-board/deploy/compose/combined.compose.yam
 ```
 
 Use `standalone.compose.yaml` when running two application replicas. It starts
-two application processes, two gateways, Envoy, one shared registry namespace,
-and exactly one in-memory delivery server. Stop either topology with the same
+two application processes, one Gateway, Envoy, one shared registry namespace,
+and exactly one in-memory delivery server. `BACKEND_URLS` is an explicit
+local-only static fixture, not production discovery. Stop either topology with the same
 command plus `down --volumes --remove-orphans`.
 
 The Kubernetes YAML files are storage-neutral references. Image distribution is
@@ -95,8 +96,9 @@ kubectl apply --filename examples/message-board/deploy/kubernetes/combined.yaml
 ```
 
 For replicated applications, apply `standalone.yaml`. Its public LoadBalancer
-service exposes Envoy only; Envoy discovers gateway replica endpoints through a
-headless Service and keeps a signed session on one gateway hash-ring member.
+service exposes Envoy only; the one Gateway uses `GkeNodeDiscovery` against the
+application headless Service. GKE owns application scaling and the Gateway
+follows ready-node DNS membership rather than a fixed backend list.
 The registry is durable and cancellation-fenced, but update delivery remains
 best effort: reconnecting clients must re-query authoritative state; gaps,
 duplicates, and no complete update history remain possible. The references use

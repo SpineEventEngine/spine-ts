@@ -97,6 +97,9 @@ importers:
       '@spine-event-engine/delivery-client':
         specifier: 2.0.0-snapshot.1
         version: link:../../../packages/delivery-client
+      '@spine-event-engine/deployment-gke':
+        specifier: 2.0.0-snapshot.1
+        version: link:../../../packages/deployment-gke
       '@spine-event-engine/example-message-board-model':
         specifier: 2.0.0-snapshot.1
         version: link:../model

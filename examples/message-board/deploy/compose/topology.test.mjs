@@ -30,17 +30,18 @@ test("declares a combined topology with its durable registry and one delivery se
   assert.doesNotMatch(document, /replicas:/u);
 });
 
-test("declares a two-gateway and two-application standalone topology", () => {
+test("declares one local-fixture gateway and two static application backends", () => {
   assert.equal(existsSync(standalone), true, "standalone Compose reference must exist");
   const document = readFileSync(standalone, "utf8");
 
   assert.match(document, /^ {2}application-1:/mu);
   assert.match(document, /^ {2}application-2:/mu);
-  assert.match(document, /^ {2}gateway-1:/mu);
-  assert.match(document, /^ {2}gateway-2:/mu);
+  assert.match(document, /^ {2}gateway:/mu);
+  assert.doesNotMatch(document, /^ {2}gateway-[0-9]+:/mu);
   assert.match(document, /^ {2}envoy:/mu);
   assert.match(document, /^ {2}delivery:/mu);
   assert.match(document, /BACKEND_URLS: http:\/\/application-1:8080,http:\/\/application-2:8080/mu);
+  assert.match(document, /LOCAL_STATIC_BACKENDS: "true"/u);
   assert.match(document, /SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-standalone/mu);
   assert.match(document, /DATASTORE_EMULATOR_HOST: datastore:8081/mu);
   assert.match(document, /MESSAGE_BOARD_SESSION_ISSUER: message-board/mu);

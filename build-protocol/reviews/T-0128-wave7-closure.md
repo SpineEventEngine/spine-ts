@@ -41,3 +41,5 @@ invalidate a result.
   recovery, client authoritative re-query after reconnect, and compatible versus
   incompatible replacement. The shared fixture does not add a compatibility
   handshake, diagnostics API, second Gateway, or runtime API change.
+- Message Board Compose/Kubernetes policy coverage now guards one Gateway,
+  explicitly local static Compose backends, and Kubernetes GKE discovery.

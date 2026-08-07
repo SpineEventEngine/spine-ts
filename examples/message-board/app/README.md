@@ -66,7 +66,9 @@ Local commands use in-memory storage, sessions, and subscription bindings.
 Prebuilt production commands require `HOST`, `PORT`, `DATASTORE_PROJECT_ID`,
 `SPINE_IPC_DIRECTORY`, and `DELIVERY_SERVER_URL`; browser modes additionally
 require `BROWSER_ORIGIN` and `SUBSCRIPTION_REGISTRY_NAMESPACE`, while the
-standalone gateway prefers comma-separated `BACKEND_URLS` and accepts legacy `BACKEND_URL`. A missing registry namespace stops a
+standalone gateway uses `BACKEND_DISCOVERY_SERVICE` and `BACKEND_DISCOVERY_PORT`
+in Kubernetes; local Compose alone uses comma-separated `BACKEND_URLS` as an
+explicit static fixture and accepts legacy `BACKEND_URL`. A missing registry namespace stops a
 browser-mode process before it opens a listener. Application data uses
 application-owned Datastore storage; gateway subscription registry storage is
 separately owned. Production browser processes also require the shared

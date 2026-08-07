@@ -9,7 +9,7 @@ setting. Compose resolves `delivery:8484`; Kubernetes resolves
 one replica, and is not highly available or durable.
 
 Combined mode runs one application/gateway process. Standalone mode has two
-application replicas and two gateways; its durable subscription registry uses
+application replicas and one Gateway; its durable subscription registry uses
 one namespace and cancellation fencing. Replicated application deployments
 require standalone mode. Both application replicas use the same
 application-selected storage configuration; deployment does not select a
@@ -17,8 +17,8 @@ storage provider.
 
 The Kubernetes public Service selects Envoy. Envoy permits only the documented
 browser RPCs, applies a 30-second timeout to unary calls, leaves Activate
-unbounded, and uses strict DNS plus authorization-header ring hashing for
-standalone gateways. Application and gateway Pods wait for the delivery server
+unbounded, and forwards to the one standalone Gateway. That Gateway uses GKE
+headless-Service DNS discovery for application Pods. Application and gateway Pods wait for the delivery server
 before startup. References use TCP startup/readiness probes and deliberately
 omit liveness probes and application health endpoints.
 

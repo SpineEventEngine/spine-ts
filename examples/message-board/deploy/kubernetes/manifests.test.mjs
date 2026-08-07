@@ -40,19 +40,21 @@ for (const mode of ["combined", "standalone"]) {
   });
 }
 
-test("standalone reference binds replica count and delivery waits to each Deployment", () => {
+test("standalone reference uses one dynamically discovering Gateway", () => {
   const document = readFileSync(join(root, "standalone.yaml"), "utf8");
   const application = statefulSet(document, "message-board-application");
   const gateway = deployment(document, "message-board-gateway");
   assert.match(application, /replicas: 2/u);
-  assert.match(gateway, /replicas: 2/u);
+  assert.match(gateway, /replicas: 1/u);
   assert.match(application, /initContainers:[\s\S]*name: wait-for-delivery/u);
   assert.match(gateway, /initContainers:[\s\S]*name: wait-for-delivery/u);
   assert.match(document, /lb_policy: RING_HASH/u);
   assert.match(document, /clusterIP: None/u);
-  assert.match(document, /message-board-gateway-headless, port_value: 8080/u);
-  assert.match(document, /name: BACKEND_URLS/u);
-  assert.match(document, /message-board-application-0\.message-board-application-headless/u);
+  assert.match(gateway, /name: BACKEND_DISCOVERY_SERVICE/u);
+  assert.match(gateway, /value: message-board-application-headless/u);
+  assert.match(gateway, /name: BACKEND_DISCOVERY_PORT/u);
+  assert.doesNotMatch(gateway, /name: BACKEND_URLS/u);
+  assert.doesNotMatch(document, /message-board-gateway-headless/u);
 });
 
 test("Envoy policy rejects non-path and duplicate route items", () => {

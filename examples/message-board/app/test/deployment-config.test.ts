@@ -43,6 +43,18 @@ describe("MessageBoard deployment configuration", () => {
     ).toEqual(["http://application-a:8081", "http://application-b:8081"]);
   });
 
+  it("uses GKE discovery instead of a fixed backend list when configured", () => {
+    expect(
+      MessageBoardDeployment.gateway({
+        ...completeEnvironment,
+        BACKEND_DISCOVERY_SERVICE: "message-board-application-headless",
+        BACKEND_DISCOVERY_PORT: "8080",
+      }),
+    ).toMatchObject({
+      discovery: { serviceName: "message-board-application-headless", port: 8080 },
+    });
+  });
+
   it("rejects an empty entry in the ordered backend topology", () => {
     expect(() =>
       MessageBoardDeployment.gateway({

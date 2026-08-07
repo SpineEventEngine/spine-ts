@@ -27,7 +27,8 @@ interface CombinedConfig extends DeploymentConfig {
 }
 
 interface GatewayConfig extends CombinedConfig {
-  readonly backendUrls: readonly string[];
+  readonly backendUrls?: readonly string[];
+  readonly discovery?: { readonly serviceName: string; readonly port: number };
 }
 
 interface DeploymentContract {
@@ -78,6 +79,17 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
   },
 
   gateway(environment: NodeJS.ProcessEnv): GatewayConfig {
+    const serviceName = environment.BACKEND_DISCOVERY_SERVICE;
+    if (serviceName !== undefined && serviceName.length > 0)
+      return {
+        ...MessageBoardDeployment.combined(environment),
+        discovery: {
+          serviceName,
+          port: DeploymentValues.port(
+            DeploymentValues.required(environment, "BACKEND_DISCOVERY_PORT"),
+          ),
+        },
+      };
     return {
       ...MessageBoardDeployment.combined(environment),
       backendUrls: DeploymentValues.backendUrls(environment),
