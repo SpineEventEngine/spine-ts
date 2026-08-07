@@ -298,3 +298,21 @@ their accepted findings. Style and API use explicit configured
 `gpt-5.6-luna` / `medium` role with `medium` explicit. Runtime metadata is
 recorded if exposed; otherwise the configured profile and absence of visible
 mismatch remain the acceptance evidence. Reliability remains closed.
+
+## Final Recheck Results
+
+- Style and maintainability: clean. Guide excerpts track the shipped sources,
+  and archive discovery is independent of the package version.
+- Documentation: clean. The guide imports the shared settings owner, shows
+  `process.env` defaults and port binding, links all complete example files,
+  and all links resolve.
+- TypeScript/API: clean. Public startup examples match the shipped contracts,
+  and `Server.run()` accurately distinguishes local environment owners from
+  standalone browser Gateways.
+- Performance and reliability remains clean from the preceding closure review;
+  no runtime behavior changed in the final correction.
+
+Every canonical review concern is now closed. Runtime self-introspection was
+unavailable for the three rechecks; their explicitly configured role profiles
+matched with no visible fallback. T-0126 proceeds to its single
+`pnpm verify:release` gate.
