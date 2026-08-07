@@ -88,7 +88,7 @@ export interface GceNodeDiscoveryOptions {
   readonly registry: LeasedNodeRegistry;
 
   /**
-   * Supplies the clock used to evaluate registry lease expiry.
+   * Returns the clock time used to evaluate registry lease expiry.
    *
    * @returns The current Unix time in milliseconds.
    */

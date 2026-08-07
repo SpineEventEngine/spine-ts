@@ -183,6 +183,18 @@ not a task blocker, because the correction class and deterministic evidence
 fully satisfy the protocol. All four canonical concerns now have accepted
 dispositions. T-0127 proceeds to its one post-convergence release gate.
 
+## Release-gate TSDoc Correction
+
+The first `pnpm verify:release` attempt passed Node, Proto generation, build,
+tooling typecheck, ESLint, and cleanup stages, then stopped at the deterministic
+callable-summary rule for `GceNodeDiscoveryOptions.now`. Its property summary
+described what supplied the clock rather than what calling it returns.
+
+The summary now begins with `Returns` and retains its explicit `@returns`
+contract. Focused TSDoc, Prettier, and diff checks pass. This documentation-only
+deterministic correction does not reopen a specialist concern. The release
+gate is rerun from the beginning.
+
 ## Correction Acceptance And Focused Re-review Dispatch
 
 The pushed correction endpoint is `0f77f672`. It adds the public
