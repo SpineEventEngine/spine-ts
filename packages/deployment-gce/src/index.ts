@@ -62,20 +62,27 @@ export class GceMetadataService implements GceMetadataProvider {
    */
   async read(signal: AbortSignal): Promise<GceMetadata> {
     const root = "http://metadata.google.internal/computeMetadata/v1";
+    const requests = new AbortController();
+    const requestSignal = AbortSignal.any([signal, requests.signal]);
     const get = async (path: string) => {
       const response = await fetch(`${root}/${path}`, {
-        signal,
+        signal: requestSignal,
         headers: { "Metadata-Flavor": "Google" },
       });
       if (!response.ok) throw new Error("GCE metadata request failed.");
       return response.text();
     };
-    const [projectId, zonePath, instanceId, privateAddress] = await Promise.all([
-      get("project/project-id"),
-      get("instance/zone"),
-      get("instance/id"),
-      get("instance/network-interfaces/0/ip"),
-    ]);
+    const [projectId, zonePath, instanceId, privateAddress] = await Promise.all(
+      [
+        get("project/project-id"),
+        get("instance/zone"),
+        get("instance/id"),
+        get("instance/network-interfaces/0/ip"),
+      ],
+    ).catch((error: unknown) => {
+      requests.abort();
+      throw error;
+    });
     const normalizedProjectId = projectId.trim();
     const zone = (zonePath.split("/").at(-1) ?? "").trim();
     const normalizedInstanceId = instanceId.trim();

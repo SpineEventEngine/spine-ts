@@ -111,6 +111,26 @@ describe("GceApplicationNode", () => {
     }
   });
 
+  it("aborts sibling metadata requests when one request fails", async () => {
+    const original = globalThis.fetch;
+    const siblingSignals: AbortSignal[] = [];
+    globalThis.fetch = async (input, init) => {
+      const path = String(input).split("/computeMetadata/v1/")[1];
+      if (path === "project/project-id") return new Response("unavailable", { status: 503 });
+      siblingSignals.push(init?.signal as AbortSignal);
+      return new Promise<Response>(() => undefined);
+    };
+    try {
+      await expect(new GceMetadataService().read(new AbortController().signal)).rejects.toThrow(
+        "metadata request failed",
+      );
+      expect(siblingSignals).toHaveLength(3);
+      expect(siblingSignals.every((signal) => signal.aborted)).toBe(true);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
   it("rejects failed, malformed, and cancelled metadata reads", async () => {
     const original = globalThis.fetch;
     try {
