@@ -142,11 +142,7 @@ describe("GkeNodeDiscovery", () => {
         },
       },
     });
-    const snapshots: readonly (readonly {
-      readonly id: string;
-      readonly endpoint: string;
-      readonly tlsServerName?: string;
-    }[])[] = [];
+    const snapshots: (readonly ApplicationNode[])[] = [];
 
     const stop = discovery.watch((nodes) => {
       snapshots.push(nodes);
@@ -185,14 +181,17 @@ describe("GkeNodeDiscovery", () => {
 
   it("uses the configured interval for zero TTL and immediate empty answers", async () => {
     const scheduler = new Scheduler();
-    const answers = [[{ address: "10.0.0.1", ttl: 0 }], []] as const;
+    const answers: (readonly { readonly address: string; readonly ttl: number }[])[] = [
+      [{ address: "10.0.0.1", ttl: 0 }],
+      [],
+    ];
     const discovery = new GkeNodeDiscovery({
       serviceName: "api.default.svc.cluster.local",
       port: 8080,
       resolver: { resolve: async () => answers.shift() ?? [] },
       scheduler,
     });
-    const snapshots: readonly unknown[][] = [];
+    const snapshots: unknown[][] = [];
     const stop = discovery.watch((nodes) => {
       snapshots.push([...nodes]);
     });
@@ -224,7 +223,7 @@ describe("GkeNodeDiscovery", () => {
       },
       scheduler,
     });
-    const snapshots: readonly unknown[][] = [];
+    const snapshots: unknown[][] = [];
     const stop = discovery.watch((nodes) => {
       snapshots.push([...nodes]);
     });
@@ -259,7 +258,7 @@ describe("GkeNodeDiscovery", () => {
       },
       scheduler,
     });
-    const snapshots: readonly unknown[][] = [];
+    const snapshots: unknown[][] = [];
     const stop = discovery.watch((nodes) => {
       snapshots.push([...nodes]);
     });
@@ -316,7 +315,7 @@ describe("GkeNodeDiscovery", () => {
       },
       scheduler,
     });
-    const snapshots: readonly unknown[][] = [];
+    const snapshots: unknown[][] = [];
     const stop = discovery.watch((nodes) => {
       snapshots.push([...nodes]);
     });
@@ -342,7 +341,7 @@ describe("GkeNodeDiscovery", () => {
       resolver: { resolve: async () => addresses },
       scheduler,
     });
-    const snapshots: readonly unknown[][] = [];
+    const snapshots: unknown[][] = [];
     const stop = discovery.watch((nodes) => {
       snapshots.push([...nodes]);
     });
@@ -377,7 +376,7 @@ describe("GkeNodeDiscovery", () => {
       resolver: { resolve: async () => addresses },
       scheduler,
     });
-    const snapshots: readonly ApplicationNode[][] = [];
+    const snapshots: ApplicationNode[][] = [];
     const stop = discovery.watch((nodes) => {
       snapshots.push([...nodes]);
     });
