@@ -308,6 +308,35 @@ describe("DynamicUnaryForwarder", () => {
     expect(calls).toEqual(["a", "b", "c", "a", "b", "c", "close:a", "close:b", "close:c", "d"]);
   });
 
+  it("keeps compatible nodes live during overlap and cuts over after an incompatible zero", async () => {
+    const forwarder = new DynamicUnaryForwarder({
+      create: async (node) => client(async () => new TextEncoder().encode(node.id)),
+    });
+    const request = {
+      service: "spine.client.QueryService",
+      method: "Read",
+      value: new Uint8Array(),
+    };
+    const old = new ApplicationNode({ id: "old", endpoint: "http://10.0.0.1" });
+    const compatible = new ApplicationNode({ id: "new-compatible", endpoint: "http://10.0.0.2" });
+    const replacement = new ApplicationNode({
+      id: "new-incompatible",
+      endpoint: "http://10.0.0.3",
+    });
+
+    await forwarder.reconcile([old, compatible]);
+    const overlapping = new Set<string>();
+    for (let index = 0; index < 2; index++)
+      overlapping.add(new TextDecoder().decode(await forwarder.forward(request)));
+    expect(overlapping).toEqual(new Set(["old", "new-compatible"]));
+
+    await forwarder.reconcile([]);
+    await expect(forwarder.forward(request)).rejects.toThrow("Gateway backend is absent.");
+    await forwarder.reconcile([replacement]);
+    expect(new TextDecoder().decode(await forwarder.forward(request))).toBe("new-incompatible");
+    await forwarder.close();
+  });
+
   it("uses all 40 nodes without retrying a selected failure", async () => {
     let creates = 0;
     const forwarder = new DynamicUnaryForwarder({

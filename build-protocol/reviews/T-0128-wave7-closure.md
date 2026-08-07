@@ -33,3 +33,11 @@ explicit `gpt-5.6-terra` / `high`. Documentation uses the existing immutable
 `gpt-5.6-luna` / `medium` role with `medium` explicit. Actual runtime metadata
 is recorded where available; missing self-introspection alone does not
 invalidate a result.
+
+## Implementation acceptance evidence
+
+- The T-0128 profile selects executable deterministic evidence for both platform
+  discovery seams, dynamic subscription reactivation, durable Gateway restart
+  recovery, client authoritative re-query after reconnect, and compatible versus
+  incompatible replacement. The shared fixture does not add a compatibility
+  handshake, diagnostics API, second Gateway, or runtime API change.

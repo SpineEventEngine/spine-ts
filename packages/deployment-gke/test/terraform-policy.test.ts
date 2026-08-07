@@ -95,6 +95,25 @@ describe("the GKE deployment guide", () => {
     expect(browserGuide).not.toContain("fixed 1–32 backend list");
   });
 
+  it("records executable replacement and restart evidence in the capacity profile", async () => {
+    const profile = await readFile(
+      new URL("../../../build-protocol/reports/T-0128_CAPACITY_PROFILE.md", import.meta.url),
+      "utf8",
+    );
+
+    for (const suite of [
+      "packages/auth/test/dynamic-subscription-creator.test.ts",
+      "packages/server/test/server/durable-subscription-bindings.test.ts",
+      "packages/client-react/test/client-react.test.ts",
+      "packages/deployment-gke/test/discovery/gke-node-discovery.test.ts",
+      "packages/deployment-gce/test/registry/registry-reader.test.ts",
+    ])
+      expect(profile).toContain(suite);
+    expect(profile).toMatch(/compatible.*overlap/iu);
+    expect(profile).toMatch(/incompatible[\s\S]*stop-all/iu);
+    expect(profile).toMatch(/authoritative re-query/iu);
+  });
+
   it("teaches the complete beginner workflow without internal planning language", async () => {
     const guide = await readFile(new URL("README.md", packageRoot), "utf8");
 

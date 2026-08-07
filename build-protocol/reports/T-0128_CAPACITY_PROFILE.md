@@ -15,13 +15,28 @@ concurrent connection starts.
 Reproduce with:
 
 ```bash
-pnpm exec vitest run packages/auth/test/dynamic-unary-forwarder.test.ts
-pnpm exec vitest run packages/deployment-gke/test/discovery/gke-node-discovery.test.ts packages/deployment-gce/test/registry/registry-reader.test.ts
+pnpm typecheck:build
+pnpm exec vitest run \
+  packages/auth/test/dynamic-unary-forwarder.test.ts \
+  packages/auth/test/dynamic-subscription-creator.test.ts \
+  packages/client-react/test/client-react.test.ts \
+  packages/server/test/server/durable-subscription-bindings.test.ts \
+  packages/deployment-gke/test/discovery/gke-node-discovery.test.ts \
+  packages/deployment-gce/test/registry/registry-reader.test.ts \
+  packages/deployment-gke/test/terraform-policy.test.ts
 ```
 
 The GKE suite supplies controlled headless-Service DNS answers. The GCE suite
 supplies controlled leased-registry snapshots, including expiry to zero and a
 later node return. The dynamic subscription suite proves retained definitions
-reactivate after membership returns. Real cloud throughput, latency, autoscaler
-choice, storage sizing, and a multiple-Gateway topology are deliberately not
-measured or claimed here.
+reactivate after membership returns. The durable-binding suite proves a
+definition survives a Gateway restart and is rehydrated after the prior owner
+relinquishes it; the React suite asserts the client contract performs an
+authoritative re-query after reconnect. The dynamic unary suite proves
+compatible old/new nodes both route during overlap, while an incompatible
+stop-all cutover reports backend absence before the new node routes. These
+shared Gateway behaviors compose with both controlled GKE and GCE discovery
+fixtures; they do not introduce a version handshake or compatibility decision.
+
+Real cloud throughput, latency, autoscaler choice, storage sizing, and a
+multiple-Gateway topology are deliberately not measured or claimed here.
