@@ -79,6 +79,25 @@ describe("GkeNodeDiscovery", () => {
     ).rejects.toBe(failure);
   });
 
+  it("cancels the sibling lookup when one address family fails fatally", async () => {
+    let cancelled = 0;
+    const failure = Object.assign(new Error("temporary DNS failure"), { code: "ESERVFAIL" });
+    const resolver = new NodeDnsResolver(() => ({
+      resolve4: async () => {
+        throw failure;
+      },
+      resolve6: async () => await new Promise(() => undefined),
+      cancel: () => {
+        cancelled += 1;
+      },
+    }));
+
+    await expect(
+      resolver.resolve("api.default.svc.cluster.local", new AbortController().signal),
+    ).rejects.toBe(failure);
+    expect(cancelled).toBe(1);
+  });
+
   it("maps Node A and AAAA TTL answers and treats name-not-found as empty", async () => {
     const resolver = new NodeDnsResolver(() => ({
       resolve4: async () => [{ address: "10.0.0.1", ttl: 12 }],
@@ -132,6 +151,34 @@ describe("GkeNodeDiscovery", () => {
     await stop();
     await expect(discovery.close()).resolves.toBeUndefined();
     expect(() => discovery.watch(() => undefined)).toThrow("is closed");
+    expect(scheduler.cancelled).toBeGreaterThan(0);
+    await expect(scheduler.tick()).rejects.toThrow("No scheduled tick.");
+  });
+
+  it("coalesces concurrent close callers onto one shutdown promise", async () => {
+    const scheduler = new Scheduler();
+    let settle: (() => void) | undefined;
+    const discovery = new GkeNodeDiscovery({
+      serviceName: "api.default.svc.cluster.local",
+      port: 8080,
+      resolver: {
+        resolve: async () =>
+          await new Promise<readonly never[]>((resolve) => {
+            settle = () => {
+              resolve([]);
+            };
+          }),
+      },
+      scheduler,
+    });
+    discovery.watch(() => undefined);
+    const refresh = scheduler.tick();
+    const first = discovery.close();
+    const second = discovery.close();
+
+    expect(second).toBe(first);
+    settle?.();
+    await Promise.all([first, refresh]);
   });
 
   it("cancels its default scheduled refresh when closed before the first lookup", async () => {
@@ -183,6 +230,32 @@ describe("GkeNodeDiscovery", () => {
     await stop();
   });
 
+  it("deduplicates equivalent IPv6 spellings after endpoint canonicalization", async () => {
+    const scheduler = new Scheduler();
+    const discovery = new GkeNodeDiscovery({
+      serviceName: "api.default.svc.cluster.local",
+      port: 8443,
+      scheme: "https",
+      resolver: {
+        resolve: async () => [
+          { address: "2001:0db8::7", ttl: 30 },
+          { address: "2001:db8:0:0:0:0:0:7", ttl: 30 },
+        ],
+      },
+      scheduler,
+    });
+    const snapshots: ApplicationNode[][] = [];
+    const stop = discovery.watch((nodes) => snapshots.push([...nodes]));
+
+    await scheduler.tick();
+
+    expect(snapshots[0]).toHaveLength(1);
+    expect(snapshots[0]?.[0]?.id).toBe(
+      "gke/https://[2001:db8::7]:8443/api.default.svc.cluster.local",
+    );
+    await stop();
+  });
+
   it("uses the smaller positive TTL before the configured refresh interval", async () => {
     const scheduler = new Scheduler();
     const discovery = new GkeNodeDiscovery({
@@ -196,7 +269,7 @@ describe("GkeNodeDiscovery", () => {
 
     await scheduler.tick();
 
-    expect(scheduler.delays).toEqual([0, 3_000]);
+    expect(scheduler.delays).toEqual([0, 3_000, 3_000]);
     await stop();
   });
 
@@ -220,7 +293,7 @@ describe("GkeNodeDiscovery", () => {
     await scheduler.tick();
     await scheduler.tick();
 
-    expect(scheduler.delays).toEqual([0, 10_000, 10_000]);
+    expect(scheduler.delays).toEqual([0, 10_000, 10_000, 10_000]);
     expect(snapshots).toHaveLength(2);
     expect(snapshots[1]).toEqual([]);
     await stop();
@@ -257,7 +330,7 @@ describe("GkeNodeDiscovery", () => {
 
     expect(snapshots).toHaveLength(2);
     expect(snapshots[1]).toEqual([]);
-    expect(scheduler.delays).toEqual([0, 2_000, 5_000, 5_000]);
+    expect(scheduler.delays).toEqual([0, 2_000, 2_000, 5_000, 5_000]);
     await stop();
   });
 
@@ -292,6 +365,75 @@ describe("GkeNodeDiscovery", () => {
 
     expect(snapshots).toHaveLength(2);
     expect(snapshots[1]).toEqual([]);
+    await stop();
+  });
+
+  it("expires membership and schedules retries while the next lookup stalls", async () => {
+    const scheduler = new Scheduler();
+    let now = 0;
+    let calls = 0;
+    const discovery = new GkeNodeDiscovery({
+      serviceName: "api.default.svc.cluster.local",
+      port: 8080,
+      refreshIntervalMs: 5_000,
+      now: () => now,
+      resolver: {
+        resolve: async (_name, signal) => {
+          calls += 1;
+          if (calls === 1) return [{ address: "10.0.0.1", ttl: 2 }];
+          return await new Promise<readonly never[]>((resolve) => {
+            signal.addEventListener(
+              "abort",
+              () => {
+                resolve([]);
+              },
+              { once: true },
+            );
+          });
+        },
+      },
+      scheduler,
+    });
+    const snapshots: unknown[][] = [];
+    const stop = discovery.watch((nodes) => snapshots.push([...nodes]));
+
+    await scheduler.tick();
+    now = 2_000;
+    const stalled = scheduler.tick();
+    await scheduler.tick();
+
+    expect(snapshots).toHaveLength(2);
+    expect(snapshots[1]).toEqual([]);
+    expect(scheduler.delays).toContain(5_000);
+    void stalled;
+    await stop();
+  });
+
+  it("does not repeat an empty snapshot when an empty answer is followed by failure", async () => {
+    const scheduler = new Scheduler();
+    let now = 0;
+    let calls = 0;
+    const discovery = new GkeNodeDiscovery({
+      serviceName: "api.default.svc.cluster.local",
+      port: 8080,
+      now: () => now,
+      resolver: {
+        resolve: async () => {
+          calls += 1;
+          if (calls === 1) return [];
+          throw new Error("temporary DNS failure");
+        },
+      },
+      scheduler,
+    });
+    const snapshots: unknown[][] = [];
+    const stop = discovery.watch((nodes) => snapshots.push([...nodes]));
+
+    await scheduler.tick();
+    now = 10_000;
+    await scheduler.tick();
+
+    expect(snapshots).toEqual([[]]);
     await stop();
   });
 
@@ -353,7 +495,8 @@ describe("GkeNodeDiscovery", () => {
 
   it("publishes every address above the operational expected count", async () => {
     const scheduler = new Scheduler();
-    const addresses = Array.from({ length: 40 }, (_, index) => ({
+    const expectedNodeCount = 32;
+    const addresses = Array.from({ length: expectedNodeCount + 8 }, (_, index) => ({
       address: `10.0.0.${(index + 1).toString()}`,
       ttl: 30,
     }));
@@ -370,7 +513,7 @@ describe("GkeNodeDiscovery", () => {
 
     await scheduler.tick();
 
-    expect(snapshots[0]).toHaveLength(40);
+    expect(snapshots[0]).toHaveLength(expectedNodeCount + 8);
     await stop();
   });
 
@@ -518,11 +661,16 @@ function client(id: string): DynamicUnaryClient {
 class Scheduler {
   readonly delays: number[] = [];
   #ticks: (() => void)[] = [];
+  cancelled = 0;
 
   schedule(delayMs: number, onTick: () => void): () => void {
     this.delays.push(delayMs);
     this.#ticks.push(onTick);
-    return () => undefined;
+    return () => {
+      const index = this.#ticks.indexOf(onTick);
+      if (index !== -1) this.#ticks.splice(index, 1);
+      this.cancelled += 1;
+    };
   }
 
   async tick(): Promise<void> {

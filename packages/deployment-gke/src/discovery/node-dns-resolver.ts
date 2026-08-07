@@ -2,15 +2,39 @@ import { Resolver } from "node:dns/promises";
 
 import type { GkeDnsAddress, GkeDnsResolver } from "./gke-node-discovery.js";
 
-interface DnsLookup {
+/**
+ * Supplies cancellable TTL-aware Node DNS address-family lookups.
+ */
+export interface DnsLookup {
+  // prettier-ignore
+
+  /**
+   * Resolves TTL-aware IPv4 records.
+   *
+   * @param name Supplies the DNS name.
+   * @param options Requests TTL metadata.
+   * @returns The current IPv4 records.
+   */
   resolve4(
     name: string,
     options: { readonly ttl: true },
   ): Promise<readonly { readonly address: string; readonly ttl: number }[]>;
+
+  /**
+   * Resolves TTL-aware IPv6 records.
+   *
+   * @param name Supplies the DNS name.
+   * @param options Requests TTL metadata.
+   * @returns The current IPv6 records.
+   */
   resolve6(
     name: string,
     options: { readonly ttl: true },
   ): Promise<readonly { readonly address: string; readonly ttl: number }[]>;
+
+  /**
+   * Cancels every active lookup.
+   */
   cancel(): void;
 }
 
@@ -47,16 +71,23 @@ export class NodeDnsResolver implements GkeDnsResolver {
     };
     signal.addEventListener("abort", cancel, { once: true });
     try {
-      const [ipv4, ipv6] = await Promise.allSettled([
-        resolver.resolve4(serviceName, { ttl: true }),
-        resolver.resolve6(serviceName, { ttl: true }),
+      const lookup = async (
+        request: Promise<readonly { readonly address: string; readonly ttl: number }[]>,
+      ) => {
+        try {
+          return await request;
+        } catch (error) {
+          if (!NodeDnsResolver.empty(error)) resolver.cancel();
+          if (NodeDnsResolver.empty(error)) return [];
+          throw error;
+        }
+      };
+      const [ipv4, ipv6] = await Promise.all([
+        lookup(resolver.resolve4(serviceName, { ttl: true })),
+        lookup(resolver.resolve6(serviceName, { ttl: true })),
       ]);
       signal.throwIfAborted();
-      const records = [ipv4, ipv6].flatMap((result) => {
-        if (result.status === "fulfilled") return result.value;
-        if (NodeDnsResolver.empty(result.reason)) return [];
-        throw result.reason;
-      });
+      const records = [...ipv4, ...ipv6];
       return records.map((record) => ({ address: record.address, ttl: record.ttl }));
     } finally {
       signal.removeEventListener("abort", cancel);

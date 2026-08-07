@@ -102,6 +102,8 @@ const systemScheduler: NodeScheduler = {
   },
 };
 
+const expectedNodeCount = 32;
+
 /**
  * Publishes ready GKE Pods from a headless-Service DNS answer.
  */
@@ -114,12 +116,15 @@ export class GkeNodeDiscovery implements NodeDiscovery {
   readonly #scheduler: NodeScheduler;
   readonly #now: () => number;
   #cancel: (() => void) | undefined;
-  #controller: AbortController | undefined;
+  #expiryCancel: (() => void) | undefined;
+  readonly #controllers = new Set<AbortController>();
   #watcher: ((nodes: readonly ApplicationNode[]) => void) | undefined;
-  #refreshing: Promise<void> | undefined;
+  readonly #refreshes = new Set<Promise<void>>();
   #validUntilMs: number | undefined;
   #expired = false;
+  #empty = false;
   #closed = false;
+  #closing: Promise<void> | undefined;
 
   /**
    * Creates discovery with a ten-second refresh interval by default.
@@ -164,49 +169,81 @@ export class GkeNodeDiscovery implements NodeDiscovery {
    *
    * @returns Completes after the admitted resolver request settles.
    */
-  async close(): Promise<void> {
-    if (this.#closed) return;
+  close(): Promise<void> {
+    if (this.#closing !== undefined) return this.#closing;
+    this.#closing = this.#close();
+    return this.#closing;
+  }
+
+  async #close(): Promise<void> {
     this.#closed = true;
     this.#cancel?.();
-    this.#controller?.abort();
+    this.#expiryCancel?.();
+    for (const controller of this.#controllers) controller.abort();
     this.#watcher = undefined;
-    await this.#refreshing;
+    await Promise.allSettled([...this.#refreshes]);
   }
 
   #schedule(delayMs: number): void {
+    this.#cancel?.();
     this.#cancel = this.#scheduler.schedule(delayMs, () => {
-      this.#refreshing = this.#refresh().catch(() => undefined);
+      const refresh = this.#refresh();
+      this.#refreshes.add(refresh);
+      void refresh.catch(() => undefined).finally(() => this.#refreshes.delete(refresh));
+    });
+  }
+
+  #scheduleExpiry(delayMs: number): void {
+    this.#expiryCancel?.();
+    this.#expiryCancel = this.#scheduler.schedule(delayMs, () => {
+      if (
+        !this.#closed &&
+        this.#validUntilMs !== undefined &&
+        this.#now() >= this.#validUntilMs &&
+        !this.#empty
+      ) {
+        this.#watcher?.([]);
+        this.#expired = true;
+        this.#empty = true;
+        this.#schedule(this.#refreshIntervalMs);
+      }
     });
   }
 
   async #refresh(): Promise<void> {
     if (this.#closed) return;
     const controller = new AbortController();
-    this.#controller = controller;
+    this.#controllers.add(controller);
     try {
       const answer = await this.#resolver.resolve(this.#serviceName, controller.signal);
       if (controller.signal.aborted) return;
       const nodes = this.#nodes(answer);
       this.#watcher?.(nodes);
       this.#expired = false;
+      this.#empty = nodes.length === 0;
+      this.#expiryCancel?.();
+      this.#expiryCancel = undefined;
       const ttlMs = this.#ttlMs(answer);
       this.#validUntilMs = this.#now() + ttlMs;
       this.#schedule(
         nodes.length === 0 ? this.#refreshIntervalMs : Math.min(this.#refreshIntervalMs, ttlMs),
       );
+      if (nodes.length > 0) this.#scheduleExpiry(ttlMs);
     } catch {
       if (
         !controller.signal.aborted &&
         this.#validUntilMs !== undefined &&
         this.#now() >= this.#validUntilMs &&
-        !this.#expired
+        !this.#expired &&
+        !this.#empty
       ) {
         this.#watcher?.([]);
         this.#expired = true;
+        this.#empty = true;
       }
       if (!controller.signal.aborted) this.#schedule(this.#refreshIntervalMs);
     } finally {
-      this.#controller = undefined;
+      this.#controllers.delete(controller);
     }
   }
 
@@ -222,15 +259,16 @@ export class GkeNodeDiscovery implements NodeDiscovery {
     for (const entry of answer) {
       const host = entry.address.includes(":") ? `[${entry.address}]` : entry.address;
       const endpoint = `${this.#scheme}://${host}:${this.#port.toString()}`;
+      const canonical = new ApplicationNode({ id: "gke", endpoint }).endpoint;
       const node = new ApplicationNode({
-        id: `gke/${endpoint}/${this.#scheme === "https" ? this.#serviceName : ""}`,
-        endpoint,
+        id: `gke/${canonical}/${this.#scheme === "https" ? this.#serviceName : ""}`,
+        endpoint: canonical,
         ...(this.#scheme === "https" ? { tlsServerName: this.#serviceName } : {}),
       });
       nodes.set(node.id, node);
     }
-    return [...nodes.values()];
+    return [...nodes.values()].slice(0, Math.max(expectedNodeCount, nodes.size));
   }
 }
 
-export { NodeDnsResolver } from "./node-dns-resolver.js";
+export { NodeDnsResolver, type DnsLookup } from "./node-dns-resolver.js";

@@ -18,6 +18,28 @@ semantics, address identity and TLS authority, cancellation/timer lifecycle,
 dynamic Gateway connection/subscription reconciliation, and scale-to-zero
 recovery.
 
+## Human-Imposed Requirements Ledger
+
+1. DNS readiness is the only GKE membership authority; do not add a registry,
+   registrar, Kubernetes watch, or public-address inference.
+2. Discovery publishes complete current snapshots, preserves canonical endpoint
+   identity and HTTPS Service-name authority, and supports IPv4 and IPv6.
+3. Refresh uses the earlier configured interval or positive TTL, with zero or
+   missing TTL falling back to the configured interval for scheduling and
+   validity.
+4. Empty or name-not-found answers apply immediately and recover after scale to
+   zero; failures retain a valid answer only until expiry and then publish one
+   empty snapshot while retries continue.
+5. Cancellation and shutdown leave no timers, DNS work, connection attempts,
+   or streams running.
+6. Expected count is 32 but is not a cap: every returned address, including 40,
+   is used without public count diagnostics or error logging.
+7. Keep the implementation small, use RED/GREEN behavior tests and deterministic
+   scheduling, preserve unrelated user work, and push every checkpoint to
+   `origin`.
+8. Do not add Terraform, autoscaling policy, Cloud Logging, multiple Gateways,
+   Cloud Run, npm publication, or JVM build work.
+
 ## Baseline And Isolation
 
 - Baseline: `origin/main@6b2e29ea`, with T-0124 integrated, post-merge
