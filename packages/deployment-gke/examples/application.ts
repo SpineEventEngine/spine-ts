@@ -6,6 +6,7 @@ import { DeploymentSettings, type DeploymentEnvironment } from "./deployment-set
  * Supplies application-owned options for one application-node process.
  */
 export interface ApplicationOptions {
+
   /**
    * Configures bounded contexts, services, and application resources.
    */
@@ -16,6 +17,7 @@ export interface ApplicationOptions {
  * Starts one GKE-reachable Spine TS application node.
  */
 export const ApplicationEntrypoint = Object.freeze({
+
   /**
    * Starts the application with injected process settings.
    *
