@@ -115,6 +115,16 @@ resource "kubernetes_deployment_v1" "application" {
             container_port = var.application_port
           }
 
+          env {
+            name  = "HOST"
+            value = "0.0.0.0"
+          }
+
+          env {
+            name  = "PORT"
+            value = tostring(var.application_port)
+          }
+
           env_from {
             config_map_ref {
               name = kubernetes_config_map_v1.runtime.metadata[0].name
@@ -169,6 +179,16 @@ resource "kubernetes_deployment_v1" "gateway" {
             container_port = var.gateway_port
           }
 
+          env {
+            name  = "HOST"
+            value = "0.0.0.0"
+          }
+
+          env {
+            name  = "PORT"
+            value = tostring(var.gateway_port)
+          }
+
           env_from {
             config_map_ref {
               name = kubernetes_config_map_v1.runtime.metadata[0].name
@@ -221,6 +241,16 @@ resource "kubernetes_deployment_v1" "delivery" {
           port {
             name           = "grpc"
             container_port = var.delivery_port
+          }
+
+          env {
+            name  = "HOST"
+            value = "0.0.0.0"
+          }
+
+          env {
+            name  = "PORT"
+            value = tostring(var.delivery_port)
           }
 
           readiness_probe {

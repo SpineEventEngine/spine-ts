@@ -131,7 +131,7 @@ variable "gateway_secret_name" {
 }
 
 variable "autoscaling_enabled" {
-  description = "Creates an optional external-metric HPA when true; disabled by default."
+  description = "Creates the module's optional external-metric HPA when true; never combine it with KEDA."
   type        = bool
   default     = false
 }

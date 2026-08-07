@@ -78,36 +78,84 @@ the kubeconfig context selected by `gcloud`. It defaults to two application
 nodes, one Gateway, and one delivery server. The Gateway and delivery-server
 replica counts are intentionally fixed at one in this topology.
 
-Your application and Gateway entrypoints remain application code. Configure
-the Gateway with the headless Service name and application port shown in the
-module. For example, an application using HTTP/2 without TLS inside the
-cluster can assemble its Gateway like this:
+Your application and Gateway entrypoints remain application code. The template
+uses `HOST=0.0.0.0` and the matching `PORT` value for every container so its
+private Kubernetes Service can reach the process. Keep that listener convention
+in your image entrypoints. An application node can use the configured listener
+like this:
+
+```ts
+import { Server } from "@spine-event-engine/server";
+
+declare const applicationOptions: Omit<
+  import("@spine-event-engine/server").ServerOptions,
+  "port" | "host"
+>;
+
+const application = Server.atPort(8080, {
+  ...applicationOptions,
+  host: "0.0.0.0",
+});
+await application.run();
+```
+
+The standalone Gateway uses the headless Service name and application port from
+the module. In production it also supplies sessions, authorization, trusted
+actor-context resolution, allowed origins, a clock, principal fingerprint,
+type registry, and named durable subscription bindings. The complete
+[server browser guide](../server/README.md#serve-browser-clients) and
+[browser authentication guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+explain those application-owned integration points.
 
 ```ts
 import { GkeNodeDiscovery } from "@spine-event-engine/deployment-gke";
-import { Server } from "@spine-event-engine/server";
+import { DurableSubscriptionBindings, Server } from "@spine-event-engine/server";
 
-declare const options: Omit<
-  import("@spine-event-engine/server").ServerOptions,
-  "port" | "browser"
-> & {
-  browser: import("@spine-event-engine/server").BrowserServerOptions;
-};
+declare const sessions: import("@spine-event-engine/auth").SessionResolver;
+declare const authorize: import("@spine-event-engine/auth").AuthorizationPolicy["authorize"];
+declare const contexts: import("@spine-event-engine/auth").ContextResolver;
+declare const clock: import("@spine-event-engine/auth").Clock;
+declare const registry: import("@spine-event-engine/core").TypeRegistryLookup;
+declare const registryStorage: import("@spine-event-engine/storage").StorageFactory;
+
+const bindings = new DurableSubscriptionBindings({
+  storageFactory: registryStorage,
+  namespace: "my-application-gateway",
+  nextId: () => crypto.randomUUID(),
+  dispose: async () => undefined,
+  leaseMs: 60_000,
+  cleanupBatchSize: 100,
+  recordLimit: 10_000,
+  maxRecordBytes: 1_048_576,
+});
 
 const discovery = new GkeNodeDiscovery({
   serviceName: "application.spine-app.svc.cluster.local",
   port: 8080,
 });
 const gateway = Server.atPort(8081, {
-  ...options,
-  browser: { ...options.browser, discovery },
+  host: "0.0.0.0",
+  browser: {
+    discovery,
+    origins: ["https://app.example.com"],
+    registry,
+    sessions,
+    authorize,
+    contexts,
+    clock,
+    fingerprint: (principal) => principal.id,
+    bindings,
+  },
 });
 await gateway.run();
 ```
 
 The ConfigMap in the template exposes matching service and port values as a
 simple convention. Adapt the names or use your own configuration loader; Spine
-TS does not require a particular environment-variable format.
+TS does not require a particular environment-variable format. Production
+startup rejects missing or volatile bindings before opening its browser
+listener. `DurableSubscriptionBindings` is the supplied durable option; give
+it a stable namespace and storage factory configured by the Gateway process.
 
 ## Deploy
 
@@ -131,6 +179,9 @@ Wait for the Deployments, then inspect the headless Service endpoints:
 
 ```bash
 kubectl get deployment,pod,service --namespace spine-app
+kubectl rollout status deployment/application --namespace spine-app
+kubectl rollout status deployment/gateway --namespace spine-app
+kubectl rollout status deployment/delivery --namespace spine-app
 kubectl get endpointslice --namespace spine-app \
   --selector kubernetes.io/service-name=application
 kubectl logs --namespace spine-app deployment/gateway
@@ -160,16 +211,18 @@ terraform apply -var-file=terraform.tfvars -var=application_replicas=0
 terraform apply -var-file=terraform.tfvars -var=application_replicas=2
 ```
 
-The optional HPA is disabled by default. When your platform team already
-operates an external-metrics adapter, set `autoscaling_enabled = true` and
-choose its metric name, target, minimum, and maximum in `terraform.tfvars`.
+The optional HPA is disabled by default. Its minimum is one application node.
+When your platform team already operates an external-metrics adapter, set
+`autoscaling_enabled = true` and choose its metric name, target, minimum, and
+maximum in `terraform.tfvars`.
 When it is enabled, Terraform deliberately omits the Deployment replica value
 so routine applies do not reset changes made by the HPA. To return to manual
 capacity, disable autoscaling and set `application_replicas` in the same apply.
 CPU alone cannot wake an application Deployment from zero because no Pod is
 running to report CPU. On Standard GKE, Google documents KEDA as the scale from
-zero path: an external request or queue metric activates one Pod, after which
-ordinary HPA can participate. Add that operator-managed KEDA configuration
+zero path. For that policy, set `autoscaling_enabled = false` and let
+operator-managed KEDA be the sole autoscaler for the Deployment. Never run the
+module HPA and a KEDA-managed HPA together. Add the KEDA configuration
 separately; this editable template does not install CRDs or assume a metric
 provider.
 
@@ -185,15 +238,22 @@ terraform apply -var-file=terraform.tfvars \
 
 During overlap, old and new nodes can process work. Pending Inbox work may run
 under the new business logic, so operators—not Spine TS—must decide whether the
-two versions are compatible. For an incompatible replacement, stop every
-application node first, apply the new image, then restore the desired count:
+two versions are compatible. For an incompatible replacement, first disable
+the module HPA if it owns capacity, stop every application node, apply the new
+image, then restore one chosen capacity policy:
 
 ```bash
-terraform apply -var-file=terraform.tfvars -var=application_replicas=0
+terraform apply -var-file=terraform.tfvars \
+  -var=autoscaling_enabled=false -var=application_replicas=0
 terraform apply -var-file=terraform.tfvars \
   -var='application_image=REGION-docker.pkg.dev/PROJECT/spine/application@sha256:NEW' \
   -var=application_replicas=2
 ```
+
+Keep manual capacity by leaving `autoscaling_enabled = false`. Restore the
+module HPA by applying `autoscaling_enabled = true` only when KEDA is absent.
+For KEDA, leave the module HPA disabled and restore the operator-managed KEDA
+policy after the application Deployment returns.
 
 Replacing the single Gateway interrupts connected clients. The
 Gateway-configured durable subscription registry preserves definitions across
@@ -203,9 +263,11 @@ Gateway is ready again.
 ## Roll back
 
 Roll back by applying a known compatible image digest and the prior replica
-count. For an incompatible rollback, use the same stop-all, apply-old-image,
-start sequence. Confirm ready application endpoints and a successful Gateway
-connection before declaring the rollback complete.
+count. For an incompatible rollback, first disable the module HPA, use the
+same stop-all, apply-old-image, start sequence, then restore exactly one of
+manual replicas, the module HPA, or the operator-managed KEDA policy. Confirm
+ready application endpoints and a successful Gateway connection before
+declaring the rollback complete.
 
 ## Troubleshooting
 
