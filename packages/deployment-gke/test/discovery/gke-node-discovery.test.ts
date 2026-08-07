@@ -124,6 +124,18 @@ describe("GkeNodeDiscovery", () => {
     await expect(discovery.close()).resolves.toBeUndefined();
     expect(() => discovery.watch(() => undefined)).toThrow("is closed");
   });
+
+  it("cancels its default scheduled refresh when closed before the first lookup", async () => {
+    const discovery = new GkeNodeDiscovery({
+      serviceName: "api.default.svc.cluster.local",
+      port: 8080,
+      resolver: { resolve: async () => [] },
+    });
+    const stop = discovery.watch(() => undefined);
+
+    await stop();
+  });
+
   it("publishes a deduplicated canonical IPv6 HTTPS snapshot with the Service TLS authority", async () => {
     const discovery = new GkeNodeDiscovery({
       serviceName: "api.default.svc.cluster.local",
