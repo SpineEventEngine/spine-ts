@@ -90,6 +90,8 @@ design, so no new requirements-splitter pass is needed.
   private application-node topology.
 - Run the cheap preflight, then
   `pnpm verify:task -- --no-coverage packages/deployment-gke/test/terraform-policy.test.ts`
-  if the diff remains infrastructure/docs-only.
+  if the diff remains infrastructure/docs-only. Review proved that dynamic
+  discovery is not admitted through the standalone Server path, so the bounded
+  runtime correction promotes final verification to `pnpm verify:release`.
 - Merge through a clean integration worktree, post-merge verify, push `main`,
   and remove completed branches and worktrees.

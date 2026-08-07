@@ -111,3 +111,48 @@ TypeScript/API, and performance/reliability use explicit
 the fixed model because the Desktop tool does not expose Luna as an override.
 Runtime metadata is recorded if exposed; otherwise the configured role/profile
 and absence of a visible mismatch remain the acceptance evidence.
+
+## Focused Re-review Results
+
+- Style and maintainability: clean. The Gateway replica assertion is bounded to
+  its own resource and both Secret variables are declared and consumed.
+- Documentation: the original production Gateway, durable bindings, and
+  autoscaling replacement findings are clean with no direct regression.
+- Performance and reliability: delivery reachability, module-HPA/KEDA mutual
+  exclusion, rollout waits, and policy tests are clean. Three P1s remain: an
+  operator-managed KEDA policy must be suspended before stop-all replacement;
+  entrypoints must read and validate injected ports rather than hard-code
+  defaults; and durable bindings must use storage shared persistently across
+  Gateway replacements, not merely a stable namespace.
+- TypeScript and API documentation: delivery configuration and the documented
+  browser collaborator types are correct. P1: `Server` treats only
+  `browser.backend` as standalone, while the GKE entrypoint supplies dynamic
+  `browser.discovery`; discovery-only production startup therefore enters the
+  local-context path and fails before it can operate as the documented Gateway.
+  P1 also confirms the injected-port mismatch.
+
+Reviewer runtime self-introspection was unavailable. All four configured
+roles/profiles matched their dispatches with no visible mismatch or fallback.
+
+## Final Correction Batch
+
+The original implementer receives one final high-risk batch:
+
+1. Treat dynamic `browser.discovery` as standalone remote hosting everywhere
+   `Server` validates ownership, required browser collaborators, production
+   registry/bindings, and opens the browser pipeline. Add direct Server tests
+   proving discovery-only startup bypasses local environment attachment and
+   owns discovery shutdown.
+2. Read and validate the injected listener/discovery ports in copyable
+   application and Gateway entrypoints; do not hard-code Terraform defaults.
+3. Require `DurableSubscriptionBindings` storage to be shared and persistent
+   across Gateway replacement before claiming survival.
+4. Require operator-managed KEDA to be suspended/removed before stop-all
+   replacement or rollback, then restored only after the selected version is
+   ready.
+
+The runtime correction is bounded but changes shared Server behavior, so the
+final verification profile is promoted to `pnpm verify:release`. Style,
+documentation, TypeScript/API, and performance/reliability receive narrow
+closure rechecks because the correction changes runtime structure, public
+snippets, and replacement semantics.
