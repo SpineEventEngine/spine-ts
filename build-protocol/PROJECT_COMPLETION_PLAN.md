@@ -157,12 +157,19 @@ durably closed.
   or explicit incompatible replacements. It adds generic and platform-specific
   deployment packages, Terraform, scale-to-zero behavior, and detailed GKE/GCE
   guides. Cloud Run and multiple Gateways are excluded.
-- **Wave 8:** multiple-Gateway behavior, framework operational logging and a
-  Google Cloud Logging adapter, the then-current `validation-ts` upgrade, and
-  Datastore/RDBMS physical-layout tuning controls. It does not promise that the
-  framework can make an operator's Gateway replacement interruption-free. Its
-  logging work emits an ERROR when application-node discovery exceeds the
-  configured expected count, while service continues across all nodes.
+- **Wave 8:** correct the generic storage model and the Datastore/RDBMS adapters
+  to use JVM-style per-record specifications and physical layouts; remove
+  unsupported persisted inventions; correct the internal deployment,
+  subscription, and authenticated-subscription Proto records; implement the
+  controlling JVM-style `DeliveryMonitor`; upgrade `validation-ts`; migrate all
+  examples and affected documentation; and finish with a repository-wide
+  invention audit. T-0129 owns the frozen plan and dependency split.
+- **Wave 9:** framework operational logging, a Google Cloud Logging adapter,
+  and repository-wide copyright-header correction. Its Q&A will also decide
+  the deferred logging questions and the application-node discovery overflow
+  message.
+- **Wave 10:** multiple-Gateway behavior. It does not promise that the framework
+  can make an operator's Gateway replacement interruption-free.
 
 Wave 6 Q&A, its original implementation, review, release verification,
 integration, and documentation closure are complete. T-0113 records the
