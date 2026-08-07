@@ -60,4 +60,3 @@ recovery.
   worktree, post-merge verify, push `main`, and remove completed branches and
   worktrees.
 - Push every feature-branch commit to `origin` immediately.
-

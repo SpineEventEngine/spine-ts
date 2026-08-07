@@ -10,6 +10,8 @@ import { NodeDnsResolver } from "./node-dns-resolver.js";
  * Represents one DNS address with its optional answer TTL in seconds.
  */
 export interface GkeDnsAddress {
+  // prettier-ignore
+
   /**
    *
    * Provides one ready-Pod IPv4 or IPv6 address.
@@ -27,6 +29,8 @@ export interface GkeDnsAddress {
  * Resolves the complete ready-Pod address set for one headless Service.
  */
 export interface GkeDnsResolver {
+  // prettier-ignore
+
   /**
    * Resolves the current answer and cooperates with cancellation.
    *
@@ -41,6 +45,8 @@ export interface GkeDnsResolver {
  * Configures GKE headless-Service discovery for one standalone Gateway.
  */
 export interface GkeNodeDiscoveryOptions {
+  // prettier-ignore
+
   /**
    *
    * Identifies the headless-Service DNS name.

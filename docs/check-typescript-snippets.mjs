@@ -55,6 +55,7 @@ const strictSnippetContexts = new Map([
   ["packages/core/README.md", "packages/core"],
   ["packages/deployment/README.md", "packages/deployment"],
   ["packages/deployment-gce/README.md", "packages/deployment-gce"],
+  ["packages/deployment-gke/README.md", "packages/deployment-gke"],
   ["packages/proto/README.md", "packages/proto"],
   ["packages/storage/README.md", "packages/storage"],
   ["packages/transport/README.md", "packages/transport"],
