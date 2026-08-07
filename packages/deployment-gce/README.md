@@ -5,6 +5,8 @@ ready gRPC listener in a caller-owned leased registry. A standalone Gateway
 reads that registry as complete live-node snapshots for routing and durable
 subscriptions.
 
+Read the [agent reference](REFERENCE.md) for the detailed runtime contract.
+
 The application process owns its registrar and the Gateway process owns its
 discovery. Both processes receive the same explicit storage factory and
 registry namespace. This package does not choose a storage backend,
@@ -29,6 +31,12 @@ server starts it only after the gRPC listener is reachable.
 import { LeasedNodeRegistry } from "@spine-event-engine/deployment";
 import { GceMetadataService, GceRegistrar } from "@spine-event-engine/deployment-gce";
 import { Server } from "@spine-event-engine/server";
+
+declare const storageFactory: import("@spine-event-engine/storage").StorageFactory;
+declare const applicationServerOptions: Omit<
+  import("@spine-event-engine/server").ServerOptions,
+  "port"
+>;
 
 const registry = new LeasedNodeRegistry({
   factory: storageFactory, // your StorageFactory
@@ -65,6 +73,12 @@ reader publishes complete snapshots—including empty membership—to the Gatewa
 import { LeasedNodeRegistry, ScheduledNodeDiscovery } from "@spine-event-engine/deployment";
 import { GceRegistryReader } from "@spine-event-engine/deployment-gce";
 import { Server } from "@spine-event-engine/server";
+
+declare const storageFactory: import("@spine-event-engine/storage").StorageFactory;
+declare const gatewayServerOptions: Omit<
+  import("@spine-event-engine/server").ServerOptions,
+  "port" | "browser"
+> & { browser: import("@spine-event-engine/server").BrowserServerOptions };
 
 const registry = new LeasedNodeRegistry({
   factory: storageFactory,

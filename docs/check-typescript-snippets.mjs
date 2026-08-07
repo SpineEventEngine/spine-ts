@@ -54,6 +54,7 @@ const usesDefaultDocuments = documents === defaultDocuments;
 const strictSnippetContexts = new Map([
   ["packages/core/README.md", "packages/core"],
   ["packages/deployment/README.md", "packages/deployment"],
+  ["packages/deployment-gce/README.md", "packages/deployment-gce"],
   ["packages/proto/README.md", "packages/proto"],
   ["packages/storage/README.md", "packages/storage"],
   ["packages/transport/README.md", "packages/transport"],
