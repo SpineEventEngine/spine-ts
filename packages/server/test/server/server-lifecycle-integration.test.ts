@@ -118,6 +118,37 @@ describe("Server lifecycle integration", () => {
     expect(start).toHaveBeenCalledOnce();
   });
 
+  it("retries later server cleanup after listener rollback before becoming terminal", async () => {
+    const startFailure = new Error("listener start failed");
+    const networkFailure = new Error("network close failed");
+    const closed: string[] = [];
+    let network: NetworkCloseProbe | undefined;
+    createHttp2Server.mockImplementationOnce((httpServer) => {
+      network = trackNetworkClose(httpServer, [networkFailure]);
+    });
+    const server = Server.atPort(0)
+      .addListenerLifecycle({ start: () => undefined, close: () => closed.push("admitted") })
+      .addListenerLifecycle({
+        start: () => {
+          throw startFailure;
+        },
+        close: () => undefined,
+      });
+
+    const first = await server.start().catch((error: unknown) => error);
+    expect(first).toBeInstanceOf(AggregateError);
+    expect((first as AggregateError).errors).toEqual([startFailure, networkFailure]);
+    expect(closed).toEqual(["admitted"]);
+    expect(network?.calls()).toBe(1);
+
+    const completion = await server.start().catch((error: unknown) => error);
+    expectDeferredCleanupCompletion(completion);
+    expect(network?.calls()).toBe(2);
+
+    const terminal = await server.start().catch((error: unknown) => error);
+    expectConsumedFailedStartServer(terminal);
+  });
+
   it("aggregates listener start and admitted rollback failures in order", async () => {
     const startFailure = new Error("start failed");
     const rollbackFailure = new Error("rollback failed");

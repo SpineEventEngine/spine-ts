@@ -377,7 +377,7 @@ export class Server {
     try {
       await running.startLifecycles();
     } catch (error) {
-      if (running.hasListenerLifecycleCleanup()) this.#failedListenerLifecycle = running;
+      if (running.hasPendingClose()) this.#failedListenerLifecycle = running;
       else this.#failedStartConsumed = true;
       throw error;
     }
@@ -900,8 +900,8 @@ class RunningHttp2Server implements RunningServer {
     }
   }
 
-  hasListenerLifecycleCleanup(): boolean {
-    return this.#startedLifecycles.length > 0;
+  hasPendingClose(): boolean {
+    return this.#closed === undefined;
   }
 
   async #closeOnce(): Promise<void> {
