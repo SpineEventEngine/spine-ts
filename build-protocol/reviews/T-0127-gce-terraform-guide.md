@@ -154,3 +154,58 @@ existing immutable documentation-reviewer profile `gpt-5.6-luna` / `medium`,
 with `medium` explicit. Runtime metadata will be recorded if exposed;
 otherwise, the immutable configured profiles and absence of a visible mismatch
 remain the acceptance evidence under the protocol.
+
+## Focused Re-review Results
+
+- Style and maintainability: P2, address/backend/forwarding/autoscaler policy
+  assertions still use raw text checks. P2, the custom resource extractor can
+  be fooled by valid lowercase heredocs and block comments. All topology
+  assertions need one durable top-level-resource scanner with negative
+  fixtures.
+- TypeScript/API: P2, `REFERENCE.md` does not document the exported
+  `GceNodeDiscovery` ownership-transfer, stop-before-close, idempotence, and
+  single/aggregate error contract. All runtime ownership, settings, examples,
+  exports, and package-contract corrections are otherwise clean.
+- Documentation: P1, Container-Optimized OS startup does not configure Docker
+  credentials for private Artifact Registry images despite IAM and OAuth scope.
+  P2, incompatible replacement and rollback lack a copyable check proving the
+  application group reached zero before proceeding. The remaining operational
+  guide is consistent.
+- Performance and reliability: P1, `autoscaling_metric_scope` is not enforced
+  against the Monitoring filter resource type, so a declared whole-group
+  configuration can still select `gce_instance` data and fail to wake from
+  zero. P2, rolling-update wording says one surge rather than one per selected
+  zone. P2, simultaneous discovery-cancel and registry-close failure needs a
+  regression test proving both errors are retained.
+
+All reviewers reported their existing configured roles and the explicitly
+dispatched profiles: Terra/high for style, TypeScript/API, and reliability;
+the immutable Luna/medium documentation role. Runtime self-introspection was
+unavailable in all lanes, with no visible mismatch.
+
+## Final Correction Batch Dispatch
+
+The original implementer receives the complete accepted batch as one pass:
+
+1. Replace every topology raw-text assertion with one robust top-level HCL
+   resource scanner, and cover line comments, block comments, uppercase and
+   lowercase heredocs with negative fixtures.
+2. Document the complete public `GceNodeDiscovery` lifecycle contract in
+   `REFERENCE.md`.
+3. Configure `docker-credential-gcr` for the exact Artifact Registry host in
+   all COS startup scripts using a writable Docker configuration directory,
+   and teach the required image-host/IAM/scope relationship.
+4. Add a copyable, explicit zero-instance verification step before incompatible
+   application replacement and rollback continue.
+5. Make custom Monitoring metric scope operational by validating the filter's
+   monitored resource type against the declared scope and scale-from-zero
+   constraints; add invalid-combination tests.
+6. Correct surge wording to one permitted surge per selected application zone,
+   and add a dual lifecycle-failure test that verifies registry closure and the
+   two retained `AggregateError` causes.
+
+The existing implementer role remains configured as `gpt-5.6-terra` /
+`medium`; runtime metadata is recorded if exposed, otherwise the immutable
+configured profile and absence of a visible mismatch remain the acceptance
+evidence. Covering tests and bounded deterministic checks must pass before one
+last focused re-review of the affected concerns.
