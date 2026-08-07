@@ -4,6 +4,7 @@ export {
   type GceMetadataProvider,
 } from "./metadata/gce-metadata-service.js";
 export { GceApplicationNode, type GceApplicationNodeOptions } from "./node/application-node.js";
+export { GceNodeDiscovery, type GceNodeDiscoveryOptions } from "./discovery/gce-node-discovery.js";
 export { type GceDeadlineFactory, type GceScheduler } from "./registrar/operations.js";
 export {
   GceRegistrar,
