@@ -116,6 +116,18 @@ implementer is explicitly configured as `gpt-5.6-terra` / `medium`; runtime
 metadata is recorded if exposed, otherwise configured profile and absence of a
 visible mismatch remain the acceptance evidence.
 
+## Release Verification
+
+The converged endpoint `51031a33` passed `pnpm verify:release`: all generated,
+build, tooling, ESLint, cleanup, TSDoc, formatting, API/documentation, Proto,
+package-readiness, and full coverage gates completed successfully. Vitest
+reported 201 passing files and 3 skipped, with 3,976 passing tests and 26
+skipped. Branch coverage is 90.15% (12,537 / 13,906).
+
+The earlier attempts and their deterministic TSDoc/formatting corrections are
+recorded above. No review concern remains open. T-0127 is ready for clean-tree
+integration and post-merge verification.
+
 ## Final Focused Re-review Results
 
 - Style and maintainability: P2, the scanner accepts a `resource` header nested

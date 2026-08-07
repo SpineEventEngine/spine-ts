@@ -1,6 +1,6 @@
 # T-0127: GCE Terraform And Beginner Deployment Guide
 
-Status: In progress
+Status: Verified; ready for integration
 
 ## Objective
 
