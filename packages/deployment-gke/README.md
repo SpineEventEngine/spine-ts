@@ -85,11 +85,15 @@ in your image entrypoints. Put one small configuration owner beside the two
 entrypoints, then have each entrypoint read its injected settings rather than
 hard-coding the Terraform defaults:
 
+Both supplied entrypoints bind `host: "0.0.0.0"` so the Kubernetes Service can
+reach their listeners.
+
 ```ts
-type Environment = Readonly<Record<string, string | undefined>>;
+// docs-snippet-path: packages/deployment-gke/examples/deployment-settings.ts
+type DeploymentEnvironment = Readonly<Record<string, string | undefined>>;
 
 const DeploymentSettings = Object.freeze({
-  port(environment: Environment, name: "PORT" | "BACKEND_DISCOVERY_PORT"): number {
+  port(environment: DeploymentEnvironment, name: "PORT" | "BACKEND_DISCOVERY_PORT"): number {
     const value = environment[name];
     const port = Number(value);
     if (typeof value !== "string" || !Number.isInteger(port) || port < 1 || port > 65_535)
@@ -97,7 +101,7 @@ const DeploymentSettings = Object.freeze({
     return port;
   },
 
-  serviceName(environment: Environment): string {
+  serviceName(environment: DeploymentEnvironment): string {
     const value = environment.BACKEND_DISCOVERY_SERVICE?.trim();
     if (value === undefined || value.length === 0)
       throw new Error("BACKEND_DISCOVERY_SERVICE must not be blank.");
@@ -106,8 +110,10 @@ const DeploymentSettings = Object.freeze({
 });
 ```
 
-In each Node.js entrypoint, supply `process.env` as `environment` to that
-configuration owner.
+The [complete shared settings owner](examples/deployment-settings.ts) is a
+small source file. Each Node.js entrypoint supplies `process.env` to it.
+The Gateway reads `"BACKEND_DISCOVERY_PORT"` and
+`BACKEND_DISCOVERY_SERVICE` from the same source.
 
 The standalone Gateway uses the headless Service name and application port from
 the module. In production it also supplies sessions, authorization, trusted
@@ -118,85 +124,74 @@ type registry, and named durable subscription bindings. The complete
 explain those application-owned integration points.
 
 ```ts
+// docs-snippet-path: packages/deployment-gke/examples/gateway.ts
 import { GkeNodeDiscovery } from "@spine-event-engine/deployment-gke";
-import { DurableSubscriptionBindings, Server } from "@spine-event-engine/server";
+import { Server, type BrowserServerOptions } from "@spine-event-engine/server";
 
+type DeploymentEnvironment = Readonly<Record<string, string | undefined>>;
 declare const DeploymentSettings: {
   readonly port: (
-    environment: Readonly<Record<string, string | undefined>>,
+    environment: DeploymentEnvironment,
     name: "PORT" | "BACKEND_DISCOVERY_PORT",
   ) => number;
-  readonly serviceName: (environment: Readonly<Record<string, string | undefined>>) => string;
+  readonly serviceName: (environment: DeploymentEnvironment) => string;
 };
-declare const environment: Readonly<Record<string, string | undefined>>;
-declare const sessions: import("@spine-event-engine/auth").SessionResolver;
-declare const authorize: import("@spine-event-engine/auth").AuthorizationPolicy["authorize"];
-declare const contexts: import("@spine-event-engine/auth").ContextResolver;
-declare const clock: import("@spine-event-engine/auth").Clock;
-declare const registry: import("@spine-event-engine/core").TypeRegistryLookup;
-declare const registryStorage: import("@spine-event-engine/storage").StorageFactory;
-declare const applicationOptions: Omit<
-  import("@spine-event-engine/server").ServerOptions,
-  "host" | "port"
->;
 
-const bindings = new DurableSubscriptionBindings({
-  storageFactory: registryStorage,
-  namespace: "my-application-gateway",
-  nextId: () => crypto.randomUUID(),
-  dispose: async () => undefined,
-  leaseMs: 60_000,
-  cleanupBatchSize: 100,
-  recordLimit: 10_000,
-  maxRecordBytes: 1_048_576,
-});
+interface GatewayOptions {
+  readonly browser: Omit<BrowserServerOptions, "host" | "port" | "discovery">;
+}
 
-const discovery = new GkeNodeDiscovery({
-  serviceName: DeploymentSettings.serviceName(environment),
-  port: DeploymentSettings.port(environment, "BACKEND_DISCOVERY_PORT"),
-});
-const gateway = Server.atPort(DeploymentSettings.port(environment, "PORT"), {
-  ...applicationOptions,
-  host: "0.0.0.0",
-  browser: {
-    discovery,
-    origins: ["https://app.example.com"],
-    registry,
-    sessions,
-    authorize,
-    contexts,
-    clock,
-    fingerprint: (principal) => principal.id,
-    bindings,
+const GatewayEntrypoint = Object.freeze({
+  async run(options: GatewayOptions, environment: DeploymentEnvironment): Promise<void> {
+    const discovery = new GkeNodeDiscovery({
+      serviceName: DeploymentSettings.serviceName(environment),
+      port: DeploymentSettings.port(environment, "BACKEND_DISCOVERY_PORT"),
+    });
+    await Server.atPort(DeploymentSettings.port(environment, "PORT"), {
+      host: "0.0.0.0",
+      browser: { ...options.browser, discovery },
+    }).run();
   },
 });
-await gateway.run();
 ```
+
+The [complete Gateway entrypoint](examples/gateway.ts) receives your typed
+browser collaborators as `GatewayOptions`. Supply sessions, authorization,
+trusted actor-context resolution, allowed origins, a clock, principal
+fingerprint, type registry, and named durable subscription bindings there.
 
 The application entrypoint uses the same configuration owner for its own
 listener:
 
 ```ts
-import { Server } from "@spine-event-engine/server";
+// docs-snippet-path: packages/deployment-gke/examples/application.ts
+import { Server, type ServerOptions } from "@spine-event-engine/server";
 
+type DeploymentEnvironment = Readonly<Record<string, string | undefined>>;
 declare const DeploymentSettings: {
   readonly port: (
-    environment: Readonly<Record<string, string | undefined>>,
+    environment: DeploymentEnvironment,
     name: "PORT" | "BACKEND_DISCOVERY_PORT",
   ) => number;
 };
-declare const environment: Readonly<Record<string, string | undefined>>;
-declare const applicationOptions: Omit<
-  import("@spine-event-engine/server").ServerOptions,
-  "host" | "port"
->;
 
-const application = Server.atPort(DeploymentSettings.port(environment, "PORT"), {
-  ...applicationOptions,
-  host: "0.0.0.0",
+interface ApplicationOptions {
+  readonly server: Omit<ServerOptions, "host" | "port" | "browser">;
+}
+
+const ApplicationEntrypoint = Object.freeze({
+  async run(options: ApplicationOptions, environment: DeploymentEnvironment): Promise<void> {
+    await Server.atPort(DeploymentSettings.port(environment, "PORT"), {
+      ...options.server,
+      host: "0.0.0.0",
+    }).run();
+  },
 });
-await application.run();
 ```
+
+The [complete application entrypoint](examples/application.ts) receives its
+typed bounded-context, service, and resource configuration as
+`ApplicationOptions`.
 
 The ConfigMap in the template exposes matching service and port values as a
 simple convention. Adapt the names or use your own configuration loader; Spine

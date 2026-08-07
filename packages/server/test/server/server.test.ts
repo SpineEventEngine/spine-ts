@@ -1470,6 +1470,62 @@ describe("Server", () => {
     await server.close();
   });
 
+  it("keeps a standalone discovery gateway signal-managed without retiring its environment", async () => {
+    const closed: string[] = [];
+    let stops = 0;
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory: new CloseTrackingStorageFactory(closed),
+      transport: new CloseTrackingTransport(closed),
+    });
+    const gateway = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        discovery: {
+          watch: () => async () => {
+            stops += 1;
+          },
+        },
+        bindings: inMemoryBindings(),
+      },
+    }).run();
+
+    process.emit("SIGTERM");
+    await waitFor(() => stops === 1);
+
+    expect(closed).toEqual([]);
+    await gateway.close();
+  });
+
+  it("retires the last local environment owner while a standalone gateway remains running", async () => {
+    const closed: string[] = [];
+    let stops = 0;
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory: new CloseTrackingStorageFactory(closed),
+      transport: new CloseTrackingTransport(closed),
+    });
+    const application = await Server.atPort(0).run();
+    const gateway = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        discovery: {
+          watch: () => async () => {
+            stops += 1;
+          },
+        },
+        bindings: inMemoryBindings(),
+      },
+    }).run();
+
+    await application.close();
+
+    expect(closed).toEqual(["transport", "storage"]);
+    expect(stops).toBe(0);
+    await gateway.close();
+    expect(stops).toBe(1);
+  });
+
   it("coalesces concurrent run calls before process lifecycle admission", async () => {
     const sigintListeners = process.listenerCount("SIGINT");
     const sigtermListeners = process.listenerCount("SIGTERM");

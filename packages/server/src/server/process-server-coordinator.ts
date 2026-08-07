@@ -3,7 +3,7 @@ import type { ServerEnvironment } from "./server-environment.js";
 
 interface RunRecord {
   readonly server: RunningServer;
-  readonly environment: ServerEnvironment;
+  readonly environment: ServerEnvironment | undefined;
   retirement: Promise<void> | undefined;
 }
 
@@ -16,12 +16,20 @@ let signalsInstalled = false;
  * @internal
  */
 export const ProcessServerCoordinator: Readonly<{
-  add(server: RunningServer, environment: ServerEnvironment, onRetired: () => void): RunningServer;
+  add(
+    server: RunningServer,
+    environment: ServerEnvironment | undefined,
+    onRetired: () => void,
+  ): RunningServer;
   installSignals(): void;
   onSignal(): void;
   closeRunning(): Promise<void>;
 }> = Object.freeze({
-  add(server: RunningServer, environment: ServerEnvironment, onRetired: () => void): RunningServer {
+  add(
+    server: RunningServer,
+    environment: ServerEnvironment | undefined,
+    onRetired: () => void,
+  ): RunningServer {
     const record: RunRecord = { server, environment, retirement: undefined };
     running.push(record);
     ProcessServerCoordinator.installSignals();
@@ -79,7 +87,10 @@ const ProcessServerCoordinatorValues = Object.freeze({
     const retirement = Promise.resolve()
       .then(async () => {
         if (!running.includes(record)) return;
-        if (running.length === 1) {
+        if (
+          record.environment !== undefined &&
+          !running.some((candidate) => candidate !== record && candidate.environment !== undefined)
+        ) {
           await record.environment.close();
         }
         ProcessServerCoordinatorValues.remove(record);

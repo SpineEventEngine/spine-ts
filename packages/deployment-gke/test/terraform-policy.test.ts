@@ -1,9 +1,14 @@
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
 
 const terraformRoot = new URL("../terraform/", import.meta.url);
 const packageRoot = new URL("../", import.meta.url);
+const exec = promisify(execFile);
 
 describe("the GKE deployment template", () => {
   it("defines the private one-Gateway topology", async () => {
@@ -101,6 +106,54 @@ describe("the GKE deployment guide", () => {
     expect(guide).toContain("sole autoscaler");
     expect(guide).toContain("suspend or remove the KEDA policy");
     expect(guide).not.toMatch(/\bT-0126\b|\bWave 7\b/);
+  });
+
+  it("points its entrypoint snippets to runnable packaged examples", async () => {
+    const guide = await readFile(new URL("README.md", packageRoot), "utf8");
+    const settings = await readFile(
+      new URL("examples/deployment-settings.ts", packageRoot),
+      "utf8",
+    );
+    const application = await readFile(new URL("examples/application.ts", packageRoot), "utf8");
+    const gateway = await readFile(new URL("examples/gateway.ts", packageRoot), "utf8");
+
+    expect(guide).toContain(
+      "// docs-snippet-path: packages/deployment-gke/examples/deployment-settings.ts",
+    );
+    expect(guide).toContain(
+      "// docs-snippet-path: packages/deployment-gke/examples/application.ts",
+    );
+    expect(guide).toContain("// docs-snippet-path: packages/deployment-gke/examples/gateway.ts");
+    expect(settings).toContain("DeploymentSettings");
+    expect(application).toContain('from "./deployment-settings.js"');
+    expect(application).toContain("process.env");
+    expect(gateway).toContain('from "./deployment-settings.js"');
+    expect(gateway).toContain("process.env");
+  });
+
+  it("packs the Terraform and entrypoint deliverables", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "spine-gke-pack-"));
+    try {
+      await exec("pnpm", ["pack", "--pack-destination", directory], {
+        cwd: new URL("../", import.meta.url),
+      });
+      const { stdout } = await exec("tar", [
+        "-tzf",
+        `${directory}/spine-event-engine-deployment-gke-2.0.0-snapshot.1.tgz`,
+      ]);
+      for (const path of [
+        "package/examples/deployment-settings.ts",
+        "package/examples/application.ts",
+        "package/examples/gateway.ts",
+        "package/terraform/main.tf",
+        "package/terraform/variables.tf",
+        "package/terraform/terraform.tfvars.example",
+        "package/terraform/.terraform.lock.hcl",
+      ])
+        expect(stdout).toContain(path);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
 

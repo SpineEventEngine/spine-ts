@@ -232,8 +232,11 @@ export class Server {
   run(): Promise<RunningServer> {
     const current = this.#run;
     if (current !== undefined) return current;
+    const environment = ServerValues.isStandaloneBrowser(this.#browser)
+      ? undefined
+      : this.#environment;
     const running = this.#start("server").then((server) =>
-      ProcessServerCoordinator.add(server, this.#environment, () => {
+      ProcessServerCoordinator.add(server, environment, () => {
         if (this.#run === running) {
           this.#run = undefined;
         }
