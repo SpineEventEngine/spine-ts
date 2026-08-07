@@ -459,6 +459,10 @@ importers:
       '@spine-event-engine/deployment':
         specifier: workspace:*
         version: link:../deployment
+    devDependencies:
+      '@spine-event-engine/auth':
+        specifier: workspace:*
+        version: link:../auth
 
   packages/proto:
     dependencies:

@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
 
 import { describe, expect, it } from "vitest";
+import { DynamicUnaryForwarder, type DynamicUnaryClient } from "@spine-event-engine/auth";
+import { ApplicationNode } from "@spine-event-engine/deployment";
 
 import { GkeNodeDiscovery } from "../../src/index.js";
 
@@ -171,7 +173,66 @@ describe("GkeNodeDiscovery", () => {
     expect(snapshots[0]).toHaveLength(40);
     await stop();
   });
+
+  it("routes every discovered address through bounded Gateway client creation", async () => {
+    const scheduler = new Scheduler();
+    const addresses = Array.from({ length: 40 }, (_, index) => ({
+      address: `10.0.1.${(index + 1).toString()}`,
+      ttl: 30,
+    }));
+    let active = 0;
+    let peak = 0;
+    const forwarder = new DynamicUnaryForwarder({
+      maxConcurrentStarts: 4,
+      create: async (node) => {
+        active += 1;
+        peak = Math.max(peak, active);
+        await Promise.resolve();
+        active -= 1;
+        return client(node.id);
+      },
+    });
+    const discovery = new GkeNodeDiscovery({
+      serviceName: "api.default.svc.cluster.local",
+      port: 8080,
+      resolver: { resolve: async () => addresses },
+      scheduler,
+    });
+    const snapshots: readonly ApplicationNode[][] = [];
+    const stop = discovery.watch((nodes) => {
+      snapshots.push([...nodes]);
+    });
+
+    await scheduler.tick();
+    await forwarder.reconcile(snapshots[0] ?? []);
+    const routed = await Promise.all(
+      Array.from({ length: 40 }, async () => {
+        const value = await forwarder.forward({
+          service: "s",
+          method: "m",
+          value: new Uint8Array(),
+        });
+        return new TextDecoder().decode(value);
+      }),
+    );
+
+    expect(peak).toBeLessThanOrEqual(4);
+    expect(new Set(routed)).toHaveLength(40);
+    await forwarder.close();
+    await stop();
+  });
 });
+
+function client(id: string): DynamicUnaryClient {
+  return {
+    forward: async () => new TextEncoder().encode(id),
+    close: async () => undefined,
+    subscribe: async () => ({ kind: "backend-subscription-envelope", bytes: new Uint8Array() }),
+    activate: async () => undefined,
+    cancel: async () => undefined,
+    dispose: async () => undefined,
+  };
+}
 
 class Scheduler {
   readonly delays: number[] = [];

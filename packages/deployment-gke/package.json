@@ -16,5 +16,8 @@
   ],
   "dependencies": {
     "@spine-event-engine/deployment": "workspace:*"
+  },
+  "devDependencies": {
+    "@spine-event-engine/auth": "workspace:*"
   }
 }
