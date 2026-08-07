@@ -1,17 +1,52 @@
 # Reference
 
-## Entrypoints
+The [deployment guide](README.md) is for people deploying an application. This
+reference records the exact package and Terraform-template contract for agents.
 
-`GkeNodeDiscovery` implements the platform-neutral `NodeDiscovery` contract. It accepts a headless-Service `serviceName`, private application `port`, and an optional `http` (default) or `https` scheme. `resolver`, `scheduler`, and `now` are injectable deterministic seams. `NodeDnsResolver` is the production default and uses Node's maintained `node:dns/promises` Resolver for A and AAAA records with TTL metadata; cancellation calls `Resolver.cancel()`. Its exported `DnsLookup` type intentionally describes the resolver-factory seam for deterministic adapters and tests; ordinary applications use the default constructor.
+## Discovery package
 
-## Identity and TLS
+`GkeNodeDiscovery` implements `NodeDiscovery`. It reads A and AAAA answers for
+a headless-Service DNS name and publishes each successful answer as a complete
+application-node snapshot. Its default refresh interval is 10 seconds. A
+positive DNS TTL can schedule an earlier refresh; zero, missing, and unusable
+TTLs use the configured interval. Empty and name-not-found answers publish an
+empty snapshot immediately and retry at the configured interval.
 
-Every complete DNS answer is deduplicated and converted into canonical HTTP(S) origins. IPv6 literals are bracketed. IDs are derived from the canonical origin and HTTPS TLS authority, so address reappearance after an absence receives fresh reconciliation work. HTTPS always uses the normalized configured Service DNS name for TLS/SNI rather than substituting the resolved IP address. HTTP does not have a TLS authority.
+HTTPS connects to Pod IP addresses while retaining the configured Service name
+for TLS server-name verification. Resolver failures retain the last valid
+membership until its deadline, then publish one empty snapshot while retries
+continue. `close()` cancels timers and resolver work, waits for admitted work,
+and prevents later snapshots.
 
-## Refresh and failure behavior
+Supplying discovery through `ServerOptions.browser` selects standalone Gateway
+hosting. The Server does not build or attach local contexts in that mode, and
+closing the Gateway stops discovery. When an application supplies both fixed
+`backend` URLs and discovery, discovery is the active membership source; fixed
+URLs are not reconciled.
 
-The default refresh interval is 10,000 milliseconds. A non-empty successful answer schedules the next read at the earlier of that interval and the smallest positive TTL. Zero, missing, or unusable TTL values use the refresh interval as both schedule and validity fallback. An empty or name-not-found answer is a successful empty snapshot applied immediately; it has no negative TTL cache and refreshes at the configured interval.
+## Terraform template
 
-A resolver error does not replace the most recent successful non-empty answer before that answer's validity deadline. Once the deadline passes, exactly one empty snapshot is published while retries continue at the configured interval. At most two DNS requests are admitted while stalled: one current request and one retry; later timer ticks keep one future retry scheduled without accumulating requests. A later success restores normal membership and TTL scheduling. Each admitted lookup has an epoch, so a late older answer cannot overwrite a newer snapshot. `close()` cancels timers and admitted resolver requests, waits for them to settle, and prevents later snapshot delivery.
+`terraform/` targets an existing Kubernetes context. It does not provision a
+GKE cluster. The module uses versioned Kubernetes-provider resources and keeps
+the three process Services private. `application` is headless with
+`publish_not_ready_addresses = false`; its ready endpoint addresses are the
+Gateway discovery source. `gateway` and `delivery` each have exactly one
+replica. The delivery server is in-memory and not highly available.
 
-Expected application-node count remains an operational threshold owned by the Gateway deployment; this package neither limits membership nor exports count diagnostics. Terraform, Kubernetes manifests, a Kubernetes API watch, leased registry access, and a logging adapter are deliberately outside this package.
+The module creates no Kubernetes Secret and accepts only the names of
+operator-created application and Gateway Secrets. It selects no storage engine,
+identity provider, public load balancer, TLS certificate, Cloud Run service, or
+application command. Application code configures `GkeNodeDiscovery` and its
+own storage, identity, and public-edge integration.
+
+`autoscaling_enabled` defaults to `false`. When true, the module creates one
+external-metric HPA with a minimum of one and the operator's metric, target,
+and maximum
+and omits the Deployment replica value, leaving capacity ownership with the
+HPA. When false, Terraform manages `application_replicas`. The HPA is not a
+scale-to-zero mechanism; external request or queue activation such as
+operator-managed KEDA is required for that behavior on Standard GKE. KEDA is
+the sole autoscaler for its target Deployment: set `autoscaling_enabled` to
+`false` before applying a KEDA policy. Suspend or remove KEDA before an
+incompatible stop-all replacement or rollback, and restore it only after the
+selected version is ready.

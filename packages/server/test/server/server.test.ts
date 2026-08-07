@@ -225,9 +225,10 @@ describe("Server", () => {
     await running.close();
   });
 
-  it("starts and stops dynamic discovery exactly once with fixed subscription assembly", async () => {
+  it("uses discovery membership instead of fixed backend membership when both are supplied", async () => {
     let watches = 0;
     let stops = 0;
+    const created: string[] = [];
     const discovery = {
       watch(onSnapshot: (nodes: readonly ApplicationNode[]) => void) {
         watches++;
@@ -247,6 +248,12 @@ describe("Server", () => {
       ...browserGateway(),
       bindings: inMemoryBindings(),
       discovery,
+      dynamicManagerFactory: (node) =>
+        ({
+          abort: () => {
+            created.push(node.id);
+          },
+        }) as never,
       host: "127.0.0.1",
       port: 0,
       readMaxBytes: 1_048_576,
@@ -254,8 +261,10 @@ describe("Server", () => {
       production: false,
     });
     expect(watches).toBe(1);
+    await Promise.resolve();
     await Promise.all([running.close(), running.close()]);
     expect(stops).toBe(1);
+    expect(created).toEqual(["node/a"]);
   });
 
   it("aborts owned dynamic session managers on removal and browser close", async () => {
@@ -605,6 +614,52 @@ describe("Server", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("uses discovery-only browser hosting without a local environment attachment", async () => {
+    let watches = 0;
+    let stops = 0;
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        discovery: {
+          watch: () => {
+            watches += 1;
+            return async () => {
+              stops += 1;
+            };
+          },
+        },
+        bindings: inMemoryBindings(),
+      },
+    }).start();
+
+    try {
+      expect(watches).toBe(1);
+      await expect(ServerEnvironment.instance().close()).resolves.toBeUndefined();
+    } finally {
+      await server.close();
+    }
+    expect(stops).toBe(1);
+  });
+
+  it("rejects local ownership for discovery-only browser hosting", async () => {
+    let closed = false;
+
+    await expect(
+      new Server({
+        browser: {
+          ...browserGateway(),
+          discovery: { watch: async () => async () => undefined },
+          bindings: inMemoryBindings(),
+        },
+        resources: [{ close: () => (closed = true) }],
+      }).start(),
+    ).rejects.toThrow(
+      "Standalone browser server cannot own local contexts, services, or resources.",
+    );
+    expect(closed).toBe(false);
   });
 
   it("forwards an authenticated browser command through the supplied standalone backend", async () => {
@@ -1413,6 +1468,62 @@ describe("Server", () => {
 
     await expect(closed).resolves.toBeUndefined();
     await server.close();
+  });
+
+  it("keeps a standalone discovery gateway signal-managed without retiring its environment", async () => {
+    const closed: string[] = [];
+    let stops = 0;
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory: new CloseTrackingStorageFactory(closed),
+      transport: new CloseTrackingTransport(closed),
+    });
+    const gateway = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        discovery: {
+          watch: () => async () => {
+            stops += 1;
+          },
+        },
+        bindings: inMemoryBindings(),
+      },
+    }).run();
+
+    process.emit("SIGTERM");
+    await waitFor(() => stops === 1);
+
+    expect(closed).toEqual([]);
+    await gateway.close();
+  });
+
+  it("retires the last local environment owner while a standalone gateway remains running", async () => {
+    const closed: string[] = [];
+    let stops = 0;
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory: new CloseTrackingStorageFactory(closed),
+      transport: new CloseTrackingTransport(closed),
+    });
+    const application = await Server.atPort(0).run();
+    const gateway = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        discovery: {
+          watch: () => async () => {
+            stops += 1;
+          },
+        },
+        bindings: inMemoryBindings(),
+      },
+    }).run();
+
+    await application.close();
+
+    expect(closed).toEqual(["transport", "storage"]);
+    expect(stops).toBe(0);
+    await gateway.close();
+    expect(stops).toBe(1);
   });
 
   it("coalesces concurrent run calls before process lifecycle admission", async () => {

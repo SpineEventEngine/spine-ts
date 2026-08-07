@@ -1,0 +1,48 @@
+import { GkeNodeDiscovery } from "@spine-event-engine/deployment-gke";
+import { Server, type BrowserServerOptions } from "@spine-event-engine/server";
+
+import { DeploymentSettings, type DeploymentEnvironment } from "./deployment-settings.js";
+
+/**
+ * Supplies application-owned browser collaborators for one Gateway process.
+ */
+export interface GatewayOptions {
+  // prettier-ignore
+
+  /**
+   * Configures browser authentication, authorization, context, registry, and bindings.
+   */
+  readonly browser: Omit<BrowserServerOptions, "host" | "port" | "discovery">;
+}
+
+/**
+ * Starts one GKE-reachable standalone Gateway.
+ */
+export const GatewayEntrypoint = Object.freeze({
+  // prettier-ignore
+
+  /**
+   * Starts the Gateway with injected process settings.
+   *
+   * @param options Supplies application-owned browser collaborators.
+   * @param environment Provides injected deployment settings.
+   * @returns Completes after the signal-managed Gateway starts.
+   */
+  async run(
+    options: GatewayOptions,
+    environment: DeploymentEnvironment = process.env,
+  ): Promise<void> {
+    const discovery = new GkeNodeDiscovery({
+      serviceName: DeploymentSettings.serviceName(environment),
+      port: DeploymentSettings.port(environment, "BACKEND_DISCOVERY_PORT"),
+    });
+    const server = Server.atPort(DeploymentSettings.port(environment, "PORT"), {
+      host: "0.0.0.0",
+      browser: {
+        ...options.browser,
+        discovery,
+      },
+    });
+    await server.run();
+  },
+});

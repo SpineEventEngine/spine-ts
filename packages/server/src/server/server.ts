@@ -223,17 +223,22 @@ export class Server {
    * use {@link start} and keep ownership of process signals themselves.
    * Concurrent calls on one builder return one managed handle. Run-managed
    * siblings share an active generation but reject while caller-managed
-   * ownership is active. The final run-managed retirement permanently closes
-   * its environment; a failed final close stays retryable through `close()` or
-   * a later process signal. Caller-managed servers never close their environment.
+   * ownership is active. The final local environment-owning run retirement
+   * permanently closes its environment; a standalone browser Gateway remains
+   * signal-managed but never owns or closes that environment. A failed final
+   * close stays retryable through `close()` or a later process signal.
+   * Caller-managed servers never close their environment.
    *
    * @returns The running server after its listener accepts requests.
    */
   run(): Promise<RunningServer> {
     const current = this.#run;
     if (current !== undefined) return current;
+    const environment = ServerValues.isStandaloneBrowser(this.#browser)
+      ? undefined
+      : this.#environment;
     const running = this.#start("server").then((server) =>
-      ProcessServerCoordinator.add(server, this.#environment, () => {
+      ProcessServerCoordinator.add(server, environment, () => {
         if (this.#run === running) {
           this.#run = undefined;
         }
@@ -250,10 +255,11 @@ export class Server {
 
   async #startOnce(ownership: EnvironmentOwnership): Promise<RunningServer> {
     const browser = this.#browser;
+    const standalone = ServerValues.isStandaloneBrowser(browser);
     if (browser?.backend !== undefined)
       BrowserServer.backendUrls(ServerValues.browserBackendUrls(browser.backend));
     if (
-      browser?.backend !== undefined &&
+      standalone &&
       (this.#contexts.length > 0 ||
         this.#resources.length > 0 ||
         Object.keys(this.#services).length > 0 ||
@@ -267,9 +273,11 @@ export class Server {
         browser,
         this.#environment.environment.type === EnvironmentType.Production,
       );
-    if (browser?.backend !== undefined)
+    if (standalone && browser !== undefined)
       return BrowserServer.open(
-        BrowserServer.backendUrls(ServerValues.browserBackendUrls(browser.backend)),
+        browser.backend === undefined
+          ? undefined
+          : BrowserServer.backendUrls(ServerValues.browserBackendUrls(browser.backend)),
         {
           ...browser,
           host: browser.host ?? this.#host,
@@ -678,7 +686,10 @@ export interface BrowserServerOptions {
 
   /**
    * Supplies changing complete membership for unary routing and native streams.
-   * Fixed backend configuration is a static complete membership input.
+   * Supplying discovery makes this a standalone Gateway, so the server does
+   * not assemble or own local contexts, services, resources, or listener
+   * lifecycles. When both backend and discovery are supplied, discovery is the
+   * active membership source and fixed backend values are not reconciled.
    */
   readonly discovery?: NodeDiscovery;
 
@@ -1194,6 +1205,10 @@ const ServerValues = Object.freeze({
       return values as readonly string[];
     }
     throw new Error("Server browser backend must configure exactly one of baseUrl or baseUrls.");
+  },
+
+  isStandaloneBrowser(browser: BrowserServerOptions | undefined): boolean {
+    return browser?.backend !== undefined || browser?.discovery !== undefined;
   },
 
   normalizeMessageMaxBytes(value: number, name: "readMaxBytes" | "writeMaxBytes"): number {

@@ -53,7 +53,7 @@ interface BrowserHostOptions extends Omit<BrowserServerOptions, "host" | "port">
  */
 export const BrowserServer: Readonly<{
   open(
-    native: RunningServer | string | readonly string[],
+    native: RunningServer | string | readonly string[] | undefined,
     options: BrowserHostOptions,
   ): Promise<RunningServer>;
   requests(options: BrowserServerOptions): {
@@ -85,7 +85,7 @@ export const BrowserServer: Readonly<{
   closeListener(server: http.Server): Promise<void>;
 }> = Object.freeze({
   async open(
-    native: RunningServer | string | readonly string[],
+    native: RunningServer | string | readonly string[] | undefined,
     options: BrowserHostOptions,
   ): Promise<RunningServer> {
     BrowserServer.requireDurableBindings(options, options.production);
@@ -97,13 +97,16 @@ export const BrowserServer: Readonly<{
       throw new Error("Browser maxActiveAuthRequests must be a positive safe integer.");
     let draining = false;
     const running = BrowserServerValues.running(native);
-    const backendBaseUrls = Array.isArray(native)
-      ? BrowserServer.backendUrls(native)
-      : [
-          typeof native === "string"
-            ? native
-            : BrowserServerValues.requiredRunning(running).baseUrl,
-        ];
+    const backendBaseUrls =
+      native === undefined
+        ? []
+        : Array.isArray(native)
+          ? BrowserServer.backendUrls(native)
+          : [
+              typeof native === "string"
+                ? native
+                : BrowserServerValues.requiredRunning(running).baseUrl,
+            ];
     const fixedNodes = backendBaseUrls.map(
       (endpoint, index) => new ApplicationNode({ id: `fixed/${index.toString()}`, endpoint }),
     );
@@ -371,8 +374,11 @@ export const BrowserServer: Readonly<{
   },
   requireDurableBindings(options: BrowserServerOptions, production: boolean): void {
     const supplied = options as Partial<BrowserServerOptions>;
+    const standalone = options.backend !== undefined || options.discovery !== undefined;
     if (options.backend !== undefined) {
       BrowserServer.backendUrls(BrowserServerValues.backendUrlsFor(options.backend));
+    }
+    if (standalone) {
       if (supplied.sessions === undefined || typeof supplied.sessions.resolve !== "function")
         throw new Error("Standalone browser server requires sessions.");
       if (typeof options.authorize !== "function")
@@ -390,13 +396,13 @@ export const BrowserServer: Readonly<{
       if (options.bindings === undefined)
         throw new Error("Standalone browser server requires explicit subscription bindings.");
     }
-    if (options.backend !== undefined && production && options.registry === undefined)
+    if (standalone && production && options.registry === undefined)
       throw new Error("Production standalone browser server requires a type registry.");
     const bindings = options.bindings;
     if (production && !isDurableSubscriptionBindings(bindings))
       throw new Error("Production browser server requires durable subscription bindings.");
     if (
-      options.backend !== undefined &&
+      standalone &&
       production &&
       (bindings === undefined ||
         !("namespace" in bindings) ||
@@ -605,8 +611,10 @@ const BrowserServerValues = Object.freeze({
     if (creator === undefined) throw new Error("Browser server backend is absent.");
     return creator;
   },
-  running(native: RunningServer | string | readonly string[]): RunningServer | undefined {
-    return typeof native === "string" || Array.isArray(native)
+  running(
+    native: RunningServer | string | readonly string[] | undefined,
+  ): RunningServer | undefined {
+    return native === undefined || typeof native === "string" || Array.isArray(native)
       ? undefined
       : (native as RunningServer);
   },

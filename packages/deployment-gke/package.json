@@ -12,7 +12,9 @@
   "files": [
     "dist",
     "README.md",
-    "REFERENCE.md"
+    "REFERENCE.md",
+    "examples",
+    "terraform"
   ],
   "dependencies": {
     "@spine-event-engine/deployment": "workspace:*"
@@ -20,6 +22,7 @@
   "devDependencies": {
     "@bufbuild/protobuf": "2.12.1",
     "@spine-event-engine/auth": "workspace:*",
-    "@spine-event-engine/proto": "workspace:*"
+    "@spine-event-engine/proto": "workspace:*",
+    "@spine-event-engine/server": "workspace:*"
   }
 }

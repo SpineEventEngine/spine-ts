@@ -79,6 +79,7 @@ const compilerOptions = {
   noResolve: true,
   skipLibCheck: true,
   target: ts.ScriptTarget.ESNext,
+  types: ["node"],
 };
 const moduleExports = new Map();
 let failures = 0;
