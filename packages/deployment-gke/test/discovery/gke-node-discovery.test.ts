@@ -409,6 +409,93 @@ describe("GkeNodeDiscovery", () => {
     await stop();
   });
 
+  it("retains one bounded retry timer while expired lookup attempts keep stalling", async () => {
+    const scheduler = new Scheduler();
+    let now = 0;
+    let calls = 0;
+    let aborted = 0;
+    const discovery = new GkeNodeDiscovery({
+      serviceName: "api.default.svc.cluster.local",
+      port: 8080,
+      refreshIntervalMs: 5_000,
+      now: () => now,
+      resolver: {
+        resolve: async (_name, signal) => {
+          calls += 1;
+          if (calls === 1) return [{ address: "10.0.0.1", ttl: 2 }];
+          return await new Promise<readonly never[]>((resolve) => {
+            signal.addEventListener(
+              "abort",
+              () => {
+                aborted += 1;
+                resolve([]);
+              },
+              { once: true },
+            );
+          });
+        },
+      },
+      scheduler,
+    });
+    const stop = discovery.watch(() => undefined);
+
+    await scheduler.tick();
+    now = 2_000;
+    await scheduler.tick();
+    await scheduler.tick();
+    await scheduler.tick();
+    await scheduler.tick();
+
+    expect(calls).toBe(3);
+    expect(scheduler.delays.slice(-1)).toEqual([5_000]);
+    await stop();
+    expect(aborted).toBe(2);
+  });
+
+  it("discards an older stalled answer after a newer retry publishes membership", async () => {
+    const scheduler = new Scheduler();
+    let now = 0;
+    let calls = 0;
+    let settleOlder:
+      ((answer: readonly { readonly address: string; readonly ttl: number }[]) => void) | undefined;
+    const discovery = new GkeNodeDiscovery({
+      serviceName: "api.default.svc.cluster.local",
+      port: 8080,
+      refreshIntervalMs: 5_000,
+      now: () => now,
+      resolver: {
+        resolve: async () => {
+          calls += 1;
+          if (calls === 1) return [{ address: "10.0.0.1", ttl: 2 }];
+          if (calls === 2)
+            return await new Promise((resolve) => {
+              settleOlder = resolve;
+            });
+          return [{ address: "10.0.0.2", ttl: 30 }];
+        },
+      },
+      scheduler,
+    });
+    const snapshots: ApplicationNode[][] = [];
+    const stop = discovery.watch((nodes) => snapshots.push([...nodes]));
+
+    await scheduler.tick();
+    now = 2_000;
+    await scheduler.tick();
+    await scheduler.tick();
+    await scheduler.tick();
+    settleOlder?.([{ address: "10.0.0.3", ttl: 30 }]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(snapshots.map((nodes) => nodes[0]?.endpoint ?? "empty")).toEqual([
+      "http://10.0.0.1:8080",
+      "empty",
+      "http://10.0.0.2:8080",
+    ]);
+    await stop();
+  });
+
   it("does not repeat an empty snapshot when an empty answer is followed by failure", async () => {
     const scheduler = new Scheduler();
     let now = 0;

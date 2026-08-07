@@ -1,6 +1,7 @@
 export {
   GkeNodeDiscovery,
   NodeDnsResolver,
+  type DnsLookup,
   type GkeDnsAddress,
   type GkeDnsResolver,
   type GkeNodeDiscoveryOptions,

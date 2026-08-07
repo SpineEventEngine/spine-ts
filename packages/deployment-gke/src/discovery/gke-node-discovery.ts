@@ -102,6 +102,8 @@ const systemScheduler: NodeScheduler = {
   },
 };
 
+const maximumRefreshes = 2;
+
 /**
  * Publishes ready GKE Pods from a headless-Service DNS answer.
  */
@@ -123,6 +125,7 @@ export class GkeNodeDiscovery implements NodeDiscovery {
   #empty = false;
   #closed = false;
   #closing: Promise<void> | undefined;
+  #epoch = 0;
 
   /**
    * Creates discovery with a ten-second refresh interval by default.
@@ -185,7 +188,10 @@ export class GkeNodeDiscovery implements NodeDiscovery {
   #schedule(delayMs: number): void {
     this.#cancel?.();
     this.#cancel = this.#scheduler.schedule(delayMs, () => {
-      const refresh = this.#refresh();
+      this.#cancel = undefined;
+      if (this.#expired) this.#schedule(this.#refreshIntervalMs);
+      if (this.#controllers.size >= maximumRefreshes) return;
+      const refresh = this.#refresh(++this.#epoch);
       this.#refreshes.add(refresh);
       void refresh.catch(() => undefined).finally(() => this.#refreshes.delete(refresh));
     });
@@ -208,13 +214,13 @@ export class GkeNodeDiscovery implements NodeDiscovery {
     });
   }
 
-  async #refresh(): Promise<void> {
+  async #refresh(epoch: number): Promise<void> {
     if (this.#closed) return;
     const controller = new AbortController();
     this.#controllers.add(controller);
     try {
       const answer = await this.#resolver.resolve(this.#serviceName, controller.signal);
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || epoch !== this.#epoch) return;
       const nodes = this.#nodes(answer);
       this.#watcher?.(nodes);
       this.#expired = false;
