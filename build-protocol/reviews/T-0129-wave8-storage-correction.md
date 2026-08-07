@@ -170,3 +170,13 @@ verification.
   assets, and 313 relative Markdown links).
 
 Review and verification are complete. T-0129 is ready for integration.
+
+## Integration
+
+- Merged through `c6c525f6` and pushed to `origin/main`.
+- In a clean integration worktree, `pnpm install --frozen-lockfile` and
+  `pnpm proto:generate` passed.
+- Post-merge `pnpm verify:task -- --no-tests` passed TypeScript, tooling, lint,
+  TSDoc, formatting, documentation, TypeDoc (all expected package exports), Buf
+  lint, generated cleanliness, and release-readiness checks.
+- T-0129 is durably closed. T-0130 starts from the verified mainline endpoint.
