@@ -28,6 +28,7 @@ export class NodeDnsResolver implements GkeDnsResolver {
   constructor(create: () => DnsLookup = () => new Resolver()) {
     this.#create = create;
   }
+
   /**
    * Resolves both address families and exposes DNS TTLs when Node supplies them.
    *
