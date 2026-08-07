@@ -1,6 +1,6 @@
 # T-0128 Review Record
 
-Status: Implementation in progress
+Status: Accepted; final release verification pending
 
 ## Required Concerns
 
@@ -107,6 +107,15 @@ and the native relay suite pass.
   relay plus dynamic creator/forwarder tests passed 68/68. This deterministic
   test-only correction does not reopen the already-clean documentation or style
   lanes.
+- Final TypeScript/API review: clean. The reviewer independently confirmed the
+  strict tooling typecheck, the 68/68 focused tests, the native-envelope flow,
+  and the absence of a Protobuf, package-export, or package-metadata delta.
+- Final performance/reliability review: clean. The reviewer independently
+  reproduced the strict tooling typecheck, the 68/68 focused tests, and a clean
+  diff, and accepted the backend-envelope ownership and lifecycle behavior.
+- Runtime-model introspection was unavailable for both final dispositions. The
+  immutable configured reviewer profiles remained `gpt-5.6-terra` / `high`,
+  with no visible mismatch.
 
 ## Review-correction evidence
 
