@@ -249,3 +249,37 @@ The three Terra reviewers are dispatched with explicit configured
 `gpt-5.6-luna` / `medium` profile; `medium` is explicit and the role selects the
 fixed model. Runtime metadata is recorded if exposed; otherwise the configured
 profile and absence of visible mismatch are the acceptance evidence.
+
+## Final Closure Review Results
+
+- Performance and reliability: clean. Mixed local/standalone retirement,
+  signal shutdown, failed-close retry, archive cleanup, and 132 focused tests
+  are sound.
+- Style, documentation, and TypeScript/API: P1. The README entrypoint snippets
+  remain declaration-only pseudo-code even though the shipped examples are
+  complete. The guide must use exact or concise excerpts that import the shared
+  settings owner and demonstrate the `process.env` default/binding, with links
+  to the complete files.
+- TypeScript/API: P2. `Server.run()` still says every final run-managed server
+  closes its environment; the contract must distinguish local environment
+  owners from standalone browser Gateways.
+- Style: P2. The real-package archive test hard-codes the current package
+  version in its `.tgz` filename; it must discover or derive the generated
+  archive name so routine version bumps do not break an unrelated test.
+
+All reviewers reported their configured roles and profiles. Runtime
+self-introspection was unavailable, and no visible mismatch or fallback
+occurred.
+
+## Final Correction Dispatch
+
+The original implementer receives the complete accepted batch above. The
+correction remains bounded to the deployment guide and policy test plus
+`Server.run()` TSDoc. Documentation, TypeScript/API, and style receive a narrow
+recorded recheck; reliability is not reopened because no runtime behavior
+changes. The single release gate remains deferred until convergence.
+
+The implementer is dispatched with explicit configured `gpt-5.6-terra` /
+`medium`. Runtime self-introspection is recorded if exposed; otherwise the
+immutable configured profile and absence of visible mismatch are the available
+acceptance evidence.
