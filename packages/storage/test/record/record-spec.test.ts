@@ -1,144 +1,100 @@
-import { create } from "@bufbuild/protobuf";
-import type { Message } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
-import type { Event } from "@spine-event-engine/proto";
+import type { Event, EventId } from "@spine-event-engine/proto";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { RecordColumn, RecordSpec } from "../../src/index.js";
+import { RecordColumn } from "../../src/record/record-column.js";
+import { RecordSpec } from "../../src/record/record-spec.js";
 
 describe("RecordSpec", () => {
-  it("requires a non-blank portable storage key", () => {
+  it("exposes the JVM-style types and defaults source type to the record type", () => {
+    const columns = [new RecordColumn<Event>("kind", () => "event", "string")];
+    const spec = new RecordSpec({
+      recordType: EventSchema,
+      idSchema: EventIdSchema,
+      extractId: (event) => event.id ?? create(EventIdSchema),
+      columns,
+    });
+
+    expect(spec.sourceType).toBe(EventSchema);
+    expect(spec.idType).toBe(EventIdSchema);
+    expect(spec.recordType).toBe(EventSchema);
+    expect(spec.columns).toBe(columns);
+  });
+
+  it("retains an explicit source type distinct from the stored record type", () => {
+    const spec = new RecordSpec<string, Event>({
+      sourceType: AnySchema,
+      recordType: EventSchema,
+      idKind: "string",
+      extractId: () => "event-1",
+    });
+
+    expect(spec.sourceType).toBe(AnySchema);
+    expect(spec.recordType).toBe(EventSchema);
+    expect(spec.idType).toBe("string");
+  });
+
+  it("requires exactly one ID type", () => {
     expect(
       () =>
         new RecordSpec({
-          schema: EventSchema,
-          storageKey: " events ",
-          idKind: "string",
-          extractId: (event) => event.id,
-        }),
-    ).toThrow(/storage key/i);
-  });
-
-  it("rejects empty and control-character storage keys", () => {
-    for (const storageKey of ["", "events\u0000current", "events\u007fcurrent"]) {
-      expect(
-        () =>
-          new RecordSpec({
-            schema: EventSchema,
-            storageKey,
-            idKind: "string",
-            extractId: (event) => event.id,
-          }),
-      ).toThrow(/storage key/i);
-    }
-  });
-
-  it("rejects blank record-column descriptors", () => {
-    expect(() => new RecordColumn<Event>("kind", () => "event", " \t ")).toThrow(/value type/i);
-  });
-
-  it("rejects a schema ID combined with a primitive ID descriptor", () => {
+          recordType: EventSchema,
+          extractId: (event: Event) => event.id,
+        } as never),
+    ).toThrow(/non-blank primitive ID kind/i);
     expect(
       () =>
         new RecordSpec({
-          schema: EventSchema,
-          storageKey: "spine.core.Event:invalid-id",
+          recordType: EventSchema,
           idSchema: EventIdSchema,
           idKind: "string",
-          extractId: (event) => event.id ?? create(EventIdSchema),
-        }),
+          extractId: (event: Event) => event.id ?? create(EventIdSchema),
+        } as never),
     ).toThrow(/both an ID schema and primitive ID kind/i);
   });
 
-  it("makes compatibility fingerprints deterministic for schemas, IDs, and columns", () => {
-    const first = new RecordSpec({
-      schema: EventSchema,
-      storageKey: "spine.core.Event:first",
-      idSchema: EventIdSchema,
-      extractId: (event) => event.id ?? create(EventIdSchema),
-      columns: [new RecordColumn("kind", () => "event", "string")],
-    });
-    const equivalent = new RecordSpec({
-      schema: EventSchema,
-      storageKey: "spine.core.Event:second",
-      idSchema: EventIdSchema,
-      extractId: (event) => event.id ?? create(EventIdSchema),
-      columns: [new RecordColumn("kind", () => "event", "string")],
-    });
-
-    expect(first.compatibilityFingerprint).toBe(equivalent.compatibilityFingerprint);
-    expect(first.compatibilityFingerprint).toContain(EventSchema.typeName);
-    expect(first.compatibilityFingerprint).toContain(EventIdSchema.typeName);
-  });
-
-  it("distinguishes same-key layouts by declared column and primitive ID descriptors", () => {
-    const stringColumn = new RecordSpec<string, Event>({
-      schema: EventSchema,
-      storageKey: "spine.core.Event:descriptor",
-      idKind: "string",
-      extractId: () => "event",
-      columns: [new RecordColumn("value", () => "one", "string")],
-    });
-    const numberColumn = new RecordSpec<string, Event>({
-      schema: EventSchema,
-      storageKey: "spine.core.Event:descriptor",
-      idKind: "string",
-      extractId: () => "event",
-      columns: [new RecordColumn("value", () => 1, "number")],
-    });
-    const numberId = new RecordSpec<number, Event>({
-      schema: EventSchema,
-      storageKey: "spine.core.Event:descriptor",
-      idKind: "number",
-      extractId: () => 1,
-      columns: [new RecordColumn("value", () => "one", "string")],
-    });
-
-    expect(stringColumn.compatibilityFingerprint).not.toBe(numberColumn.compatibilityFingerprint);
-    expect(stringColumn.compatibilityFingerprint).not.toBe(numberId.compatibilityFingerprint);
-  });
-
-  it("exposes its read-only protobuf schema to storage adapters", () => {
+  it("materializes cloned IDs, records, and columns", () => {
     const spec = new RecordSpec({
-      schema: EventSchema,
-      storageKey: "spine.core.Event:record-spec",
+      recordType: EventSchema,
       idSchema: EventIdSchema,
       extractId: (event) => event.id ?? create(EventIdSchema),
+      columns: [new RecordColumn<Event>("typeUrl", (event) => event.message?.typeUrl, "string")],
+    });
+    const event = create(EventSchema, {
+      id: create(EventIdSchema, { value: "event-1" }),
+      message: create(AnySchema, { typeUrl: "type.spine.io/tasks.TaskCreated" }),
     });
 
-    expect(spec.schema).toBe(EventSchema);
+    const materialized = spec.materialize(event);
+    if (event.id === undefined || event.message === undefined) {
+      throw new Error("Expected materialized test event fields.");
+    }
+    event.id.value = "changed";
+    event.message.typeUrl = "type.spine.io/tasks.Mutated";
+
+    expect(materialized.id.value).toBe("event-1");
+    expect(materialized.record.message?.typeUrl).toBe("type.spine.io/tasks.TaskCreated");
+    expect(materialized.columns.get("typeUrl")).toBe("type.spine.io/tasks.TaskCreated");
   });
 
-  it("uses clone methods for ids, records, and column values when they exist", () => {
+  it("uses clone methods for IDs, records, and column values when they exist", () => {
     const recordClone = {
       id: "record-1",
-      clone: () =>
-        Object.freeze({
-          id: "record-1-copy",
-          cloned: true,
-        }),
+      clone: () => Object.freeze({ id: "record-1-copy", cloned: true }),
     } as unknown as Message;
     const id = {
       value: "id-1",
-      clone: () =>
-        Object.freeze({
-          value: "id-1-copy",
-          cloned: true,
-        }),
+      clone: () => Object.freeze({ value: "id-1-copy", cloned: true }),
     };
     const columnValue = {
       value: "column-1",
-      clone: () =>
-        Object.freeze({
-          value: "column-1-copy",
-          cloned: true,
-        }),
+      clone: () => Object.freeze({ value: "column-1-copy", cloned: true }),
     };
     const spec = new RecordSpec<typeof id, Message>({
-      schema: {} as GenMessage<Message>,
-      storageKey: "test.Record:clone",
+      recordType: {} as GenMessage<Message>,
       idKind: "object",
       extractId: () => id,
       columns: [new RecordColumn<Message>("copy", () => columnValue, "object")],
@@ -146,41 +102,39 @@ describe("RecordSpec", () => {
 
     const materialized = spec.materialize(recordClone);
 
-    expect(materialized.record).toMatchObject({
-      id: "record-1-copy",
-      cloned: true,
-    });
-    expect(materialized.id).toMatchObject({
-      value: "id-1-copy",
-      cloned: true,
-    });
+    expect(materialized.record).toMatchObject({ id: "record-1-copy", cloned: true });
+    expect(materialized.id).toMatchObject({ value: "id-1-copy", cloned: true });
     expect(materialized.columns.get("copy")).toMatchObject({
       value: "column-1-copy",
       cloned: true,
     });
   });
 
-  it("raises a stable error when plain values cannot be cloned", () => {
-    const spec = new RecordSpec<() => void, Event>({
-      schema: EventSchema,
-      storageKey: "spine.core.Event:unclonable",
+  it("raises stable errors for unclonable IDs and records", () => {
+    const unclonableSpec = new RecordSpec<() => void, Event>({
+      recordType: EventSchema,
       idKind: "function",
       extractId: () => unclonableId,
     });
-    const event = create(EventSchema, {
-      id: create(EventIdSchema, { value: "event-1" }),
-      message: create(AnySchema, { typeUrl: "type.spine.io/tasks.TaskCreated" }),
+    const invalidRecordSpec = new RecordSpec<string, Message>({
+      recordType: {} as GenMessage<Message>,
+      idKind: "string",
+      extractId: () => "record-1",
     });
 
-    expect(() => spec.materialize(event)).toThrow("Storage value could not be cloned.");
+    expect(() => unclonableSpec.materialize(create(EventSchema))).toThrow(
+      "Storage value could not be cloned.",
+    );
+    expect(() => invalidRecordSpec.cloneRecord({} as Message)).toThrow(
+      "Storage record could not be cloned.",
+    );
   });
 
   it("rejects duplicate declared record-column names", () => {
     expect(
       () =>
         new RecordSpec({
-          schema: EventSchema,
-          storageKey: "spine.core.Event:columns",
+          recordType: EventSchema,
           idKind: "string",
           extractId: (event) => event.id,
           columns: [
@@ -191,15 +145,42 @@ describe("RecordSpec", () => {
     ).toThrow('duplicate record column "kind"');
   });
 
-  it("raises a stable error when record cloning falls back to an invalid schema", () => {
-    const spec = new RecordSpec<string, Message>({
-      schema: {} as GenMessage<Message>,
-      storageKey: "test.Record:invalid",
-      idKind: "string",
-      extractId: () => "record-1",
-    });
+  it("does not admit legacy schema, storage key, or fingerprint members", () => {
+    type Input = ConstructorParameters<typeof RecordSpec<string, Event>>[0];
+    type Surface = RecordSpec<string, Event>;
 
-    expect(() => spec.cloneRecord({} as Message)).toThrow("Storage record could not be cloned.");
+    expectTypeOf<Input>().not.toHaveProperty("schema");
+    expectTypeOf<Input>().not.toHaveProperty("storageKey");
+    expectTypeOf<Surface>().not.toHaveProperty("schema");
+    expectTypeOf<Surface>().not.toHaveProperty("storageKey");
+    expectTypeOf<Surface>().not.toHaveProperty("compatibilityFingerprint");
+
+    const sourceType: GenMessage<Event> = EventSchema;
+    expect(sourceType).toBe(EventSchema);
+  });
+
+  it("requires exactly one ID descriptor at compile time", () => {
+    type Input = ConstructorParameters<typeof RecordSpec<EventId, Event>>[0];
+
+    // @ts-expect-error RecordSpec needs an ID schema or primitive ID kind.
+    const withoutId: Input = { recordType: EventSchema, extractId: (event) => event.id };
+    const withBoth: Input = {
+      recordType: EventSchema,
+      idSchema: EventIdSchema,
+      // @ts-expect-error RecordSpec cannot combine a message ID schema and primitive ID kind.
+      idKind: "string",
+      extractId: (event) => event.id ?? create(EventIdSchema),
+    };
+    const messageWithKind: Input = {
+      recordType: EventSchema,
+      // @ts-expect-error Message IDs require an ID schema instead of a primitive ID kind.
+      idKind: "string",
+      extractId: (event) => event.id ?? create(EventIdSchema),
+    };
+
+    void withoutId;
+    void withBoth;
+    void messageWithKind;
   });
 });
 

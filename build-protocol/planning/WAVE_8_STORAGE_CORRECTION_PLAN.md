@@ -26,6 +26,26 @@ new behavior and a repository-wide audit finds no unresolved invention.
 - T-0144 runs the one final `verify:release`; earlier slices use focused
   `verify:task` and do not repeatedly pay the repository-wide gate.
 
+### Integration-train correction
+
+T-0131 removes public constructor fields and accessors that direct consumers in
+later tasks still use. The deterministic repository build therefore cannot be
+green after T-0131 alone, and a compatibility alias would violate the approved
+removal boundary. T-0131 through T-0142 form one stacked integration train:
+
+- each task receives its focused RED/GREEN proof, required specialist review,
+  commit, and immediate feature-branch push;
+- each accepted task becomes the immutable base of the next dependent task;
+- the train does not merge into `main` while an assigned legacy consumer still
+  fails the repository build;
+- T-0142 must restore the complete deterministic task profile before the train
+  merges to `main`; T-0143 and T-0144 then execute from that integrated base.
+
+This is a sequencing correction only. It does not permit compatibility fields,
+temporary runtime aliases, weakened tests, or ownership leakage. Every direct
+legacy consumer remains owned by its existing task; deterministic failure
+inventory proves the handoff until that task removes it.
+
 ## Dependency Graph
 
 ```mermaid
@@ -99,8 +119,8 @@ Replaces storage-key/fingerprint identity with the source type, ID type, record
 type, ID extraction, and columns that define a JVM-style record specification.
 
 - Dependencies: T-0130.
-- Ownership: `packages/storage/src/{record,storage,memory,query}/**` and mirrored
-  tests.
+- Ownership: `packages/storage/src/{record,storage,memory,query,event}/**` and
+  mirrored tests, limited in `event` to the direct `RecordSpec` consumer.
 - RED-first acceptance: two Entity source types storing `EntityRecord` remain
   physically distinct; ordinary records default their source to their record
   type; column materialization, context and tenant isolation, queries, compare-
@@ -121,7 +141,10 @@ type, ID extraction, and columns that define a JVM-style record specification.
 - Review: style/maintainability, TypeScript/API docs, and
   performance/reliability; documentation receives narrow public-claim review
   if package prose changes.
-- Verification: coverage-enabled focused `verify:task`.
+- Verification: the shared deterministic profile is run through its expected
+  downstream compile failure and the complete failure inventory is recorded.
+  Focused package typecheck and coverage must pass. The stacked train restores
+  and passes the complete `verify:task` no later than T-0142.
 
 ## T-0132: Current EntityRecord Storage
 

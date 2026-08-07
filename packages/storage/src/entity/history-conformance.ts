@@ -162,12 +162,11 @@ const EntityHistoryFixture = {
   ): Promise<EntityStorageConformance<string, StringValue>> {
     const input: EntityStorageInput<string, StringValue> = {
       context: { name: "EntityHistoryConformance", multitenant: false },
-      id: { clone: (id) => id, fingerprint: "string", key: (id) => id },
+      id: { clone: (id) => id, key: (id) => id },
       extractId: (state) => state.value,
       columns: [new RecordColumn<StringValue, string>("value", (state) => state.value, "string")],
-      layout: "entity-v1",
+      sourceType: StringValueSchema,
       stateSchema: StringValueSchema,
-      storageKey: "conformance.Task:current",
     };
     const storage = adapter.create(input);
     const current = create(StringValueSchema, { value: "task" });
@@ -257,16 +256,6 @@ const EntityHistoryFixture = {
     ConformanceAssertions.assert(
       reopenedQuery[0]?.id === "task",
       "current query must survive close and reopen",
-    );
-    await ConformanceAssertions.assertRejects(
-      () =>
-        adapter
-          .reopen({
-            ...input,
-            id: { ...input.id, fingerprint: "incompatible-string" },
-          })
-          .current.query({}),
-      "current query must reject an incompatible descriptor fingerprint",
     );
     return reopened;
   },

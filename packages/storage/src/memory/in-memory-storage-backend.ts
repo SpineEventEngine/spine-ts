@@ -13,55 +13,53 @@ export class InMemoryStorageBackend {
   readonly [Symbol.toStringTag] = "InMemoryStorageBackend";
 
   /**
-   * Binds one canonical scope to one compatible backend-owned value.
+   * Binds one canonical scope to one backend-owned value.
    * @param backend Selects the shared ephemeral backend.
+   * @param namespace Separates Entity and generic record backend values.
    * @param scope Identifies the canonical storage scope.
-   * @param fingerprint Identifies the compatible record layout.
    * @param create Creates the value when the scope is first bound.
    * @returns The existing or newly created backend-owned value.
    */
   static bind<T>(
     backend: InMemoryStorageBackend,
+    namespace: "entity" | "record",
     scope: string,
-    fingerprint: string,
     create: () => T,
   ): T {
-    return MemoryBackendScopes.bind(backend, scope, fingerprint, create);
+    return MemoryBackendScopes.bind(backend, namespace, scope, create);
   }
 }
 
-interface BoundScope {
-  readonly fingerprint: string;
-  readonly value: unknown;
-}
-
-const scopesByBackend = new WeakMap<InMemoryStorageBackend, Map<string, BoundScope>>();
+const scopesByBackend = new WeakMap<InMemoryStorageBackend, Map<string, unknown>>();
 
 /**
- * Binds canonical scopes to compatible values for each in-memory backend.
+ * Binds canonical scopes to values for each in-memory backend.
  */
 const MemoryBackendScopes = {
   // prettier-ignore
 
   /**
-   * Binds one canonical scope to one compatible backend-owned value.
+   * Binds one canonical scope to one backend-owned value.
    */
-  bind<T>(backend: InMemoryStorageBackend, scope: string, fingerprint: string, create: () => T): T {
-    let scopes = scopesByBackend.get(backend);
+  bind<T>(
+    backend: InMemoryStorageBackend,
+    namespace: "entity" | "record",
+    scope: string,
+    create: () => T,
+  ): T {
+    let scopes: Map<string, unknown> | undefined = scopesByBackend.get(backend);
     if (scopes === undefined) {
-      scopes = new Map<string, BoundScope>();
+      scopes = new Map<string, unknown>();
       scopesByBackend.set(backend, scopes);
     }
 
-    const existing = scopes.get(scope);
+    const key = `${namespace}:${scope}`;
+    const existing = scopes.get(key);
     if (existing === undefined) {
       const value = create();
-      scopes.set(scope, { fingerprint, value });
+      scopes.set(key, value);
       return value;
     }
-    if (existing.fingerprint !== fingerprint) {
-      throw new Error(`Storage scope "${scope}" has an incompatible record specification.`);
-    }
-    return existing.value as T;
+    return existing as T;
   },
 };

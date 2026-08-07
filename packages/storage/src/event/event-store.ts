@@ -378,8 +378,7 @@ const EventContexts = {
  * @internal
  */
 export const eventStoreRecordSpec: RecordSpec<EventId, Event> = new RecordSpec<EventId, Event>({
-  schema: EventSchema,
-  storageKey: "spine.core.Event:event-store",
+  recordType: EventSchema,
   idSchema: EventIdSchema,
   extractId: (event) => EventIds.require(event),
   columns: [

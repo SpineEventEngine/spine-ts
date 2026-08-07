@@ -6,14 +6,14 @@ const storageScopes = {
   /**
    * Creates a length-delimited storage scope.
    * @param context Supplies the bounded-context and tenant scope.
-   * @param storageKey Supplies the physical record layout identity.
+   * @param sourceType Supplies the physical source-type identity.
    * @returns The canonical storage scope key.
    */
-  canonical(context: StorageContext, storageKey: string): string {
+  canonical(context: StorageContext, sourceType: string): string {
     const values = [
       context.name,
       context.multitenant ? storageScopes.tenant(context) : "single-tenant",
-      storageKey,
+      sourceType,
     ];
     return values.map((value) => `${String(storageScopes.utf8Length(value))}:${value}`).join(":");
   },

@@ -8,7 +8,7 @@ Import public types from `@spine-event-engine/storage`. The entry point exports
 `StorageFactory`, `RecordStorage`, `RecordSpec`, `RecordColumn`, `RecordQuery`,
 `RecordMask`, `InMemoryStorageFactory`, `InMemoryStorageBackend`, event-store
 types, normalized query policy/evaluator types, and entity history interfaces.
-The `./internal/entity-history` subpath supplies Entity records, ID/layout
+The `./internal/entity-history` subpath supplies Entity records, source-type
 inputs, and current/state/event-history ports. The separate
 `./internal/entity-commit` subpath supplies atomic commit input/result types,
 `EntityCommitStorage`, and `EntityCommitStorageFactories`; both are
@@ -18,12 +18,14 @@ framework/provider seams, not application-facing remote APIs.
 
 `StorageFactory.createRecordStorage(context, spec)` returns an independently
 closeable `RecordStorage`. A context contains a bounded-context name,
-multitenancy flag, and optional tenant ID. A `RecordSpec` fixes the Protobuf
-schema, storage key, identity extractor, ID schema or primitive ID kind, and
-materialized columns. Generic durable providers key their physical scope by the
-backend, context name, tenancy mode, tenant slice, and `RecordSpec.storageKey`;
-the schema is codec metadata rather than scope identity. Application and
-framework code must reuse a storage key for one logical scope.
+multitenancy flag, and optional tenant ID. A `RecordSpec` fixes the source type,
+stored record type, identity extractor, ID schema or primitive ID kind, and
+materialized columns. `sourceType` defaults to `recordType`; Entity record
+specifications use the entity state type as their source type. The in-memory
+provider keys its physical scope by the backend, context name, tenancy mode,
+tenant slice, and `RecordSpec.sourceType`. It keeps different source types
+separate even when they use the same stored record type. `idType`,
+`recordType`, `sourceType`, and `columns` are read-only accessors.
 
 `RecordStorage` supports `write`, `writeAll`, `read`, `delete`, `compareAndSet`,
 `index`, `query`, `queryEntries`, `queryPlan`, and `queryPlanEntries`. It clones

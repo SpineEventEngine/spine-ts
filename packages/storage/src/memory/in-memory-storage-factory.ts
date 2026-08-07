@@ -86,12 +86,11 @@ export class InMemoryStorageFactory extends StorageFactory {
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
   ): TenantRecords<I, R> {
-    const scope = StorageScopes.canonical(context, recordSpec.storageKey);
-    const fingerprint = recordSpec.compatibilityFingerprint;
+    const scope = StorageScopes.canonical(context, recordSpec.sourceType.typeName);
     return InMemoryStorageBackend.bind(
       this.#backend,
+      "record",
       scope,
-      fingerprint,
       () => new TenantRecords<I, R>(),
     );
   }

@@ -55,12 +55,11 @@ export class MemoryEntityStorageFactory {
    * @returns The compatible backend maps for this Entity scope.
    */
   backend<I, S extends Message>(input: EntityStorageInput<I, S>): EntityBackend {
-    const scope = StorageScopes.canonical(input.context, input.storageKey);
-    const fingerprint = EntitySnapshots.fingerprint(input);
+    const scope = StorageScopes.canonical(input.context, input.sourceType.typeName);
     return InMemoryStorageBackend.bind(
       this.#backend,
+      "entity",
       scope,
-      fingerprint,
       () =>
         ({
           current: new Map<string, unknown>(),
@@ -161,19 +160,14 @@ export interface EntityStorageInput<I, S extends Message> {
   readonly columns: readonly RecordColumn<S>[];
 
   /**
-   * Names the compatible storage layout.
+   * Identifies the Entity source type represented by these records.
    */
-  readonly layout: string;
+  readonly sourceType: GenMessage<Message>;
 
   /**
    * Describes the generated entity state message.
    */
   readonly stateSchema: GenMessage<S>;
-
-  /**
-   * Names this entity storage scope within its context.
-   */
-  readonly storageKey: string;
 }
 
 /**
@@ -189,11 +183,6 @@ export interface EntityIdCodec<I> {
    * @returns Returns an independent identifier copy.
    */
   readonly clone: (id: I) => I;
-
-  /**
-   * Stable, validated compatibility identity for this ID representation.
-   */
-  readonly fingerprint: string;
 
   /**
    * Converts an entity identifier into its storage-map key.
@@ -236,21 +225,6 @@ export interface EntityBackend {
  */
 const EntitySnapshots = {
   // prettier-ignore
-
-  /**
-   * Derives the compatibility fingerprint for one entity storage input.
-   */
-  fingerprint<I, S extends Message>(input: EntityStorageInput<I, S>): string {
-    if (input.layout.trim().length === 0 || input.id.fingerprint.trim().length === 0) {
-      throw new Error("Entity storage requires non-blank layout and ID codec fingerprints.");
-    }
-    return JSON.stringify({
-      id: input.id.fingerprint,
-      layout: input.layout,
-      columns: input.columns.map((column) => [column.name, column.valueType]),
-      state: input.stateSchema.typeName,
-    });
-  },
 
   /**
    * Clones one entity ID with the platform structured-clone operation.

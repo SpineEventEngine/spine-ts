@@ -27,8 +27,9 @@ workspace while developing the framework.
 
 ## 🧪 Store a Protobuf record in memory
 
-Create a `RecordSpec` to describe the record's schema, identity, and searchable
-columns. Pass it to an `InMemoryStorageFactory` with the storage context.
+Create a `RecordSpec` to describe the record type, identity, and searchable
+columns. Its source type defaults to the record type. Pass it to an
+`InMemoryStorageFactory` with the storage context.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
@@ -38,8 +39,7 @@ import { InMemoryStorageFactory, RecordColumn, RecordSpec } from "@spine-event-e
 const records = new InMemoryStorageFactory().createRecordStorage(
   { name: "Users", multitenant: false },
   new RecordSpec<string, StringValue>({
-    schema: StringValueSchema,
-    storageKey: "users.Name",
+    recordType: StringValueSchema,
     idKind: "string",
     extractId: (user) => user.value,
     columns: [new RecordColumn<StringValue, string>("value", (user) => user.value, "string")],

@@ -238,7 +238,7 @@ describe("MemoryEntityCommitStorage", () => {
     const factory = new InMemoryStorageFactory();
     const input = entityInput();
     const commits = commitStorage(factory, input);
-    const incompatible = { ...input, storageKey: "tasks.Other:current" };
+    const incompatible = { ...input, sourceType: EventSchema };
 
     expect(() =>
       commits.commit({
@@ -271,12 +271,11 @@ function commitStorage(
 function entityInput(): EntityStorageInput<string, ReturnType<typeof createString>> {
   return {
     context,
-    id: { clone: (id) => id, fingerprint: "string", key: (id) => id },
+    id: { clone: (id) => id, key: (id) => id },
     extractId: () => "task",
     columns: [],
-    layout: "entity-v1",
+    sourceType: StringValueSchema,
     stateSchema: StringValueSchema,
-    storageKey: "tasks.Task:current",
   };
 }
 

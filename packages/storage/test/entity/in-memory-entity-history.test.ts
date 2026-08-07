@@ -1,5 +1,5 @@
 import { create } from "@bufbuild/protobuf";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
@@ -14,21 +14,6 @@ import { InMemoryStorageBackend } from "../../src/index.js";
 import { EntityHistoryConformance } from "../../src/internal/entity-history.js";
 
 describe("InMemoryEntityHistory", () => {
-  it("rejects blank entity layout and ID fingerprints", () => {
-    const factory = new MemoryEntityStorageFactory();
-    expect(() => factory.create({ ...entityStorageInput(), layout: " " })).toThrow(/non-blank/);
-    expect(() =>
-      factory.create({
-        ...entityStorageInput(),
-        id: {
-          clone: (id: string) => id,
-          fingerprint: " ",
-          key: (id: string) => id,
-        },
-      }),
-    ).toThrow(/non-blank/);
-  });
-
   it("uses isolated default current-record storage and ID cloning", async () => {
     const storage = new MemoryEntityRecordStorage({
       columns: [],
@@ -105,12 +90,11 @@ describe("InMemoryEntityHistory", () => {
     const secondFactory = new MemoryEntityStorageFactory();
     const input = {
       context: { name: "Tasks", multitenant: false },
-      id: { clone: (id: string) => id, fingerprint: "string", key: (id: string) => id },
+      id: { clone: (id: string) => id, key: (id: string) => id },
       extractId: () => "task",
       columns: [],
-      layout: "entity-v1",
+      sourceType: StringValueSchema,
       stateSchema: StringValueSchema,
-      storageKey: "tasks.Task:current",
     };
     const first = firstFactory.create(input);
     const second = secondFactory.create(input);
@@ -123,7 +107,7 @@ describe("InMemoryEntityHistory", () => {
     });
     await expect(second.current.read("task")).resolves.toBeUndefined();
   });
-  it("shares compatible entity rows and rejects mismatch with one backend token", async () => {
+  it("shares entity rows with one backend token and isolates distinct source types", async () => {
     const backend = new InMemoryStorageBackend();
     const firstFactory = new MemoryEntityStorageFactory(backend);
     const secondFactory = new MemoryEntityStorageFactory(backend);
@@ -141,56 +125,28 @@ describe("InMemoryEntityHistory", () => {
     await expect(second.current.read("task")).resolves.toMatchObject({
       state: { value: "current" },
     });
-    expect(() =>
-      secondFactory.create({ ...input, id: { ...input.id, fingerprint: "incompatible" } }),
-    ).toThrow(/incompatible record specification/);
-  });
-  it("rejects an incompatible fingerprint before an independent handle can access rows", async () => {
-    const factory = new MemoryEntityStorageFactory();
-    const input = entityStorageInput();
-    const first = factory.create(input);
-    await first.current.write({
-      id: "task",
-      state: createString("current"),
-      version: 1n,
-      archived: false,
-      deleted: false,
-    });
-
-    expect(() =>
-      factory.create({ ...input, id: { ...input.id, fingerprint: "incompatible" } }),
-    ).toThrow(/incompatible record specification/);
-    await expect(first.current.read("task")).resolves.toMatchObject({
-      state: { value: "current" },
-    });
+    const otherSource = secondFactory.create({ ...input, sourceType: AnySchema });
+    await expect(otherSource.current.read("task")).resolves.toBeUndefined();
   });
 
-  it("length-delimits context, tenant, and purpose scopes without collisions", async () => {
+  it("length-delimits context, tenant, and source-type scopes without collisions", async () => {
     const factory = new MemoryEntityStorageFactory();
     const first = factory.create(
       entityStorageInput({
         context: { name: "ab", multitenant: true, tenantId: "c" },
-        storageKey: "d",
       }),
     );
     const tupleCollision = factory.create(
       entityStorageInput({
         context: { name: "a", multitenant: true, tenantId: "bc" },
-        storageKey: "d",
       }),
     );
     const otherTenant = factory.create(
       entityStorageInput({
         context: { name: "ab", multitenant: true, tenantId: "other" },
-        storageKey: "d",
       }),
     );
-    const stateHistory = factory.create(
-      entityStorageInput({ storageKey: "tasks.Task:state-history" }),
-    );
-    const eventHistory = factory.create(
-      entityStorageInput({ storageKey: "tasks.Task:event-history" }),
-    );
+    const otherSource = factory.create({ ...entityStorageInput(), sourceType: AnySchema });
     await first.current.write({
       id: "task",
       state: createString("current"),
@@ -198,20 +154,10 @@ describe("InMemoryEntityHistory", () => {
       archived: false,
       deleted: false,
     });
-    await stateHistory.states.append(stateRecord(1));
-    await eventHistory.events.append({
-      entityId: "task",
-      event: event("event"),
-      producerVersion: 1n,
-      createdAt: timestamp(1),
-    });
 
     await expect(tupleCollision.current.read("task")).resolves.toBeUndefined();
     await expect(otherTenant.current.read("task")).resolves.toBeUndefined();
-    await expect(first.states.backward("task", 1)).resolves.toEqual([]);
-    await expect(first.events.backward("task", 1)).resolves.toEqual([]);
-    await expect(stateHistory.current.read("task")).resolves.toBeUndefined();
-    await expect(eventHistory.current.read("task")).resolves.toBeUndefined();
+    await expect(otherSource.current.read("task")).resolves.toBeUndefined();
   });
 
   it("shares one explicit multitenant tenant scope without colliding with single-tenant storage", async () => {
@@ -841,18 +787,15 @@ function entityStorageInput(
       readonly multitenant: boolean;
       readonly tenantId?: string;
     };
-    readonly fingerprint: string;
-    readonly storageKey: string;
   }> = {},
 ) {
   return {
     context: { name: "Tasks", multitenant: false },
-    id: { clone: (id: string) => id, fingerprint: "string", key: (id: string) => id },
+    id: { clone: (id: string) => id, key: (id: string) => id },
     extractId: () => "task",
     columns: [],
-    layout: "entity-v1",
+    sourceType: StringValueSchema,
     stateSchema: StringValueSchema,
-    storageKey: "tasks.Task:current",
     ...overrides,
   };
 }

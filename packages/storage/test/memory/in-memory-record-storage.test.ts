@@ -9,14 +9,11 @@ import type { Event, EventId } from "@spine-event-engine/proto";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
-import {
-  InMemoryRecordStorage,
-  InMemoryStorageFactory,
-  RecordColumn,
-  RecordSpec,
-  RecordStorage,
-} from "../../src/index.js";
-import type { NormalizedQueryPlan, RecordEntry } from "../../src/index.js";
+import { InMemoryRecordStorage } from "../../src/memory/in-memory-record-storage.js";
+import { RecordColumn } from "../../src/record/record-column.js";
+import { RecordSpec } from "../../src/record/record-spec.js";
+import { RecordStorage, type RecordEntry } from "../../src/record/record-storage.js";
+import type { NormalizedQueryPlan } from "../../src/query/query-policy.js";
 import { TenantRecords } from "../../src/memory/tenant-records.js";
 import { assertQueryProviderConformance } from "../query/query-provider-conformance.js";
 
@@ -77,8 +74,7 @@ describe("InMemoryRecordStorage", () => {
     const storage = new ObservedInMemoryStorage(
       { name: "QueryConformance", multitenant: false },
       new RecordSpec({
-        schema: StringValueSchema,
-        storageKey: "StringValueSchema:legacy",
+        recordType: StringValueSchema,
         idKind: "string",
         extractId: (record) => record.value,
         columns: [
@@ -718,11 +714,10 @@ describe("InMemoryRecordStorage", () => {
   });
 
   it("does not persist earlier records when later materialization fails", async () => {
-    const storage = new InMemoryStorageFactory().createRecordStorage(
+    const storage = new InMemoryRecordStorage(
       { name: "Tasks", multitenant: false },
       new RecordSpec({
-        schema: EventSchema,
-        storageKey: "EventSchema:legacy",
+        recordType: EventSchema,
         idSchema: EventIdSchema,
         extractId: (event) => {
           if (event.id?.value === "event-2") {
@@ -884,7 +879,7 @@ function createStorage(
     multitenant: false,
   },
 ) {
-  return new InMemoryStorageFactory().createRecordStorage(context, createSpec());
+  return new InMemoryRecordStorage(context, createSpec());
 }
 
 function createLookupEvents(ids: readonly string[]) {
@@ -893,11 +888,10 @@ function createLookupEvents(ids: readonly string[]) {
 
 function createLookupStorage(values: Record<string, unknown>) {
   const kinds = [...new Set(Object.values(values).map(valueKind))].sort().join("-");
-  return new InMemoryStorageFactory().createRecordStorage(
+  return new InMemoryRecordStorage(
     { name: "Tasks", multitenant: false },
     new RecordSpec({
-      schema: EventSchema,
-      storageKey: `EventSchema:lookup-${kinds}`,
+      recordType: EventSchema,
       idSchema: EventIdSchema,
       extractId: (event) => {
         if (event.id === undefined) {
@@ -978,8 +972,7 @@ class QueryEntriesStorage extends RecordStorage<EventId, Event> {
 
 function createSpec() {
   return new RecordSpec({
-    schema: EventSchema,
-    storageKey: "EventSchema:legacy",
+    recordType: EventSchema,
     idSchema: EventIdSchema,
     extractId: (event) => {
       if (event.id === undefined) {

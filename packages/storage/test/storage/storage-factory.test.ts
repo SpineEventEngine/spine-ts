@@ -1,4 +1,6 @@
 import { create } from "@bufbuild/protobuf";
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { AnySchema, StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import type { Event } from "@spine-event-engine/proto";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
@@ -64,7 +66,6 @@ describe("StorageFactory", () => {
   it("isolates compatible scopes across default independent factories", async () => {
     const firstFactory = new InMemoryStorageFactory();
     const secondFactory = new InMemoryStorageFactory();
-    const incompatibleFactory = new InMemoryStorageFactory();
     const compatible = createEventSpec();
     const first = firstFactory.createRecordStorage(
       { name: "SharedFactoryScope", multitenant: false },
@@ -77,21 +78,9 @@ describe("StorageFactory", () => {
     await first.write(createEvent("event-1", "type.spine.io/tasks.TaskCreated"));
 
     await expect(second.read(create(EventIdSchema, { value: "event-1" }))).resolves.toBeUndefined();
-
-    expect(() =>
-      incompatibleFactory.createRecordStorage(
-        { name: "SharedFactoryScope", multitenant: false },
-        new RecordSpec({
-          schema: EventSchema,
-          storageKey: compatible.storageKey,
-          idKind: "string",
-          extractId: (event) => event.id,
-        }),
-      ),
-    ).not.toThrow();
   });
 
-  it("shares compatible scopes and rejects mismatches across factories given one backend token", async () => {
+  it("shares source-type scopes across factories given one backend token", async () => {
     const backend = new InMemoryStorageBackend();
     const firstFactory = new InMemoryStorageFactory(backend);
     const secondFactory = new InMemoryStorageFactory(backend);
@@ -109,18 +98,6 @@ describe("StorageFactory", () => {
     await expect(second.read(create(EventIdSchema, { value: "event-1" }))).resolves.toMatchObject({
       id: { value: "event-1" },
     });
-    const incompatible = secondFactory.createRecordStorage(
-      { name: "SharedFactoryScope", multitenant: false },
-      new RecordSpec({
-        schema: EventSchema,
-        storageKey: compatible.storageKey,
-        idKind: "string",
-        extractId: (event) => event.id,
-      }),
-    );
-    await expect(incompatible.read(create(EventIdSchema, { value: "event-1" }))).rejects.toThrow(
-      /incompatible/,
-    );
   });
 
   it("retains shared backend rows when a sibling factory closes", async () => {
@@ -150,27 +127,27 @@ describe("StorageFactory", () => {
     await expect(users.read(create(EventIdSchema, { value: "event-1" }))).resolves.toBeUndefined();
   });
 
-  it("shares Unicode-delimited equivalent scopes without colliding context or storage keys", async () => {
+  it("shares Unicode-delimited equivalent source scopes without collisions", async () => {
     const backend = new InMemoryStorageBackend();
     const contextName = "Tasks-a-é-中-𐀀";
-    const storageKey = "tasks.Task-a-é-中-𐀀";
+    const sourceSchema = sourceType("tasks.Task-a-é-中-𐀀");
     const firstFactory = new InMemoryStorageFactory(backend);
     const secondFactory = new InMemoryStorageFactory(backend);
     const first = firstFactory.createRecordStorage(
       { name: contextName, multitenant: false },
-      createEventSpec(storageKey),
+      createEventSpec(sourceSchema),
     );
     const equivalent = secondFactory.createRecordStorage(
       { name: contextName, multitenant: false },
-      createEventSpec(storageKey),
+      createEventSpec(sourceSchema),
     );
     const otherContext = secondFactory.createRecordStorage(
       { name: `${contextName}-other`, multitenant: false },
-      createEventSpec(storageKey),
+      createEventSpec(sourceSchema),
     );
-    const otherStorageKey = secondFactory.createRecordStorage(
+    const otherSource = secondFactory.createRecordStorage(
       { name: contextName, multitenant: false },
-      createEventSpec(`${storageKey}-other`),
+      createEventSpec(sourceType(`${sourceSchema.typeName}-other`)),
     );
 
     await first.write(createEvent("event-1", "type.spine.io/tasks.TaskCreated"));
@@ -184,7 +161,7 @@ describe("StorageFactory", () => {
       otherContext.read(create(EventIdSchema, { value: "event-1" })),
     ).resolves.toBeUndefined();
     await expect(
-      otherStorageKey.read(create(EventIdSchema, { value: "event-1" })),
+      otherSource.read(create(EventIdSchema, { value: "event-1" })),
     ).resolves.toBeUndefined();
   });
 
@@ -204,41 +181,74 @@ describe("StorageFactory", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("binds compatibility independently for distinct tenant scopes", async () => {
+  it("keeps source-type rows isolated by tenant scope", async () => {
     const backend = new InMemoryStorageBackend();
     const factory = new InMemoryStorageFactory(backend);
-    const compatible = createEventSpec();
+    const spec = createEventSpec();
     const tenantOne = { name: "TenantBound", multitenant: true, tenantId: "one" };
     const tenantTwo = { name: "TenantBound", multitenant: true, tenantId: "two" };
 
-    const first = factory.createRecordStorage(tenantOne, compatible);
-    const otherTenant = factory.createRecordStorage(
-      tenantTwo,
-      new RecordSpec({
-        schema: EventSchema,
-        storageKey: compatible.storageKey,
-        idKind: "string",
-        extractId: (event) => event.id,
-      }),
-    );
-    const sameTenantMismatch = factory.createRecordStorage(
-      tenantOne,
-      new RecordSpec({
-        schema: EventSchema,
-        storageKey: compatible.storageKey,
-        idKind: "string",
-        extractId: (event) => event.id,
-      }),
-    );
+    const first = factory.createRecordStorage(tenantOne, spec);
+    const otherTenant = factory.createRecordStorage(tenantTwo, spec);
 
     await expect(first.read(create(EventIdSchema, { value: "event-1" }))).resolves.toBeUndefined();
     await expect(
       otherTenant.read(create(EventIdSchema, { value: "event-1" })),
     ).resolves.toBeUndefined();
-    await expect(
-      sameTenantMismatch.read(create(EventIdSchema, { value: "event-1" })),
-    ).rejects.toThrow(/incompatible/);
   });
+
+  it.each(["record-first", "entity-first"] as const)(
+    "keeps generic records and Entity storage usable when created %s",
+    async (order) => {
+      const factory = new InMemoryStorageFactory();
+      const records = () =>
+        factory.createRecordStorage(
+          { name: "SharedSource", multitenant: false },
+          new RecordSpec<string, StringValue>({
+            recordType: StringValueSchema,
+            idKind: "string",
+            extractId: (record) => record.value,
+          }),
+        );
+      const entities = () =>
+        factory.createEntityStorage({
+          ...createEntityInput(),
+          context: { name: "SharedSource", multitenant: false },
+        }) as {
+          readonly current: {
+            read(id: string): Promise<{ readonly state: StringValue } | undefined>;
+            write(record: {
+              readonly id: string;
+              readonly state: StringValue;
+              readonly version: bigint;
+              readonly archived: boolean;
+              readonly deleted: boolean;
+            }): Promise<void>;
+          };
+        };
+      const [recordStorage, entityStorage] =
+        order === "record-first"
+          ? [records(), entities()]
+          : (() => {
+              const entityStorage = entities();
+              return [records(), entityStorage] as const;
+            })();
+
+      await recordStorage.write(create(StringValueSchema, { value: "record" }));
+      await entityStorage.current.write({
+        id: "task",
+        state: create(StringValueSchema, { value: "entity" }),
+        version: 1n,
+        archived: false,
+        deleted: false,
+      });
+
+      await expect(recordStorage.read("record")).resolves.toMatchObject({ value: "record" });
+      await expect(entityStorage.current.read("task")).resolves.toMatchObject({
+        state: { value: "entity" },
+      });
+    },
+  );
 
   it("rejects record storage creation after the factory closes", () => {
     const factory = new InMemoryStorageFactory();
@@ -263,10 +273,10 @@ describe("StorageFactory", () => {
   });
 });
 
-function createEventSpec(storageKey = "EventSchema:legacy") {
+function createEventSpec(sourceType: GenMessage<Message> = EventSchema) {
   return new RecordSpec({
-    schema: EventSchema,
-    storageKey,
+    sourceType,
+    recordType: EventSchema,
     idSchema: EventIdSchema,
     extractId: (event) => {
       if (event.id === undefined) {
@@ -279,6 +289,10 @@ function createEventSpec(storageKey = "EventSchema:legacy") {
   });
 }
 
+function sourceType(typeName: string): GenMessage<Message> {
+  return { typeName } as GenMessage<Message>;
+}
+
 function createEvent(id: string, typeUrl: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
@@ -289,11 +303,10 @@ function createEvent(id: string, typeUrl: string) {
 function createEntityInput(): EntityStorageInput<string, StringValue> {
   return {
     context: { name: "Tasks", multitenant: false },
-    id: { clone: (id) => id, fingerprint: "string", key: (id) => id },
+    id: { clone: (id) => id, key: (id) => id },
     extractId: () => "task",
     columns: [],
-    layout: "entity-v1",
+    sourceType: StringValueSchema,
     stateSchema: StringValueSchema,
-    storageKey: "tasks.Task:current",
   };
 }

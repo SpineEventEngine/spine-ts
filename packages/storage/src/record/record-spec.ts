@@ -8,6 +8,31 @@ const storageHost = globalThis as typeof globalThis & {
   structuredClone<Value>(value: Value): Value;
 };
 
+type RecordSpecInput<I, R extends Message> = RecordSpecFields<I, R> &
+  ([I] extends [Message] ? RecordSpecMessageId<I> : RecordSpecPrimitiveId);
+
+interface RecordSpecFields<I, R extends Message> {
+  readonly sourceType?: GenMessage<Message>;
+  readonly recordType: GenMessage<R>;
+  readonly extractId: (record: R) => I;
+  readonly columns?: readonly RecordColumn<R>[];
+}
+
+interface RecordSpecMessageId<I extends Message> {
+  readonly idSchema: GenMessage<I>;
+  readonly idKind?: never;
+}
+
+interface RecordSpecPrimitiveId {
+  readonly idSchema?: never;
+  readonly idKind: string;
+}
+
+interface RuntimeRecordSpecInput {
+  readonly idSchema?: GenMessage<Message>;
+  readonly idKind?: string;
+}
+
 /**
  * Declarative specification for one identified Protobuf record type.
  */
@@ -16,32 +41,17 @@ export class RecordSpec<I, R extends Message> {
   readonly #extractId: (record: R) => I;
   readonly #idSchema: (I extends Message ? GenMessage<I> : undefined) | undefined;
   readonly #idKind: string;
-  readonly #record: GenMessage<R>;
-  readonly #storageKey: string;
+  readonly #recordType: GenMessage<R>;
+  readonly #sourceType: GenMessage<Message>;
 
   /**
    * Creates a record specification.
    *
-   * @throws Error if two declared columns have the same name.
-   * @param input The schema, identity, and column definitions.
+   * @throws Error if the ID type is invalid or two declared columns have the same name.
+   * @param input The source, record, identity, and column definitions.
    */
-  constructor(input: {
-    readonly schema: GenMessage<R>;
-
-    /**
-     * Stable provider-visible identity for this physical record layout.
-     */
-    readonly storageKey: string;
-    readonly idSchema?: I extends Message ? GenMessage<I> : undefined;
-
-    /**
-     * Stable primitive-ID kind when `idSchema` is not supplied.
-     */
-    readonly idKind?: string;
-    readonly extractId: (record: R) => I;
-    readonly columns?: readonly RecordColumn<R>[];
-  }) {
-    RecordSpecSupport.validateStorageKey(input.storageKey);
+  constructor(input: RecordSpecInput<I, R>) {
+    const runtimeInput = input as RuntimeRecordSpecInput;
     this.#columns = input.columns ?? [];
     const names = new Set<string>();
     for (const column of this.#columns) {
@@ -54,48 +64,52 @@ export class RecordSpec<I, R extends Message> {
     }
     this.#extractId = input.extractId;
     if (
-      input.idSchema === undefined &&
-      (input.idKind === undefined || input.idKind.trim().length === 0)
+      runtimeInput.idSchema === undefined &&
+      (runtimeInput.idKind === undefined || runtimeInput.idKind.trim().length === 0)
     ) {
       throw new Error("Storage record specification requires a non-blank primitive ID kind.");
     }
-    if (input.idSchema !== undefined && input.idKind !== undefined) {
+    if (runtimeInput.idSchema !== undefined && runtimeInput.idKind !== undefined) {
       throw new Error(
         "Storage record specification must not declare both an ID schema and primitive ID kind.",
       );
     }
-    this.#idSchema = input.idSchema;
+    this.#idSchema = input.idSchema as I extends Message ? GenMessage<I> : undefined;
     this.#idKind = input.idKind ?? "";
-    this.#record = input.schema;
-    this.#storageKey = input.storageKey;
+    this.#recordType = input.recordType;
+    this.#sourceType = input.sourceType ?? input.recordType;
   }
 
   /**
-   * Returns the Protobuf schema used to clone, encode, and decode records.
-   * @returns The managed record schema.
+   * Returns the original message type represented by these records.
+   * @returns The source message type.
    */
-  get schema(): GenMessage<R> {
-    return this.#record;
+  get sourceType(): GenMessage<Message> {
+    return this.#sourceType;
   }
 
   /**
-   * Returns the stable provider-visible physical layout identity.
-   * @returns The record storage key.
+   * Returns the type used to identify stored records.
+   * @returns The message ID type or primitive ID kind.
    */
-  get storageKey(): string {
-    return this.#storageKey;
+  get idType(): I extends Message ? GenMessage<I> : string {
+    return (this.#idSchema ?? this.#idKind) as I extends Message ? GenMessage<I> : string;
   }
 
   /**
-   * Returns the deterministic provider metadata compatibility descriptor.
-   * @returns The compatibility fingerprint.
+   * Returns the Protobuf record type stored by this specification.
+   * @returns The managed record type.
    */
-  get compatibilityFingerprint(): string {
-    return JSON.stringify({
-      columns: this.#columns.map((column) => ({ name: column.name, type: column.valueType })),
-      id: this.#idSchema?.typeName ?? `primitive:${this.#idKind}`,
-      record: this.#record.typeName,
-    });
+  get recordType(): GenMessage<R> {
+    return this.#recordType;
+  }
+
+  /**
+   * Returns the columns materialized from stored records.
+   * @returns The declared record columns.
+   */
+  get columns(): readonly RecordColumn<R>[] {
+    return this.#columns;
   }
 
   /**
@@ -115,7 +129,7 @@ export class RecordSpec<I, R extends Message> {
    * @returns The cloned record.
    */
   cloneRecord(record: R): R {
-    return RecordCloner.message(this.#record, record);
+    return RecordCloner.message(this.#recordType, record);
   }
 
   /**
@@ -152,27 +166,6 @@ export class RecordSpec<I, R extends Message> {
     };
   }
 }
-
-const RecordSpecSupport = Object.freeze({
-  validateStorageKey(storageKey: string): void {
-    if (
-      storageKey.length === 0 ||
-      storageKey.trim() !== storageKey ||
-      this.hasControlCharacter(storageKey)
-    ) {
-      throw new Error("Storage record specification requires a non-blank storage key.");
-    }
-  },
-
-  hasControlCharacter(value: string): boolean {
-    for (let index = 0; index < value.length; index++) {
-      const codePoint = value.codePointAt(index);
-      if (codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f)) return true;
-      if (codePoint !== undefined && codePoint > 0xffff) index++;
-    }
-    return false;
-  },
-});
 
 type CloneMethod = (this: object) => unknown;
 

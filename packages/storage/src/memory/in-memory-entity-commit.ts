@@ -34,12 +34,12 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
   #open = true;
 
   /**
-   * Creates a commit handle bound to one Entity storage layout.
+   * Creates a commit handle bound to one Entity source type.
    *
    * @param backend Selects the shared in-memory backend.
    * @param entities Opens the matching Entity storage maps.
    * @param events Supplies the matching framework EventStore records.
-   * @param input Defines the Entity storage layout.
+   * @param input Defines the Entity storage source type.
    */
   constructor(
     backend: InMemoryStorageBackend,
@@ -75,8 +75,8 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
   async #commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<EntityCommitResult> {
     const receipts = InMemoryStorageBackend.bind(
       this.#backend,
+      "entity",
       `${this.#scope(input)}:receipts`,
-      "spine.entity-commit.receipts.v1",
       () => new Map<string, string>(),
     );
     const digest = InMemoryCommitValues.digest(input);
@@ -103,7 +103,7 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
         return "conflict";
       }
       const delivery = [...(input.events ?? [])].map((event) =>
-        clone(eventStoreRecordSpec.schema, event),
+        clone(eventStoreRecordSpec.recordType, event),
       );
       const materialized = delivery.map((event) => eventStoreRecordSpec.materialize(event));
       const ids = materialized.map((record) => record.id);
@@ -130,13 +130,13 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
   }
 
   #scope<I, S extends Message>(input: EntityCommitInput<I, S>): string {
-    return StorageScopes.canonical(input.context, `${input.entity.storageKey}:commit`);
+    return StorageScopes.canonical(input.context, `${input.entity.sourceType.typeName}:commit`);
   }
 
   #requireCompatible<I, S extends Message>(input: EntityCommitInput<I, S>): void {
     if (
       this.#scope(input) !==
-      StorageScopes.canonical(this.#input.context, `${this.#input.storageKey}:commit`)
+      StorageScopes.canonical(this.#input.context, `${this.#input.sourceType.typeName}:commit`)
     ) {
       throw new Error("Entity commit handle cannot commit another Entity storage scope.");
     }
