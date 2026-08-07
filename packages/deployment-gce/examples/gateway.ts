@@ -1,9 +1,12 @@
-import { LeasedNodeRegistry, ScheduledNodeDiscovery } from "@spine-event-engine/deployment";
-import { GceRegistryReader } from "@spine-event-engine/deployment-gce";
+import { LeasedNodeRegistry } from "@spine-event-engine/deployment";
+import { GceNodeDiscovery } from "@spine-event-engine/deployment-gce";
 import { Server, type BrowserServerOptions } from "@spine-event-engine/server";
-import type { StorageFactory } from "@spine-event-engine/storage";
 
-import { GceDeploymentSettings, type DeploymentEnvironment } from "./deployment-settings.js";
+import {
+  GceDeploymentSettings,
+  type DeploymentEnvironment,
+  type RegistryStorageResolver,
+} from "./deployment-settings.js";
 
 /**
  * Supplies application-owned collaborators for one standalone Gateway process.
@@ -17,9 +20,9 @@ export interface GatewayOptions {
   readonly browser: Omit<BrowserServerOptions, "host" | "port" | "discovery">;
 
   /**
-   * Provides the application-selected durable storage factory.
+   * Resolves the application-selected durable registry storage factory.
    */
-  readonly storageFactory: StorageFactory;
+  readonly registryStorage: RegistryStorageResolver;
 }
 
 /**
@@ -40,12 +43,12 @@ export const GceGatewayEntrypoint = Object.freeze({
     environment: DeploymentEnvironment = process.env,
   ): Promise<void> {
     const registry = new LeasedNodeRegistry({
-      factory: options.storageFactory,
+      factory: options.registryStorage.storageFactoryFor(
+        GceDeploymentSettings.registryStorageReference(environment),
+      ),
       namespace: GceDeploymentSettings.registryNamespace(environment),
     });
-    const discovery = new ScheduledNodeDiscovery({
-      reader: new GceRegistryReader(registry),
-    });
+    const discovery = new GceNodeDiscovery({ registry });
     const server = Server.atPort(GceDeploymentSettings.port(environment, "PORT"), {
       host: "0.0.0.0",
       browser: { ...options.browser, discovery },

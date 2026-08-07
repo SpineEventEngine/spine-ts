@@ -72,14 +72,20 @@ cp terraform.tfvars.example terraform.tfvars
 Set the project, region, two or more application zones, VPC/subnetwork,
 least-privilege service-account email, and the three image digests. Set
 `registry_namespace` and `registry_storage_reference` identically for
-application and Gateway images. The reference tells those images how to select
-their shared durable registry storage; it is not a storage-engine choice made
-by Terraform.
+application and Gateway images. Each entrypoint passes that reference to its
+application-owned `registryStorage.storageFactoryFor(reference)` resolver. The
+resolver chooses the shared durable `StorageFactory`; Terraform only transports
+the reference and never chooses a storage engine.
 
 `application_secret_reference` and `gateway_secret_reference` are identifiers
 your images resolve through your own configuration mechanism. They are passed
 as environment values only. Terraform neither reads secret values nor writes
 them into state.
+
+Grant the VM service account `roles/artifactregistry.reader` on each Artifact
+Registry repository that stores these images. The template uses the broad
+`cloud-platform` OAuth scope so Google Cloud IAM can evaluate that role; the IAM
+role, not the scope alone, authorizes image pulls.
 
 ## Connect your application entrypoints
 
@@ -92,13 +98,15 @@ The server invokes the registrar only after the listener is ready.
 import { LeasedNodeRegistry } from "@spine-event-engine/deployment";
 import { GceRegistrar } from "@spine-event-engine/deployment-gce";
 import { Server, type ServerOptions } from "@spine-event-engine/server";
-import type { StorageFactory } from "@spine-event-engine/storage";
-
-import { GceDeploymentSettings, type DeploymentEnvironment } from "./deployment-settings.js";
+import {
+  GceDeploymentSettings,
+  type DeploymentEnvironment,
+  type RegistryStorageResolver,
+} from "./deployment-settings.js";
 
 export interface ApplicationOptions {
   readonly server: Omit<ServerOptions, "host" | "port" | "browser">;
-  readonly storageFactory: StorageFactory;
+  readonly registryStorage: RegistryStorageResolver;
 }
 
 export const GceApplicationEntrypoint = Object.freeze({
@@ -108,34 +116,41 @@ export const GceApplicationEntrypoint = Object.freeze({
   ): Promise<void> {
     const port = GceDeploymentSettings.port(environment, "PORT");
     const registry = new LeasedNodeRegistry({
-      factory: options.storageFactory,
+      factory: options.registryStorage.storageFactoryFor(
+        GceDeploymentSettings.registryStorageReference(environment),
+      ),
       namespace: GceDeploymentSettings.registryNamespace(environment),
     });
     const registrar = new GceRegistrar({ registry, port });
     const server = Server.atPort(port, { ...options.server, host: "0.0.0.0" });
-    server.addListenerLifecycle(registrar.lifecycle());
+    server.addResource(registry).addListenerLifecycle(registrar.lifecycle());
     await server.run();
   },
 });
 ```
 
-The Gateway uses the same factory and namespace indirectly through its
-environment. It refreshes the complete live-node registry snapshot every 10
-seconds. Supply your durable subscription bindings, authentication, and browser
-collaborators in `browserOptions`.
+The Gateway resolves the same storage reference and namespace through its
+environment. It owns a GCE discovery lifecycle that refreshes the complete
+live-node registry snapshot every 10 seconds, stops that schedule when the
+browser server stops, and then closes its registry. Supply your durable
+subscription bindings, authentication, and browser collaborators in
+`browserOptions`.
 
 ```ts
 // docs-snippet-path: packages/deployment-gce/examples/gateway.ts
-import { LeasedNodeRegistry, ScheduledNodeDiscovery } from "@spine-event-engine/deployment";
-import { GceRegistryReader } from "@spine-event-engine/deployment-gce";
+import { LeasedNodeRegistry } from "@spine-event-engine/deployment";
+import { GceNodeDiscovery } from "@spine-event-engine/deployment-gce";
 import { Server, type BrowserServerOptions } from "@spine-event-engine/server";
-import type { StorageFactory } from "@spine-event-engine/storage";
 
-import { GceDeploymentSettings, type DeploymentEnvironment } from "./deployment-settings.js";
+import {
+  GceDeploymentSettings,
+  type DeploymentEnvironment,
+  type RegistryStorageResolver,
+} from "./deployment-settings.js";
 
 export interface GatewayOptions {
   readonly browser: Omit<BrowserServerOptions, "host" | "port" | "discovery">;
-  readonly storageFactory: StorageFactory;
+  readonly registryStorage: RegistryStorageResolver;
 }
 
 export const GceGatewayEntrypoint = Object.freeze({
@@ -144,12 +159,12 @@ export const GceGatewayEntrypoint = Object.freeze({
     environment: DeploymentEnvironment = process.env,
   ): Promise<void> {
     const registry = new LeasedNodeRegistry({
-      factory: options.storageFactory,
+      factory: options.registryStorage.storageFactoryFor(
+        GceDeploymentSettings.registryStorageReference(environment),
+      ),
       namespace: GceDeploymentSettings.registryNamespace(environment),
     });
-    const discovery = new ScheduledNodeDiscovery({
-      reader: new GceRegistryReader(registry),
-    });
+    const discovery = new GceNodeDiscovery({ registry });
     const server = Server.atPort(GceDeploymentSettings.port(environment, "PORT"), {
       host: "0.0.0.0",
       browser: { ...options.browser, discovery },
@@ -178,6 +193,12 @@ terraform apply tfplan
 The first VM can take several minutes to start. Autohealing waits for the
 configured startup delay (120 seconds by default) before treating a failed
 application listener as unhealthy.
+
+The template uses Container-Optimized OS and runs each image with a startup
+script and `docker run --rm --network host`. If a container exits, Docker
+removes it and the listener health check fails; the MIG can then repair that
+VM after the startup delay. Use `journalctl -u google-startup-scripts.service`
+or the VM serial-console log to diagnose startup-script and container failures.
 
 ## Verify the deployment
 
@@ -212,16 +233,25 @@ terraform apply -var='application_replicas=2'
 
 At zero nodes, the registry becomes empty after at most the 60-second lease
 expiry. The Gateway remains alive but reports backend unavailability until a
-node returns; it keeps refreshing every 10 seconds.
+node returns; it keeps refreshing every 10 seconds. If an autoscaler is already
+enabled, first remove it in the same transition:
+
+```bash
+terraform apply -var='autoscaling_enabled=false' -var='application_replicas=0'
+```
 
 To let Compute Engine scale the same application version, set
-`autoscaling_enabled = true`, choose `cpu`, `per_instance`, or `whole_group`,
-and provide a metric, target, and min/max capacity. Terraform then omits the
-MIG size and GCE is the sole capacity owner.
+`autoscaling_enabled = true`. For `autoscaling_signal = "cpu"`,
+`autoscaling_target` is the CPU utilization target. For
+`autoscaling_signal = "monitoring"`, choose the metric name, a filter that
+selects only the intended resource and series, a metric target kind, and the
+declared `per_instance` or `whole_group` scope. Terraform then omits the MIG
+size and GCE is the sole capacity owner.
 
 CPU and per-instance metrics require a running VM, so they cannot scale from
 zero. For scale-from-zero, use a `whole_group` Cloud Monitoring metric that is
-produced while no application VM exists, or use an operator action or schedule.
+produced while no application VM exists, and set
+`autoscaling_min_replicas = 0`; otherwise use an operator action or schedule.
 Internal passthrough load-balancer utilization is not a suitable autoscaling
 signal for this topology.
 
@@ -233,43 +263,57 @@ replacement with one surge instance and no planned unavailable instance. Old
 and new nodes can overlap, so they must understand the same stored data and
 messages during the rollout.
 
-For an incompatible business-logic or data change, first set application
-capacity to zero and wait until the old nodes exit, then apply the new image and
-restore capacity. This framework does not negotiate compatibility. Pending
-Inbox work may execute under the new version, so make the change safe for those
-messages before starting it.
+For an incompatible business-logic or data change, first disable any enabled
+autoscaler and set application capacity to zero. Wait until the old nodes exit,
+apply the new image while capacity remains zero, then restore manual capacity
+or explicitly enable the new autoscaler. This framework does not negotiate
+compatibility. Pending Inbox work may execute under the new version, so make
+the change safe for those messages before starting it.
+
+```bash
+terraform apply -var='autoscaling_enabled=false' -var='application_replicas=0'
+# Set the new application_image digest in terraform.tfvars.
+terraform apply -var='autoscaling_enabled=false' -var='application_replicas=0'
+terraform apply -var='autoscaling_enabled=false' -var='application_replicas=2'
+```
 
 The Gateway normally stays in place during an application replacement. A
 Gateway interruption disconnects browser clients. Its durable subscription
 definitions survive only when your Gateway bindings use the same application-
 owned persistent storage. Clients reconnect and issue an authoritative query.
+Replacing `gateway_image` performs its explicit one-unavailable, zero-surge
+singleton update and therefore causes that interruption. Replacing
+`delivery_image` performs the same singleton update; the supplied in-memory
+delivery server loses its state whenever its process stops.
 
 ## Roll back
 
 To roll back a compatible application image, restore the prior immutable digest
 and run `terraform apply`. GCE creates the previous instance template and
-performs the same rolling update. For an incompatible rollback, use the same
-stop-all sequence: reduce the application group to zero, wait for shutdown,
-apply the prior image, then restore capacity.
+performs the same rolling update. For an incompatible rollback, disable an
+enabled autoscaler, reduce the application group to zero, wait for shutdown,
+apply the prior image, then restore manual capacity or deliberately re-enable
+autoscaling.
 
 ## Troubleshooting
 
-| Symptom                              | Check                                                                                                                                 |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Gateway has no backend               | Confirm the application group has healthy instances, registry references and namespace match, then allow a 10-second refresh.         |
-| A node remains listed after a crash  | Wait up to 60 seconds for lease expiry; cleanup is finite and does not make expired nodes routable.                                   |
-| An application VM keeps restarting   | Check the image starts its listener on `HOST=0.0.0.0` and `PORT`, and increase the startup delay only when its real startup needs it. |
-| A client cannot reach the Gateway    | Reach the private output from the VPC or configure your own TLS/authentication edge; this module creates no public path.              |
-| Autoscaling does not wake zero nodes | CPU and per-instance metrics cannot observe an empty group; use a whole-group metric or set a manual/scheduled minimum.               |
-| Delivery state disappeared           | The supplied delivery server is in-memory. Do not describe it as durable or highly available.                                         |
+| Symptom                              | Check                                                                                                                                                             |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Gateway has no backend               | Confirm the application group has healthy instances, registry references and namespace match, then allow a 10-second refresh.                                     |
+| A node remains listed after a crash  | Wait up to 60 seconds for lease expiry; cleanup is finite and does not make expired nodes routable.                                                               |
+| An application VM keeps restarting   | Check the image starts its listener on `HOST=0.0.0.0` and `PORT`, and increase the startup delay only when its real startup needs it.                             |
+| A client cannot reach the Gateway    | Reach the private output from the VPC or configure your own TLS/authentication edge; this module creates no public path.                                          |
+| Autoscaling does not wake zero nodes | CPU and per-instance metrics cannot observe an empty group; use a whole-group metric with `autoscaling_min_replicas = 0` or set a manual/scheduled minimum.       |
+| Delivery state disappeared           | The supplied delivery server is in-memory and loses state whenever it is replaced or restarted. Do not describe it as durable or highly available.                |
+| A container fails during startup     | Read `journalctl -u google-startup-scripts.service` or serial-console output; `docker run --rm` removes an exited container and health checks trigger MIG repair. |
 
 ## Remove the deployment
 
-Remove application capacity first when you need a controlled domain shutdown,
-then destroy the infrastructure:
+Disable any enabled autoscaler and remove application capacity first when you
+need a controlled domain shutdown, then destroy the infrastructure:
 
 ```bash
-terraform apply -var='application_replicas=0'
+terraform apply -var='autoscaling_enabled=false' -var='application_replicas=0'
 terraform destroy
 ```
 

@@ -8,14 +8,19 @@ describe("GceNodeDiscovery", () => {
     const events: string[] = [];
     const discovery = new GceNodeDiscovery({
       registry: registry({
-        read: async () => [],
-        close: async () => {
+        read: () => Promise.resolve([]),
+        close: () => {
           events.push("registry");
+          return Promise.resolve();
         },
       }),
       scheduler: {
-        schedule: (_delay, _tick) => () => {
-          events.push("stop");
+        schedule: (delay, tick) => {
+          void delay;
+          void tick;
+          return () => {
+            events.push("stop");
+          };
         },
       },
     });
@@ -26,13 +31,41 @@ describe("GceNodeDiscovery", () => {
     expect(events).toEqual(["stop", "registry"]);
   });
 
+  it("closes its registry when scheduled discovery cancellation fails", async () => {
+    let registryClosed = false;
+    const discovery = new GceNodeDiscovery({
+      registry: registry({
+        read: () => Promise.resolve([]),
+        close: () => {
+          registryClosed = true;
+          return Promise.resolve();
+        },
+      }),
+      scheduler: {
+        schedule: (delay, tick) => {
+          void delay;
+          void tick;
+          return () => {
+            throw new Error("scheduled discovery cancel failed");
+          };
+        },
+      },
+    });
+
+    discovery.watch(() => undefined);
+
+    await expect(discovery.close()).rejects.toThrow("scheduled discovery cancel failed");
+    expect(registryClosed).toBe(true);
+  });
+
   it("shares one close attempt and closes the registry once", async () => {
     let closes = 0;
     const discovery = new GceNodeDiscovery({
       registry: registry({
-        read: async () => [],
-        close: async () => {
+        read: () => Promise.resolve([]),
+        close: () => {
           closes++;
+          return Promise.resolve();
         },
       }),
     });
@@ -44,25 +77,15 @@ describe("GceNodeDiscovery", () => {
     expect(closes).toBe(1);
   });
 
-  it("closes its registry after a discovery-stop failure", async () => {
-    let registryClosed = false;
+  it("preserves an owned-registry close failure", async () => {
     const discovery = new GceNodeDiscovery({
       registry: registry({
-        read: async () => [],
-        close: async () => {
-          registryClosed = true;
-        },
+        read: () => Promise.resolve([]),
+        close: () => Promise.reject(new Error("registry close failed")),
       }),
-      discovery: {
-        watch: () => () => Promise.resolve(),
-        close: async () => {
-          throw new Error("stop failed");
-        },
-      },
     });
 
-    await expect(discovery.close()).rejects.toThrow("stop failed");
-    expect(registryClosed).toBe(true);
+    await expect(discovery.close()).rejects.toThrow("registry close failed");
   });
 });
 

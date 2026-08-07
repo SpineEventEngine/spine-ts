@@ -220,21 +220,49 @@ variable "autoscaling_enabled" {
   default     = false
 }
 
-variable "autoscaling_metric_type" {
-  description = "Autoscaling signal: cpu, per_instance, or whole_group."
+variable "autoscaling_signal" {
+  description = "Autoscaling signal: cpu utilization or a custom Monitoring metric."
   type        = string
   default     = "cpu"
 
   validation {
-    condition     = contains(["cpu", "per_instance", "whole_group"], var.autoscaling_metric_type)
-    error_message = "Autoscaling metric type must be cpu, per_instance, or whole_group."
+    condition     = contains(["cpu", "monitoring"], var.autoscaling_signal)
+    error_message = "Autoscaling signal must be cpu or monitoring."
+  }
+}
+
+variable "autoscaling_metric_scope" {
+  description = "Whether a custom Monitoring metric is per_instance or whole_group."
+  type        = string
+  default     = "per_instance"
+
+  validation {
+    condition     = contains(["per_instance", "whole_group"], var.autoscaling_metric_scope)
+    error_message = "Autoscaling metric scope must be per_instance or whole_group."
   }
 }
 
 variable "autoscaling_metric" {
-  description = "Cloud Monitoring metric name when autoscaling uses per_instance or whole_group."
+  description = "Cloud Monitoring metric name when autoscaling signal is monitoring."
   type        = string
   default     = ""
+}
+
+variable "autoscaling_metric_filter" {
+  description = "Cloud Monitoring filter that selects the intended metric resource and series."
+  type        = string
+  default     = ""
+}
+
+variable "autoscaling_metric_target_type" {
+  description = "Monitoring metric target kind, such as GAUGE or DELTA_PER_SECOND."
+  type        = string
+  default     = "GAUGE"
+
+  validation {
+    condition     = contains(["GAUGE", "DELTA_PER_SECOND", "DELTA_PER_MINUTE"], var.autoscaling_metric_target_type)
+    error_message = "Monitoring metric target type must be GAUGE, DELTA_PER_SECOND, or DELTA_PER_MINUTE."
+  }
 }
 
 variable "autoscaling_target" {

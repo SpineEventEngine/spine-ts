@@ -205,7 +205,7 @@ resource "google_compute_region_instance_group_manager" "application" {
     type                  = "PROACTIVE"
     minimal_action        = "REPLACE"
     replacement_method    = "SUBSTITUTE"
-    max_surge_fixed       = 1
+    max_surge_fixed       = length(var.application_zones)
     max_unavailable_fixed = 0
   }
 
@@ -216,8 +216,13 @@ resource "google_compute_region_instance_group_manager" "application" {
     }
 
     precondition {
-      condition     = !var.autoscaling_enabled || var.autoscaling_metric_type == "cpu" || trimspace(var.autoscaling_metric) != ""
+      condition     = !var.autoscaling_enabled || var.autoscaling_signal == "cpu" || trimspace(var.autoscaling_metric) != ""
       error_message = "Monitoring autoscaling requires a metric name."
+    }
+
+    precondition {
+      condition     = !var.autoscaling_enabled || var.autoscaling_signal != "monitoring" || var.autoscaling_metric_scope == "whole_group" || var.autoscaling_min_replicas >= 1
+      error_message = "Per-instance Monitoring metrics require at least one application node."
     }
   }
 }
@@ -233,17 +238,18 @@ resource "google_compute_region_autoscaler" "application" {
     max_replicas = var.autoscaling_max_replicas
 
     dynamic "cpu_utilization" {
-      for_each = var.autoscaling_metric_type == "cpu" ? [true] : []
+      for_each = var.autoscaling_signal == "cpu" ? [true] : []
       content {
         target = var.autoscaling_target
       }
     }
 
     dynamic "metric" {
-      for_each = var.autoscaling_metric_type == "cpu" ? [] : [true]
+      for_each = var.autoscaling_signal == "cpu" ? [] : [true]
       content {
         name   = var.autoscaling_metric
-        type   = var.autoscaling_metric_type == "whole_group" ? "GAUGE" : "DELTA_PER_SECOND"
+        filter = var.autoscaling_metric_filter
+        type   = var.autoscaling_metric_target_type
         target = var.autoscaling_target
       }
     }
@@ -270,6 +276,14 @@ resource "google_compute_region_instance_group_manager" "gateway" {
     health_check      = google_compute_health_check.gateway.self_link
     initial_delay_sec = var.application_startup_delay_sec
   }
+
+  update_policy {
+    type                  = "PROACTIVE"
+    minimal_action        = "REPLACE"
+    replacement_method    = "SUBSTITUTE"
+    max_surge_fixed       = 0
+    max_unavailable_fixed = 1
+  }
 }
 
 resource "google_compute_region_instance_group_manager" "delivery" {
@@ -291,6 +305,14 @@ resource "google_compute_region_instance_group_manager" "delivery" {
   auto_healing_policies {
     health_check      = google_compute_health_check.delivery.self_link
     initial_delay_sec = var.application_startup_delay_sec
+  }
+
+  update_policy {
+    type                  = "PROACTIVE"
+    minimal_action        = "REPLACE"
+    replacement_method    = "SUBSTITUTE"
+    max_surge_fixed       = 0
+    max_unavailable_fixed = 1
   }
 }
 

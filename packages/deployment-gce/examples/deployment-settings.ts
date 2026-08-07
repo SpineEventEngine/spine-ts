@@ -1,7 +1,24 @@
+import type { StorageFactory } from "@spine-event-engine/storage";
+
 /**
  * Represents environment values injected into one GCE deployment process.
  */
 export type DeploymentEnvironment = Readonly<Record<string, string | undefined>>;
+
+/**
+ * Resolves one application-owned storage factory from an injected reference.
+ */
+export interface RegistryStorageResolver {
+  // prettier-ignore
+
+  /**
+   * Resolves the durable storage factory selected by one deployment reference.
+   *
+   * @param reference Identifies application-owned registry storage configuration.
+   * @returns The storage factory for the selected durable registry storage.
+   */
+  storageFactoryFor(reference: string): StorageFactory;
+}
 
 /**
  * Reads the small set of deployment settings shared by GCE process entrypoints.
@@ -34,6 +51,19 @@ export const GceDeploymentSettings = Object.freeze({
     const value = environment.REGISTRY_NAMESPACE?.trim();
     if (value === undefined || value.length === 0)
       throw new Error("REGISTRY_NAMESPACE must not be blank.");
+    return value;
+  },
+
+  /**
+   * Reads the shared registry storage reference.
+   *
+   * @param environment Provides injected process settings.
+   * @returns The non-empty application-owned storage reference.
+   */
+  registryStorageReference(environment: DeploymentEnvironment): string {
+    const value = environment.REGISTRY_STORAGE_REFERENCE?.trim();
+    if (value === undefined || value.length === 0)
+      throw new Error("REGISTRY_STORAGE_REFERENCE must not be blank.");
     return value;
   },
 });

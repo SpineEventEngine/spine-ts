@@ -26,12 +26,26 @@ gateway_secret_reference     = "projects/my-project/secrets/gateway-runtime"
 # Manual capacity applies while autoscaling is disabled.
 application_replicas = 2
 
-# GCE owns capacity when this is true. Choose exactly one supported signal.
-# A CPU or per-instance metric cannot wake an empty group. To scale from zero,
-# use whole_group with a metric that exists while no application VM is running.
-autoscaling_enabled      = false
-autoscaling_metric_type  = "cpu"
-autoscaling_metric       = ""
-autoscaling_target       = 0.7
-autoscaling_min_replicas = 1
-autoscaling_max_replicas = 8
+# GCE owns capacity when this is true. CPU uses a utilization target. Monitoring
+# uses a separately chosen metric name, resource/series filter, target kind,
+# and scope. Scope documents whether your metric exists per VM or for the whole
+# group; the filter must select only the intended regional application group.
+autoscaling_enabled            = false
+autoscaling_signal             = "cpu"
+autoscaling_metric_scope       = "per_instance"
+autoscaling_metric             = ""
+autoscaling_metric_filter      = ""
+autoscaling_metric_target_type = "GAUGE"
+autoscaling_target             = 0.7
+autoscaling_min_replicas       = 1
+autoscaling_max_replicas       = 8
+
+# A whole-group Monitoring metric can wake an empty group only when it exists
+# without an application VM. Use these explicit values for that case:
+# autoscaling_signal             = "monitoring"
+# autoscaling_metric_scope       = "whole_group"
+# autoscaling_metric             = "custom.googleapis.com/spine/pending_work"
+# autoscaling_metric_filter      = "resource.type = \"global\""
+# autoscaling_metric_target_type = "GAUGE"
+# autoscaling_target             = 1
+# autoscaling_min_replicas       = 0
