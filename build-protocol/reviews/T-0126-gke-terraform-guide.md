@@ -226,3 +226,26 @@ package-completeness correction discovered before release verification:
 This remediation receives narrow style, documentation, API, and reliability
 closure only where changed. The already-promoted release gate runs once after
 closure converges.
+
+## Final Closure Review Dispatch
+
+Correction `d7b64c78` is pushed and passes 132 focused Server and deployment
+policy tests, package typechecks, ESLint, TSDoc, documentation snippet and
+audience checks, cleanup checks, Terraform formatting and validation, package
+archive inspection, and diff validation.
+
+- Style and maintainability reviews only process-coordinator ownership,
+  example structure, manifest/TypeScript configuration, and focused test
+  maintainability.
+- Documentation reviews only whether the shipped settings, application, and
+  Gateway examples are complete and beginner-copyable from the guide.
+- TypeScript/API reviews only the example contracts, package payload, and the
+  standalone/local lifecycle contract exposed by the changed runtime.
+- Performance/reliability reviews only mixed local/standalone retirement,
+  signal shutdown, close retry behavior, and deterministic archive checking.
+
+The three Terra reviewers are dispatched with explicit configured
+`gpt-5.6-terra` / `high`. The documentation reviewer has the existing immutable
+`gpt-5.6-luna` / `medium` profile; `medium` is explicit and the role selects the
+fixed model. Runtime metadata is recorded if exposed; otherwise the configured
+profile and absence of visible mismatch are the acceptance evidence.
