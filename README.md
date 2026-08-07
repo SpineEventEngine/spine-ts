@@ -111,6 +111,7 @@ Start with these packages:
 
 - [End-user guide](docs/USER_GUIDE.md)
 - [Message Board example](examples/message-board/README.md)
+- [Deploy on GKE](packages/deployment-gke/README.md)
 - [Browser authentication and extension guide](docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 - [Generated API documentation](docs/api/README.md)
 - [Reference for coding agents](REFERENCE.md)

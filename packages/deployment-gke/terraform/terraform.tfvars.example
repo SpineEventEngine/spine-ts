@@ -1,0 +1,22 @@
+# Create these Secrets separately. Terraform deliberately never receives their values.
+application_secret_name = "my-application-runtime"
+gateway_secret_name     = "my-gateway-runtime"
+
+# Replace every image with an immutable image published by your delivery pipeline.
+application_image = "REGION-docker.pkg.dev/PROJECT/spine/application@sha256:REPLACE"
+gateway_image     = "REGION-docker.pkg.dev/PROJECT/spine/gateway@sha256:REPLACE"
+delivery_image    = "REGION-docker.pkg.dev/PROJECT/spine/simple-delivery@sha256:REPLACE"
+
+# Choose a context created by `gcloud container clusters get-credentials`.
+kubeconfig_context = "gke_PROJECT_REGION_CLUSTER"
+
+# This value controls manual capacity while autoscaling_enabled is false.
+application_replicas = 2
+
+# The template creates no HPA unless you explicitly enable it. Select values
+# that match an external metric adapter already operated by your platform team.
+autoscaling_enabled      = false
+autoscaling_metric       = "requests_per_second"
+autoscaling_target       = "10"
+autoscaling_min_replicas = 1
+autoscaling_max_replicas = 8

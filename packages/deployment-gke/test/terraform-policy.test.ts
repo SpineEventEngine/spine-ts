@@ -13,11 +13,18 @@ describe("the GKE deployment template", () => {
     expect(terraform).toContain('resource "kubernetes_deployment_v1" "application"');
     expect(terraform).toContain('resource "kubernetes_deployment_v1" "delivery"');
     expect(terraform).toContain('resource "kubernetes_service_v1" "application"');
-    expect(terraform).toContain('cluster_ip = "None"');
-    expect(terraform).toContain('readiness_probe');
-    expect(terraform).toContain('name = "BACKEND_DISCOVERY_SERVICE"');
-    expect(terraform).toContain('service_account_name = var.service_account_name');
+    expect(terraform).toMatch(/cluster_ip\s+=\s+"None"/u);
+    expect(terraform).toMatch(/publish_not_ready_addresses\s+=\s+false/u);
+    expect(terraform).toContain("readiness_probe");
+    expect(terraform).toContain("BACKEND_DISCOVERY_SERVICE");
+    expect(terraform).toContain("service_account_name = var.service_account_name");
     expect(terraform).not.toContain('type = "LoadBalancer"');
+    expect(terraform).toMatch(
+      /resource "kubernetes_deployment_v1" "gateway"[\s\S]*?replicas\s*=\s*1/u,
+    );
+    expect(terraform).toMatch(
+      /resource "kubernetes_deployment_v1" "delivery"[\s\S]*?replicas\s*=\s*1/u,
+    );
   });
 
   it("leaves operator-selected autoscaling disabled by default", async () => {
@@ -29,18 +36,20 @@ describe("the GKE deployment template", () => {
     expect(variables).toContain('variable "autoscaling_target"');
     expect(variables).toContain('variable "autoscaling_min_replicas"');
     expect(variables).toContain('variable "autoscaling_max_replicas"');
-    expect(terraform).toContain('count = var.autoscaling_enabled ? 1 : 0');
+    expect(terraform).toContain("count = var.autoscaling_enabled ? 1 : 0");
+    expect(variables).toMatch(/variable "autoscaling_enabled"[\s\S]*?default\s+=\s+false/u);
   });
 
   it("uses references for secrets and does not select application storage", async () => {
     const terraform = await readTerraform();
     const variables = await readFile(new URL("variables.tf", terraformRoot), "utf8");
 
-    expect(terraform).toContain('secret_key_ref');
+    expect(terraform).toContain("secret_ref");
     expect(variables).toContain('variable "application_secret_name"');
-    expect(terraform.toLowerCase()).not.toContain('mysql');
-    expect(terraform.toLowerCase()).not.toContain('datastore');
-    expect(terraform.toLowerCase()).not.toContain('cloud run');
+    expect(terraform.toLowerCase()).not.toContain("mysql");
+    expect(terraform.toLowerCase()).not.toContain("datastore");
+    expect(terraform.toLowerCase()).not.toContain("cloud run");
+    expect(terraform).not.toContain('resource "kubernetes_secret"');
   });
 });
 
@@ -65,7 +74,7 @@ describe("the GKE deployment guide", () => {
     expect(guide).toContain("terraform init");
     expect(guide).toContain("terraform plan");
     expect(guide).toContain("terraform apply");
-    expect(guide).toContain("durable subscriptions");
+    expect(guide).toMatch(/durable subscription/iu);
     expect(guide).not.toMatch(/\bT-0126\b|\bWave 7\b/);
   });
 });
