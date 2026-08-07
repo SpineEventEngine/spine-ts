@@ -102,8 +102,6 @@ const systemScheduler: NodeScheduler = {
   },
 };
 
-const expectedNodeCount = 32;
-
 /**
  * Publishes ready GKE Pods from a headless-Service DNS answer.
  */
@@ -267,7 +265,7 @@ export class GkeNodeDiscovery implements NodeDiscovery {
       });
       nodes.set(node.id, node);
     }
-    return [...nodes.values()].slice(0, Math.max(expectedNodeCount, nodes.size));
+    return [...nodes.values()];
   }
 }
 
