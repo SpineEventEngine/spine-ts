@@ -55,8 +55,9 @@ types, multiple provider adapters, and repository-wide documentation.
    for the incorrect pre-Wave-8 layout because no deployed applications exist.
 9. Remove compatibility fingerprints, stored spec metadata, commit receipts,
    JSON packed into `Any`, delivery attempts, attempt exhaustion, quarantine,
-   invented coordination records, and the Message Board quarantine and revoked
-   session facilities. Do not replace removed inventions with new ones.
+   invented coordination records, `packages/delivery-client`'s
+   `RemovalQuarantine`, and the Message Board quarantine and revoked-session
+   facilities. Do not replace removed inventions with new ones.
 10. Persist only approved Proto messages. Inbox persistence uses the existing
     `spine.server.delivery.InboxMessage`; delivered rows provide deduplication.
     Shard ownership, not per-message claims, provides delivery exclusion.

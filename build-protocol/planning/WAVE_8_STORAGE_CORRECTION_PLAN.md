@@ -59,8 +59,13 @@ Freezes every Wave 8 serialized record before runtime migration.
   descriptor/contract tests, and deterministic authored-Proto checks.
 - RED-first acceptance: descriptors reject the old deployment and Stand
   messages, then prove the exact approved packages, names, typed IDs, field
-  order, field names, and type URLs for node discovery, `SubscriptionRecord`,
-  and `GatewayAuthenticatedSubscription`. The checker rejects authored
+  names, numbers, labels/cardinality, scalar or message types, `type_name`,
+  oneof/map membership, source order, and file/package type-URL options for node
+  discovery, `SubscriptionRecord`, and `GatewayAuthenticatedSubscription`.
+  Public facets export the client and auth records; node discovery remains an
+  internal generated import. Compile/import tests reject obsolete
+  `spine.system.*` paths and accidental root/facet exposure of internal records.
+  The checker rejects authored
   `optional` fields and incorrect declaration/comment spacing while preserving
   manifest-frozen copied Proto unchanged.
 - Removal boundary: no aliases, legacy packages, version fields, primitive IDs,
@@ -83,6 +88,14 @@ type, ID extraction, and columns that define a JVM-style record specification.
   physically distinct; ordinary records default their source to their record
   type; column materialization, context and tenant isolation, queries, compare-
   and-set, and batch behavior remain correct.
+- Public contract: `RecordSpec` remains exported from
+  `@spine-event-engine/storage`. Its constructor takes `recordType`, the
+  existing message-ID schema or primitive-ID kind, `extractId`, optional
+  columns, and optional `sourceType`; `sourceType` defaults to `recordType`.
+  Read-only `sourceType`, `idType`, `recordType`, and `columns` accessors expose
+  the specification. The old `schema`, `storageKey`, and
+  `compatibilityFingerprint` accessors/inputs are removed without aliases.
+  Compile-time consumer tests and public TSDoc/REFERENCE freeze this surface.
 - Removal boundary: delete compatibility fingerprints, spec metadata, and
   compatibility-oriented canonical layout machinery. Do not add a replacement
   hash or persisted descriptor.
@@ -143,7 +156,20 @@ default names.
   user-column index is auto-created. Startup diagnoses missing/incompatible
   required columns and primary keys, accepts harmless compatible additions,
   never alters existing tables, and supports custom names and create
-  operations. Live tests cover MySQL InnoDB/MyISAM and MariaDB InnoDB/Aria.
+  operations. Live tests cover commit, rollback, and injected mid-write failure
+  for MySQL InnoDB/MyISAM and MariaDB InnoDB/Aria, explicitly distinguishing
+  transactional atomicity from safe, reported partial progress on
+  nontransactional engines.
+- Public contract: `MysqlStorageFactory.newBuilder()` returns exported
+  `MysqlStorageFactoryBuilder`. The builder supplies `setOptions(options)`,
+  `setTableName(recordType, name)`, grouped
+  `setTableName(sourceType, recordType, name)`,
+  `useOperationFactory(factory)`, and `build()`. Exported
+  `CreateOperationFactory` receives the resolved table specification and
+  returns the create-table operation. Exact source-plus-record registration
+  wins over record-only registration, which wins over the JVM default name.
+  Public TSDoc, REFERENCE examples, and compile-time consumer tests freeze the
+  API.
 - Removal boundary: delete shared records/columns tables, spec metadata, schema
   hashes, and false multi-table atomicity claims for nontransactional engines.
 - Review: all four concerns.
@@ -160,6 +186,15 @@ Replaces shared kinds with JVM-familiar per-record kinds and customization.
   Entity and non-Entity family is separate; `(column)` values are native
   properties used for provider-side filter/order; custom record layouts and
   record/entity storage creators are selected by source type.
+- Public contract: `DatastoreStorageFactory.newBuilder()` returns exported
+  `DatastoreStorageFactoryBuilder` with `setClient(client)`, record-only and
+  grouped `organizeRecords(...)` overloads, `useRecordStorage(...)`,
+  `useEntityStorage(...)`, and `build()`. Exported `RecordLayout`,
+  `CreateRecordStorage`, and `CreateEntityStorage` are the callback/layout
+  types. An exact custom storage creator wins over an exact grouped layout,
+  which wins over a record-only layout, which wins over the JVM default kind.
+  Public TSDoc, REFERENCE examples, and compile-time consumer tests freeze the
+  API.
 - Removal boundary: delete shared/canonical kinds, stored compatibility
   metadata, old-layout readers, and fallback scans presented as pushdown.
 - Review: all four concerns.
@@ -177,6 +212,8 @@ Uses the corrected `spine.deployment` record directly.
   registration fencing uses `NodeRegistrationId`, endpoint and expiry round-
   trip through the Proto, and provider layout customization reaches this
   record family.
+- Provider tests prove both MySQL table customization and Datastore layout or
+  custom-storage selection reach the node-discovery record.
 - Removal boundary: delete encoding version and primitive node/registration
   IDs. Do not add old-lease migration, Cloud Run, logging, or Gateway scaling.
 - Review: documentation, TypeScript/API docs, and performance/reliability;
@@ -193,6 +230,8 @@ Persists one `spine.client.SubscriptionRecord` per subscription.
   approved fields round-trip; `SubscriptionStatus`, `status`, and
   `SS_UNSPECIFIED` are used; creation, activation expiry, cancellation, pending
   cleanup, polling, restart, and custom registry behavior remain correct.
+- Provider tests prove MySQL and Datastore customization reaches
+  `SubscriptionRecord`.
 - Removal boundary: delete revision, generation, control/staging records,
   JSON-in-`Any`, and arbitrary global capacity coordination. Do not promise
   complete update delivery or multiple-Gateway behavior.
@@ -205,12 +244,15 @@ Persists the approved authenticated subscription instead of durable binding
 coordination records.
 
 - Dependencies: T-0137.
-- Ownership: authenticated-subscription code in `packages/auth/**`, the server
-  durable-binding owner, and focused Browser/Gateway tests.
+- Ownership: authenticated-subscription code in `packages/auth/**`,
+  `packages/server/src/server/durable-subscription-bindings.ts` and its mirrored
+  tests, and focused Browser/Gateway tests.
 - RED-first acceptance: subscription ID, subscription, and `when_expires`
   round-trip directly; expiry and single-Gateway restart behavior remain
   correct; the Topic retains the resolved Actor/Tenant context; an inspected
   backend contains no other Gateway coordination record.
+- Provider tests prove MySQL and Datastore customization reaches
+  `GatewayAuthenticatedSubscription`.
 - Removal boundary: delete quota, cleanup, reservation, fence, admission-token,
   principal-fingerprint identity, receipt, and other unapproved persistence.
 - Review: all four concerns.
@@ -223,11 +265,16 @@ exclusion mechanism.
 
 - Dependencies: T-0133 through T-0135.
 - Ownership: Inbox, shard-registry, lease, and pickup files under
-  `packages/server/src/delivery/**`, plus focused tests.
+  `packages/server/src/delivery/**`; all `packages/delivery-client/**` source,
+  tests, exports, README, and REFERENCE related to `RemovalQuarantine`, remote
+  quarantine, or removal fingerprints; plus focused tests.
 - RED-first acceptance: pending and delivered `InboxMessage` rows round-trip;
   delivered rows provide deduplication; `ShardSessionRecord` represents shard
   ownership; two workers cannot own one shard; no per-message claim or separate
-  dedup record is acquired.
+  dedup record is acquired. Provider tests prove MySQL and Datastore
+  customization reaches `InboxMessage` and shard-session records. Remote
+  delivery tests prove uncertain removal no longer writes or consults
+  `RemovalQuarantine` or fingerprints and uses no replacement persistent type.
 - Removal boundary: delete JSON-in-`Any`, message claims, dedup guards, delivery
   attempts, and quarantine persistence. T-0140 owns monitor policy.
 - Review: style/maintainability, TypeScript/API docs, and
@@ -246,9 +293,31 @@ Replaces attempt/exhaustion policy with JVM-style failure actions.
   asynchronous mark-delivered/repeat-dispatch actions; default failure marks
   delivered; repeat redispatches; continuation, start/completion, reception-
   failure, pickup-failure, and already-picked hooks are observed. Monitor and
-  action exceptions are contained. A durable mark failure leaves the row
+  action exceptions are contained. Adversarial sequences prove a thrown hook
+  or action produces no unhandled rejection, permits independent targets to
+  continue, and safely releases or retains the affected shard. Graceful stop
+  prevents later pickup/dispatch, releases the shard, and lets a replacement
+  worker acquire it without concurrent duplicate delivery. A durable mark
+  failure leaves the row
   pending, stops later same-target messages, continues independent targets,
   releases the shard, and permits a later run.
+- Public contract: exported class `DeliveryMonitor` defines
+  `shouldContinueAfter(stage)`, `onDeliveryStarted(shard)`,
+  `onDeliveryCompleted(stats)`, `onReceptionFailure(reception)`,
+  `onShardPickUpFailure(failure)`, and `onShardAlreadyPicked(failure)`.
+  Callbacks may return their value directly or through `Promise`; void hooks
+  may return `void | Promise<void>`. Exported `FailedReception` exposes
+  read-only `message` and `error` plus `markDelivered()` and
+  `repeatDispatching()`, each returning an exported `ReceptionAction` whose
+  `execute()` returns `Promise<void>`. Pickup callbacks analogously return the
+  exported action supplied by `FailedPickUp` or `AlreadyPickedUp`. The default
+  monitor marks failed reception delivered, propagates genuine pickup failure,
+  and does nothing when another node owns the shard. Remove old observer-only
+  callback names (`onStarted`, `onPage`, `onSkipped`, `onFailure`,
+  `onCompleted`) and delivery-attempt/retry-decision exports; retain a delivery
+  result/statistics type only where the new completion callback and public
+  delivery method require it. Root-export and declaration tests freeze the
+  cutover.
 - Removal boundary: delete delivery attempts, exhaustion thresholds, retry
   decision machinery, quarantine/dead-letter behavior, and related public
   exports. Do not add timers, backoff, scheduler policy, or failure records.
@@ -287,6 +356,7 @@ Moves every example to the settled storage, delivery, and validation APIs.
 - RED-first acceptance: static/focused tests reject old layouts and removed
   retry policy; provider configuration uses the new hooks; Message Board and
   Distributed Message Board contain no quarantine or revoked-session facility;
+  examples contain no `RemovalQuarantine` import, construction, or replacement;
   all example builds and focused behavior/startup tests pass.
 - Removal boundary: no replacement quarantine/session record and no unrelated
   example feature.
@@ -304,9 +374,15 @@ Aligns every current public claim with the stabilized Wave 8 runtime.
   governing records.
 - Acceptance: deterministic checks first find every stale shared-table/kind,
   fingerprint, receipt, claim, attempt/exhaustion, quarantine, revoked-session,
-  old Proto name, validation package, or false atomicity claim. Corrected docs
+  old Proto name, `ApplicationNodeLease:v1` or versioned discovery-storage key,
+  `@spine-event-engine/validation-ts` import/link, `RemovalQuarantine`, or false
+  atomicity claim. Corrected docs
   teach per-record layouts, customization, structural validation, engine
-  limits, `DeliveryMonitor`, and the no-migration cutover in beginner order.
+  limits, `DeliveryMonitor`, the package rename to
+  `@spine-event-engine/validation` `2.0.0-snapshot.7`, and the no-migration
+  cutover in beginner order. Deterministic checks also validate every
+  README-to-REFERENCE link and audience statement, USER_GUIDE presence and
+  navigation, example command/path, Mermaid diagram, and Markdown link.
 - Review: documentation and TypeScript/API docs; performance/reliability for
   provider, transaction, and delivery claims. Style is N/A for prose-only work.
 - Verification: `verify:task -- --no-tests` after deterministic docs checks.
@@ -318,14 +394,18 @@ Wave 9 begins.
 
 - Dependencies: all earlier Wave 8 tasks.
 - Ownership: audit records and deterministic audit scripts. Runtime findings
-  return as one batch to the responsible implementation context; this task does
-  not design replacements.
+  return as one batch to the responsible implementation context. If that
+  context is unavailable, reopen its task on a corrective branch with the same
+  ledger, relevant reviewers, and focused verification before T-0144 resumes;
+  this task does not design replacements.
 - Acceptance: inventory every persisted record and serialization boundary,
   public API, hidden limit, retry/quota/cleanup mechanism, delivery,
   subscription, auth, deployment and provider layout, example, and current
   documentation claim. Classify each as human-approved, a JVM counterpart, an
   approved TypeScript-specific necessity, removed, or requiring a human
-  decision. No unresolved invention or decision may cross into Wave 9.
+  decision. The deterministic inventory names `RemovalQuarantine` and all other
+  forbidden Wave 8 artifacts explicitly. No unresolved invention or decision
+  may cross into Wave 9.
 - Review: all four canonical concerns over their affected evidence.
 - Verification: deterministic preflight followed by the single
   `verify:release`; merge, focused post-merge proof or a repeated full gate when
