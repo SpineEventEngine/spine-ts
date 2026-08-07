@@ -22,3 +22,40 @@ Status: Implementation in progress
 Recorded after mechanical verification and before reviewer dispatch. Terra
 reviewers use explicit `gpt-5.6-terra` / `high`; documentation uses its immutable
 `gpt-5.6-luna` / `medium` role with `medium` explicit.
+
+## Implementation Acceptance
+
+The pushed endpoint `597db7d5` contains the RED-first contract, GCE Terraform,
+packaged typed entrypoints, human guide/reference, package payload, source
+evidence, and the mechanical snippet correction. The original implementer was
+explicitly configured as `gpt-5.6-terra` / `medium`; runtime
+self-introspection was unavailable and no visible mismatch occurred.
+
+Mechanical evidence is green: six deterministic Terraform/guide/package tests,
+build and tooling typechecks, strict TypeScript documentation snippets, TSDoc,
+Prettier, package archive inspection, Terraform formatting/validation, and diff
+validation. The worktree and pushed branch are clean.
+
+## Review Wave Dispatch
+
+- Style and maintainability checks Terraform module depth/resource ownership,
+  startup-example structure, deterministic policy tests, naming, package
+  payload, and maintainability of future version/placement changes.
+- Documentation checks beginner completeness and factual/copyable claims for
+  private networking, internal passthrough load balancers, image startup,
+  secrets, registration timings, scaling from zero, replacement, rollback,
+  Gateway interruption, troubleshooting, and teardown.
+- TypeScript/API checks the packaged registrar/discovery entrypoints against
+  current public contracts, ownership/closure semantics, snippets, imports,
+  package contents, and public wording.
+- Performance and reliability checks managed-group/update/autohealing behavior,
+  stable internal endpoints, startup/container failure handling, autoscaler
+  metric semantics and ownership, scale-to-zero recovery, rolling versus
+  stop-all operations (including enabled-autoscaler cases), registry expiry,
+  and in-memory delivery limitations.
+
+Style, TypeScript/API, and reliability reviewers are dispatched with explicit
+configured `gpt-5.6-terra` / `high`. The documentation reviewer uses the
+existing immutable `gpt-5.6-luna` / `medium` profile with `medium` explicit.
+Runtime metadata is recorded if exposed; otherwise configured profile and
+absence of visible mismatch remain the acceptance evidence.
