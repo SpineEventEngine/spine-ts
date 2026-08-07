@@ -1,6 +1,6 @@
 # T-0128: Cross-Platform Capacity, Replacement, And Wave Closure
 
-Status: Reviewed and release-verified; integration pending
+Status: Integrated and post-merge verified
 
 ## Objective
 

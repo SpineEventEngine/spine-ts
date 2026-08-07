@@ -1,6 +1,6 @@
 # Spine TS Project Completion Plan
 
-Status: Initial release, post-release JVM parity Waves 1 through 6, and T-0080
+Status: Initial release, post-release JVM parity Waves 1 through 7, and T-0080
 authored-API/example quality correction complete
 
 Plan date: 2026-07-12
@@ -20,9 +20,10 @@ release-gated, merged, post-merge verified, and pushed. T-0111 Distributed
 Message Board and example migration is reviewed, release-gated, merged,
 post-merge verified, and pushed. T-0112 documentation and Wave closure is
 reviewed, release-gated, merged, post-merge verified, and pushed. Wave 6 is
-durably closed; Wave 7 requires its separate human Q&A before work starts.
-Autonomous implementation follows
-`build-protocol/planning/WAVE_6_DISTRIBUTED_DELIVERY_STAND_PLAN.md`.
+durably closed. Wave 7's T-0121 through T-0128 scaling, discovery, Terraform,
+deployment guidance, and closure sequence is reviewed, release-verified,
+integrated, and post-merge verified. Its implementation follows
+`build-protocol/planning/WAVE_7_SCALING_REDEPLOYMENT_PLAN.md`.
 
 The pre-Wave-7 architecture review found that `EntityStateChanged` currently
 uses a domain EventBus persistence-bypass path instead of a paired System
@@ -40,7 +41,7 @@ and pushed. T-0118 Message Board payload-first synchronization is reviewed,
 release-verified, merged as `964d24c0`, post-merge verified, and pushed. T-0119
 documentation and correction closure is reviewed, release-verified, merged as
 `5d3ac54d`, post-merge verified, and pushed. The T-0114 through T-0119
-correction sequence is complete; Wave 7 Q&A may continue.
+correction sequence is complete and supplied Wave 7's required baseline.
 
 ## Purpose
 
@@ -166,11 +167,11 @@ durably closed.
 Wave 6 Q&A, its original implementation, review, release verification,
 integration, and documentation closure are complete. T-0113 records the
 subsequent System Context and payload-first correction that must precede Wave 7.
-Wave 7 Q&A and its dependency-ordered T-0121 through T-0128 plan are approved
-under T-0120. T-0121 may start after T-0120 review convergence, integration,
-post-merge verification, and remote synchronization. Do not publish packages
-to npm until all waves are complete and publication is revisited with the
-human.
+Wave 7 Q&A and its dependency-ordered T-0121 through T-0128 plan were approved
+under T-0120. The complete sequence is now reviewed, release-verified,
+integrated, post-merge verified, and remotely synchronized. Do not publish
+packages to npm until all waves are complete and publication is revisited with
+the human.
 
 ## Authored API And Example Quality Correction
 
