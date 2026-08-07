@@ -58,6 +58,37 @@ describe("GceNodeDiscovery", () => {
     expect(registryClosed).toBe(true);
   });
 
+  it("retains both close failures after closing its registry", async () => {
+    const discoveryFailure = new Error("scheduled discovery cancel failed");
+    const registryFailure = new Error("registry close failed");
+    let registryClosed = false;
+    const discovery = new GceNodeDiscovery({
+      registry: registry({
+        read: () => Promise.resolve([]),
+        close: () => {
+          registryClosed = true;
+          return Promise.reject(registryFailure);
+        },
+      }),
+      scheduler: {
+        schedule: (delay, tick) => {
+          void delay;
+          void tick;
+          return () => {
+            throw discoveryFailure;
+          };
+        },
+      },
+    });
+
+    discovery.watch(() => undefined);
+
+    const error = await discovery.close().catch((failure: unknown) => failure);
+    expect(error).toBeInstanceOf(AggregateError);
+    expect((error as AggregateError).errors).toEqual([discoveryFailure, registryFailure]);
+    expect(registryClosed).toBe(true);
+  });
+
   it("shares one close attempt and closes the registry once", async () => {
     let closes = 0;
     const discovery = new GceNodeDiscovery({

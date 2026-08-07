@@ -87,6 +87,14 @@ Registry repository that stores these images. The template uses the broad
 `cloud-platform` OAuth scope so Google Cloud IAM can evaluate that role; the IAM
 role, not the scope alone, authorizes image pulls.
 
+Every image must use an Artifact Registry host such as
+`us-docker.pkg.dev`. Each COS startup script extracts that exact host from its
+own immutable image name, creates a writable Docker configuration under
+`/var/lib/spine-docker`, and runs `docker-credential-gcr configure-docker` for
+that host before it pulls the image. The helper uses the attached VM service
+account; no registry credential or key is placed in Terraform, metadata, or the
+Docker command.
+
 ## Connect your application entrypoints
 
 The application image must create its normal bounded contexts and storage
@@ -195,10 +203,12 @@ configured startup delay (120 seconds by default) before treating a failed
 application listener as unhealthy.
 
 The template uses Container-Optimized OS and runs each image with a startup
-script and `docker run --rm --network host`. If a container exits, Docker
-removes it and the listener health check fails; the MIG can then repair that
-VM after the startup delay. Use `journalctl -u google-startup-scripts.service`
-or the VM serial-console log to diagnose startup-script and container failures.
+script. It configures the exact Artifact Registry host with
+`docker-credential-gcr`, then uses `docker run --rm --network host`. If a
+container exits, Docker removes it and the listener health check fails; the MIG
+can then repair that VM after the startup delay. Use
+`journalctl -u google-startup-scripts.service` or the VM serial-console log to
+diagnose credential-helper, startup-script, and container failures.
 
 ## Verify the deployment
 
@@ -245,8 +255,10 @@ To let Compute Engine scale the same application version, set
 `autoscaling_target` is the CPU utilization target. For
 `autoscaling_signal = "monitoring"`, choose the metric name, a filter that
 selects only the intended resource and series, a metric target kind, and the
-declared `per_instance` or `whole_group` scope. Terraform then omits the MIG
-size and GCE is the sole capacity owner.
+declared `per_instance` or `whole_group` scope. A per-instance filter must set
+`resource.type = "gce_instance"`; a whole-group filter must select another
+resource type, such as `global`. Terraform validates that relationship, then
+omits the MIG size and GCE is the sole capacity owner.
 
 CPU and per-instance metrics require a running VM, so they cannot scale from
 zero. For scale-from-zero, use a `whole_group` Cloud Monitoring metric that is
@@ -259,9 +271,9 @@ signal for this topology.
 
 For a compatible change, publish a new immutable application digest, set it in
 `terraform.tfvars`, and apply. The regional MIG performs a proactive rolling
-replacement with one surge instance and no planned unavailable instance. Old
-and new nodes can overlap, so they must understand the same stored data and
-messages during the rollout.
+replacement with one permitted surge instance for each selected application
+zone and no planned unavailable instance. Old and new nodes can overlap, so
+they must understand the same stored data and messages during the rollout.
 
 For an incompatible business-logic or data change, first disable any enabled
 autoscaler and set application capacity to zero. Wait until the old nodes exit,
@@ -272,6 +284,7 @@ the change safe for those messages before starting it.
 
 ```bash
 terraform apply -var='autoscaling_enabled=false' -var='application_replicas=0'
+test -z "$(gcloud compute instance-groups managed list-instances spine-application --region=REGION --format='value(instance)')"
 # Set the new application_image digest in terraform.tfvars.
 terraform apply -var='autoscaling_enabled=false' -var='application_replicas=0'
 terraform apply -var='autoscaling_enabled=false' -var='application_replicas=2'
@@ -293,7 +306,15 @@ and run `terraform apply`. GCE creates the previous instance template and
 performs the same rolling update. For an incompatible rollback, disable an
 enabled autoscaler, reduce the application group to zero, wait for shutdown,
 apply the prior image, then restore manual capacity or deliberately re-enable
-autoscaling.
+autoscaling. Confirm the group is empty before applying the prior image:
+
+```bash
+terraform apply -var='autoscaling_enabled=false' -var='application_replicas=0'
+test -z "$(gcloud compute instance-groups managed list-instances spine-application --region=REGION --format='value(instance)')"
+# Restore the prior application_image digest in terraform.tfvars.
+terraform apply -var='autoscaling_enabled=false' -var='application_replicas=0'
+terraform apply -var='autoscaling_enabled=false' -var='application_replicas=2'
+```
 
 ## Troubleshooting
 

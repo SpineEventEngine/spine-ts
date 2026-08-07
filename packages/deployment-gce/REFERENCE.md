@@ -19,9 +19,17 @@ per-instance Monitoring metrics cannot revive a zero-instance group. A
 whole-group Monitoring metric can, if the operator supplies one that continues
 to exist at zero capacity.
 
-The template uses Compute-Optimized OS plus a `docker run` startup script. It
+The template uses Container-Optimized OS plus a `docker run` startup script. It
 does not use the deprecated container startup agent or a
-`gce-container-declaration` metadata value.
+`gce-container-declaration` metadata value. Each immutable image must use an
+Artifact Registry `*-docker.pkg.dev` host. The relevant COS startup script
+extracts that host from the image, exports a writable
+`HOME=/var/lib/spine-docker` and `DOCKER_CONFIG=$HOME/.docker`, then invokes
+`docker-credential-gcr configure-docker --registries=<exact-host>` before its
+Docker pull. This stores only credential-helper configuration; the helper uses
+the attached service account, whose repository-level
+`roles/artifactregistry.reader` and `cloud-platform` OAuth scope authorize the
+pull.
 
 ## Metadata and node identity
 
@@ -61,9 +69,18 @@ registrar waits for the admitted promise to settle before deletion.
 ## Discovery
 
 `GceRegistryReader.read(signal)` reads the full live registry snapshot at its
-injected clock time, which defaults to `Date.now`. Use it with
-`ScheduledNodeDiscovery`, whose production scheduler is optional and unref'ed;
-expired rows are filtered immediately, so scale-to-zero produces an empty membership snapshot.
-A later registrar makes its node discoverable and also resumes bounded cleanup
-of abandoned expired rows. Registry-read failures retain the Gateway's previous
-valid membership until a later refresh succeeds.
+injected clock time, which defaults to `Date.now`. `GceNodeDiscovery` owns one
+`LeasedNodeRegistry`, wraps that reader in `ScheduledNodeDiscovery`, and is the
+Gateway-facing `NodeDiscovery`. Its production scheduler is optional and
+unref'ed; expired rows are filtered immediately, so scale-to-zero produces an
+empty membership snapshot. A later registrar makes its node discoverable and
+also resumes bounded cleanup of abandoned expired rows. Registry-read failures
+retain the Gateway's previous valid membership until a later refresh succeeds.
+
+`watch(onSnapshot)` returns a stop operation. Calling that operation or
+`close()` permanently stops future refresh scheduling, waits for any admitted
+read, and then closes the owned registry. `close()` is idempotent: callers
+share the same promise and the registry closes once. The owner still attempts
+registry closure if stopping discovery fails. It rethrows one close failure;
+when both operations fail, it rejects with an `AggregateError` containing both
+causes. Do not separately close the registry passed to `GceNodeDiscovery`.

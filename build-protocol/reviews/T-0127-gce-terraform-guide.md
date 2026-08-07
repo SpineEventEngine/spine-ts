@@ -209,3 +209,32 @@ The existing implementer role remains configured as `gpt-5.6-terra` /
 configured profile and absence of a visible mismatch remain the acceptance
 evidence. Covering tests and bounded deterministic checks must pass before one
 last focused re-review of the affected concerns.
+
+## Final Correction Acceptance
+
+The implementation at the next pushed correction endpoint resolves all six
+accepted findings in one pass. The policy test now uses a single balanced,
+top-level HCL resource scanner for every topology assertion and regression
+fixtures for line comments, block comments, uppercase/lowercase heredocs, and
+quoted source text. `REFERENCE.md` now states the exported
+`GceNodeDiscovery` ownership, stop-before-close, idempotence, single-error, and
+dual-error aggregation contract.
+
+Every COS startup script extracts and configures only its own validated
+Artifact Registry host with `docker-credential-gcr` in a writable Docker
+configuration directory; no credential is embedded. Monitoring metric scope
+now has Terraform-enforced `gce_instance` versus non-instance resource-type
+semantics, including the zero-minimum restriction, with invalid-combination
+tests. The deployment guide contains explicit empty-group checks before
+incompatible replacement/rollback and corrects the surge wording to one
+permitted instance for each selected application zone. The lifecycle suite now
+proves that a close operation retains both causes in `AggregateError` while
+still attempting registry closure.
+
+Final bounded evidence passed: composite and tooling TypeScript checks; 2
+focused Vitest files / 13 tests; focused ESLint; TSDoc; strict TypeScript
+documentation snippets; Prettier; Terraform `fmt -check` and `validate`; and
+`git diff --check`. The existing implementer was explicitly configured as
+`gpt-5.6-terra` / `medium`. Runtime self-introspection is unavailable; the
+configured profile and absence of a visible mismatch are the available metadata
+evidence. The endpoint is ready for the required final focused re-review.

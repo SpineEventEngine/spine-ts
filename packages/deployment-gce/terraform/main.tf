@@ -1,6 +1,9 @@
 locals {
-  runtime_ports = [var.application_port, var.gateway_port, var.delivery_port]
-  runtime_tags  = ["spine-runtime"]
+  application_image_host = split("/", var.application_image)[0]
+  delivery_image_host    = split("/", var.delivery_image)[0]
+  gateway_image_host     = split("/", var.gateway_image)[0]
+  runtime_ports          = [var.application_port, var.gateway_port, var.delivery_port]
+  runtime_tags           = ["spine-runtime"]
 }
 
 resource "google_compute_health_check" "application" {
@@ -92,7 +95,11 @@ resource "google_compute_instance_template" "application" {
   metadata_startup_script = <<-EOT
     #!/usr/bin/env bash
     set -eu
-    docker run --rm --network host \
+    export HOME=/var/lib/spine-docker
+    export DOCKER_CONFIG="$HOME/.docker"
+    mkdir -p "$DOCKER_CONFIG"
+    docker-credential-gcr configure-docker --registries=${local.application_image_host}
+    docker --config "$DOCKER_CONFIG" run --rm --network host \
       -e HOST=0.0.0.0 \
       -e PORT=${var.application_port} \
       -e DELIVERY_SERVER_URL=http://${google_compute_forwarding_rule.delivery.ip_address}:${var.delivery_port} \
@@ -131,7 +138,11 @@ resource "google_compute_instance_template" "gateway" {
   metadata_startup_script = <<-EOT
     #!/usr/bin/env bash
     set -eu
-    docker run --rm --network host \
+    export HOME=/var/lib/spine-docker
+    export DOCKER_CONFIG="$HOME/.docker"
+    mkdir -p "$DOCKER_CONFIG"
+    docker-credential-gcr configure-docker --registries=${local.gateway_image_host}
+    docker --config "$DOCKER_CONFIG" run --rm --network host \
       -e HOST=0.0.0.0 \
       -e PORT=${var.gateway_port} \
       -e REGISTRY_NAMESPACE=${var.registry_namespace} \
@@ -169,7 +180,11 @@ resource "google_compute_instance_template" "delivery" {
   metadata_startup_script = <<-EOT
     #!/usr/bin/env bash
     set -eu
-    docker run --rm --network host \
+    export HOME=/var/lib/spine-docker
+    export DOCKER_CONFIG="$HOME/.docker"
+    mkdir -p "$DOCKER_CONFIG"
+    docker-credential-gcr configure-docker --registries=${local.delivery_image_host}
+    docker --config "$DOCKER_CONFIG" run --rm --network host \
       -e HOST=0.0.0.0 \
       -e PORT=${var.delivery_port} \
       ${var.delivery_image}
@@ -221,8 +236,25 @@ resource "google_compute_region_instance_group_manager" "application" {
     }
 
     precondition {
-      condition     = !var.autoscaling_enabled || var.autoscaling_signal != "monitoring" || var.autoscaling_metric_scope == "whole_group" || var.autoscaling_min_replicas >= 1
-      error_message = "Per-instance Monitoring metrics require at least one application node."
+      condition     = !var.autoscaling_enabled || var.autoscaling_signal != "monitoring" || var.autoscaling_min_replicas >= 1 || var.autoscaling_metric_scope == "whole_group"
+      error_message = "Monitoring minimum replicas of zero requires a whole_group Monitoring metric."
+    }
+
+    precondition {
+      condition     = !var.autoscaling_enabled || var.autoscaling_signal != "cpu" || var.autoscaling_min_replicas >= 1
+      error_message = "CPU autoscaling requires at least one application node."
+    }
+
+    precondition {
+      condition = !var.autoscaling_enabled || var.autoscaling_signal != "monitoring" || (
+        var.autoscaling_metric_scope == "per_instance" &&
+        can(regex("resource\\.type\\s*=\\s*\"gce_instance\"", var.autoscaling_metric_filter))
+        ) || (
+        var.autoscaling_metric_scope == "whole_group" &&
+        can(regex("resource\\.type\\s*=", var.autoscaling_metric_filter)) &&
+        !can(regex("resource\\.type\\s*=\\s*\"gce_instance\"", var.autoscaling_metric_filter))
+      )
+      error_message = "per_instance Monitoring metrics require resource.type = \"gce_instance\"; whole_group metrics require a resource.type other than \"gce_instance\"."
     }
   }
 }

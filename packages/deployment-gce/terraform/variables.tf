@@ -80,32 +80,32 @@ variable "service_account_email" {
 }
 
 variable "application_image" {
-  description = "Immutable container image digest for the application-node process."
+  description = "Immutable Artifact Registry container image digest for the application-node process."
   type        = string
 
   validation {
-    condition     = can(regex("@sha256:[0-9a-fA-F]{64}$", var.application_image))
-    error_message = "Application image must end with an immutable SHA-256 digest."
+    condition     = can(regex("^[a-z0-9-]+-docker\\.pkg\\.dev/.+@sha256:[0-9a-fA-F]{64}$", var.application_image))
+    error_message = "Application image must use an Artifact Registry host and end with an immutable SHA-256 digest."
   }
 }
 
 variable "gateway_image" {
-  description = "Immutable container image digest for the standalone Gateway process."
+  description = "Immutable Artifact Registry container image digest for the standalone Gateway process."
   type        = string
 
   validation {
-    condition     = can(regex("@sha256:[0-9a-fA-F]{64}$", var.gateway_image))
-    error_message = "Gateway image must end with an immutable SHA-256 digest."
+    condition     = can(regex("^[a-z0-9-]+-docker\\.pkg\\.dev/.+@sha256:[0-9a-fA-F]{64}$", var.gateway_image))
+    error_message = "Gateway image must use an Artifact Registry host and end with an immutable SHA-256 digest."
   }
 }
 
 variable "delivery_image" {
-  description = "Immutable container image digest for the in-memory simple delivery server."
+  description = "Immutable Artifact Registry container image digest for the in-memory simple delivery server."
   type        = string
 
   validation {
-    condition     = can(regex("@sha256:[0-9a-fA-F]{64}$", var.delivery_image))
-    error_message = "Delivery image must end with an immutable SHA-256 digest."
+    condition     = can(regex("^[a-z0-9-]+-docker\\.pkg\\.dev/.+@sha256:[0-9a-fA-F]{64}$", var.delivery_image))
+    error_message = "Delivery image must use an Artifact Registry host and end with an immutable SHA-256 digest."
   }
 }
 
@@ -249,7 +249,7 @@ variable "autoscaling_metric" {
 }
 
 variable "autoscaling_metric_filter" {
-  description = "Cloud Monitoring filter that selects the intended metric resource and series."
+  description = "Cloud Monitoring filter that selects the intended metric resource and series, including resource.type."
   type        = string
   default     = ""
 }
