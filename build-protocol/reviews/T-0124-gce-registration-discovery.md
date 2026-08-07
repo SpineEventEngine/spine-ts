@@ -105,3 +105,11 @@ acceptance evidence.
 All configured reviewer profiles matched their dispatches; runtime
 self-introspection was unavailable and no mismatch or fallback was visible.
 Only the performance/reliability lane reopens after the focused P1 correction.
+
+## Reliability Re-review Dispatch
+
+Correction `e34ef45e` retains deferred cleanup after a successful lifecycle
+rollback when a later close phase fails, and its focused lifecycle suite passes
+51 tests. The existing performance/reliability reviewer alone rechecks the
+remaining finding with explicit `gpt-5.6-terra` / `high`; all other lanes remain
+closed.
