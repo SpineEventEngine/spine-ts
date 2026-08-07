@@ -181,3 +181,48 @@ documentation role remains immutable `gpt-5.6-luna` / `medium`, with `medium`
 explicit and the role selecting the fixed model. Runtime metadata will be
 recorded when exposed; otherwise configured profile and absence of a visible
 mismatch remain the acceptance evidence.
+
+## Closure Re-review Results
+
+- TypeScript/API: clean. Discovery-only admission/opening, required
+  collaborators, named durable bindings, backend-plus-discovery precedence,
+  public TSDoc, snippets, and 128 focused tests are correct.
+- Style and maintainability: the runtime seam and tests are clean. P2: the
+  guide describes one shared `DeploymentSettings` owner, but its entrypoint
+  snippets only declare that owner and environment instead of importing a real
+  module and binding `process.env`.
+- Documentation: P1 confirms the declaration-only entrypoints are not copyable
+  for a beginner deployment guide. Persistent bindings, KEDA safety, and
+  discovery-only semantics are otherwise clean.
+- Performance and reliability: P1 discovery-only `Server.run()` still registers
+  local `ServerEnvironment` retirement with `ProcessServerCoordinator`, so the
+  last standalone Gateway closes facilities it never attached. Signal-managed
+  listener/discovery shutdown must remain, but environment retirement must be
+  limited to environment-owning run records. All other closure concerns are
+  clean.
+
+Runtime self-introspection was unavailable. Every reviewer reported its
+configured role/profile with no visible mismatch or fallback.
+
+## Final Remediation Dispatch
+
+The original implementer receives the two accepted findings plus one mechanical
+package-completeness correction discovered before release verification:
+
+1. Make process coordination distinguish environment-owning local servers from
+   standalone browser hosts. Closing or signaling a discovery-only `run()` must
+   stop its listener/discovery exactly once without closing `ServerEnvironment`;
+   local run siblings must still close their environment when their last
+   environment-owning record retires.
+2. Supply actual small, documented GKE entrypoint example files with one shared
+   deployment-settings owner. README snippets use those real paths, import the
+   owner, bind `process.env`, and accept application-owned collaborators through
+   explicit typed options instead of declaration-only pseudo-code.
+3. Add `terraform` and the new examples to the deployment-gke package payload.
+   The current package `files` list contains only `dist`, README, and reference,
+   which would omit the primary T-0126 deliverables from a future package.
+   Prove the packed file list deterministically.
+
+This remediation receives narrow style, documentation, API, and reliability
+closure only where changed. The already-promoted release gate runs once after
+closure converges.
