@@ -184,6 +184,7 @@ describe("package metadata", () => {
       "packages/delivery-server",
       "packages/deployment",
       "packages/deployment-gce",
+      "packages/deployment-gke",
       "packages/proto",
       "packages/proto-tools",
       "packages/server",
