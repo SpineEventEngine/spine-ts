@@ -158,12 +158,18 @@ keep its own underlying work alive.
 
 ## Gateway contracts and request facts
 
-One logical browser Gateway may use a fixed 1–32 backend list. Commands and
-queries are sent to one backend with bounded round-robin selection and no
-automatic retry. Subscription creation and activation fan out across that fixed
-list; merged notices are best-effort and can duplicate, gap, or be lost. Query
-responses remain authoritative. This is configured at startup and does not
-discover backends or redeploy them dynamically.
+One standalone Gateway dynamically discovers application nodes on GKE or GCE.
+GKE supplies ready nodes through headless-Service DNS; GCE supplies them through
+leased discovery backed by application-owned storage. Commands and queries are
+sent to one current backend with bounded round-robin selection and no automatic
+retry. Subscription creation and activation reconcile across every discovered
+node; merged notices are best-effort and can duplicate, gap, or be lost. Query
+responses remain authoritative after a reconnect or Gateway replacement. The
+expected 32 nodes is measured/recommended capacity, not a hard runtime maximum;
+the Gateway continues to use all discovered nodes with bounded connection
+starts. Infrastructure platforms scale identical application versions, while
+Spine TS only follows the resulting membership. Cloud Run and multiple-Gateway
+operation are excluded.
 
 The gateway authenticates and authorizes every incoming request independently,
 then resolves and injects a trusted context. Browser-visible actor/tenant is
@@ -423,11 +429,14 @@ limits, gRPC-Web, and explicit binary Connect support. Its Activate route is a
 live stream. Copy and customize the template for hosts, certificates,
 observability, rate limits, and topology.
 
-A fixed gateway topology contains 1–32 ordered origins. Unary calls are
+Standalone gateways discover their application nodes dynamically: GKE uses
+service DNS and GCE uses the leased registry reader. The measured capacity
+profile exercises 32 and 40 discovered nodes with at most two concurrent
+connection starts; it is not a cloud throughput benchmark. Unary calls are
 round-robin without retry; subscriptions are best effort and can duplicate.
 Generic loss notices mean a possible gap and require an authoritative re-query.
-The legacy single-backend form remains supported; durable fan-in fencing rejects
-missing, reordered, or different backend topology before attachment.
+The legacy single-backend form remains supported for local fixtures; durable
+fan-in fencing rejects incompatible membership changes before attachment.
 
 Use this test matrix before changing an extension:
 

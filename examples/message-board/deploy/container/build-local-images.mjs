@@ -24,6 +24,8 @@ const packages = [
   "packages/core",
   "packages/delivery-client",
   "packages/delivery-server",
+  "packages/deployment",
+  "packages/deployment-gke",
   "packages/proto",
   "packages/server",
   "packages/storage",

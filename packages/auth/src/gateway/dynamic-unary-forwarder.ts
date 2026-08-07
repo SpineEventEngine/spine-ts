@@ -456,7 +456,13 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     if (child.active || definition.updates === undefined) return;
     child.active = true;
     child.activation = client
-      .activate({ wire: definition.wire, updates: definition.updates }, child.controller.signal)
+      .activate(
+        {
+          wire: { kind: "backend-subscription-envelope", bytes: child.backend.bytes.slice() },
+          updates: definition.updates,
+        },
+        child.controller.signal,
+      )
       .catch(() => undefined)
       .then(() => {
         this.#completeChild(definition, id, child);

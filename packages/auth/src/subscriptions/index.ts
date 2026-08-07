@@ -706,13 +706,13 @@ export interface SubscriptionCreator {
 
   /**
    * Activates a backend subscription.
-   * @param request Supplies copied canonical subscription bytes and update sink.
+   * @param request Supplies the copied private backend envelope and update sink.
    * @param signal Cancels the backend operation.
    * @returns Completes after activation ends.
    */
   activate(
     request: {
-      readonly wire: PublicSubscriptionWire;
+      readonly wire: BackendSubscriptionEnvelope;
       readonly updates: SubscriptionUpdateSink;
     },
     signal: SubscriptionAbortSignal,

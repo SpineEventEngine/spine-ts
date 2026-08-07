@@ -209,7 +209,11 @@ async function assertCancelled() {
 }
 
 function isCancelledSubscriptionClosure(error) {
-  return error instanceof ConnectError && error.code === Code.NotFound;
+  return (
+    error instanceof ConnectError &&
+    (error.code === Code.NotFound ||
+      (error.code === Code.PermissionDenied && error.rawMessage === "gateway rejected denied"))
+  );
 }
 
 async function authoritativeQuery() {

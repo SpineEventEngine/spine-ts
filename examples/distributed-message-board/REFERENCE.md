@@ -8,7 +8,9 @@ belongs here.
 `deploy/compose.yaml` starts two identical application processes against one
 shared application-selected Datastore emulator. Both use the same in-memory
 simple delivery server. A single standalone Gateway has a fixed backend list of
-both application URLs and owns the browser-facing subscription bindings.
+both application URLs only as this local Compose fixture and owns the
+browser-facing subscription bindings. Production GKE/GCE deployment instead
+uses dynamic discovery; this example intentionally does not.
 
 Commands may be accepted by either application node. Delivery chooses one
 owner for aggregate work; the corresponding event drives one Projection result

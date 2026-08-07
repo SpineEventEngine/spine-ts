@@ -244,28 +244,40 @@ describe("DynamicUnaryForwarder", () => {
     expect(started).toEqual(["a", "c"]);
   });
 
-  it("limits concurrent client starts while eventually including all nodes", async () => {
-    let active = 0;
-    let peak = 0;
-    const forwarder = new DynamicUnaryForwarder({
-      maxConcurrentStarts: 2,
-      create: async (node) => {
-        active++;
-        peak = Math.max(peak, active);
-        await Promise.resolve();
-        active--;
-        return client(async () => new TextEncoder().encode(node.id));
-      },
-    });
-    await forwarder.reconcile(
-      Array.from(
-        { length: 40 },
-        (_, index) =>
-          new ApplicationNode({ id: `${index}`, endpoint: `http://10.0.2.${index + 1}` }),
-      ),
-    );
-    expect(peak).toBe(2);
-  });
+  it.each([32, 40])(
+    "limits concurrent client starts while including all %i discovered nodes",
+    async (count) => {
+      let active = 0;
+      let peak = 0;
+      const created = new Set<string>();
+      const forwarder = new DynamicUnaryForwarder({
+        maxConcurrentStarts: 2,
+        create: async (node) => {
+          active++;
+          peak = Math.max(peak, active);
+          await Promise.resolve();
+          active--;
+          created.add(node.id);
+          return client(async () => new TextEncoder().encode(node.id));
+        },
+      });
+      await forwarder.reconcile(
+        Array.from(
+          { length: count },
+          (_, index) =>
+            new ApplicationNode({ id: `${index}`, endpoint: `http://10.0.2.${index + 1}` }),
+        ),
+      );
+      expect(peak).toBe(2);
+      expect(created).toEqual(new Set(Array.from({ length: count }, (_, index) => `${index}`)));
+      const forwarded = await Promise.all(
+        Array.from({ length: count }, () =>
+          forwarder.forward({ service: "s", method: "m", value: new Uint8Array() }),
+        ),
+      );
+      expect(new Set(forwarded.map((value) => new TextDecoder().decode(value)))).toEqual(created);
+    },
+  );
 
   it("routes every node in round-robin order and recovers from empty membership", async () => {
     const calls: string[] = [];
@@ -300,6 +312,35 @@ describe("DynamicUnaryForwarder", () => {
       ),
     );
     expect(calls).toEqual(["a", "b", "c", "a", "b", "c", "close:a", "close:b", "close:c", "d"]);
+  });
+
+  it("keeps compatible nodes live during overlap and cuts over after an incompatible zero", async () => {
+    const forwarder = new DynamicUnaryForwarder({
+      create: async (node) => client(async () => new TextEncoder().encode(node.id)),
+    });
+    const request = {
+      service: "spine.client.QueryService",
+      method: "Read",
+      value: new Uint8Array(),
+    };
+    const old = new ApplicationNode({ id: "old", endpoint: "http://10.0.0.1" });
+    const compatible = new ApplicationNode({ id: "new-compatible", endpoint: "http://10.0.0.2" });
+    const replacement = new ApplicationNode({
+      id: "new-incompatible",
+      endpoint: "http://10.0.0.3",
+    });
+
+    await forwarder.reconcile([old, compatible]);
+    const overlapping = new Set<string>();
+    for (let index = 0; index < 2; index++)
+      overlapping.add(new TextDecoder().decode(await forwarder.forward(request)));
+    expect(overlapping).toEqual(new Set(["old", "new-compatible"]));
+
+    await forwarder.reconcile([]);
+    await expect(forwarder.forward(request)).rejects.toThrow("Gateway backend is absent.");
+    await forwarder.reconcile([replacement]);
+    expect(new TextDecoder().decode(await forwarder.forward(request))).toBe("new-incompatible");
+    await forwarder.close();
   });
 
   it("uses all 40 nodes without retrying a selected failure", async () => {

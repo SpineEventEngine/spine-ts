@@ -38,7 +38,8 @@ The images set `NODE_ENV=production`. Supply these values when starting them:
 | ---------------- | ------------------------------------------------------------------------------ |
 | Application only | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `SPINE_IPC_DIRECTORY`                  |
 | Combined         | Application values plus `BROWSER_ORIGIN` and `SUBSCRIPTION_REGISTRY_NAMESPACE` |
-| Gateway          | Combined values plus preferred `BACKEND_URLS` or legacy `BACKEND_URL`          |
+| Gateway (local)  | Combined values plus `BACKEND_URLS` or legacy `BACKEND_URL`                    |
+| Gateway (GKE)    | Combined values plus `BACKEND_DISCOVERY_SERVICE` and `BACKEND_DISCOVERY_PORT`  |
 | Delivery server  | `HOST`, `PORT`                                                                 |
 
 Every browser process additionally requires one shared
@@ -60,6 +61,11 @@ existing same-host ZeroMQ transport. Application code selects Datastore for
 Message Board data. The standalone gateway creates a separate Datastore-backed
 subscription registry and isolates its records with the required namespace.
 Infrastructure passes these values; it does not choose a storage provider.
+
+`BACKEND_URLS` is the comma-separated local Compose fixture and `BACKEND_URL`
+remains its legacy single-backend form. Production Kubernetes gateways use
+`BACKEND_DISCOVERY_SERVICE` and `BACKEND_DISCOVERY_PORT` for GKE service DNS;
+they do not configure a fixed backend list.
 
 For example, start the native application against a disposable Datastore
 emulator:

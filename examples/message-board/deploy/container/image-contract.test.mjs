@@ -200,8 +200,8 @@ test("runtime commands keep Node as PID 1 and stop cleanly", () => {
     for (const signal of ["TERM", "INT"]) {
       const containers = startRuntimeMatrix({ messageBoard, network, owned, signal, suffix });
       const identity = docker(["image", "inspect", messageBoard, "--format", "{{.Id}}"]).trim();
-      assert.equal(containerImage(containers[0]), identity);
       assert.equal(containerImage(containers[1]), identity);
+      assert.equal(containerImage(containers[2]), identity);
       for (const name of containers.toReversed()) {
         const executable = docker(["exec", name, "readlink", "/proc/1/exe"]).trim();
         assert.match(executable, /\/node$/u);
@@ -338,7 +338,7 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
   ]);
   waitForLog(gateway, /MessageBoard gateway ready/u);
   exerciseRegistry(network, "http://gateway:18082", "http://localhost:18082", messageBoard);
-  return [application, combined, gateway, delivery];
+  return [delivery, application, combined, gateway];
 }
 
 function waitForLog(container, expected) {

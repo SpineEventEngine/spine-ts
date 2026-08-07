@@ -69,7 +69,7 @@ kind: Deployment
 metadata:
   name: message-board-gateway
 spec:
-  replicas: 2
+  replicas: 1
   selector: { matchLabels: { app: message-board-gateway } }
   template:
     metadata: { labels: { app: message-board-gateway } }
@@ -93,7 +93,8 @@ spec:
               { name: HOST, value: 0.0.0.0 },
               { name: PORT, value: "8080" },
               { name: NODE_ENV, value: production },
-              { name: BACKEND_URLS, value: http://message-board-application-0.message-board-application-headless:8080,http://message-board-application-1.message-board-application-headless:8080 },
+              { name: BACKEND_DISCOVERY_SERVICE, value: message-board-application-headless },
+              { name: BACKEND_DISCOVERY_PORT, value: "8080" },
             ]
           startupProbe: { tcpSocket: { port: 8080 }, failureThreshold: 30, periodSeconds: 2 }
           readinessProbe: { tcpSocket: { port: 8080 }, periodSeconds: 2 }
@@ -154,9 +155,8 @@ spec:
 ---
 apiVersion: v1
 kind: Service
-metadata: { name: message-board-gateway-headless }
+metadata: { name: message-board-gateway }
 spec:
-  clusterIP: None
   selector: { app: message-board-gateway }
   ports: [{ port: 8080, targetPort: 8080 }]
 ---
@@ -259,4 +259,4 @@ data:
             cluster_name: gateway
             endpoints:
               - lb_endpoints:
-                  - endpoint: { address: { socket_address: { address: message-board-gateway-headless, port_value: 8080 } } }
+                  - endpoint: { address: { socket_address: { address: message-board-gateway, port_value: 8080 } } }

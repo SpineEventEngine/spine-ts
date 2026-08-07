@@ -199,10 +199,14 @@ describe("NativeSubscriptionCreator", () => {
       ),
     };
     const backend = await native.subscribe(wire, signal);
+    expect(backend).toEqual({
+      kind: "backend-subscription-envelope",
+      bytes: toBinary(SubscriptionSchema, create(SubscriptionSchema, { id: { value: "one" } })),
+    });
     const updates: Uint8Array[] = [];
     await native.activate(
       {
-        wire,
+        wire: backend,
         updates: (update) => {
           updates.push(update.bytes);
           return Promise.resolve();

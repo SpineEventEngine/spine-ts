@@ -47,7 +47,7 @@ test("combined Compose serves signed MessageBoard behavior through Envoy", () =>
       ["combined", "delivery", "envoy"],
       new Map([["combined", /MessageBoard combined server ready/u]]),
     );
-    const output = client(project, "envoy", "full");
+    const output = client(project, "envoy", "distributed-full");
     assert.match(output, /query-ok/u);
     assert.match(output, /full-ok/u);
     assert.equal(
@@ -65,48 +65,50 @@ test("combined Compose serves signed MessageBoard behavior through Envoy", () =>
   }
 });
 
-test("standalone Compose preserves public behavior and cancellation across gateway failover", () => {
+test("standalone Compose recovers its one Gateway from an expected client interruption", () => {
   const project = projectName();
   try {
     run(project, standalone, ["up", "--detach"]);
     waitFor(
       project,
       standalone,
-      ["application-1", "application-2", "gateway-1", "gateway-2", "delivery", "envoy"],
+      ["application-1", "application-2", "gateway", "delivery", "envoy"],
       new Map([
         ["application-1", /MessageBoard application ready/u],
         ["application-2", /MessageBoard application ready/u],
-        ["gateway-1", /MessageBoard gateway ready/u],
-        ["gateway-2", /MessageBoard gateway ready/u],
+        ["gateway", /MessageBoard gateway ready/u],
       ]),
     );
 
-    assert.match(client(project, "envoy", "full"), /full-ok/u);
-    const subscription = client(project, "gateway-1", "subscribe").trim();
+    let output;
+    try {
+      output = client(project, "envoy", "distributed-full");
+    } catch (error) {
+      throw new Error(
+        `Standalone public subscription failed. ${String(error)}\n${serviceLogs(project, standalone, ["gateway", "application-1", "application-2"])}`,
+      );
+    }
+    assert.match(output, /full-ok/u);
+    const subscription = client(project, "gateway", "subscribe").trim();
     assert.notEqual(subscription, "");
 
-    run(project, standalone, ["kill", "--signal", "SIGKILL", "gateway-1"]);
-    waitStopped(project, standalone, "gateway-1");
-    waitFor(project, standalone, ["gateway-2"]);
-    const state = status(project, standalone);
-    assert.equal(state.has("gateway-1"), false);
-    assert.equal(state.get("gateway-2")?.state, "running");
-    assert.match(client(project, "gateway-2", "cancel", subscription), /cancel-ok/u);
+    run(project, standalone, ["kill", "--signal", "SIGKILL", "gateway"]);
+    waitStopped(project, standalone, "gateway");
 
-    run(project, standalone, ["up", "--detach", "gateway-1"]);
+    run(project, standalone, ["up", "--detach", "gateway"]);
     waitFor(
       project,
       standalone,
-      ["gateway-1"],
-      new Map([["gateway-1", /MessageBoard gateway ready/u]]),
+      ["gateway"],
+      new Map([["gateway", /MessageBoard gateway ready/u]]),
     );
-    assert.match(client(project, "gateway-1", "assert-cancelled", subscription), /cancelled-ok/u);
+    assert.match(client(project, "gateway", "cancel", subscription), /cancel-ok/u);
+    assert.match(client(project, "gateway", "assert-cancelled", subscription), /cancelled-ok/u);
     assert.match(client(project, "envoy", "query"), /query-ok/u);
 
-    run(project, standalone, ["kill", "--signal", "SIGTERM", "gateway-1"]);
-    waitStopped(project, standalone, "gateway-1");
-    assert.equal(status(project, standalone, true).get("gateway-1")?.exitCode, 0);
-    assert.equal(status(project, standalone).get("gateway-2")?.state, "running");
+    run(project, standalone, ["kill", "--signal", "SIGTERM", "gateway"]);
+    waitStopped(project, standalone, "gateway");
+    assert.equal(status(project, standalone, true).get("gateway")?.exitCode, 0);
   } finally {
     cleanup(project, standalone);
   }
@@ -197,6 +199,14 @@ function diagnostics(project, compose) {
     return run(project, compose, ["ps", "--all", "--format", "json"]);
   } catch (error) {
     return `Could not collect running-service diagnostics: ${String(error)}`;
+  }
+}
+
+function serviceLogs(project, compose, services) {
+  try {
+    return run(project, compose, ["logs", "--tail", "200", ...services]);
+  } catch (error) {
+    return `Could not collect service logs: ${String(error)}`;
   }
 }
 

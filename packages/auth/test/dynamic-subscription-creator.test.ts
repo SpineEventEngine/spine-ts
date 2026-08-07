@@ -31,6 +31,66 @@ describe("DynamicSubscriptionCreator", () => {
     await activation;
   });
 
+  it("activates every node with its private native subscription envelope", async () => {
+    const received = new Map<string, { readonly kind: string; readonly bytes: Uint8Array }>();
+    const delivered = deferred();
+    const owner = new DynamicUnaryForwarder({
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          subscribe: () =>
+            Promise.resolve({
+              kind: "backend-subscription-envelope" as const,
+              bytes: new Uint8Array([node.id === "a" ? 1 : 2]),
+            }),
+          activate: async (request, signal) => {
+            received.set(node.id, { kind: request.wire.kind, bytes: request.wire.bytes.slice() });
+            if (node.id === "a") {
+              await request.updates({ kind: "subscription-update", bytes: new Uint8Array([7]) });
+            }
+            await new Promise<void>((resolve) => {
+              signal.addEventListener(
+                "abort",
+                () => {
+                  resolve();
+                },
+                { once: true },
+              );
+            });
+          },
+        }),
+    });
+    const creator = new DynamicSubscriptionCreator(owner);
+    const wire = subscription();
+    await owner.reconcile([
+      new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" }),
+      new ApplicationNode({ id: "b", endpoint: "http://10.0.0.2" }),
+    ]);
+    await creator.subscribe(wire, new AbortController().signal);
+    const controller = new AbortController();
+    const activation = creator.activate(
+      {
+        wire,
+        updates: () => {
+          delivered.resolve(undefined);
+          return Promise.resolve();
+        },
+      },
+      controller.signal,
+    );
+    await delivered.promise;
+
+    expect(received).toEqual(
+      new Map([
+        ["a", { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) }],
+        ["b", { kind: "backend-subscription-envelope", bytes: new Uint8Array([2]) }],
+      ]),
+    );
+    expect(received.get("a")?.bytes).not.toEqual(wire.bytes);
+    controller.abort();
+    await activation;
+  });
+
   it("rehydrates through the adapter before a native node is discovered", async () => {
     let subscriptions = 0;
     const owner = new DynamicUnaryForwarder({
