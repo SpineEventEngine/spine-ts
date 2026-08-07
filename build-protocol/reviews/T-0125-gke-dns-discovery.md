@@ -100,3 +100,11 @@ configured role/profile and absence of visible mismatch are acceptance evidence.
 All configured reviewer profiles matched their dispatches; runtime
 self-introspection was unavailable and no mismatch or fallback was visible.
 Only API and performance/reliability reopen after the focused correction.
+
+## Final Re-review Dispatch
+
+Correction `574e418a` passes 27 focused tests with 95.00% branch coverage and
+all affected typecheck, lint, TSDoc, metadata/snippet, strict snippet,
+audience/API documentation, formatting, and diff gates. The existing
+TypeScript/API and performance/reliability reviewers alone recheck their
+remaining findings, each with explicit `gpt-5.6-terra` / `high`.
