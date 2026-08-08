@@ -507,7 +507,7 @@ validate through the framework facade:
 const violations = validation.validate(CreateTaskSchema, command);
 ```
 
-The facade wraps `@spine-event-engine/validation-ts` and adds framework checks
+The facade wraps `@spine-event-engine/validation` `2.0.0-snapshot.7` and adds framework checks
 for state-transition validation, command/event envelope validation, and domain
 runtime rules.
 

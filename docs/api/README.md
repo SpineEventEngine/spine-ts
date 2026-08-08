@@ -212,22 +212,16 @@ store the original `Event` envelope, and both replay only the routed row target
 before the transaction and `Stand` update. Before handler code runs, replay
 validates the row label, pending `TO_DELIVER` status, tenant, payload/schema,
 target type URL, and routed target ID.
-For supported rows, an internal pre-callback gate reads the 100 retained
-attempt slots for the exact inbox message. At that bound it skips the callback
-and another attempt, claims the exact row under the live shard fence, and marks
-it `DELIVERED` without accepted-work or failure-budget use. A lease/fencing
-failure through the final guard before durable marking remains
-`LEASE` / `LEASE_INACTIVE`, retains one bounded attempt at the 100-slot cap,
-reports one failure with no accepted work, and leaves the row `TO_DELIVER`. If
-the mark fails and cleanup succeeds, the authoritative row remains `TO_DELIVER`
-and the local run returns one frozen, bounded, stack-free exhaustion-facts
-object. If cleanup also fails, the same one-failure accounting instead returns
-a `CLEANUP` result whose `AggregateError` contains the original mark error plus
-the cleanup error; that error is not promised frozen, bounded, or stack-free. It
-is not a public
-monitor/action, scheduler/backoff, dead-letter, production-topology, catch-up,
-or adapter policy. Broader inbox lifecycle management and transport topology
-are not provided by this API.
+Pending and delivered `InboxMessage` rows are stored directly. Shard ownership
+is the only concurrent-delivery exclusion; there is no per-message claim or
+separate dedup record. Delivered rows are the deduplication fact. Handler
+effects and the delivered-row compare-and-set are not one transaction, so a
+lost acknowledgement can redeliver after restart and downstream handling must
+be idempotent. `DeliveryMonitor` is the explicit failure-policy seam: by
+default it marks a failed reception delivered and continues independent targets;
+an application can instead choose the immediate repeat action. The framework
+persists no attempts, quarantine, receipts, markers, timers, backoff,
+dead-letter storage, or scheduler policy.
 Process-manager
 repositories with authentic generated metadata do execute through the local
 command/event buses: default command routing reads the first command field,
@@ -486,37 +480,15 @@ skipped before callback invocation, acceptance, failure recording, or
 failure-budget consumption. Malformed or deprecated stored `IMPORT_EVENT` data
 fails closed as `DeliveryStorageCorruptionError` before replay begins.
 
-Endpoint failures leave rows pending for a later framework run only when
-cleanup succeeds. Pre-callback claim, validation, and lease-fencing failures do
-not increment accepted work, but they increment failed work and count toward
-the framework failure bound. Once an endpoint callback has been invoked,
-endpoint failures and framework cleanup or delivery-status failures after that
-callback are accepted work and may appear in failed work. Supported endpoint
-failures are also retained internally as sanitized attempt records with
-message/inbox/shard identity, label, node, attempted time, accepted flag, and
-stable failure stage/reason. Retained records do not include raw `Any.value`
-payload bytes, raw user errors, stack traces, or unbounded exception text.
-Before a supported callback runs, the internal retained-attempt count for that
-exact inbox message is checked against the same 100-slot bound. An exhausted
-row skips the callback and another retained attempt, then is claim-fenced and
-marked `DELIVERED` without accepted-work or failure-budget use. Lease/fencing
-through the final pre-mark guard retains `LEASE` / `LEASE_INACTIVE` attempt
-facts and one-failure accounting without accepted work. A mark failure
-with successful cleanup leaves the authoritative row `TO_DELIVER` and
-contributes one frozen, bounded, stack-free exhaustion-facts observation. If
-cleanup also fails, direct run and loop accounting still record one `CLEANUP`
-failure whose `AggregateError` contains the original mark error plus cleanup
-error and has no frozen, bounded, or stack-free guarantee. This narrow gate is
-internal; it does not add public retry-policy configuration or public
-monitor/action behavior. Live shard ownership plus live per-message ownership
-block competing callback dispatch while
-ownership is current; expired per-message ownership may be replaced during
-claim compare-and-set using the storage clock as abandoned-work recovery. If a
-stale owner continues after losing renewal, endpoint callback side effects are
-at-least-once/replay-safe: later final fencing can prevent stale finalization,
-but it cannot uninvoke a callback that already ran. Broader production
-supervision, cancellation, and retry-monitor policy are not provided by this
-API.
+`DeliveryMonitor` contains endpoint failures. Its default reception action
+marks the row delivered; a custom monitor may repeat dispatch immediately.
+If that durable action fails, the row remains pending, later messages for that
+target stop, independent targets continue, and a later run can retry. Shard
+ownership protects only concurrent workers, not endpoint effects. Therefore a
+lost acknowledgement can redeliver after a handler runs, and downstream effects
+must be idempotent. The delivery model has no attempt history, exhaustion,
+claims, quarantine, receipts, markers, timers, backoff, dead-letter storage,
+or scheduler persistence.
 The package does not expose a raw worker callback API; framework-owned replay
 stays behind validated endpoints. Lease renewal uses same-event-loop timers
 around in-process callbacks, so CPU-bound synchronous callbacks can still starve

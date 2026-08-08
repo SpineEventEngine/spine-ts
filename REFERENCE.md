@@ -23,8 +23,8 @@ returned `RunningServer`. `Server.run()` is process-owning mode and coordinates
 
 Browser applications configure `ServerOptions.browser` with exact origins,
 session resolution, authorization, actor/tenant context resolution, clock,
-principal fingerprinting, optional schema registry, and optional strict opaque
-cookies. The server keeps its native HTTP/2 backend on an ephemeral loopback
+optional schema registry, and optional strict opaque cookies. The server keeps
+its native HTTP/2 backend on an ephemeral loopback
 port and returns only the authenticated Connect/gRPC-Web URL. Framework code
 owns listener creation, CORS, routing, readiness, rollback, subscription
 bindings, and shutdown. Application code owns identity-provider flows, durable

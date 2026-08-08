@@ -36,7 +36,8 @@ contract.
 
 - Current documentation and governing records only; no production code or
   historical-record rewrites.
-- The orchestrator is the sole documentation writer.
+- The serialized `implementer` owns documentation edits; the orchestrator
+  coordinates review. This preserves one-writer semantics for current claims.
 - No replacement persistence or compatibility guidance may be invented.
 
 ## Review Dispatch

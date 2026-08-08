@@ -36,6 +36,6 @@ New task logs use the canonical directory-style path `build-protocol/tasks/<task
 
 - Spine JVM reference: `../spine-jvm-docs`.
 - Protobuf runtime: Buf `@bufbuild/protobuf` / `@bufbuild/protoc-gen-es` generated TypeScript.
-- Validation runtime: `SpineEventEngine/validation-ts`, observed at `2.0.0-snapshot.4` in the cloned research source.
+- Validation runtime: `@spine-event-engine/validation` `2.0.0-snapshot.7`.
 - Decorator baseline: TypeScript 5+ standard decorators. Legacy `experimentalDecorators` semantics and `emitDecoratorMetadata` must not be assumed unless explicitly isolated behind a compatibility adapter.
 - Local IPC baseline: ZeroMQ over local IPC only, hidden behind framework transport abstractions.

@@ -154,6 +154,6 @@ Apache 2.0.
 ## 🔗 Related projects
 
 - [Spine Event Engine](https://spine.io/)
-- [Spine Validation for TypeScript](https://github.com/SpineEventEngine/validation-ts)
+- [Spine Validation for TypeScript](https://github.com/SpineEventEngine/validation)
 - [Protobuf-ES](https://github.com/bufbuild/protobuf-es)
 - [Connect](https://connectrpc.com/)

@@ -109,7 +109,7 @@ transport topics.
 
 `@spine-event-engine/core` owns the validation interface exposed to framework users.
 Single-message validation is delegated to
-`@spine-event-engine/validation-ts@2.0.0-snapshot.4`, but
+`@spine-event-engine/validation@2.0.0-snapshot.7`, but
 callers use `Validate.message()` and `Validate.check()` from core. This keeps the
 experimental upstream API and generated upstream validation error types behind a
 framework seam.
@@ -525,9 +525,8 @@ The following runtime pieces are not available in the verified local/example con
 - production transport-backed/background worker topology and supervision,
   production catch-up orchestration, durable production storage adapters, entity
   storage/cache catch-up, and production tenant-index policy. Durable inbox
-  records, dedup guards, shard leases, per-message claims, bounded internal
-  shard replay, the framework-owned local delivery worker/loop boundary for
-  supported labels, and the internal tenant index are present;
+  records and shard ownership are present; delivered rows are the deduplication
+  fact, with no per-message claim or separate dedup record;
 - richer query filtering, retained subscription update replay, and
   cross-process subscription stream ownership;
 - full system-context runtime, command-log repositories, system event taxonomy,
@@ -632,14 +631,17 @@ contract in their own packages; choosing and operating either adapter remains
 application deployment work, not a production deployment guarantee.
 
 `RecordSpec` binds one generated Protobuf record schema, optional generated ID
-schema, ID extraction, and deterministic query columns. `RecordStorage` stores
+schema, ID extraction, deterministic query columns, and an optional source
+type (defaulting to the record type). `RecordStorage` stores
 identified Protobuf records, clones them on write/read, deletes by ID, and
 queries by exact IDs, exact column filters, deterministic sort order on `id`,
 stored columns, or dotted record paths, stable continuations after sorted row
 keys, non-negative offsets applied after sorting and before positive limits,
 and simple masks on cloned results.
 `StorageContext` carries the bounded-context storage namespace plus optional
-tenant scoping for multitenant storages.
+tenant scoping for multitenant storages. Providers resolve direct record
+families from source type, record type, and optional external `StorageGroup`;
+their layouts are structurally validated and never migrated automatically.
 
 `EventStore` is a higher-level framework delegate over
 `RecordStorage<EventId, Event>`. It is intentionally created directly by
@@ -662,18 +664,17 @@ preserves byte arrays used by packed Protobuf `Any` payloads.
 Aggregate latest-state, optional state history, and traceability event-journal
 storage use the shared entity-storage provider seam. Aggregate loading uses the
 latest persisted state; it never reconstructs state by snapshot-plus-replay.
-The framework persists durable inbox rows through `RecordStorage`,
-keeps live deduplication guards beside those rows, coordinates shard ownership
-with durable shard leases, and uses bounded internal replay for local
-framework-owned shard draining. A replay run picks up, renews, and releases its
-shard session with compare-and-set fencing. Rows unavailable to the active
-worker are skipped before endpoint invocation, and bounded replay can scan past
-unavailable head rows to reach later available rows. Its callback limit caps
-endpoint callbacks that actually run. Newly observed rows stop at the storage
-read cap plus that limit while pending scans continue after stable inbox row
-keys instead of moving absolute offsets. Endpoint callbacks receive independent
-message snapshots only for `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and
-`REACT_UPON_EVENT`; their
+The framework persists pending and delivered `InboxMessage` rows directly
+through `RecordStorage`. Shard ownership is the only concurrent-delivery
+exclusion; it creates neither a per-message claim nor a separate dedup record.
+Delivered rows are the deduplication fact. Handler effects and the delivered-row
+compare-and-set are not transactional, so a lost acknowledgement can redeliver
+after restart and downstream handling must be idempotent. `DeliveryMonitor`
+owns reception-failure policy: its default marks a failed reception delivered
+and continues independent targets; applications may choose the immediate repeat
+action. It adds no attempts, quarantine, receipts, markers, timers, backoff,
+dead-letter storage, or scheduler policy. Callback snapshots for
+`HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT` copy their
 `Date` values and `Any.value` bytes are copied. `CATCH_UP` stays pending and
 never reaches callbacks or returned failures. Successful callbacks mark rows
 `DELIVERED`; endpoint failures remain pending for later runs only when
