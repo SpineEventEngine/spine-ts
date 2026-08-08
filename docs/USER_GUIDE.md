@@ -318,6 +318,14 @@ message TaskList {
 
 ### Entity columns
 
+`(column) = true` is a storage and query declaration. When Spine TS writes an
+entity state, it materializes that field as a named value beside the Protobuf
+payload. A query can then filter or sort by the generated column. For example,
+the `open_task_count` field above becomes `TaskListColumns.openTaskCount`, which
+the query in section 8 uses in both `gt(...)` and `orderBy(...)`. Fields without
+the option remain part of the state message, but are not query columns. Mark
+only fields that the application needs to filter or sort.
+
 Entity code generation emits a descriptor-backed definition next to the
 state schema. Register that value once and reuse the returned immutable column
 collection. The imports and exported declaration below come from
@@ -1164,6 +1172,8 @@ factory must match delivery storage, and a multi-shard run names its shard:
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import {
   DeliveryBuilder,
+  DeliveryMonitor,
+  FailedReception,
   ShardedWorkRegistry,
   UniformAcrossAllShards,
 } from "@spine-event-engine/server";
@@ -1176,13 +1186,15 @@ const delivery = new DeliveryBuilder()
   .withStorageFactory(storageFactory)
   .withWorkRegistry(new ShardedWorkRegistry({ context, storageFactory }))
   .withStrategy(strategy)
-  .withMonitor({
-    onPage(page) {
-      return page.failed === 0;
-    },
-  })
+  .withMonitor(
+    new (class extends DeliveryMonitor {
+      override onReceptionFailure(reception: FailedReception) {
+        // The default is reception.markDelivered(). Return this action to make it explicit.
+        return reception.markDelivered();
+      }
+    })(),
+  )
   .withPageSize(250)
-  .withBatchSize(20)
   .withNode("worker-a")
   .build();
 
@@ -1194,14 +1206,17 @@ await delivery.run({
 });
 ```
 
-`result` contains frozen ordered primitive page summaries without messages,
-payload bytes, dates, or errors. Page size is at most 1,000 and batch size is at
-most 1,000 summaries. `onStarted` follows successful pickup; an already-owned
-run calls `onSkipped` and then `onCompleted` with `SKIPPED`. Page/failure and
-terminal hooks run after release. Returning `false` from `onPage` yields
-`STOPPED`. Any hook exception rejects `run()`, prevents later hooks, and leaves
-an acquired shard reusable. This is deliberately not a scheduler, supervisor,
-retry policy, catch-up facility, or remote topology.
+`run()` returns only a terminal status: `COMPLETED`, `SKIPPED`, `FAILED`, or
+`STOPPED`. `pageSize` bounds one Inbox read and is at most 1,000; there is no
+separate batch-size setting or page callback. A `DeliveryMonitor` is the place
+to observe a delivery and choose its failure action. It receives shard pickup
+events, `onDeliveryStarted`, `onDeliveryCompleted(statistics)`, and one failed
+reception at a time. Statistics contain immutable `processed`, `delivered`, and
+`failed` counts. To stop a finite drain, override
+`shouldContinueAfter("DELIVERY")` or `shouldContinueAfter("PAGE")` and return
+`false`. Monitor failures are contained so the shard can be released. This is
+deliberately not a scheduler, supervisor, retry policy, catch-up facility, or
+remote topology.
 
 ### Standalone in-memory delivery server and two-machine topology
 
@@ -1410,6 +1425,41 @@ child-process test coverage, but the runnable to-do application is not a public
 production multi-process topology.
 
 ## 12. Develop with Google Cloud Datastore
+
+### First: how a record family gets a physical name
+
+A record family is the durable home for one kind of Protobuf record. Its
+identity has three parts: the source Proto type, the stored record Proto type,
+and an optional `StorageGroup`. The source names an ungrouped family. A group
+separates related stored records, such as Entity history, from the current
+record family.
+
+For example, imagine source type `acme.tasks.Task`, stored record type
+`spine.server.entity.EntityRecord`, and
+`new StorageGroup("acme.tasks.Task")`. The default grouped names are
+`acme_tasks_Task_EntityRecord` in MySQL and
+`acme.tasks.Task_EntityRecord` in Datastore. Without the group, the source type
+alone produces `acme_tasks_Task` in MySQL and `acme.tasks.Task` in Datastore.
+The adapters keep the original Protobuf payload in each row; the name decides
+which table or kind contains that record family, not how the message is
+decoded.
+
+Use a factory mapping when an application needs a shorter or existing physical
+name. MySQL's `setTableName(sourceSchema, recordSchema, "task_history")` maps a
+grouped source/record pair to a table. Datastore's
+`organizeRecords(sourceSchema, recordSchema, { kind: "TaskHistory" })` maps
+the same pair to a kind. Set these mappings while building the factory, before
+creating storage handles. The exact source and record schemas matter; changing
+only the table or kind name does not change the stored Protobuf record.
+
+`RecordSpec` can also declare `RecordColumn` values. On every write, providers
+materialize those named values beside the authoritative Protobuf bytes. A
+`RecordQuery` filters with `{ filters: [{ column: "state", value: "OPEN" }] }`
+and sorts with `{ sort: [{ field: "state", direction: "asc" }] }`. In other
+words, declare a column for a value that you plan to look up or order by; do
+not try to filter an undeclared payload path. Entity `(column)` options follow
+the same idea: generated Entity columns become materialized storage values for
+their supported query filters and sorts.
 
 `@spine-event-engine/storage-datastore` is an optional implementation of the public
 `@spine-event-engine/storage` port. It uses the official Google Cloud Datastore client

@@ -28,6 +28,11 @@ const staleDocumentationPatterns = [
     /\bpnpm\s+(?:add|install)\s+@spine-event-engine\/(?:core|proto|storage(?:-(?:datastore|rdbms))?|transport)\b/gu,
   ],
   ["stale missing storage-adapter claim", /\b(?:Datastore|RDBMS)\s+(?:is\s+)?not available\b/gu],
+  ["retired delivery page callback", /\bonPage\s*\(/gu],
+  ["retired delivery batch-size builder", /\bwithBatchSize\s*\(/gu],
+  ["retired delivery started hook", /\bonStarted\s*\(/gu],
+  ["retired delivery skipped hook", /\bonSkipped\s*\(/gu],
+  ["retired delivery completed hook", /\bonCompleted\s*\(/gu],
 ];
 const executionHistoryTerms = [
   "T-\\d{4,}[A-Za-z]*",

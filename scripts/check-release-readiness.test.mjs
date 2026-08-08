@@ -353,6 +353,30 @@ describe("check-release-readiness", () => {
     });
   });
 
+  it("rejects retired delivery observer and batch APIs in reader documentation", () => {
+    withTempRepository((repoRoot) => {
+      writeFileSync(
+        join(repoRoot, "README.md"),
+        [
+          "delivery.onPage(() => true);",
+          "builder.withBatchSize(10);",
+          "observer.onStarted();",
+          "observer.onSkipped();",
+          "observer.onCompleted();",
+        ].join("\n"),
+      );
+      execFileSync("git", ["add", "README.md"], { cwd: repoRoot });
+
+      expect(collectUserFacingDocumentationProblems(repoRoot)).toEqual([
+        "README.md:1: retired delivery page callback: onPage(",
+        "README.md:2: retired delivery batch-size builder: withBatchSize(",
+        "README.md:3: retired delivery started hook: onStarted(",
+        "README.md:4: retired delivery skipped hook: onSkipped(",
+        "README.md:5: retired delivery completed hook: onCompleted(",
+      ]);
+    });
+  });
+
   it("accepts an IPv4 listen address without treating it as a placeholder version", () => {
     withTempRepository((repoRoot) => {
       writeFileSync(join(repoRoot, "README.md"), "Listen on `0.0.0.0`.\n");
