@@ -81,7 +81,21 @@ describe("DeliveryMonitor delivery", () => {
 
   it("accepts an explicit complete WorkerId", () => {
     const worker = { nodeId: { value: "node-a" }, value: "restart-a" };
-    expect(build().withWorker(worker).build().worker).toMatchObject(worker);
+    const delivery = build().withWorker(worker).build();
+    worker.nodeId.value = "mutated";
+    worker.value = "mutated";
+    expect(delivery.worker).toMatchObject({ nodeId: { value: "node-a" }, value: "restart-a" });
+    expect(() => {
+      (delivery.worker.nodeId! as { value: string }).value = "mutated-again";
+    }).toThrow();
+  });
+
+  it("rejects conflicting direct worker and node identities", () => {
+    expect(() =>
+      build()
+        .withNode("node-a")
+        .withWorker({ nodeId: { value: "node-b" }, value: "x" }),
+    ).toThrow("must match");
   });
 
   it("maps skipped and failed pickup outcomes without rejecting", async () => {
