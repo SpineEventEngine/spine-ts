@@ -12,7 +12,7 @@ the caller. `run()` delegates `SIGINT` and `SIGTERM` shutdown to `Server`.
 
 Browser configuration supplies the Message Board type registry, `LocalBoardSession`
 resolver and clock, `BoardAccessPolicy`, `BoardContextResolver`, exact
-Vite origin, and stable principal fingerprint. Generic listener, CORS, router,
+Vite origin. Generic listener, CORS, router,
 subscription-binding, rollback, and lifecycle modules must remain in the
 framework rather than returning to this package.
 

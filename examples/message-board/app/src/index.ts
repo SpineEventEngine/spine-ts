@@ -235,7 +235,6 @@ export class MessageBoardApplication {
               authorize: policy.authorize.bind(policy),
               contexts: new BoardContextResolver(),
               clock: LocalBoardSession.clock,
-              fingerprint: (principal) => principal.id,
               ...(options.bindings === undefined ? {} : { bindings: options.bindings }),
             },
           }
