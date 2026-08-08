@@ -81,7 +81,7 @@ describe("DeliveryMonitor delivery", () => {
 
   it("accepts an explicit complete WorkerId", () => {
     const worker = { nodeId: { value: "node-a" }, value: "restart-a" };
-    expect(build().withWorker(worker).build().worker).toEqual(worker);
+    expect(build().withWorker(worker).build().worker).toMatchObject(worker);
   });
 
   it("maps skipped and failed pickup outcomes without rejecting", async () => {

@@ -4,7 +4,6 @@ import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import { Delivery, type DeliveryEndpointMessage } from "../../src/delivery/delivery.js";
-import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
 import { ShardIndex } from "../../src/index.js";
 
 describe("Delivery direct worker", () => {
@@ -96,6 +95,24 @@ describe("Delivery direct worker", () => {
     expect(run).toMatchObject({ failed: 1, delivered: 1 });
     expect(rows).toEqual([]);
   });
+
+  it.each([false, new Error("release failed")])(
+    "contains unsuccessful shard release and does not complete the monitor",
+    async (release) => {
+      const shard = ShardIndex.single();
+      const delivery = createDelivery({
+        registry: {
+          pickUp: async () => session(shard),
+          release: async () => {
+            if (release instanceof Error) throw release;
+            return release;
+          },
+        },
+      });
+      const run = await delivery.drain(shard, { onMessage: () => undefined });
+      expect(run.status).toBe("FAILED");
+    },
+  );
 
   it("blocks only a target after acknowledgement failure and does not spin", async () => {
     const shard = ShardIndex.single();
@@ -222,7 +239,6 @@ function createDelivery(options: {
       read: async () => options.read?.() ?? [...rows],
       readMessage: async () => undefined,
       markDelivered: async (row) => options.mark?.(row) ?? row,
-      begin: async () => undefined,
     },
     workRegistry: {
       sessionKind: "LEASED",

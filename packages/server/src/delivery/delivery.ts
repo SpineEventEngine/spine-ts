@@ -253,6 +253,7 @@ export class Delivery {
       return result("STOPPED");
     }
     const statistics = counts();
+    const failures: DeliveryFailure[] = [];
     let current = session;
     const renew = async (): Promise<boolean> => {
       if (current.kind !== "LEASED" || this.shards.renew === undefined) return true;
@@ -303,6 +304,7 @@ export class Delivery {
             statistics.delivered += 1;
           } catch (error) {
             statistics.failed += 1;
+            failures.push(Object.freeze({ message: snapshot(message), error }));
             const reception = new FailedReception(
               message,
               error,
@@ -346,12 +348,15 @@ export class Delivery {
         // Reached a full page without progress: continue past it once. A later
         // independent target may still be actionable; exhaustion ends the run.
       }
-      return result("DRAINED", statistics);
+      return result("DRAINED", statistics, failures);
     } finally {
       const released = await safelyValue(
         () => this.shards.release(current, options.operation),
         false,
       );
+      if (!released) {
+        return result("FAILED", { ...statistics, failed: statistics.failed + 1 }, failures);
+      }
       if (released) {
         await safely(() =>
           this.#monitor.onDeliveryCompleted(
@@ -451,8 +456,21 @@ function snapshotWorker(worker: WorkerId): WorkerId {
 function counts() {
   return { processed: 0, accepted: 0, delivered: 0, failed: 0 };
 }
-function result(status: DeliveryRun["status"], value = counts()): DeliveryRun {
-  return Object.freeze({ status, ...value, failures: Object.freeze([]) });
+function result(
+  status: DeliveryRun["status"],
+  value = counts(),
+  failures: readonly DeliveryFailure[] = [],
+): DeliveryRun {
+  return Object.freeze({ status, ...value, failures: Object.freeze([...failures]) });
+}
+function snapshot(message: InboxMessage): InboxMessage {
+  return Object.freeze({
+    ...message,
+    id: Object.freeze({ ...message.id }),
+    inboxId: Object.freeze({ ...message.inboxId }),
+    shard: new ShardIndex(message.shard.index, message.shard.ofTotal),
+    whenReceived: new Date(message.whenReceived),
+  });
 }
 async function safely(action: () => void | Promise<void>): Promise<boolean> {
   try {

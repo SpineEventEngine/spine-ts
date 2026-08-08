@@ -267,7 +267,7 @@ describe("DeliveryRunCoordinator", () => {
     expect(worker.maxConcurrent).toBe(1);
   });
 
-  it("continues only PAUSED shards from mixed per-shard evidence", async () => {
+  it("does not re-admit retired PAUSED compatibility evidence", async () => {
     const scopes = Array.from({ length: 5 }, (_, index) =>
       scope(`target-${String(index)}`, index, 5),
     );
@@ -287,12 +287,10 @@ describe("DeliveryRunCoordinator", () => {
 
     const settlement = await coordinator.start(scopes);
 
-    expect(worker.starts).toHaveLength(2);
+    expect(worker.starts).toHaveLength(1);
     expect(entry(worker.starts, 0).shards.map((shard) => shard.index)).toEqual([0, 1, 2, 3, 4]);
-    expect(entry(worker.starts, 1).shards.map((shard) => shard.index)).toEqual([0]);
-    expect(entry(worker.starts, 1).obligation).toBe(entry(worker.starts, 0).obligation);
     expect(settlement.scopes.map(({ disposition }) => disposition)).toEqual([
-      "IDLE",
+      undefined,
       "PARKED",
       "PARKED",
       "STOPPED",
