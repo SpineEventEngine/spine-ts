@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/require-await */
 
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { create } from "@bufbuild/protobuf";
+import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -80,7 +82,7 @@ describe("DeliveryMonitor delivery", () => {
   });
 
   it("accepts an explicit complete WorkerId", () => {
-    const worker = { nodeId: { value: "node-a" }, value: "restart-a" };
+    const worker = create(WorkerIdSchema, { nodeId: { value: "node-a" }, value: "restart-a" });
     const delivery = build().withWorker(worker).build();
     worker.nodeId.value = "mutated";
     worker.value = "mutated";
@@ -96,7 +98,7 @@ describe("DeliveryMonitor delivery", () => {
     expect(() =>
       build()
         .withNode("node-a")
-        .withWorker({ nodeId: { value: "node-b" }, value: "x" }),
+        .withWorker(create(WorkerIdSchema, { nodeId: { value: "node-b" }, value: "x" })),
     ).toThrow("must match");
   });
 
@@ -116,6 +118,7 @@ describe("DeliveryMonitor delivery", () => {
       .withWorkRegistry({
         sessionKind: "LEASED",
         pickUp: async () => undefined,
+        validateOwnership: async () => undefined,
         release: async () => true,
       })
       .build()
@@ -127,6 +130,7 @@ describe("DeliveryMonitor delivery", () => {
         pickUp: async () => {
           throw new Error("pickup failed");
         },
+        validateOwnership: async () => undefined,
         release: async () => true,
       })
       .build()
@@ -223,7 +227,7 @@ describe("DeliveryMonitor delivery", () => {
         ...registry(shard),
         pickUp: async () => {
           pickups += 1;
-          return { kind: "LEASED" as const, shard };
+          return leasedSession(shard);
         },
       },
     });
@@ -417,11 +421,21 @@ function message(signalId: string, targetId: string, shard: ShardIndex) {
   };
 }
 function registry(shard: ShardIndex) {
+  const session = leasedSession(shard);
   return {
     sessionKind: "LEASED" as const,
-    pickUp: async () => ({ kind: "LEASED" as const, shard }),
-    validateOwnership: async (session: { readonly kind: "LEASED"; readonly shard: ShardIndex }) =>
-      session,
+    pickUp: async () => session,
+    validateOwnership: async () => session,
     release: async () => true,
+  };
+}
+
+function leasedSession(shard: ShardIndex) {
+  return {
+    kind: "LEASED" as const,
+    shard,
+    worker: create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
+    pickedUpAt: new Date(0),
+    expiresAt: new Date(60_000),
   };
 }
