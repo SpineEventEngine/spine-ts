@@ -3,6 +3,14 @@ import { randomUUID } from "node:crypto";
 import { create } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import {
+  ShardIndexSchema,
+  ShardSessionRecordSchema,
+  WorkerIdSchema,
+  type ShardIndex as WireShardIndex,
+  type ShardSessionRecord,
+  type WorkerId,
+} from "@spine-event-engine/proto/delivery";
+import {
   RecordSpec,
   type RecordStorage,
   type StorageContext,
@@ -61,41 +69,30 @@ export class ShardedWorkRegistry {
    * Invalid caller shard, node, and clock values throw before storage access.
    *
    * @param shard Selects the shard to acquire.
-   * @param node Identifies the worker acquiring the shard.
+   * @param worker Supplies the complete stable worker identity acquiring the shard.
    * @returns The leased session, when the shard is available.
    */
-  async pickUp(shard: ShardIndex, node: string): Promise<ShardSession | undefined> {
+  async pickUp(shard: ShardIndex, worker: WorkerId): Promise<ShardSession | undefined> {
     const nextShard = ShardRegistryValues.requireInputShard(shard, "Shard index");
-    const nextNode = ShardRegistryValues.requireInputText(node, "Shard node", maxSessionTextBytes);
-    let now = ShardRegistryValues.requireInputTime(this.#now(), "Shard pickup time");
+    const nextWorker = Direct.worker(worker);
+    let now = Direct.time(this.#now(), "Shard pickup time");
     const storage = this.#storage();
 
     try {
       for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
-        const currentRecord = await ShardRegistryValues.readShardRecord(storage, nextShard.key());
+        const id = Direct.id(nextShard);
+        const currentRecord = await storage.read(id);
         const current =
           currentRecord === undefined
             ? undefined
-            : ShardRegistryValues.readSession(currentRecord, nextShard.key());
-        now = ShardRegistryValues.requireInputTime(this.#now(), "Shard pickup time");
-        if (current !== undefined && current.expiresAt.getTime() > now) {
+            : Direct.session(currentRecord, nextShard, this.#leaseMs);
+        now = Direct.time(this.#now(), "Shard pickup time");
+        if (current?.worker !== undefined && current.expiresAt.getTime() > now) {
           return undefined;
         }
 
-        const next = new ShardSession(
-          randomUUID(),
-          nextShard,
-          nextNode,
-          new Date(now),
-          new Date(now + this.#leaseMs),
-        );
-        const nextRecord = ShardRegistryValues.writeSession(next);
-        const claimed = await ShardRegistryValues.casShardRecord(
-          storage,
-          nextShard.key(),
-          currentRecord,
-          nextRecord,
-        );
+        const next = Direct.owned(nextShard, nextWorker, now, this.#leaseMs);
+        const claimed = await storage.compareAndSet(id, currentRecord, Direct.record(next));
 
         if (claimed) {
           return next;
@@ -115,40 +112,29 @@ export class ShardedWorkRegistry {
    * @returns The renewed session, when the lease fence remains valid.
    */
   async renew(session: ShardSession): Promise<ShardSession | undefined> {
-    const expected = ShardRegistryValues.snapshotSessionClaim(session);
-    let now = ShardRegistryValues.requireInputTime(this.#now(), "Shard renewal time");
+    const expected = Direct.expected(session);
+    let now = Direct.time(this.#now(), "Shard renewal time");
     const storage = this.#storage();
 
     try {
       for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
-        const currentRecord = await ShardRegistryValues.readShardRecord(storage, expected.key);
+        const currentRecord = await storage.read(Direct.id(expected.shard));
         if (currentRecord === undefined) {
           return undefined;
         }
 
-        const current = ShardRegistryValues.readSession(currentRecord, expected.key);
-        now = ShardRegistryValues.requireInputTime(this.#now(), "Shard renewal time");
-        if (current.id !== expected.id || current.node !== expected.node) {
+        const current = Direct.session(currentRecord, expected.shard, this.#leaseMs);
+        now = Direct.time(this.#now(), "Shard renewal time");
+        if (!Direct.sameWorker(current, expected) || !Direct.sameRecord(current, expected)) {
           return undefined;
         }
         if (current.expiresAt.getTime() <= now) {
           return undefined;
         }
 
-        const next = new ShardSession(
-          current.id,
-          current.shard,
-          current.node,
-          current.pickedUpAt,
-          new Date(now + this.#leaseMs),
-        );
+        const next = Direct.owned(current.shard, current.worker!, now, this.#leaseMs);
         if (
-          await ShardRegistryValues.casShardRecord(
-            storage,
-            expected.key,
-            currentRecord,
-            ShardRegistryValues.writeSession(next),
-          )
+          await storage.compareAndSet(Direct.id(expected.shard), currentRecord, Direct.record(next))
         ) {
           return next;
         }
@@ -167,28 +153,32 @@ export class ShardedWorkRegistry {
    * @returns Whether the session was released.
    */
   async release(session: ShardSession): Promise<boolean> {
-    const expected = ShardRegistryValues.snapshotSessionClaim(session);
-    let now = ShardRegistryValues.requireInputTime(this.#now(), "Shard release time");
+    const expected = Direct.expected(session);
+    let now = Direct.time(this.#now(), "Shard release time");
     const storage = this.#storage();
 
     try {
       for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
-        const currentRecord = await ShardRegistryValues.readShardRecord(storage, expected.key);
+        const currentRecord = await storage.read(Direct.id(expected.shard));
         if (currentRecord === undefined) {
           return false;
         }
 
-        const current = ShardRegistryValues.readSession(currentRecord, expected.key);
-        now = ShardRegistryValues.requireInputTime(this.#now(), "Shard release time");
-        if (current.id !== expected.id || current.node !== expected.node) {
+        const current = Direct.session(currentRecord, expected.shard, this.#leaseMs);
+        now = Direct.time(this.#now(), "Shard release time");
+        if (!Direct.sameWorker(current, expected) || !Direct.sameRecord(current, expected)) {
           return false;
         }
-        if (current.expiresAt.getTime() <= now) {
+        if (current.worker === undefined || current.expiresAt.getTime() <= now) {
           return false;
         }
 
         if (
-          await ShardRegistryValues.casShardRecord(storage, expected.key, currentRecord, undefined)
+          await storage.compareAndSet(
+            Direct.id(expected.shard),
+            currentRecord,
+            Direct.unowned(current),
+          )
         ) {
           return true;
         }
@@ -200,9 +190,9 @@ export class ShardedWorkRegistry {
     }
   }
 
-  #storage(): RecordStorage<string, Any> {
+  #storage(): RecordStorage<WireShardIndex, ShardSessionRecord> {
     return this.#storageFactory.createRecordStorage(
-      ShardRegistryValues.shardRegistryContext(this.#context),
+      Direct.context(this.#context),
       shardSessionRecordSpec,
     );
   }
@@ -232,19 +222,12 @@ export class ShardSession {
     // prettier-ignore
 
     /**
-     * Unique pickup session identifier.
-     */
-    readonly id: string,
-
-    /**
      * Shard held by this session.
      */
     readonly shard: ShardIndex,
 
-    /**
-     * Worker node that owns this session.
-     */
-    readonly node: string,
+    /** Complete durable worker identity. */
+    readonly worker: WorkerId | undefined,
 
     /**
      * Time when the shard was picked up.
@@ -341,11 +324,138 @@ interface SessionClaim {
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 const defaultShardLeaseMs = 30_000;
 
-const shardSessionRecordSpec = new RecordSpec<string, Any>({
-  schema: AnySchema,
-  storageKey: "spine.delivery.ShardSession:current",
-  idKind: "string",
-  extractId: (record) => ShardRegistryValues.readStoredSession(record).key,
+export const shardSessionRecordSpec = new RecordSpec<WireShardIndex, ShardSessionRecord>({
+  sourceType: ShardSessionRecordSchema,
+  recordType: ShardSessionRecordSchema,
+  idSchema: ShardIndexSchema,
+  extractId: (record) => {
+    if (record.index === undefined)
+      throw new DeliveryStorageCorruptionError("Shard session index is missing.");
+    return record.index;
+  },
+});
+
+const Direct = Object.freeze({
+  id(shard: ShardIndex): WireShardIndex {
+    return create(ShardIndexSchema, { index: shard.index, ofTotal: shard.ofTotal });
+  },
+  time(value: unknown, label: string): number {
+    if (!(value instanceof Date) || !Number.isFinite(value.getTime())) {
+      throw new Error(`${label} is invalid.`);
+    }
+    return value.getTime();
+  },
+  date(
+    value: { readonly seconds: bigint; readonly nanos: number } | undefined,
+    label: string,
+  ): Date {
+    if (
+      value === undefined ||
+      !Number.isInteger(value.nanos) ||
+      value.nanos < 0 ||
+      value.nanos >= 1_000_000_000
+    ) {
+      throw new DeliveryStorageCorruptionError(`${label} is invalid.`);
+    }
+    const ms = Number(value.seconds) * 1_000 + Math.floor(value.nanos / 1_000_000);
+    if (!Number.isSafeInteger(ms)) throw new DeliveryStorageCorruptionError(`${label} is invalid.`);
+    return new Date(ms);
+  },
+  session(record: ShardSessionRecord, expected: ShardIndex, leaseMs: number): ShardSession {
+    const index = record.index;
+    if (
+      index === undefined ||
+      index.index !== expected.index ||
+      index.ofTotal !== expected.ofTotal
+    ) {
+      throw new DeliveryStorageCorruptionError("Shard session does not match its storage ID.");
+    }
+    const picked = Direct.date(record.whenLastPicked, "Shard pickup time");
+    const worker = record.worker;
+    if (worker === undefined)
+      return new ShardSession(expected, undefined, picked, new Date(picked.getTime() + leaseMs));
+    const node = worker.nodeId?.value;
+    if (
+      typeof node !== "string" ||
+      node.trim().length === 0 ||
+      typeof worker.value !== "string" ||
+      worker.value.trim().length === 0
+    ) {
+      throw new DeliveryStorageCorruptionError("Shard worker is invalid.");
+    }
+    const expires = picked.getTime() + leaseMs;
+    if (!Number.isSafeInteger(expires))
+      throw new DeliveryStorageCorruptionError("Shard lease expiry is invalid.");
+    return new ShardSession(
+      expected,
+      create(WorkerIdSchema, { nodeId: { value: node }, value: worker.value }),
+      picked,
+      new Date(expires),
+    );
+  },
+  owned(shard: ShardIndex, worker: WorkerId, now: number, leaseMs: number): ShardSession {
+    const expires = now + leaseMs;
+    if (!Number.isSafeInteger(expires)) throw new Error("Shard lease expiry is invalid.");
+    return new ShardSession(shard, worker, new Date(now), new Date(expires));
+  },
+  record(session: ShardSession): ShardSessionRecord {
+    const worker = session.worker;
+    if (worker === undefined) throw new Error("Shard worker is invalid.");
+    return create(ShardSessionRecordSchema, {
+      index: Direct.id(session.shard),
+      whenLastPicked: {
+        seconds: BigInt(Math.floor(session.pickedUpAt.getTime() / 1_000)),
+        nanos: (session.pickedUpAt.getTime() % 1_000) * 1_000_000,
+      },
+      worker,
+    });
+  },
+  unowned(session: ShardSession): ShardSessionRecord {
+    return create(ShardSessionRecordSchema, {
+      index: Direct.id(session.shard),
+      whenLastPicked: {
+        seconds: BigInt(Math.floor(session.pickedUpAt.getTime() / 1_000)),
+        nanos: (session.pickedUpAt.getTime() % 1_000) * 1_000_000,
+      },
+    });
+  },
+  expected(session: ShardSession): ShardSession {
+    return session;
+  },
+  sameWorker(first: ShardSession, second: ShardSession): boolean {
+    return (
+      first.worker?.nodeId?.value === second.worker?.nodeId?.value &&
+      first.worker?.value === second.worker?.value
+    );
+  },
+  sameRecord(first: ShardSession, second: ShardSession): boolean {
+    return (
+      first.shard.key() === second.shard.key() &&
+      first.pickedUpAt.getTime() === second.pickedUpAt.getTime() &&
+      Direct.sameWorker(first, second)
+    );
+  },
+  context(context: StorageContext): StorageContext {
+    return context.multitenant
+      ? {
+          name: `${context.name}.delivery.shards`,
+          multitenant: true,
+          ...(context.tenantId === undefined ? {} : { tenantId: context.tenantId }),
+        }
+      : { name: `${context.name}.delivery.shards`, multitenant: false };
+  },
+  worker(value: WorkerId): WorkerId {
+    const node = value?.nodeId?.value;
+    if (
+      typeof node !== "string" ||
+      node.trim().length === 0 ||
+      typeof value.value !== "string" ||
+      value.value.trim().length === 0
+    ) {
+      throw new Error("Shard worker is invalid.");
+    }
+    return create(WorkerIdSchema, { nodeId: { value: node }, value: value.value });
+  },
 });
 
 const ShardRegistryValues = Object.freeze({
@@ -353,9 +463,8 @@ const ShardRegistryValues = Object.freeze({
     const stored = ShardRegistryValues.readStoredSession(record, expectedKey);
 
     return new ShardSession(
-      stored.id,
       new ShardIndex(stored.shardIndex, stored.shardTotal),
-      stored.node,
+      create(WorkerIdSchema, { nodeId: { value: stored.node }, value: stored.id }),
       ShardRegistryValues.storedDate(stored.pickedUpAtMs, "Shard pickup time"),
       ShardRegistryValues.storedDate(stored.expiresAtMs, "Shard expiry time"),
     );
@@ -591,12 +700,18 @@ const ShardRegistryValues = Object.freeze({
   },
 
   writeSession(session: ShardSession): Any {
+    const worker = session.worker;
+    if (worker === undefined) throw new Error("Shard worker is invalid.");
     const stored: StoredShardSession = {
       key: session.shard.key(),
-      id: ShardRegistryValues.requireInputText(session.id, "Shard session ID", maxSessionTextBytes),
+      id: ShardRegistryValues.requireInputText(
+        worker.value,
+        "Shard worker ID",
+        maxSessionTextBytes,
+      ),
       node: ShardRegistryValues.requireInputText(
-        session.node,
-        "Shard session node",
+        worker.nodeId?.value,
+        "Shard worker node",
         maxSessionTextBytes,
       ),
       shardIndex: session.shard.index,
