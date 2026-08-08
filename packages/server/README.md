@@ -341,12 +341,13 @@ the separate public `DeliverySource` used to observe remote shards.
 delivery/tracing facilities, and their process lifecycle. They do not create a
 production transport topology or durable scheduler for you.
 
-`DeliveryMonitor` is the explicit failure-policy seam. Its hooks may return a
-value or a promise; a failed reception defaults to durable `markDelivered()`.
-Applications may instead select one immediate `repeatDispatching()` action.
-The monitor never schedules retries, backoff, dead-letter storage, or failure
-records. Each delivery lifetime has an opaque `WorkerId`; graceful stop waits
-for admitted work to settle before releasing its shard session.
+`DeliveryMonitor` is the customizable explicit failure-policy seam. Its hooks
+may return a value or a promise; a failed reception defaults to durable
+`markDelivered()` and continues independent targets. Applications may instead
+select one immediate `repeatDispatching()` action. The monitor adds no attempts,
+quarantine, receipts, markers, timers, backoff, dead-letter storage, or
+scheduler policy. Each delivery lifetime has an opaque `WorkerId`; graceful
+stop waits for admitted work to settle before releasing its shard session.
 
 The default Entity Inbox has one shard. Configure more shards through the public
 builder chain:

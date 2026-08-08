@@ -258,11 +258,12 @@ before source client/storage. `DeliverySource` is not configured on
 durable supervisor state, topology failover, exactly-once effects, or automatic
 retry of unknown remote mutations.
 
-`DeliveryMonitor` is instantiable and exposes asynchronous continuation,
-start/completion, failed-reception, pickup-failure, and already-picked hooks.
+`DeliveryMonitor` is an instantiable, customizable policy seam exposing
+asynchronous continuation, start/completion, failed-reception, pickup-failure,
+and already-picked hooks.
 `FailedReception` supplies only `markDelivered()` and one immediate
 `repeatDispatching()` action; the framework adds no attempt history, timer,
-backoff, quarantine, dead-letter, receipt, or scheduler policy. A failed
+backoff, quarantine, dead-letter, receipt, marker, or scheduler policy. A failed
 durable acknowledgement keeps that row pending, blocks later rows for its
 target during the run, and does not prevent independent targets from running.
 

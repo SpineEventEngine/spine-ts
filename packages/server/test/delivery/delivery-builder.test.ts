@@ -1,13 +1,74 @@
+/* eslint-disable @typescript-eslint/require-await */
+
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
-import { DeliveryBuilder, DeliveryMonitor, ShardIndex } from "../../src/index.js";
+import {
+  AlreadyPickedUp,
+  DeliveryBuilder,
+  DeliveryMonitor,
+  FailedPickUp,
+  FailedReception,
+  ShardIndex,
+} from "../../src/index.js";
+import { Delivery as CoreDelivery } from "../../src/delivery/delivery.js";
 
 describe("DeliveryMonitor delivery", () => {
   it("is instantiable and permits direct or promised hook results", async () => {
     const monitor = new DeliveryMonitor();
     expect(await monitor.shouldContinueAfter("DELIVERY")).toBe(true);
     await monitor.onDeliveryStarted(ShardIndex.single());
+    await monitor.onDeliveryCompleted({ processed: 0, delivered: 0, failed: 0 });
+    await (
+      await monitor.onShardPickUpFailure(new FailedPickUp(ShardIndex.single(), new Error()))
+    ).execute();
+    await (await monitor.onShardAlreadyPicked(new AlreadyPickedUp(ShardIndex.single()))).execute();
+    const reception = new FailedReception(
+      message("failed", "target", ShardIndex.single()),
+      new Error(),
+      async () => undefined,
+      async () => undefined,
+    );
+    await (await monitor.onReceptionFailure(reception)).execute();
+    await reception.repeatDispatching().execute();
+  });
+
+  it("repeats one failed dispatch when the monitor selects the direct action", async () => {
+    const shard = ShardIndex.single();
+    const pending = message("pending", "target", shard);
+    let reads = 0;
+    let calls = 0;
+    let acknowledgements = 0;
+    class RepeatMonitor extends DeliveryMonitor {
+      override onReceptionFailure(reception: FailedReception) {
+        return reception.repeatDispatching();
+      }
+    }
+    await build()
+      .withMonitor(new RepeatMonitor())
+      .withInbox({
+        sessionKind: "LEASED",
+        receive: async () => {
+          throw new Error("not used");
+        },
+        read: async () => (reads++ === 0 ? [pending] : []),
+        readMessage: async () => undefined,
+        markDelivered: async (value) => {
+          acknowledgements += 1;
+          return value;
+        },
+      })
+      .withWorkRegistry(registry(shard))
+      .build()
+      .run({
+        shard,
+        onMessage: async () => {
+          calls += 1;
+          if (calls === 1) throw new Error("first dispatch fails");
+        },
+      });
+    expect(calls).toBe(2);
+    expect(acknowledgements).toBe(1);
   });
 
   it("allocates an opaque distinct WorkerId for each delivery lifetime", () => {
@@ -21,6 +82,192 @@ describe("DeliveryMonitor delivery", () => {
   it("accepts an explicit complete WorkerId", () => {
     const worker = { nodeId: { value: "node-a" }, value: "restart-a" };
     expect(build().withWorker(worker).build().worker).toEqual(worker);
+  });
+
+  it("maps skipped and failed pickup outcomes without rejecting", async () => {
+    const shard = ShardIndex.single();
+    const inbox = {
+      sessionKind: "LEASED" as const,
+      receive: async () => {
+        throw new Error("not used");
+      },
+      read: async () => [],
+      readMessage: async () => undefined,
+      markDelivered: async () => undefined,
+    };
+    const skipped = await build()
+      .withInbox(inbox)
+      .withWorkRegistry({
+        sessionKind: "LEASED",
+        pickUp: async () => undefined,
+        release: async () => true,
+      })
+      .build()
+      .run({ shard, onMessage: async () => undefined });
+    const failed = await build()
+      .withInbox(inbox)
+      .withWorkRegistry({
+        sessionKind: "LEASED",
+        pickUp: async () => {
+          throw new Error("pickup failed");
+        },
+        release: async () => true,
+      })
+      .build()
+      .run({ shard, onMessage: async () => undefined });
+    expect(skipped.status).toBe("SKIPPED");
+    expect(failed.status).toBe("FAILED");
+  });
+
+  it("stops at monitor delivery and page continuation gates", async () => {
+    const shard = ShardIndex.single();
+    for (const stage of ["DELIVERY", "PAGE"] as const) {
+      let reads = 0;
+      class StopMonitor extends DeliveryMonitor {
+        override shouldContinueAfter(current: "DELIVERY" | "PAGE") {
+          return current !== stage;
+        }
+      }
+      await build()
+        .withMonitor(new StopMonitor())
+        .withInbox({
+          sessionKind: "LEASED",
+          receive: async () => {
+            throw new Error("not used");
+          },
+          read: async () => (reads++ === 0 ? [message("pending", "target", shard)] : []),
+          readMessage: async () => undefined,
+          markDelivered: async (value) => value,
+        })
+        .withWorkRegistry(registry(shard))
+        .build()
+        .run({ shard, onMessage: async () => undefined });
+      expect(reads).toBe(stage === "DELIVERY" ? 0 : 1);
+    }
+  });
+
+  it("contains a lost acknowledgement and uses the default acknowledgement fallback", async () => {
+    const shard = ShardIndex.single();
+    const pending = message("pending", "target", shard);
+    let reads = 0;
+    let acknowledgements = 0;
+    await build()
+      .withInbox({
+        sessionKind: "LEASED",
+        receive: async () => {
+          throw new Error("not used");
+        },
+        read: async () => (reads++ === 0 ? [pending] : []),
+        readMessage: async () => undefined,
+        markDelivered: async (value) => (acknowledgements++ === 0 ? undefined : value),
+      })
+      .withWorkRegistry(registry(shard))
+      .build()
+      .run({ shard, onMessage: async () => undefined });
+    expect(acknowledgements).toBe(2);
+  });
+
+  it("maps an abort raised by an in-flight endpoint to a stopped public run", async () => {
+    const shard = ShardIndex.single();
+    const controller = new AbortController();
+    const pending = message("pending", "target", shard);
+    const delivery = new CoreDelivery({
+      context: { name: `abort-${crypto.randomUUID()}`, multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      inbox: {
+        sessionKind: "LEASED",
+        receive: async () => {
+          throw new Error("not used");
+        },
+        read: async () => [pending],
+        readMessage: async () => undefined,
+        markDelivered: async (value) => value,
+      },
+      workRegistry: registry(shard),
+    });
+    const result = await delivery.runControlled({
+      shard,
+      signal: controller.signal,
+      onMessage: async () => {
+        controller.abort();
+      },
+    });
+    expect(result.status).toBe("STOPPED");
+  });
+
+  it("stops a controlled run before shard acquisition when already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const shard = ShardIndex.single();
+    let pickups = 0;
+    const delivery = new CoreDelivery({
+      context: { name: `pre-abort-${crypto.randomUUID()}`, multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      workRegistry: {
+        ...registry(shard),
+        pickUp: async () => {
+          pickups += 1;
+          return { kind: "LEASED" as const, shard };
+        },
+      },
+    });
+    await expect(
+      delivery.runControlled({
+        shard,
+        signal: controller.signal,
+        onMessage: async () => undefined,
+      }),
+    ).resolves.toMatchObject({ status: "STOPPED" });
+    expect(pickups).toBe(0);
+  });
+
+  it("maps a controlled already-owned shard to SKIPPED", async () => {
+    const shard = ShardIndex.single();
+    const delivery = new CoreDelivery({
+      context: { name: `skip-${crypto.randomUUID()}`, multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      workRegistry: {
+        sessionKind: "LEASED",
+        pickUp: async () => undefined,
+        release: async () => true,
+      },
+    });
+    await expect(
+      delivery.runControlled({
+        shard,
+        signal: new AbortController().signal,
+        onMessage: async () => undefined,
+      }),
+    ).resolves.toMatchObject({ status: "SKIPPED" });
+  });
+
+  it("drains an exclusive session without attempting lease renewal", async () => {
+    const shard = ShardIndex.single();
+    const pending = message("exclusive", "target", shard);
+    let reads = 0;
+    const delivery = new CoreDelivery({
+      context: { name: `exclusive-${crypto.randomUUID()}`, multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      inbox: {
+        sessionKind: "EXCLUSIVE",
+        receive: async () => {
+          throw new Error("not used");
+        },
+        read: async () => (reads++ === 0 ? [pending] : []),
+        readMessage: async () => undefined,
+        markDelivered: async (value) => value,
+      },
+      workRegistry: {
+        sessionKind: "EXCLUSIVE",
+        pickUp: async () => ({ kind: "EXCLUSIVE" as const, shard }),
+        release: async () => true,
+      },
+    });
+    await expect(
+      delivery.drain(shard, { onMessage: async () => undefined }),
+    ).resolves.toMatchObject({
+      status: "DRAINED",
+    });
   });
 
   it("contains failed acknowledgement and continues an independent target", async () => {

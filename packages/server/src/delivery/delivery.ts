@@ -18,40 +18,130 @@ import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry } from "./sharded-work-registry.js";
 import type { DeliveryResult, DeliveryRunOptions, DeliveryStrategy } from "./delivery-builder.js";
 
-/** Endpoint snapshot supplied for direct Inbox delivery. */
+/**
+ * Describes an endpoint snapshot supplied for direct Inbox delivery.
+ */
 export type DeliveryEndpointMessage = InboxMessage;
-/** Endpoint invoked for one persisted Inbox message. */
+
+/**
+ * Dispatches one persisted Inbox message to an endpoint.
+ *
+ * @param message The message to dispatch.
+ * @returns A promise that settles when endpoint dispatch completes.
+ */
 export type OnDeliveryMessage = (message: DeliveryEndpointMessage) => void | Promise<void>;
 
-/** A finite direct-delivery result retained for package integrations. */
+/**
+ * Summarizes one finite direct delivery run.
+ */
 export interface DeliveryRun {
+  // prettier-ignore
+
+  /**
+   * Identifies the terminal delivery outcome.
+   */
   readonly status: "DRAINED" | "SKIPPED" | "FAILED" | "STOPPED";
+
+  /**
+   * Counts messages considered for dispatch.
+   */
   readonly processed: number;
+
+  /**
+   * Counts messages admitted to the endpoint.
+   */
   readonly accepted: number;
+
+  /**
+   * Counts messages durably acknowledged as delivered.
+   */
   readonly delivered: number;
+
+  /**
+   * Counts dispatch or acknowledgement failures.
+   */
   readonly failed: number;
+
+  /**
+   * Lists ephemeral delivery failures.
+   */
   readonly failures: readonly DeliveryFailure[];
 }
 
-/** Ephemeral delivery failure evidence; it is never persisted. */
+/**
+ * Describes ephemeral delivery failure evidence that is never persisted.
+ */
 export interface DeliveryFailure {
+  // prettier-ignore
+
+  /**
+   * Identifies the message associated with the failure.
+   */
   readonly message: InboxMessage;
+
+  /**
+   * Supplies the observed failure.
+   */
   readonly error: unknown;
 }
 
-/** Owns direct Inbox delivery for one worker identity. */
+/**
+ * Executes direct Inbox delivery for one complete worker identity.
+ */
 export class Delivery {
+  // prettier-ignore
+
+  /**
+   * Identifies the immutable storage namespace.
+   */
   readonly context: StorageContext;
+
+  /**
+   * Supplies durable record storage.
+   */
   readonly storageFactory: StorageFactory;
+
+  /**
+   * Maps targets to delivery shards.
+   */
   readonly strategy: DeliveryStrategy;
+
+  /**
+   * Identifies this worker's opaque durable ownership identity.
+   */
   readonly worker: WorkerId;
+
+  /**
+   * Names the worker node for compatibility integrations.
+   */
   readonly node: string;
+
+  /**
+   * Bounds each direct Inbox read.
+   */
   readonly pageSize: number;
+
+  /**
+   * Retains the configured batch size for integrations.
+   */
   readonly batchSize: number;
+
+  /**
+   * Reads and acknowledges direct Inbox rows.
+   */
   readonly inbox: DeliveryInbox;
+
+  /**
+   * Acquires and releases direct shard ownership.
+   */
   readonly shards: DeliveryWorkRegistry;
   readonly #monitor: DeliveryMonitor;
 
+  /**
+   * Creates direct delivery from immutable options.
+   *
+   * @param options The delivery configuration.
+   */
   constructor(options: DeliveryOptions) {
     this.context = Object.freeze({ ...options.context });
     this.storageFactory = options.storageFactory;
@@ -70,6 +160,12 @@ export class Delivery {
     Object.freeze(this);
   }
 
+  /**
+   * Executes one finite shard delivery.
+   *
+   * @param options The selected shard and endpoint callback.
+   * @returns The terminal public delivery result.
+   */
   async run(options: DeliveryRunOptions): Promise<DeliveryResult> {
     const shard = options.shard ?? ShardIndex.single();
     const run = await this.drain(shard, { onMessage: options.onMessage });
@@ -86,6 +182,12 @@ export class Delivery {
     });
   }
 
+  /**
+   * Executes one finite shard delivery under an operation signal.
+   *
+   * @param options The controlled shard, endpoint, and cancellation signal.
+   * @returns The terminal public delivery result.
+   */
   runControlled(options: DeliveryControlledRun): Promise<DeliveryResult> {
     const shard = options.shard;
     return this.drain(shard, {
@@ -106,7 +208,13 @@ export class Delivery {
     );
   }
 
-  /** Delivers one exact direct Inbox row for local handoff integration. */
+  /**
+   * Delivers the selected message's shard for local handoff integration.
+   *
+   * @param message The message selecting the shard to drain.
+   * @param input The endpoint callback or callback configuration.
+   * @returns The terminal direct-delivery result.
+   */
   async drainMessage(
     message: InboxMessage,
     input: OnDeliveryMessage | { readonly node?: string; readonly onMessage: OnDeliveryMessage },
@@ -115,7 +223,13 @@ export class Delivery {
     return this.drain(message.shard, { onMessage });
   }
 
-  /** Drains one owned shard and always contains monitor and endpoint failures. */
+  /**
+   * Executes one owned shard drain while containing monitor and endpoint failures.
+   *
+   * @param shard The shard to acquire and drain.
+   * @param options The endpoint and optional operation signal.
+   * @returns The terminal direct-delivery result.
+   */
   async drain(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
     if (options.operation?.signal?.aborted) return result("STOPPED");
     let session;
@@ -136,7 +250,7 @@ export class Delivery {
     const statistics = counts();
     let current = session;
     const renew = async (): Promise<boolean> => {
-      if (current?.kind !== "LEASED" || this.shards.renew === undefined) return true;
+      if (current.kind !== "LEASED" || this.shards.renew === undefined) return true;
       const renewed = await this.shards.renew(current, options.operation);
       if (renewed === undefined) return false;
       current = renewed;
@@ -210,7 +324,7 @@ export class Delivery {
       return result("DRAINED", statistics);
     } finally {
       await safely(async () => {
-        await this.shards.release(current!, options.operation);
+        await this.shards.release(current, options.operation);
       });
       await safely(() =>
         this.#monitor.onDeliveryCompleted(
@@ -225,20 +339,77 @@ export class Delivery {
   }
 }
 
+/**
+ * Configures one direct delivery owner.
+ */
 export interface DeliveryOptions {
+  // prettier-ignore
+
+  /**
+   * Identifies the storage namespace.
+   */
   readonly context: StorageContext;
+
+  /**
+   * Supplies durable record storage.
+   */
   readonly storageFactory: StorageFactory;
+
+  /**
+   * Supplies direct shard ownership when customized.
+   */
   readonly workRegistry?: DeliveryWorkRegistry;
+
+  /**
+   * Supplies direct Inbox access when customized.
+   */
   readonly inbox?: DeliveryInbox;
+
+  /**
+   * Maps targets to shards when customized.
+   */
   readonly strategy?: DeliveryStrategy;
+
+  /**
+   * Supplies delivery lifecycle and failure policy hooks.
+   */
   readonly monitor?: DeliveryMonitor;
+
+  /**
+   * Supplies a complete opaque worker identity.
+   */
   readonly worker?: WorkerId;
+
+  /**
+   * Names the node used to derive a default worker identity.
+   */
   readonly node?: string;
+
+  /**
+   * Bounds each direct Inbox read.
+   */
   readonly pageSize?: number;
+
+  /**
+   * Retains a batch-size integration setting.
+   */
   readonly batchSize?: number;
 }
+
+/**
+ * Configures one direct shard drain.
+ */
 export interface DeliveryDrainOptions {
+  // prettier-ignore
+
+  /**
+   * Dispatches supported Inbox messages.
+   */
   readonly onMessage: OnDeliveryMessage;
+
+  /**
+   * Propagates cancellation through the drain.
+   */
   readonly operation?: import("./delivery-ports.js").DeliveryOperationOptions;
 }
 function workerId(node: string): WorkerId {

@@ -153,7 +153,7 @@ export interface DeliveryWorkRegistry {
    * Acquires one shard work fence when it is available.
    *
    * @param shard Selects the shard to acquire.
-   * @param node Identifies the worker acquiring the fence.
+   * @param worker Identifies the complete worker acquiring the fence.
    * @param options Propagates cancellation and a delivery deadline.
    * @returns The acquired session, when the shard is available.
    */

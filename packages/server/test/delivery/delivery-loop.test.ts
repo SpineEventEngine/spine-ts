@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/require-await */
+
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
@@ -64,6 +66,31 @@ describe("DeliveryLoop", () => {
     release?.();
     await close;
     await run;
+  });
+
+  it("forwards an operation and preserves a non-drained terminal status", async () => {
+    const controller = new AbortController();
+    let received: unknown;
+    const loop = new DeliveryLoop({
+      delivery: {
+        drain: async (_shard, options) => {
+          received = options.operation;
+          return {
+            status: "FAILED" as const,
+            processed: 0,
+            accepted: 0,
+            delivered: 0,
+            failed: 1,
+            failures: [],
+          };
+        },
+      } as Delivery,
+      shard: ShardIndex.single(),
+      operation: { signal: controller.signal },
+      onMessage: () => undefined,
+    });
+    await expect(loop.run()).resolves.toMatchObject({ status: "FAILED" });
+    expect(received).toEqual({ signal: controller.signal });
   });
 });
 

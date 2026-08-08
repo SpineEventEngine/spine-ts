@@ -3,7 +3,7 @@ import type { WorkerId } from "@spine-event-engine/proto/delivery";
 
 import { ServerEnvironment } from "../server/server-environment.js";
 import { Delivery as CoreDelivery, type OnDeliveryMessage } from "./delivery.js";
-import { DeliveryMonitor, type DeliveryStatistics } from "./delivery-monitor.js";
+import { DeliveryMonitor } from "./delivery-monitor.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "./delivery-ports.js";
 import type { DeliveryControlledRun } from "./delivery-run-control.js";
 import { ShardIndex } from "./shard-index.js";
@@ -229,7 +229,9 @@ export interface Delivery {
    */
   readonly node: string;
 
-  /** Complete opaque worker identity used for shard ownership. */
+  /**
+   * Identifies the complete opaque worker used for shard ownership.
+   */
   readonly worker: WorkerId;
 
   /**
