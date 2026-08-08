@@ -51,12 +51,22 @@ describe("MessageBoard deployment entrypoints", () => {
     await import("../src/application-entry.ts");
     expect(calls.datastore).toHaveBeenCalledWith({ projectId: "project" });
     expect(calls.storage).toHaveBeenCalledWith(calls.client);
+    expect(calls.configureServer).toHaveBeenCalledWith(
+      calls.applicationConfig,
+      calls.client,
+      process.env,
+    );
     expect(calls.runApplication).toHaveBeenCalledWith(calls.applicationConfig, calls.storageResult);
 
     vi.resetModules();
     await import("../src/combined-entry.ts");
     expect(calls.datastore).toHaveBeenCalledWith({ projectId: "project" });
     expect(calls.storage).toHaveBeenCalledWith(calls.client);
+    expect(calls.configureServer).toHaveBeenCalledWith(
+      calls.combinedConfig,
+      calls.client,
+      process.env,
+    );
     expect(calls.runCombined).toHaveBeenCalledWith(
       expect.objectContaining({ bindings: calls.bindings, sessions: calls.sessions }),
       calls.storageResult,
@@ -70,6 +80,11 @@ describe("MessageBoard deployment entrypoints", () => {
 
     expect(calls.datastore).toHaveBeenCalledWith({ projectId: "project" });
     expect(calls.storage).toHaveBeenCalledWith(calls.client);
+    expect(calls.configureServer).toHaveBeenCalledWith(
+      calls.gatewayConfig,
+      calls.client,
+      process.env,
+    );
 
     expect(calls.serverAtPort).toHaveBeenCalledWith(
       calls.gatewayConfig.port,
@@ -115,13 +130,14 @@ function startupMocks() {
     return client;
   });
   const storageFactory = vi.fn(() => storage);
+  const configureServer = vi.fn(() => undefined);
   vi.doMock("@google-cloud/datastore", () => ({ Datastore: datastore }));
   vi.doMock("../src/deployment-config.js", () => ({
     MessageBoardDeployment: {
       application: () => applicationConfig,
       combined: () => combinedConfig,
       gateway: () => gatewayConfig,
-      configureServer: () => undefined,
+      configureServer,
       storage: storageFactory,
       bindings: () => bindings,
       sessions: () => sessions,
@@ -151,6 +167,8 @@ function startupMocks() {
     applicationConfig,
     bindings,
     client,
+    combinedConfig,
+    configureServer,
     datastore,
     gatewayConfig,
     runApplication,
