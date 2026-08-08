@@ -1,4 +1,7 @@
+/* eslint-disable @typescript-eslint/no-non-null-assertion, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/require-await */
+
 import { create } from "@bufbuild/protobuf";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { WorkerIdSchema, type WorkerId } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
@@ -182,6 +185,36 @@ describe("Delivery direct worker", () => {
     });
     expect(run).toMatchObject({ failed: 1, delivered: 1 });
     expect(rows).toEqual([]);
+  });
+
+  it("retains a failure message independently from later caller mutation", async () => {
+    const shard = ShardIndex.single();
+    const row = {
+      ...message("failed", "target", shard),
+      signal: create(AnySchema, { typeUrl: "type.example/signal", value: new Uint8Array([1, 2]) }),
+      keepUntil: new Date(10_000),
+    };
+    const delivery = createDelivery({ rows: [row], mark: async () => undefined });
+    const run = await delivery.drain(shard, {
+      onMessage: () => {
+        throw new Error("failed");
+      },
+    });
+    row.id.value = "mutated";
+    row.inboxId.targetId = "mutated";
+    row.shard = new ShardIndex(0, 2);
+    row.whenReceived.setTime(20_000);
+    row.keepUntil.setTime(30_000);
+    row.signal.value[0] = 9;
+    const fact = run.failures[0]!.message;
+    expect(fact).toMatchObject({ id: { value: "failed" }, inboxId: { targetId: "target" } });
+    expect(fact.shard).toMatchObject({ index: 0, ofTotal: 1 });
+    expect(fact.whenReceived.getTime()).not.toBe(20_000);
+    expect(fact.keepUntil?.getTime()).toBe(10_000);
+    expect(fact.signal?.value[0]).toBe(1);
+    expect(() => {
+      (fact.id as { value: string }).value = "changed";
+    }).toThrow();
   });
 
   it("repeats a failed reception when the monitor selects repeat dispatch", async () => {

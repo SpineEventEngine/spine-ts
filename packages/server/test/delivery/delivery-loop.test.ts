@@ -92,6 +92,51 @@ describe("DeliveryLoop", () => {
     await expect(loop.run()).resolves.toMatchObject({ status: "FAILED" });
     expect(received).toEqual({ signal: controller.signal });
   });
+
+  it("snapshots caller options before later mutation", async () => {
+    const originalShard = new ShardIndex(0, 2);
+    const controller = new AbortController();
+    let receivedShard: ShardIndex | undefined;
+    let receivedSignal: AbortSignal | undefined;
+    let originalCalls = 0;
+    const original = {
+      drain: async (
+        shard: ShardIndex,
+        options: { onMessage: () => void; operation?: { signal?: AbortSignal } },
+      ) => {
+        receivedShard = shard;
+        receivedSignal = options.operation?.signal;
+        options.onMessage();
+        return {
+          status: "DRAINED" as const,
+          processed: 0,
+          accepted: 0,
+          delivered: 0,
+          failed: 0,
+          failures: [],
+        };
+      },
+    } as Delivery;
+    const options = {
+      delivery: original,
+      shard: originalShard,
+      onMessage: () => {
+        originalCalls += 1;
+      },
+      operation: { signal: controller.signal },
+    };
+    const loop = new DeliveryLoop(options);
+    options.delivery = delivery();
+    options.shard = new ShardIndex(1, 2);
+    options.onMessage = () => {
+      throw new Error("mutated callback");
+    };
+    options.operation = {};
+    await loop.run();
+    expect(receivedShard).toMatchObject({ index: 0, ofTotal: 2 });
+    expect(receivedSignal).toBe(controller.signal);
+    expect(originalCalls).toBe(1);
+  });
 });
 
 function delivery(): Delivery {

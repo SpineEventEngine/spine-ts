@@ -1,4 +1,5 @@
-import { create } from "@bufbuild/protobuf";
+import { clone, create } from "@bufbuild/protobuf";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { randomUUID } from "node:crypto";
 import { WorkerIdSchema, type WorkerId } from "@spine-event-engine/proto/delivery";
 import type { StorageContext, StorageFactory } from "@spine-event-engine/storage";
@@ -35,7 +36,6 @@ export type OnDeliveryMessage = (message: DeliveryEndpointMessage) => void | Pro
  * Summarizes one finite direct delivery run.
  */
 export interface DeliveryRun {
-
   /**
    * Identifies the terminal delivery outcome.
    */
@@ -71,7 +71,6 @@ export interface DeliveryRun {
  * Describes ephemeral delivery failure evidence that is never persisted.
  */
 export interface DeliveryFailure {
-
   /**
    * Identifies the message associated with the failure.
    */
@@ -87,7 +86,6 @@ export interface DeliveryFailure {
  * Executes direct Inbox delivery for one complete worker identity.
  */
 export class Delivery {
-
   /**
    * Identifies the immutable storage namespace.
    */
@@ -372,7 +370,6 @@ export class Delivery {
  * Configures one direct delivery owner.
  */
 export interface DeliveryOptions {
-
   /**
    * Identifies the storage namespace.
    */
@@ -423,7 +420,6 @@ export interface DeliveryOptions {
  * Configures one direct shard drain.
  */
 export interface DeliveryDrainOptions {
-
   /**
    * Dispatches supported Inbox messages.
    */
@@ -456,10 +452,15 @@ function result(
 function snapshot(message: InboxMessage): InboxMessage {
   return Object.freeze({
     ...message,
-    id: Object.freeze({ ...message.id, shard: new ShardIndex(message.id.shard.index, message.id.shard.ofTotal) }),
+    id: Object.freeze({
+      ...message.id,
+      shard: new ShardIndex(message.id.shard.index, message.id.shard.ofTotal),
+    }),
     inboxId: Object.freeze({ ...message.inboxId }),
+    ...(message.signal === undefined ? {} : { signal: clone(AnySchema, message.signal) }),
     shard: new ShardIndex(message.shard.index, message.shard.ofTotal),
     whenReceived: new Date(message.whenReceived),
+    ...(message.keepUntil === undefined ? {} : { keepUntil: new Date(message.keepUntil) }),
   });
 }
 async function safely(action: () => void | Promise<void>): Promise<boolean> {

@@ -21,7 +21,9 @@ export class DeliveryLoop {
       delivery: options.delivery,
       shard: new ShardIndex(options.shard.index, options.shard.ofTotal),
       onMessage: options.onMessage,
-      ...(options.operation === undefined ? {} : { operation: Object.freeze({ ...options.operation }) }),
+      ...(options.operation === undefined
+        ? {}
+        : { operation: Object.freeze({ ...options.operation }) }),
     });
   }
 
