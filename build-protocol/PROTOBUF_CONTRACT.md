@@ -11,7 +11,8 @@ The copied set starts with `spine/options.proto` and includes all messages neede
 - core command/event/context/actor/tenant/version/ack/response/enrichment messages;
 - client command/query/subscription services and request messages;
 - server entity, aggregate, delivery, dispatch, integration, migration, tenant, transport, and system messages;
-- validation option definitions and validation error messages needed by `validation-ts`;
+- validation option definitions and validation error messages needed by
+  `@spine-event-engine/validation`;
 - common base/time/value types referenced transitively by the above.
 
 ## Buf and Protobuf-ES
@@ -23,7 +24,8 @@ Generation must use Buf and Protobuf-ES:
 - Generated outputs must expose message schemas that can be passed to Protobuf-ES functions such as `create`, reflection helpers, and validation.
 - The framework must not support hand-written TS Protobuf bindings, `protobuf.js` bindings, or `ts-proto` bindings as first-class inputs.
 
-The version selection is deferred to [CODE_QUALITY.md](CODE_QUALITY.md), but selected versions must be current at implementation time and compatible with `@spine-event-engine/validation-ts`.
+The selected validation runtime is `@spine-event-engine/validation`
+`2.0.0-snapshot.7`.
 
 ## Domain Modeling Conventions
 
@@ -67,9 +69,10 @@ All command, event, query, subscription, enrichment, validation, and storage pat
 
 ## Validation Contract
 
-`@spine-event-engine/validation-ts` is mandatory for validation of single Protobuf messages.
+`@spine-event-engine/validation` `2.0.0-snapshot.7` is mandatory for validation
+of single Protobuf messages.
 
-Observed constraints of `validation-ts`:
+Observed constraints of the validation runtime:
 
 - It is designed for Buf/Protobuf-ES generated TypeScript.
 - It supports major Spine validation options such as `(required)`, `(pattern)`, `(min)`, `(max)`, `(range)`, `(distinct)`, `(validate)`, `(goes)`, message-level required combinations, and oneof choice.
@@ -77,7 +80,8 @@ Observed constraints of `validation-ts`:
 
 Therefore:
 
-- command, event, state, query, and subscription message validation uses `validation-ts`;
+- command, event, state, query, and subscription message validation uses
+  `@spine-event-engine/validation`;
 - entity state transitions enforce `(set_once)` in the framework transaction layer;
 - validation results are structured data, not only thrown exceptions;
 - server-side command acknowledgement and client-side errors must preserve packed validation details where Spine messages support them.
@@ -92,4 +96,3 @@ The implementation phase must add a script that:
 - verifies copied files match upstream;
 - runs Buf lint and generation;
 - fails CI if copied proto files drift silently.
-

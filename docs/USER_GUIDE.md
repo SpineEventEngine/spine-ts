@@ -1270,18 +1270,14 @@ import {
   DeliveryClient,
   RemoteInbox,
   RemoteWorkRegistry,
-  type RemovalQuarantine,
 } from "@spine-event-engine/delivery-client";
 import { DeliveryBuilder, DeliverySupervisor } from "@spine-event-engine/server";
 
 // Run this independently on application machine A and application machine B.
 const source = DeliveryClient.connectTo("http://10.0.0.5:8484");
-// The application supplies a durable, capacity-bounded implementation; never use
-// an in-memory Map because restart safety is part of RemoteInbox's no-replay contract.
-declare const durableRemovalQuarantine: RemovalQuarantine;
 const delivery = new DeliveryBuilder()
   .withNode(process.env.HOSTNAME ?? "worker-a")
-  .withInbox(new RemoteInbox(source, durableRemovalQuarantine))
+  .withInbox(new RemoteInbox(source))
   .withWorkRegistry(new RemoteWorkRegistry(source))
   .build();
 const supervisor = new DeliverySupervisor({
@@ -1299,14 +1295,15 @@ try {
 } finally {
   await supervisor.close({ graceMs: 5_000 });
   source.close();
-  // Release the application-owned durableRemovalQuarantine resource afterwards.
 }
 ```
 
 The two machines compete for shared shards and can recover stale ownership
-through the shared service. A completed endpoint may still be retried after an
-uncertain handoff, so endpoint effects must be replay-safe. This topology does
-not prove live compatibility with a JVM server.
+through the shared service. Remote removal rereads the exact pending row and
+calls `removeOne()` directly; it keeps no local removal state. A completed
+endpoint may still be retried after a lost acknowledgement, so endpoint effects
+must be idempotent. This topology does not prove live compatibility with a JVM
+server.
 
 ### Production delivery supervision
 
@@ -1331,16 +1328,13 @@ import {
   DeliveryClient,
   RemoteInbox,
   RemoteWorkRegistry,
-  type RemovalQuarantine,
 } from "@spine-event-engine/delivery-client";
 import { DeliveryBuilder, DeliverySupervisor } from "@spine-event-engine/server";
 
 const client = DeliveryClient.connectTo("http://127.0.0.1:8080");
-// Caller-owned durable storage; an in-memory Map is not restart-safe here.
-declare const durableRemovalQuarantine: RemovalQuarantine;
 const delivery = new DeliveryBuilder()
   .withNode("worker-a")
-  .withInbox(new RemoteInbox(client, durableRemovalQuarantine))
+  .withInbox(new RemoteInbox(client))
   .withWorkRegistry(new RemoteWorkRegistry(client))
   .build();
 const supervisor = new DeliverySupervisor({
@@ -1363,7 +1357,6 @@ try {
 } finally {
   await supervisor.close({ graceMs: 5_000 });
   client.close();
-  // Release the application-owned durableRemovalQuarantine resource afterwards.
 }
 ```
 

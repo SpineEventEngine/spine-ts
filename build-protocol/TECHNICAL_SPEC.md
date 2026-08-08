@@ -53,7 +53,9 @@ line.
 7. Support multiple Node.js processes for command handling, event handling, read-side projection updates, query serving, subscription streaming, delivery, and system tasks.
 8. Prefer OOP APIs and TypeScript generics over procedural registration.
 9. Provide annotation-like handler declaration through standard TypeScript decorators if viable, with code generation or explicit registration as fallback where decorators cannot express the needed metadata.
-10. Use `@spine-event-engine/validation-ts` for message validation and add framework-level state-transition validation where that package does not cover stateful rules such as `(set_once)`.
+10. Use `@spine-event-engine/validation` `2.0.0-snapshot.7` for message
+    validation and add framework-level state-transition validation where that
+    package does not cover stateful rules such as `(set_once)`.
 11. Generated Protobuf-ES files must live under `packages/<package>/generated/`,
     must be ignored by Git, and must be regenerated during builds.
 12. Production code may import generated code directly. Do not add generated

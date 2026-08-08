@@ -212,22 +212,16 @@ store the original `Event` envelope, and both replay only the routed row target
 before the transaction and `Stand` update. Before handler code runs, replay
 validates the row label, pending `TO_DELIVER` status, tenant, payload/schema,
 target type URL, and routed target ID.
-For supported rows, an internal pre-callback gate reads the 100 retained
-attempt slots for the exact inbox message. At that bound it skips the callback
-and another attempt, claims the exact row under the live shard fence, and marks
-it `DELIVERED` without accepted-work or failure-budget use. A lease/fencing
-failure through the final guard before durable marking remains
-`LEASE` / `LEASE_INACTIVE`, retains one bounded attempt at the 100-slot cap,
-reports one failure with no accepted work, and leaves the row `TO_DELIVER`. If
-the mark fails and cleanup succeeds, the authoritative row remains `TO_DELIVER`
-and the local run returns one frozen, bounded, stack-free exhaustion-facts
-object. If cleanup also fails, the same one-failure accounting instead returns
-a `CLEANUP` result whose `AggregateError` contains the original mark error plus
-the cleanup error; that error is not promised frozen, bounded, or stack-free. It
-is not a public
-monitor/action, scheduler/backoff, dead-letter, production-topology, catch-up,
-or adapter policy. Broader inbox lifecycle management and transport topology
-are not provided by this API.
+Pending and delivered `InboxMessage` rows are stored directly. Shard ownership
+is the only concurrent-delivery exclusion; there is no per-message claim or
+separate dedup record. Delivered rows are the deduplication fact. Handler
+effects and the delivered-row compare-and-set are not one transaction, so a
+lost acknowledgement can redeliver after restart and downstream handling must
+be idempotent. `DeliveryMonitor` is the explicit failure-policy seam: by
+default it marks a failed reception delivered and continues independent targets;
+an application can instead choose the immediate repeat action. The framework
+persists no attempts, quarantine, receipts, markers, timers, backoff,
+dead-letter storage, or scheduler policy.
 Process-manager
 repositories with authentic generated metadata do execute through the local
 command/event buses: default command routing reads the first command field,
@@ -446,82 +440,43 @@ does not expose low-level persistence handles, handler invocation, delivery,
 catch-up, read-side indexing, subscriptions, system events, or aggregate
 repository caching.
 Durable-delivery exports include the builder-owned `Delivery` interface,
-`DeliveryBuilder`, `DeliveryEndpointMessage`, `DeliveryMonitor`, `DeliveryPage`,
+`DeliveryBuilder`, `DeliveryEndpointMessage`, `DeliveryMonitor`,
 `DeliveryResult`, `DeliveryRunOptions`, `DeliveryStrategy`,
 `UniformAcrossAllShards`, `DeliveryStorageCorruptionError`, `Inbox`, `InboxId`,
 `InboxMessage`, `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
 `InboxReadContinuation`, `InboxReadOptions`, `InboxWriteResult`, `InboxStorage`,
 `InboxStorageOptions`, `DeliveryLabel`, `DeliveryStatus`, `ShardIndex`,
 `ShardSession`, `ShardedWorkRegistry`, and `ShardedWorkRegistryOptions`.
-`DeliveryBuilder` snapshots storage, node, shard strategy, monitor, and finite
-page/batch bounds. Page size is limited to the storage maximum of 1,000 and
-batch size to 1,000 retained primitive summaries. A multi-shard strategy exposes
-its cardinality and requires an explicit run shard. The returned public view has
-no constructor, direct drain, exact-message drain, attempt history, or shard
-registry. A public finite `Delivery.run()` observes pages, normal already-owned
-pickup, failures, and completion without adding a production scheduler, retry
-policy, catch-up facility, or remote topology. This implementation persists inbox messages and shard
-lease records through `StorageFactory` / `RecordStorage`, deduplicates live
-inbox writes durably by `(signalId, inboxId)` through small internal guard
-records, and keeps shard ordering metadata on each message with receive time
-(`whenReceived`), `version`, and inbox-message UUID ordering. Direct inbox
-writes require `InboxMessage.id.shard` to match
-`InboxMessage.shard`. Recognized valid `DeliveryLabel` values for durable rows
-are `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`;
-framework replay callbacks support only `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`,
-and `REACT_UPON_EVENT`. `IMPORT_EVENT` is recognized only as deprecated legacy
-stored/wire data and fails closed on read or framework replay.
+`DeliveryBuilder` snapshots storage, node, shard strategy, monitor, and bounded
+read options. A run picks up one shard with complete `WorkerId` fencing and
+reads direct pending rows in bounded, stable order. It neither exposes pages or
+retained summaries nor creates guard records, per-message claims, attempt
+history, a retry policy, or a scheduler. Direct inbox writes require
+`InboxMessage.id.shard` to match `InboxMessage.shard`; delivered rows are the
+deduplication fact. Framework replay handles `HANDLE_COMMAND`,
+`UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; `CATCH_UP` remains pending and
+`IMPORT_EVENT` fails closed as storage corruption.
 
-Built contexts use storage-backed shard pickup, renewal, and release internally
-through atomic `RecordStorage.compareAndSet()` fencing. Framework-owned replay
-scans pending rows in inbox order, skips unavailable rows before endpoint
-invocation, and supplies independent message snapshots only for
-`HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`. `Date` values
-and `Any.value` bytes are copied. Its callback limit caps endpoint callbacks
-actually invoked. Newly observed rows stop at the storage read cap plus
-`limit` while pending scans continue after stable inbox row keys instead of
-moving absolute offsets.
-Valid worker-unsupported labels such as `CATCH_UP` remain pending and are
-skipped before callback invocation, acceptance, failure recording, or
-failure-budget consumption. Malformed or deprecated stored `IMPORT_EVENT` data
-fails closed as `DeliveryStorageCorruptionError` before replay begins.
+Pickup, renewal, acknowledgement, and release use compare-and-set fencing at
+each operation. A completed `WorkerId` can recover its own unexpired session;
+a different worker is excluded until it expires, and a stale owner cannot
+release a newer session. `DeliveryMonitor` contains reception failures: by
+default it marks the row delivered and continues independent targets; an
+application may choose immediate repeat dispatch instead. There is no
+callback/failure budget or timer-driven renewal model.
 
-Endpoint failures leave rows pending for a later framework run only when
-cleanup succeeds. Pre-callback claim, validation, and lease-fencing failures do
-not increment accepted work, but they increment failed work and count toward
-the framework failure bound. Once an endpoint callback has been invoked,
-endpoint failures and framework cleanup or delivery-status failures after that
-callback are accepted work and may appear in failed work. Supported endpoint
-failures are also retained internally as sanitized attempt records with
-message/inbox/shard identity, label, node, attempted time, accepted flag, and
-stable failure stage/reason. Retained records do not include raw `Any.value`
-payload bytes, raw user errors, stack traces, or unbounded exception text.
-Before a supported callback runs, the internal retained-attempt count for that
-exact inbox message is checked against the same 100-slot bound. An exhausted
-row skips the callback and another retained attempt, then is claim-fenced and
-marked `DELIVERED` without accepted-work or failure-budget use. Lease/fencing
-through the final pre-mark guard retains `LEASE` / `LEASE_INACTIVE` attempt
-facts and one-failure accounting without accepted work. A mark failure
-with successful cleanup leaves the authoritative row `TO_DELIVER` and
-contributes one frozen, bounded, stack-free exhaustion-facts observation. If
-cleanup also fails, direct run and loop accounting still record one `CLEANUP`
-failure whose `AggregateError` contains the original mark error plus cleanup
-error and has no frozen, bounded, or stack-free guarantee. This narrow gate is
-internal; it does not add public retry-policy configuration or public
-monitor/action behavior. Live shard ownership plus live per-message ownership
-block competing callback dispatch while
-ownership is current; expired per-message ownership may be replaced during
-claim compare-and-set using the storage clock as abandoned-work recovery. If a
-stale owner continues after losing renewal, endpoint callback side effects are
-at-least-once/replay-safe: later final fencing can prevent stale finalization,
-but it cannot uninvoke a callback that already ran. Broader production
-supervision, cancellation, and retry-monitor policy are not provided by this
-API.
+`DeliveryMonitor` contains endpoint failures. Its default reception action
+marks the row delivered; a custom monitor may repeat dispatch immediately.
+If that durable action fails, the row remains pending, later messages for that
+target stop, independent targets continue, and a later run can retry. Shard
+ownership protects only concurrent workers, not endpoint effects. Therefore a
+lost acknowledgement can redeliver after a handler runs, and downstream effects
+must be idempotent. The delivery model has no attempt history, exhaustion,
+claims, quarantine, receipts, markers, timers, backoff, dead-letter storage,
+or scheduler persistence.
 The package does not expose a raw worker callback API; framework-owned replay
-stays behind validated endpoints. Lease renewal uses same-event-loop timers
-around in-process callbacks, so CPU-bound synchronous callbacks can still starve
-renewal; this implementation treats that as an in-process trust-boundary limitation rather
-than timer-protected preemption.
+stays behind validated endpoints. Renewal is checked through shard fencing at
+protected delivery operations rather than by a timer around callbacks.
 `InboxReadOptions.limit` remains the page-size control for a single ordered
 inbox read and must be positive and at most `1000`.
 `InboxReadContinuation` names the stable row key used to read the next ordered

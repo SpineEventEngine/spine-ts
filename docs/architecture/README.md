@@ -109,7 +109,7 @@ transport topics.
 
 `@spine-event-engine/core` owns the validation interface exposed to framework users.
 Single-message validation is delegated to
-`@spine-event-engine/validation-ts@2.0.0-snapshot.4`, but
+`@spine-event-engine/validation@2.0.0-snapshot.7`, but
 callers use `Validate.message()` and `Validate.check()` from core. This keeps the
 experimental upstream API and generated upstream validation error types behind a
 framework seam.
@@ -525,9 +525,8 @@ The following runtime pieces are not available in the verified local/example con
 - production transport-backed/background worker topology and supervision,
   production catch-up orchestration, durable production storage adapters, entity
   storage/cache catch-up, and production tenant-index policy. Durable inbox
-  records, dedup guards, shard leases, per-message claims, bounded internal
-  shard replay, the framework-owned local delivery worker/loop boundary for
-  supported labels, and the internal tenant index are present;
+  records and shard ownership are present; delivered rows are the deduplication
+  fact, with no per-message claim or separate dedup record;
 - richer query filtering, retained subscription update replay, and
   cross-process subscription stream ownership;
 - full system-context runtime, command-log repositories, system event taxonomy,
@@ -624,7 +623,7 @@ separately.
 
 `@spine-event-engine/storage` owns a record-storage seam. The package exports
 `StorageFactory` with one mandatory adapter method,
-`createRecordStorage(context, spec)`, plus `RecordStorage`, `RecordSpec`,
+`createRecordStorage(context, spec, group?)`, plus `RecordStorage`, `RecordSpec`,
 `RecordColumn`, query/mask contracts, and an in-memory implementation. It does
 not implement repositories, transactions, buses, delivery workers, service
 APIs or delivery workers. Datastore and MySQL RDBMS adapters implement this
@@ -632,14 +631,17 @@ contract in their own packages; choosing and operating either adapter remains
 application deployment work, not a production deployment guarantee.
 
 `RecordSpec` binds one generated Protobuf record schema, optional generated ID
-schema, ID extraction, and deterministic query columns. `RecordStorage` stores
+schema, ID extraction, deterministic query columns, and an optional source
+type (defaulting to the record type). `RecordStorage` stores
 identified Protobuf records, clones them on write/read, deletes by ID, and
 queries by exact IDs, exact column filters, deterministic sort order on `id`,
 stored columns, or dotted record paths, stable continuations after sorted row
 keys, non-negative offsets applied after sorting and before positive limits,
 and simple masks on cloned results.
 `StorageContext` carries the bounded-context storage namespace plus optional
-tenant scoping for multitenant storages.
+tenant scoping for multitenant storages. Providers resolve direct record
+families from source type, record type, and optional external `StorageGroup`;
+their layouts are structurally validated and never migrated automatically.
 
 `EventStore` is a higher-level framework delegate over
 `RecordStorage<EventId, Event>`. It is intentionally created directly by
@@ -654,7 +656,8 @@ attempts, fan out to subscribers, or implement retry/bus behavior.
 
 `InMemoryStorageFactory` and `InMemoryRecordStorage` are
 test/development adapter. They are process-local, share backing records by
-factory, context name, tenant mode, tenant ID, and `RecordSpec` instance,
+factory, physical context, source type, and optional `StorageGroup`; compatible
+distinct `RecordSpec` instances therefore share backing records,
 return independently closeable handles, and clone stored values so later caller
 mutation cannot affect stored records. Payloads must remain cloneable, which
 preserves byte arrays used by packed Protobuf `Any` payloads.
@@ -662,70 +665,18 @@ preserves byte arrays used by packed Protobuf `Any` payloads.
 Aggregate latest-state, optional state history, and traceability event-journal
 storage use the shared entity-storage provider seam. Aggregate loading uses the
 latest persisted state; it never reconstructs state by snapshot-plus-replay.
-The framework persists durable inbox rows through `RecordStorage`,
-keeps live deduplication guards beside those rows, coordinates shard ownership
-with durable shard leases, and uses bounded internal replay for local
-framework-owned shard draining. A replay run picks up, renews, and releases its
-shard session with compare-and-set fencing. Rows unavailable to the active
-worker are skipped before endpoint invocation, and bounded replay can scan past
-unavailable head rows to reach later available rows. Its callback limit caps
-endpoint callbacks that actually run. Newly observed rows stop at the storage
-read cap plus that limit while pending scans continue after stable inbox row
-keys instead of moving absolute offsets. Endpoint callbacks receive independent
-message snapshots only for `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and
-`REACT_UPON_EVENT`; their
-`Date` values and `Any.value` bytes are copied. `CATCH_UP` stays pending and
-never reaches callbacks or returned failures. Successful callbacks mark rows
-`DELIVERED`; endpoint failures remain pending for later runs only when
-framework-owned cleanup succeeds. Cleanup, validation, lease/fencing, and
-delivery-status failures are reported without an immediate retry or recovery
-guarantee here. The delivery subsystem also retains internal
-sanitized attempt records for supported endpoint failures, storing only
-message/inbox/shard identity, label, node, attempted time, accepted flag, and a
-stable failure stage/reason. Retained attempts do not store raw `Any.value`
-payload bytes, raw user errors, stack traces, or unbounded exception text.
-Before a supported endpoint callback runs, the package-internal retry gate
-summarizes retained attempts for that exact inbox message by reading only its
-100 known per-message retained slots. An exhausted supported row skips the
-endpoint callback and another retained-attempt write, then is claimed,
-synchronized to the live shard fence, and marked `DELIVERED` without consuming
-accepted work or the configured failure bound. Lease/fencing failure through
-the final guard before durable marking remains `LEASE` / `LEASE_INACTIVE`,
-retains one bounded attempt at the 100-slot cap, contributes one failure without
-accepted work, and leaves the row `TO_DELIVER`. A mark failure followed by
-successful cleanup leaves the authoritative row `TO_DELIVER` and contributes
-one frozen, bounded, stack-free exhaustion-facts object. If cleanup also fails,
-the row still remains `TO_DELIVER` and contributes one `CLEANUP` failure whose
-`AggregateError` contains the original mark error plus cleanup error and has no
-frozen, bounded, or stack-free guarantee. Retryable
-supported failures remain on the existing path and stay available for later
-replay when cleanup leaves the row pending. Retry monitors/workers, backoff,
-scheduling, production supervision, topology, catch-up storage, and production
-adapters remain deferred.
-Worker-unsupported rows such as `CATCH_UP` do not
-consume accepted work or loop failure budget. Pre-callback claim, validation,
-and lease/fencing failures do not increment accepted work, but they do increment
-failed work and count toward the framework failure bound. Once the endpoint
-callback or `onMessage` path has been invoked, endpoint failures and later
-framework cleanup/status-update failures are accepted work and may appear in
-failed work.
-Live shard ownership plus live per-message ownership block competing callback
-dispatch while ownership is current; expired per-message ownership may be
-replaced during claim compare-and-set using the storage clock as
-abandoned-work recovery. If a stale owner continues running after losing
-renewal, endpoint callback side effects are at-least-once/replay-safe: later
-final fencing can prevent stale finalization, but it cannot uninvoke a callback
-that already ran. Broader production supervision, cancellation, and
-retry-monitor policy is not provided. The framework repeats
-one-shard replay until
-idle, skipped, stopped, paused after a bounded skipped-only scan streak, or a
-configured failure bound. A later internal run resumes from a saved cursor and
-safely resets it if earlier pending rows disappeared. Lease renewal uses same-event-loop timers
-around in-process callbacks, so CPU-bound synchronous callbacks can still
-starve renewal; this implementation treats that as an in-process trust-boundary
-limitation rather than timer-protected preemption. The package does not expose
-a raw worker callback API; framework-owned replay stays behind validated
-endpoints. Local posting handoffs cover command rows,
+The framework persists pending and delivered `InboxMessage` rows directly
+through `RecordStorage`. Shard ownership is the only concurrent-delivery
+exclusion; it creates neither a per-message claim nor a separate dedup record.
+Delivered rows are the deduplication fact. Handler effects and the delivered-row
+compare-and-set are not transactional, so a lost acknowledgement can redeliver
+after restart and downstream handling must be idempotent. `DeliveryMonitor`
+owns reception-failure policy: its default marks a failed reception delivered
+and continues independent targets; applications may choose the immediate repeat
+action. It adds no attempts, quarantine, receipts, markers, timers, backoff,
+dead-letter storage, or scheduler policy. Callback snapshots copy `Date` values
+and `Any.value` bytes. The package exposes no raw worker callback API; replay
+stays behind validated endpoints. Local posting handoffs cover command rows,
 projection subscriber rows, and process-manager event rows. Command
 handlers and projection subscribers wait for the exact received row to replay;
 framework-owned replay validates the row label and pending `TO_DELIVER` status
