@@ -529,7 +529,6 @@ describe("LocalEntityInbox", () => {
 
     const run = await new DeliveryLoop({
       delivery,
-      node: "worker-a",
       shard: ShardIndex.single(),
       onMessage: (message) => inbox.replay(message),
     }).run();

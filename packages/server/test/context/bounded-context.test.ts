@@ -2111,11 +2111,11 @@ class ObservingStorageFactory extends InMemoryStorageFactory {
     recordSpec: RecordSpec<I, R>,
   ): RecordStorage<I, R> {
     this.#creationCount += 1;
-    this.creations.push({ context, recordSpec });
+    this.creations.push({ context, recordSpec: eraseRecordSpec(recordSpec) });
     const storage = this.throwOnCloseCreations.includes(this.#creationCount)
       ? new ThrowingCloseRecordStorage(context, recordSpec, this.observed)
       : new ObservingRecordStorage(context, recordSpec, this.observed);
-    this.storages.push(storage);
+    this.storages.push(eraseRecordStorage(storage));
     return storage;
   }
 }
@@ -2144,15 +2144,14 @@ class DelayingStorageFactory extends InMemoryStorageFactory {
   // The protected storage seam intentionally returns unknown; this test fixture
   // narrows only the fields it decorates.
   override createEntityStorage(input: unknown): unknown {
-    /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return */
     const storage = super.createEntityStorage(input) as {
-      readonly current: EntityRecordStorage<unknown, Message>;
+      readonly current: EntityRecordStorage<unknown>;
       readonly events: unknown;
       readonly states: unknown;
       close(): void;
     };
     const current = storage.current;
-    const delayedCurrent: EntityRecordStorage<unknown, Message> = {
+    const delayedCurrent: EntityRecordStorage<unknown> = {
       read: (id) => current.read(id),
       query: (plan) => current.query(plan),
       write: async (record) => {
@@ -2559,4 +2558,16 @@ async function waitForCondition(
 interface StorageCreation {
   readonly context: StorageContext;
   readonly recordSpec: RecordSpec<unknown, Message>;
+}
+
+function eraseRecordSpec<I, R extends Message>(
+  recordSpec: RecordSpec<I, R>,
+): RecordSpec<unknown, Message> {
+  return recordSpec as unknown as RecordSpec<unknown, Message>;
+}
+
+function eraseRecordStorage<I, R extends Message>(
+  storage: RecordStorage<I, R>,
+): RecordStorage<unknown, Message> {
+  return storage as unknown as RecordStorage<unknown, Message>;
 }

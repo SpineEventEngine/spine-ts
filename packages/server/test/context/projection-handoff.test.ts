@@ -127,7 +127,6 @@ describe("LocalProjectionInbox", () => {
     const recovery = await new DeliveryLoop({
       delivery,
       shard: ShardIndex.single(),
-      node: "startup-recovery",
       onMessage: (message) => inbox.replay(message, "tenant-a"),
     }).run();
     expect(recovery.delivered).toBe(1);
@@ -249,7 +248,6 @@ describe("LocalProjectionInbox", () => {
     const run = await new DeliveryLoop({
       delivery,
       shard: ShardIndex.single(),
-      node: "worker-a",
       onMessage: (message) => inbox.replay(message),
     }).run();
 
