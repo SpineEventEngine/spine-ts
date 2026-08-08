@@ -1,6 +1,6 @@
 # T-0143 Documentation Convergence Review
 
-Status: Specialist review wave in progress at `f7f247eb`.
+Status: Converged and clean at `6486ce10`.
 
 ## Required Concerns
 
@@ -76,3 +76,8 @@ prose-only changes; security remains N/A because no trust-boundary claim changed
 - Reliability P1 resolved: active guidance distinguishes optional lower-level
   `keepUntil` from the repository handoff's `whenReceived + 30 seconds` value,
   including the delivered-row suppression boundary.
+- Documentation targeted re-review: CLEAN at `95bf415c`.
+- TypeScript/API final targeted re-review: CLEAN at `6486ce10`.
+- Performance/reliability final targeted re-review: CLEAN at `6486ce10`.
+- Runtime metadata was unavailable for all reviewers; the immutable or
+  explicitly configured profiles recorded above satisfy the acceptance gate.

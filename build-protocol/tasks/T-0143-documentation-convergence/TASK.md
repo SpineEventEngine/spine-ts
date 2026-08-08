@@ -1,6 +1,6 @@
 # T-0143: Wave 8 Documentation Convergence
 
-Status: In progress from integrated Wave 8 implementation base.
+Status: Complete and verified at the T-0143 closure commit.
 
 ## Objective
 
