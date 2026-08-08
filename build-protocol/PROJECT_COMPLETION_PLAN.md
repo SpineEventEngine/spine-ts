@@ -181,6 +181,11 @@ integrated, post-merge verified, and remotely synchronized. Do not publish
 packages to npm until all waves are complete and publication is revisited with
 the human.
 
+Wave 8's T-0129 through T-0144 sequence is complete: the storage correction,
+delivery-policy cutover, validation upgrade, example and documentation
+convergence, invention audit, release verification, and post-merge proof are
+clean. T-0144 owns the final remote-synchronization contract.
+
 ## Authored API And Example Quality Correction
 
 T-0080 is a bounded corrective program opened after Wave 4. It does not answer

@@ -1,6 +1,6 @@
 # Wave 8 Storage Correction Plan
 
-Status: Reviewed and ready for implementation
+Status: Complete under T-0144's remote-synchronization contract.
 
 Navigation: [Completion plan](../PROJECT_COMPLETION_PLAN.md) | [Task ledger](../tasks/T-0129-wave8-storage-correction/TASK.md)
 

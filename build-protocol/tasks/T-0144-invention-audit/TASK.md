@@ -1,6 +1,6 @@
 # T-0144: Invention Audit And Wave 8 Closure
 
-Status: Release verified; integration and remote synchronization in progress.
+Status: Complete under the remote-synchronization contract recorded below.
 
 ## Objective
 
@@ -53,3 +53,13 @@ runtime and owns the single repository-wide `verify:release`.
   style/maintainability, and documentation concerns are all required over the
   affected audit evidence.
 - Security is N/A unless the audit or a correction changes a trust boundary.
+
+## Closure
+
+The release-verified task tree was merged without conflicts as `ce0b9476`; its
+tree is byte-identical to the task endpoint. Focused post-merge verification
+passes 18 files / 406 tests plus every deterministic task gate. This record
+cannot include the content-addressed SHA of its own commit. Its completion
+contract is therefore to push this record to the task, integration, and `main`
+refs on `origin`, then confirm externally that all three refs resolve to that
+same commit. No ref is pushed to `spine-event-engine`.
