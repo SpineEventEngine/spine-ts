@@ -15,41 +15,6 @@ current behavior. The deterministic companion is
 - **TS necessity**: bounded adapter/lifecycle detail required by this runtime.
 - **Removed**: forbidden pre-Wave-8 invention; the checker protects its absence.
 
-## Persisted records and serialization boundaries
-
-| Surface                                                              | Classification  | Current evidence                                                                          |
-| -------------------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------- |
-| `EntityRecord`, grouped state/event history, and Event Store `Event` | JVM counterpart | Direct `RecordSpec` families; current state is never reconstructed from events.           |
-| `InboxMessage` and shard-session record                              | Human-approved  | Direct rows; shard ownership excludes concurrent workers; delivered rows are dedup facts. |
-| `SubscriptionRecord`                                                 | Human-approved  | One `spine.client.SubscriptionRecord` per explicit subscription.                          |
-| `GatewayAuthenticatedSubscription`                                   | Human-approved  | One approved binding record; single-Gateway scope.                                        |
-| `ApplicationNodeLease` and `NodeRegistrationId`                      | Human-approved  | `spine.deployment` direct record and unversioned discovery layout.                        |
-| Tenant index                                                         | TS necessity    | Stores `spine.core.TenantId` in its own layout for multitenant discovery.                 |
-| Protobuf-ES schemas, `Any`, and descriptor metadata                  | JVM counterpart | The active serialized boundary; authored Proto remains non-optional.                      |
-
-## Public APIs, layouts, and limits
-
-| Surface                                                                         | Classification  | Current evidence                                                                       |
-| ------------------------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------- |
-| `RecordSpec` (`recordType`, ID, columns, `sourceType`) and `StorageGroup`       | JVM counterpart | Providers resolve direct source/record/group layouts.                                  |
-| MySQL `setTableName`/create operation and Datastore layout/storage creators     | Human-approved  | Every framework record family remains configurable.                                    |
-| Provider structural validation; no automatic migration                          | Human-approved  | Existing layouts are inspected, never altered.                                         |
-| Datastore reconciliation 1,000, write batches 500; MySQL query structure bounds | TS necessity    | Bounded provider operation limits, not policy records.                                 |
-| `DeliveryMonitor`, `FailedReception`, immediate actions                         | JVM counterpart | Default marks failed reception delivered; durable action failure isolates the target.  |
-| Complete `WorkerId` fencing and finite shard lease                              | TS necessity    | Same worker converges before expiry; stale release cannot remove a replacement.        |
-| Stand cleanup, Gateway expiry cleanup, bounded queues/pages                     | TS necessity    | Explicit bounded cleanup/lifecycle mechanisms; no quotas or durable scheduling policy. |
-
-## Delivery, subscription, auth, deployment, examples, and documentation
-
-| Surface                                           | Classification            | Current evidence                                                                            |
-| ------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------- |
-| Handler effect plus delivered-row CAS             | Human-approved limitation | Not one transaction; lost acknowledgement may redeliver; downstream work is idempotent.     |
-| Remote inbox removal                              | Human-approved            | Rereads exact pending row and calls `removeOne()` with no local state.                      |
-| Stand/Gateway subscriptions                       | Human-approved            | Best-effort updates; no complete replay, multi-Gateway coordination, quota, or reservation. |
-| Browser auth/session collaborators                | TS necessity              | Application-owned identity/session policy; no Wave 8 persistence invention.                 |
-| Node discovery and provider layouts               | Human-approved            | Per-record source layout with no versioned key or migration path.                           |
-| Examples and current READMEs/REFERENCE/USER_GUIDE | Human-approved            | Teach direct records, provider customization, monitor behavior, and no-migration cutover.   |
-
 ## Removed artifacts protected by the deterministic audit
 
 `RemovalQuarantine`; `RemovalFingerprint`; `DeliveryReceipt`; `DeliveryMarker`;
@@ -60,7 +25,7 @@ current behavior. The deterministic companion is
 machine-readable source of truth is
 [`.wave8-forbidden-artifacts.json`](../../.wave8-forbidden-artifacts.json).
 
-## Navigable contract evidence
+## Current contract and serialization inventory
 
 | Contract                                                                                             | Classification  | Exact evidence                                                                                                                                                                                                                                             |
 | ---------------------------------------------------------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -70,8 +35,14 @@ machine-readable source of truth is
 | `SubscriptionRecord` and subscription registry                                                       | Human-approved  | [Proto](../../packages/proto/proto/spine/client/subscription_record.proto), [registry](../../packages/server/src/stand/subscription-registry.ts)                                                                                                           |
 | `GatewayAuthenticatedSubscription` and bindings                                                      | Human-approved  | [Proto](../../packages/proto/proto/spine/auth/authenticated_subscription.proto), [bindings](../../packages/server/src/server/durable-subscription-bindings.ts), [auth reference](../../packages/auth/REFERENCE.md)                                         |
 | `ApplicationNodeLease`, `NodeRegistrationId`, registry                                               | Human-approved  | [Proto](../../packages/proto/proto/spine/deployment/node_discovery.proto), [record spec](../../packages/deployment/src/registry/leased-node-registry.ts)                                                                                                   |
+| Tenant index using direct `TenantId` records                                                         | TS necessity    | [tenant index](../../packages/server/src/context/tenant-index.ts), [Tenant ID schema](../../packages/proto/proto/spine/core/tenant_id.proto)                                                                                                               |
+| Authored Protobuf-ES schemas, `Any`, and descriptor metadata                                         | JVM counterpart | [Proto sources](../../packages/proto/proto), [generated exports](../../packages/proto/src/index.ts), [Proto contract](../PROTOBUF_CONTRACT.md)                                                                                                             |
 | MySQL table/create configuration                                                                     | Human-approved  | [builder](../../packages/storage-rdbms/src/mysql/storage-factory.ts), [reference](../../packages/storage-rdbms/REFERENCE.md)                                                                                                                               |
 | Datastore layouts and custom creators                                                                | Human-approved  | [builder](../../packages/storage-datastore/src/datastore/storage-factory.ts), [reference](../../packages/storage-datastore/REFERENCE.md)                                                                                                                   |
+| `RemoteInbox`, `RemoteWorkRegistry`, `RemoteDelivery`, client options                                | Human-approved  | [delivery-client exports](../../packages/delivery-client/src/index.ts), [remote adapters](../../packages/delivery-client/src/remote/adapters.ts), [reference](../../packages/delivery-client/REFERENCE.md)                                                 |
+| Stand/Gateway subscription, browser-auth, and cleanup contracts                                      | TS necessity    | [server exports](../../packages/server/src/index.ts), [auth exports](../../packages/auth/src/index.ts), [server reference](../../packages/server/REFERENCE.md), [auth reference](../../packages/auth/REFERENCE.md)                                         |
+| Handler effect plus delivered-row CAS limitation                                                     | Human-approved  | [delivery implementation](../../packages/server/src/delivery/delivery.ts), [server reference](../../packages/server/REFERENCE.md), [delivery-client reference](../../packages/delivery-client/REFERENCE.md)                                                |
+| Examples and current public documentation                                                            | Human-approved  | [examples](../../examples), [USER_GUIDE](../../docs/USER_GUIDE.md), [API guide](../../docs/api/README.md), [architecture guide](../../docs/architecture/README.md)                                                                                         |
 | Validation package                                                                                   | Human-approved  | [core manifest](../../packages/core/package.json), [facade](../../packages/core/src/index.ts)                                                                                                                                                              |
 
 ## Exact bounded-mechanism ledger
