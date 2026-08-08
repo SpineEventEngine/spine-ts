@@ -35,8 +35,6 @@ export type OnDeliveryMessage = (message: DeliveryEndpointMessage) => void | Pro
  * Summarizes one finite direct delivery run.
  */
 export interface DeliveryRun {
-  // prettier-ignore
-
   /**
    * Identifies the terminal delivery outcome.
    */
@@ -72,8 +70,6 @@ export interface DeliveryRun {
  * Describes ephemeral delivery failure evidence that is never persisted.
  */
 export interface DeliveryFailure {
-  // prettier-ignore
-
   /**
    * Identifies the message associated with the failure.
    */
@@ -89,8 +85,6 @@ export interface DeliveryFailure {
  * Executes direct Inbox delivery for one complete worker identity.
  */
 export class Delivery {
-  // prettier-ignore
-
   /**
    * Identifies the immutable storage namespace.
    */
@@ -256,13 +250,10 @@ export class Delivery {
     const failures: DeliveryFailure[] = [];
     let current = session;
     const renew = async (): Promise<boolean> => {
-      if (current.kind !== "LEASED" || this.shards.renew === undefined) return true;
+      const renewShard = this.shards.renew?.bind(this.shards);
+      if (current.kind !== "LEASED" || renewShard === undefined) return true;
       const renewed = await safelyValue(
-        () =>
-          this.shards.renew!(
-            current as Extract<typeof current, { kind: "LEASED" }>,
-            options.operation,
-          ),
+        () => renewShard(current as Extract<typeof current, { kind: "LEASED" }>, options.operation),
         undefined,
       );
       if (renewed === undefined) return false;
@@ -281,7 +272,7 @@ export class Delivery {
           statuses: ["TO_DELIVER"],
           limit: this.pageSize,
           ...(after === undefined ? {} : { after }),
-          ...(options.operation === undefined ? {} : options.operation),
+          ...(options.operation ?? {}),
         });
         if (messages.length === 0) break;
         const deliveredBefore = statistics.delivered;
@@ -355,19 +346,20 @@ export class Delivery {
         false,
       );
       if (!released) {
+        // The release result changes the terminal delivery outcome: a shard is
+        // not complete until ownership is confirmed released.
+        // eslint-disable-next-line no-unsafe-finally
         return result("FAILED", { ...statistics, failed: statistics.failed + 1 }, failures);
       }
-      if (released) {
-        await safely(() =>
-          this.#monitor.onDeliveryCompleted(
-            Object.freeze({
-              processed: statistics.processed,
-              delivered: statistics.delivered,
-              failed: statistics.failed,
-            } satisfies DeliveryStatistics),
-          ),
-        );
-      }
+      await safely(() =>
+        this.#monitor.onDeliveryCompleted(
+          Object.freeze({
+            processed: statistics.processed,
+            delivered: statistics.delivered,
+            failed: statistics.failed,
+          } satisfies DeliveryStatistics),
+        ),
+      );
     }
   }
 }
@@ -376,8 +368,6 @@ export class Delivery {
  * Configures one direct delivery owner.
  */
 export interface DeliveryOptions {
-  // prettier-ignore
-
   /**
    * Identifies the storage namespace.
    */
@@ -422,18 +412,12 @@ export interface DeliveryOptions {
    * Bounds each direct Inbox read.
    */
   readonly pageSize?: number;
-
-  /**
-   * Retains a batch-size integration setting.
-   */
 }
 
 /**
  * Configures one direct shard drain.
  */
 export interface DeliveryDrainOptions {
-  // prettier-ignore
-
   /**
    * Dispatches supported Inbox messages.
    */

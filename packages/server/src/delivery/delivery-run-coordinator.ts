@@ -313,7 +313,7 @@ export class DeliveryRunCoordinator {
 
   async #runOwnerAdmission(scopes: readonly DeliveryRunScope[]): Promise<void> {
     const obligation = DeliveryRunValues.obligation(scopes);
-    let shards = DeliveryRunValues.shards(scopes);
+    const shards = DeliveryRunValues.shards(scopes);
     while (shards.length > 0) {
       let evidence: DeliveryWorkerEvidence;
       const started = this.#worker.start(obligation, shards);

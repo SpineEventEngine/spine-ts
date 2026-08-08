@@ -459,8 +459,10 @@ const DeliveryValues = Object.freeze({
     return Object.freeze({ ...context });
   },
   snapshotWorker(worker: WorkerId): WorkerId {
+    const nodeId = worker.nodeId;
+    if (nodeId === undefined) throw new Error("Delivery worker must include a node identifier.");
     return Object.freeze({
-      nodeId: Object.freeze({ value: worker.nodeId!.value }),
+      nodeId: Object.freeze({ value: nodeId.value }),
       value: worker.value,
     }) as WorkerId;
   },

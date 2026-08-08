@@ -46,7 +46,7 @@ export class DeliveryRunControl {
           if (aborted !== undefined) throw aborted;
           return result;
         },
-        (error) => {
+        (error: unknown) => {
           throw error;
         },
       )
