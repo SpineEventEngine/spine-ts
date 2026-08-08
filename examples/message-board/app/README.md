@@ -74,11 +74,10 @@ application-owned Datastore storage; gateway subscription registry storage is
 separately owned. Production browser processes also require the shared
 `MESSAGE_BOARD_SESSION_ISSUER`, `MESSAGE_BOARD_SESSION_AUDIENCE`,
 `MESSAGE_BOARD_SESSION_KEY_ID`, and `MESSAGE_BOARD_SESSION_PRIVATE_KEY` values.
-The same application-selected storage holds application-owned session
-revocations as logical records distinct from the gateway-owned subscription
-registry. Changing the signing values per browser-capable replica breaks
-session validation or revocation; changing the registry namespace splits
-subscription ownership.
+Each entrypoint constructs one caller-owned Datastore client from
+`DATASTORE_PROJECT_ID` and hands that exact client to the storage factory.
+Changing signing values per browser-capable replica breaks session validation;
+changing the registry namespace splits subscription ownership.
 The [container image guide](../deploy/container/README.md) lists the production
 commands, fixed image tags, and runtime values.
 

@@ -3230,6 +3230,25 @@ describe("repository signal routing", () => {
     );
   });
 
+  it("routes a message-valued producer ID to a matching scalar target ID", () => {
+    const repository = createTaskCreatedScalarProjectionRepository();
+    const id = create(TaskIdSchema, { value: "matching-scalar-target" });
+
+    expect(
+      repository.routeEvent(
+        SignalEnvelopes.event({
+          id: create(EventIdSchema, { value: "event-scalar-producer-match" }),
+          context: create(EventContextSchema, {
+            producerId: AnyMessages.pack(TaskIdSchema, id),
+            version: create(VersionSchema, { number: 1 }),
+          }),
+          schema: TaskCreatedSchema,
+          message: create(TaskCreatedSchema, { id, title: "Matching scalar producer task" }),
+        }),
+      ).entityIds,
+    ).toEqual([id.value]);
+  });
+
   it("rejects message-valued event IDs with the wrong message type", () => {
     const repository = createMessageIdTaskRepository();
 

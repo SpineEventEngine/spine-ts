@@ -49,13 +49,17 @@ describe("MessageBoard deployment entrypoints", () => {
     const calls = startupMocks();
 
     await import("../src/application-entry.ts");
-    expect(calls.runApplication).toHaveBeenCalledWith(calls.applicationConfig, calls.storage);
+    expect(calls.datastore).toHaveBeenCalledWith({ projectId: "project" });
+    expect(calls.storage).toHaveBeenCalledWith(calls.client);
+    expect(calls.runApplication).toHaveBeenCalledWith(calls.applicationConfig, calls.storageResult);
 
     vi.resetModules();
     await import("../src/combined-entry.ts");
+    expect(calls.datastore).toHaveBeenCalledWith({ projectId: "project" });
+    expect(calls.storage).toHaveBeenCalledWith(calls.client);
     expect(calls.runCombined).toHaveBeenCalledWith(
       expect.objectContaining({ bindings: calls.bindings, sessions: calls.sessions }),
-      calls.storage,
+      calls.storageResult,
     );
   });
 
@@ -63,6 +67,9 @@ describe("MessageBoard deployment entrypoints", () => {
     const calls = startupMocks();
 
     await import("../src/gateway-entry.ts");
+
+    expect(calls.datastore).toHaveBeenCalledWith({ projectId: "project" });
+    expect(calls.storage).toHaveBeenCalledWith(calls.client);
 
     expect(calls.serverAtPort).toHaveBeenCalledWith(
       calls.gatewayConfig.port,
@@ -103,14 +110,19 @@ function startupMocks() {
     .fn()
     .mockReturnValue({ run: vi.fn().mockResolvedValue({ baseUrl: "http://gateway" }) });
 
-  vi.doMock("@google-cloud/datastore", () => ({ Datastore: vi.fn() }));
+  const client = {};
+  const datastore = vi.fn(function Datastore() {
+    return client;
+  });
+  const storageFactory = vi.fn(() => storage);
+  vi.doMock("@google-cloud/datastore", () => ({ Datastore: datastore }));
   vi.doMock("../src/deployment-config.js", () => ({
     MessageBoardDeployment: {
       application: () => applicationConfig,
       combined: () => combinedConfig,
       gateway: () => gatewayConfig,
       configureServer: () => undefined,
-      storage: () => storage,
+      storage: storageFactory,
       bindings: () => bindings,
       sessions: () => sessions,
     },
@@ -138,11 +150,14 @@ function startupMocks() {
   return {
     applicationConfig,
     bindings,
+    client,
+    datastore,
     gatewayConfig,
     runApplication,
     runCombined,
     serverAtPort,
     sessions,
-    storage,
+    storage: storageFactory,
+    storageResult: storage,
   };
 }

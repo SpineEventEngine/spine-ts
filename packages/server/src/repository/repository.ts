@@ -618,6 +618,11 @@ export class Repository<
   /**
    * Routes an event to one or more entity IDs without invoking a handler.
    *
+   * A packed message-valued `EventContext.producerId` is decoded using the event
+   * message's first-field schema. It must identify the same entity as that first
+   * field: message targets compare the complete ID message, while scalar targets
+   * compare the message ID's scalar value. A mismatch is rejected.
+   *
    * @param event The event envelope to route.
    * @returns The calculated event route.
    */
