@@ -38,4 +38,3 @@ serialized, dependency, and runtime contracts do not.
   documentation-regression test changes. It must not spawn subagents.
 - The orchestrator owns read-only inventory, verification, review aggregation,
   integration, and remote synchronization.
-
