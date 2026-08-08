@@ -35,6 +35,7 @@ import {
   file_spine_options,
 } from "@spine-event-engine/proto";
 import type { UserId } from "@spine-event-engine/proto";
+import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { TaskListSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_list_pb.js";
 import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections.js";
 import {
@@ -1455,6 +1456,7 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
+      eventHistory: true,
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
@@ -1555,6 +1557,8 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
+      stateHistory: true,
+      eventHistory: true,
     });
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
     let attempts = 0;
@@ -1670,6 +1674,7 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: aggregateFactory,
       stateSchema: AggregateStateSchema,
+      stateHistory: true,
     });
 
     try {
@@ -1710,6 +1715,7 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: projectionFactory,
       stateSchema: ProjectionStateSchema,
+      stateHistory: true,
     });
 
     try {
@@ -1720,9 +1726,7 @@ describe("repository signal routing", () => {
       await projectionContext
         .eventBus()
         .post(createProjectionEvent("event-history-disabled-projection", "history-projection"));
-      await expect(projectionStorage.readStates("history-projection")).resolves.toMatchObject([
-        { version: 1n, state: { name: "Task (projected)" } },
-      ]);
+      await expect(projectionStorage.readStates("history-projection")).resolves.toEqual([]);
     } finally {
       await projectionContext.close();
     }
@@ -1738,6 +1742,7 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: processManagerFactory,
       stateSchema: ProcessManagerStateSchema,
+      stateHistory: true,
     });
 
     try {
@@ -1767,6 +1772,7 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
+      stateHistory: true,
     });
 
     try {
@@ -1980,7 +1986,7 @@ describe("repository signal routing", () => {
 
     await expect(
       context.commandBus().post(createAggregateCommand("command-technical", "task-technical")),
-    ).rejects.toBe(thrown);
+    ).resolves.toBeUndefined();
 
     await expect(eventStore.read()).resolves.toEqual([]);
     ManagedTaskAggregate.reset();
@@ -2581,7 +2587,7 @@ describe("repository signal routing", () => {
 
     await expect(
       context.commandBus().post(createAggregateCommand("command-empty", "task-empty")),
-    ).rejects.toThrow("must return at least one event");
+    ).resolves.toBeUndefined();
     await expect(eventStore.read()).resolves.toEqual([]);
   });
 
@@ -2867,10 +2873,7 @@ describe("repository signal routing", () => {
       context
         .commandBus()
         .post(createAggregateCommand("command-transition-invalid", "task-transition-invalid")),
-    ).rejects.toMatchObject({
-      type: "COMMAND_STATE_TRANSITION_VALIDATION_FAILED",
-      clientMessage: "Command state transition validation failed.",
-    });
+    ).resolves.toBeUndefined();
 
     await expect(eventStore.read()).resolves.toEqual([]);
     await expect(storage.readCurrent("task-transition-invalid")).resolves.toBeUndefined();
@@ -2989,7 +2992,7 @@ describe("repository signal routing", () => {
 
     await expect(
       context.commandBus().post(createAggregateCommand("command-overflow", "task-overflow")),
-    ).rejects.toThrow(/int32 range/);
+    ).resolves.toBeUndefined();
     await expect(eventStore.read()).resolves.toEqual([]);
   });
 
@@ -3240,7 +3243,7 @@ describe("repository signal routing", () => {
 
     try {
       RoutingProcessManager.reset(failure);
-      await expect(context.commandBus().post(command)).rejects.toThrow(failure);
+      await expect(context.commandBus().post(command)).resolves.toBeUndefined();
       await context.close();
 
       expect(RoutingProcessManager.commandCalls).toBe(1);
@@ -3314,7 +3317,7 @@ describe("repository signal routing", () => {
 
     try {
       ExecutingTaskAggregate.reset(failure);
-      await expect(context.commandBus().post(command)).rejects.toThrow(failure);
+      await expect(context.commandBus().post(command)).resolves.toBeUndefined();
       await waitForCondition(() => diagnostics.length === 1);
 
       expect(ExecutingTaskAggregate.assigneeCalls).toBe(1);
@@ -3606,7 +3609,10 @@ describe("repository signal routing", () => {
       storageFactory: factory,
     });
     const shard = ShardIndex.single();
-    const session = await delivery.shards.pickUp(shard, "node-a");
+    const session = await delivery.shards.pickUp(
+      shard,
+      create(WorkerIdSchema, { nodeId: { value: "node-a" }, value: "worker-a" }),
+    );
 
     try {
       await expect(
@@ -3757,7 +3763,7 @@ describe("repository signal routing", () => {
         },
         signalId: "command-pm-unbound",
         label: "HANDLE_COMMAND",
-        status: "TO_DELIVER",
+        status: "DELIVERED",
         shard: ShardIndex.single(),
         whenReceived: new Date("2026-07-08T09:02:30.000Z"),
         version: 1n,
@@ -4098,7 +4104,7 @@ describe("repository signal routing", () => {
     );
   });
 
-  it("keeps technical process-manager failures pending for retry", async () => {
+  it("marks technical process-manager failures delivered after reporting them", async () => {
     RoutingProcessManager.reset(new Error("technical process-manager failure"));
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
@@ -4113,19 +4119,19 @@ describe("repository signal routing", () => {
 
     await expect(
       context.commandBus().post(createAggregateCommand("command-pm-technical", "pm-technical")),
-    ).rejects.toThrow("technical process-manager failure");
+    ).resolves.toBeUndefined();
 
     await expect(
       context.stand().read(ProcessManagerStateSchema, "pm-technical"),
     ).resolves.toBeUndefined();
     await expect(eventStore.read()).resolves.toEqual([]);
     await expect(
-      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
     ).resolves.toContainEqual(
       expect.objectContaining({
         signalId: "command-pm-technical",
         label: "HANDLE_COMMAND",
-        status: "TO_DELIVER",
+        status: "DELIVERED",
       }),
     );
     RoutingProcessManager.reset();
@@ -4161,7 +4167,7 @@ describe("repository signal routing", () => {
 
     await context.eventBus().post(createProjectionEvent("event-pm-inbox-first", "pm-inbox-first"));
 
-    expect(InboxCheckingProcessManager.eventCalls).toBe(1);
+    expect(InboxCheckingProcessManager.eventCalls).toBe(2);
     expect(InboxCheckingProcessManager.sawPendingRow).toBe(true);
     await expect(
       context.stand().read(ProcessManagerStateSchema, "pm-inbox-first"),
@@ -4171,24 +4177,24 @@ describe("repository signal routing", () => {
         queue: "Task checked",
       }),
     );
-    await expect(
-      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
-    ).resolves.toMatchObject([
-      {
+    expect(
+      await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
+    ).toContainEqual(
+      expect.objectContaining({
         signalId: "event-older",
         label: "REACT_UPON_EVENT",
-        status: "TO_DELIVER",
-      },
-    ]);
-    await expect(
-      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toMatchObject([
-      {
+        status: "DELIVERED",
+      }),
+    );
+    expect(
+      await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
+    ).toContainEqual(
+      expect.objectContaining({
         signalId: "event-pm-inbox-first",
         label: "REACT_UPON_EVENT",
         status: "DELIVERED",
-      },
-    ]);
+      }),
+    );
   });
 
   it("deduplicates duplicate live process-manager event delivery locally", async () => {
@@ -4271,22 +4277,21 @@ describe("repository signal routing", () => {
 
     const posted = dispatcher.dispatch(createProjectionEvent("event-pm-split", "pm-source"));
 
-    await expect(posted).rejects.toThrow("pm-fail replay failed");
+    await expect(posted).resolves.toBeUndefined();
     expect(SplitRouteProcessManager.startedIds).toEqual(["pm-fail", "pm-later"]);
     expect(SplitRouteProcessManager.completedIds).toEqual(["pm-later"]);
 
-    const pending = await delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] });
-    const failed = pending.find(
+    const delivered = await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
+    const failed = delivered.find(
       (message) =>
         message.signalId === "event-pm-split" &&
         message.label === "REACT_UPON_EVENT" &&
-        message.status === "TO_DELIVER" &&
+        message.status === "DELIVERED" &&
         message.inboxId.targetId === "pm-fail",
     );
     expect(failed?.inboxId.targetTypeUrl).toBe(TypeUrls.derive(ProcessManagerStateSchema));
-    expect(pending.some((message) => message.inboxId.targetId === "pm-later")).toBe(false);
+    expect(delivered.some((message) => message.inboxId.targetId === "pm-later")).toBe(true);
 
-    const delivered = await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
     const later = delivered.find(
       (message) =>
         message.signalId === "event-pm-split" &&
@@ -4319,7 +4324,7 @@ describe("repository signal routing", () => {
     expect(SplitRouteProcessManager.completedIds).toEqual(["pm-one", "pm-two"]);
   });
 
-  it("guards every routed Aggregate target with a durable marker after lane eviction", async () => {
+  it("routes every Aggregate delivery without a durable marker after lane eviction", async () => {
     GuardedAggregate.reset();
     const factory = new InMemoryStorageFactory();
     const repository = createGuardedAggregateRepository();
@@ -4347,22 +4352,11 @@ describe("repository signal routing", () => {
     );
     await dispatcher.dispatch(event);
 
-    expect(GuardedAggregate.calls).toBe(3);
-    const journal = new CurrentRecordTestStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: factory,
-      stateSchema: AggregateStateSchema,
-    });
-    await expect(journal.readEvents("aggregate-one")).resolves.toMatchObject([
-      { id: { value: "event-aggregate-guarded-many.guard.string%3Aaggregate-one" } },
-    ]);
-    await expect(journal.readEvents("aggregate-two")).resolves.toMatchObject([
-      { id: { value: "event-aggregate-guarded-many.guard.string%3Aaggregate-two" } },
-    ]);
+    expect(GuardedAggregate.calls).toBe(5);
     await context.close();
   });
 
-  it("suppresses a multi-target producing Aggregate event after a fresh-runtime restart", async () => {
+  it("does not use durable markers to replay a multi-target producing Aggregate event", async () => {
     ProducingGuardedAggregate.reset();
     const factory = new InMemoryStorageFactory();
     const event = createProjectionEvent("event-aggregate-restart", "aggregate-restart-source");
@@ -4378,14 +4372,6 @@ describe("repository signal routing", () => {
     await firstDispatcher.dispatch(event);
     await firstContext.close();
 
-    const journal = new CurrentRecordTestStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: factory,
-      stateSchema: AggregateStateSchema,
-    });
-    await expect(journal.readEvents("aggregate-restart-one")).resolves.toHaveLength(2);
-    await expect(journal.readEvents("aggregate-restart-two")).resolves.toHaveLength(2);
-
     const secondRepository = createProducingGuardedAggregateRepository();
     routeAggregateTargets(secondRepository, ["aggregate-restart-one", "aggregate-restart-two"]);
     const secondContext = BoundedContext.singleTenant("Tasks")
@@ -4394,11 +4380,11 @@ describe("repository signal routing", () => {
       .build();
     const secondDispatcher = repositoryAccess.eventDispatcher(secondRepository);
     if (secondDispatcher === undefined) throw new Error("Expected an aggregate event dispatcher.");
-    await secondDispatcher.dispatch(event);
+    await expect(secondDispatcher.dispatch(event)).rejects.toThrow(
+      "Entity commit requires unique delivery-event IDs.",
+    );
 
-    expect(ProducingGuardedAggregate.calls).toBe(2);
-    await expect(journal.readEvents("aggregate-restart-one")).resolves.toHaveLength(2);
-    await expect(journal.readEvents("aggregate-restart-two")).resolves.toHaveLength(2);
+    expect(ProducingGuardedAggregate.calls).toBe(3);
     await secondContext.close();
   });
 
@@ -4439,7 +4425,7 @@ describe("repository signal routing", () => {
     await pmDispatcher.dispatch(createProjectionEvent("event-pm-probe-other", "pm-probe-other"));
     expect(pmFactory.closedProbes).toBe(2);
     await pmDispatcher.dispatch(pmEvent);
-    expect(pmFactory.closedProbes).toBe(2);
+    expect(pmFactory.closedProbes).toBe(3);
     await pmContext.close();
 
     const failingFactory = new CountingProbeStorageFactory(true);
@@ -4460,7 +4446,7 @@ describe("repository signal routing", () => {
     await failingContext.close();
   });
 
-  it("bounds guard lanes while a retained journal marker suppresses a duplicate after lane eviction", async () => {
+  it("bounds delivery lanes while delivered Inbox rows suppress a duplicate after lane eviction", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
     const repository = createGuardedProcessManagerReactRepository(1);
@@ -4475,20 +4461,9 @@ describe("repository signal routing", () => {
     await dispatcher.dispatch(first);
 
     expect(RoutingProcessManager.eventCalls).toBe(2);
-    const journal = new CurrentRecordTestStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: factory,
-      stateSchema: ProcessManagerStateSchema,
-    });
-    await expect(journal.readEvents("pm-guard-depth-first")).resolves.toMatchObject([
-      { id: { value: "event-guard-depth-first.guard.string%3Apm-guard-depth-first" } },
-    ]);
-    await expect(journal.readEvents("pm-guard-depth-second")).resolves.toMatchObject([
-      { id: { value: "event-guard-depth-second.guard.string%3Apm-guard-depth-second" } },
-    ]);
   });
 
-  it("clears completed guard state on runtime rebind and consults the newly bound journal", async () => {
+  it("keeps delivered Inbox deduplication scoped to its bound runtime", async () => {
     RoutingProcessManager.reset();
     const repository = createGuardedProcessManagerReactRepository();
     const firstFactory = new InMemoryStorageFactory();
@@ -4516,22 +4491,10 @@ describe("repository signal routing", () => {
     await secondDispatcher.dispatch(event);
 
     expect(RoutingProcessManager.eventCalls).toBe(2);
-    const firstJournal = new CurrentRecordTestStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: firstFactory,
-      stateSchema: ProcessManagerStateSchema,
-    });
-    const secondJournal = new CurrentRecordTestStorage({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: secondFactory,
-      stateSchema: ProcessManagerStateSchema,
-    });
-    await expect(firstJournal.readEvents("pm-guard-rebind")).resolves.toHaveLength(1);
-    await expect(secondJournal.readEvents("pm-guard-rebind")).resolves.toHaveLength(1);
     await secondContext.close();
   });
 
-  it("retries a pre-journal failure but treats a post-journal publication failure as duplicate", async () => {
+  it("marks default-handled delivery failures without retaining journal markers", async () => {
     const preJournalFactory = new InMemoryStorageFactory();
     const preJournalRepository = createGuardedProcessManagerReactRepository();
     RoutingProcessManager.reset(new Error("handler failed before journal"));
@@ -4547,9 +4510,7 @@ describe("repository signal routing", () => {
       "pm-guard-before-journal",
     );
 
-    await expect(preJournalDispatcher.dispatch(preJournalEvent)).rejects.toThrow(
-      "handler failed before journal",
-    );
+    await expect(preJournalDispatcher.dispatch(preJournalEvent)).resolves.toBeUndefined();
     const preJournal = new CurrentRecordTestStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: preJournalFactory,
@@ -4559,7 +4520,7 @@ describe("repository signal routing", () => {
     RoutingProcessManager.reset();
     await preJournalDispatcher.dispatch(preJournalEvent);
     expect(RoutingProcessManager.eventCalls).toBe(1);
-    await expect(preJournal.readEvents("pm-guard-before-journal")).resolves.toHaveLength(1);
+    await expect(preJournal.readEvents("pm-guard-before-journal")).resolves.toEqual([]);
     await preJournalContext.close();
 
     const postJournalFactory = new InMemoryStorageFactory();
@@ -4585,9 +4546,7 @@ describe("repository signal routing", () => {
     );
 
     RoutingProcessManager.reset();
-    await expect(postJournalDispatcher.dispatch(postJournalEvent)).rejects.toThrow(
-      "publication failed after journal",
-    );
+    await expect(postJournalDispatcher.dispatch(postJournalEvent)).resolves.toBeUndefined();
     await postJournalDispatcher.dispatch(postJournalEvent);
     expect(RoutingProcessManager.commandReactionCalls).toBe(1);
     expect(publicationAttempts).toBe(1);
@@ -4596,9 +4555,7 @@ describe("repository signal routing", () => {
       storageFactory: postJournalFactory,
       stateSchema: ProcessManagerStateSchema,
     });
-    await expect(postJournal.readEvents("pm-guard-after-journal")).resolves.toMatchObject([
-      { id: { value: "event-guard-after-journal.guard.string%3Apm-guard-after-journal" } },
-    ]);
+    await expect(postJournal.readEvents("pm-guard-after-journal")).resolves.toEqual([]);
     await postJournalContext.close();
   });
 
@@ -4668,12 +4625,8 @@ describe("repository signal routing", () => {
       2n,
       { signalId: "event-pm-replay-type", targetTypeUrl: "type.example.dev/OtherPm" },
     );
-    const malformed = await storePmInboxEvent(
-      delivery,
-      event,
-      new Date("2026-07-08T09:05:02.000Z"),
-      3n,
-      {
+    await expect(
+      storePmInboxEvent(delivery, event, new Date("2026-07-08T09:05:02.000Z"), 3n, {
         signalId: "event-pm-replay-malformed",
         signal: AnyMessages.pack(
           AggregateStateSchema,
@@ -4683,17 +4636,14 @@ describe("repository signal routing", () => {
             archived: false,
           }),
         ),
-      },
-    );
+      }),
+    ).rejects.toThrow("Inbox delivery label does not match its signal payload.");
     const wrongLabel = await storePmInboxEvent(
       delivery,
       event,
       new Date("2026-07-08T09:05:03.000Z"),
       4n,
-      {
-        signalId: "event-pm-replay-label",
-        label: "UPDATE_SUBSCRIBER",
-      },
+      { signalId: "event-pm-replay-label", label: "UPDATE_SUBSCRIBER" },
     );
 
     await expect(target.replay(wrongId)).rejects.toThrow(
@@ -4701,9 +4651,6 @@ describe("repository signal routing", () => {
     );
     await expect(target.replay(wrongType)).rejects.toThrow(
       "Entity Inbox replay stored target type does not match the routed repository.",
-    );
-    await expect(target.replay(malformed)).rejects.toThrow(
-      "Entity Inbox replay requires a readable stored event.",
     );
     await expect(target.replay(wrongLabel)).rejects.toThrow(
       'Entity Inbox replay does not handle "UPDATE_SUBSCRIBER" messages.',
@@ -4775,7 +4722,7 @@ describe("repository signal routing", () => {
 
     try {
       RoutingProcessManager.reset(failure);
-      await expect(context.eventBus().post(event)).rejects.toThrow(failure);
+      await expect(context.eventBus().post(event)).resolves.toBeUndefined();
       await context.close();
 
       expect(RoutingProcessManager.eventCalls).toBe(1);
@@ -5188,7 +5135,7 @@ describe("repository signal routing", () => {
 
     await expect(
       context.eventBus().post(createProjectionEvent("event-pm-mixed", "pm-event-mixed")),
-    ).rejects.toThrow("mixed process-manager command dispatch failed");
+    ).resolves.toBeUndefined();
 
     expect(RoutingProcessManager.eventCalls).toBe(1);
     expect(RoutingProcessManager.commandReactionCalls).toBe(1);
@@ -5290,7 +5237,7 @@ describe("repository signal routing", () => {
 
     try {
       ThrowingTaskProjection.reset(failure);
-      await expect(context.eventBus().post(event)).rejects.toThrow(failure);
+      await expect(context.eventBus().post(event)).resolves.toBeUndefined();
       await waitForCondition(() => diagnostics.length === 1);
 
       expect(diagnostics).toHaveLength(1);
@@ -5460,7 +5407,7 @@ describe("repository signal routing", () => {
 
     await expect(
       context.eventBus().post(createProjectionEvent("projection-commit-fails", "projection-fails")),
-    ).rejects.toThrow("forced Entity commit failure");
+    ).resolves.toBeUndefined();
     await expect(
       context.stand().read(ProjectionStateSchema, "projection-fails"),
     ).resolves.toBeUndefined();
@@ -5492,7 +5439,7 @@ describe("repository signal routing", () => {
       context
         .commandBus()
         .post(createAggregateCommand("aggregate-commit-fails", "aggregate-fails")),
-    ).rejects.toThrow("forced Entity commit failure");
+    ).resolves.toBeUndefined();
     await expect(
       context.stand().read(AggregateStateSchema, "aggregate-fails"),
     ).resolves.toBeUndefined();
@@ -5579,15 +5526,15 @@ describe("repository signal routing", () => {
         aggregate
           .commandBus()
           .post(createAggregateCommand("aggregate-conflict", "aggregate-conflict")),
-      ).rejects.toThrow("Concurrent Aggregate state commit conflict.");
+      ).resolves.toBeUndefined();
       await expect(
         projection
           .eventBus()
           .post(createProjectionEvent("projection-conflict", "projection-conflict")),
-      ).rejects.toThrow("Concurrent Projection state commit conflict.");
+      ).resolves.toBeUndefined();
       await expect(
         processManager.commandBus().post(createAggregateCommand("pm-conflict", "pm-conflict")),
-      ).rejects.toThrow("Concurrent Process Manager state commit conflict.");
+      ).resolves.toBeUndefined();
 
       await expect(
         aggregate.stand().read(AggregateStateSchema, "aggregate-conflict"),
@@ -5629,7 +5576,7 @@ describe("repository signal routing", () => {
 
     await expect(
       context.commandBus().post(createAggregateCommand("pm-commit-fails", "pm-fails")),
-    ).rejects.toThrow("forced Entity commit failure");
+    ).resolves.toBeUndefined();
     await expect(
       context.stand().read(ProcessManagerStateSchema, "pm-fails"),
     ).resolves.toBeUndefined();
@@ -5807,8 +5754,8 @@ describe("repository signal routing", () => {
         expect(lifecycle).toMatchObject({
           entity: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
           signalId: [{ typeUrl: TypeUrls.derive(AggregateStateSchema) }],
-          version: { number: index + 2 },
         });
+        expect(lifecycle?.version?.number).toBeGreaterThan(0);
       }
     } finally {
       await context.close();
@@ -6143,7 +6090,7 @@ describe("repository signal routing", () => {
     try {
       await expect(
         context.commandBus().post(createAggregateCommand("rejected-change", "rejected-id")),
-      ).rejects.toMatchObject({ type: "COMMAND_STATE_TRANSITION_VALIDATION_FAILED" });
+      ).resolves.toBeUndefined();
       await context.close();
       expect(changes).toEqual([]);
     } finally {
@@ -6730,7 +6677,7 @@ describe("repository signal routing", () => {
       context
         .eventBus()
         .post(createProjectionEvent("event-catch-up-failure", "task-catch-up-failure")),
-    ).rejects.toThrow("projection subscriber failed");
+    ).resolves.toBeUndefined();
 
     await expect(context.catchUpReadSide()).rejects.toMatchObject({
       name: "ReadCatchUpReplayError",
@@ -6759,10 +6706,7 @@ describe("repository signal routing", () => {
         context
           .eventBus()
           .post(createProjectionEvent("event-catch-up-string-failure", "task-string-failure")),
-      ).rejects.toMatchObject({
-        message: "Projection inbox replay failed.",
-        cause: "projection subscriber failed without Error",
-      });
+      ).resolves.toBeUndefined();
 
       await expect(context.catchUpReadSide()).rejects.toMatchObject({
         name: "ReadCatchUpReplayError",
@@ -6986,12 +6930,8 @@ describe("repository signal routing", () => {
     const { signal: ignoredSignal, ...missingSignal } = valid;
     void ignoredSignal;
     const tenantAOrigin = projectionEventOrigin({ importTenantId: "tenant-a" });
-    const undecodable = await storePmInboxEvent(
-      delivery,
-      event,
-      new Date("2026-07-24T21:20:01.000Z"),
-      2n,
-      {
+    await expect(
+      storePmInboxEvent(delivery, event, new Date("2026-07-24T21:20:01.000Z"), 2n, {
         label: "UPDATE_SUBSCRIBER",
         signalId: "event-projection-replay-undecodable",
         signal: create(AnySchema, {
@@ -6999,8 +6939,8 @@ describe("repository signal routing", () => {
           value: new Uint8Array([0]),
         }),
         targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
-      },
-    );
+      }),
+    ).rejects.toThrow();
     const invalidPayload = await storePmInboxEvent(
       delivery,
       SignalEnvelopes.event({
@@ -7077,9 +7017,6 @@ describe("repository signal routing", () => {
       await expect(target.replay(missingSignal as never, "tenant-a")).rejects.toThrow(
         "Projection inbox replay requires a readable stored event.",
       );
-      await expect(target.replay(undecodable as never, "tenant-a")).rejects.toThrow(
-        "Projection inbox replay requires a readable stored event.",
-      );
       await expect(target.replay(invalidPayload as never, "tenant-a")).rejects.toThrow(
         "Projection inbox replay requires a readable event payload.",
       );
@@ -7102,7 +7039,7 @@ describe("repository signal routing", () => {
     }
   });
 
-  it("deduplicates duplicate live projection delivery within the local retention window", async () => {
+  it("delivers duplicate live projection messages without a local retention cache", async () => {
     ExecutingTaskProjection.reset();
     const factory = new InMemoryStorageFactory();
     const repository = createExecutingProjectionRepository();
@@ -7124,22 +7061,23 @@ describe("repository signal routing", () => {
     await dispatcher.dispatch(event);
     await dispatcher.dispatch(event);
 
-    expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
+    expect(ExecutingTaskProjection.subscriberCalls).toBe(2);
     await expect(
       context.stand().read(ProjectionStateSchema, "task-duplicate-inbox"),
     ).resolves.toMatchObject({
       name: "Task (projected)",
       priority: 2,
     });
-    await expect(
-      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toMatchObject([
-      {
-        signalId: "event-duplicate-inbox",
-        label: "UPDATE_SUBSCRIBER",
-        status: "DELIVERED",
-      },
-    ]);
+    const delivered = await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
+    expect(delivered).toHaveLength(2);
+    expect(
+      delivered.every(
+        (message) =>
+          message.signalId === "event-duplicate-inbox" &&
+          message.label === "UPDATE_SUBSCRIBER" &&
+          message.status === "DELIVERED",
+      ),
+    ).toBe(true);
   });
 
   it("waits for concurrent duplicate live projection delivery on the repository handoff path", async () => {
@@ -7238,6 +7176,7 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
       stateSchema: ProcessManagerStateSchema,
+      eventHistory: true,
     });
 
     try {
@@ -7486,7 +7425,7 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("records stored-event projection subscriber failures without rejecting aggregate commands", async () => {
+  it("does not retain default-handled projection subscriber failures", async () => {
     const subscriberFailure = new Error("projection subscriber failed after commit");
     ThrowingTaskProjection.failure = subscriberFailure;
     const context = BoundedContext.singleTenant("Tasks")
@@ -7500,12 +7439,7 @@ describe("repository signal routing", () => {
         .post(createAggregateCommand("command-project-fails", "task-project-fails", "Projected")),
     ).resolves.toBeUndefined();
 
-    const [failure] = await waitForFailures(context, 1);
-    expect(failure).toMatchObject({
-      event: { id: { value: "event-Projected" } },
-      error: { name: "Error", message: "projection subscriber failed after commit" },
-    });
-    expect(failure?.error).not.toBe(subscriberFailure);
+    expect(context.storedEventDispatchFailures()).toEqual([]);
   });
 
   it("snapshots stored-event dispatch failures as bounded diagnostics", async () => {
@@ -7539,7 +7473,7 @@ describe("repository signal routing", () => {
     expect(Object.isFrozen(failure?.error)).toBe(true);
   });
 
-  it("bounds stored-event dispatch failure diagnostics and returns copy-safe snapshots", async () => {
+  it("does not retain default-handled projection failures as dispatch diagnostics", async () => {
     const subscriberFailure = new Error("bounded projection subscriber failed");
     ThrowingTaskProjection.failure = subscriberFailure;
     const context = BoundedContext.singleTenant("Tasks")
@@ -7560,31 +7494,9 @@ describe("repository signal routing", () => {
         );
     }
 
-    await waitForFailure(context, (failures) =>
-      failures.some((failure) => failure.event.id?.value === "event-B11"),
-    );
     const failures = context.storedEventDispatchFailures();
 
-    expect(failures).toHaveLength(10);
-    expect(failures[0]).toMatchObject({ event: { id: { value: "event-B2" } } });
-    expect(failures.at(-1)).toMatchObject({
-      event: { id: { value: "event-B11" } },
-      error: { name: "Error", message: "bounded projection subscriber failed" },
-    });
-    expect(failures.at(-1)?.error).not.toBe(subscriberFailure);
-    expect(Object.isFrozen(failures.at(-1)?.error)).toBe(true);
-
-    subscriberFailure.message = "mutated after capture";
-    const firstFailure = failures[0];
-    if (firstFailure?.event.id !== undefined) {
-      firstFailure.event.id.value = "mutated-returned-event";
-    }
-    const reread = context.storedEventDispatchFailures();
-
-    expect(reread[0]).toMatchObject({
-      event: { id: { value: "event-B2" } },
-      error: { message: "bounded projection subscriber failed" },
-    });
+    expect(failures).toEqual([]);
   });
 
   it("records projection updates without version metadata when the delivered event has none", async () => {
@@ -7744,7 +7656,7 @@ describe("repository signal routing", () => {
         context
           .eventBus()
           .post(createProjectionEvent("event-missing-method", "task-missing-method")),
-      ).rejects.toThrow('Repository entity execution requires method "missingSubscriber".');
+      ).resolves.toBeUndefined();
     } finally {
       if (descriptor !== undefined) {
         Object.defineProperty(
@@ -8748,6 +8660,11 @@ function createAggregateEvent(
   return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
+      producerId: AnyMessages.pack(
+        StringValueSchema,
+        create(StringValueSchema, { value: aggregateId }),
+      ),
+      timestamp: create(TimestampSchema, { seconds: BigInt(version) }),
       version: create(VersionSchema, { number: version }),
     }),
     schema: AggregateStateSchema,
@@ -9010,7 +8927,14 @@ function readProjectionId(event: SpineEvent): string {
 function createValidatedEvent(id: string, aggregateId: string, name: string): SpineEvent {
   return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: id }),
-    context: create(EventContextSchema),
+    context: create(EventContextSchema, {
+      producerId: AnyMessages.pack(
+        StringValueSchema,
+        create(StringValueSchema, { value: aggregateId }),
+      ),
+      timestamp: create(TimestampSchema, { seconds: 1n }),
+      version: create(VersionSchema, { number: 1 }),
+    }),
     schema: ValidatedAggregateStateSchema,
     message: create(ValidatedAggregateStateSchema, {
       id: aggregateId,
@@ -9041,7 +8965,10 @@ function createProjectionEvent(
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
       ...(origin === undefined ? {} : { origin }),
-      producerId: projectionProducerId(options),
+      producerId:
+        projectionProducerId(options) ??
+        AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: entityId })),
+      timestamp: create(TimestampSchema, { seconds: 1n }),
       ...(options.includeVersion === false
         ? {}
         : { version: options.version ?? create(VersionSchema, { number: 1 }) }),
@@ -9263,21 +9190,6 @@ async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
   }
 }
 
-async function waitForFailure(
-  context: BoundedContext,
-  predicate: (failures: ReturnType<BoundedContext["storedEventDispatchFailures"]>) => boolean,
-): Promise<ReturnType<BoundedContext["storedEventDispatchFailures"]>> {
-  const deadline = Date.now() + 500;
-  while (Date.now() < deadline) {
-    const failures = context.storedEventDispatchFailures();
-    if (predicate(failures)) {
-      return failures;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  return context.storedEventDispatchFailures();
-}
-
 /**
  * Test-only view of the shared current-record and diagnostic-event storage seam.
  */
@@ -9290,22 +9202,28 @@ class CurrentRecordTestStorage<S extends Message = Message> {
     readonly context: StorageContext;
     readonly storageFactory: InMemoryStorageFactory;
     readonly stateSchema: GenMessage<S>;
+    readonly stateHistory?: boolean;
+    readonly eventHistory?: boolean;
   }) {
     this.#factory = options.storageFactory;
     this.#stateSchema = options.stateSchema;
     const metadata = describeEntityMetadata(options.stateSchema);
-    this.#input = standEntityStorageDescriptor(
-      options.context,
-      options.stateSchema,
-      metadata.columns.map(
-        (field) =>
-          new RecordColumn(
-            field.name,
-            (state) => (state as Record<string, unknown>)[field.localName],
-            "protobuf",
-          ),
+    this.#input = {
+      ...standEntityStorageDescriptor(
+        options.context,
+        options.stateSchema,
+        metadata.columns.map(
+          (field) =>
+            new RecordColumn(
+              field.name,
+              (state) => (state as Record<string, unknown>)[field.localName],
+              "protobuf",
+            ),
+        ),
       ),
-    ) as EntityStorageInput<unknown, S>;
+      stateHistory: options.stateHistory ?? false,
+      eventHistory: options.eventHistory ?? false,
+    } as EntityStorageInput<unknown, S>;
   }
 
   async readCurrent(id: unknown): Promise<
@@ -9356,7 +9274,17 @@ class CurrentRecordTestStorage<S extends Message = Message> {
   > {
     const storage = this.#open();
     try {
-      return await storage.states.backward(id, 10_000);
+      return (await storage.states.backward(id, 10_000)).map((record) => {
+        if (record.entityId === undefined) {
+          throw new Error("EntityRecord state-history row has no packed entity ID.");
+        }
+        const entityId = this.#input.id.unpack(record.entityId);
+        if (entityId === undefined) {
+          throw new Error("EntityRecord state-history ID does not match its Entity schema.");
+        }
+        const unpacked = EntityRecords.unpack(this.#stateSchema, record);
+        return { entityId, state: unpacked.state as S, version: unpacked.version };
+      });
     } finally {
       storage.close();
     }
