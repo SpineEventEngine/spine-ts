@@ -24,6 +24,8 @@ import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-met
 
 type ProjectionState = Message<"ProjectionState"> & { id: string; name: string; priority: number };
 type AggregateState = Message<"AggregateState"> & { id: string; name: string };
+type ProjectionId = Message<"ProjectionId"> & { value: string };
+type MessageIdState = Message<"MessageIdState"> & { id?: ProjectionId };
 
 const fixtureDescriptorSet = fromBinary(
   FileDescriptorSetSchema,
@@ -43,18 +45,26 @@ function fixtureSchemaAt<Shape extends Message>(index: number): GenMessage<Shape
 
 const ProjectionStateSchema = fixtureSchemaAt<ProjectionState>(0);
 const AggregateStateSchema = fixtureSchemaAt<AggregateState>(1);
-const ProjectionIdSchema = fixtureSchemaAt<Message>(8);
-const MessageIdStateSchema = fixtureSchemaAt<Message>(9);
+const ProjectionIdSchema = fixtureSchemaAt<ProjectionId>(8);
+const MessageIdStateSchema = fixtureSchemaAt<MessageIdState>(9);
 
 class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {}
 class AlternateAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
-class MessageIdProjection extends Projection<Message, typeof MessageIdStateSchema, number> {}
+class MessageIdProjection extends Projection<ProjectionId, typeof MessageIdStateSchema, number> {}
 class DerivedTaskProjection extends TaskProjection {}
+
+function register(entityType: unknown, schema: GenMessage<Message>): void {
+  new Repository({ entityType: entityType as never, schema });
+}
+
+function scan(entityType: unknown) {
+  return SpecScanner.scan(entityType as never);
+}
 
 describe("SpecScanner", () => {
   it("derives its current EntityRecord specification from the Entity class alone", () => {
-    new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema });
-    const spec = SpecScanner.scan(TaskProjection);
+    register(TaskProjection, ProjectionStateSchema);
+    const spec = scan(TaskProjection);
 
     expect(spec.sourceType).toBe(ProjectionStateSchema);
     expect(spec.recordType.typeName).toBe("spine.server.entity.EntityRecord");
@@ -75,8 +85,8 @@ describe("SpecScanner", () => {
   });
 
   it("materializes default lifecycle and Version columns from an incomplete persisted record", () => {
-    new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema });
-    const spec = SpecScanner.scan(TaskProjection);
+    register(TaskProjection, ProjectionStateSchema);
+    const spec = scan(TaskProjection);
     const record = create(EntityRecordSchema);
 
     expect(spec.columns.find((column) => column.name === "archived")?.valueIn(record)).toBe(false);
@@ -87,8 +97,8 @@ describe("SpecScanner", () => {
   });
 
   it("reads its current-record ID from the packed EntityRecord envelope", () => {
-    new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema });
-    const spec = SpecScanner.scan(TaskProjection);
+    register(TaskProjection, ProjectionStateSchema);
+    const spec = scan(TaskProjection);
     const record = create(EntityRecordSchema, {
       entityId: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: "task-1" })),
       state: AnyMessages.pack(
@@ -101,8 +111,8 @@ describe("SpecScanner", () => {
   });
 
   it("uses the generated schema for a message-shaped Entity ID", () => {
-    new Repository({ entityType: MessageIdProjection, schema: MessageIdStateSchema });
-    const spec = SpecScanner.scan(MessageIdProjection);
+    register(MessageIdProjection, MessageIdStateSchema);
+    const spec = scan(MessageIdProjection);
     const id = create(ProjectionIdSchema, { value: "task-2" });
     const record = create(EntityRecordSchema, {
       entityId: AnyMessages.pack(ProjectionIdSchema, id),
@@ -113,11 +123,11 @@ describe("SpecScanner", () => {
   });
 
   it("keeps EntityRecord shared while isolating Entity source types", () => {
-    new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema });
-    new Repository({ entityType: AlternateAggregate, schema: AggregateStateSchema });
+    register(TaskProjection, ProjectionStateSchema);
+    register(AlternateAggregate, AggregateStateSchema);
 
-    const projection = SpecScanner.scan(TaskProjection);
-    const alternate = SpecScanner.scan(AlternateAggregate);
+    const projection = scan(TaskProjection);
+    const alternate = scan(AlternateAggregate);
 
     expect(projection.recordType).toBe(alternate.recordType);
     expect(projection.recordType).toBe(EntityRecordSchema);
@@ -127,8 +137,8 @@ describe("SpecScanner", () => {
   });
 
   it("unpacks a record state once when two state columns are materialized", () => {
-    new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema });
-    const spec = SpecScanner.scan(TaskProjection);
+    register(TaskProjection, ProjectionStateSchema);
+    const spec = scan(TaskProjection);
     const packedState = AnyMessages.pack(
       ProjectionStateSchema,
       create(ProjectionStateSchema, { id: "task-1", name: "First", priority: 1 }),
@@ -147,11 +157,9 @@ describe("SpecScanner", () => {
   });
 
   it("does not inherit generated schema metadata from an Entity superclass", () => {
-    new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema });
+    register(TaskProjection, ProjectionStateSchema);
 
-    expect(() => SpecScanner.scan(DerivedTaskProjection)).toThrow(
-      /no generated state schema metadata/,
-    );
+    expect(() => scan(DerivedTaskProjection)).toThrow(/no generated state schema metadata/);
   });
 
   it("keeps unpack caches separate for the same envelope under different state schemas", () => {
@@ -169,8 +177,8 @@ describe("SpecScanner", () => {
   });
 
   it("rejects missing or mismatched EntityRecord envelopes", () => {
-    new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema });
-    const spec = SpecScanner.scan(TaskProjection);
+    register(TaskProjection, ProjectionStateSchema);
+    const spec = scan(TaskProjection);
 
     expect(() => spec.idValueIn(create(EntityRecordSchema))).toThrow(/ID does not match/);
     expect(() =>
@@ -208,8 +216,8 @@ describe("SpecScanner", () => {
       archived: true,
       deleted: false,
     });
-    new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema });
-    expect(SpecScanner.scan(TaskProjection).idValueIn(scalar)).toBe("authoritative-id");
+    register(TaskProjection, ProjectionStateSchema);
+    expect(scan(TaskProjection).idValueIn(scalar)).toBe("authoritative-id");
 
     const messageId = create(ProjectionIdSchema, { value: "message-id" });
     const message = EntityRecords.pack(
@@ -219,8 +227,8 @@ describe("SpecScanner", () => {
       1n,
       { archived: false, deleted: true },
     );
-    new Repository({ entityType: MessageIdProjection, schema: MessageIdStateSchema });
-    expect(SpecScanner.scan(MessageIdProjection).idValueIn(message)).toEqual(messageId);
+    register(MessageIdProjection, MessageIdStateSchema);
+    expect(scan(MessageIdProjection).idValueIn(message)).toEqual(messageId);
     expect(() =>
       EntityRecords.pack(ProjectionStateSchema, "id", scalarState, -1n, {
         archived: false,
@@ -252,10 +260,10 @@ describe("SpecScanner", () => {
   });
 
   it("keeps descriptor ID decoding fail-closed and canonicalizes structured IDs", () => {
-    new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema });
+    register(TaskProjection, ProjectionStateSchema);
     const descriptor = entityStorageDescriptor(
       { name: "Tasks", multitenant: false },
-      SpecScanner.scan(TaskProjection),
+      scan(TaskProjection),
     );
 
     expect(
@@ -268,20 +276,20 @@ describe("SpecScanner", () => {
   });
 
   it("round-trips scalar Entity IDs through the storage codec packer", () => {
-    new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema });
+    register(TaskProjection, ProjectionStateSchema);
     const descriptor = entityStorageDescriptor(
       { name: "Tasks", multitenant: false },
-      SpecScanner.scan(TaskProjection),
+      scan(TaskProjection),
     );
 
     expect(descriptor.id.unpack(descriptor.id.pack("task-1"))).toBe("task-1");
   });
 
   it("round-trips generated message Entity IDs through the storage codec packer", () => {
-    new Repository({ entityType: MessageIdProjection, schema: MessageIdStateSchema });
+    register(MessageIdProjection, MessageIdStateSchema);
     const descriptor = entityStorageDescriptor(
       { name: "Tasks", multitenant: false },
-      SpecScanner.scan(MessageIdProjection),
+      scan(MessageIdProjection),
     );
     const id = create(ProjectionIdSchema, { value: "task-1" });
 
@@ -292,8 +300,8 @@ describe("SpecScanner", () => {
     expect(() => EntityRecords.unpack(ProjectionStateSchema, {} as EntityRecord)).toThrow(
       /state schema/,
     );
-    new Repository({ entityType: MessageIdProjection, schema: MessageIdStateSchema });
-    const spec = SpecScanner.scan(MessageIdProjection);
+    register(MessageIdProjection, MessageIdStateSchema);
+    const spec = scan(MessageIdProjection);
     expect(() => spec.idValueIn({} as EntityRecord)).toThrow(/packed entity ID/);
     expect(() =>
       spec.idValueIn(

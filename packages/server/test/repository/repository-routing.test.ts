@@ -1144,7 +1144,10 @@ class MessageIdTaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint
 class MessageIdProducingAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
   assignTask(command: Task): TaskCreated {
     this.update((draft) => Object.assign(draft, command));
-    return create(TaskCreatedSchema, { id: command.id, title: command.title });
+    return create(TaskCreatedSchema, {
+      ...(command.id === undefined ? {} : { id: command.id }),
+      title: command.title,
+    });
   }
 }
 
@@ -1421,7 +1424,7 @@ describe("repository signal routing", () => {
 
   it("derives stable current-record identity from every supported ID representation", () => {
     new Repository({ entityType: ExecutingTaskProjection, schema: ProjectionStateSchema });
-    const spec = SpecScanner.scan(ExecutingTaskProjection);
+    const spec = SpecScanner.scan(ExecutingTaskProjection as never);
     const descriptor = entityStorageDescriptor({ name: "Tasks", multitenant: false }, spec);
     const structured = { value: "task-1" };
     const record = EntityRecords.pack(
@@ -1439,14 +1442,14 @@ describe("repository signal routing", () => {
     expect(descriptor.id.unpack(record.entityId as NonNullable<typeof record.entityId>)).toBe(
       "task-1",
     );
-    expect(descriptor.id.key(null)).toBe("null");
+    expect(descriptor.id.key(null as never)).toBe("null");
     expect(descriptor.id.key("task-1")).toBe("string:task-1");
     expect(descriptor.id.key(1)).toBe("number:1");
     expect(descriptor.id.key(false)).toBe("boolean:false");
-    expect(descriptor.id.key(1n)).toBe("bigint:1");
-    expect(descriptor.id.key(structured)).toBe('json:{"value":"task-1"}');
-    expect(descriptor.id.clone(structured)).toEqual(structured);
-    expect(descriptor.id.clone(structured)).not.toBe(structured);
+    expect(descriptor.id.key(1n as never)).toBe("bigint:1");
+    expect(descriptor.id.key(structured as never)).toBe('json:{"value":"task-1"}');
+    expect(descriptor.id.clone(structured as never)).toEqual(structured);
+    expect(descriptor.id.clone(structured as never)).not.toBe(structured);
   });
 
   it("executes aggregate commands through a built bounded-context command bus", async () => {
@@ -9452,16 +9455,7 @@ class CurrentRecordTestStorage<S extends Message = Message> {
         backward(id: unknown, depth: number): Promise<readonly SpineEvent[]>;
       };
       readonly states: {
-        backward(
-          id: unknown,
-          depth: number,
-        ): Promise<
-          readonly {
-            readonly entityId: unknown;
-            readonly state: S;
-            readonly version: bigint;
-          }[]
-        >;
+        backward(id: unknown, depth: number): Promise<readonly EntityRecord[]>;
       };
       close(): void;
     };

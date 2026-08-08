@@ -391,7 +391,7 @@ describe("@spine-event-engine/server", () => {
       ),
     ).toBeInstanceOf(Inbox);
     expect(
-      new ShardSession("session-1", ShardIndex.single(), "node-1", new Date(0), new Date(1)),
+      new ShardSession(ShardIndex.single(), undefined, new Date(0), new Date(1)),
     ).toBeInstanceOf(ShardSession);
     expect("dispatch" in new CommandBus()).toBe(false);
     expectTypeOf<CommandBus>().not.toHaveProperty("dispatch");
