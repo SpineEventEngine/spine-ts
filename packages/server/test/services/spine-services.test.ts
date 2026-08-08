@@ -37,6 +37,7 @@ import {
   EventSchema,
   FieldPathSchema,
   InternetDomainSchema,
+  OriginSchema,
   RejectionEventContextSchema,
   TenantIdSchema,
   type TenantId,
@@ -2365,6 +2366,41 @@ describe("SpineServices", () => {
     await iterator.return?.();
   });
 
+  it("matches multitenant event subscriptions against past-message actor tenants", async () => {
+    const context = BoundedContext.multitenant("PastMessageTenantEvents")
+      .addEventDispatcher(createDomainEventDispatcher(AggregateStateSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createEventTopic("tenant-past"));
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const nextUpdate = iterator.next();
+
+    await delay(25);
+    await context
+      .eventBus()
+      .post(createPastMessageAggregateEvent("event-past-other", "tenant-other"));
+    const beforeMatchingTenant = await Promise.race([
+      nextUpdate.then(() => "delivered"),
+      delay(50).then(() => "pending"),
+    ]);
+    await context
+      .eventBus()
+      .post(createPastMessageAggregateEvent("event-past-match", "tenant-past"));
+
+    const delivered = await withTimeout(nextUpdate, "past-message tenant subscription update");
+    const update = delivered.value as SubscriptionUpdate | undefined;
+
+    expect(beforeMatchingTenant).toBe("pending");
+    expect(delivered.done).toBe(false);
+    expect(update?.update.case).toBe("eventUpdates");
+    expect(
+      update?.update.case === "eventUpdates"
+        ? update.update.value.event.map((event) => event.id?.value)
+        : [],
+    ).toEqual(["event-past-match"]);
+    await iterator.return?.();
+  });
+
   it("keeps duplicate activation and cancellation behavior for event subscriptions", async () => {
     const context = BoundedContext.singleTenant("EventLifecycle")
       .addEventDispatcher(createDomainEventDispatcher(AggregateStateSchema))
@@ -2425,6 +2461,27 @@ describe("SpineServices", () => {
     expect((thrown as ConnectError).rawMessage).toBe(
       "SubscriptionService.Subscribe event topics support only include_all in this runtime slice.",
     );
+  });
+
+  it("rejects field masks and false include-all values on event topics", () => {
+    const context = BoundedContext.singleTenant("MalformedEventTopics")
+      .addEventDispatcher(createDomainEventDispatcher(AggregateStateSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const masked = createEventTopic();
+    masked.fieldMask = create(FieldMaskSchema, { paths: ["name"] });
+    const disabled = createEventTopic();
+    if (disabled.target?.criterion.case !== "includeAll") {
+      throw new Error("Expected an include-all event topic.");
+    }
+    disabled.target.criterion.value = false;
+
+    for (const [topic, message] of [
+      [masked, "SubscriptionService.Subscribe event topics do not support field_mask."],
+      [disabled, "SubscriptionService.Subscribe requires filters or include_all = true."],
+    ] as const) {
+      expect(() => handlers.subscribe(topic)).toThrow(message);
+    }
   });
 
   it("rejects internal event targets before listener attachment", () => {
@@ -3243,6 +3300,63 @@ describe("SpineServices", () => {
         id: taskId,
         title: "Matched",
       }),
+    );
+    await iterator.return?.();
+  });
+
+  it("matches message-valued subscription fields by their encoded value", async () => {
+    const repository = new Repository({
+      entityType: MessageIdTaskAggregate,
+      schema: TaskSchema,
+    });
+    const context = BoundedContext.singleTenant("MessageFieldTasks")
+      .add(repository)
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const taskId = create(TaskIdSchema, { value: "task-message-field" });
+    const subscription = await handlers.subscribe(
+      createFilteredTopicForTask({
+        filter: [
+          create(CompositeFilterSchema, {
+            filter: [
+              create(FilterSchema, {
+                fieldPath: { fieldName: ["id"] },
+                value: AnyMessages.pack(TaskIdSchema, taskId),
+                operator: Filter_Operator.EQUAL,
+              }),
+            ],
+            operator: CompositeFilter_CompositeOperator.ALL,
+          }),
+        ],
+      }),
+    );
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = iterator.next();
+
+    await delay(25);
+    await postEntityStateChanged(
+      context,
+      TaskSchema,
+      create(TaskSchema, {
+        id: create(TaskIdSchema, { value: "other-message-field" }),
+        title: "Ignored",
+      }),
+    );
+    await postEntityStateChanged(
+      context,
+      TaskSchema,
+      create(TaskSchema, { id: clone(TaskIdSchema, taskId), title: "Matched" }),
+    );
+
+    const delivered = (await withTimeout(next, "message field subscription")).value as
+      SubscriptionUpdate | undefined;
+
+    expect(AnyMessages.unpack(entityUpdateId(delivered) ?? packMissing(), TaskIdSchema)).toEqual(
+      taskId,
+    );
+    expect(AnyMessages.unpack(entityUpdateKind(delivered)?.value as Any, TaskSchema)).toEqual(
+      create(TaskSchema, { id: taskId, title: "Matched" }),
     );
     await iterator.return?.();
   });
@@ -4185,6 +4299,24 @@ function createAggregateEvent(
     message: create(AggregateStateSchema, {
       id: aggregateId,
       name,
+      archived: false,
+    }),
+  });
+}
+
+function createPastMessageAggregateEvent(id: string, tenantId: string) {
+  return SignalEnvelopes.event({
+    id: create(EventIdSchema, { value: id }),
+    context: create(EventContextSchema, {
+      origin: {
+        case: "pastMessage",
+        value: create(OriginSchema, { actorContext: createActorContext(tenantId) }),
+      },
+    }),
+    schema: AggregateStateSchema,
+    message: create(AggregateStateSchema, {
+      id: `aggregate-${id}`,
+      name: "Past message",
       archived: false,
     }),
   });
