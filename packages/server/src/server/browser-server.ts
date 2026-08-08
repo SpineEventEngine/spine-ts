@@ -165,7 +165,6 @@ export const BrowserServer: Readonly<{
       authorize: options.authorize,
       contexts: options.contexts,
       clock: options.clock,
-      fingerprint: options.fingerprint,
       creator,
     });
     try {
@@ -178,8 +177,13 @@ export const BrowserServer: Readonly<{
         if (Number.isSafeInteger(nowMs))
           await durableBindings.recoverActive({
             nowMs,
-            onDefinition: (definition: import("@spine-event-engine/auth").PublicSubscriptionWire) =>
-              creator.rehydrate(definition),
+            onDefinition: async (
+              definition: import("@spine-event-engine/auth").PublicSubscriptionWire,
+              whenExpires: number,
+            ) => {
+              await creator.rehydrate(definition);
+              subscriptions.scheduleExpiry(whenExpires);
+            },
           });
       }
     } catch (error) {
@@ -391,8 +395,6 @@ export const BrowserServer: Readonly<{
         throw new Error("Standalone browser server requires context resolution.");
       if (supplied.clock === undefined || typeof supplied.clock.now !== "function")
         throw new Error("Standalone browser server requires a clock.");
-      if (typeof options.fingerprint !== "function")
-        throw new Error("Standalone browser server requires a fingerprint function.");
       if (options.bindings === undefined)
         throw new Error("Standalone browser server requires explicit subscription bindings.");
     }

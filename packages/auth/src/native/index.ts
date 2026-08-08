@@ -651,7 +651,7 @@ const NativeGatewayValues = Object.freeze({
         ? Code.Unauthenticated
         : result.reason === "forbidden" || result.reason === "denied"
           ? Code.PermissionDenied
-          : result.reason === "request-too-large" || result.reason === "binding-capacity-exceeded"
+          : result.reason === "request-too-large"
             ? Code.ResourceExhausted
             : result.reason === "binding-busy"
               ? Code.Aborted

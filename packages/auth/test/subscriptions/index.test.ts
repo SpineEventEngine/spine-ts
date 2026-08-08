@@ -1,6 +1,11 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { ActorContextSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
+import {
+  ActorContextSchema,
+  TenantIdSchema,
+  UserIdSchema,
+  ZoneIdSchema,
+} from "@spine-event-engine/proto";
 import {
   SubscriptionSchema,
   SubscriptionUpdateSchema,
@@ -92,7 +97,6 @@ function setup(
           }),
       },
       clock: { now: () => create(TimestampSchema, { seconds: 10n }) },
-      fingerprint: (principal) => principal.id,
       creator: {
         subscribe: () => {
           calls.push("subscribe");
@@ -140,6 +144,23 @@ function subscriptionWire(id: string, actor = "owner-a", tenantId = "tenant-a") 
     }),
   );
 }
+function canonicalBinding(id: string, whenExpires: number) {
+  const definition = subscriptionWire(id);
+  const subscription = fromBinary(SubscriptionSchema, definition);
+  return {
+    topic: {
+      kind: "subscription-topic" as const,
+      bytes: toBinary(TopicSchema, subscription.topic ?? create(TopicSchema)),
+    },
+    whenExpires,
+  };
+}
+function trustedContext() {
+  return create(ActorContextSchema, {
+    actor: user("owner-a"),
+    tenantId: tenant("tenant-a"),
+  });
+}
 
 describe("SubscriptionGateway", () => {
   it("does not start native activation for a pre-aborted downstream request", async () => {
@@ -165,16 +186,10 @@ describe("SubscriptionGateway", () => {
       nextId: () => "queued-activation",
       dispose: () => Promise.resolve(),
     });
-    await bindings.create({
-      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
-      principalFingerprint: "owner",
-      tenant: undefined,
-      expiresAtMs: 100,
-    });
+    await bindings.create(canonicalBinding("queued-activation", 100));
     const first = bindings.activate({
       id: "queued-activation",
-      principalFingerprint: "owner",
-      tenant: undefined,
+      context: trustedContext(),
       nowMs: 1,
       signal: new AbortController().signal,
       onDefinition: async () => {
@@ -187,8 +202,7 @@ describe("SubscriptionGateway", () => {
     let queuedNativeCalls = 0;
     const queued = bindings.activate({
       id: "queued-activation",
-      principalFingerprint: "owner",
-      tenant: undefined,
+      context: trustedContext(),
       nowMs: 1,
       signal: controller.signal,
       onDefinition: () => {
@@ -210,17 +224,11 @@ describe("SubscriptionGateway", () => {
       nextId: () => "active-cancel",
       dispose: () => Promise.resolve(),
     });
-    await bindings.create({
-      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
-      principalFingerprint: "owner",
-      tenant: undefined,
-      expiresAtMs: 100,
-    });
+    await bindings.create(canonicalBinding("active-cancel", 100));
     let cancels = 0;
     const active = bindings.activate({
       id: "active-cancel",
-      principalFingerprint: "owner",
-      tenant: undefined,
+      context: trustedContext(),
       nowMs: 1,
       signal: new AbortController().signal,
       onDefinition: async (_backend, signal) => {
@@ -238,8 +246,7 @@ describe("SubscriptionGateway", () => {
     await tick();
     const cancelled = bindings.cancel({
       id: "active-cancel",
-      principalFingerprint: "owner",
-      tenant: undefined,
+      context: trustedContext(),
       nowMs: 1,
       onDefinition: () => {
         cancels++;
@@ -252,7 +259,7 @@ describe("SubscriptionGateway", () => {
     expect(bindings.size).toBe(0);
   });
 
-  it("disposes a naturally completed native activation and removes its binding", async () => {
+  it("retains a naturally completed native activation until cancellation or expiry", async () => {
     const fixture = setup();
     const subscriptionGateway = gateway(fixture);
     const wire = await subscribe(subscriptionGateway);
@@ -260,8 +267,8 @@ describe("SubscriptionGateway", () => {
     await expect(subscriptionGateway.handle(request("Activate", wire))).resolves.toEqual({
       kind: "activated",
     });
-    expect(fixture.calls).toEqual(["subscribe", "activate", "cancel"]);
-    expect(fixture.bindings.size).toBe(0);
+    expect(fixture.calls).toEqual(["subscribe", "activate"]);
+    expect(fixture.bindings.size).toBe(1);
   });
 
   it("expires a live activation without another gateway request", async () => {
@@ -293,7 +300,7 @@ describe("SubscriptionGateway", () => {
     expect(fixture.bindings.size).toBe(0);
   });
 
-  it("aborts B3 work and removes the binding when its update sink rejects malformed bytes", async () => {
+  it("aborts B3 work and retains the binding when its update sink rejects malformed bytes", async () => {
     const fixture = setup();
     let activated = false;
     fixture.options.creator.activate = async ({ updates }) => {
@@ -311,8 +318,8 @@ describe("SubscriptionGateway", () => {
       }),
     ).rejects.toThrow();
     expect(activated).toBe(true);
-    expect(fixture.calls).toEqual(["subscribe", "cancel"]);
-    expect(fixture.bindings.size).toBe(0);
+    expect(fixture.calls).toEqual(["subscribe"]);
+    expect(fixture.bindings.size).toBe(1);
   });
 
   it("passes the platform AbortSignal to subscription callbacks", async () => {
@@ -370,7 +377,7 @@ describe("SubscriptionGateway", () => {
     expect(emitted.subscription).toEqual(publicSubscription);
   });
 
-  it("aborts a quiet activation through the admitted downstream signal and cleans up once", async () => {
+  it("aborts a quiet activation through the admitted downstream signal while retaining it", async () => {
     const fixture = setup();
     fixture.options.creator.activate = async (_request, signal) => {
       await new Promise<void>((_resolve, reject) => {
@@ -393,8 +400,8 @@ describe("SubscriptionGateway", () => {
     await tick();
     controller.abort();
     await expect(activating).rejects.toThrow("aborted");
-    expect(fixture.calls).toEqual(["subscribe", "cancel"]);
-    expect(fixture.bindings.size).toBe(0);
+    expect(fixture.calls).toEqual(["subscribe"]);
+    expect(fixture.bindings.size).toBe(1);
   });
 
   it("rejects terminal, invalid, and unauthorized gateway requests", async () => {
@@ -466,14 +473,9 @@ describe("SubscriptionGateway", () => {
       },
       dispose: () => Promise.resolve(),
     });
-    await expect(
-      unavailableId.create({
-        definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
-        principalFingerprint: "owner",
-        tenant: undefined,
-        expiresAtMs: 100,
-      }),
-    ).rejects.toThrow("subscription binding creation failed");
+    await expect(unavailableId.create(canonicalBinding("unavailable", 100))).rejects.toThrow(
+      "subscription binding creation failed",
+    );
 
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => "one",
@@ -482,18 +484,12 @@ describe("SubscriptionGateway", () => {
     const cancel = (id: string, nowMs: number) =>
       bindings.cancel({
         id,
-        principalFingerprint: "owner",
-        tenant: undefined,
+        context: trustedContext(),
         nowMs,
         onDefinition: () => Promise.resolve(),
       });
     await expect(cancel("missing", 0)).resolves.toEqual({ kind: "closed" });
-    await bindings.create({
-      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
-      principalFingerprint: "owner",
-      tenant: undefined,
-      expiresAtMs: 1,
-    });
+    await bindings.create(canonicalBinding("one", 1));
     await expect(cancel("one", 1)).resolves.toEqual({ kind: "denied" });
     await tick();
     expect(bindings.size).toBe(0);
@@ -537,118 +533,71 @@ describe("SubscriptionGateway", () => {
     });
   });
 
+  it("retains optional trusted zone and language facts in the public Subscription", async () => {
+    const fixture = setup();
+    fixture.options.contexts.resolve = () =>
+      Promise.resolve({
+        actor: user("owner-a"),
+        tenant: tenant("tenant-a"),
+        timestamp: create(TimestampSchema, { seconds: 10n }),
+        zoneId: create(ZoneIdSchema, { value: "Europe/Lisbon" }),
+        language: 1,
+      });
+
+    const result = await gateway(fixture).handle(request("Subscribe", topic));
+    if (result.kind !== "subscribed") throw new Error("expected subscription");
+    const retained = fromBinary(SubscriptionSchema, result.wire.bytes).topic?.context;
+    expect(retained).toMatchObject({ zoneId: { value: "Europe/Lisbon" }, language: 1 });
+  });
+
+  it("rejects a lifecycle method paired with the wrong public wire shape", async () => {
+    const fixture = setup();
+    await expect(
+      gateway(fixture).handle({
+        ...request("Cancel", topic),
+        wire: { kind: "subscription-topic", bytes: topic },
+      } as never),
+    ).resolves.toEqual({ kind: "rejected", reason: "unknown-operation" });
+  });
+
   it("keeps logical definition bounds separate from native child-envelope bounds", async () => {
     const oversize = new InMemorySubscriptionBindings({
       nextId: () => "one",
       limits: { maxBackendEnvelopeBytes: 1 },
       dispose: () => Promise.resolve(),
     });
-    await expect(
-      oversize.create({
-        definition: { kind: "public-subscription", bytes: new Uint8Array([1, 2]) },
-        principalFingerprint: "p",
-        tenant: undefined,
-        expiresAtMs: 100,
-      }),
-    ).resolves.toEqual({ id: "one" });
+    await expect(oversize.create(canonicalBinding("one", 100))).resolves.toMatchObject({
+      kind: "public-subscription",
+    });
     const emptyId = new InMemorySubscriptionBindings({
       nextId: () => "",
       dispose: () => Promise.resolve(),
     });
-    await expect(
-      emptyId.create({
-        definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
-        principalFingerprint: "p",
-        tenant: undefined,
-        expiresAtMs: 100,
-      }),
-    ).rejects.toThrow("unique");
+    await expect(emptyId.create(canonicalBinding("empty", 100))).rejects.toThrow("unique");
     const duplicateId = new InMemorySubscriptionBindings({
       nextId: () => "one",
       dispose: () => Promise.resolve(),
     });
-    const input = {
-      definition: { kind: "public-subscription" as const, bytes: new Uint8Array([1]) },
-      principalFingerprint: "p",
-      tenant: undefined,
-      expiresAtMs: 100,
-    };
+    const input = canonicalBinding("one", 100);
     await duplicateId.create(input);
     await expect(duplicateId.create(input)).rejects.toThrow("unique");
   });
 
-  it("maps capacity reservation and retained-creation capacity failures to public rejection reasons", async () => {
-    const fixture = setup();
-    const bindings = fixture.bindings;
-    const unavailable = {
-      create: bindings.create.bind(bindings),
-      activate: bindings.activate.bind(bindings),
-      cancel: bindings.cancel.bind(bindings),
-      reserveCapacity: () => Promise.reject(new Error("store unavailable")),
-      purgeExpired: bindings.purgeExpired.bind(bindings),
-      close: bindings.close.bind(bindings),
-    };
-    await expect(
-      new SubscriptionGateway({ ...fixture.options, bindings: unavailable }).handle(
-        request("Subscribe", topic),
-      ),
-    ).resolves.toEqual({ kind: "rejected", reason: "denied" });
-    const capacityFailure = {
-      ...unavailable,
-      reserveCapacity: () => Promise.resolve({ id: "reserved", release: () => Promise.resolve() }),
-      create: () => {
-        throw new Error("binding-capacity-exceeded");
-      },
-    };
-    await expect(
-      new SubscriptionGateway({ ...fixture.options, bindings: capacityFailure }).handle(
-        request("Subscribe", topic),
-      ),
-    ).resolves.toEqual({ kind: "rejected", reason: "binding-capacity-exceeded" });
-  });
-
-  it("suppresses backend activation and cancellation when a durable guard is false", async () => {
-    const fixture = setup();
-    const bindings = fixture.bindings;
-    const guarded = {
-      create: bindings.create.bind(bindings),
-      activate: async (input: Parameters<typeof bindings.activate>[0]) => {
-        await input.onDefinition(
-          { kind: "public-subscription", bytes: new Uint8Array([1]) },
-          new AbortController().signal,
-          () => Promise.resolve(false),
-        );
-        return { kind: "activated" as const };
-      },
-      cancel: async (input: Parameters<typeof bindings.cancel>[0]) => {
-        await input.onDefinition(
-          { kind: "public-subscription", bytes: new Uint8Array([1]) },
-          new AbortController().signal,
-          () => Promise.resolve(false),
-        );
-        return { kind: "closed" as const };
-      },
-      reserveCapacity: bindings.reserveCapacity.bind(bindings),
-      purgeExpired: bindings.purgeExpired.bind(bindings),
-      close: bindings.close.bind(bindings),
-    };
-    const subscriptionGateway = new SubscriptionGateway({ ...fixture.options, bindings: guarded });
-    const wire = await subscribe(subscriptionGateway);
-
-    await expect(subscriptionGateway.handle(request("Activate", wire))).resolves.toEqual({
-      kind: "activated",
-    });
-    await expect(subscriptionGateway.handle(request("Cancel", wire))).resolves.toEqual({
-      kind: "cancelled",
-    });
-    expect(fixture.calls).toEqual(["subscribe"]);
+  it("rejects invalid public binding limits before accepting a definition", () => {
+    expect(
+      () =>
+        new InMemorySubscriptionBindings({
+          nextId: () => "one",
+          dispose: () => Promise.resolve(),
+          limits: { maxPendingOperations: 0 },
+        }),
+    ).toThrow("positive safe integers");
   });
 
   it("does not apply a native child-envelope bound to the logical definition", async () => {
     const fixture = setup();
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => "one",
-      limits: { bindingLimit: 1 },
       dispose: () => Promise.resolve(),
     });
     fixture.options.creator.subscribe = () => Promise.resolve();
@@ -663,22 +612,19 @@ describe("SubscriptionGateway", () => {
     });
   });
 
-  it("denies a foreign cancel before it reserves a binding queue slot", async () => {
+  it("denies a foreign cancel before its definition callback", async () => {
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => "one",
       dispose: () => Promise.resolve(),
     });
-    await bindings.create({
-      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
-      principalFingerprint: "owner",
-      tenant: "tenant",
-      expiresAtMs: 100,
-    });
+    await bindings.create(canonicalBinding("one", 100));
     await expect(
       bindings.cancel({
         id: "one",
-        principalFingerprint: "other",
-        tenant: "tenant",
+        context: create(ActorContextSchema, {
+          actor: user("other"),
+          tenantId: tenant("tenant-a"),
+        }),
         nowMs: 1,
         onDefinition: () => {
           throw new Error("must not run");
@@ -687,57 +633,6 @@ describe("SubscriptionGateway", () => {
     ).resolves.toEqual({ kind: "denied" });
   });
 
-  it("leases capacity before backend Subscribe starts", async () => {
-    const fixture = setup();
-    const bindings = new InMemorySubscriptionBindings({
-      nextId: () => "one",
-      limits: { bindingLimit: 1 },
-      dispose: () => Promise.resolve(),
-    });
-    let release: (() => void) | undefined;
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    fixture.options.creator.subscribe = async () => {
-      await held;
-    };
-    const subscriptionGateway = new SubscriptionGateway({ ...fixture.options, bindings });
-    const first = subscriptionGateway.handle(request("Subscribe", topic));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toEqual({
-      kind: "rejected",
-      reason: "binding-capacity-exceeded",
-    });
-    defined(release, "expected release")();
-    await first;
-  });
-
-  it("gateway close aborts a pending Subscribe and releases its capacity lease", async () => {
-    const fixture = setup();
-    const bindings = new InMemorySubscriptionBindings({
-      nextId: () => "one",
-      limits: { bindingLimit: 1 },
-      dispose: () => Promise.resolve(),
-    });
-    let aborted = false;
-    fixture.options.creator.subscribe = async (_request, signal) => {
-      signal.addEventListener("abort", () => {
-        aborted = true;
-      });
-      await new Promise<void>(() => undefined);
-    };
-    const subscriptionGateway = new SubscriptionGateway({
-      ...fixture.options,
-      bindings,
-      limits: { shutdownTimeoutMs: 1 },
-    });
-    const pending = subscriptionGateway.handle(request("Subscribe", topic));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await subscriptionGateway.close();
-    expect(aborted).toBe(true);
-    await expect(pending).rejects.toThrow("aborted");
-    await expect(bindings.reserveCapacity()).rejects.toThrow("closed");
-  });
   it("returns only a copied public subscription wire and never a backend envelope", async () => {
     const fixture = setup();
     const result = await gateway(fixture).handle(request("Subscribe", topic));
@@ -755,17 +650,11 @@ describe("SubscriptionGateway", () => {
       dispose: () => Promise.resolve(),
     });
     const source = new Uint8Array([1, 2, 3]);
-    await bindings.create({
-      definition: { kind: "public-subscription", bytes: source },
-      principalFingerprint: "p",
-      tenant: undefined,
-      expiresAtMs: 100,
-    });
+    await bindings.create(canonicalBinding("one", 100));
     source.fill(9);
     await bindings.activate({
       id: "one",
-      principalFingerprint: "p",
-      tenant: undefined,
+      context: trustedContext(),
       nowMs: 1,
       signal: new AbortController().signal,
       onDefinition: ({ bytes }) => {
@@ -774,19 +663,22 @@ describe("SubscriptionGateway", () => {
         return Promise.resolve();
       },
     });
-    expect(callbackBytes).toEqual(new Uint8Array([0, 0, 0]));
+    expect(callbackBytes).toEqual(
+      new Uint8Array(defined(callbackBytes, "expected callback bytes").byteLength),
+    );
     let retryBytes: Uint8Array | undefined;
     await bindings.cancel({
       id: "one",
-      principalFingerprint: "p",
-      tenant: undefined,
+      context: trustedContext(),
       nowMs: 1,
       onDefinition: ({ bytes }) => {
         retryBytes = bytes;
         return Promise.resolve();
       },
     });
-    expect(retryBytes).toEqual(new Uint8Array([0, 0, 0]));
+    expect(retryBytes).toEqual(
+      new Uint8Array(defined(retryBytes, "expected retry bytes").byteLength),
+    );
   });
 
   it("serializes delayed activate before cancel backend effects", async () => {
@@ -868,14 +760,74 @@ describe("SubscriptionGateway", () => {
     expect(fixture.bindings.size).toBe(0);
   });
 
+  it("maps direct binding busy and denied outcomes to public rejections", async () => {
+    const fixture = setup();
+    const original = fixture.bindings;
+    fixture.options.bindings = {
+      create: original.create.bind(original),
+      activate: () => Promise.reject(new Error("binding-busy")),
+      cancel: () => Promise.resolve({ kind: "denied" as const }),
+      purgeExpired: original.purgeExpired.bind(original),
+      close: original.close.bind(original),
+    };
+    const subscriptionGateway = gateway(fixture);
+    const wire = await subscribe(subscriptionGateway);
+    await expect(subscriptionGateway.handle(request("Activate", wire))).resolves.toEqual({
+      kind: "rejected",
+      reason: "binding-busy",
+    });
+    await expect(subscriptionGateway.handle(request("Cancel", wire))).resolves.toEqual({
+      kind: "rejected",
+      reason: "denied",
+    });
+  });
+
+  it("rejects activate and cancel wires without a usable subscription ID", async () => {
+    const subscriptionGateway = gateway(setup());
+    const withoutId = toBinary(
+      SubscriptionSchema,
+      create(SubscriptionSchema, { topic: create(TopicSchema) }),
+    );
+    for (const method of ["Activate", "Cancel"] as const)
+      await expect(subscriptionGateway.handle(request(method, withoutId))).resolves.toEqual({
+        kind: "rejected",
+        reason: "denied",
+      });
+    for (const method of ["Activate", "Cancel"] as const)
+      await expect(
+        subscriptionGateway.handle(request(method, subscriptionWire(""))),
+      ).resolves.toEqual({
+        kind: "rejected",
+        reason: "denied",
+      });
+  });
+
+  it("maps a direct cancellation busy error to its public rejection", async () => {
+    const fixture = setup();
+    const original = fixture.bindings;
+    fixture.options.bindings = {
+      create: original.create.bind(original),
+      activate: original.activate.bind(original),
+      cancel: () => Promise.reject(new Error("binding-busy")),
+      purgeExpired: original.purgeExpired.bind(original),
+      close: original.close.bind(original),
+    };
+    const subscriptionGateway = gateway(fixture);
+    const wire = await subscribe(subscriptionGateway);
+    await expect(subscriptionGateway.handle(request("Cancel", wire))).resolves.toEqual({
+      kind: "rejected",
+      reason: "binding-busy",
+    });
+  });
+
   it("runs mandatory cancellation cleanup after an activation callback rejects", async () => {
     const failure = new Error("activate failed");
     const fixture = setup({ activate: async () => Promise.reject(failure) });
     const subscriptionGateway = gateway(fixture);
     const wire = await subscribe(subscriptionGateway);
     await expect(subscriptionGateway.handle(request("Activate", wire))).rejects.toBe(failure);
-    expect(fixture.calls).toEqual(["subscribe", "activate", "cancel"]);
-    expect(fixture.bindings.size).toBe(0);
+    expect(fixture.calls).toEqual(["subscribe", "activate"]);
+    expect(fixture.bindings.size).toBe(1);
   });
 
   it("makes store close terminal for concurrent and late creation", async () => {
@@ -884,12 +836,7 @@ describe("SubscriptionGateway", () => {
       dispose: () => Promise.resolve(),
     });
     const closing = bindings.close();
-    const create = bindings.create({
-      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
-      principalFingerprint: "p",
-      tenant: undefined,
-      expiresAtMs: 10,
-    });
+    const create = bindings.create(canonicalBinding("one", 10));
     await closing;
     await expect(create).rejects.toThrow("closed");
     expect(bindings.size).toBe(0);
@@ -906,16 +853,10 @@ describe("SubscriptionGateway", () => {
         return Promise.resolve();
       },
     });
-    await bindings.create({
-      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
-      principalFingerprint: "owner",
-      tenant: undefined,
-      expiresAtMs: 100,
-    });
+    await bindings.create(canonicalBinding("one", 100));
     const activating = bindings.activate({
       id: "one",
-      principalFingerprint: "owner",
-      tenant: undefined,
+      context: trustedContext(),
       nowMs: 0,
       signal: new AbortController().signal,
       onDefinition: async (_envelope, signal) => {
@@ -954,16 +895,10 @@ describe("SubscriptionGateway", () => {
         return Promise.resolve();
       },
     });
-    await bindings.create({
-      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
-      principalFingerprint: "owner",
-      tenant: undefined,
-      expiresAtMs: 1,
-    });
+    await bindings.create(canonicalBinding("one", 1));
     const activating = bindings.activate({
       id: "one",
-      principalFingerprint: "owner",
-      tenant: undefined,
+      context: trustedContext(),
       nowMs: 0,
       signal: new AbortController().signal,
       onDefinition: async () =>
@@ -989,17 +924,11 @@ describe("SubscriptionGateway", () => {
       nextId: () => "one",
       dispose: () => Promise.resolve(),
     });
-    await bindings.create({
-      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
-      principalFingerprint: "owner",
-      tenant: undefined,
-      expiresAtMs: 100,
-    });
+    await bindings.create(canonicalBinding("one", 100));
     await expect(
       bindings.activate({
         id: "one",
-        principalFingerprint: "owner",
-        tenant: undefined,
+        context: trustedContext(),
         nowMs: 0,
         signal: new AbortController().signal,
         onDefinition: (received) => {
@@ -1008,7 +937,7 @@ describe("SubscriptionGateway", () => {
         },
       }),
     ).rejects.toThrow("synchronous activation failure");
-    expect(envelope).toEqual(new Uint8Array([0]));
+    expect(envelope).toEqual(new Uint8Array(defined(envelope, "expected definition").byteLength));
     await expect(bindings.close()).resolves.toBeUndefined();
     expect(bindings.size).toBe(0);
   });
@@ -1018,18 +947,12 @@ describe("SubscriptionGateway", () => {
       nextId: () => "one",
       dispose: () => Promise.resolve(),
     });
-    await bindings.create({
-      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
-      principalFingerprint: "owner",
-      tenant: undefined,
-      expiresAtMs: 100,
-    });
+    await bindings.create(canonicalBinding("one", 100));
 
     await expect(
       bindings.activate({
         id: "one",
-        principalFingerprint: "owner",
-        tenant: undefined,
+        context: trustedContext(),
         nowMs: 0,
         signal: new AbortController().signal,
         onDefinition: () => {
@@ -1055,16 +978,10 @@ describe("SubscriptionGateway", () => {
         return Promise.resolve();
       },
     });
-    await bindings.create({
-      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
-      principalFingerprint: "owner",
-      tenant: undefined,
-      expiresAtMs: 100,
-    });
+    await bindings.create(canonicalBinding("one", 100));
     const activating = bindings.activate({
       id: "one",
-      principalFingerprint: "owner",
-      tenant: undefined,
+      context: trustedContext(),
       nowMs: 0,
       signal: new AbortController().signal,
       onDefinition: async () =>
@@ -1154,23 +1071,6 @@ describe("SubscriptionGateway", () => {
     await firstActivation;
   });
 
-  it("rejects a second retained binding at the configured capacity", async () => {
-    const bindings = new InMemorySubscriptionBindings({
-      nextId: () => "one",
-      limits: { bindingLimit: 1 },
-      dispose: () => Promise.resolve(),
-    });
-    const input = {
-      definition: { kind: "public-subscription" as const, bytes: new Uint8Array([1]) },
-      principalFingerprint: "p",
-      tenant: undefined,
-      expiresAtMs: 100,
-    };
-    await bindings.create(input);
-    await expect(bindings.create(input)).rejects.toThrow("binding-capacity-exceeded");
-    expect(bindings.size).toBe(1);
-  });
-
   it("disposes an expired binding without blocking an unrelated binding", async () => {
     const calls: string[] = [];
     let release: (() => void) | undefined;
@@ -1187,25 +1087,15 @@ describe("SubscriptionGateway", () => {
         await held;
       },
     });
-    const first = await bindings.create({
-      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
-      principalFingerprint: "p",
-      tenant: undefined,
-      expiresAtMs: 1,
-    });
-    const second = await bindings.create({
-      definition: { kind: "public-subscription", bytes: new Uint8Array([2]) },
-      principalFingerprint: "p",
-      tenant: undefined,
-      expiresAtMs: 100,
-    });
+    const first = await bindings.create(canonicalBinding("1", 1));
+    const second = await bindings.create(canonicalBinding("2", 100));
     const purging = bindings.purgeExpired(1);
     await new Promise((resolve) => setTimeout(resolve, 0));
     await expect(
       bindings.activate({
-        id: second.id,
-        principalFingerprint: "p",
-        tenant: undefined,
+        id: defined(fromBinary(SubscriptionSchema, second.bytes).id, "expected subscription id")
+          .value,
+        context: trustedContext(),
         nowMs: 2,
         signal: new AbortController().signal,
         onDefinition: () => {
@@ -1218,28 +1108,9 @@ describe("SubscriptionGateway", () => {
     defined(release, "expected release")();
     await purging;
     expect(bindings.size).toBe(1);
-    expect(first.id).toBe("1");
-  });
-
-  it("enforces capacity atomically for simultaneous creates", async () => {
-    const bindings = new InMemorySubscriptionBindings({
-      nextId: (() => {
-        let id = 0;
-        return () => String(++id);
-      })(),
-      limits: { bindingLimit: 1 },
-      dispose: () => Promise.resolve(),
-    });
-    const input = {
-      definition: { kind: "public-subscription" as const, bytes: new Uint8Array([1]) },
-      principalFingerprint: "p",
-      tenant: undefined,
-      expiresAtMs: 100,
-    };
-    const results = await Promise.allSettled([bindings.create(input), bindings.create(input)]);
-    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
-    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
-    expect(bindings.size).toBe(1);
+    expect(
+      defined(fromBinary(SubscriptionSchema, first.bytes).id, "expected subscription id").value,
+    ).toBe("1");
   });
 
   it("closes terminally within one timeout while disposing every retained binding", async () => {
@@ -1255,13 +1126,7 @@ describe("SubscriptionGateway", () => {
         await new Promise<void>(() => undefined);
       },
     });
-    for (let id = 0; id < 2; id++)
-      await bindings.create({
-        definition: { kind: "public-subscription", bytes: new Uint8Array([id]) },
-        principalFingerprint: "p",
-        tenant: undefined,
-        expiresAtMs: 100,
-      });
+    for (let id = 0; id < 2; id++) await bindings.create(canonicalBinding(String(id + 1), 100));
     await expect(bindings.close()).rejects.toBeInstanceOf(AggregateError);
     expect(started).toEqual(["live", "live"]);
     expect(bindings.size).toBe(0);
@@ -1323,13 +1188,12 @@ describe("SubscriptionGateway", () => {
     expect(fixture.bindings.size).toBe(0);
   });
 
-  it("compensates an expired delayed Subscribe and releases its reserved capacity", async () => {
+  it("compensates an expired delayed Subscribe", async () => {
     let now = 10n;
     let expiresAt = 11n;
     let releaseBackend: (() => void) | undefined;
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => "one",
-      limits: { bindingLimit: 1 },
       dispose: () => Promise.resolve(),
     });
     const fixture = setup();
@@ -1442,11 +1306,10 @@ describe("SubscriptionGateway", () => {
     expect(fixture.calls).toEqual(["subscribe", "activate", "cancel"]);
   });
 
-  it("aborts a hung Subscribe at its operation timeout, settles its handle, and releases its lease", async () => {
+  it("aborts a hung Subscribe at its operation timeout and settles its handle", async () => {
     const fixture = setup();
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => "one",
-      limits: { bindingLimit: 1 },
       dispose: () => Promise.resolve(),
     });
     let aborted = false;
@@ -1475,7 +1338,7 @@ describe("SubscriptionGateway", () => {
     });
   });
 
-  it("releases leases when logical creation fails through coordinator compensation", async () => {
+  it("propagates a direct binding creation failure", async () => {
     const fixture = setup();
     fixture.options.creator.subscribe = () => Promise.resolve();
     const subscriptionGateway = new SubscriptionGateway({
@@ -1491,7 +1354,6 @@ describe("SubscriptionGateway", () => {
       },
       activate: fixture.bindings.activate.bind(fixture.bindings),
       cancel: fixture.bindings.cancel.bind(fixture.bindings),
-      reserveCapacity: fixture.bindings.reserveCapacity.bind(fixture.bindings),
       purgeExpired: fixture.bindings.purgeExpired.bind(fixture.bindings),
       close: fixture.bindings.close.bind(fixture.bindings),
     };
@@ -1500,13 +1362,12 @@ describe("SubscriptionGateway", () => {
       bindings: failingBindings,
       limits: { operationTimeoutMs: 1 },
     });
-    await expect(createFailureGateway.handle(request("Subscribe", topic))).resolves.toEqual({
-      kind: "rejected",
-      reason: "denied",
-    });
+    await expect(createFailureGateway.handle(request("Subscribe", topic))).rejects.toThrow(
+      "create failed",
+    );
   });
 
-  it("cancels the logical coordinator after durable binding persistence fails", async () => {
+  it("does not call a backend subscription when direct binding creation fails", async () => {
     const fixture = setup();
     let cancellations = 0;
     fixture.options.creator.cancel = () => {
@@ -1521,84 +1382,15 @@ describe("SubscriptionGateway", () => {
         },
         activate: fixture.bindings.activate.bind(fixture.bindings),
         cancel: fixture.bindings.cancel.bind(fixture.bindings),
-        reserveCapacity: fixture.bindings.reserveCapacity.bind(fixture.bindings),
         purgeExpired: fixture.bindings.purgeExpired.bind(fixture.bindings),
         close: fixture.bindings.close.bind(fixture.bindings),
       },
     });
 
-    await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toEqual({
-      kind: "rejected",
-      reason: "denied",
-    });
-    expect(cancellations).toBe(1);
-  });
-
-  it("bounds close-raced compensation, releases capacity, and retains no binding", async () => {
-    const fixture = setup();
-    const bindings = new InMemorySubscriptionBindings({
-      nextId: () => "one",
-      limits: { bindingLimit: 1 },
-      dispose: () => Promise.resolve(),
-    });
-    let releaseCreate: (() => void) | undefined;
-    const creating = new Promise<void>((resolve) => (releaseCreate = resolve));
-    let createStarted: (() => void) | undefined;
-    const started = new Promise<void>((resolve) => (createStarted = resolve));
-    const delayedBindings = {
-      create: async (input: Parameters<typeof bindings.create>[0]) => {
-        defined(createStarted, "expected create start")();
-        await creating;
-        void input;
-        throw new Error("binding store is closed");
-      },
-      activate: bindings.activate.bind(bindings),
-      cancel: bindings.cancel.bind(bindings),
-      reserveCapacity: bindings.reserveCapacity.bind(bindings),
-      purgeExpired: bindings.purgeExpired.bind(bindings),
-      close: () => Promise.resolve(),
-    };
-    let releaseSubscribe: (() => void) | undefined;
-    const receiving = new Promise<void>((resolve) => (releaseSubscribe = resolve));
-    let subscribeSignal: AbortSignal | undefined;
-    fixture.options.creator.subscribe = async (_request, signal) => {
-      subscribeSignal = signal;
-      await receiving;
-    };
-    const subscriptionGateway = new SubscriptionGateway({
-      ...fixture.options,
-      bindings: delayedBindings,
-      limits: { shutdownTimeoutMs: 1 },
-    });
-    const pending = subscriptionGateway.handle(request("Subscribe", topic));
-    await tick();
-    defined(releaseSubscribe, "expected subscribe release")();
-    await started;
-    await subscriptionGateway.close();
-    expect(subscribeSignal?.aborted).toBe(true);
-    defined(releaseCreate, "expected create release")();
-    await expect(pending).resolves.toEqual({ kind: "rejected", reason: "denied" });
-    expect(bindings.size).toBe(0);
-    const reusable = await bindings.reserveCapacity();
-    await reusable.release();
-  });
-
-  it("releases a capacity-one lease after timed-out compensation", async () => {
-    const fixture = setup();
-    const bindings = new InMemorySubscriptionBindings({
-      nextId: () => "one",
-      limits: { bindingLimit: 1 },
-      dispose: () => Promise.resolve(),
-    });
-    fixture.options.creator.subscribe = () => Promise.resolve();
-    const subscriptionGateway = new SubscriptionGateway({
-      ...fixture.options,
-      bindings,
-      limits: { operationTimeoutMs: 1, maxBackendEnvelopeBytes: 1 },
-    });
-    await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toMatchObject({
-      kind: "subscribed",
-    });
+    await expect(subscriptionGateway.handle(request("Subscribe", topic))).rejects.toThrow(
+      "durable binding write failed",
+    );
+    expect(cancellations).toBe(0);
   });
 
   it("lets a concurrent Cancel close first when Activate is delayed before store admission", async () => {
@@ -1700,7 +1492,7 @@ describe("SubscriptionGateway", () => {
     await expect(subscriptionGateway.close()).rejects.toBeInstanceOf(AggregateError);
     await activeSettled;
     expect(activeAborted).toBe(true);
-    expect(cleanupAborted).toBe(true);
+    expect(cleanupAborted).toBe(false);
     expect(bindings.size).toBe(0);
   });
 });

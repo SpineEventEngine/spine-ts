@@ -195,29 +195,22 @@ can be retried without repeating completed native cleanup.
 Browser subscription bindings are separate from service-owned subscription
 records. `BrowserServerOptions.bindings` accepts the `SubscriptionBindings`
 contract from `@spine-event-engine/auth`. Production browser assembly requires
-bindings that declare the durable capability; `DurableSubscriptionBindings` is
-the provided implementation. It rejects a missing or volatile in-memory
-binding store before listener open. The durable registry receives an explicit
-application namespace, storage factory, identifier source, disposal callback,
-and finite lease, cleanup, record, and byte limits. It owns and closes only
+the Server package's `DurableSubscriptionBindings`; it rejects a missing or
+in-memory binding store before listener open. The durable registry receives an explicit
+application namespace, storage factory, identifier source, and cleanup callback. It owns and closes only
 its independently opened record-storage handle, not the application storage
 factory or a Spine JVM/TS backend. It stores canonical public Subscription
 definitions, never backend envelopes or membership topology, and never returns
 private native data through public subscription responses.
 
-The durable registry preserves opaque records through a process restart.
-It validates record family, version, type, storage key identity, owner
-fingerprint, tenant, expiry, lifecycle, fence, lease, canonical byte
-accounting, and finite record size before use. Invalid data fails closed with a
-generic registry error. A namespace-global quota reserves the final public ID
-before creation; the reservation release is asynchronous and exactly once.
-Two gateways coordinate ownership with finite leases and fences. Before each
-backend effect and public update, the gateway checks its durable owner/fence
-guard. A false guard suppresses that effect or update; renewal also aborts the
-local controller when it observes lease loss. A former owner cannot finalize.
-Cleanup remains bounded and restart-safe at the record level. It renews the
-fenced cleaner lease immediately before each disposal callback, preventing a
-second cleaner from taking over during that callback. Active streams do not resume,
+The durable registry preserves one approved `GatewayAuthenticatedSubscription`
+per public subscription through a process restart. It validates the record ID,
+full Subscription, and expiry before use. The trusted Actor and Tenant remain
+inside the stored Topic and are checked for Activate and Cancel. Create assigns
+the public ID directly; no quota, reservation, fingerprint, or lease is
+persisted. Cleanup remains bounded and restart-safe at the record level. It
+cleans the backend definition before deleting its record. It is not a cleaner
+lease or fence: this direct store supports one Gateway process. Active streams do not resume,
 updates are not replayed, and the registry provides neither exactly-once
 delivery, global update ordering, nor cluster-complete notification delivery.
 

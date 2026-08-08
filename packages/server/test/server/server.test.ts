@@ -189,16 +189,12 @@ describe("Server", () => {
     ).rejects.toThrow("Server browser backend URLs must be strings.");
   });
 
-  it("accepts ordered backend URL lists with topology-fencing bindings", async () => {
+  it("accepts ordered backend URL lists with direct durable bindings", async () => {
     const bindings = new DurableSubscriptionBindings({
       storageFactory: new InMemoryStorageFactory(),
       namespace: "fan-in",
       nextId: () => "binding",
-      dispose: () => Promise.resolve(),
-      leaseMs: 1,
-      cleanupBatchSize: 1,
-      recordLimit: 1,
-      maxRecordBytes: 1,
+      cleanup: () => Promise.resolve(),
     });
     BrowserServer.requireDurableBindings(
       {
@@ -495,7 +491,7 @@ describe("Server", () => {
         } as unknown as BrowserServerOptions,
         true,
       );
-    }).toThrow("named durable subscription bindings");
+    }).toThrow("durable subscription bindings");
   });
 
   it("rejects missing standalone authentication collaborators before listener startup", () => {
@@ -518,7 +514,6 @@ describe("Server", () => {
     [{ contexts: { resolve: () => undefined } }, "context resolution"],
     [{ contexts: { resolveContext: () => undefined } }, "context resolution"],
     [{ clock: { now: "invalid" } }, "clock"],
-    [{ fingerprint: "invalid" }, "fingerprint"],
     [{ bindings: undefined }, "subscription bindings"],
   ])("rejects malformed standalone collaborator %j", (malformed, expected) => {
     expect(() => {
@@ -537,7 +532,6 @@ describe("Server", () => {
     ["authorization", { authorize: undefined }, "authorization"],
     ["context resolution", { contexts: undefined }, "context resolution"],
     ["clock", { clock: undefined }, "clock"],
-    ["fingerprint", { fingerprint: undefined }, "fingerprint"],
   ] as const)(
     "rejects a standalone browser gateway missing %s before listener startup",
     (_name, missing, expected) => {
@@ -2823,7 +2817,6 @@ function browserGateway(): BrowserServerOptions {
         }),
     },
     clock: { now: () => create(TimestampSchema) },
-    fingerprint: () => "test",
   };
 }
 

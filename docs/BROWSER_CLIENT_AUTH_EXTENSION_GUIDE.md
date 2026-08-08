@@ -219,16 +219,16 @@ or malformed `Any` remains a safe type-URL-only fact.
 | `resolve-context` | Valid session; no authorization-policy invocation | `resolveContext()` returns informational actor/tenant/expiry | No backend forward                                 |
 | `command`         | Authorize every Post                              | Replace matching actor/tenant hint with resolver output      | Forward once, without credential                   |
 | `query`           | Authorize every Read                              | Replace matching actor/tenant hint                           | Forward once, without credential                   |
-| `subscribe`       | Authorize every Subscribe                         | Reject stale hint before binding                             | Return only public subscription ID                 |
+| `subscribe`       | Authorize every Subscribe                         | Reject stale hint before binding                             | Return the public Subscription                     |
 | `activate`        | Authorize every Activate                          | Re-resolve request context                                   | Require stored owner and unexpired session         |
 | `cancel`          | Authorize every Cancel                            | Re-resolve request context                                   | Require stored owner; retryable cleanup is private |
 
 `UnaryGateway` covers `ResolveContext`, Post, and Read. `SubscriptionGateway`
 covers Subscribe, Activate, and Cancel. `createNativeGatewayServices()` adapts
-them to Connect service implementations. The gateway owns private backend
-subscription envelopes; applications and browsers must never receive, retain,
-or log those bytes. `SubscriptionUpdateRelay` copies public updates, keeps FIFO
-order, and has finite message/byte limits.
+them to Connect service implementations. The gateway retains only the public
+Subscription definition and its trusted Topic context; applications and
+browsers receive no private backend subscription state. `SubscriptionUpdateRelay`
+copies public updates, keeps FIFO order, and has finite message/byte limits.
 
 `ResolveContext` is a gateway operation, but it is not an `IncomingRequest`:
 it validates the session and returns informational context without invoking the
@@ -239,7 +239,7 @@ ResolveContext valid-session validation is not policy authorization.
 
 The following are exact public declaration shapes. They are the minimum seams
 an application implements; do not place credentials in `IncomingRequest`,
-forward credentials to native services, expose a backend envelope, or let a
+forward credentials to native services, expose backend-only subscription state, or let a
 client-provided context become trusted. See the generated
 [auth declarations](api/README.md) for the complete exported inventory.
 
@@ -323,9 +323,9 @@ void [
 `TransportRequestContext`; it intentionally excludes credentials and unknown
 headers. `IncomingRequests.decode(input)` decodes incoming gateway requests.
 `NativeGatewayRequestContext.credential()` and `.transport()` are the HTTP-adapter
-extraction points. `SubscriptionBindings` is trusted infrastructure: it receives private `BackendSubscriptionEnvelope` values only
-from the gateway and supplies a fresh copy only to gateway-controlled backend
-callbacks.
+extraction points. `SubscriptionBindings` is trusted infrastructure: it retains
+the public Subscription derived from the resolved Topic and provides a fresh
+copy only to gateway-controlled callbacks.
 
 ## Sessions, cookies, and multi-node choices
 
@@ -352,9 +352,7 @@ is checked on each lifecycle request and again on reconnect/expiry.
 | ---------------------------------------------------- | --------------------------------------: | ----------------------------------------------------------------------------------------------- |
 | Unary gateway `maxRequestBytes`                      | Application-required constructor option | Oversize input rejects before session resolution.                                               |
 | Subscription request bytes                           |                         1,048,576 bytes | Rejects before retained binding/callback work.                                                  |
-| Subscription backend envelope                        |                         1,048,576 bytes | Rejects before retention.                                                                       |
 | Subscription relay                                   |           64 messages / 1,048,576 bytes | FIFO relay terminates with `ResourceExhausted`; it does not silently discard.                   |
-| Subscription binding count                           |                                     100 | Deterministic capacity rejection.                                                               |
 | Pending work per binding                             |                                       1 | One active operation plus one queued operation is permitted; a third rejects as `binding-busy`. |
 | Subscription operation / shutdown                    |                    30,000 ms / 1,000 ms | Abort-aware callbacks; cleanup failures remain observable/retryable where appropriate.          |
 | Envoy connection-manager request/stream idle timeout |                             30 s / 30 s | Finite public request/header handling.                                                          |

@@ -117,8 +117,8 @@ The Gateway reads `"BACKEND_DISCOVERY_PORT"` and
 
 The standalone Gateway uses the headless Service name and application port from
 the module. In production it also supplies sessions, authorization, trusted
-actor-context resolution, allowed origins, a clock, principal fingerprint,
-type registry, and named durable subscription bindings. The complete
+actor-context resolution, allowed origins, a clock, type registry, and named
+durable subscription bindings. The complete
 [server browser guide](../server/README.md#serve-browser-clients) and
 [browser authentication guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 explain those application-owned integration points.
@@ -157,8 +157,8 @@ export const GatewayEntrypoint = Object.freeze({
 
 The [complete Gateway entrypoint](examples/gateway.ts) receives your typed
 browser collaborators as `GatewayOptions`. Supply sessions, authorization,
-trusted actor-context resolution, allowed origins, a clock, principal
-fingerprint, type registry, and named durable subscription bindings there.
+trusted actor-context resolution, allowed origins, a clock, type registry, and
+named durable subscription bindings there.
 
 The application entrypoint uses the same configuration owner for its own
 listener:

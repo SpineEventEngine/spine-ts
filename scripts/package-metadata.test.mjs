@@ -343,6 +343,7 @@ describe("package metadata", () => {
     const apiDocsChecker = readFileSync(join(repoRoot, "scripts/check-api-docs.mjs"), "utf8");
     expect(apiDocsChecker).not.toContain('"--out", htmlPath');
     expect(apiDocsChecker).toContain('"--json", jsonPath');
+    expect(apiDocsChecker).not.toContain('"SubscriptionCapacityReservation"');
   });
 
   it("exports the packaged Proto sources, compiled generated modules, and manifest", () => {

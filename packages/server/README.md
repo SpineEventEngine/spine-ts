@@ -265,11 +265,7 @@ const bindings = new DurableSubscriptionBindings({
   storageFactory: registryStorage,
   namespace: "my-app",
   nextId: () => crypto.randomUUID(),
-  dispose: async () => undefined,
-  leaseMs: 60_000,
-  cleanupBatchSize: 100,
-  recordLimit: 10_000,
-  maxRecordBytes: 1_048_576,
+  cleanup: async () => undefined,
 });
 
 const running = await new Server({
@@ -281,7 +277,6 @@ const running = await new Server({
     authorize,
     contexts: contextResolver,
     clock,
-    fingerprint: (principal) => principal.id,
     bindings,
   },
 }).run();
@@ -289,33 +284,28 @@ const running = await new Server({
 void running;
 ```
 
-In production, browser access needs bindings that declare the durable
-capability. `DurableSubscriptionBindings` is the supplied implementation;
-compatible bindings can be used by later standalone hosting as well. Startup
-rejects missing or volatile bindings before opening a listener. The registry
+In production, browser access requires `DurableSubscriptionBindings`. Startup
+rejects missing or in-memory bindings before opening a listener. The registry
 uses the storage factory that your application supplies and closes only its own
 handle, so you can use a separate factory from application-data storage or
 intentionally share one. Its namespace separates applications sharing a
-provider. `leaseMs` is milliseconds; `cleanupBatchSize`, `recordLimit`, and
-`maxRecordBytes` are positive safe integers. Combined browser mode may omit
-bindings to use an in-memory registry; standalone mode must always supply them
-explicitly.
+provider. Combined browser mode may omit bindings to use an in-memory registry;
+standalone mode must always supply them explicitly.
 
-Every durable reservation has its final public ID before the backend subscribe
-operation begins. Registries using the same namespace coordinate that finite
-capacity, so the limit applies across gateway processes rather than to each
-process separately. An activation uses a finite lease and fence. Before each
-backend effect and each forwarded update, a durable binding checks that it
-still owns its lease. A lost lease suppresses later effects and updates, and
-the local controller is aborted when a renewal observes the loss. It cannot
-later complete as owner.
-Cancellation can be retried after an uncertain backend result. Expired records
-are cleaned in bounded batches when requests call the registry; applications
-may also call `purgeExpired(nowMs)` from their own maintenance loop. A cleaner
-renews its fenced lease immediately before each disposal callback, so another
-registry cannot take over while that callback is still running. This is
-coordination only: it does not recover a live stream or promise replay,
-exactly-once updates, ordering, or cluster-complete notifications.
+Each durable binding stores one approved `GatewayAuthenticatedSubscription`:
+its public subscription ID, complete subscription, and expiry. The Topic keeps
+the trusted Actor and Tenant resolved for the request, so later Activate and
+Cancel requests must match that trusted context. Cancellation runs backend
+cleanup before exact record deletion; a failed cleanup leaves the record for a
+retry. Expired records are cleaned in finite batches when requests call the
+registry; applications may also call `purgeExpired(nowMs)` from a maintenance
+loop. This is a single-Gateway persistence model: it does not coordinate
+multiple Gateway processes, quotas, reservations, or durable fingerprints.
+On restart, unexpired definitions are rehydrated and expired definitions are
+removed only after cleanup succeeds. Configure MySQL with
+`setTableName(GatewayAuthenticatedSubscriptionSchema, table)` or Datastore with
+`useRecordStorage(GatewayAuthenticatedSubscriptionSchema, creator)` to target
+this record family.
 
 The server validates commands before handler code runs. Invalid payloads are
 returned as `COMMAND_VALIDATION_ERROR`; invalid state transitions are returned

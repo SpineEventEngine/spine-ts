@@ -738,14 +738,6 @@ export interface BrowserServerOptions {
   readonly clock: Clock;
 
   /**
-   * Creates stable subscription ownership identities for authenticated principals.
-   *
-   * @param principal Supplies the authenticated principal.
-   * @returns The stable ownership identity.
-   */
-  readonly fingerprint: (principal: { readonly id: string }) => string;
-
-  /**
    * Supplies the registry that owns opaque browser-subscription bindings.
    *
    * Production requires bindings that declare durable registry capability.

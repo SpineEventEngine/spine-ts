@@ -6,7 +6,6 @@ import {
   TopicSchema,
 } from "@spine-event-engine/proto/client";
 import type {
-  AuthenticatedPrincipal,
   AuthorizationPolicy,
   Clock,
   ContextResolver,
@@ -23,8 +22,7 @@ declare const clearTimeout: (handle: unknown) => void;
 type BindingState = "inactive" | "active" | "cancelling" | "closed";
 interface Binding {
   readonly definition: Uint8Array;
-  readonly principalFingerprint: string;
-  readonly tenant: string | undefined;
+  readonly context: ActorContext;
   readonly expiresAtMs: number;
   state: BindingState;
   controller: AbortController;
@@ -122,15 +120,11 @@ export type SubscriptionAbortSignal = AbortSignal;
  *
  * @param definition Supplies the copied canonical subscription definition.
  * @param signal Cancels the backend effect.
- * @param guard Checks whether a durable owner may continue. When supplied, a
- * false result stops the next backend effect or public update. When absent,
- * in-memory bindings continue normally.
  * @returns Completes after the backend effect ends.
  */
 export type OnSubscriptionDefinition = (
   definition: PublicSubscriptionWire,
   signal: SubscriptionAbortSignal,
-  guard?: () => Promise<boolean>,
 ) => Promise<void>;
 
 /**
@@ -148,8 +142,6 @@ type SubscriptionOperation = "subscribe" | "activate" | "cancel";
 interface PreparedOperation {
   readonly source: Extract<IncomingRequest, { readonly kind: SubscriptionOperation }>;
   readonly context: ActorContext;
-  readonly fingerprint: string;
-  readonly tenant: string | undefined;
   readonly expiresAtMs: number;
   readonly nowMs: number;
 }
@@ -171,11 +163,6 @@ export interface SubscriptionGatewayLimits {
   readonly maxBackendEnvelopeBytes?: number;
 
   /**
-   * Limits retained subscription bindings.
-   */
-  readonly bindingLimit?: number;
-
-  /**
    * Limits queued work per binding.
    */
   readonly pendingOperationLimit?: number;
@@ -193,30 +180,10 @@ export interface SubscriptionGatewayLimits {
 const defaultLimits: Required<SubscriptionGatewayLimits> = {
   maxRequestBytes: 1_048_576,
   maxBackendEnvelopeBytes: 1_048_576,
-  bindingLimit: 100,
   pendingOperationLimit: 1,
   operationTimeoutMs: 30_000,
   shutdownTimeoutMs: 1_000,
 };
-
-/**
- * A pre-Subscribe capacity lease. It must be released if creation does not retain a binding.
- */
-export interface SubscriptionCapacityReservation {
-  // prettier-ignore
-
-  /**
-   * Identifies the final public logical subscription before native creation begins.
-   */
-  readonly id: string;
-
-  /**
-   * Clears the previously reserved binding slot.
-   *
-   * @returns Completes after the slot is available again.
-   */
-  release(): Promise<void>;
-}
 
 /**
  * Trusted infrastructure store for logical subscription ownership. Results expose only transition state;
@@ -226,29 +193,23 @@ export interface SubscriptionBindings {
   // prettier-ignore
 
   /**
-   * Creates an inactive logical binding.
-   * @param input Supplies the copied canonical definition and ownership facts.
-   * @returns Returns the new public binding identifier.
+   * Creates and retains an inactive canonical subscription from a trusted topic.
+   * @param input Supplies the rewritten trusted topic and expiry.
+   * @returns Returns the retained public subscription wire.
    */
   create(input: {
-    readonly definition: PublicSubscriptionWire;
-    readonly principalFingerprint: string;
-
-    readonly tenant: string | undefined;
-    readonly expiresAtMs: number;
-    readonly reservation?: SubscriptionCapacityReservation;
-  }): Promise<{ readonly id: string }>;
+    readonly topic: SubscriptionTopicWire;
+    readonly whenExpires: number;
+  }): Promise<PublicSubscriptionWire>;
 
   /**
    * Activates an owned logical binding.
-   * @param input Supplies ownership facts and the definition callback.
+   * @param input Supplies trusted context and the definition callback.
    * @returns Returns the ownership transition outcome.
    */
   activate(input: {
     readonly id: string;
-    readonly principalFingerprint: string;
-
-    readonly tenant: string | undefined;
+    readonly context: ActorContext;
     readonly nowMs: number;
     readonly onDefinition: OnSubscriptionDefinition;
 
@@ -265,18 +226,10 @@ export interface SubscriptionBindings {
    */
   cancel(input: {
     readonly id: string;
-    readonly principalFingerprint: string;
-
-    readonly tenant: string | undefined;
+    readonly context: ActorContext;
     readonly nowMs: number;
     readonly onDefinition: OnSubscriptionDefinition;
   }): Promise<SubscriptionBindingTransition>;
-
-  /**
-   * Acquires one finite binding slot.
-   * @returns Returns the reservation to release when unused.
-   */
-  reserveCapacity(): Promise<SubscriptionCapacityReservation>;
 
   /**
    * Removes bindings expired at the supplied time.
@@ -295,7 +248,18 @@ export interface SubscriptionBindings {
    */
   recoverActive?(input: {
     readonly nowMs: number;
-    readonly onDefinition: (definition: PublicSubscriptionWire) => Promise<void>;
+
+    /**
+     * Restores one definition and its expiry.
+     *
+     * @param definition Supplies the retained public subscription.
+     * @param whenExpires Supplies its expiry in epoch milliseconds.
+     * @returns Completes after the definition is restored.
+     */
+    readonly onDefinition: (
+      definition: PublicSubscriptionWire,
+      whenExpires: number,
+    ) => Promise<void>;
   }): Promise<void>;
 
   /**
@@ -312,13 +276,12 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
   readonly #bindings = new Map<string, Binding>();
   readonly #nextId: () => string;
   readonly #disposeCallback: OnSubscriptionDefinition;
-  readonly #reservations = new Set<SubscriptionCapacityReservation>();
   #closed = false;
   readonly #limits: Required<SubscriptionGatewayLimits>;
 
   /**
    * Creates the in-memory binding store.
-   * @param options Supplies identifiers, limits, and disposal behavior.
+   * @param options Supplies identifiers, process limits, and disposal behavior.
    */
   constructor(options: {
     readonly nextId: () => string;
@@ -336,31 +299,6 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
    */
   get size(): number {
     return this.#bindings.size;
-  }
-
-  /**
-   * Acquires one finite slot before an asynchronous backend Subscribe effect.
-   * @returns Returns the reservation to release when unused.
-   */
-  reserveCapacity(): Promise<SubscriptionCapacityReservation> {
-    return Promise.resolve().then(() => {
-      if (this.#closed) throw new Error("subscription bindings are closed");
-      if (this.#bindings.size + this.#reservations.size >= this.#limits.bindingLimit)
-        throw new Error("binding-capacity-exceeded");
-      let released = false;
-      const reservation: SubscriptionCapacityReservation = {
-        id: this.#nextId(),
-        release: () => {
-          if (!released) {
-            released = true;
-            this.#reservations.delete(reservation);
-          }
-          return Promise.resolve();
-        },
-      };
-      this.#reservations.add(reservation);
-      return reservation;
-    });
   }
 
   /**
@@ -400,33 +338,27 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
   }
 
   /**
-   * Creates an inactive binding from a copied canonical subscription definition.
-   * @param input Supplies the definition and ownership facts.
-   * @returns Returns the new public binding identifier.
+   * Creates an inactive binding from a trusted rewritten topic.
+   * @param input Supplies the topic and expiry.
+   * @returns Returns the retained public subscription wire.
    */
   create(input: {
-    readonly definition: PublicSubscriptionWire;
-    readonly principalFingerprint: string;
-    readonly tenant: string | undefined;
-    readonly expiresAtMs: number;
-    readonly reservation?: SubscriptionCapacityReservation;
-  }): Promise<{ readonly id: string }> {
+    readonly topic: SubscriptionTopicWire;
+    readonly whenExpires: number;
+  }): Promise<PublicSubscriptionWire> {
     try {
       if (this.#closed) throw new Error("subscription bindings are closed");
-      const reservation = input.reservation;
-      if (
-        (reservation === undefined || !this.#reservations.has(reservation)) &&
-        this.#bindings.size + this.#reservations.size >= this.#limits.bindingLimit
-      )
-        throw new Error("binding-capacity-exceeded");
-      const id = reservation?.id ?? this.#nextId();
+      const id = this.#nextId();
       if (id.length === 0 || this.#bindings.has(id))
         throw new Error("subscription ID must be unique");
+      const topic = fromBinary(TopicSchema, input.topic.bytes);
+      if (topic.context === undefined) throw new Error("subscription topic has no trusted context");
+      const wire = SubscriptionGatewayValues.subscribed(id, input.topic.bytes);
+      if (wire.kind !== "subscribed") throw new Error("subscription wire creation failed");
       this.#bindings.set(id, {
-        definition: input.definition.bytes.slice(),
-        principalFingerprint: input.principalFingerprint,
-        tenant: input.tenant,
-        expiresAtMs: input.expiresAtMs,
+        definition: wire.wire.bytes.slice(),
+        context: clone(ActorContextSchema, topic.context),
+        expiresAtMs: input.whenExpires,
         state: "inactive",
         controller: new AbortController(),
         tail: Promise.resolve(),
@@ -435,8 +367,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
         expiring: false,
         cancelRequested: false,
       });
-      void input.reservation?.release();
-      return Promise.resolve({ id });
+      return Promise.resolve(SubscriptionGatewayValues.copyPublic(wire.wire));
     } catch (error) {
       return Promise.reject(
         error instanceof Error ? error : new Error("subscription binding creation failed"),
@@ -451,8 +382,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
    */
   async activate(input: {
     readonly id: string;
-    readonly principalFingerprint: string;
-    readonly tenant: string | undefined;
+    readonly context: ActorContext;
     readonly nowMs: number;
     readonly onDefinition: OnSubscriptionDefinition;
     readonly signal: AbortSignal;
@@ -488,8 +418,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
    */
   async cancel(input: {
     readonly id: string;
-    readonly principalFingerprint: string;
-    readonly tenant: string | undefined;
+    readonly context: ActorContext;
     readonly nowMs: number;
     readonly onDefinition: OnSubscriptionDefinition;
   }): Promise<SubscriptionBindingTransition> {
@@ -514,8 +443,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
   }
   #owned(input: {
     readonly id: string;
-    readonly principalFingerprint: string;
-    readonly tenant: string | undefined;
+    readonly context: ActorContext;
     readonly nowMs: number;
   }): Promise<Binding | undefined> {
     const binding = this.#bindings.get(input.id);
@@ -524,24 +452,18 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
       this.#expire(input.id, binding);
       return Promise.resolve(undefined);
     }
-    return binding.principalFingerprint === input.principalFingerprint &&
-      binding.tenant === input.tenant
+    return SubscriptionGatewayValues.contextsEqual(binding.context, input.context)
       ? Promise.resolve(binding)
       : Promise.resolve(undefined);
   }
   #precheck(input: {
     readonly id: string;
-    readonly principalFingerprint: string;
-    readonly tenant: string | undefined;
+    readonly context: ActorContext;
     readonly nowMs: number;
   }): "owned" | "absent" | "denied" {
     const binding = this.#bindings.get(input.id);
     if (binding === undefined) return "absent";
-    if (
-      binding.principalFingerprint !== input.principalFingerprint ||
-      binding.tenant !== input.tenant
-    )
-      return "denied";
+    if (!SubscriptionGatewayValues.contextsEqual(binding.context, input.context)) return "denied";
     if (binding.expiring || binding.expiresAtMs <= input.nowMs) {
       this.#expire(input.id, binding);
       return "denied";
@@ -818,13 +740,6 @@ export interface SubscriptionGatewayOptions {
   readonly clock: Clock;
 
   /**
-   * Returns a stable principal ownership fingerprint.
-   * @param principal Supplies the authenticated principal.
-   * @returns Returns the ownership fingerprint.
-   */
-  readonly fingerprint: (principal: AuthenticatedPrincipal) => string;
-
-  /**
    * Coordinates logical subscriptions across the current native membership.
    */
   readonly creator: SubscriptionCoordinator;
@@ -886,7 +801,6 @@ export type SubscriptionGatewayResult =
         | "denied"
         | "request-too-large"
         | "backend-envelope-too-large"
-        | "binding-capacity-exceeded"
         | "binding-busy";
     };
 
@@ -897,7 +811,7 @@ export type SubscriptionGatewayResult =
 export class SubscriptionGateway {
   readonly #options: SubscriptionGatewayOptions;
   readonly #limits: Required<SubscriptionGatewayLimits>;
-  readonly #pendingSubscribes = new Map<AbortController, SubscriptionCapacityReservation>();
+  readonly #expiryTimers = new Set<unknown>();
   #closed = false;
 
   /**
@@ -926,17 +840,31 @@ export class SubscriptionGateway {
   }
 
   /**
-   * Closes admission, aborts pending Subscribe effects, and closes retained bindings.
+   * Closes admission and closes retained bindings.
    * @returns Completes after retained bindings close.
    */
   async close(): Promise<void> {
     this.#closed = true;
-    for (const [controller, reservation] of this.#pendingSubscribes) {
-      controller.abort();
-      await reservation.release();
-    }
-    this.#pendingSubscribes.clear();
+    for (const timer of this.#expiryTimers) clearTimeout(timer);
+    this.#expiryTimers.clear();
     await this.#options.bindings.close();
+  }
+
+  /**
+   * Schedules finite local expiry cleanup for a recovered durable definition.
+   * @param whenExpires Supplies the retained expiry in epoch milliseconds.
+   */
+  scheduleExpiry(whenExpires: number): void {
+    const nowMs = this.#nowMs();
+    if (nowMs === undefined || this.#closed) return;
+    const timer = setTimeout(
+      () => {
+        this.#expiryTimers.delete(timer);
+        void this.#options.bindings.purgeExpired(whenExpires).catch(() => undefined);
+      },
+      Math.max(0, whenExpires - nowMs),
+    );
+    this.#expiryTimers.add(timer);
   }
   async #handleOperation(request: SubscriptionGatewayRequest): Promise<SubscriptionGatewayResult> {
     const kind = SubscriptionGatewayValues.operationFor(request);
@@ -1002,11 +930,6 @@ export class SubscriptionGateway {
       context,
       expiresAtMs,
       nowMs,
-      fingerprint: this.#options.fingerprint(session.principal),
-      tenant:
-        context.tenantId === undefined
-          ? undefined
-          : SubscriptionGatewayValues.tenantFingerprint(context.tenantId),
     };
   }
   #nowMs(): number | undefined {
@@ -1018,28 +941,25 @@ export class SubscriptionGateway {
     updates: SubscriptionUpdateSink | undefined,
     signal: AbortSignal | undefined,
   ): Promise<SubscriptionGatewayResult> {
-    const { source, context, fingerprint, tenant, expiresAtMs, nowMs } = prepared;
+    const { source, context, expiresAtMs, nowMs } = prepared;
     const rewritten = SubscriptionGatewayValues.rewrite(source, context);
-    if (source.kind === "subscribe")
-      return this.#subscribe(rewritten, fingerprint, tenant, expiresAtMs);
+    if (source.kind === "subscribe") return this.#subscribe(rewritten, context, expiresAtMs);
     const id = source.subscription.id?.value;
     if (id === undefined || id.length === 0) return SubscriptionGatewayValues.rejected("denied");
     return source.kind === "activate"
       ? this.#activate(
           id,
-          fingerprint,
-          tenant,
+          context,
           nowMs,
           expiresAtMs,
           updates ?? SubscriptionGatewayValues.discardUpdate,
           signal,
         )
-      : this.#cancel(id, fingerprint, tenant, nowMs);
+      : this.#cancel(id, context, nowMs);
   }
   async #activate(
     id: string,
-    fingerprint: string,
-    tenant: string | undefined,
+    context: ActorContext,
     nowMs: number,
     expiresAtMs: number,
     updates: SubscriptionUpdateSink,
@@ -1061,20 +981,17 @@ export class SubscriptionGateway {
     try {
       const result = await this.#options.bindings.activate({
         id,
-        principalFingerprint: fingerprint,
-        tenant,
+        context,
         nowMs,
         signal: active,
-        onDefinition: (definition, effectSignal, guard) =>
-          this.#forwardActivate(definition, updates, effectSignal, guard),
+        onDefinition: (definition, effectSignal) =>
+          this.#forwardActivate(definition, updates, effectSignal),
       });
       if (result.kind !== "activated") return SubscriptionGatewayValues.rejected("denied");
-      await this.#cleanupAfterActivationFailure(id, fingerprint, tenant, nowMs);
       return { kind: "activated" };
     } catch (error) {
       if (error instanceof Error && error.message === "binding-busy")
         return SubscriptionGatewayValues.rejected("binding-busy");
-      await this.#cleanupAfterActivationFailure(id, fingerprint, tenant, nowMs);
       throw error;
     } finally {
       clearTimeout(expiry);
@@ -1083,18 +1000,15 @@ export class SubscriptionGateway {
   }
   async #cancel(
     id: string,
-    fingerprint: string,
-    tenant: string | undefined,
+    context: ActorContext,
     nowMs: number,
   ): Promise<SubscriptionGatewayResult> {
     try {
       const result = await this.#options.bindings.cancel({
         id,
-        principalFingerprint: fingerprint,
-        tenant,
+        context,
         nowMs,
-        onDefinition: (definition, effectSignal, guard) =>
-          this.#forwardCancel(definition, effectSignal, guard),
+        onDefinition: (definition, effectSignal) => this.#forwardCancel(definition, effectSignal),
       });
       return result.kind === "denied"
         ? SubscriptionGatewayValues.rejected("denied")
@@ -1107,46 +1021,44 @@ export class SubscriptionGateway {
   }
   async #subscribe(
     bytes: Uint8Array,
-    fingerprint: string,
-    tenant: string | undefined,
+    context: ActorContext,
     expiresAtMs: number,
   ): Promise<SubscriptionGatewayResult> {
-    const reservation = await this.#reserveCapacity();
-    if ("kind" in reservation) return reservation;
-    const subscribed = SubscriptionGatewayValues.subscribed(reservation.id, bytes);
-    if (subscribed.kind !== "subscribed") throw new Error("subscription wire creation failed");
-    const wire = subscribed.wire;
+    const wire = await this.#options.bindings.create({
+      topic: { kind: "subscription-topic", bytes: bytes.slice() },
+      whenExpires: expiresAtMs,
+    });
+    const id = fromBinary(SubscriptionSchema, wire.bytes).id?.value;
+    if (id === undefined || id.length === 0) throw new Error("retained subscription has no ID");
     const controller = new AbortController();
-    this.#pendingSubscribes.set(controller, reservation);
     try {
       await this.#receiveBackend(wire, controller);
       const nowMs = this.#nowMs();
       if (nowMs === undefined || expiresAtMs <= nowMs) {
         await this.#compensateDefinition(wire, controller);
+        await this.#options.bindings.cancel({
+          id,
+          context,
+          nowMs: nowMs ?? expiresAtMs,
+          onDefinition: () => Promise.resolve(),
+        });
         return SubscriptionGatewayValues.rejected("denied");
       }
-      return await this.#retainDefinition(
-        wire,
-        fingerprint,
-        tenant,
-        expiresAtMs,
-        reservation,
-        controller,
-      );
-    } finally {
-      this.#pendingSubscribes.delete(controller);
-      await reservation.release();
-    }
-  }
-  async #reserveCapacity(): Promise<SubscriptionCapacityReservation | SubscriptionGatewayResult> {
-    try {
-      return await this.#options.bindings.reserveCapacity();
+      this.scheduleExpiry(expiresAtMs);
+      return { kind: "subscribed", wire: SubscriptionGatewayValues.copyPublic(wire) };
     } catch (error) {
-      return SubscriptionGatewayValues.rejected(
-        error instanceof Error && error.message === "binding-capacity-exceeded"
-          ? "binding-capacity-exceeded"
-          : "denied",
-      );
+      try {
+        await this.#compensateDefinition(wire, controller);
+        await this.#options.bindings.cancel({
+          id,
+          context,
+          nowMs: this.#nowMs() ?? expiresAtMs,
+          onDefinition: () => Promise.resolve(),
+        });
+      } catch {
+        // Retain the row: a later request can retry backend cleanup.
+      }
+      throw error;
     }
   }
   async #receiveBackend(wire: PublicSubscriptionWire, controller: AbortController): Promise<void> {
@@ -1160,41 +1072,6 @@ export class SubscriptionGateway {
       controller,
     );
   }
-  async #retainDefinition(
-    wire: PublicSubscriptionWire,
-    fingerprint: string,
-    tenant: string | undefined,
-    expiresAtMs: number,
-    reservation: SubscriptionCapacityReservation,
-    controller: AbortController,
-  ): Promise<SubscriptionGatewayResult> {
-    try {
-      const binding = await this.#options.bindings.create({
-        definition: SubscriptionGatewayValues.copyPublic(wire),
-        principalFingerprint: fingerprint,
-        tenant,
-        expiresAtMs,
-        reservation,
-      });
-      if (binding.id !== reservation.id) throw new Error("subscription reservation ID changed");
-      return { kind: "subscribed", wire: SubscriptionGatewayValues.copyPublic(wire) };
-    } catch (error) {
-      return this.#failedCreation(error, reservation, wire, controller);
-    }
-  }
-  async #failedCreation(
-    error: unknown,
-    reservation: SubscriptionCapacityReservation,
-    wire: PublicSubscriptionWire,
-    controller: AbortController,
-  ): Promise<SubscriptionGatewayResult> {
-    await Promise.all([reservation.release(), this.#compensateDefinition(wire, controller)]);
-    return SubscriptionGatewayValues.rejected(
-      error instanceof Error && error.message === "binding-capacity-exceeded"
-        ? "binding-capacity-exceeded"
-        : "denied",
-    );
-  }
   async #compensateDefinition(
     wire: PublicSubscriptionWire,
     controller: AbortController,
@@ -1205,41 +1082,19 @@ export class SubscriptionGateway {
       signal,
     );
   }
-  async #cleanupAfterActivationFailure(
-    id: string,
-    fingerprint: string,
-    tenant: string | undefined,
-    nowMs: number,
-  ): Promise<void> {
-    try {
-      await this.#options.bindings.cancel({
-        id,
-        principalFingerprint: fingerprint,
-        tenant,
-        nowMs,
-        onDefinition: (definition, effectSignal, guard) =>
-          this.#forwardCancel(definition, effectSignal, guard),
-      });
-    } catch {
-      // The activation failure remains authoritative; cancellation stays retryable.
-    }
-  }
   async #forwardActivate(
     definition: PublicSubscriptionWire,
     updates: SubscriptionUpdateSink,
     signal: SubscriptionAbortSignal,
-    guard: (() => Promise<boolean>) | undefined,
   ): Promise<void> {
     const privateWire = SubscriptionGatewayValues.copyPublic(definition);
     try {
-      if (!(await SubscriptionGatewayValues.canContinue(guard))) return;
       const publicSubscription = fromBinary(SubscriptionSchema, definition.bytes);
       await this.#options.creator.activate(
         {
           wire: privateWire,
           updates: async (update) => {
             try {
-              if (!(await SubscriptionGatewayValues.canContinue(guard))) return;
               const decoded = fromBinary(SubscriptionUpdateSchema, update.bytes);
               decoded.subscription = clone(SubscriptionSchema, publicSubscription);
               await updates({
@@ -1260,11 +1115,9 @@ export class SubscriptionGateway {
   async #forwardCancel(
     definition: PublicSubscriptionWire,
     signal: SubscriptionAbortSignal,
-    guard: (() => Promise<boolean>) | undefined,
   ): Promise<void> {
     const privateWire = SubscriptionGatewayValues.copyPublic(definition);
     try {
-      if (!(await SubscriptionGatewayValues.canContinue(guard))) return;
       await this.#options.creator.cancel({ wire: privateWire }, signal);
     } finally {
       privateWire.bytes.fill(0);
@@ -1276,10 +1129,6 @@ export class SubscriptionGateway {
  * Builds validated subscription gateway inputs and isolated wire values.
  */
 const SubscriptionGatewayValues = Object.freeze({
-  async canContinue(guard: (() => Promise<boolean>) | undefined): Promise<boolean> {
-    return guard === undefined || (await guard());
-  },
-
   discardUpdate(update: SubscriptionUpdateWire): Promise<void> {
     update.bytes.fill(0);
     return Promise.resolve();
@@ -1320,18 +1169,14 @@ const SubscriptionGatewayValues = Object.freeze({
     });
   },
   matches(requested: ActorContext, trusted: ActorContext): boolean {
-    return (
-      requested.actor?.value === trusted.actor?.value &&
-      SubscriptionGatewayValues.tenantBytesEqual(requested.tenantId, trusted.tenantId)
-    );
+    return SubscriptionGatewayValues.contextsEqual(requested, trusted);
   },
-  tenantBytesEqual(
-    left: Parameters<typeof toBinary<typeof TenantIdSchema>>[1] | undefined,
-    right: Parameters<typeof toBinary<typeof TenantIdSchema>>[1] | undefined,
-  ): boolean {
-    if (left === undefined || right === undefined) return left === right;
-    const first = toBinary(TenantIdSchema, left);
-    const second = toBinary(TenantIdSchema, right);
+  contextsEqual(left: ActorContext, right: ActorContext): boolean {
+    if (left.actor?.value !== right.actor?.value) return false;
+    if (left.tenantId === undefined || right.tenantId === undefined)
+      return left.tenantId === right.tenantId;
+    const first = toBinary(TenantIdSchema, left.tenantId);
+    const second = toBinary(TenantIdSchema, right.tenantId);
     return (
       first.byteLength === second.byteLength && first.every((byte, index) => byte === second[index])
     );
@@ -1388,11 +1233,6 @@ const SubscriptionGatewayValues = Object.freeze({
     reason: Extract<SubscriptionGatewayResult, { readonly kind: "rejected" }>["reason"],
   ): SubscriptionGatewayResult {
     return { kind: "rejected", reason };
-  },
-  tenantFingerprint(tenant: Parameters<typeof toBinary<typeof TenantIdSchema>>[1]): string {
-    return [...toBinary(TenantIdSchema, tenant)]
-      .map((byte) => byte.toString(16).padStart(2, "0"))
-      .join("");
   },
   timestampMs(seconds: bigint, nanos: number): number | undefined {
     const value = Number(seconds);

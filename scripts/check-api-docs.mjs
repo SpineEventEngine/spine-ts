@@ -154,7 +154,6 @@ const expectedAuthExports = [
   "SubscriptionBindings",
   "SubscriptionAbortSignal",
   "SubscriptionBindingTransition",
-  "SubscriptionCapacityReservation",
   "SubscriptionTopicWire",
   "PublicSubscriptionWire",
   "BackendSubscriptionEnvelope",
