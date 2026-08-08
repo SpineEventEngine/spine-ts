@@ -4124,18 +4124,41 @@ const RepositoryRoutes = {
     schema: MessageSchema,
     targetIdField: DescriptorFieldMetadata,
   ): unknown {
-    const producerId = RepositoryRoutes.readProducerId(event);
-    const routedProducerId =
-      event.context?.rejection !== undefined &&
-      schema.fields[0]?.fieldKind === "message" &&
-      producerId === "Unknown"
-        ? undefined
-        : producerId;
     const fieldId = RepositoryRoutes.readRouteId(
       RepositoryRoutes.readFirstFieldId(message, schema, "event"),
       targetIdField,
       "event",
     );
+    const producerId = event.context?.producerId;
+
+    if (targetIdField.descriptor.fieldKind === "message" && producerId !== undefined) {
+      const producer = AnyMessages.unpack(
+        producerId,
+        targetIdField.descriptor.message as MessageSchema,
+      );
+      if (producer !== undefined) {
+        if (
+          !RepositoryRoutes.sameMessageId(
+            targetIdField.descriptor.message as MessageSchema,
+            producer,
+            fieldId.id,
+          )
+        ) {
+          throw new Error(
+            "Repository event routing requires producer ID and first field to identify the same entity.",
+          );
+        }
+        return fieldId.id;
+      }
+    }
+
+    const primitiveProducerId = RepositoryRoutes.readProducerId(event);
+    const routedProducerId =
+      event.context?.rejection !== undefined &&
+      schema.fields[0]?.fieldKind === "message" &&
+      primitiveProducerId === "Unknown"
+        ? undefined
+        : primitiveProducerId;
 
     if (routedProducerId !== undefined && routedProducerId !== fieldId.value) {
       throw new Error(
@@ -4146,6 +4169,19 @@ const RepositoryRoutes = {
     return routedProducerId === undefined || targetIdField.descriptor.fieldKind === "message"
       ? fieldId.id
       : routedProducerId;
+  },
+
+  sameMessageId(schema: MessageSchema, left: Message, right: unknown): boolean {
+    try {
+      const leftBytes = toBinary(schema, left as never);
+      const rightBytes = toBinary(schema, right as never);
+      return (
+        leftBytes.length === rightBytes.length &&
+        leftBytes.every((value, index) => value === rightBytes[index])
+      );
+    } catch {
+      return false;
+    }
   },
 
   readRouteId(

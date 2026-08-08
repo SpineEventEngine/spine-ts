@@ -3124,6 +3124,27 @@ describe("repository signal routing", () => {
     expectTypeOf(route.entityIds).toEqualTypeOf<readonly TaskId[]>();
   });
 
+  it("routes a message-valued producer ID when it matches the event target ID", () => {
+    const repository = createMessageIdTaskRepository();
+    const taskId = create(TaskIdSchema, { value: "message-producer-task" });
+    const route = repository.routeEvent(
+      SignalEnvelopes.event({
+        id: create(EventIdSchema, { value: "event-message-producer-task" }),
+        context: create(EventContextSchema, {
+          producerId: AnyMessages.pack(TaskIdSchema, taskId),
+          version: create(VersionSchema, { number: 1 }),
+        }),
+        schema: TaskCreatedSchema,
+        message: create(TaskCreatedSchema, {
+          id: taskId,
+          title: "Message producer task",
+        }),
+      }),
+    );
+
+    expect(route.entityIds).toEqual([taskId]);
+  });
+
   it("rejects message-valued event IDs with the wrong message type", () => {
     const repository = createMessageIdTaskRepository();
 
