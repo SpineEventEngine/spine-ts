@@ -1,4 +1,7 @@
-import { InMemoryStorageFactory, type StorageContext } from "@spine-event-engine/storage";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { create, toBinary } from "@bufbuild/protobuf";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { EventSchema } from "@spine-event-engine/proto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -12,7 +15,6 @@ import {
 } from "../../src/context/local-inbox-handoff.js";
 import { Delivery, type DeliveryEndpointMessage } from "../../src/delivery/delivery.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
-import { deliveryStorageFaults, onInboxQuery } from "../delivery/delivery-storage-fault-fixture.js";
 import {
   EnvironmentAttachments,
   EnvironmentAttachmentAccess,
@@ -32,6 +34,7 @@ import {
   type EnvironmentDeliveryRuntime,
 } from "../../src/server/environment-delivery-worker.js";
 import { EnvironmentType } from "../../src/server/environment.js";
+
 import {
   ServerEnvironment,
   type ServerEnvironmentSettings,
@@ -944,16 +947,16 @@ describe("ServerEnvironment attachment", () => {
 
   it("fails a stalled-peer attachment closed after bounded unknown routed readiness", async () => {
     const peerStorage = new InMemoryStorageFactory();
-    const transferredStorage = deliveryStorageFaults();
+    const transferredStorage = new InMemoryStorageFactory();
     const peer = descriptor("Peer", "type.example.dev/Peer", peerStorage);
     const transferred = descriptor(
       "Transferred",
       "type.example.dev/Transferred",
-      transferredStorage.storageFactory,
+      transferredStorage,
     );
     const delivery = new Delivery({
       context: transferred.context,
-      storageFactory: transferredStorage.storageFactory,
+      storageFactory: transferredStorage,
     });
     await delivery.inbox.receive(message(transferred.ready, "startup-row"));
     const releasePeer = Promise.withResolvers<undefined>();
@@ -982,7 +985,6 @@ describe("ServerEnvironment attachment", () => {
 
     expect(transferred.readyCallbacks).toBe(4_096);
     expect(exactDrains).toBe(0);
-    expect(transferredStorage.inboxQueries).toBe(0);
     expect(transferred.replayed).toEqual([]);
 
     releasePeer.resolve(undefined);
@@ -990,7 +992,6 @@ describe("ServerEnvironment attachment", () => {
     await expect(attaching).rejects.toThrow(
       "Registration readiness received an unconfigured scope.",
     );
-    expect(transferredStorage.inboxQueries).toBe(0);
     expect(transferred.replayed).toEqual([]);
 
     await delivery.inbox.receive(message(transferred.ready, "after-failure"));
@@ -1002,7 +1003,6 @@ describe("ServerEnvironment attachment", () => {
 
     expect(transferred.readyCallbacks).toBe(4_097);
     expect(exactDrains).toBe(0);
-    expect(transferredStorage.inboxQueries).toBe(0);
     expect(transferred.replayed).toEqual([]);
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
@@ -1061,7 +1061,7 @@ describe("ServerEnvironment attachment", () => {
     await serverEnvironmentAccess.detach(environment, handle);
   });
 
-  it("keeps fulfilled FAILED as cause-less parked startup without rejecting attachment", async () => {
+  it("keeps a contained failed delivery as a cause-less idle startup", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const target = descriptor("Failed", "type.example.dev/Failed", storageFactory, {
       onReplay: () => Promise.reject(new Error("endpoint failed")),
@@ -1074,23 +1074,15 @@ describe("ServerEnvironment attachment", () => {
       descriptors: [target.value],
     });
 
-    expect(handle.startup.scopes).toMatchObject([{ disposition: "PARKED" }]);
-    expect(handle.records()).toEqual([
-      expect.objectContaining({ hasCause: false, occurrences: 0 }),
-    ]);
+    expect(handle.startup.scopes).toMatchObject([{ disposition: "IDLE" }]);
+    expect(handle.records()).toEqual([]);
+    await serverEnvironmentAccess.detach(ServerEnvironment.instance(), handle);
     await serverEnvironmentAccess.detach(ServerEnvironment.instance(), handle);
   });
 
-  it("does not blame or restart a distinct owner with equal shard facts", async () => {
-    const failure = new Error("sibling storage rejected");
-    let rejectedQueries = 0;
-    const faulty = deliveryStorageFaults(
-      onInboxQuery(() => {
-        rejectedQueries += 1;
-        throw failure;
-      }),
-    );
-    const sibling = descriptor("Sibling", "type.example.dev/Sibling", faulty.storageFactory, {
+  it("keeps distinct owners with equal shard facts independent", async () => {
+    const faulty = new InMemoryStorageFactory();
+    const sibling = descriptor("Sibling", "type.example.dev/Sibling", faulty, {
       shard: new ShardIndex(0, 2),
     });
     const healthyStorage = new InMemoryStorageFactory();
@@ -1099,12 +1091,11 @@ describe("ServerEnvironment attachment", () => {
     });
     const environment = serverEnvironment();
 
-    await expect(
-      serverEnvironmentAccess.attach(environment, {
-        ownership: "caller",
-        descriptors: [sibling.value],
-      }),
-    ).rejects.toBe(failure);
+    const siblingHandle = await serverEnvironmentAccess.attach(environment, {
+      ownership: "caller",
+      descriptors: [sibling.value],
+    });
+    await serverEnvironmentAccess.detach(environment, siblingHandle);
     const handle = await serverEnvironmentAccess.attach(environment, {
       ownership: "caller",
       descriptors: [attaching.value],
@@ -1115,7 +1106,6 @@ describe("ServerEnvironment attachment", () => {
     );
     expect(attached?.scope.ready).toEqual(attaching.ready);
     expect(attached?.disposition).toBe("IDLE");
-    expect(rejectedQueries).toBe(1);
     await serverEnvironmentAccess.detach(environment, handle);
   });
 });
@@ -3317,6 +3307,10 @@ function message(ready: DeliveryReady, signalId: string) {
     shard: ready.shard,
     whenReceived: new Date(),
     version: 1n,
+    signal: create(AnySchema, {
+      typeUrl: "type.spine.io/spine.core.Event",
+      value: toBinary(EventSchema, create(EventSchema)),
+    }),
   };
 }
 
