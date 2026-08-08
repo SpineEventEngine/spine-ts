@@ -394,10 +394,7 @@ describe("check-release-readiness", () => {
       );
       writeFileSync(
         join(repoRoot, "docs", "firestore-storage-extension-analysis.md"),
-        [
-          "<!-- release-readiness: historical-or-migration -->",
-          "The historical migration replaces `onPage` and `DeliveryPage`.",
-        ].join("\n"),
+        "The historical migration replaces `onPage` and `DeliveryPage`.\n",
       );
       execFileSync("git", ["add", "README.md", "docs/firestore-storage-extension-analysis.md"], {
         cwd: repoRoot,
