@@ -267,6 +267,10 @@ describe("Server", () => {
   it("rolls back discovery and dynamic resources once when durable cleanup is pre-attached", async () => {
     let stops = 0;
     const aborted: string[] = [];
+    const native = {
+      baseUrl: "http://127.0.0.1:65534",
+      close: vi.fn().mockResolvedValue(undefined),
+    };
     const bindings = new DurableSubscriptionBindings({
       storageFactory: new InMemoryStorageFactory(),
       namespace: "pre-attached",
@@ -276,7 +280,7 @@ describe("Server", () => {
     attachDurableSubscriptionCleanup(bindings, () => Promise.resolve());
 
     await expect(
-      BrowserServer.open("http://127.0.0.1:65534", {
+      BrowserServer.open(native as never, {
         ...browserGateway(),
         bindings,
         discovery: {
@@ -304,6 +308,7 @@ describe("Server", () => {
     ).rejects.toThrow("already attached");
     expect(stops).toBe(1);
     expect(aborted).toEqual(["node/pre-attached"]);
+    expect(native.close).toHaveBeenCalledOnce();
   });
 
   it("aborts owned dynamic session managers on removal and browser close", async () => {
