@@ -35,6 +35,7 @@ export type OnDeliveryMessage = (message: DeliveryEndpointMessage) => void | Pro
  * Summarizes one finite direct delivery run.
  */
 export interface DeliveryRun {
+
   /**
    * Identifies the terminal delivery outcome.
    */
@@ -70,6 +71,7 @@ export interface DeliveryRun {
  * Describes ephemeral delivery failure evidence that is never persisted.
  */
 export interface DeliveryFailure {
+
   /**
    * Identifies the message associated with the failure.
    */
@@ -85,6 +87,7 @@ export interface DeliveryFailure {
  * Executes direct Inbox delivery for one complete worker identity.
  */
 export class Delivery {
+
   /**
    * Identifies the immutable storage namespace.
    */
@@ -114,10 +117,6 @@ export class Delivery {
    * Bounds each direct Inbox read.
    */
   readonly pageSize: number;
-
-  /**
-   * Retains the configured batch size for integrations.
-   */
 
   /**
    * Reads and acknowledges direct Inbox rows.
@@ -368,6 +367,7 @@ export class Delivery {
  * Configures one direct delivery owner.
  */
 export interface DeliveryOptions {
+
   /**
    * Identifies the storage namespace.
    */
@@ -418,6 +418,7 @@ export interface DeliveryOptions {
  * Configures one direct shard drain.
  */
 export interface DeliveryDrainOptions {
+
   /**
    * Dispatches supported Inbox messages.
    */

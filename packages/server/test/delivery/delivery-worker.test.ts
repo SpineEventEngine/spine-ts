@@ -4,6 +4,7 @@ import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import { Delivery, type DeliveryEndpointMessage } from "../../src/delivery/delivery.js";
+import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
 import { ShardIndex } from "../../src/index.js";
 
 describe("Delivery direct worker", () => {
@@ -94,6 +95,32 @@ describe("Delivery direct worker", () => {
     });
     expect(run).toMatchObject({ failed: 1, delivered: 1 });
     expect(rows).toEqual([]);
+  });
+
+  it("repeats a failed reception when the monitor selects repeat dispatch", async () => {
+    const shard = ShardIndex.single();
+    const rows = [message("failed", "target", shard)];
+    let calls = 0;
+    const delivery = createDelivery({
+      rows,
+      mark: async (row) => {
+        remove(rows, row);
+        return row;
+      },
+      monitor: new (class extends DeliveryMonitor {
+        override onReceptionFailure(reception: Parameters<DeliveryMonitor["onReceptionFailure"]>[0]) {
+          return reception.repeat();
+        }
+      })(),
+    });
+    const run = await delivery.drain(shard, {
+      onMessage: () => {
+        calls += 1;
+        if (calls === 1) throw new Error("first dispatch failed");
+      },
+    });
+    expect(run).toMatchObject({ status: "DRAINED", failed: 1, delivered: 2 });
+    expect(calls).toBe(2);
   });
 
   it.each([false, new Error("release failed")])(
@@ -225,12 +252,14 @@ function createDelivery(options: {
   };
   read?: () => Promise<DeliveryEndpointMessage[]>;
   mark?: (row: DeliveryEndpointMessage) => Promise<DeliveryEndpointMessage | undefined>;
+  monitor?: DeliveryMonitor;
 }): Delivery {
   const rows = options.rows ?? [];
   return new Delivery({
     context: { name: "DeliveryWorker", multitenant: false },
     storageFactory: new InMemoryStorageFactory(),
     worker: options.worker ?? workerId("node", "restart"),
+    monitor: options.monitor,
     inbox: {
       sessionKind: "LEASED",
       receive: async () => {
