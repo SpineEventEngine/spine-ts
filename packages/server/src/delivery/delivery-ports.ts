@@ -81,61 +81,6 @@ export interface DeliveryInbox {
     message: InboxMessage,
     options?: DeliveryOperationOptions,
   ): Promise<InboxMessage | undefined>;
-
-  /**
-   * Returns work for an exact pending message under the supplied work-session fence.
-   *
-   * @param message Identifies the pending message snapshot.
-   * @param session Proves ownership of the shard fence.
-   * @param options Propagates cancellation and a delivery deadline.
-   * @returns The admitted work, when the fence remains valid.
-   */
-  begin(
-    message: InboxMessage,
-    session: DeliveryWorkSession,
-    options?: DeliveryOperationOptions,
-  ): Promise<DeliveryInboxWork | undefined>;
-}
-
-/**
- * One admitted exact-message delivery operation.
- */
-export interface DeliveryInboxWork {
-  // prettier-ignore
-
-  /**
-   * A defensive message snapshot admitted under this work fence; callers may mutate their copy.
-   */
-  readonly message: InboxMessage;
-
-  /**
-   * Ensures the work has a current matching session.
-   *
-   * @param session Supplies the current shard session.
-   * @param options Propagates cancellation and a delivery deadline.
-   * @returns A promise that resolves after the work has the matching session.
-   */
-  synchronize(session: DeliveryWorkSession, options?: DeliveryOperationOptions): Promise<void>;
-
-  /**
-   * Completes the admitted message once delivery succeeded.
-   *
-   * Shard ownership excludes concurrent delivery, but the handler effect and
-   * durable delivered transition are not transactional. A lost acknowledgement
-   * can therefore redeliver; downstream handling must be idempotent.
-   *
-   * @param options Propagates cancellation and a delivery deadline.
-   * @returns Whether the message transitioned to complete.
-   */
-  complete(options?: DeliveryOperationOptions): Promise<boolean>;
-
-  /**
-   * Clears the admitted message without remote removal.
-   *
-   * @param options Propagates cancellation and a delivery deadline.
-   * @returns A promise that resolves after the admitted work is abandoned.
-   */
-  abandon(options?: DeliveryOperationOptions): Promise<void>;
 }
 
 /**

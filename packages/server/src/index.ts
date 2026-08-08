@@ -68,7 +68,6 @@ export type { EventDispatcher } from "./bus/event-dispatcher.js";
 export { DeliveryStorageCorruptionError } from "./delivery/delivery-storage-error.js";
 export type {
   DeliveryInbox,
-  DeliveryInboxWork,
   DeliveryWorkRegistry,
   DeliveryWorkSession,
   ExclusiveDeliveryWorkSession,
@@ -79,7 +78,6 @@ export {
   DeliveryBuilder,
   DeliveryMonitor,
   type Delivery,
-  type DeliveryPage,
   type DeliveryResult,
   type DeliveryRunOptions,
   type DeliveryStrategy,

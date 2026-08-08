@@ -124,7 +124,6 @@ export class Delivery {
   /**
    * Retains the configured batch size for integrations.
    */
-  readonly batchSize: number;
 
   /**
    * Reads and acknowledges direct Inbox rows.
@@ -152,7 +151,6 @@ export class Delivery {
         : snapshotWorker(options.worker);
     this.node = this.worker.nodeId?.value ?? "local";
     this.pageSize = options.pageSize ?? 100;
-    this.batchSize = options.batchSize ?? 100;
     this.inbox =
       options.inbox ??
       new Inbox(new InboxStorage({ context: this.context, storageFactory: this.storageFactory }));
@@ -181,7 +179,6 @@ export class Delivery {
             : run.status === "STOPPED"
               ? "STOPPED"
               : "COMPLETED",
-      pages: Object.freeze([]),
     });
   }
 
@@ -206,7 +203,6 @@ export class Delivery {
               : run.status === "STOPPED"
                 ? "STOPPED"
                 : "COMPLETED",
-        pages: Object.freeze([]),
       }),
     );
   }
@@ -425,7 +421,6 @@ export interface DeliveryOptions {
   /**
    * Retains a batch-size integration setting.
    */
-  readonly batchSize?: number;
 }
 
 /**

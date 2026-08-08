@@ -14,8 +14,6 @@ const defaultContext: StorageContext = Object.freeze({
   multitenant: false,
 });
 const defaultPageSize = 100;
-const defaultBatchSize = 100;
-const maxBatchSize = 1_000;
 const controlledDeliveryRunners = new WeakMap<
   Delivery,
   (options: DeliveryControlledRun) => Promise<DeliveryResult>
@@ -145,44 +143,7 @@ export interface DeliveryResult {
   /**
    * Terminal reason for this local run.
    */
-  readonly status: "COMPLETED" | "SKIPPED" | "STOPPED" | "FAILED" | "PAUSED";
-
-  /**
-   * Frozen ordered primitive page summaries, bounded by the configured batch size.
-   */
-  readonly pages: readonly DeliveryPage[];
-}
-
-/**
- * Immutable primitive summary of one bounded loop page.
- */
-export interface DeliveryPage {
-  // prettier-ignore
-
-  /**
-   * Why this bounded page stopped.
-   */
-  readonly status: "IDLE" | "SKIPPED" | "STOPPED" | "FAILED" | "PAUSED";
-
-  /**
-   * Pending rows examined.
-   */
-  readonly processed: number;
-
-  /**
-   * Rows whose endpoint callback ran.
-   */
-  readonly accepted: number;
-
-  /**
-   * Rows durably marked delivered.
-   */
-  readonly delivered: number;
-
-  /**
-   * Failures observed without exposing mutable payloads or errors.
-   */
-  readonly failed: number;
+  readonly status: "COMPLETED" | "SKIPPED" | "STOPPED" | "FAILED";
 }
 
 /**
@@ -240,11 +201,6 @@ export interface Delivery {
   readonly pageSize: number;
 
   /**
-   * Maximum retained page summaries per finite run, from 1 through 1000.
-   */
-  readonly batchSize: number;
-
-  /**
    * Durable inbox facade.
    */
   readonly inbox: DeliveryInbox;
@@ -269,7 +225,6 @@ export class DeliveryBuilder {
   #strategy: DeliveryStrategy | undefined;
   #monitor: DeliveryMonitor | undefined;
   #pageSize: number | undefined;
-  #batchSize: number | undefined;
   #node: string | undefined;
   #worker: WorkerId | undefined;
 
@@ -351,17 +306,6 @@ export class DeliveryBuilder {
   }
 
   /**
-   * Sets the positive number of pages admitted by one local run.
-   *
-   * @param batchSize The positive page count.
-   * @returns This builder.
-   */
-  withBatchSize(batchSize: number): this {
-    this.#batchSize = DeliveryValues.requireBound("Delivery batch size", batchSize, maxBatchSize);
-    return this;
-  }
-
-  /**
    * Sets the node identity used for shard pickup.
    *
    * @param node The non-empty node identity.
@@ -434,7 +378,6 @@ export class DeliveryBuilder {
       strategy,
       ...(this.#monitor === undefined ? {} : { monitor: this.#monitor }),
       pageSize: this.#pageSize ?? defaultPageSize,
-      batchSize: this.#batchSize ?? defaultBatchSize,
       node,
       ...(this.#worker === undefined ? {} : { worker: this.#worker }),
     });
@@ -449,7 +392,6 @@ class BuiltDelivery implements Delivery {
   readonly node: string;
   readonly worker: WorkerId;
   readonly pageSize: number;
-  readonly batchSize: number;
   readonly inbox: DeliveryInbox;
   readonly #core: CoreDelivery;
 
@@ -461,7 +403,6 @@ class BuiltDelivery implements Delivery {
     this.node = core.node;
     this.worker = core.worker;
     this.pageSize = core.pageSize;
-    this.batchSize = core.batchSize;
     this.inbox = core.inbox;
     controlledDeliveryRunners.set(this, (options) => core.runControlled(options));
     Object.freeze(this);

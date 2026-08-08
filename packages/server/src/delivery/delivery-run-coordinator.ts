@@ -329,7 +329,7 @@ export class DeliveryRunCoordinator {
       if (!this.#accepting) {
         return;
       }
-      shards = DeliveryRunValues.pausedShards(evidence);
+      return;
     }
   }
 
@@ -653,15 +653,6 @@ const DeliveryRunValues = Object.freeze({
       shards.set(shard.key(), new ShardIndex(shard.index, shard.ofTotal));
     return Object.freeze(Array.from(shards.values()));
   },
-  pausedShards(evidence: DeliveryWorkerEvidence): readonly ShardIndex[] {
-    return Object.freeze(
-      evidence.shards.flatMap((result) =>
-        result.status === "fulfilled" && result.run.status === "PAUSED"
-          ? [new ShardIndex(result.shard.index, result.shard.ofTotal)]
-          : [],
-      ),
-    );
-  },
   validateEvidence(
     obligation: DeliveryRunObligation,
     requested: readonly ShardIndex[],
@@ -714,7 +705,6 @@ const DeliveryRunValues = Object.freeze({
         return "STOPPED";
       case "FAILED":
       case "SKIPPED":
-      case "PAUSED":
         return "PARKED";
     }
   },

@@ -38,10 +38,7 @@ export class DeliveryWorker {
           new DeliveryLoop({
             delivery: options.delivery,
             shard,
-            node: options.node,
             onMessage: options.onMessage,
-            ...(options.limit === undefined ? {} : { limit: options.limit }),
-            ...(options.maxFailures === undefined ? {} : { maxFailures: options.maxFailures }),
           }),
       ),
     );
@@ -201,19 +198,6 @@ export interface DeliveryWorkerOptions {
    * Worker node name used for shard pickup.
    */
   readonly node: string;
-
-  /**
-   * Optional positive accepted-work cap for each drain.
-   */
-  readonly limit?: number;
-
-  /**
-   * Maximum failed observations per loop before that loop stops. Successful
-   * exhaustion marking consumes no failure budget; a failed exhaustion mark
-   * and existing endpoint, claim, lease/fencing, cleanup, or status-update
-   * failures do. Defaults to one; capped at 1000.
-   */
-  readonly maxFailures?: number;
 
   /**
    * Framework endpoint callback invoked for each available supported worker row.
@@ -468,8 +452,6 @@ const DeliveryWorkerValues = Object.freeze({
   },
   state(status: DeliveryLoopStatus): DeliveryShardState {
     switch (status) {
-      case "PAUSED":
-        return "PAUSED";
       case "IDLE":
         return "COMPLETE";
       case "STOPPED":
@@ -482,7 +464,6 @@ const DeliveryWorkerValues = Object.freeze({
   status(loops: readonly DeliveryLoopRun[]): DeliveryLoopStatus {
     if (loops.some(({ status }) => status === "FAILED")) return "FAILED";
     if (loops.some(({ status }) => status === "STOPPED")) return "STOPPED";
-    if (loops.some(({ status }) => status === "PAUSED")) return "PAUSED";
     if (loops.some(({ status }) => status === "SKIPPED")) return "SKIPPED";
     return "IDLE";
   },

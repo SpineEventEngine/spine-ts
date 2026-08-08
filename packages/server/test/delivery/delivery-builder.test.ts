@@ -379,9 +379,6 @@ describe("DeliveryMonitor delivery", () => {
     expect(() => new DeliveryBuilder().withPageSize(0)).toThrow(
       "Delivery page size must be a positive safe integer.",
     );
-    expect(() => new DeliveryBuilder().withBatchSize(1_001)).toThrow(
-      "Delivery batch size must be at most 1000.",
-    );
     expect(() => ShardIndex.single()).not.toThrow();
   });
 });

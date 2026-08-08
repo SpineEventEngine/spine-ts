@@ -19,7 +19,6 @@ import {
 } from "../../src/index.js";
 import type {
   DeliveryInbox,
-  DeliveryInboxWork,
   DeliveryOperationOptions,
   DeliveryWorkSession,
   DeliveryWorkRegistry,
@@ -1001,14 +1000,6 @@ class AdmissionInbox implements DeliveryInbox {
     options?: DeliveryOperationOptions,
   ): Promise<InboxMessage | undefined> {
     return this.#delegate.markDelivered(message, options);
-  }
-
-  begin(
-    message: InboxMessage,
-    session: DeliveryWorkSession,
-    options?: DeliveryOperationOptions,
-  ): Promise<DeliveryInboxWork | undefined> {
-    return this.#delegate.begin(message, session, options);
   }
 }
 

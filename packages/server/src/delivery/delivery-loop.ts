@@ -102,21 +102,6 @@ export interface DeliveryLoopOptions {
   readonly shard: ShardIndex;
 
   /**
-   * Names the local node for retained compatibility integrations.
-   */
-  readonly node?: string;
-
-  /**
-   * Limits accepted work for retained compatibility integrations.
-   */
-  readonly limit?: number;
-
-  /**
-   * Limits failures for retained compatibility integrations.
-   */
-  readonly maxFailures?: number;
-
-  /**
    * Dispatches one supported Inbox message.
    */
   readonly onMessage: OnDeliveryMessage;
@@ -125,22 +110,12 @@ export interface DeliveryLoopOptions {
    * Propagates cancellation and deadline information.
    */
   readonly operation?: DeliveryOperationOptions;
-
-  /**
-   * Observes the start of a loop for retained compatibility integrations.
-   */
-  readonly onStarted?: () => void;
-
-  /**
-   * Retains the former empty-epoch completion option for integrations.
-   */
-  readonly completeAdmittedEmptyEpoch?: boolean;
 }
 
 /**
  * Identifies the terminal state of a finite loop.
  */
-export type DeliveryLoopStatus = "IDLE" | "SKIPPED" | "STOPPED" | "FAILED" | "PAUSED";
+export type DeliveryLoopStatus = "IDLE" | "SKIPPED" | "STOPPED" | "FAILED";
 
 /**
  * Combines loop progress with its terminal state.

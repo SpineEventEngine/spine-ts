@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import type { Any } from "@bufbuild/protobuf/wkt";
 
 import type { InboxStorage } from "./inbox-storage.js";
-import type { DeliveryInboxWork, DeliveryWorkSession } from "./delivery-ports.js";
 import type { ShardIndex } from "./shard-index.js";
 
 /**
@@ -95,22 +94,6 @@ export class Inbox {
     return this.storage.markDelivered(message);
   }
 
-  /**
-   * Returns exact-row work while the caller owns the message shard.
-   *
-   * @param message Identifies the pending message.
-   * @param session Supplies the leased shard fence.
-   * @returns The admitted work, when the exact pending row remains current.
-   */
-  async begin(
-    message: InboxMessage,
-    session: DeliveryWorkSession,
-  ): Promise<DeliveryInboxWork | undefined> {
-    if (session.kind !== "LEASED") return undefined;
-    const admitted = await this.storage.admit(message);
-    return admitted === undefined ? undefined : new LocalInboxWork(this.storage, admitted);
-  }
-
   #inputObject(value: unknown, label: string): Record<string, unknown> {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
       throw new InboxMessageError(`${label} is invalid.`);
@@ -125,53 +108,6 @@ export class Inbox {
     } catch (error) {
       throw new InboxMessageError(`${label} is invalid.`, { cause: error });
     }
-  }
-}
-
-class LocalInboxWork implements DeliveryInboxWork {
-  #message: InboxMessage | undefined;
-
-  constructor(
-    private readonly storage: InboxStorage,
-    message: InboxMessage,
-  ) {
-    this.#message = message;
-  }
-
-  get message(): InboxMessage {
-    return this.#requireMessage();
-  }
-
-  synchronize(session: DeliveryWorkSession): Promise<void> {
-    if (session.kind !== "LEASED") throw new InboxMessageError("Inbox work session is not leased.");
-    if (this.#message === undefined) throw new InboxMessageError("Inbox work is no longer active.");
-    return Promise.resolve();
-  }
-
-  /**
-   * Marks the exact pending row delivered after the handler effect has succeeded.
-   *
-   * The handler effect and this durable transition are not transactional. A lost
-   * acknowledgement can therefore redeliver after restart; downstream handling
-   * must remain idempotent.
-   */
-  async complete(): Promise<boolean> {
-    const message = this.#requireMessage();
-    const completed = await this.storage.markDelivered(message);
-    if (completed !== undefined) {
-      this.#message = undefined;
-    }
-    return completed !== undefined;
-  }
-
-  abandon(): Promise<void> {
-    this.#message = undefined;
-    return Promise.resolve();
-  }
-
-  #requireMessage(): InboxMessage {
-    if (this.#message === undefined) throw new InboxMessageError("Inbox work is no longer active.");
-    return this.#message;
   }
 }
 
