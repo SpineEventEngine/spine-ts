@@ -1,6 +1,6 @@
 # T-0142: Wave 8 Example Migration
 
-Status: In progress on stacked integration train.
+Status: Complete on stacked integration train; integration pending.
 
 ## Objective
 
