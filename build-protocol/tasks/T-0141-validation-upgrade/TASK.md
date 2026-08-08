@@ -1,6 +1,6 @@
 # T-0141: Validation Package Upgrade
 
-Status: Implementation checkpoint ready for required review on the stacked integration train.
+Status: Complete on stacked integration train; not merged to `main`.
 
 ## Objective
 
@@ -51,3 +51,11 @@ facade and validation semantics remain fixed.
 - Focused core, server transition-validation, and proto-tools packaging tests
   pass. The separate To-Do black-box suite has inherited projection/subscription
   timeouts and is recorded in the work log without example changes.
+
+## Closure
+
+- Exact npm package rename/version, focused compatibility, typechecks, static
+  checks, and both required specialist reviews are complete.
+- The one final `verify:task` passes Proto checks and stops only at stale example
+  APIs assigned to T-0142; no validation-package error is present.
+- T-0141 remains stacked and unmerged to `main`.
