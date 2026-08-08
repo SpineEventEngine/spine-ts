@@ -1,6 +1,8 @@
-<!-- release-readiness: historical-or-migration -->
-
 # Firestore-compatible storage extension
+
+> **Historical and superseded.** This analysis preserves earlier design evidence
+> and is not an implementation guide. For the supported adapter behavior, use
+> the [current Datastore guide](USER_GUIDE.md#12-develop-with-google-cloud-datastore).
 
 ## Reference and scope
 

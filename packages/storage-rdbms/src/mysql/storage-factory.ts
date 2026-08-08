@@ -114,13 +114,16 @@ export interface MysqlStorageFactoryBuilder {
   setOptions(options: MysqlStorageOptions): this;
 
   /**
-   * Sets the ungrouped table name for a record type.
+   * Sets the ungrouped table name for a record-family source type.
    *
-   * @param recordType Identifies the record Protobuf type.
+   * For Entity current storage, this is the Entity state type, not the stored
+   * `EntityRecord` envelope.
+   *
+   * @param sourceType Identifies the ungrouped family source Protobuf type.
    * @param name Specifies the physical table name.
    * @returns Returns this builder.
    */
-  setTableName<R extends Message>(recordType: GenMessage<R>, name: string): this;
+  setTableName<S extends Message>(sourceType: GenMessage<S>, name: string): this;
 
   /**
    * Sets the grouped table name for a source and record type.
@@ -396,13 +399,16 @@ class Builder implements MysqlStorageFactoryBuilder {
   }
 
   /**
-   * Sets the ungrouped table name for a record type.
+   * Sets the ungrouped table name for a record-family source type.
    *
-   * @param recordType Identifies the record Protobuf type.
+   * For Entity current storage, this is the Entity state type, not the stored
+   * `EntityRecord` envelope.
+   *
+   * @param sourceType Identifies the ungrouped family source Protobuf type.
    * @param name Specifies the physical table name.
    * @returns Returns this builder.
    */
-  setTableName<R extends Message>(recordType: GenMessage<R>, name: string): this;
+  setTableName<S extends Message>(sourceType: GenMessage<S>, name: string): this;
 
   /**
    * Sets the grouped table name for a source and record type.
@@ -426,8 +432,8 @@ class Builder implements MysqlStorageFactoryBuilder {
    */
   setTableName(...args: unknown[]): this {
     if (args.length === 2) {
-      const [record, name] = args as [GenMessage<Message>, string];
-      this.#resolver.setRecordName(record.typeName, name);
+      const [source, name] = args as [GenMessage<Message>, string];
+      this.#resolver.setRecordName(source.typeName, name);
     } else {
       const [source, record, name] = args as [GenMessage<Message>, GenMessage<Message>, string];
       this.#resolver.setGroupName(source.typeName, record.typeName, name);

@@ -1,7 +1,7 @@
 # T-0145: Wave 8 Guide Correction
 
-Status: Implementation correction batch complete; review pending from completed
-Wave 8 commit `1abb4217`.
+Status: Final correction implementation complete; targeted re-review pending
+from completed Wave 8 commit `1abb4217`.
 
 ## Objective
 

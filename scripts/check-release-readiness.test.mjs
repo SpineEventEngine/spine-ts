@@ -382,21 +382,29 @@ describe("check-release-readiness", () => {
     });
   });
 
-  it("allows retired names only in explicitly marked historical or migration documentation", () => {
+  it("allows retired names only in reviewed historical documentation paths", () => {
     withTempRepository((repoRoot) => {
       mkdirSync(join(repoRoot, "docs"), { recursive: true });
-      writeFileSync(join(repoRoot, "README.md"), "The old `onPage` callback is unavailable.\n");
       writeFileSync(
-        join(repoRoot, "docs", "MIGRATION.md"),
+        join(repoRoot, "README.md"),
         [
           "<!-- release-readiness: historical-or-migration -->",
-          "The migration replaces `onPage` and `DeliveryPage`.",
+          "The old `onPage` callback is unavailable.",
         ].join("\n"),
       );
-      execFileSync("git", ["add", "README.md", "docs/MIGRATION.md"], { cwd: repoRoot });
+      writeFileSync(
+        join(repoRoot, "docs", "firestore-storage-extension-analysis.md"),
+        [
+          "<!-- release-readiness: historical-or-migration -->",
+          "The historical migration replaces `onPage` and `DeliveryPage`.",
+        ].join("\n"),
+      );
+      execFileSync("git", ["add", "README.md", "docs/firestore-storage-extension-analysis.md"], {
+        cwd: repoRoot,
+      });
 
       expect(collectUserFacingDocumentationProblems(repoRoot)).toEqual([
-        "README.md:1: retired delivery page callback: onPage",
+        "README.md:2: retired delivery page callback: onPage",
       ]);
     });
   });

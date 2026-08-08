@@ -1490,10 +1490,12 @@ plan. This describes the storage/query path; it does not mean that the Message
 Board example configures MySQL.
 
 Use a factory mapping when an application needs a shorter or existing physical
-name. MySQL has separate registrations: `setTableName(recordType, "tasks")`
-names an ungrouped record family, while
-`setTableName(sourceSchema, recordSchema, "task_history")` names a grouped
-source/record family. Datastore's `organizeRecords(recordType, { kind: "Tasks" })`
+name. MySQL has separate registrations:
+`setTableName(TaskStateSchema, "tasks")` names the ungrouped current Entity
+family by its source state type, while
+`setTableName(TaskStateSchema, EntityRecordSchema, "task_history")` names its
+grouped state-history family. Datastore's
+`organizeRecords(recordType, { kind: "Tasks" })`
 is a record-only fallback; its three-argument source/record registration is
 also used by a default Entity history when that history group has the same name
 as the source. It therefore cannot rename only current Entity records while
