@@ -344,7 +344,7 @@ describe("DeliveryClient RPC and lifecycle", () => {
     await expect(mutation).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
   });
 
-  it("quarantines ambiguous mutation outcomes without payload diagnostics or retry", async () => {
+  it("reports ambiguous mutation outcomes without payload diagnostics or retry", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport, { readRetries: 5 });
     const value = domainMessage("sensitive-id");
@@ -447,7 +447,7 @@ describe("DeliveryClient RPC and lifecycle", () => {
     expect(fake.unary).not.toHaveBeenCalled();
   });
 
-  it("quarantines each ambiguous batch outcome without payload leakage or retry", async () => {
+  it("reports each ambiguous batch outcome without payload leakage or retry", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport, { readRetries: 5 });
     const messages = [domainMessage("sensitive-first"), domainMessage("sensitive-second")];

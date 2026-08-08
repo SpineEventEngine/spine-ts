@@ -348,14 +348,17 @@ describe("DeliveryClient shard observation", () => {
     }
   });
 
-  it("keeps PICKED quarantine and invalidates stale sessions only after NOT_PICKED", async () => {
+  it("retains no local release marker after an unknown outcome", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport);
     const registry = new RemoteWorkRegistry(client);
     const shard = ShardIndex.single();
     await expect(registry.release({ kind: "EXCLUSIVE", shard })).resolves.toBe(false);
     echoPickup(fake);
-    const session = await registry.pickUp(shard, "node");
+    const session = await registry.pickUp(
+      shard,
+      create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker-1" }),
+    );
     if (session === undefined) throw new Error("Remote session was not acquired.");
     fake.fail(new Error("release response lost"));
     await expect(registry.release(session)).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
@@ -375,7 +378,10 @@ describe("DeliveryClient shard observation", () => {
     const registry = new RemoteWorkRegistry(client);
     const shard = ShardIndex.single();
     echoPickup(fake);
-    const session = await registry.pickUp(shard, "node");
+    const session = await registry.pickUp(
+      shard,
+      create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker-1" }),
+    );
     if (session === undefined) throw new Error("Remote session was not acquired.");
     let release: (() => void) | undefined;
     const pendingRelease = new Promise((resolve) => {

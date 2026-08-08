@@ -44,30 +44,20 @@ describe("RemoteInbox direct behavior", () => {
     await expect(inbox.readMessage(first.id)).resolves.toBe(first);
   });
 
-  it("admits only an exact pending row and keeps failed completion active", async () => {
+  it("removes only an exact authoritative pending row", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
     const pending = domainMessage("pending");
-    const session = await ownedSession(client);
 
-    await expect(
-      inbox.begin(pending, { kind: "LEASED", shard: ShardIndex.single() }),
-    ).resolves.toBeUndefined();
     client.findOne
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce({ ...pending, status: "DELIVERED" });
-    await expect(inbox.begin(pending, session)).resolves.toBeUndefined();
-    await expect(inbox.begin(pending, session)).resolves.toBeUndefined();
+    await expect(inbox.markDelivered(pending)).resolves.toBeUndefined();
+    await expect(inbox.markDelivered(pending)).resolves.toBeUndefined();
     client.findOne.mockResolvedValueOnce(pending);
-    const work = await inbox.begin(pending, session);
-    if (work === undefined) throw new Error("Expected exact remote work.");
     client.removeOne.mockRejectedValueOnce(new Error("lost"));
-    await expect(work.complete()).rejects.toThrow("lost");
-    expect(work.message).toMatchObject({ id: pending.id });
-    await expect(work.abandon()).resolves.toBeUndefined();
-    await expect(
-      work.synchronize({ kind: "LEASED", shard: ShardIndex.single() }),
-    ).rejects.toBeInstanceOf(DeliveryProtocolError);
+    await expect(inbox.markDelivered(pending)).rejects.toThrow("lost");
+    expect(client.removeOne).toHaveBeenCalledExactlyOnceWith(pending, undefined);
   });
 
   it("continues a bounded page from an exact cursor and forwards remote read bounds", async () => {
@@ -113,45 +103,23 @@ describe("RemoteInbox direct behavior", () => {
     ).rejects.toBeInstanceOf(DeliveryPagingError);
   });
 
-  it("fences changed authoritative rows and makes successful completion terminal", async () => {
+  it("fences changed authoritative rows and returns an immutable delivered acknowledgement", async () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
     const pending = domainMessage("pending");
-    const session = await ownedSession(client);
-
     for (const current of [
       { ...pending, id: { ...pending.id, value: "other" } },
       { ...pending, signalId: "other" },
       { ...pending, signal: undefined },
     ]) {
       client.findOne.mockResolvedValueOnce(current);
-      await expect(inbox.begin(pending, session)).resolves.toBeUndefined();
+      await expect(inbox.markDelivered(pending)).resolves.toBeUndefined();
     }
     client.findOne.mockResolvedValueOnce(pending);
-    const work = await inbox.begin(pending, session);
-    if (work === undefined) throw new Error("Expected exact remote work.");
-    await expect(work.complete({ timeoutMs: 50 })).resolves.toBe(true);
-    await expect(work.complete()).resolves.toBe(false);
-    expect(() => work.message).toThrow(DeliveryProtocolError);
-    await expect(work.synchronize(session)).rejects.toBeInstanceOf(DeliveryProtocolError);
+    const delivered = await inbox.markDelivered(pending, { timeoutMs: 50 });
+    expect(delivered).toMatchObject({ id: pending.id, status: "DELIVERED" });
+    expect(Object.isFrozen(delivered)).toBe(true);
     expect(client.removeOne).toHaveBeenCalledWith(pending, { timeoutMs: 50 });
-  });
-
-  it("rejects a stale locally issued session before beginning or completing remote work", async () => {
-    const client = new Client();
-    const inbox = new RemoteInbox(client as never);
-    const registry = new RemoteWorkRegistry(client as never);
-    const pending = domainMessage("pending");
-    const session = await registry.pickUp(ShardIndex.single(), "node");
-    if (session === undefined) throw new Error("Expected remote shard session.");
-    client.findOne.mockResolvedValueOnce(pending);
-    const work = await inbox.begin(pending, session);
-    if (work === undefined) throw new Error("Expected remote work.");
-
-    registry.reconcile({ shard: ShardIndex.single(), status: "NOT_PICKED", messages: 0 });
-    await expect(inbox.begin(pending, session)).resolves.toBeUndefined();
-    await expect(work.complete()).rejects.toBeInstanceOf(DeliveryProtocolError);
-    expect(client.removeOne).not.toHaveBeenCalled();
   });
 
   it("rejects malformed shard observations before they can change remote ownership", () => {
@@ -177,9 +145,3 @@ describe("RemoteInbox direct behavior", () => {
     }).not.toThrow();
   });
 });
-
-async function ownedSession(client: Client) {
-  const session = await new RemoteWorkRegistry(client as never).pickUp(ShardIndex.single(), "node");
-  if (session === undefined) throw new Error("Expected remote shard session.");
-  return session;
-}
