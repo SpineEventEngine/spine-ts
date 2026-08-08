@@ -37,6 +37,7 @@ import {
   EventSchema,
   FieldPathSchema,
   InternetDomainSchema,
+  OriginSchema,
   RejectionEventContextSchema,
   TenantIdSchema,
   type TenantId,
@@ -2340,15 +2341,17 @@ describe("SpineServices", () => {
     const subscription = await handlers.subscribe(createEventTopic("tenant-a"));
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
     const nextUpdate = iterator.next();
+    const attachment = await awaitSubscriptionAttachment(context, subscription);
+    let settled = false;
+    void nextUpdate.then(() => {
+      settled = true;
+    });
 
-    await delay(25);
     await context
       .eventBus()
       .post(createAggregateEvent("event-tenant-b", "aggregate-1", "Tenant B", "tenant-b"));
-    const beforeMatchingTenant = await Promise.race([
-      nextUpdate.then(() => "delivered"),
-      delay(50).then(() => "pending"),
-    ]);
+    await Promise.resolve();
+    expect(settled).toBe(false);
 
     await context
       .eventBus()
@@ -2356,12 +2359,49 @@ describe("SpineServices", () => {
     const delivered = await withTimeout(nextUpdate, "tenant event subscription update");
     const update = delivered.value as SubscriptionUpdate | undefined;
 
-    expect(beforeMatchingTenant).toBe("pending");
     expect(delivered.done).toBe(false);
     if (update?.update.case !== "eventUpdates") {
       throw new Error("Expected tenant event subscription update.");
     }
     expect(update.update.value.event.map((event) => event.id?.value)).toEqual(["event-tenant-a"]);
+    attachment.unsubscribe();
+    await iterator.return?.();
+  });
+
+  it("matches multitenant event subscriptions against past-message actor tenants", async () => {
+    const context = BoundedContext.multitenant("PastMessageTenantEvents")
+      .addEventDispatcher(createDomainEventDispatcher(AggregateStateSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createEventTopic("tenant-past"));
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const nextUpdate = iterator.next();
+    const attachment = await awaitSubscriptionAttachment(context, subscription);
+    let settled = false;
+    void nextUpdate.then(() => {
+      settled = true;
+    });
+
+    await context
+      .eventBus()
+      .post(createPastMessageAggregateEvent("event-past-other", "tenant-other"));
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    await context
+      .eventBus()
+      .post(createPastMessageAggregateEvent("event-past-match", "tenant-past"));
+
+    const delivered = await withTimeout(nextUpdate, "past-message tenant subscription update");
+    const update = delivered.value as SubscriptionUpdate | undefined;
+
+    expect(delivered.done).toBe(false);
+    expect(update?.update.case).toBe("eventUpdates");
+    expect(
+      update?.update.case === "eventUpdates"
+        ? update.update.value.event.map((event) => event.id?.value)
+        : [],
+    ).toEqual(["event-past-match"]);
+    attachment.unsubscribe();
     await iterator.return?.();
   });
 
@@ -2425,6 +2465,27 @@ describe("SpineServices", () => {
     expect((thrown as ConnectError).rawMessage).toBe(
       "SubscriptionService.Subscribe event topics support only include_all in this runtime slice.",
     );
+  });
+
+  it("rejects field masks and false include-all values on event topics", () => {
+    const context = BoundedContext.singleTenant("MalformedEventTopics")
+      .addEventDispatcher(createDomainEventDispatcher(AggregateStateSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const masked = createEventTopic();
+    masked.fieldMask = create(FieldMaskSchema, { paths: ["name"] });
+    const disabled = createEventTopic();
+    if (disabled.target?.criterion.case !== "includeAll") {
+      throw new Error("Expected an include-all event topic.");
+    }
+    disabled.target.criterion.value = false;
+
+    for (const [topic, message] of [
+      [masked, "SubscriptionService.Subscribe event topics do not support field_mask."],
+      [disabled, "SubscriptionService.Subscribe requires filters or include_all = true."],
+    ] as const) {
+      expect(() => handlers.subscribe(topic)).toThrow(message);
+    }
   });
 
   it("rejects internal event targets before listener attachment", () => {
@@ -3213,8 +3274,8 @@ describe("SpineServices", () => {
     const subscription = await handlers.subscribe(createMessageIdFilteredTopic(taskId));
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
     const next = iterator.next();
+    const attachment = await awaitSubscriptionAttachment(context, subscription);
 
-    await delay(25);
     await postEntityStateChanged(
       context,
       TaskSchema,
@@ -3244,6 +3305,65 @@ describe("SpineServices", () => {
         title: "Matched",
       }),
     );
+    attachment.unsubscribe();
+    await iterator.return?.();
+  });
+
+  it("matches message-valued subscription fields by their encoded value", async () => {
+    const repository = new Repository({
+      entityType: MessageIdTaskAggregate,
+      schema: TaskSchema,
+    });
+    const context = BoundedContext.singleTenant("MessageFieldTasks")
+      .add(repository)
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const taskId = create(TaskIdSchema, { value: "task-message-field" });
+    const subscription = await handlers.subscribe(
+      createFilteredTopicForTask({
+        filter: [
+          create(CompositeFilterSchema, {
+            filter: [
+              create(FilterSchema, {
+                fieldPath: { fieldName: ["id"] },
+                value: AnyMessages.pack(TaskIdSchema, taskId),
+                operator: Filter_Operator.EQUAL,
+              }),
+            ],
+            operator: CompositeFilter_CompositeOperator.ALL,
+          }),
+        ],
+      }),
+    );
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = iterator.next();
+    const attachment = await awaitSubscriptionAttachment(context, subscription);
+
+    await postEntityStateChanged(
+      context,
+      TaskSchema,
+      create(TaskSchema, {
+        id: create(TaskIdSchema, { value: "other-message-field" }),
+        title: "Ignored",
+      }),
+    );
+    await postEntityStateChanged(
+      context,
+      TaskSchema,
+      create(TaskSchema, { id: clone(TaskIdSchema, taskId), title: "Matched" }),
+    );
+
+    const delivered = (await withTimeout(next, "message field subscription")).value as
+      SubscriptionUpdate | undefined;
+
+    expect(AnyMessages.unpack(entityUpdateId(delivered) ?? packMissing(), TaskIdSchema)).toEqual(
+      taskId,
+    );
+    expect(AnyMessages.unpack(entityUpdateKind(delivered)?.value as Any, TaskSchema)).toEqual(
+      create(TaskSchema, { id: taskId, title: "Matched" }),
+    );
+    attachment.unsubscribe();
     await iterator.return?.();
   });
 
@@ -4190,6 +4310,24 @@ function createAggregateEvent(
   });
 }
 
+function createPastMessageAggregateEvent(id: string, tenantId: string) {
+  return SignalEnvelopes.event({
+    id: create(EventIdSchema, { value: id }),
+    context: create(EventContextSchema, {
+      origin: {
+        case: "pastMessage",
+        value: create(OriginSchema, { actorContext: createActorContext(tenantId) }),
+      },
+    }),
+    schema: AggregateStateSchema,
+    message: create(AggregateStateSchema, {
+      id: `aggregate-${id}`,
+      name: "Past message",
+      archived: false,
+    }),
+  });
+}
+
 function createRejectionEvent(
   command: ReturnType<typeof createAggregateCommand>,
   stacktrace: string,
@@ -5017,6 +5155,22 @@ function registeredSubscriptionHandlers(
   }
 
   return handlers;
+}
+
+async function awaitSubscriptionAttachment(context: BoundedContext, subscription: Subscription) {
+  const id = subscription.id;
+  if (id === undefined) throw new Error("Expected a subscription ID.");
+  const registry = boundedContextAccess.subscriptionRegistry(context);
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const entry = await registry.get(id);
+    if (entry?.phase === "active") {
+      return await boundedContextAccess.consumeSubscription(context, id.value, () => undefined);
+    }
+    await Promise.resolve();
+  }
+
+  throw new Error("Subscription did not become active.");
 }
 
 function registeredQueryHandlers(

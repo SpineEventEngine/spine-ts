@@ -39,4 +39,40 @@ describe("InMemoryDeliveryState", () => {
       state.setSession(second, worker, 43);
     }).not.toThrow();
   });
+
+  it("rejects malformed message identity and tolerates an absent release", () => {
+    const state = new InMemoryDeliveryState();
+    const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
+
+    expect(state.release(shard)).toBeUndefined();
+    expect(() =>
+      state.putAll([
+        {
+          message: create(InboxMessageSchema, { id: { uuid: "missing-shard" } }),
+          bytes: 1,
+        },
+      ]),
+    ).toThrow("Delivery message identity is missing.");
+  });
+
+  it("fails closed when callers corrupt the exposed retained-message map", () => {
+    const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
+    const message = create(InboxMessageSchema, { id: { uuid: "message", index: shard } });
+    const seeded = new InMemoryDeliveryState();
+    seeded.putAll([{ message, bytes: 1 }]);
+    const key = seeded.messages.keys().next().value;
+    if (key === undefined) throw new Error("Expected a retained message key.");
+
+    const replacement = new InMemoryDeliveryState();
+    replacement.messages.set(key, message);
+    expect(() => replacement.putAll([{ message, bytes: 2 }])).toThrow(
+      "Delivery message shard count is invalid.",
+    );
+
+    const deletion = new InMemoryDeliveryState();
+    deletion.putAll([{ message, bytes: 1 }]);
+    expect(deletion.delete(message)).toBe(true);
+    deletion.messages.set(key, message);
+    expect(() => deletion.delete(message)).toThrow("Delivery message shard count is invalid.");
+  });
 });

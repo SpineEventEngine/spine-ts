@@ -2,7 +2,8 @@ import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import { Delivery } from "../../src/delivery/delivery.js";
-import { DeliveryWorker } from "../../src/delivery/delivery-worker.js";
+import type { DeliveryLoopRun, DeliveryLoopStatus } from "../../src/delivery/delivery-loop.js";
+import { deliveryWorkerAccess, DeliveryWorker } from "../../src/delivery/delivery-worker.js";
 import { ShardIndex } from "../../src/index.js";
 
 describe("DeliveryWorker", () => {
@@ -39,10 +40,49 @@ describe("DeliveryWorker", () => {
         }),
     ).toThrow("DeliveryWorker shards must be a non-empty array.");
   });
+
+  it.each(["FAILED", "STOPPED", "SKIPPED", "IDLE"] as const)(
+    "prioritizes %s terminal loop status",
+    (status) => {
+      expect(deliveryWorkerAccess.status([loopRun(status)])).toBe(status);
+    },
+  );
+
+  it("rejects internal lifecycle access for non-worker values", () => {
+    expect(() => deliveryWorkerAccess.awaitSettled({} as DeliveryWorker)).toThrow(
+      "Delivery worker access requires a DeliveryWorker instance.",
+    );
+  });
+
+  it("settles an idle worker and requires stop before permanent retirement", async () => {
+    const worker = new DeliveryWorker({
+      delivery: delivery(),
+      shards: [ShardIndex.single()],
+      onMessage: () => undefined,
+    });
+    await expect(deliveryWorkerAccess.awaitSettled(worker)).resolves.toBeUndefined();
+    await expect(deliveryWorkerAccess.retire(worker)).rejects.toThrow(
+      "DeliveryWorker must be stopped before retirement.",
+    );
+    worker.stop();
+    await expect(deliveryWorkerAccess.retire(worker)).resolves.toBeUndefined();
+  });
 });
 function delivery(): Delivery {
   return new Delivery({
     context: { name: "WorkerRuntime", multitenant: false },
     storageFactory: new InMemoryStorageFactory(),
+  });
+}
+
+function loopRun(status: DeliveryLoopStatus): DeliveryLoopRun {
+  return Object.freeze({
+    status,
+    runs: 0,
+    processed: 0,
+    accepted: 0,
+    delivered: 0,
+    failed: 0,
+    failures: Object.freeze([]),
   });
 }

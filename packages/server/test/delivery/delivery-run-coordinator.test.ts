@@ -733,6 +733,28 @@ describe("DeliveryRunCoordinator", () => {
     expect(coordinator.retired).toBe(true);
   });
 
+  it.each([
+    ["an empty owner barrier", [] as string[]],
+    ["an unknown owner barrier", ["unknown"]],
+  ])("settles %s without affecting configured lifecycle work", async (_label, owners) => {
+    const configured = scope("first", 0, 1);
+    const coordinator = new DeliveryRunCoordinator({
+      scopes: [configured],
+      worker: new FakeRunWorker([]),
+    });
+
+    await expect(coordinator.awaitOwnersBarrier(owners)).resolves.toBeUndefined();
+    expect(coordinator.settlement().scopes).toEqual([]);
+  });
+
+  it("settles an empty delivery admission without worker start", async () => {
+    const worker = new FakeRunWorker([]);
+    const coordinator = new DeliveryRunCoordinator({ scopes: [scope("first", 0, 1)], worker });
+
+    await expect(coordinator.start([])).resolves.toEqual({ scopes: [], pending: [] });
+    expect(worker.starts).toEqual([]);
+  });
+
   it("publishes retirement before a synchronous stop callback can reenter", async () => {
     const events: string[] = [];
     let reentered = false;

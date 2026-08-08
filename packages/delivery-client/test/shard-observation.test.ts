@@ -18,9 +18,11 @@ import {
   DeliveryClient,
   DeliveryOutcomeUnknownError,
   DeliveryProtocolError,
+  DeliveryShardObservationError,
   ShardObservationOverflowError,
   RemoteWorkRegistry,
 } from "../src/index.js";
+import { ShardObservationStream } from "../src/client/shard-observation.js";
 import { echoPickup, transport } from "./shared-fixtures.js";
 
 describe("DeliveryClient shard observation", () => {
@@ -268,6 +270,133 @@ describe("DeliveryClient shard observation", () => {
       expect(fake.streamAborts).toBe(1);
     },
   );
+
+  it("keeps cancellation idempotent and subsequent iterator reads completed", async () => {
+    const fake = transport();
+    fake.streamReplyAndHold([
+      create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
+    ]);
+    const stream = DeliveryClient.usingTransport(fake.transport).observeShardUpdates();
+    const iterator = stream[Symbol.asyncIterator]();
+    await vi.waitFor(() => {
+      expect(fake.streamStarted).toBe(1);
+    });
+
+    stream.cancel();
+    stream.cancel();
+
+    await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined });
+    await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined });
+  });
+
+  it("delivers an update buffered before the consumer asks for it", async () => {
+    const controller = new AbortController();
+    let processed!: () => void;
+    const updateProcessed = new Promise<void>((resolve) => {
+      processed = resolve;
+    });
+    const created = create(SubscriptionResponseSchema, {
+      value: { case: "created", value: true },
+    });
+    const update = create(SubscriptionResponseSchema, {
+      value: { case: "update", value: create(ShardInfoUpdateSchema) },
+    });
+    const observation = Object.freeze({
+      shard: ShardIndex.single(),
+      status: "PICKED" as const,
+      messages: 4,
+    });
+    const stream = new ShardObservationStream({
+      signal: controller.signal,
+      timeoutMs: 1,
+      capacity: 1,
+      reconnects: 0,
+      reconnectBackoffMs: 0,
+      open: async function* () {
+        yield created;
+        yield update;
+        await new Promise<void>((resolve) => {
+          controller.signal.addEventListener(
+            "abort",
+            () => {
+              resolve();
+            },
+            { once: true },
+          );
+        });
+      },
+      acknowledge: (frame) => frame.value.case === "created",
+      decodeUpdate: () => {
+        processed();
+        return observation;
+      },
+      finish: () => undefined,
+      cancel: () => {
+        controller.abort();
+      },
+    });
+
+    await updateProcessed;
+
+    await expect(stream[Symbol.asyncIterator]().next()).resolves.toMatchObject({
+      done: false,
+      value: observation,
+    });
+    stream.cancel();
+  });
+
+  it("reports a stream that exhausts its configured reconnects", async () => {
+    const fake = transport();
+    fake.streamReply([
+      create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
+    ]);
+    const stream = DeliveryClient.usingTransport(fake.transport, {
+      observationReconnects: 0,
+    }).observeShardUpdates();
+
+    await expect(stream[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(
+      DeliveryShardObservationError,
+    );
+  });
+
+  it("resumes observation after a positive reconnect backoff", async () => {
+    vi.useFakeTimers();
+    try {
+      const fake = transport();
+      fake.streamReply([
+        create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
+      ]);
+      fake.streamReplyAndHold([
+        create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
+        create(SubscriptionResponseSchema, {
+          value: {
+            case: "update",
+            value: create(ShardInfoUpdateSchema, {
+              index: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
+              newStatus: ShardStatus.NOT_PICKED,
+              newMessagesCount: 2,
+            }),
+          },
+        }),
+      ]);
+      const stream = DeliveryClient.usingTransport(fake.transport, {
+        observationReconnects: 1,
+        observationReconnectBackoffMs: 100,
+      }).observeShardUpdates();
+      const pending = stream[Symbol.asyncIterator]().next();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(100);
+      await expect(pending).resolves.toMatchObject({
+        done: false,
+        value: { status: "NOT_PICKED", messages: 2 },
+      });
+      stream.cancel();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it("does not open an Admin stream for a pre-aborted caller signal", () => {
     const fake = transport();

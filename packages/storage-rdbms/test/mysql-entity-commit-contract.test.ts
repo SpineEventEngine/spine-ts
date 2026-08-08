@@ -2,11 +2,16 @@ import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema, VersionSchema } from "@spine-event-engine/proto";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { mysqlEntityLockKey, MysqlEntityCommitCoordinator } from "../src/mysql/entity-commit.js";
 import { MysqlEntityStorage } from "../src/mysql/entity-history.js";
-import { mysqlCurrentRevision, mysqlEntityTables } from "../src/mysql/testing.js";
+import {
+  mysqlCurrentRecord,
+  mysqlCurrentRevision,
+  mysqlEntityTables,
+  mysqlHistoryCounts,
+} from "../src/mysql/testing.js";
 
 describe("MysqlEntityCommitCoordinator", () => {
   it("derives a 64-character lowercase hexadecimal advisory key for each entity identity", () => {
@@ -183,6 +188,49 @@ describe("MysqlEntityStorage history behavior", () => {
     await expect(
       mysqlCurrentRevision(pool as never, entityInput(false, false), "missing"),
     ).rejects.toThrow(/missing/i);
+  });
+
+  it("returns absent and decoded current records from provider rows", async () => {
+    const value = create(EntityRecordSchema);
+    const pool = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[], []])
+        .mockResolvedValueOnce([[{ bytes: toBinary(EntityRecordSchema, value) }], []]),
+    };
+    const input = entityInput(false, false);
+
+    await expect(mysqlCurrentRecord(pool as never, input, "missing")).resolves.toBeUndefined();
+    await expect(mysqlCurrentRecord(pool as never, input, "present")).resolves.toEqual(value);
+  });
+
+  it("counts only matching enabled state and event histories", async () => {
+    const pool = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([
+          [
+            { bytes: toBinary(EntityRecordSchema, record("task", 1n, 1n)) },
+            { bytes: toBinary(EntityRecordSchema, record("other", 2n, 2n)) },
+            { bytes: toBinary(EntityRecordSchema, create(EntityRecordSchema)) },
+          ],
+          [],
+        ])
+        .mockResolvedValueOnce([
+          [
+            { bytes: toBinary(EventSchema, event("task", "one", 1n, 1n)) },
+            { bytes: toBinary(EventSchema, event("other", "two", 2n, 2n)) },
+            { bytes: toBinary(EventSchema, create(EventSchema)) },
+          ],
+          [],
+        ]),
+    };
+    await expect(
+      mysqlHistoryCounts(pool as never, entityInput(true, true), "task"),
+    ).resolves.toEqual({ states: 1, events: 1 });
+    await expect(
+      mysqlHistoryCounts({ query: vi.fn() } as never, entityInput(false, false), "task"),
+    ).resolves.toEqual({ states: 0, events: 0 });
   });
 
   it("translates Entity-ID predicates before querying the canonical current family", async () => {

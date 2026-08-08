@@ -1,8 +1,18 @@
-import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { create, type Message } from "@bufbuild/protobuf";
+import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { createPool } from "mysql2/promise";
+import { EventSchema } from "@spine-event-engine/proto";
+import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
+import { RecordSpec, StorageGroup } from "@spine-event-engine/storage";
 import { describe, expect, it, vi } from "vitest";
 
-import { MysqlStorageFactory, type MysqlStorageFactoryBuilder } from "../src/index.js";
+import {
+  MysqlStorageFactory,
+  type CreateOperationFactory,
+  type MysqlStorageFactoryBuilder,
+  type MysqlTableSpec,
+} from "../src/index.js";
 
 vi.mock("mysql2/promise", () => ({ createPool: vi.fn() }));
 
@@ -106,4 +116,132 @@ describe("MysqlStorageFactory builder contract", () => {
     expect(createPool).toHaveBeenLastCalledWith({ host: "db.example", database: "defaults" });
     expect(release).toHaveBeenCalledOnce();
   });
+
+  it("enforces MySQL Entity-commit scope, history, event-ID, and close guards before opening tables", async () => {
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve({ release: vi.fn() })),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/commits" })
+      .build();
+    const entity = entityInput({ name: "commits", multitenant: false });
+    const mutation = {
+      context: entity.context,
+      entity,
+      entityId: "entity",
+      next: create(EntityRecordSchema),
+    };
+    const closed = EntityCommitStorageFactories.create(factory, entity);
+    closed.close();
+    await expect(closed.commit(mutation)).rejects.toThrow(/closed/i);
+
+    const commits = EntityCommitStorageFactories.create(factory, entity);
+    await expect(
+      commits.commit({ ...mutation, entity: { ...entity, sourceType: TimestampSchema } }),
+    ).rejects.toThrow(/scope is incompatible/i);
+    await expect(
+      commits.commit({ ...mutation, context: { name: "other", multitenant: false } }),
+    ).rejects.toThrow(/context is incompatible/i);
+    commits.close();
+
+    const noHistory = entityInput({ name: "no-history", multitenant: false }, false, false);
+    const disabled = EntityCommitStorageFactories.create(factory, noHistory);
+    await expect(
+      disabled.commit({
+        ...mutation,
+        context: noHistory.context,
+        entity: noHistory,
+        states: [create(EntityRecordSchema)],
+      }),
+    ).rejects.toThrow(/state history is disabled/i);
+    await expect(
+      disabled.commit({
+        ...mutation,
+        context: noHistory.context,
+        entity: noHistory,
+        diagnostics: [create(EventSchema)],
+      }),
+    ).rejects.toThrow(/event history is disabled/i);
+    disabled.close();
+
+    const missingId = EntityCommitStorageFactories.create(factory, entity);
+    await expect(missingId.commit({ ...mutation, events: [create(EventSchema)] })).rejects.toThrow(
+      /requires delivery-event IDs/i,
+    );
+    missingId.close();
+    factory.close();
+  });
+
+  it("uses a configured create operation for a grouped record family before inspecting its layout", async () => {
+    let table: MysqlTableSpec<string, import("@bufbuild/protobuf/wkt").StringValue> | undefined;
+    const query = vi.fn((sql: string) => {
+      if (sql.includes("information_schema.columns"))
+        return Promise.resolve([table?.columns.map(({ name }) => ({ column_name: name })) ?? []]);
+      if (sql.includes("index_name='PRIMARY'"))
+        return Promise.resolve([table?.primaryKey.map((column_name) => ({ column_name })) ?? []]);
+      if (sql.includes("information_schema.statistics")) return Promise.resolve([[]]);
+      if (sql.includes("information_schema.tables"))
+        return Promise.resolve([[{ engine: "InnoDB" }]]);
+      return Promise.resolve([[]]);
+    });
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve({ query, release: vi.fn() })),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    let operationCalls = 0;
+    const operation: CreateOperationFactory = <I, R extends Message>(
+      resolved: MysqlTableSpec<I, R>,
+    ) => {
+      operationCalls += 1;
+      table = resolved as unknown as MysqlTableSpec<
+        string,
+        import("@bufbuild/protobuf/wkt").StringValue
+      >;
+      return { sql: `CREATE TABLE \`${resolved.tableName}\` (test INT)` };
+    };
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/grouped" })
+      .useOperationFactory(operation)
+      .build();
+    const records = factory.createRecordStorage(
+      { name: "grouped", multitenant: false },
+      new RecordSpec({
+        recordType: StringValueSchema,
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
+      new StorageGroup("history"),
+    );
+
+    await (records as unknown as { prepare(): Promise<void> }).prepare();
+
+    expect(operationCalls).toBe(1);
+    expect(table?.groupName).toBe("history");
+    expect(table?.tableName).toContain("history");
+    expect(query.mock.calls[0]?.[0]).toContain("CREATE TABLE");
+    records.close();
+    factory.close();
+  });
 });
+
+function entityInput(
+  context: { readonly name: string; readonly multitenant: boolean },
+  stateHistory = true,
+  eventHistory = true,
+) {
+  return {
+    context,
+    id: {
+      clone: (id: string) => id,
+      key: (id: string) => id,
+      pack: () => create(AnySchema),
+      unpack: () => undefined,
+    },
+    columns: [],
+    sourceType: StringValueSchema,
+    stateSchema: StringValueSchema,
+    stateHistory,
+    eventHistory,
+  };
+}

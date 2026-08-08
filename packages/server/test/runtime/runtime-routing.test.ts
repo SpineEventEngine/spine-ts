@@ -421,6 +421,39 @@ describe("server runtime routing", () => {
     ).toThrow(/must be an authentic EventRegistrationReadiness instance/);
   });
 
+  it("rejects missing input and malformed authentic message-name lists", () => {
+    expect(() => createRoutingPlan(null as never)).toThrow(
+      "Server runtime routing requires an input object.",
+    );
+    expect(() => createRoutingPlan({} as never)).toThrow(
+      "Server runtime routing requires an input object.",
+    );
+
+    const handlers = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
+      builder.assign(CommandSchema, "assignCreate"),
+    ]);
+    const readiness = CommandRegistrationReadiness.fromEntityHandlers([handlers]);
+    const expectNamesFailure = (value: unknown, pattern: RegExp) => {
+      withPatchedPrototypeMethod(
+        CommandRegistrationReadiness.prototype,
+        "commandTypeNames",
+        () => value,
+        () => {
+          expect(() =>
+            createRoutingPlan({
+              context: BoundedContext.singleTenant("Tasks").build(),
+              commands: readiness,
+            }),
+          ).toThrow(pattern);
+        },
+      );
+    };
+
+    expectNamesFailure(undefined, /must return an array of registered message names/);
+    expectNamesFailure([42], /message names must be non-empty strings/);
+    expectNamesFailure([" "], /message names must be non-empty strings/);
+  });
+
   it("rejects prototype-forged command readiness before override methods run", () => {
     const commandHandlers = EntityHandlers.define(
       TaskProjection,
