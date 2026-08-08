@@ -149,6 +149,8 @@ export const BrowserServer: Readonly<{
         nextId: () => globalThis.crypto.randomUUID(),
         dispose: (definition, signal) => creator.cancel({ wire: definition }, signal),
       });
+    if (isDurableSubscriptionBindings(bindings))
+      bindings.attachCleanup((definition, signal) => creator.cancel({ wire: definition }, signal));
     const requests = BrowserServer.requests(options);
     const unary = new UnaryGateway({
       ...(options.registry === undefined ? {} : { registry: options.registry }),

@@ -79,7 +79,8 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
    */
   readonly namespace: string;
   readonly #storage: RecordStorage<SubscriptionId, GatewayAuthenticatedSubscription>;
-  readonly #cleanup: OnSubscriptionDefinition;
+  #cleanup: OnSubscriptionDefinition;
+  #cleanupAttached = false;
   readonly #nextId: () => string;
   readonly #pending = new Map<string, Promise<unknown>>();
   readonly #active = new Map<string, AbortController>();
@@ -136,6 +137,18 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       this.#storage.close();
       throw new Error("Authenticated subscription storage requires atomic compare-and-set.");
     }
+  }
+
+  /**
+   * Attaches the Gateway-owned backend cancellation effect before recovery or expiry work.
+   *
+   * @internal BrowserServer installs its topology-aware subscription creator exactly once.
+   */
+  attachCleanup(cleanup: OnSubscriptionDefinition): void {
+    if (this.#cleanupAttached)
+      throw new Error("Authenticated subscription cleanup is already attached.");
+    this.#cleanup = cleanup;
+    this.#cleanupAttached = true;
   }
 
   /**

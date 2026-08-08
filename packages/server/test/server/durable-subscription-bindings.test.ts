@@ -1078,6 +1078,37 @@ describe("DurableSubscriptionBindings", () => {
     await expect(bindings.purgeExpired(3)).rejects.toThrow("closed");
   });
 
+  it("uses an attached backend cleanup before removing an expired durable row", async () => {
+    const cleaned: string[] = [];
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: new InMemoryStorageFactory(),
+      namespace: "attached-expiry",
+      nextId: () => "attached",
+      cleanup: () => Promise.reject(new Error("unattached cleanup must not run")),
+    });
+    bindings.attachCleanup((wire) => {
+      cleaned.push(subscriptionId(wire.bytes));
+      return Promise.resolve();
+    });
+    await bindings.create({
+      topic: { kind: "subscription-topic", bytes: topic() },
+      whenExpires: 1,
+    });
+
+    await bindings.purgeExpired(1);
+    const restored: string[] = [];
+    await bindings.recoverActive({
+      nowMs: 0,
+      onDefinition: (wire) => {
+        restored.push(subscriptionId(wire.bytes));
+        return Promise.resolve();
+      },
+    });
+
+    expect(cleaned).toEqual(["attached"]);
+    expect(restored).toEqual([]);
+  });
+
   it("stops a raw expiry scan at its first unexpired row", async () => {
     const backing = new InMemoryStorageFactory();
     let cleanups = 0;
