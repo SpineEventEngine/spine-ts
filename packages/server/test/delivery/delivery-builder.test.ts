@@ -12,6 +12,7 @@ import {
   FailedPickUp,
   FailedReception,
   ShardIndex,
+  UniformAcrossAllShards,
 } from "../../src/index.js";
 import { Delivery as CoreDelivery } from "../../src/delivery/delivery.js";
 
@@ -101,6 +102,35 @@ describe("DeliveryMonitor delivery", () => {
         .withNode("node-a")
         .withWorker(create(WorkerIdSchema, { nodeId: { value: "node-b" }, value: "x" })),
     ).toThrow("must match");
+  });
+
+  it.each([
+    ["", "type.example/Task", "Delivery target ID must be a non-empty string."],
+    ["task-1", "", "Delivery target type must be a non-empty string."],
+  ])("rejects incomplete shard coordinates", (targetId, targetType, message) => {
+    expect(() => UniformAcrossAllShards.singleShard().shardFor(targetId, targetType)).toThrow(
+      message,
+    );
+  });
+
+  it.each([
+    [0, "Delivery page size must be a positive safe integer."],
+    [1_001, "Delivery page size must be at most 1000."],
+  ])("rejects page size %i outside the finite delivery bound", (pageSize, message) => {
+    expect(() => build().withPageSize(pageSize)).toThrow(message);
+  });
+
+  it("rejects a strategy that returns a shard from a different configured total", () => {
+    const delivery = build()
+      .withStrategy({
+        shardCount: 2,
+        shardFor: () => new ShardIndex(0, 3),
+      })
+      .build();
+
+    expect(() => delivery.strategy.shardFor("task-1", "type.example/Task")).toThrow(
+      "Delivery strategy shard total must equal its resolved shard count.",
+    );
   });
 
   it("maps skipped and failed pickup outcomes without rejecting", async () => {
