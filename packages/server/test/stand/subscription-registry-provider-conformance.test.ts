@@ -83,7 +83,7 @@ describe("StorageSubscriptionRegistry provider configuration", () => {
         if (sql.startsWith("CREATE TABLE")) {
           const definitions = /\((.*), PRIMARY KEY/.exec(sql)?.[1] ?? "";
           schemaColumns = [...definitions.matchAll(/`([^`]+)`/g)].map((match) => ({
-            column_name: match[1],
+            column_name: match[1] ?? "",
           }));
           return [[]];
         }

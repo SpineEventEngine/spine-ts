@@ -1,4 +1,4 @@
-import { create, toBinary } from "@bufbuild/protobuf";
+import { create, toBinary, type Message } from "@bufbuild/protobuf";
 import {
   SubscriptionIdSchema,
   SubscriptionRecordSchema,
@@ -7,7 +7,13 @@ import {
   type SubscriptionId,
   type SubscriptionRecord,
 } from "@spine-event-engine/proto/client";
-import { InMemoryStorageFactory, type RecordStorage } from "@spine-event-engine/storage";
+import {
+  InMemoryStorageFactory,
+  type RecordSpec,
+  type RecordStorage,
+  type StorageContext,
+  type StorageGroup,
+} from "@spine-event-engine/storage";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   InMemorySubscriptionRegistry,
@@ -95,7 +101,7 @@ describe("SubscriptionRecord codec", () => {
         subscription: subscription("one"),
         phase: "pending",
         createdAt: 1,
-      }),
+      } as never),
     ).toThrow("invalid");
   });
   it("round-trips active records and rejects records beyond the durable size limit", () => {
@@ -314,7 +320,9 @@ describe("storage registry compare-and-set retries", () => {
     const factory = new InMemoryStorageFactory();
     const open = factory.createRecordStorage.bind(factory);
     let losses = 4;
-    factory.createRecordStorage = ((...args: never[]) => {
+    factory.createRecordStorage = ((
+      ...args: [StorageContext, RecordSpec<unknown, Message>, StorageGroup?]
+    ) => {
       const storage = open(...args);
       const compareAndSet = storage.compareAndSet.bind(storage);
       storage.compareAndSet = async (...values) => {
@@ -342,7 +350,9 @@ describe("storage registry compare-and-set retries", () => {
   it("rejects a storage handle that does not guarantee atomic compare-and-set", () => {
     const factory = new InMemoryStorageFactory();
     const open = factory.createRecordStorage.bind(factory);
-    factory.createRecordStorage = ((...args: never[]) => {
+    factory.createRecordStorage = ((
+      ...args: [StorageContext, RecordSpec<unknown, Message>, StorageGroup?]
+    ) => {
       const storage = open(...args);
       Object.defineProperty(storage, "atomicCompareAndSet", { value: false });
       return storage;
@@ -460,7 +470,9 @@ function controllableRegistry(
 ): StorageSubscriptionRegistry {
   const factory = new InMemoryStorageFactory();
   const open = factory.createRecordStorage.bind(factory);
-  factory.createRecordStorage = ((...args: never[]) => {
+  factory.createRecordStorage = ((
+    ...args: [StorageContext, RecordSpec<unknown, Message>, StorageGroup?]
+  ) => {
     const storage = open(...args);
     configure(storage as never);
     return storage;

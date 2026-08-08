@@ -27,6 +27,8 @@ import {
   Stand,
   StandStateTypeError,
   type StandSubscription,
+  type StandSubscriptionEntry,
+  type StandSubscriptionRegistry,
   type StandUpdate,
 } from "../../src/index.js";
 import { SubscriptionIdSchema, SubscriptionSchema } from "@spine-event-engine/proto/client";
@@ -1317,7 +1319,7 @@ describe("Stand", () => {
 function pairedRuntime(
   domainStand: Stand,
   storageFactory: InMemoryStorageFactory,
-  registry: InMemorySubscriptionRegistry | StorageSubscriptionRegistry,
+  registry: StandSubscriptionRegistry,
   domainEventBus: EventBusType,
   systemEventBus: EventBusType,
 ): SubscriptionRuntime {
@@ -1427,7 +1429,7 @@ class ClosingStorageFactory extends InMemoryStorageFactory {
     recordSpec: RecordSpec<I, R>,
   ): RecordStorage<I, R> {
     const storage = super.onCreateRecordStorage(context, recordSpec);
-    this.storages.push(storage);
+    this.storages.push(storage as unknown as RecordStorage<unknown, Message>);
     return storage;
   }
 }
@@ -1476,13 +1478,16 @@ class AttachmentIdentityRegistry extends InMemorySubscriptionRegistry {
     });
   }
 
-  override async snapshot() {
+  override async snapshot(): Promise<readonly StandSubscriptionEntry[]> {
     const entries = await super.snapshot();
     return this.replaceContent ? entries.map((entry) => this.#replacement(entry)) : entries;
   }
 
-  #replacement(entry: Awaited<ReturnType<InMemorySubscriptionRegistry["get"]>>) {
-    if (entry === undefined) return entry;
+  #replacement(entry: StandSubscriptionEntry): StandSubscriptionEntry;
+  #replacement(entry: undefined): undefined;
+  #replacement(entry: StandSubscriptionEntry | undefined): StandSubscriptionEntry | undefined;
+  #replacement(entry: StandSubscriptionEntry | undefined): StandSubscriptionEntry | undefined {
+    if (entry === undefined) return undefined;
     const subscription = clone(SubscriptionSchema, entry.subscription);
     if (subscription.topic?.id !== undefined) subscription.topic.id.value = "replacement";
     return Object.freeze({ ...entry, subscription });

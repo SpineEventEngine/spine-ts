@@ -1,3 +1,5 @@
+import { create } from "@bufbuild/protobuf";
+import { SubscriptionIdSchema } from "@spine-event-engine/proto/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { SubscriptionRuntime } from "../../src/stand/subscription-runtime.js";
@@ -92,7 +94,9 @@ describe("SubscriptionRuntime", () => {
     );
     await runtime.close();
     await runtime.close();
-    await expect(registry.get({ value: "one" })).rejects.toThrow("closed");
+    await expect(registry.get(create(SubscriptionIdSchema, { value: "one" }))).rejects.toThrow(
+      "closed",
+    );
   });
 
   it("exposes its registry and ignores a failed timer reconciliation", async () => {
