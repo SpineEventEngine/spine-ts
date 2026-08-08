@@ -133,6 +133,29 @@ describe("DeliveryMonitor delivery", () => {
     );
   });
 
+  it.each([
+    [
+      () => UniformAcrossAllShards.forNumber(0),
+      "Delivery shard count must be a positive safe integer.",
+    ],
+    [() => build().withNode(""), "Delivery node must be a non-empty string."],
+    [() => build().withNode(1 as never), "Delivery node must be a non-empty string."],
+    [
+      () => build().withWorker(create(WorkerIdSchema)),
+      "Delivery worker must contain non-blank node and value.",
+    ],
+    [
+      () => build().withWorker(create(WorkerIdSchema, { nodeId: { value: " " }, value: "x" })),
+      "Delivery worker must contain non-blank node and value.",
+    ],
+    [
+      () => build().withStrategy({ shardCount: 0, shardFor: () => ShardIndex.single() }),
+      "Delivery strategy shard count must be a positive safe integer.",
+    ],
+  ])("rejects invalid public delivery builder input", (operation, message) => {
+    expect(operation).toThrow(message);
+  });
+
   it("maps skipped and failed pickup outcomes without rejecting", async () => {
     const shard = ShardIndex.single();
     const inbox = {
