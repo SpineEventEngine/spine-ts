@@ -192,11 +192,12 @@ describe("MysqlEntityStorage history behavior", () => {
     const current = fakeRecords([]);
     const storage = new MysqlEntityStorage(entityInput(false, false), () => current as never);
     const plans: unknown[] = [];
-    (current as { queryPlanEntries(plan: unknown): Promise<readonly unknown[]> }).queryPlanEntries =
-      (plan) => {
-        plans.push(plan);
-        return Promise.resolve([]);
-      };
+    (
+      current as unknown as { queryPlanEntries(plan: unknown): Promise<readonly unknown[]> }
+    ).queryPlanEntries = (plan) => {
+      plans.push(plan);
+      return Promise.resolve([]);
+    };
 
     await storage.current.query({ predicate: { kind: "ids", ids: ["one"] } });
     await storage.current.query({});
@@ -286,7 +287,7 @@ describe("MysqlEntityStorage history behavior", () => {
     const storage = new MysqlEntityStorage(entityInput(true, true), () => stores.shift() as never);
 
     await expect(storage.states.backward("task", 10, 1n)).resolves.toMatchObject([
-      { version: { number: 1n } },
+      { version: { number: 1 } },
     ]);
     await expect(
       storage.states.stateAt("task", create(TimestampSchema, { seconds: 1n })),
@@ -366,7 +367,7 @@ describe("MysqlEntityStorage history behavior", () => {
   it("rejects malformed current Entity records while retaining only timestamp-eligible histories", async () => {
     const current = fakeRecords([]);
     const states = fakeRecords([
-      create(EntityRecordSchema, { version: create(VersionSchema, { number: 9n }) }),
+      create(EntityRecordSchema, { version: create(VersionSchema, { number: 9 }) }),
       record("task", 2n, 2n),
       record("task", 1n, 1n),
     ]);
@@ -377,7 +378,7 @@ describe("MysqlEntityStorage history behavior", () => {
     ]);
     const stores = [current, states, events];
     const storage = new MysqlEntityStorage(entityInput(true, true), () => stores.shift() as never);
-    (current as { queryPlanEntries: () => Promise<unknown[]> }).queryPlanEntries = () =>
+    (current as unknown as { queryPlanEntries: () => Promise<unknown[]> }).queryPlanEntries = () =>
       Promise.resolve([{ record: create(EntityRecordSchema) }]);
 
     await expect(storage.current.query({})).rejects.toThrow(/requires entityId/i);
@@ -429,7 +430,7 @@ function record(id: string, version: bigint, seconds: bigint) {
     entityId: packed(id),
     state: packed(`state-${String(version)}`),
     version: create(VersionSchema, {
-      number: version,
+      number: Number(version),
       timestamp: create(TimestampSchema, { seconds }),
     }),
   });
@@ -440,7 +441,7 @@ function event(id: string, value: string, version: bigint, seconds: bigint) {
     id: create(EventIdSchema, { value }),
     context: {
       producerId: packed(id),
-      version: create(VersionSchema, { number: version }),
+      version: create(VersionSchema, { number: Number(version) }),
       timestamp: create(TimestampSchema, { seconds }),
     },
   });

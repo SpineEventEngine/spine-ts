@@ -368,7 +368,7 @@ describe("MysqlRecordStorage", () => {
     const calls: { sql: string; values?: readonly unknown[] }[] = [];
     const connection = {
       query: (sql: string) => {
-        calls.push(sql);
+        calls.push({ sql });
         return Promise.resolve([
           [
             { column_name: "_scope" },
@@ -380,7 +380,7 @@ describe("MysqlRecordStorage", () => {
         ] as never);
       },
       execute: (sql: string) => {
-        calls.push(sql);
+        calls.push({ sql });
         return Promise.resolve([{ affectedRows: 1 }, []] as never);
       },
       beginTransaction: () => Promise.resolve(),
@@ -402,8 +402,8 @@ describe("MysqlRecordStorage", () => {
 
     await storage.write(create(StringValueSchema, { value: "one" }));
 
-    expect(calls[0]).toMatch(/CREATE TABLE IF NOT EXISTS `google_protobuf_StringValue`/);
-    expect(calls.at(-1)).toMatch(/INSERT INTO `google_protobuf_StringValue`/);
+    expect(calls[0]?.sql).toMatch(/CREATE TABLE IF NOT EXISTS `google_protobuf_StringValue`/);
+    expect(calls.at(-1)?.sql).toMatch(/INSERT INTO `google_protobuf_StringValue`/);
   });
 
   it("encodes single and multitenant scopes injectively without aliases", async () => {
@@ -422,7 +422,7 @@ describe("MysqlRecordStorage", () => {
         ] as never);
       },
       execute: (sql: string, values?: readonly unknown[]) => {
-        calls.push({ sql, values });
+        calls.push(values === undefined ? { sql } : { sql, values });
         return Promise.resolve([{ affectedRows: 1 }, []] as never);
       },
       beginTransaction: () => Promise.resolve(),
@@ -680,7 +680,7 @@ describe("MysqlRecordStorage", () => {
         return Promise.resolve([[], []] as never);
       },
       execute: (sql: string, values?: readonly unknown[]) => {
-        calls.push({ sql, values });
+        calls.push(values === undefined ? { sql } : { sql, values });
         return Promise.resolve([{ affectedRows: 1 }, []] as never);
       },
       beginTransaction: () => Promise.resolve(),
@@ -764,7 +764,7 @@ describe("MysqlRecordStorage", () => {
   });
 
   it("rejects undeclared query columns and oversized scope or record keys before acquisition", async () => {
-    const calls: string[] = [];
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
     const connection = readyConnection(calls);
     let acquired = 0;
     const storage = stringStorage(connection, () => acquired++);
@@ -928,7 +928,7 @@ function readyConnection(
   options: { select?: () => unknown[] } = {},
 ) {
   const record = (sql: string, values?: readonly unknown[]) => {
-    calls.push({ sql, values });
+    calls.push(values === undefined ? { sql } : { sql, values });
   };
   return {
     query: (sql: string, values?: readonly unknown[]) => {

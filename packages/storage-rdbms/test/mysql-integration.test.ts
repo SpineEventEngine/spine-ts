@@ -11,6 +11,7 @@ import { EntityCommitStorageFactories } from "@spine-event-engine/storage/intern
 import { eventStoreRecordSpec } from "@spine-event-engine/storage/internal/event-store";
 import { EventStore } from "@spine-event-engine/storage";
 import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
+import type { RowDataPacket } from "mysql2";
 import { createPool } from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -67,7 +68,7 @@ live("MySQL-family record layout", () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
     const pool = createPool(url);
     try {
-      const [rows] = await pool.query<{ engine: string }[]>(
+      const [rows] = await pool.query<(RowDataPacket & { engine: string })[]>(
         "SELECT ENGINE AS engine FROM information_schema.tables WHERE table_schema=DATABASE() LIMIT 1",
       );
       expect(rows).toBeDefined();
@@ -98,7 +99,9 @@ live("MySQL-family record layout", () => {
       expect(actualTables).toHaveLength(4);
       for (const tableName of actualTables)
         await pool.query(`ALTER TABLE \`${tableName}\` ENGINE=${engine.toUpperCase()}`);
-      const [engines] = await pool.query<{ table_name: string; engine: string }[]>(
+      const [engines] = await pool.query<
+        (RowDataPacket & { table_name: string; engine: string })[]
+      >(
         "SELECT table_name AS table_name, engine AS engine FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN (?, ?, ?, ?)",
         actualTables,
       );
@@ -217,14 +220,9 @@ live("MySQL-family record layout", () => {
       await expect(commits.commit(mutation(context, input, "with-history"))).resolves.toBe(
         "committed",
       );
-      await expect(
-        commits.commit({
-          ...mutation(context, input, "current-only"),
-          states: undefined,
-          diagnostics: undefined,
-          events: undefined,
-        }),
-      ).resolves.toBe("committed");
+      await expect(commits.commit(mutation(context, input, "current-only"))).resolves.toBe(
+        "committed",
+      );
     } finally {
       for (const table of tables) await pool.query(`ALTER TABLE \`${table}\` ENGINE=InnoDB`);
       eventRecords.close();
@@ -313,7 +311,7 @@ live("MySQL-family record layout", () => {
     const context = { name: `t0134_replay_${String(Date.now())}`, multitenant: false };
     const input = entityInput(context);
     const commits = EntityCommitStorageFactories.create(factory, input);
-    const pool = createPool(url);
+    const pool = createPool(url ?? "");
     try {
       const same = mutation(context, input, "same");
       await expect(commits.commit(same)).resolves.toBe("committed");
