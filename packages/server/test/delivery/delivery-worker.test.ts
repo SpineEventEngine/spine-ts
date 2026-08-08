@@ -79,6 +79,92 @@ describe("Delivery direct worker", () => {
     expect(dispatched).toBe(0);
   });
 
+  it("contains a thrown renewal before callback or acknowledgement", async () => {
+    const shard = ShardIndex.single();
+    let callbacks = 0;
+    let acknowledgements = 0;
+    let releases = 0;
+    const delivery = createDelivery({
+      rows: [message("one", "target", shard)],
+      registry: {
+        pickUp: async () => session(shard),
+        renew: async () => {
+          throw new Error("renew failed");
+        },
+        release: async () => {
+          releases += 1;
+          return true;
+        },
+      },
+      mark: async () => {
+        acknowledgements += 1;
+        throw new Error("must not acknowledge");
+      },
+    });
+    await expect(
+      delivery.drain(shard, {
+        onMessage: () => {
+          callbacks += 1;
+        },
+      }),
+    ).resolves.toMatchObject({ status: "STOPPED" });
+    expect(callbacks).toBe(0);
+    expect(acknowledgements).toBe(0);
+    expect(releases).toBe(1);
+  });
+
+  it.each([false, new Error("release failed")])(
+    "returns FAILED when abort cleanup cannot release ownership",
+    async (releaseResult) => {
+      const shard = ShardIndex.single();
+      const controller = new AbortController();
+      const pickup = Promise.withResolvers<ReturnType<typeof session>>();
+      let completion = 0;
+      let releaseOptions: unknown;
+      const delivery = createDelivery({
+        monitor: new (class extends DeliveryMonitor {
+          override onDeliveryCompleted() {
+            completion += 1;
+          }
+        })(),
+        registry: {
+          pickUp: async () => pickup.promise,
+          release: async (_session, operation) => {
+            releaseOptions = operation;
+            if (releaseResult instanceof Error) throw releaseResult;
+            return releaseResult;
+          },
+        },
+      });
+      const run = delivery.drain(shard, {
+        onMessage: () => undefined,
+        operation: { signal: controller.signal },
+      });
+      pickup.resolve(session(shard));
+      controller.abort();
+      await expect(run).resolves.toMatchObject({ status: "FAILED" });
+      expect(completion).toBe(0);
+      expect(releaseOptions).toBeUndefined();
+    },
+  );
+
+  it("forwards the exact operation signal to Inbox reads", async () => {
+    const shard = ShardIndex.single();
+    const controller = new AbortController();
+    let received: AbortSignal | undefined;
+    const delivery = createDelivery({
+      read: async (options) => {
+        received = options?.signal;
+        return [];
+      },
+    });
+    await delivery.drain(shard, {
+      onMessage: () => undefined,
+      operation: { signal: controller.signal },
+    });
+    expect(received).toBe(controller.signal);
+  });
+
   it("defaults a failed reception to durable acknowledgement", async () => {
     const shard = ShardIndex.single();
     const rows = [message("failed", "target", shard)];
@@ -288,7 +374,7 @@ function createDelivery(config: {
       worker: WorkerId,
     ) => Promise<ReturnType<typeof session> | undefined>;
     renew?: () => Promise<ReturnType<typeof session> | undefined>;
-    release: () => Promise<boolean>;
+    release: (session: ReturnType<typeof session>, operation?: unknown) => Promise<boolean>;
   };
   read?: (options?: InboxReadOptions) => Promise<DeliveryEndpointMessage[]>;
   mark?: (row: DeliveryEndpointMessage) => Promise<DeliveryEndpointMessage | undefined>;
@@ -315,7 +401,7 @@ function createDelivery(config: {
       sessionKind: "LEASED",
       pickUp: async (shard, worker) => config.registry?.pickUp(shard, worker) ?? session(shard),
       renew: async (current) => config.registry?.renew?.() ?? current,
-      release: async () => config.registry?.release() ?? true,
+      release: async (current, operation) => config.registry?.release(current, operation) ?? true,
     },
   });
 }
