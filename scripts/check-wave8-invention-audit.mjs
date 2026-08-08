@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,9 +26,11 @@ const excludedFiles = new Set([
   "DECISION_LOG.md",
   "build-protocol/DECISION_LOG.md",
   "build-protocol/PROJECT_COMPLETION_PLAN.md",
+  ".wave8-forbidden-artifacts.json",
 ]);
 const sourceExtensions = new Set([
   ".ts",
+  ".tsx",
   ".mts",
   ".mjs",
   ".json",
@@ -36,24 +39,15 @@ const sourceExtensions = new Set([
   ".yaml",
   ".yml",
 ]);
-const forbidden = [
-  ["RemovalQuarantine", /\bRemovalQuarantine\b/gu],
-  ["removal fingerprint", /\bRemovalFingerprint\b|\bremoval[-_ ]fingerprint\b/giu],
-  ["receipt", /\b(?:Commit|Replay|Delivery)Receipt\b/gu],
-  ["marker", /\b(?:Delivery|Commit|Replay)Marker\b/gu],
-  ["replacement dedup claim", /\b(?:DeliveryClaim|DedupGuard|DedupRecord)\b/gu],
-  ["delivery attempt", /\bDeliveryAttempt\b/gu],
-  ["attempt exhaustion", /\bAttemptExhaustion\b/gu],
-  ["retry decision", /\bRetryDecision\b/gu],
-  ["revoked-session facility", /\bRevokedSession\b|\brevoked[-_ ]session\b/giu],
-  [
-    "versioned discovery key",
-    /\bApplicationNodeLease:v1\b|\bversioned discovery[-_ ]?(?:storage )?key\b/giu,
-  ],
-  ["retired validation package", /@spine-event-engine\/validation-ts\b/gu],
-  ["storage fingerprint", /\bcompatibilityFingerprint\b|\bschema fingerprint\b/giu],
-];
-
+const manifest = JSON.parse(
+  readFileSync(join(repoRoot, ".wave8-forbidden-artifacts.json"), "utf8"),
+);
+export const forbiddenArtifacts = manifest.map(({ name, fixture }) => [name, fixture]);
+const forbidden = manifest.map(({ name, pattern, flags, fixture }) => [
+  name,
+  new RegExp(pattern, flags),
+  fixture,
+]);
 function files(root, directory = root) {
   if (!existsSync(directory)) return [];
   const result = [];
@@ -74,18 +68,41 @@ function files(root, directory = root) {
   return result.sort();
 }
 
-function truthfulNegative(line) {
-  return /\b(?:no|without|removed|delete(?:d)?|does not|never)\b/iu.test(line);
+function trackedFiles(root) {
+  try {
+    return execFileSync("git", ["ls-files", "--cached"], {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .split("\n")
+      .filter(Boolean)
+      .filter((path) => !excludedPrefixes.some((prefix) => path.startsWith(prefix)))
+      .filter((path) => !excludedFiles.has(path))
+      .filter((path) => !path.includes("/dist/") && !path.includes("/test/"))
+      .filter((path) => sourceExtensions.has(`.${path.split(".").at(-1)}`))
+      .sort();
+  } catch {
+    return files(root);
+  }
+}
+
+function truthfulNegative(path, line, artifact) {
+  if (!path.endsWith(".md")) return false;
+  const escaped = artifact.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return new RegExp(`(?:no|without|removed|delete(?:d)?|does not|never)\\s+${escaped}`, "iu").test(
+    line,
+  );
 }
 
 export function auditWave8CurrentState(root = repoRoot) {
   const problems = [];
-  for (const path of files(root)) {
+  for (const path of trackedFiles(root)) {
     const lines = readFileSync(join(root, path), "utf8").split("\n");
     for (const [index, line] of lines.entries()) {
-      for (const [name, pattern] of forbidden) {
+      for (const [name, pattern, artifact = pattern.source] of forbidden) {
         pattern.lastIndex = 0;
-        if (!pattern.test(line) || truthfulNegative(line)) continue;
+        if (!pattern.test(line) || truthfulNegative(path, line, artifact)) continue;
         problems.push(`${path}:${index + 1}: forbidden Wave 8 artifact: ${name}`);
       }
     }

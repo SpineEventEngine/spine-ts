@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { auditWave8CurrentState } from "./check-wave8-invention-audit.mjs";
+import { auditWave8CurrentState, forbiddenArtifacts } from "./check-wave8-invention-audit.mjs";
 
 const fixtures = [];
 
@@ -64,5 +64,31 @@ describe("Wave 8 invention audit", () => {
     writeFileSync(join(root, "docs", "GUIDE.md"), "The adapter has no shared records table.\n");
 
     expect(auditWave8CurrentState(root)).toEqual([]);
+  });
+
+  it.each(forbiddenArtifacts)("rejects every manifest rule: %s", (name, expression) => {
+    const root = fixture();
+    writeFileSync(join(root, "packages", "server", "src", "legacy.ts"), `${expression}\n`);
+
+    expect(auditWave8CurrentState(root)).toEqual([
+      `packages/server/src/legacy.ts:1: forbidden Wave 8 artifact: ${name}`,
+    ]);
+  });
+
+  it("does not let an executable or mixed positive/negative line bypass a rule", () => {
+    const root = fixture();
+    writeFileSync(
+      join(root, "packages", "server", "src", "legacy.ts"),
+      "// no RemovalQuarantine\n",
+    );
+    writeFileSync(
+      join(root, "docs", "GUIDE.md"),
+      "No old one, but RemovalQuarantine is supported.\n",
+    );
+
+    expect(auditWave8CurrentState(root)).toEqual([
+      "docs/GUIDE.md:1: forbidden Wave 8 artifact: RemovalQuarantine",
+      "packages/server/src/legacy.ts:1: forbidden Wave 8 artifact: RemovalQuarantine",
+    ]);
   });
 });
