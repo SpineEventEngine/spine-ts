@@ -17,7 +17,7 @@ import { expect, it } from "vitest";
 it("exposes the narrow provider-only entity history SPI", () => {
   const types:
     | [
-        EntityRecordStorage<string, StringValue>,
+        EntityRecordStorage<string>,
         EntityStateHistoryPort<string, StringValue>,
         EntityEventHistoryPort<string>,
         EntityStorageConformance<string, StringValue>,

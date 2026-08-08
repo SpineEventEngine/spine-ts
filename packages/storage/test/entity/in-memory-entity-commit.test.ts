@@ -222,10 +222,10 @@ describe("MemoryEntityCommitStorage", () => {
     let pause = true;
     const queryEntries = vi
       .spyOn(InMemoryRecordStorage.prototype, "queryEntries")
-      .mockImplementation(async function (query) {
+      .mockImplementation(async function (this: InMemoryRecordStorage<unknown, Message>, query) {
         if (pause) {
           pause = false;
-          reached.resolve();
+          reached.resolve(undefined);
           await selected.promise;
         }
         return RecordStorage.prototype.queryEntries.call(this, query);
@@ -241,7 +241,7 @@ describe("MemoryEntityCommitStorage", () => {
         next: current("new", 2n, create(TimestampSchema, { seconds: 2n })),
         states: [state("new", 2n)],
       });
-      selected.resolve();
+      selected.resolve(undefined);
       await Promise.all([truncating, committing]);
     } finally {
       queryEntries.mockRestore();

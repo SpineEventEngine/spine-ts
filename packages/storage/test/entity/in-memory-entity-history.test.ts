@@ -41,22 +41,16 @@ describe("InMemoryEntityHistory", () => {
   it("passes the reusable generated current-record and state-history conformance checks", async () => {
     const factory = new InMemoryStorageFactory();
     const adapter = {
-      create: (entity: EntityStorageInput<string, ReturnType<typeof StringValueSchema.create>>) =>
-        factory.createEntityStorage(entity) as EntityStorageConformance<
-          string,
-          ReturnType<typeof StringValueSchema.create>
-        >,
-      reopen: (entity: EntityStorageInput<string, ReturnType<typeof StringValueSchema.create>>) =>
-        factory.createEntityStorage(entity) as EntityStorageConformance<
-          string,
-          ReturnType<typeof StringValueSchema.create>
-        >,
+      create: (entity: EntityStorageInput<string, StringValue>) =>
+        factory.createEntityStorage(entity) as EntityStorageConformance<string, StringValue>,
+      reopen: (entity: EntityStorageInput<string, StringValue>) =>
+        factory.createEntityStorage(entity) as EntityStorageConformance<string, StringValue>,
     };
     await EntityHistoryConformance.check(adapter);
   });
 
   it("keeps disabled history ports readable and maintenance-safe without writes", async () => {
-    const states = disabledStateHistoryPort<string, ReturnType<typeof StringValueSchema.create>>();
+    const states = disabledStateHistoryPort<string, StringValue>();
     const events = disabledEventHistoryPort<string>();
     await expect(states.backward("task", 1)).resolves.toEqual([]);
     await expect(states.stateAt("task", create(TimestampSchema))).resolves.toBeUndefined();
@@ -109,7 +103,7 @@ describe("InMemoryEntityHistory", () => {
     const createStorage = vi.spyOn(factory, "createRecordStorage");
     const storage = factory.createEntityStorage(input(false)) as EntityStorageConformance<
       string,
-      ReturnType<typeof StringValueSchema.create>
+      StringValue
     >;
     await expect(storage.states.append(record("task", "first", 1))).rejects.toThrow(/disabled/);
     expect(createStorage).not.toHaveBeenCalled();
@@ -123,7 +117,7 @@ describe("InMemoryEntityHistory", () => {
     const factory = new InMemoryStorageFactory();
     const storage = factory.createEntityStorage(input(true)) as EntityStorageConformance<
       string,
-      ReturnType<typeof StringValueSchema.create>
+      StringValue
     >;
     const first = record("task", "first", 1);
     const second = record("task", "second", 2);
@@ -145,7 +139,7 @@ describe("InMemoryEntityHistory", () => {
     const factory = new InMemoryStorageFactory();
     const storage = factory.createEntityStorage(input(true)) as EntityStorageConformance<
       string,
-      ReturnType<typeof StringValueSchema.create>
+      StringValue
     >;
     await storage.states.append(record("task", "first", 1));
     await storage.states.append(record("task", "second", 2));
@@ -225,15 +219,15 @@ describe("InMemoryEntityHistory", () => {
 
   it("isolates state histories by tenant and supports close behavior", async () => {
     const factory = new InMemoryStorageFactory();
-    const tenant = input(true, { name: "Tasks", multitenant: true, tenantId: "tenant-a" });
-    const other = input(true, { name: "Tasks", multitenant: true, tenantId: "tenant-b" });
+    const tenant = input(true, { name: "Tasks", multitenant: true, tenantId: "tenant-a" } as never);
+    const other = input(true, { name: "Tasks", multitenant: true, tenantId: "tenant-b" } as never);
     const first = factory.createEntityStorage(tenant) as EntityStorageConformance<
       string,
-      ReturnType<typeof StringValueSchema.create>
+      StringValue
     >;
     const second = factory.createEntityStorage(other) as EntityStorageConformance<
       string,
-      ReturnType<typeof StringValueSchema.create>
+      StringValue
     >;
     await first.states.append(record("task", "first", 1));
     expect(await second.states.backward("task", 1)).toEqual([]);
@@ -338,7 +332,7 @@ describe("InMemoryEntityHistory", () => {
     const reached = deferred();
     const history = createHistory({
       afterSelection: () => {
-        reached.resolve();
+        reached.resolve(undefined);
         return selection.promise;
       },
     });
@@ -347,7 +341,7 @@ describe("InMemoryEntityHistory", () => {
     const trimming = history.trim("task", 1);
     await reached.promise;
     const append = history.append(record("task", "three", 3));
-    selection.resolve();
+    selection.resolve(undefined);
     await Promise.all([trimming, append]);
     expect((await history.backward("task", 5)).map((entry) => state(entry).value)).toEqual([
       "three",
@@ -358,7 +352,7 @@ describe("InMemoryEntityHistory", () => {
     const laterReached = deferred();
     const later = createHistory({
       afterSelection: () => {
-        laterReached.resolve();
+        laterReached.resolve(undefined);
         return laterSelection.promise;
       },
     });
@@ -366,7 +360,7 @@ describe("InMemoryEntityHistory", () => {
     const truncating = later.truncate(create(TimestampSchema, { seconds: 2n }));
     await laterReached.promise;
     const appended = later.append(record("task", "new", 2));
-    laterSelection.resolve();
+    laterSelection.resolve(undefined);
     await Promise.all([truncating, appended]);
     expect((await later.backward("task", 5)).map((entry) => state(entry).value)).toEqual(["new"]);
   });
@@ -376,7 +370,7 @@ describe("InMemoryEntityHistory", () => {
     const createStorage = vi.spyOn(factory, "createRecordStorage");
     const storage = factory.createEntityStorage(input(false)) as EntityStorageConformance<
       string,
-      ReturnType<typeof StringValueSchema.create>
+      StringValue
     > & { readonly events: MemoryEntityEventHistory<string> };
     await expect(storage.events.append(event("event", "task", 1, 1))).rejects.toThrow(/disabled/);
     expect(createStorage).not.toHaveBeenCalled();
@@ -542,7 +536,7 @@ describe("InMemoryEntityHistory", () => {
     const reached = deferred();
     const concurrent = createEventHistory({
       afterSelection: () => {
-        reached.resolve();
+        reached.resolve(undefined);
         return selected.promise;
       },
     });
@@ -550,7 +544,7 @@ describe("InMemoryEntityHistory", () => {
     const truncating = concurrent.truncate(create(TimestampSchema, { seconds: 2n }));
     await reached.promise;
     const appended = concurrent.append(event("\u{10000}", "task", 2, 1));
-    selected.resolve();
+    selected.resolve(undefined);
     await Promise.all([truncating, appended]);
     expect((await concurrent.backward("task", 5)).map((entry) => entry.id?.value)).toEqual([
       "\u{10000}",
@@ -559,8 +553,12 @@ describe("InMemoryEntityHistory", () => {
 
   it("isolates event history by tenant and retains large histories in declared order", async () => {
     const factory = new InMemoryStorageFactory();
-    const tenant = input(false, { name: "Tasks", multitenant: true, tenantId: "tenant-a" });
-    const other = input(false, { name: "Tasks", multitenant: true, tenantId: "tenant-b" });
+    const tenant = input(false, {
+      name: "Tasks",
+      multitenant: true,
+      tenantId: "tenant-a",
+    } as never);
+    const other = input(false, { name: "Tasks", multitenant: true, tenantId: "tenant-b" } as never);
     const first = factory.createEntityStorage({ ...tenant, eventHistory: true }) as {
       readonly events: MemoryEntityEventHistory<string>;
     };
@@ -583,7 +581,7 @@ describe("InMemoryEntityHistory", () => {
 function input(
   stateHistory: boolean,
   context = { name: "Tasks", multitenant: false as const },
-): EntityStorageInput<string, ReturnType<typeof StringValueSchema.create>> {
+): EntityStorageInput<string, StringValue> {
   return {
     context,
     id: {
@@ -610,7 +608,7 @@ function createHistory(maintenance?: InMemoryMaintenance) {
     id: entity.id,
     records: factory.createRecordStorage(entity.context, layout.spec, layout.group),
     stateSchema: StringValueSchema,
-    maintenance,
+    ...(maintenance === undefined ? {} : { maintenance }),
   });
 }
 
@@ -627,7 +625,7 @@ function createEventHistoryBundle(maintenance?: InMemoryMaintenance) {
     history: new MemoryEntityEventHistory({
       id: entity.id,
       records,
-      maintenance,
+      ...(maintenance === undefined ? {} : { maintenance }),
     }),
     reopen: () =>
       new MemoryEntityEventHistory({
