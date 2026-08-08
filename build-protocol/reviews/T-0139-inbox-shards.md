@@ -118,3 +118,27 @@ Status: Review wave 1 assigned at endpoint `56a37d50`
   re-review because this batch changed the direct Inbox query/paging behavior
   and its tests. TypeScript/API documentation and documentation remain closed;
   security remains N/A. The deferred T-0140 inventory is unchanged.
+
+## Final Re-Review Result
+
+- Performance/reliability is clean and converged at `8e3f9658`; the configured
+  reviewer retained its explicit immutable `gpt-5.6-terra` / `high` profile,
+  with runtime self-introspection unavailable and no visible mismatch.
+- Style/maintainability found one final P1: both direct Inbox record and
+  continuation timestamp conversion encode pre-epoch millisecond remainders as
+  negative nanos, producing an invalid generated Timestamp. The accepted
+  correction uses floor-normalized seconds/nanos in both paths and adds a
+  pre-epoch mapping/continuation regression.
+- This is a targeted high-risk correction beyond the complete waves because a
+  P1 remains; it does not reopen API documentation, prose documentation, or
+  security.
+
+## Pre-Epoch Timestamp Correction Pending Re-Review
+
+- The accepted floor-normalized Timestamp correction and direct `-1ms`
+  record/continuation regressions are implemented. The focused suite is 67/67
+  and exact changed-source coverage remains at least 90% in every metric.
+- Style/maintainability awaits the confirming re-review for this narrow source
+  and test change. Performance/reliability, API/docs, documentation, and
+  security dispositions otherwise remain unchanged; the T-0140 inventory is
+  unaffected.

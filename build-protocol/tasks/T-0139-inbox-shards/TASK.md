@@ -1,6 +1,6 @@
 # T-0139: Inbox And Shard Records
 
-Status: Final targeted re-review corrections converged; correction commit and task-branch push pending.
+Status: Final pre-epoch timestamp correction converged; correction commit and task-branch push pending.
 
 ## Objective
 
@@ -250,6 +250,14 @@ still import old retry/attempt policy.
   statements, 90.70% branches, 97.20% functions, and 96.56% lines. Reliability
   and maintainability await their final re-review; all other lane dispositions
   remain unchanged.
+
+### 2026-08-08 Pre-Epoch Timestamp Evidence
+
+- Direct Inbox record and continuation timestamp conversion use normalized
+  floor seconds and non-negative nanos. Regression tests cover `-1ms` durable
+  record round-trip and a pre-epoch cursor excluding itself while returning its
+  next row. The exact six-source profile is 8 files / 67 tests at 94.38%
+  statements, 90.70% branches, 97.20% functions, and 96.57% lines.
 
 ### 2026-08-08 Coverage Correction
 

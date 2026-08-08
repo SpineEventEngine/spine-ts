@@ -303,9 +303,10 @@ const Values = Object.freeze({
     };
   },
   timestamp(ms: number) {
+    const seconds = Math.floor(ms / 1_000);
     return create(TimestampSchema, {
-      seconds: BigInt(Math.floor(ms / 1_000)),
-      nanos: (ms % 1_000) * 1_000_000,
+      seconds: BigInt(seconds),
+      nanos: (ms - seconds * 1_000) * 1_000_000,
     });
   },
   atomic(storage: RecordStorage<WireInboxMessageId, WireInboxMessage>): void {

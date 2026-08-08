@@ -52,6 +52,12 @@ describe("direct InboxMessage storage", () => {
     expect(record.version).toBe(7);
   });
 
+  it("round-trips pre-epoch generated timestamps with normalized nanos", () => {
+    const message = createMessage("pre-epoch", "signal", 1n, new Date(-1));
+
+    expect(InboxRecords.read(InboxRecords.write(message))).toEqual(message);
+  });
+
   it("rejects every CAS mutation before touching a non-atomic inbox handle", async () => {
     const factory = new InMemoryStorageFactory();
     const original = factory.createRecordStorage.bind(factory);
@@ -353,6 +359,29 @@ describe("direct InboxMessage storage", () => {
 
     await storage.write(first);
     await storage.write(second);
+    await expect(storage.read(first.shard)).resolves.toEqual([first, second]);
+    await expect(
+      storage.read(first.shard, {
+        after: {
+          messageId: first.id.value,
+          whenReceived: first.whenReceived,
+          version: first.version,
+        },
+      }),
+    ).resolves.toEqual([second]);
+  });
+
+  it("continues across a pre-epoch durable cursor without returning the cursor row", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const first = createMessage("first", "signal-1", 1n, new Date(-2));
+    const second = createMessage("second", "signal-2", 2n, new Date(-1));
+
+    await storage.write(first);
+    await storage.write(second);
+    await expect(storage.read(first.shard)).resolves.toEqual([first, second]);
     await expect(
       storage.read(first.shard, {
         after: {

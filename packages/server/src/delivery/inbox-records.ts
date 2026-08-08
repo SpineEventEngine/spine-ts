@@ -1,5 +1,5 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
+import { AnySchema, StringValueSchema, TimestampSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import {
   InboxIdSchema,
@@ -241,7 +241,11 @@ const Values = Object.freeze({
     }
   },
   timestamp(ms: number) {
-    return { seconds: BigInt(Math.floor(ms / 1000)), nanos: (ms % 1000) * 1_000_000 };
+    const seconds = Math.floor(ms / 1_000);
+    return create(TimestampSchema, {
+      seconds: BigInt(seconds),
+      nanos: (ms - seconds * 1_000) * 1_000_000,
+    });
   },
   date(value: { readonly seconds: bigint; readonly nanos: number }, label: string): Date {
     const ms = Number(value.seconds) * 1000 + Math.floor(value.nanos / 1_000_000);
