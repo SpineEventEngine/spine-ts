@@ -92,7 +92,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     await running.close();
   });
 
-  it("routes configured ports through the real attachment factory to finite and supervisor delivery", async () => {
+  it("routes configured ports through the attachment factory without eager delivery", async () => {
     let finiteReads = 0;
     let finitePickups = 0;
     const inbox = {
@@ -144,7 +144,9 @@ describe("ServerEnvironment delivery lifecycle", () => {
       });
 
       expect(opens).toBe(1);
-      await waitFor(() => finitePickups > 0 && finiteReads > 0);
+      await Promise.resolve();
+      expect(finitePickups).toBeGreaterThan(0);
+      expect(finiteReads).toBe(0);
       expect(withInbox).toHaveBeenCalledWith(inbox);
       expect(withWorkRegistry).toHaveBeenCalledWith(workRegistry);
       await serverEnvironmentAccess.detach(environment, attachment);

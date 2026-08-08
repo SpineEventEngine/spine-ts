@@ -210,6 +210,7 @@ describe("@spine-event-engine/server", () => {
     expect(Object.keys(serverRoot).sort()).toEqual(
       [
         "Aggregate",
+        "AlreadyPickedUp",
         "Apply",
         "Assign",
         "BoundedContext",
@@ -218,6 +219,7 @@ describe("@spine-event-engine/server", () => {
         "CommandBus",
         "CommandRegistrationReadiness",
         "DeliveryBuilder",
+        "DeliveryMonitor",
         "DeliveryShutdownTimeoutError",
         "DeliveryStorageCorruptionError",
         "DeliverySupervisor",
@@ -233,6 +235,8 @@ describe("@spine-event-engine/server", () => {
         "Command",
         "EventBus",
         "EventRegistrationReadiness",
+        "FailedPickUp",
+        "FailedReception",
         "FixedClock",
         "HandlerMetadataError",
         "HandlerMetadataRegistry",
