@@ -673,60 +673,9 @@ after restart and downstream handling must be idempotent. `DeliveryMonitor`
 owns reception-failure policy: its default marks a failed reception delivered
 and continues independent targets; applications may choose the immediate repeat
 action. It adds no attempts, quarantine, receipts, markers, timers, backoff,
-dead-letter storage, or scheduler policy. Callback snapshots for
-`HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT` copy their
-`Date` values and `Any.value` bytes are copied. `CATCH_UP` stays pending and
-never reaches callbacks or returned failures. Successful callbacks mark rows
-`DELIVERED`; endpoint failures remain pending for later runs only when
-framework-owned cleanup succeeds. Cleanup, validation, lease/fencing, and
-delivery-status failures are reported without an immediate retry or recovery
-guarantee here. The delivery subsystem also retains internal
-sanitized attempt records for supported endpoint failures, storing only
-message/inbox/shard identity, label, node, attempted time, accepted flag, and a
-stable failure stage/reason. Retained attempts do not store raw `Any.value`
-payload bytes, raw user errors, stack traces, or unbounded exception text.
-Before a supported endpoint callback runs, the package-internal retry gate
-summarizes retained attempts for that exact inbox message by reading only its
-100 known per-message retained slots. An exhausted supported row skips the
-endpoint callback and another retained-attempt write, then is claimed,
-synchronized to the live shard fence, and marked `DELIVERED` without consuming
-accepted work or the configured failure bound. Lease/fencing failure through
-the final guard before durable marking remains `LEASE` / `LEASE_INACTIVE`,
-retains one bounded attempt at the 100-slot cap, contributes one failure without
-accepted work, and leaves the row `TO_DELIVER`. A mark failure followed by
-successful cleanup leaves the authoritative row `TO_DELIVER` and contributes
-one frozen, bounded, stack-free exhaustion-facts object. If cleanup also fails,
-the row still remains `TO_DELIVER` and contributes one `CLEANUP` failure whose
-`AggregateError` contains the original mark error plus cleanup error and has no
-frozen, bounded, or stack-free guarantee. Retryable
-supported failures remain on the existing path and stay available for later
-replay when cleanup leaves the row pending. Retry monitors/workers, backoff,
-scheduling, production supervision, topology, catch-up storage, and production
-adapters remain deferred.
-Worker-unsupported rows such as `CATCH_UP` do not
-consume accepted work or loop failure budget. Pre-callback claim, validation,
-and lease/fencing failures do not increment accepted work, but they do increment
-failed work and count toward the framework failure bound. Once the endpoint
-callback or `onMessage` path has been invoked, endpoint failures and later
-framework cleanup/status-update failures are accepted work and may appear in
-failed work.
-Live shard ownership plus live per-message ownership block competing callback
-dispatch while ownership is current; expired per-message ownership may be
-replaced during claim compare-and-set using the storage clock as
-abandoned-work recovery. If a stale owner continues running after losing
-renewal, endpoint callback side effects are at-least-once/replay-safe: later
-final fencing can prevent stale finalization, but it cannot uninvoke a callback
-that already ran. Broader production supervision, cancellation, and
-retry-monitor policy is not provided. The framework repeats
-one-shard replay until
-idle, skipped, stopped, paused after a bounded skipped-only scan streak, or a
-configured failure bound. A later internal run resumes from a saved cursor and
-safely resets it if earlier pending rows disappeared. Lease renewal uses same-event-loop timers
-around in-process callbacks, so CPU-bound synchronous callbacks can still
-starve renewal; this implementation treats that as an in-process trust-boundary
-limitation rather than timer-protected preemption. The package does not expose
-a raw worker callback API; framework-owned replay stays behind validated
-endpoints. Local posting handoffs cover command rows,
+dead-letter storage, or scheduler policy. Callback snapshots copy `Date` values
+and `Any.value` bytes. The package exposes no raw worker callback API; replay
+stays behind validated endpoints. Local posting handoffs cover command rows,
 projection subscriber rows, and process-manager event rows. Command
 handlers and projection subscribers wait for the exact received row to replay;
 framework-owned replay validates the row label and pending `TO_DELIVER` status
