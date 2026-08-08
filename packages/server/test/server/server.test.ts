@@ -62,6 +62,7 @@ import {
 } from "../../src/index.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 import { BrowserServer } from "../../src/server/browser-server.js";
+import { attachDurableSubscriptionCleanup } from "../../src/server/durable-subscription-bindings.js";
 import { EnvironmentTests } from "../../src/server/environment.js";
 
 describe("Server", () => {
@@ -189,16 +190,12 @@ describe("Server", () => {
     ).rejects.toThrow("Server browser backend URLs must be strings.");
   });
 
-  it("accepts ordered backend URL lists with topology-fencing bindings", async () => {
+  it("accepts ordered backend URL lists with direct durable bindings", async () => {
     const bindings = new DurableSubscriptionBindings({
       storageFactory: new InMemoryStorageFactory(),
       namespace: "fan-in",
       nextId: () => "binding",
-      dispose: () => Promise.resolve(),
-      leaseMs: 1,
-      cleanupBatchSize: 1,
-      recordLimit: 1,
-      maxRecordBytes: 1,
+      cleanup: () => Promise.resolve(),
     });
     BrowserServer.requireDurableBindings(
       {
@@ -265,6 +262,53 @@ describe("Server", () => {
     await Promise.all([running.close(), running.close()]);
     expect(stops).toBe(1);
     expect(created).toEqual(["node/a"]);
+  });
+
+  it("rolls back discovery and dynamic resources once when durable cleanup is pre-attached", async () => {
+    let stops = 0;
+    const aborted: string[] = [];
+    const native = {
+      baseUrl: "http://127.0.0.1:65534",
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: new InMemoryStorageFactory(),
+      namespace: "pre-attached",
+      nextId: () => "subscription",
+      cleanup: () => Promise.resolve(),
+    });
+    attachDurableSubscriptionCleanup(bindings, () => Promise.resolve());
+
+    await expect(
+      BrowserServer.open(native as never, {
+        ...browserGateway(),
+        bindings,
+        discovery: {
+          watch: (publish) => {
+            publish([
+              new ApplicationNode({ id: "node/pre-attached", endpoint: "https://10.0.0.1" }),
+            ]);
+            return async () => {
+              stops++;
+            };
+          },
+        },
+        dynamicManagerFactory: (node) =>
+          ({
+            abort: () => {
+              aborted.push(node.id);
+            },
+          }) as never,
+        host: "127.0.0.1",
+        port: 0,
+        readMaxBytes: 1_048_576,
+        writeMaxBytes: 1_048_576,
+        production: false,
+      }),
+    ).rejects.toThrow("already attached");
+    expect(stops).toBe(1);
+    expect(aborted).toEqual(["node/pre-attached"]);
+    expect(native.close).toHaveBeenCalledOnce();
   });
 
   it("aborts owned dynamic session managers on removal and browser close", async () => {
@@ -495,7 +539,7 @@ describe("Server", () => {
         } as unknown as BrowserServerOptions,
         true,
       );
-    }).toThrow("named durable subscription bindings");
+    }).toThrow("durable subscription bindings");
   });
 
   it("rejects missing standalone authentication collaborators before listener startup", () => {
@@ -518,7 +562,6 @@ describe("Server", () => {
     [{ contexts: { resolve: () => undefined } }, "context resolution"],
     [{ contexts: { resolveContext: () => undefined } }, "context resolution"],
     [{ clock: { now: "invalid" } }, "clock"],
-    [{ fingerprint: "invalid" }, "fingerprint"],
     [{ bindings: undefined }, "subscription bindings"],
   ])("rejects malformed standalone collaborator %j", (malformed, expected) => {
     expect(() => {
@@ -537,7 +580,6 @@ describe("Server", () => {
     ["authorization", { authorize: undefined }, "authorization"],
     ["context resolution", { contexts: undefined }, "context resolution"],
     ["clock", { clock: undefined }, "clock"],
-    ["fingerprint", { fingerprint: undefined }, "fingerprint"],
   ] as const)(
     "rejects a standalone browser gateway missing %s before listener startup",
     (_name, missing, expected) => {
@@ -2823,7 +2865,6 @@ function browserGateway(): BrowserServerOptions {
         }),
     },
     clock: { now: () => create(TimestampSchema) },
-    fingerprint: () => "test",
   };
 }
 
@@ -2850,7 +2891,7 @@ class CloseTrackingStorageFactory extends InMemoryStorageFactory {
 
 class TrackingStorageFactory extends InMemoryStorageFactory {
   readonly contexts: StorageContext[] = [];
-  readonly storages: RecordStorage<unknown, Message>[] = [];
+  readonly storages: RecordStorage<never, Message>[] = [];
 
   override createRecordStorage<I, R extends Message>(
     context: StorageContext,
@@ -2859,7 +2900,7 @@ class TrackingStorageFactory extends InMemoryStorageFactory {
     this.contexts.push(context);
     const storage = super.createRecordStorage(context, recordSpec);
 
-    this.storages.push(storage);
+    this.storages.push(storage as unknown as RecordStorage<never, Message>);
     return storage;
   }
 

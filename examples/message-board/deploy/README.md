@@ -87,9 +87,10 @@ kubectl create secret tls message-board-envoy-tls --cert=tls.crt --key=tls.key
 Every browser-capable combined process and standalone gateway uses the same
 issuer, audience, key ID, private key, and registry namespace; separate values
 break authenticated failover. Application-only standalone processes do not
-configure browser sessions or the subscription registry. The gateway-owned
-registry and application-owned session revocations are distinct logical records
-with distinct owners, even when both use the same application-selected storage.
+configure browser sessions or the subscription registry. The example does not
+persist session revocations; the gateway-owned registry is the durable browser
+subscription state. Each process creates its caller-owned Datastore client and
+passes that exact client to its storage factory.
 
 ```bash
 kubectl apply --filename examples/message-board/deploy/kubernetes/combined.yaml

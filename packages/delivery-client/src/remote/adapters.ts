@@ -1,8 +1,7 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import type {
   DeliveryInbox,
-  DeliveryInboxWork,
   DeliveryOperationOptions,
   DeliveryWorkRegistry,
   DeliveryWorkSession,
@@ -14,16 +13,13 @@ import type {
   InboxWriteResult,
 } from "@spine-event-engine/server";
 import { ShardIndex } from "@spine-event-engine/server";
+import type { WorkerId } from "@spine-event-engine/proto/delivery";
 
 import { conditionalPickUp } from "@spine-event-engine/server/internal/conditional-pickup";
 import { DeliveryClient, deliveryClientAccess } from "../client/client.js";
 import {
-  DeliveryOutcomeUnknownError,
   DeliveryPagingError,
   DeliveryProtocolError,
-  DeliveryQuarantineError,
-  type RemovalQuarantine,
-  type RemovalQuarantineRecord,
   type DeliveryWorkerId,
   type RemoteShardObservation,
   type RemoteShardSession,
@@ -40,20 +36,13 @@ export class RemoteInbox implements DeliveryInbox {
    * Remote inbox work requires an exclusive remote shard session.
    */
   readonly sessionKind = "EXCLUSIVE" as const;
-  private readonly quarantine: RemovalQuarantine;
 
   /**
-   * Creates a remote inbox with durable removal recovery.
+   * Creates a remote inbox.
    *
    * @param client Sends inbox calls to the delivery server.
-   * @param quarantine Persists recovery state before callback admission and removal.
    */
-  constructor(
-    private readonly client: DeliveryClient,
-    quarantine: RemovalQuarantine | undefined,
-  ) {
-    if (quarantine === undefined) throw new DeliveryQuarantineError();
-    this.quarantine = quarantine;
+  constructor(private readonly client: DeliveryClient) {
     Object.freeze(this);
   }
 
@@ -138,86 +127,22 @@ export class RemoteInbox implements DeliveryInbox {
   }
 
   /**
-   * Creates exclusive work after durable admission.
+   * Removes one exact authoritative pending row and returns its delivered fact.
    *
-   * @param message Supplies the expected message snapshot.
-   * @param session Supplies the exclusive shard session.
-   * @param options Bounds or cancels remote reads and removals.
-   * @returns Admitted work, or `undefined` when work cannot safely begin.
+   * @param message Supplies the expected pending message snapshot.
+   * @param options Bounds or cancels remote reads and removal.
+   * @returns The delivered acknowledgement, or `undefined` when the pending
+   * row is absent or no longer matches.
    */
-  async begin(
+  async markDelivered(
     message: InboxMessage,
-    session: DeliveryWorkSession,
     options?: DeliveryOperationOptions,
-  ): Promise<DeliveryInboxWork | undefined> {
-    if (session.kind !== "EXCLUSIVE" || !RemoteValues.sameShard(session.shard, message.shard))
-      return undefined;
-    const key = RemoteValues.inboxKey(message);
-    const quarantined = await RemoteValues.quarantineGet(this.quarantine, key);
-    if (quarantined !== undefined) {
-      const current = await this.client.findOne(message.id, options);
-      if (current === undefined) {
-        await RemoteValues.quarantineDelete(this.quarantine, key);
-        return undefined;
-      }
-      if (quarantined.fingerprint !== RemoteValues.fingerprint(current)) return undefined;
-      if (quarantined.phase === "ADMITTED") return undefined;
-      await this.client.removeOne(current, options);
-      await RemoteValues.quarantineDelete(this.quarantine, key);
-      return undefined;
-    }
+  ): Promise<InboxMessage | undefined> {
     const current = await this.client.findOne(message.id, options);
     if (current?.status !== "TO_DELIVER" || !RemoteValues.sameMessage(current, message))
       return undefined;
-    await RemoteValues.quarantinePut(this.quarantine, {
-      id: key,
-      phase: "ADMITTED",
-      fingerprint: RemoteValues.fingerprint(current),
-    });
-    return new RemoteInboxWork(this.client, current, this.quarantine, options);
-  }
-}
-
-class RemoteInboxWork implements DeliveryInboxWork {
-  #active = true;
-  constructor(
-    private readonly client: DeliveryClient,
-    private readonly snapshot: InboxMessage,
-    private readonly quarantine: RemovalQuarantine,
-    private readonly operation: DeliveryOperationOptions | undefined,
-  ) {}
-  get message(): InboxMessage {
-    if (!this.#active) throw new DeliveryProtocolError();
-    return DeliveryMessageCodec.snapshot(this.snapshot);
-  }
-  async synchronize(
-    session: DeliveryWorkSession,
-    options?: DeliveryOperationOptions,
-  ): Promise<void> {
-    if (
-      !this.#active ||
-      session.kind !== "EXCLUSIVE" ||
-      !RemoteValues.sameShard(session.shard, this.snapshot.shard)
-    )
-      throw new DeliveryProtocolError();
-    const owner = RemoteSessionOwner.for(this.client);
-    if (!(await owner.synchronize(session, options))) throw new DeliveryProtocolError();
-  }
-  async complete(options?: DeliveryOperationOptions): Promise<boolean> {
-    if (!this.#active) return false;
-    await RemoteValues.quarantinePut(this.quarantine, {
-      id: RemoteValues.inboxKey(this.snapshot),
-      phase: "REMOVING",
-      fingerprint: RemoteValues.fingerprint(this.snapshot),
-    });
-    await this.client.removeOne(this.snapshot, options ?? this.operation);
-    await RemoteValues.quarantineDelete(this.quarantine, RemoteValues.inboxKey(this.snapshot));
-    this.#active = false;
-    return true;
-  }
-  abandon(_options?: DeliveryOperationOptions): Promise<void> {
-    void _options;
-    return Promise.resolve();
+    await this.client.removeOne(current, options);
+    return DeliveryMessageCodec.snapshot({ ...current, status: "DELIVERED" });
   }
 }
 
@@ -232,64 +157,39 @@ class RemoteSessionOwner {
    */
   readonly #sessions = new WeakMap<ExclusiveDeliveryWorkSession, RemoteShardSession>();
   readonly #sessionsByShard = new Map<string, Set<ExclusiveDeliveryWorkSession>>();
-  readonly #releasesInFlight = new Set<string>();
-  readonly #quarantined = new Set<string>();
 
   /**
    * Creates a registry backed by the supplied delivery client.
    *
    * @param client Sends shard operations to the delivery server.
    */
-  private constructor(private readonly client: DeliveryClient) {}
-
-  static for(client: DeliveryClient): RemoteSessionOwner {
-    const current = remoteSessionOwners.get(client);
-    if (current !== undefined) return current;
-    const owner = new RemoteSessionOwner(client);
-    remoteSessionOwners.set(client, owner);
-    return owner;
-  }
+  constructor(private readonly client: DeliveryClient) {}
 
   /**
-   * Acquires a shard for the supplied application node.
+   * Acquires a shard for the supplied complete worker identity.
    *
    * @param shardIndex Identifies the shard to acquire.
-   * @param node Identifies the application node requesting work.
+   * @param worker Identifies the worker requesting work.
    * @param options Bounds or cancels the remote mutation.
    * @returns A local exclusive session, or `undefined` when unavailable.
    */
   async pickUp(
     shardIndex: ShardIndex,
-    node: string,
+    worker: WorkerId,
     options?: DeliveryOperationOptions,
   ): Promise<ExclusiveDeliveryWorkSession | undefined> {
-    return this.#pickUp(shardIndex, node, options);
-  }
-
-  async #pickUp(
-    shardIndex: ShardIndex,
-    node: string,
-    options: DeliveryOperationOptions | undefined,
-  ): Promise<ExclusiveDeliveryWorkSession | undefined> {
-    const key = RemoteValues.shardKey(shardIndex);
-    if (this.#quarantined.has(key)) return undefined;
-    let remote: RemoteShardSession | undefined;
-    try {
-      const operation = {
-        ...(options?.signal === undefined ? {} : { signal: options.signal }),
-        ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
-      };
-      remote = await this.client.pickUp(shardIndex, RemoteValues.workerFor(node), operation);
-    } catch (error) {
-      if (error instanceof DeliveryOutcomeUnknownError) this.#quarantined.add(key);
-      throw error;
-    }
+    const operation = {
+      ...(options?.signal === undefined ? {} : { signal: options.signal }),
+      ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+    };
+    const remote = await this.client.pickUp(shardIndex, RemoteValues.worker(worker), operation);
     if (remote === undefined) return undefined;
     const session = RemoteValues.freeze({
       kind: "EXCLUSIVE" as const,
       shard: DeliveryShardCodec.snapshot(shardIndex),
     });
     this.#sessions.set(session, remote);
+    const key = RemoteValues.shardKey(shardIndex);
     const sessions = this.#sessionsByShard.get(key) ?? new Set<ExclusiveDeliveryWorkSession>();
     sessions.add(session);
     this.#sessionsByShard.set(key, sessions);
@@ -311,66 +211,70 @@ class RemoteSessionOwner {
     const remote = this.#sessions.get(session);
     if (remote === undefined) return false;
     const key = RemoteValues.shardKey(session.shard);
-    if (this.#quarantined.has(key)) return false;
     this.#sessions.delete(session);
     this.#removeSession(key, session);
-    this.#releasesInFlight.add(key);
-    this.#quarantined.add(key);
-    try {
-      await this.client.release(remote, options);
-      this.#quarantined.delete(key);
-      return true;
-    } finally {
-      this.#releasesInFlight.delete(key);
-    }
+    await this.client.release(remote, options);
+    return true;
   }
 
-  async synchronize(
-    session: ExclusiveDeliveryWorkSession,
-    options: DeliveryOperationOptions | undefined,
-  ): Promise<boolean> {
+  /**
+   * Validates that an exclusive remote session still owns its shard.
+   *
+   * An exact worker and pickup-time match retains the local session. A free
+   * shard accidentally acquired by the probe is released and invalidated, as
+   * is a session held by a different current owner. Unknown outcomes fail
+   * closed without storing quarantine or marker state.
+   *
+   * @param session Supplies the locally issued exclusive session.
+   * @param options Bounds or cancels the authoritative probe.
+   * @returns The retained session, or `undefined` when validation fails.
+   */
+  async validateOwnership(
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<ExclusiveDeliveryWorkSession | undefined> {
+    if (session.kind !== "EXCLUSIVE") return undefined;
     const remote = this.#sessions.get(session);
-    if (remote === undefined) return false;
-    const key = RemoteValues.shardKey(session.shard);
-    if (this.#quarantined.has(key)) return false;
-    try {
-      const probe = await deliveryClientAccess.probePickUp(
-        this.client,
-        session.shard,
-        RemoteValues.workerFor(remote.worker.nodeId),
-        options ?? {},
-      );
-      if (
-        probe.kind === "ALREADY_PICKED" &&
-        RemoteValues.sameWorker(probe.session.worker, remote.worker) &&
-        probe.session.whenPicked.getTime() === remote.whenPicked.getTime()
-      ) {
-        return true;
-      }
-      if (probe.kind === "PICKED") await this.#cleanupAccidentalPickup(probe.session);
-      this.#sessions.delete(session);
-      this.#removeSession(key, session);
-      return false;
-    } catch (error) {
-      if (error instanceof DeliveryOutcomeUnknownError) this.#quarantined.add(key);
-      throw error;
+    if (remote === undefined) return undefined;
+    const probe = await deliveryClientAccess.probePickUp(
+      this.client,
+      session.shard,
+      remote.worker,
+      options ?? {},
+    );
+    if (probe.kind === "PICKED") {
+      await this.#cleanupAccidentalPickup(probe.session);
+      this.#invalidate(session);
+      return undefined;
     }
+    if (
+      RemoteValues.sameWorker(probe.session.worker, remote.worker) &&
+      probe.session.whenPicked.getTime() === remote.whenPicked.getTime()
+    ) {
+      return session;
+    }
+    this.#invalidate(session);
+    return undefined;
   }
 
   async #cleanupAccidentalPickup(session: RemoteShardSession): Promise<void> {
     try {
       await this.client.release(session, { timeoutMs: 1_000 });
     } catch {
-      // The old owner is fenced even if bounded cleanup cannot establish its outcome.
+      // Validation remains failed closed when bounded cleanup is uncertain.
     }
+  }
+
+  #invalidate(session: ExclusiveDeliveryWorkSession): void {
+    this.#sessions.delete(session);
+    this.#removeSession(RemoteValues.shardKey(session.shard), session);
   }
 
   /**
    * Applies a validated Admin observation to local remote-session state.
    *
    * A `PICKED` observation cannot prove ownership because the frozen wire
-   * omits a session identity. Only `NOT_PICKED` invalidates stale sessions and
-   * clears unknown-mutation quarantine for a fresh pickup.
+   * omits a session identity. Only `NOT_PICKED` invalidates stale sessions.
    *
    * @param observation Supplies the detached remote shard observation.
    */
@@ -393,7 +297,6 @@ class RemoteSessionOwner {
       }
       this.#sessionsByShard.delete(key);
     }
-    if (!this.#releasesInFlight.has(key)) this.#quarantined.delete(key);
   }
 
   #removeSession(key: string, session: ExclusiveDeliveryWorkSession): void {
@@ -405,7 +308,7 @@ class RemoteSessionOwner {
 }
 
 /**
- * Adapts the one per-client remote session owner to the server work-registry port.
+ * Adapts one per-registry remote session owner to the server work-registry port.
  */
 export class RemoteWorkRegistry implements DeliveryWorkRegistry {
   // prettier-ignore
@@ -422,27 +325,27 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
    * @param client Sends shard operations to the delivery server.
    */
   constructor(client: DeliveryClient) {
-    this.#owner = RemoteSessionOwner.for(client);
-    conditionalPickUp.register(this, (shard, node, options) =>
-      this.#owner.pickUp(shard, node, options),
+    this.#owner = new RemoteSessionOwner(client);
+    conditionalPickUp.register(this, (shard, worker, options) =>
+      this.#owner.pickUp(shard, worker, options),
     );
     Object.freeze(this);
   }
 
   /**
-   * Acquires a remote shard for an application node.
+   * Acquires a remote shard for a complete worker identity.
    *
    * @param shardIndex Identifies the shard to acquire.
-   * @param node Identifies the application node requesting the shard.
+   * @param worker Identifies the worker requesting the shard.
    * @param options Bounds or cancels the remote operation.
    * @returns The acquired exclusive session, or `undefined` when unavailable.
    */
   pickUp(
     shardIndex: ShardIndex,
-    node: string,
+    worker: WorkerId,
     options?: DeliveryOperationOptions,
   ): Promise<ExclusiveDeliveryWorkSession | undefined> {
-    return this.#owner.pickUp(shardIndex, node, options);
+    return this.#owner.pickUp(shardIndex, worker, options);
   }
 
   /**
@@ -454,6 +357,20 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
    */
   release(session: DeliveryWorkSession, options?: DeliveryOperationOptions): Promise<boolean> {
     return this.#owner.release(session, options);
+  }
+
+  /**
+   * Validates current remote ownership before a guarded side effect.
+   *
+   * @param session Supplies the exclusive session to validate.
+   * @param options Bounds or cancels the authoritative probe.
+   * @returns The retained session, or `undefined` when validation fails.
+   */
+  validateOwnership(
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<ExclusiveDeliveryWorkSession | undefined> {
+    return this.#owner.validateOwnership(session, options);
   }
 
   /**
@@ -469,8 +386,6 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
 /**
  * Groups immutable remote-adapter value operations.
  */
-const remoteSessionOwners = new WeakMap<DeliveryClient, RemoteSessionOwner>();
-
 const RemoteValues = Object.freeze({
   receiveMessage(input: InboxMessageInput): InboxMessage {
     const message = DeliveryMessageCodec.snapshot({
@@ -491,10 +406,6 @@ const RemoteValues = Object.freeze({
 
   shardKey(value: ShardIndex): string {
     return `${String(value.index)}/${String(value.ofTotal)}`;
-  },
-
-  inboxKey(message: InboxMessage): string {
-    return `${RemoteValues.shardKey(message.id.shard)}:${message.id.value}`;
   },
 
   pageAnchor(value: Date): Date {
@@ -551,49 +462,15 @@ const RemoteValues = Object.freeze({
           left.value.every((value, index) => value === right.value[index]);
   },
 
-  fingerprint(message: InboxMessage): string {
-    return createHash("sha256")
-      .update(message.id.value)
-      .update(String(message.version))
-      .update(String(message.whenReceived.getTime()))
-      .update(message.signal?.typeUrl ?? "")
-      .update(message.signal?.value ?? new Uint8Array())
-      .digest("hex");
-  },
-
-  async quarantineGet(
-    quarantine: RemovalQuarantine,
-    id: string,
-  ): Promise<RemovalQuarantineRecord | undefined> {
-    try {
-      return await quarantine.get(id);
-    } catch {
-      throw new DeliveryQuarantineError();
-    }
-  },
-
-  async quarantinePut(
-    quarantine: RemovalQuarantine,
-    record: RemovalQuarantineRecord,
-  ): Promise<void> {
-    try {
-      await quarantine.put(Object.freeze({ ...record }));
-    } catch {
-      throw new DeliveryQuarantineError();
-    }
-  },
-
-  async quarantineDelete(quarantine: RemovalQuarantine, id: string): Promise<void> {
-    try {
-      await quarantine.delete(id);
-    } catch {
-      throw new DeliveryQuarantineError();
-    }
-  },
-
-  workerFor(node: string): DeliveryWorkerId {
-    if (typeof node !== "string" || node.trim().length === 0)
-      throw new TypeError("Delivery worker node is invalid.");
-    return RemoteValues.freeze({ nodeId: node, value: randomUUID() });
+  worker(worker: WorkerId): DeliveryWorkerId {
+    const nodeId = worker.nodeId?.value;
+    if (
+      typeof nodeId !== "string" ||
+      nodeId.trim().length === 0 ||
+      typeof worker.value !== "string" ||
+      worker.value.trim().length === 0
+    )
+      throw new TypeError("Delivery worker ID is invalid.");
+    return RemoteValues.freeze({ nodeId, value: worker.value });
   },
 });

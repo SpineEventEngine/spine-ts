@@ -1,8 +1,13 @@
 import { create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
   ApplicationNodeLeaseSchema,
   type ApplicationNodeLease,
-} from "@spine-event-engine/proto/generated/spine/system/deployment/application_node_lease_pb.js";
+} from "@spine-event-engine/proto/generated/spine/deployment/node_discovery_pb.js";
+import {
+  NodeIdSchema,
+  type NodeId,
+} from "@spine-event-engine/proto/generated/spine/server/server_environment_pb.js";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
@@ -41,9 +46,12 @@ describe("LeasedNodeRegistry", () => {
     expect(results.filter(Boolean)).toHaveLength(1);
   });
 
-  it("uses the v1 storage key and typed persisted fields", () => {
-    expect(leaseRecordSpec.storageKey).toBe("spine.deployment.ApplicationNodeLease:v1");
-    expect(leaseRecordSpec.schema.typeName).toBe("spine.system.deployment.ApplicationNodeLease");
+  it("uses the approved node-discovery record family and NodeId storage identity", () => {
+    expect(leaseRecordSpec.sourceType).toBe(ApplicationNodeLeaseSchema);
+    expect(leaseRecordSpec.recordType).toBe(ApplicationNodeLeaseSchema);
+    expect(leaseRecordSpec.idType).toBe(NodeIdSchema);
+    expect(leaseRecordSpec).not.toHaveProperty("storageKey");
+    expect(JSON.stringify(leaseRecordSpec)).not.toContain("encodingVersion");
   });
 
   it("omits a lease exactly at its expiry and keeps namespaces isolated", async () => {
@@ -213,7 +221,33 @@ describe("LeasedNodeRegistry", () => {
     expect(
       () => new LeasedNodeRegistry({ factory, namespace: "invalid-bound", cleanupBatchSize: 0 }),
     ).toThrow("cleanup batch size");
+    expect(
+      () =>
+        new LeasedNodeRegistry({ factory, namespace: "oversized-bound", cleanupBatchSize: 257 }),
+    ).toThrow("cleanup batch size");
     expect(factory.created).toBe(0);
+
+    void new LeasedNodeRegistry({ factory, namespace: "maximum-bound", cleanupBatchSize: 256 });
+    expect(factory.created).toBe(1);
+  });
+
+  it("preserves the supported Protobuf Timestamp millisecond boundary", async () => {
+    const registry = new LeasedNodeRegistry({
+      factory: new InMemoryStorageFactory(),
+      namespace: "timestamp-boundary",
+    });
+    const node = new ApplicationNode({ id: "node/boundary", endpoint: "http://10.0.0.1" });
+
+    await expect(
+      registry.register({ node, registrationId: "maximum", expiresAt: 253_402_300_799_999 }),
+    ).resolves.toBe(true);
+    await expect(
+      registry.register({
+        node: new ApplicationNode({ id: "node/too-late", endpoint: "http://10.0.0.2" }),
+        registrationId: "too-late",
+        expiresAt: 253_402_300_800_000,
+      }),
+    ).rejects.toThrow("expiry");
   });
 
   it("fails an entire malformed snapshot without modifying its rows", async () => {
@@ -223,24 +257,73 @@ describe("LeasedNodeRegistry", () => {
       { name: "invalid-row", multitenant: false },
       leaseRecordSpec,
     );
-    await storage.write(
-      create(ApplicationNodeLeaseSchema, { encodingVersion: 1, nodeId: "node/a" }),
-    );
+    await storage.write(create(ApplicationNodeLeaseSchema, { nodeId: nodeId("node/a") }));
 
     await expect(registry.read(0)).rejects.toThrow("invalid");
     await expect(storage.query()).resolves.toHaveLength(1);
   });
 
-  it("fails an unknown-version snapshot without modifying its rows", async () => {
+  it("fails a non-millisecond expiry snapshot without modifying its rows", async () => {
     const factory = new InMemoryStorageFactory();
     const registry = new LeasedNodeRegistry({ factory, namespace: "unknown-version" });
     const storage = factory.createRecordStorage(
       { name: "unknown-version", multitenant: false },
       leaseRecordSpec,
     );
-    await storage.write(leaseRecord("node/a", 2));
+    await storage.write(leaseRecord("node/a", 1));
 
-    await expect(registry.read(0)).rejects.toThrow("unsupported version");
+    await expect(registry.read(0)).rejects.toThrow("invalid");
+    await expect(storage.query()).resolves.toHaveLength(1);
+  });
+
+  it("rejects missing node IDs and invalid or unrepresentable persisted values", async () => {
+    expect(() => leaseRecordSpec.idValueIn(create(ApplicationNodeLeaseSchema))).toThrow("node ID");
+
+    const factory = new InMemoryStorageFactory();
+    const registry = new LeasedNodeRegistry({ factory, namespace: "invalid-values" });
+    const storage = factory.createRecordStorage(
+      { name: "invalid-values", multitenant: false },
+      leaseRecordSpec,
+    );
+    await storage.write(
+      create(ApplicationNodeLeaseSchema, {
+        nodeId: nodeId("invalid-endpoint"),
+        endpoint: { origin: "http://10.0.0.1/not-an-origin" },
+        whenExpires: create(TimestampSchema, { seconds: 0n, nanos: 100_000_000 }),
+        registrationId: { value: "process" },
+      }),
+    );
+
+    await expect(registry.read(0)).rejects.toThrow("invalid");
+    await storage.delete(nodeId("invalid-endpoint"));
+    await storage.write(
+      create(ApplicationNodeLeaseSchema, {
+        nodeId: nodeId("large-time"),
+        endpoint: { origin: "http://10.0.0.1" },
+        whenExpires: create(TimestampSchema, { seconds: BigInt(Number.MAX_SAFE_INTEGER) }),
+        registrationId: { value: "process" },
+      }),
+    );
+    await expect(registry.read(0)).rejects.toThrow("invalid");
+  });
+
+  it("rejects an out-of-range persisted Protobuf Timestamp without rewriting it", async () => {
+    const factory = new InMemoryStorageFactory();
+    const registry = new LeasedNodeRegistry({ factory, namespace: "timestamp-overflow" });
+    const storage = factory.createRecordStorage(
+      { name: "timestamp-overflow", multitenant: false },
+      leaseRecordSpec,
+    );
+    await storage.write(
+      create(ApplicationNodeLeaseSchema, {
+        nodeId: nodeId("node/too-late"),
+        endpoint: { origin: "http://10.0.0.1" },
+        whenExpires: create(TimestampSchema, { seconds: 253_402_300_800n }),
+        registrationId: { value: "process" },
+      }),
+    );
+
+    await expect(registry.read(0)).rejects.toThrow("invalid");
     await expect(storage.query()).resolves.toHaveLength(1);
   });
 
@@ -251,10 +334,10 @@ describe("LeasedNodeRegistry", () => {
       { name: "wrong-slot", multitenant: false },
       leaseRecordSpec,
     );
-    await storage.compareAndSet("node/a", undefined, leaseRecord("node/b", 1));
+    await storage.compareAndSet(nodeId("node/a"), undefined, leaseRecord("node/b"));
 
     await expect(registry.read(0)).rejects.toThrow("invalid");
-    await expect(storage.read("node/a")).resolves.toBeDefined();
+    await expect(storage.read(nodeId("node/a"))).resolves.toBeDefined();
   });
 
   it("returns false when a compare-and-set renewal loses its race", async () => {
@@ -266,8 +349,8 @@ describe("LeasedNodeRegistry", () => {
       { name: "lost-renewal", multitenant: false },
       leaseRecordSpec,
     );
-    const current = await storage.read("node/a");
-    await storage.compareAndSet("node/a", current, leaseRecord("node/a", 1));
+    const current = await storage.read(nodeId("node/a"));
+    await storage.compareAndSet(nodeId("node/a"), current, leaseRecord("node/a"));
     await expect(registry.renew("node/a", "owner", 20)).resolves.toBe(false);
   });
 
@@ -340,13 +423,16 @@ describe("LeasedNodeRegistry", () => {
   });
 });
 
-function leaseRecord(nodeId: string, version: number): ApplicationNodeLease {
+function nodeId(value: string): NodeId {
+  return create(NodeIdSchema, { value });
+}
+
+function leaseRecord(node: string, nanos = 0): ApplicationNodeLease {
   return create(ApplicationNodeLeaseSchema, {
-    encodingVersion: version,
-    nodeId,
+    nodeId: nodeId(node),
     endpoint: { origin: "http://10.0.0.1" },
-    expiresAtMillis: 100n,
-    registrationId: "process",
+    whenExpires: create(TimestampSchema, { seconds: 0n, nanos: 100_000_000 + nanos }),
+    registrationId: { value: "process" },
   });
 }
 
@@ -396,7 +482,7 @@ class CappedQueryFactory extends InMemoryStorageFactory {
 
 class DelayedQueryFactory extends InMemoryStorageFactory {
   storage:
-    import("@spine-event-engine/storage").RecordStorage<string, ApplicationNodeLease> | undefined;
+    import("@spine-event-engine/storage").RecordStorage<NodeId, ApplicationNodeLease> | undefined;
   #resolve: (() => void) | undefined;
 
   override createRecordStorage<I, R extends import("@bufbuild/protobuf").Message>(

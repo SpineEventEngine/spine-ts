@@ -4,66 +4,80 @@ This reference is for agents configuring the Google Cloud Datastore adapter.
 
 ## Public entry point
 
-Import `DatastoreStorageFactory`, `DatastoreQueryLimitError`,
-`DatastoreStorageOptions`, `DatastoreStorageFactoryInput`, and
-`DatastoreEntityStorageHandle` from `@spine-event-engine/storage-datastore`.
-The adapter depends on the public storage contract and the official
-`@google-cloud/datastore` client.
+Import `DatastoreStorageFactory`, `DatastoreStorageFactoryBuilder`,
+`RecordLayout`, `CreateRecordStorage`, `CreateEntityStorage`, and
+`DatastoreQueryLimitError` from `@spine-event-engine/storage-datastore`.
+Create a factory with `DatastoreStorageFactory.newBuilder().setClient(client)`.
+The adapter never owns or closes that client.
 
-## Factory and lifecycle
+The builder is mutable until `build()` and the built factory receives a
+snapshot. The last registration for the same identity wins. Record resolution
+uses this precedence:
 
-`new DatastoreStorageFactory({ client, maxClientSideScan? })` uses a
-caller-owned `Datastore` client. `DatastoreStorageFactory.create(options)`
-creates a client from official client options. The scan bound defaults to 1000
-and must be a positive finite integer. Closing the factory prevents new storage
-creation; it does not close an injected client. Record handles are independently
-closeable through the base storage contract.
+1. an exact source-plus-record creator;
+2. a record-only creator;
+3. an exact source-plus-record layout;
+4. a record-only layout; and
+5. the default kind.
 
-For a multitenant `StorageContext`, the tenant ID selects the Datastore
-namespace. The adapter stores record payload bytes and materialized columns in
-private entities. Its record kind is a collision-safe canonical encoding of
-context name, tenancy mode, and `RecordSpec.storageKey`; schema type is payload
-codec metadata. This is a hard cutover with no migration, legacy reader, or
-dual-write path. Datastore kinds are limited to 1500 UTF-8 bytes and an
-oversized kind fails before client activity. Indexed column values permit strings, finite
-Datastore-compatible numbers, booleans, `null`, and exact signed 64-bit
-bigints. An out-of-range bigint fails before an RPC.
+`organizeRecords(...)` changes a kind. `useRecordStorage(...)` replaces a
+record-family provider. `useEntityStorage(...)` replaces the complete coherent
+Entity handle, including its commit capability; the built-in Entity provider
+does not mix custom record creators into one transaction.
 
-## Queries and writes
+## Physical layout
 
-The adapter pushes down provider-legal ID filters, equality filters, and order.
-Plans needing reconciliation use a provider sentinel of
-`maxClientSideScan + 1`. If the matching row set exceeds the bound, it throws
-`DatastoreQueryLimitError` before local filtering, ordering, continuation,
-offset, or semantic limit can return a partial result. It has no unlimited scan
-option and no adapter-specific generic cursor.
+Every record family uses the source Proto full name as its default kind. A
+grouped family uses `<group>_<record-simple-name>`. A layout registration can
+replace only the kind. Rows contain indexed `_scope`, unindexed Protobuf
+`bytes`, and native declared columns; no ID copy, schema fingerprint, marker,
+or compatibility entity is stored. Tenant contexts use the tenant namespace.
 
-`writeAll()` groups at most 500 mutations. A later group failure can leave an
-earlier group durable. Current-record writes and entity-history operations are
-separate calls and are not one transaction.
+The canonical key contains context, tenant mode, source type, external
+`StorageGroup`, and record ID without truncation or hashing. `_scope`, `bytes`,
+and `__key__` are reserved. Blank kinds, kinds or key names over 1,500 UTF-8
+bytes, unsupported indexed values, non-finite numbers, and integers outside
+their supported exact range fail before an RPC. Stored `bytes` remain the
+authoritative record; declared properties are rematerialized after decoding.
 
-## Entity history seam
+Entity current records use `EntityRecord`; enabled state history uses grouped
+`EntityStateKey`/`EntityRecord`; diagnostic history uses grouped
+`EventId`/`Event`; Event Store is a separate ungrouped Event family. Disabled
+histories allocate no record handle or Datastore row.
 
-`createEntityStorage(input)` returns the framework/provider-only structural
-handle containing `current`, `states`, and `events`. It binds layout
-compatibility before access and is independently closeable. State and event
-history reads are immutable, asynchronous, newest-first, and bounded. The API
-does not expose an application-facing history route.
+## Queries and commits
 
-Appending immutable state or event data with identical identity and content is
-safe to retry; divergent content fails. State trim and truncate work in bounded
-chunks. Completed chunks can remain durable after a later failure, so callers
-retry maintenance as needed.
+Queries always constrain `_scope`. Provider-illegal plans reconcile a maximum
+of 1,000 rows; the 1,001st row throws `DatastoreQueryLimitError`.
+`writeAll()` uses batches of at most 500 mutations and is not atomic across
+batches.
 
-The internal atomic Entity commit port combines current state, configured
-histories, framework delivery events, and a receipt in one Datastore
-transaction. Its receipt records the committing invocation owner so an
-ambiguous acknowledgement still returns `committed` to exactly that invocation;
-later callers receive `replayed`. Standalone history operations remain separate.
+Provider-legal ID predicates, declared-property comparisons, and ordering are
+pushed only when Datastore can execute the whole selected conjunction. Local
+reconciliation preserves shared query semantics and never becomes an unlimited
+scan. A smaller caller-supplied reconciliation bound retains its own sentinel and
+`QueryCandidateLimitError` behavior. There is no public Datastore cursor API.
+
+The internal Entity commit reads current and immutable keys then applies current,
+enabled histories, and delivery events in one Datastore transaction. It rejects
+more than 25 entity groups, 500 mutations, or its conservative transaction-size
+limit before opening the transaction. Current mismatch returns `conflict`.
+An already-applied identical retry returns `committed`; divergent immutable
+content fails. Only ABORTED provider failures retry, for at most three attempts.
+
+History reads use stable finite keyset pages. State history provides backward,
+state-at-time, trim, and truncate behavior; event history provides backward and
+truncate behavior. Timestamp comparisons include seconds and nanoseconds.
+Long maintenance can commit several bounded chunks, so a later failure leaves
+earlier chunks durable and the caller retries the same idempotent operation.
 
 ## Operations and errors
 
-Malformed stored payloads cause a redacted decoding error. Datastore provider
-and configuration failures propagate through the adapter operations. Deploy the
-provided history indexes and any application-specific composite indexes before
-using the corresponding query combinations.
+Malformed payloads fail with a redacted decoding error. Physical Datastore
+errors are surfaced without payload data. The emulator suite is required for
+provider acceptance; cloud smoke remains credential-gated.
+
+`build()` and storage-handle creation issue no request. Closing the factory is
+idempotent and prevents creation of another handle without closing the
+caller-owned client or already-created handles. Each record, Entity, and commit
+handle has its own idempotent lifecycle and rejects work after it is closed.

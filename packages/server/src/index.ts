@@ -30,7 +30,6 @@ export {
 export {
   InMemorySubscriptionRegistry,
   StorageSubscriptionRegistry,
-  StandCapacityError,
   StandConflictError,
   type StandActivateResult,
   type StandCleanupResult,
@@ -69,7 +68,6 @@ export type { EventDispatcher } from "./bus/event-dispatcher.js";
 export { DeliveryStorageCorruptionError } from "./delivery/delivery-storage-error.js";
 export type {
   DeliveryInbox,
-  DeliveryInboxWork,
   DeliveryWorkRegistry,
   DeliveryWorkSession,
   ExclusiveDeliveryWorkSession,
@@ -78,14 +76,22 @@ export type {
 export { type DeliveryEndpointMessage } from "./delivery/delivery.js";
 export {
   DeliveryBuilder,
+  DeliveryMonitor,
   type Delivery,
-  type DeliveryMonitor,
-  type DeliveryPage,
   type DeliveryResult,
   type DeliveryRunOptions,
   type DeliveryStrategy,
   UniformAcrossAllShards,
 } from "./delivery/delivery-builder.js";
+export {
+  AlreadyPickedUp,
+  FailedPickUp,
+  FailedReception,
+  type DeliveryStage,
+  type DeliveryStatistics,
+  type PickUpAction,
+  type ReceptionAction,
+} from "./delivery/delivery-monitor.js";
 export {
   DeliverySupervisor,
   DeliveryShutdownTimeoutError,
@@ -145,6 +151,8 @@ export {
   type FirstFieldRoutingHint,
   isEntitySchema,
 } from "./entity/entity-metadata.js";
+
+export { SpecScanner } from "./entity/spec-scanner.js";
 
 export {
   createEntityTransaction,

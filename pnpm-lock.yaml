@@ -85,6 +85,9 @@ importers:
       '@connectrpc/connect-node':
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
+      '@google-cloud/datastore':
+        specifier: 10.1.1
+        version: 10.1.1
       '@spine-event-engine/auth':
         specifier: 2.0.0-snapshot.1
         version: link:../../../packages/auth
@@ -220,6 +223,9 @@ importers:
       '@connectrpc/connect-node':
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
+      '@google-cloud/datastore':
+        specifier: 10.1.1
+        version: 10.1.1
       '@spine-event-engine/client-node':
         specifier: workspace:*
         version: link:../../packages/client-node
@@ -389,9 +395,9 @@ importers:
       '@spine-event-engine/proto':
         specifier: 2.0.0-snapshot.1
         version: link:../proto
-      '@spine-event-engine/validation-ts':
-        specifier: 2.0.0-snapshot.4
-        version: 2.0.0-snapshot.4(@bufbuild/protobuf@2.12.1)
+      '@spine-event-engine/validation':
+        specifier: 2.0.0-snapshot.7
+        version: 2.0.0-snapshot.7(@bufbuild/protobuf@2.12.1)
 
   packages/delivery-client:
     dependencies:
@@ -437,6 +443,16 @@ importers:
       '@spine-event-engine/storage':
         specifier: workspace:*
         version: link:../storage
+    devDependencies:
+      '@spine-event-engine/storage-datastore':
+        specifier: workspace:*
+        version: link:../storage-datastore
+      '@spine-event-engine/storage-rdbms':
+        specifier: workspace:*
+        version: link:../storage-rdbms
+      mysql2:
+        specifier: 3.23.1
+        version: 3.23.1(@types/node@24.13.2)
 
   packages/deployment-gce:
     dependencies:
@@ -1059,8 +1075,9 @@ packages:
   '@shikijs/vscode-textmate@10.0.2':
     resolution: {integrity: sha512-83yeghZ2xxin3Nj8z1NMd/NCuca+gsYXswywDy5bHvwlWL8tpTQmzGeUuHd9FC3E/SBEMvzJRwWEOz5gGes9Qg==}
 
-  '@spine-event-engine/validation-ts@2.0.0-snapshot.4':
-    resolution: {integrity: sha512-JCwS6mESUjCsTfbuKDTFtaM3Bz+qX1x3S4AOD6D/ybQtWt7xPO3Xd3rIEkLo3SSJBNSvWH5XV1lW8bv6W1iHJA==}
+  '@spine-event-engine/validation@2.0.0-snapshot.7':
+    resolution: {integrity: sha512-axp84tc+rE3c0Z3lbC6sHBt5irGiBAdix9rbrSMZrogNVJCuePtMqxlbRR5NDK1jRGzXMwm2MWcwwOLRQSJ3tg==}
+    engines: {node: '>=24.0.0'}
     peerDependencies:
       '@bufbuild/protobuf': ^2.10.2
 
@@ -2275,6 +2292,15 @@ packages:
     resolution: {integrity: sha512-5yDliI1uWkYPo7W+Zvrxg6YmoWuj5iC5EydewqrRTvc68nyMTZhlPPlLg6cptUGfbQAb+N9XDPDPzF6N081lug==}
     engines: {node: '>=18'}
 
+  temporal-polyfill@1.0.1:
+    resolution: {integrity: sha512-N2SoI9olnW7BUsU8RosDphZQl9s+WJ8O7PoJMFCr/e5/1rFkVI4GNOWaSeySG+UoP04foPYsnLWbJmbXOiShZg==}
+
+  temporal-spec@1.0.0:
+    resolution: {integrity: sha512-00Ahj1e1ifaERTMOIIGpOCdOo9IEk2m6GGSMedsn9a2SIsGLdOTbmME1Htv6IM82b6VHrzSUTIVc7YHy6hdhFQ==}
+
+  temporal-utils@1.0.1:
+    resolution: {integrity: sha512-HAixuesxFQIUaQk3ptX2jhfO/FsOkgVkDDMawvp6n/fkB1q6BKfs3lURw9I+pK/2e2e/q/vrLrxmeqauBoyGMQ==}
+
   tinybench@2.9.0:
     resolution: {integrity: sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg==}
 
@@ -2914,9 +2940,10 @@ snapshots:
 
   '@shikijs/vscode-textmate@10.0.2': {}
 
-  '@spine-event-engine/validation-ts@2.0.0-snapshot.4(@bufbuild/protobuf@2.12.1)':
+  '@spine-event-engine/validation@2.0.0-snapshot.7(@bufbuild/protobuf@2.12.1)':
     dependencies:
       '@bufbuild/protobuf': 2.12.1
+      temporal-polyfill: 1.0.1
 
   '@standard-schema/spec@1.1.0': {}
 
@@ -4138,6 +4165,15 @@ snapshots:
       stream-events: 1.0.5
     transitivePeerDependencies:
       - supports-color
+
+  temporal-polyfill@1.0.1:
+    dependencies:
+      temporal-spec: 1.0.0
+      temporal-utils: 1.0.1
+
+  temporal-spec@1.0.0: {}
+
+  temporal-utils@1.0.1: {}
 
   tinybench@2.9.0: {}
 

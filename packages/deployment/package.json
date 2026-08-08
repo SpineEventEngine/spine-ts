@@ -19,5 +19,10 @@
     "@bufbuild/protobuf": "2.12.1",
     "@spine-event-engine/proto": "workspace:*",
     "@spine-event-engine/storage": "workspace:*"
+  },
+  "devDependencies": {
+    "@spine-event-engine/storage-datastore": "workspace:*",
+    "@spine-event-engine/storage-rdbms": "workspace:*",
+    "mysql2": "3.23.1"
   }
 }

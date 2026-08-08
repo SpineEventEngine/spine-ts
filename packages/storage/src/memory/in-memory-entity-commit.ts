@@ -1,23 +1,29 @@
 import { clone, toBinary, type Message } from "@bufbuild/protobuf";
-import { EventSchema } from "@spine-event-engine/proto";
+import type { Event, EventId } from "@spine-event-engine/proto";
+import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 
-import { eventStoreRecordSpec } from "../event/event-store.js";
+import { eventStoreAccess, eventStoreRecordSpec } from "../event/event-store.js";
+import { eventHistorySpec, stateHistorySpec } from "../entity/entity-history-record-spec.js";
 import type { EntityRecord } from "../entity/entity-record.js";
 import type {
   EntityCommitInput,
   EntityCommitResult,
   EntityCommitStorage,
 } from "../internal/entity-commit.js";
-import { StorageScopes } from "../storage/canonical-scope.js";
-import type { EntityStorageInput } from "./in-memory-entity-history.js";
+import type { RecordSpec } from "../record/record-spec.js";
+import type { StorageGroup } from "../record/storage-group.js";
+import type { StorageContext } from "../storage/storage.js";
+import type { StorageFactory } from "../storage/storage-factory.js";
 import {
   InMemoryEntityStorage,
+  KeyedSerialQueue,
   MemoryEntityStorageFactory,
+  ENTITY_SCOPE_MUTATION_KEY,
   type EntityBackend,
+  type EntityStorageInput,
 } from "./in-memory-entity-history.js";
-import { InMemoryStorageBackend } from "./in-memory-storage-backend.js";
+import { InMemoryRecordStorage } from "./in-memory-record-storage.js";
 import { TenantRecords } from "./tenant-records.js";
-import type { Event, EventId } from "@spine-event-engine/proto";
 
 const commitHost = globalThis as typeof globalThis & {
   structuredClone<Value>(value: Value): Value;
@@ -27,29 +33,37 @@ const commitHost = globalThis as typeof globalThis & {
  * Implements provider-owned Entity commits for one shared in-memory backend.
  */
 export class MemoryEntityCommitStorage implements EntityCommitStorage {
-  readonly #backend: InMemoryStorageBackend;
   readonly #entities: MemoryEntityStorageFactory;
-  readonly #events: TenantRecords<EventId, Event>;
+  readonly #factory: StorageFactory;
+  readonly #openRecords: <I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ) => TenantRecords<I, R>;
   readonly #input: EntityStorageInput<unknown, Message>;
   #open = true;
 
   /**
-   * Creates a commit handle bound to one Entity storage layout.
+   * Creates a commit handle bound to one Entity source type.
    *
-   * @param backend Selects the shared in-memory backend.
-   * @param entities Opens the matching Entity storage maps.
-   * @param events Supplies the matching framework EventStore records.
-   * @param input Defines the Entity storage layout.
+   * @param entities Opens the matching current Entity storage.
+   * @param factory Owns the Event Store coordination lock.
+   * @param openRecords Opens exact generic-record backing slices.
+   * @param input Defines the Entity storage source type.
    */
   constructor(
-    backend: InMemoryStorageBackend,
     entities: MemoryEntityStorageFactory,
-    events: TenantRecords<EventId, Event>,
+    factory: StorageFactory,
+    openRecords: <I, R extends Message>(
+      context: StorageContext,
+      spec: RecordSpec<I, R>,
+      group?: StorageGroup,
+    ) => TenantRecords<I, R>,
     input: EntityStorageInput<unknown, Message>,
   ) {
-    this.#backend = backend;
     this.#entities = entities;
-    this.#events = events;
+    this.#factory = factory;
+    this.#openRecords = openRecords;
     this.#input = input;
   }
 
@@ -62,7 +76,12 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
   commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<EntityCommitResult> {
     this.#requireOpen();
     this.#requireCompatible(input);
-    return InMemoryCommitLocks.run(this.#backend, this.#scope(input), () => this.#commit(input));
+    const backend = this.#entities.backend(input.entity);
+    const work = () =>
+      backend.mutationQueue.run(ENTITY_SCOPE_MUTATION_KEY, () => this.#commit(input, backend));
+    return input.events === undefined || input.events.length === 0
+      ? work()
+      : eventStoreAccess.withLock(this.#factory, input.context, work);
   }
 
   /**
@@ -72,71 +91,127 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
     this.#open = false;
   }
 
-  async #commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<EntityCommitResult> {
-    const receipts = InMemoryStorageBackend.bind(
-      this.#backend,
-      `${this.#scope(input)}:receipts`,
-      "spine.entity-commit.receipts.v1",
-      () => new Map<string, string>(),
-    );
-    const digest = InMemoryCommitValues.digest(input);
-    const receiptKey = `${input.id}\u0000${input.entity.id.key(input.entityId)}`;
-    const prior = receipts.get(receiptKey);
-    if (prior !== undefined) {
-      if (prior !== digest) throw new Error("Entity commit ID was reused with different content.");
-      return "replayed";
-    }
-
-    const live = this.#entities.backend(input.entity);
+  async #commit<I, S extends Message>(
+    input: EntityCommitInput<I, S>,
+    liveBackend: EntityBackend,
+  ): Promise<EntityCommitResult> {
+    this.#requireEnabledHistories(input);
+    const stateLayout =
+      input.states === undefined || input.states.length === 0
+        ? undefined
+        : stateHistorySpec(input.entity.stateSchema);
+    const eventLayout =
+      input.diagnostics === undefined || input.diagnostics.length === 0
+        ? undefined
+        : eventHistorySpec(input.entity.stateSchema);
+    const liveStates =
+      stateLayout === undefined
+        ? undefined
+        : this.#openRecords(input.context, stateLayout.spec, stateLayout.group);
+    const liveDiagnostics =
+      eventLayout === undefined
+        ? undefined
+        : this.#openRecords(input.context, eventLayout.spec, eventLayout.group);
+    const liveEvents =
+      input.events === undefined || input.events.length === 0
+        ? undefined
+        : this.#openRecords(input.context, eventStoreRecordSpec);
     const stagedBackend: EntityBackend = {
-      current: commitHost.structuredClone(live.current),
-      events: commitHost.structuredClone(live.events),
-      states: commitHost.structuredClone(live.states),
-      stateQueue: live.stateQueue,
+      current: commitHost.structuredClone(liveBackend.current),
+      mutationQueue: new KeyedSerialQueue(),
     };
-    const entity = new InMemoryEntityStorage(input.entity, stagedBackend);
-    const stagedEvents = new TenantRecords<EventId, Event>();
-    stagedEvents.replace(this.#events.snapshot());
+    const stagedStates = InMemoryCommitValues.stage(liveStates);
+    const stagedDiagnostics = InMemoryCommitValues.stage(liveDiagnostics);
+    const stagedEvents = InMemoryCommitValues.stage(liveEvents);
+    const stagedEntity = new InMemoryEntityStorage(
+      this.#stagedInput(input.entity, stateLayout, stagedStates, eventLayout, stagedDiagnostics),
+      stagedBackend,
+    );
     try {
-      const current = await entity.current.read(input.entityId);
-      if (!InMemoryCommitValues.sameCurrent(current, input.expected, input.entity.stateSchema)) {
-        return "conflict";
-      }
+      const current = await stagedEntity.current.read(input.entityId);
+      if (!InMemoryCommitValues.sameCurrent(current, input.expected)) return "conflict";
+
       const delivery = [...(input.events ?? [])].map((event) =>
-        clone(eventStoreRecordSpec.schema, event),
+        clone(eventStoreRecordSpec.recordType, event),
       );
       const materialized = delivery.map((event) => eventStoreRecordSpec.materialize(event));
       const ids = materialized.map((record) => record.id);
       if (
         new Set(ids.map((id) => id.value)).size !== ids.length ||
-        ids.some((id) => stagedEvents.read(id) !== undefined)
+        ids.some((id) => stagedEvents?.read(id) !== undefined)
       ) {
         throw new Error("Entity commit requires unique delivery-event IDs.");
       }
 
-      await entity.current.write(input.next);
-      for (const state of input.states ?? []) await entity.states.append(state);
-      for (const diagnostic of input.diagnostics ?? []) await entity.events.append(diagnostic);
-      stagedEvents.writeAll(materialized);
-      InMemoryCommitValues.replace(live.current, stagedBackend.current);
-      InMemoryCommitValues.replace(live.states, stagedBackend.states);
-      InMemoryCommitValues.replace(live.events, stagedBackend.events);
-      this.#events.replace(stagedEvents.snapshot());
-      receipts.set(receiptKey, digest);
+      await stagedEntity.current.write(input.next);
+      for (const state of input.states ?? []) await stagedEntity.states.append(state);
+      for (const diagnostic of input.diagnostics ?? [])
+        await stagedEntity.events.append(diagnostic);
+      stagedEvents?.writeAll(materialized);
+
+      InMemoryCommitValues.replace(liveBackend.current, stagedBackend.current);
+      InMemoryCommitValues.publish(liveStates, stagedStates);
+      InMemoryCommitValues.publish(liveDiagnostics, stagedDiagnostics);
+      InMemoryCommitValues.publish(liveEvents, stagedEvents);
       return "committed";
     } finally {
-      entity.close();
+      stagedEntity.close();
     }
   }
 
-  #scope<I, S extends Message>(input: EntityCommitInput<I, S>): string {
-    return StorageScopes.canonical(input.context, `${input.entity.storageKey}:commit`);
+  #stagedInput<I, S extends Message>(
+    entity: EntityStorageInput<I, S>,
+    stateLayout: ReturnType<typeof stateHistorySpec> | undefined,
+    states:
+      | TenantRecords<
+          import("@spine-event-engine/proto/generated/spine/server/entity/state_key_pb.js").EntityStateKey,
+          EntityRecord
+        >
+      | undefined,
+    eventLayout: ReturnType<typeof eventHistorySpec> | undefined,
+    diagnostics: TenantRecords<EventId, Event> | undefined,
+  ): EntityStorageInput<I, S> {
+    const base = { ...entity };
+    delete base.stateHistoryStorage;
+    delete base.eventHistoryStorage;
+    return {
+      ...base,
+      ...(stateLayout === undefined || states === undefined
+        ? {}
+        : {
+            stateHistoryStorage: new InMemoryRecordStorage(
+              entity.context,
+              stateLayout.spec,
+              () => states,
+            ),
+          }),
+      ...(eventLayout === undefined || diagnostics === undefined
+        ? {}
+        : {
+            eventHistoryStorage: new InMemoryRecordStorage(
+              entity.context,
+              eventLayout.spec,
+              () => diagnostics,
+            ),
+          }),
+    };
+  }
+
+  #requireEnabledHistories<I, S extends Message>(input: EntityCommitInput<I, S>): void {
+    if ((input.states?.length ?? 0) > 0 && !input.entity.stateHistory) {
+      throw new Error("Entity commit cannot append state history when it is disabled.");
+    }
+    if ((input.diagnostics?.length ?? 0) > 0 && !input.entity.eventHistory) {
+      throw new Error("Entity commit cannot append event history when it is disabled.");
+    }
   }
 
   #requireCompatible<I, S extends Message>(input: EntityCommitInput<I, S>): void {
     if (
-      this.#scope(input) !==
-      StorageScopes.canonical(this.#input.context, `${this.#input.storageKey}:commit`)
+      input.context.name !== this.#input.context.name ||
+      input.context.multitenant !== this.#input.context.multitenant ||
+      input.context.tenantId !== this.#input.context.tenantId ||
+      input.entity.sourceType.typeName !== this.#input.sourceType.typeName
     ) {
       throw new Error("Entity commit handle cannot commit another Entity storage scope.");
     }
@@ -147,89 +222,29 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
   }
 }
 
-const InMemoryCommitLocks = Object.freeze({
-  queues: new WeakMap<InMemoryStorageBackend, Map<string, Promise<void>>>(),
-
-  async run<T>(backend: InMemoryStorageBackend, scope: string, work: () => Promise<T>): Promise<T> {
-    const queues = this.queues.get(backend) ?? new Map<string, Promise<void>>();
-    this.queues.set(backend, queues);
-    const prior = queues.get(scope) ?? Promise.resolve();
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const tail = prior.then(() => gate);
-    queues.set(scope, tail);
-    await prior;
-    try {
-      return await work();
-    } finally {
-      release();
-      if (queues.get(scope) === tail) queues.delete(scope);
-    }
-  },
-});
-
 const InMemoryCommitValues = Object.freeze({
-  digest<I, S extends Message>(input: EntityCommitInput<I, S>): string {
-    return JSON.stringify({
-      context: input.context,
-      id: input.id,
-      entityId: input.entity.id.key(input.entityId),
-      expected: InMemoryCommitValues.record(input.expected, input.entity.stateSchema),
-      next: InMemoryCommitValues.record(input.next, input.entity.stateSchema),
-      states: (input.states ?? []).map((state) => ({
-        entityId: input.entity.id.key(state.entityId),
-        state: InMemoryCommitValues.hex(toBinary(input.entity.stateSchema, state.state)),
-        version: state.version.toString(),
-        createdAt: InMemoryCommitValues.time(state.createdAt),
-      })),
-      diagnostics: (input.diagnostics ?? []).map((event) => ({
-        entityId: input.entity.id.key(event.entityId),
-        event: InMemoryCommitValues.hex(toBinary(EventSchema, event.event)),
-        producerVersion: event.producerVersion.toString(),
-        createdAt: InMemoryCommitValues.time(event.createdAt),
-      })),
-      events: (input.events ?? []).map((event) =>
-        InMemoryCommitValues.hex(toBinary(EventSchema, event)),
-      ),
-    });
-  },
-
-  record<I, S extends Message>(
-    record: EntityRecord<I, S> | undefined,
-    schema: EntityCommitInput<I, S>["entity"]["stateSchema"],
-  ): unknown {
-    return record === undefined
-      ? undefined
-      : {
-          state: InMemoryCommitValues.hex(toBinary(schema, record.state)),
-          version: record.version.toString(),
-          archived: record.archived,
-          deleted: record.deleted,
-        };
-  },
-
-  time(value: { readonly seconds: bigint; readonly nanos: number }): readonly [string, number] {
-    return [value.seconds.toString(), value.nanos];
-  },
-
-  sameCurrent<I, S extends Message>(
-    actual: EntityRecord<I, S> | undefined,
-    expected: EntityRecord<I, S> | undefined,
-    schema: EntityCommitInput<I, S>["entity"]["stateSchema"],
-  ): boolean {
+  sameCurrent(actual: EntityRecord | undefined, expected: EntityRecord | undefined): boolean {
     if (actual === undefined || expected === undefined) return actual === expected;
-    return (
-      actual.version === expected.version &&
-      actual.archived === expected.archived &&
-      actual.deleted === expected.deleted &&
-      InMemoryCommitValues.equal(toBinary(schema, actual.state), toBinary(schema, expected.state))
+    return InMemoryCommitValues.equal(
+      toBinary(EntityRecordSchema, actual),
+      toBinary(EntityRecordSchema, expected),
     );
   },
 
-  hex(bytes: Uint8Array): string {
-    return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  stage<I, R extends Message>(
+    live: TenantRecords<I, R> | undefined,
+  ): TenantRecords<I, R> | undefined {
+    if (live === undefined) return undefined;
+    const staged = new TenantRecords<I, R>();
+    staged.replace(live.snapshot());
+    return staged;
+  },
+
+  publish<I, R extends Message>(
+    live: TenantRecords<I, R> | undefined,
+    staged: TenantRecords<I, R> | undefined,
+  ): void {
+    if (live !== undefined && staged !== undefined) live.replace(staged.snapshot());
   },
 
   equal(left: Uint8Array, right: Uint8Array): boolean {

@@ -18,17 +18,19 @@ explicit `Repository` registration. A built context owns `CommandBus`,
 Each built context also owns one `StandSubscriptionRegistry`. By default the
 builder creates a storage-backed registry from the resolved context
 `StorageFactory` (including the `ServerEnvironment` factory used for a builder
-added to a server). Its capacity is 100 definitions, or a configured positive
-safe-integer lower limit through `withSubscriptionLimit(limit)`. A complete
-custom implementation can instead be supplied with
-`withSubscriptionRegistry(registry)`; the two options are mutually exclusive,
-and builder ownership transfers on the first build attempt.
+added to a server). It stores one `spine.client.SubscriptionRecord` under each
+explicit `SubscriptionId`. A complete custom implementation can instead be
+supplied with `withSubscriptionRegistry(registry)`; builder ownership transfers
+on the first build attempt.
 
 Create records begin `pending` and expire after 30 seconds unless activated.
 Active records have no framework TTL. Cancellation physically deletes the
-definition and releases capacity; no tombstone remains. A stored definition is
-at most 1 MiB (1,048,576 bytes). `cleanup()` visits a finite page of at most 25
-expired pending definitions, and can run idempotently on every node.
+definition; no tombstone remains. A stored definition is at most 1 MiB
+(1,048,576 bytes). Its physical provider columns are `status` and
+`when_activation_expires`. `cleanup()` asks the provider for 26 pending rows
+ordered by `when_activation_expires` then ID, validates that finite result,
+deletes at most 25 expired definitions, and reports `more` only when its
+observed 26th row is expired. Cleanup can run idempotently on every node.
 
 Context close drains and closes Stand before its registry, then closes tenant,
 repository, and storage resources; it attempts every close and reports
@@ -37,15 +39,12 @@ Attaching such a context to a production `ServerEnvironment` emits one
 context-name-only warning without failing startup; Local environments do not
 warn.
 
-The generic storage seam has no native two-row transaction. Creation reserves
-capacity in the control row before writing its full record to one fixed staging
-slot, then promotes that exact staged record. A crash or missing stage is
-recovered on the next operation: the matching fenced stage is finished, while
-a missing stage rolls its reserved count back. A stale writer cannot promote
-after its control token changes. Each node reconciles its local snapshot
-immediately after context assembly and then every ten seconds. Reconciliation
-is revision-fenced, and physical deletion detaches the local observer after its
-next completed cycle. This is best-effort per-node convergence, not a
+Creation writes the pending record only when that ID is absent. Activation
+replaces that pending record only when it remains unchanged. Cancellation and
+expiry cleanup delete the observed record only when it remains unchanged. Each
+node reconciles its local snapshot immediately after context assembly and then
+every ten seconds. Physical deletion detaches the local observer after its next
+completed cycle. This is best-effort per-node convergence, not a
 cluster-completeness, replay, ordering, gap-repair, or exactly-once guarantee.
 
 The registry accepts only a generated `SubscriptionId` for activate, get, and
@@ -53,21 +52,17 @@ delete. `create(subscription)` returns `{ kind: "created", entry }` or
 `{ kind: "existing", entry }`; the latter requires byte-equivalent canonical
 content and a different definition with the same ID throws `StandConflictError`.
 `activate(id)` returns `activated`, `active`, `missing`, or `expired`.
-`delete(id, expectedRevision?)` returns `deleted`, `missing`, or `changed`;
-negative expected revisions throw `RangeError`. Capacity admission throws
-`StandCapacityError`. Blank IDs or topics, malformed durable records, unknown
-phases, invalid revisions, and inconsistent control data fail closed.
+`delete(id)` returns `deleted` or `missing`. Blank IDs or topics and malformed
+durable records fail closed.
 
 Entries and nested subscriptions returned by create, activate, get, and
-snapshot are clone-safe views with a deeply readonly TypeScript surface.
-Objects are frozen at runtime; Protobuf byte arrays remain mutable runtime
-views but are cloned so they never alias caller storage. Snapshots contain at
-most the configured capacity and are ordered by identifier. The internal staging
-slot is never exposed and is empty after recovery settles. A durable provider
-must implement atomic compare-and-set for definition, control, and staging
-records; construction rejects a provider that cannot. The registry owns only
-its three opened record-storage handles, while the context owns and closes the
-registry.
+snapshot are clone-safe views. Protobuf byte arrays remain mutable runtime
+views but are cloned so they never alias caller storage. Snapshots are ordered
+by identifier. A durable provider must implement atomic compare-and-set for
+`SubscriptionRecord`; construction rejects a provider that cannot. MySQL table
+configuration and Datastore custom record storage registered for
+`SubscriptionRecord` are used by the registry. The registry owns its one
+record-storage handle, while the context owns and closes the registry.
 
 `Entity` is the state base class. `Aggregate`, `Projection`, and
 `ProcessManager` identify the three entity families. Handler decorators are
@@ -200,29 +195,22 @@ can be retried without repeating completed native cleanup.
 Browser subscription bindings are separate from service-owned subscription
 records. `BrowserServerOptions.bindings` accepts the `SubscriptionBindings`
 contract from `@spine-event-engine/auth`. Production browser assembly requires
-bindings that declare the durable capability; `DurableSubscriptionBindings` is
-the provided implementation. It rejects a missing or volatile in-memory
-binding store before listener open. The durable registry receives an explicit
-application namespace, storage factory, identifier source, disposal callback,
-and finite lease, cleanup, record, and byte limits. It owns and closes only
+the Server package's `DurableSubscriptionBindings`; it rejects a missing or
+in-memory binding store before listener open. The durable registry receives an explicit
+application namespace, storage factory, identifier source, and cleanup callback. It owns and closes only
 its independently opened record-storage handle, not the application storage
 factory or a Spine JVM/TS backend. It stores canonical public Subscription
 definitions, never backend envelopes or membership topology, and never returns
 private native data through public subscription responses.
 
-The durable registry preserves opaque records through a process restart.
-It validates record family, version, type, storage key identity, owner
-fingerprint, tenant, expiry, lifecycle, fence, lease, canonical byte
-accounting, and finite record size before use. Invalid data fails closed with a
-generic registry error. A namespace-global quota reserves the final public ID
-before creation; the reservation release is asynchronous and exactly once.
-Two gateways coordinate ownership with finite leases and fences. Before each
-backend effect and public update, the gateway checks its durable owner/fence
-guard. A false guard suppresses that effect or update; renewal also aborts the
-local controller when it observes lease loss. A former owner cannot finalize.
-Cleanup remains bounded and restart-safe at the record level. It renews the
-fenced cleaner lease immediately before each disposal callback, preventing a
-second cleaner from taking over during that callback. Active streams do not resume,
+The durable registry preserves one approved `GatewayAuthenticatedSubscription`
+per public subscription through a process restart. It validates the record ID,
+full Subscription, and expiry before use. The trusted Actor and Tenant remain
+inside the stored Topic and are checked for Activate and Cancel. Create assigns
+the public ID directly; no quota, reservation, fingerprint, or lease is
+persisted. Cleanup remains bounded and restart-safe at the record level. It
+cleans the backend definition before deleting its record. It is not a cleaner
+lease or fence: this direct store supports one Gateway process. Active streams do not resume,
 updates are not replayed, and the registry provides neither exactly-once
 delivery, global update ordering, nor cluster-complete notification delivery.
 
@@ -234,6 +222,17 @@ local durable-row abstraction. Read limits are 1–1000; work leases are
 updates, and process-manager reactions. Callbacks are at-least-once/replay-safe:
 lost renewal can prevent stale finalization but cannot undo a callback already
 run. The package exposes no general raw worker callback API.
+
+Shard ownership is the only delivery exclusion mechanism and excludes
+concurrent delivery within that shard. Pending and delivered `InboxMessage`
+rows are direct records; a delivered row is the deduplication fact. A handler
+effect and the exact pending-to-delivered compare-and-set are not one
+transaction, so a lost acknowledgement can redeliver after restart. Downstream
+signal handling must be idempotent. A customized `DeliveryWorkRegistry`
+implements `validateOwnership()` so delivery can validate before dispatch, at
+repository commit time, and before acknowledgement. Validation is a fence
+against an observed takeover, not a distributed transaction with handler
+storage.
 
 `BoundedContextBuilder.withDeliveryStrategy(strategy)` snapshots a validated
 immutable strategy for its Entity Inbox; the default is one shard. For example,
@@ -262,6 +261,15 @@ before source client/storage. `DeliverySource` is not configured on
 `DeliveryBuilder`. The supervisor does not promise
 durable supervisor state, topology failover, exactly-once effects, or automatic
 retry of unknown remote mutations.
+
+`DeliveryMonitor` is an instantiable, customizable policy seam exposing
+asynchronous continuation, start/completion, failed-reception, pickup-failure,
+and already-picked hooks.
+`FailedReception` supplies only `markDelivered()` and one immediate
+`repeatDispatching()` action; the framework adds no attempt history, timer,
+backoff, quarantine, dead-letter, receipt, marker, or scheduler policy. A failed
+durable acknowledgement keeps that row pending, blocks later rows for its
+target during the run, and does not prevent independent targets from running.
 
 `Environment` resolves the Node `local` or `production` profile once from
 `NODE_ENV`. `ServerEnvironment` resolves configured facilities once for that

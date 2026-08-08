@@ -538,12 +538,12 @@ const EnvironmentDeliveryValues = Object.freeze({
     const delivery = new Delivery({
       context: runtime.context,
       storageFactory: runtime.storageFactory,
+      node: nodeId ?? runtime.context.name,
       ...(ports ?? {}),
     });
     const worker = new DeliveryWorker({
       delivery,
       shards: EnvironmentDeliveryValues.uniqueShards(runtime.scopes),
-      node: nodeId ?? runtime.context.name,
       onMessage: (message) => runtime.descriptor.replay(message, runtime.tenant.tenantId),
     });
     return deliveryRunWorkers.worker(worker);

@@ -1,10 +1,6 @@
 import type { Message } from "@bufbuild/protobuf";
 import type { Event } from "@spine-event-engine/proto";
 
-import type {
-  EntityEventHistoryRecord,
-  EntityStateHistoryRecord,
-} from "../entity/entity-history-storage.js";
 import type { EntityRecord } from "../entity/entity-record.js";
 import type { StorageContext } from "../storage/storage.js";
 import type { EntityStorageInput } from "./entity-history.js";
@@ -31,11 +27,6 @@ export interface EntityCommitInput<I, S extends Message> {
   readonly entity: EntityStorageInput<I, S>;
 
   /**
-   * Identifies this source-signal commit within the Entity scope.
-   */
-  readonly id: string;
-
-  /**
    * Identifies the Entity record being changed.
    */
   readonly entityId: I;
@@ -43,22 +34,22 @@ export interface EntityCommitInput<I, S extends Message> {
   /**
    * Requires this current record before applying the next record.
    */
-  readonly expected?: EntityRecord<I, S>;
+  readonly expected?: EntityRecord;
 
   /**
    * Stores the next current record.
    */
-  readonly next: EntityRecord<I, S>;
+  readonly next: EntityRecord;
 
   /**
    * Appends retained Entity state-history rows.
    */
-  readonly states?: readonly EntityStateHistoryRecord<I, S>[];
+  readonly states?: readonly EntityRecord[];
 
   /**
    * Appends retained diagnostic Entity-event rows.
    */
-  readonly diagnostics?: readonly EntityEventHistoryRecord<I>[];
+  readonly diagnostics?: readonly Event[];
 
   /**
    * Appends canonical framework delivery events.
@@ -69,7 +60,7 @@ export interface EntityCommitInput<I, S extends Message> {
 /**
  * Reports the durable outcome of one Entity commit attempt.
  */
-export type EntityCommitResult = "committed" | "replayed" | "conflict";
+export type EntityCommitResult = "committed" | "conflict";
 
 /**
  * A provider handle for atomic changes to one bounded Entity scope.
@@ -78,10 +69,10 @@ export interface EntityCommitStorage {
   // prettier-ignore
 
   /**
-   * Applies one complete Entity mutation or returns its durable prior outcome.
+   * Applies one complete Entity mutation.
    *
    * @param input Defines the unit of Entity, history, and delivery-event work.
-   * @returns Resolves to the committed, replayed, or conflict outcome.
+   * @returns Resolves to the committed or conflict outcome.
    */
   commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<EntityCommitResult>;
 

@@ -671,16 +671,18 @@ describe("@spine-event-engine/core validation facade", () => {
       );
       expect(validationError.constraintViolation[0]?.fieldPath?.fieldName).toEqual(["name"]);
       expect(validationError.constraintViolation[0]?.message?.withPlaceholders).toBe(
-        "A value must be set.",
+        "The field `${parent.type}.${field.path}` of the type `${field.type}` must have a non-default value.",
       );
       expect(validationError.constraintViolation[0]?.message?.placeholderValue).toEqual({
-        field: "[redacted]",
-        value: "[redacted]",
+        "field.path": "[redacted]",
+        "field.type": "[redacted]",
+        "message.type": "[redacted]",
+        "parent.type": "[redacted]",
       });
     }
   });
 
-  it("returns invalid results and creates ValidationError messages without validation-ts imports", () => {
+  it("returns invalid results and creates ValidationError messages without direct upstream imports", () => {
     const result = Validate.message(RequiredNameSchema, create(RequiredNameSchema, { name: "" }));
 
     expect(result.valid).toBe(false);
@@ -689,8 +691,10 @@ describe("@spine-event-engine/core validation facade", () => {
     expect(result.violations[0]?.fieldPath?.fieldName).toEqual(["name"]);
     expect(result.violations[0]?.fieldValue).toBeUndefined();
     expect(result.violations[0]?.message?.placeholderValue).toEqual({
-      field: "[redacted]",
-      value: "[redacted]",
+      "field.path": "[redacted]",
+      "field.type": "[redacted]",
+      "message.type": "[redacted]",
+      "parent.type": "[redacted]",
     });
     expect(result.error?.$typeName).toBe("spine.validation.ValidationError");
     expect(result.error?.constraintViolation).toEqual(result.violations);

@@ -1,93 +1,35 @@
-import type { Message } from "@bufbuild/protobuf";
+import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+export type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import type { NormalizedQueryEntry } from "../query/query-execution.js";
 import type { NormalizedQueryPlan } from "../query/query-policy.js";
 
 /**
- * Durable latest-state representation shared by all entity kinds.
+ * Internal latest-state persistence port for one Entity identifier type.
  */
-export interface EntityRecord<I, S extends Message> {
+export interface EntityRecordStorage<I> {
   // prettier-ignore
 
   /**
-   * Identifies the entity represented by the stored row.
+   * Reads the latest JVM EntityRecord for an entity ID.
+   *
+   * @param id The entity ID to read.
+   * @returns The current EntityRecord, when present.
    */
-  readonly id: I;
+  read(id: I): Promise<EntityRecord | undefined>;
 
   /**
-   * Carries the latest entity state.
+   * Writes one JVM EntityRecord envelope.
+   *
+   * @param record The EntityRecord to persist.
+   * @returns A promise that resolves once the record is persisted.
    */
-  readonly state: S;
+  write(record: EntityRecord): Promise<void>;
 
   /**
-   * Records the version associated with the state.
+   * Reads normalized current records with provider materialized columns.
+   *
+   * @param plan The normalized current-record query plan.
+   * @returns Matching records and materialized columns.
    */
-  readonly version: bigint;
-
-  /**
-   * Indicates whether the entity is archived.
-   */
-  readonly archived: boolean;
-
-  /**
-   * Indicates whether the entity is deleted.
-   */
-  readonly deleted: boolean;
+  query(plan: NormalizedQueryPlan<I>): Promise<readonly NormalizedQueryEntry<I, EntityRecord>[]>;
 }
-
-/**
- * Internal latest-state persistence port shared by entity kinds.
- */
-export interface EntityRecordStorage<I, S extends Message> {
-  // prettier-ignore
-
-  /**
-   * Reads the latest record for an entity ID.
-   *
-   * @param id Identifies the entity to read.
-   * @returns Resolves to the stored record when it exists.
-   */
-  read(id: I): Promise<EntityRecord<I, S> | undefined>;
-
-  /**
-   * Writes the latest record for an entity.
-   *
-   * @param record Supplies the record to store.
-   * @returns Completes when the record is stored.
-   */
-  write(record: EntityRecord<I, S>): Promise<void>;
-
-  /**
-   * Reads normalized latest-state records.
-   *
-   * @param plan Specifies the normalized query plan.
-   * @returns Resolves to matching materialized records.
-   */
-  query(
-    plan: NormalizedQueryPlan<I>,
-  ): Promise<readonly NormalizedQueryEntry<I, EntityRecord<I, S>>[]>;
-}
-
-/**
- * Closed physical purposes used when deriving entity storage keys.
- */
-export type EntityRecordPurpose = "current" | "state-history" | "event-history";
-
-/**
- * Provides stable storage-key derivation for entity records.
- */
-export const EntityStorageKey: Readonly<{
-  of(stateType: string, purpose: EntityRecordPurpose): string;
-}> = Object.freeze({
-  // prettier-ignore
-
-  /**
-   * Derives a stable storage key for an entity state type and record purpose.
-   *
-   * @param stateType Names the entity state type.
-   * @param purpose Selects the physical record purpose.
-   * @returns Returns the stable storage key.
-   */
-  of(stateType: string, purpose: EntityRecordPurpose): string {
-    return `${stateType}:${purpose}`;
-  },
-});

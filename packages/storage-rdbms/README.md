@@ -11,7 +11,7 @@ For database requirements, query limits, lifecycle, and error details, see
 ## 💡 Why use it?
 
 - ✅ Stores Spine records durably in a MySQL database.
-- ✅ Owns a bounded `mysql2` connection pool and transactional writes.
+- ✅ Owns a bounded `mysql2` connection pool; InnoDB writes are transactional.
 - ✅ Supports declared-column filters, sorting, offsets, limits, and
   continuations.
 - ✅ Keeps adapter tables private behind the common `RecordStorage` API.
@@ -28,40 +28,47 @@ workspace while developing the framework.
 
 ## 🔌 Create and close a MySQL factory
 
-Provide a MySQL URL that includes a database name. The factory connects,
-creates or verifies its tables, and then is ready for the normal storage API.
+Provide a MySQL URL that includes a database name. Building the factory opens
+its pool only; each record family creates and verifies its private table lazily
+on first use.
 
 ```ts
 import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
 
-const factory = await MysqlStorageFactory.create({
-  url: "mysql://user:password@127.0.0.1:3306/spine_app",
-  connectionLimit: 8,
-  tls: { rejectUnauthorized: true },
-});
+const factory = await MysqlStorageFactory.newBuilder()
+  .setOptions({
+    url: "mysql://user:password@127.0.0.1:3306/spine_app",
+    connectionLimit: 8,
+    tls: { rejectUnauthorized: true },
+  })
+  .build();
 
 try {
   // Pass factory to a Spine TS server or create record storage through it.
 } finally {
-  await factory.close();
+  factory.close();
 }
 ```
 
 Use a dedicated database account. The account must be able to create and
-inspect the adapter tables as well as perform normal transactional reads and
-writes. Do not commit connection URLs or credentials.
+inspect the adapter tables and perform normal reads and writes. Do not commit
+connection URLs or credentials.
 
 ## ✨ Supported records and queries
 
-The adapter performs record CRUD, transactional `writeAll`, payload-based
-compare-and-set, named-column queries, sort order, offsets, limits, and keyset
-continuations. It supports primitive and structured storage IDs, but indexed
-column values are limited to `null`, booleans, finite numbers, strings, and
-signed 64-bit `bigint` values.
+The adapter performs record CRUD, payload-based compare-and-set, named-column
+queries, sort order, offsets, limits, and keyset continuations. InnoDB makes
+`writeAll` and Entity commits transactional. MyISAM and Aria instead use
+deterministic ordered writes with immutable-prefix retry semantics; a failed
+write may require an identical retry. It supports primitive and structured
+storage IDs, but indexed column values are limited to `null`, booleans, finite
+numbers, strings, and signed 64-bit `bigint` values.
 
-The factory creates private `spine_ts_records` and `spine_ts_columns` tables.
-They are adapter implementation details; application code should use
-`RecordStorage` rather than issuing SQL against them.
+Each record source uses its own private table. An ungrouped family defaults to
+its Proto full name with dots replaced by underscores. A grouped family uses
+the group name with dots replaced by underscores, followed by the record type's
+short name. Tables include native declared columns, but the adapter never adds
+user-column indexes automatically.
 
 ## 🧪 Verify with a disposable database
 
@@ -86,5 +93,5 @@ same package but is not implemented.
 ## 🔗 Learn more
 
 - [Storage API](../storage/README.md)
-- [End-user storage guide](../../docs/USER_GUIDE.md#storage)
+- [End-user storage guide](../../docs/USER_GUIDE.md#13-develop-with-mysql-rdbms-storage)
 - [Reference for coding agents](REFERENCE.md)

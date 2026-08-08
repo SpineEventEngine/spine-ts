@@ -45,7 +45,6 @@ export {
   DeliveryOutcomeUnknownError,
   DeliveryPagingError,
   DeliveryProtocolError,
-  DeliveryQuarantineError,
   DeliveryShardObservationError,
   ShardObservationOverflowError,
   MAX_DELIVERY_BATCH_MESSAGES,
@@ -62,8 +61,6 @@ export type {
   ReleasedShardSession,
   RemoteShardObservation,
   RemoteShardSession,
-  RemovalQuarantine,
-  RemovalQuarantineRecord,
 } from "./types.js";
 
 /**

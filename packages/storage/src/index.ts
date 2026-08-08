@@ -28,8 +28,9 @@ export type {
   RecordReadOptions,
 } from "./record/record-query.js";
 export { RecordQuery } from "./record/record-query.js";
-export { RecordSpec } from "./record/record-spec.js";
+export { RecordSpec, type RecordSpecOptions } from "./record/record-spec.js";
 export { RecordStorage } from "./record/record-storage.js";
+export { StorageGroup } from "./record/storage-group.js";
 export type { RecordEntry } from "./record/record-storage.js";
 export type { Storage, StorageContext } from "./storage/storage.js";
 export { StorageFactory } from "./storage/storage-factory.js";

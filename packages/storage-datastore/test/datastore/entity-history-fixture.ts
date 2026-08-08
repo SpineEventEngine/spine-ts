@@ -17,9 +17,15 @@ export class HistoryDatastoreBackend {
   readonly entities = new Map<string, StoredEntity>();
   readonly revisions = new Map<string, number>();
   failCommitAppliedOnce = false;
+  failTransactionRead: Error | undefined;
+  failTransactionCommit: Error | undefined;
+  failRollback: Error | undefined;
+  abortedTransactions = 0;
+  rollbacks = 0;
   deleteCalls = 0;
   failDeleteAt: number | undefined;
   heldDelete: Deferred<void> | undefined;
+  malformedQueryAt: number | undefined;
   maxTransactionGroups = 0;
 
   client(): HistoryDatastoreClient {
@@ -82,6 +88,11 @@ export class HistoryDatastoreClient {
     this.queryCalls += 1;
     this.queries.push(query);
     if (query.limitValue !== undefined) this.queryLimits.push(query.limitValue);
+    if (this.queryCalls === this.backend.malformedQueryAt)
+      return Promise.resolve([
+        [],
+        { endCursor: Buffer.alloc(0), moreResults: "MORE_RESULTS_AFTER_LIMIT" },
+      ]);
     const all = [...this.backend.entities.entries()]
       .map(([serialized, stored]) => {
         const key = parseKey(serialized);
@@ -90,17 +101,21 @@ export class HistoryDatastoreClient {
       .filter((row) => query.kind === undefined || row.key.path.includes(query.kind))
       .filter((row) => query.matches(row, this.KEY))
       .sort((left, right) => query.compare(left, right, this.KEY));
-    const offset =
-      query.cursor === undefined ? (query.offsetValue ?? 0) : Number(query.cursor.toString());
+    let offset = query.offsetValue ?? 0;
+    if (query.cursor !== undefined) {
+      const cursor: Buffer | string = query.cursor;
+      offset = all.findIndex((row) => query.after(row, cursor, this.KEY));
+    }
     const page = all.slice(
       offset,
       query.limitValue === undefined ? undefined : offset + query.limitValue,
     );
     const next = offset + page.length;
+    const last = page.at(-1);
     return Promise.resolve([
       page.map((row) => ({ ...row, [this.KEY]: row.key })),
       {
-        endCursor: Buffer.from(String(next)),
+        endCursor: last === undefined ? Buffer.alloc(0) : query.cursorFor(last, this.KEY),
         moreResults: next < all.length ? "MORE_RESULTS_AFTER_LIMIT" : "NO_MORE_RESULTS",
       },
     ]);
@@ -155,6 +170,8 @@ export class HistoryTransaction {
   }
 
   get(key: HistoryKey): Promise<[Record<string | symbol, unknown> | undefined]> {
+    if (this.client.backend.failTransactionRead !== undefined)
+      return Promise.reject(this.client.backend.failTransactionRead);
     this.observe(key);
     return Promise.resolve([this.client.entity(key)]);
   }
@@ -180,6 +197,12 @@ export class HistoryTransaction {
 
   async commit(): Promise<[]> {
     if (!this.#running) throw new Error("Transaction was not started.");
+    if (this.client.backend.abortedTransactions > 0) {
+      this.client.backend.abortedTransactions -= 1;
+      throw Object.assign(new Error("transaction aborted"), { code: 10 });
+    }
+    if (this.client.backend.failTransactionCommit !== undefined)
+      throw this.client.backend.failTransactionCommit;
     for (const [group, version] of this.#observed)
       if ((this.client.backend.revisions.get(group) ?? 0) !== version) {
         const error = Object.assign(new Error("transaction aborted"), { code: 10 });
@@ -212,6 +235,9 @@ export class HistoryTransaction {
   }
 
   rollback(): Promise<[]> {
+    this.client.backend.rollbacks += 1;
+    if (this.client.backend.failRollback !== undefined)
+      return Promise.reject(this.client.backend.failRollback);
     return Promise.resolve([]);
   }
 
@@ -222,7 +248,7 @@ export class HistoryTransaction {
 }
 
 export class HistoryQuery {
-  readonly filters: unknown[][] = [];
+  readonly filters: unknown[] = [];
   readonly orders: unknown[][] = [];
   limitValue: number | undefined;
   cursor: Buffer | string | undefined;
@@ -232,7 +258,7 @@ export class HistoryQuery {
 
   constructor(readonly kind: string | undefined) {}
   filter(...input: unknown[]): this {
-    this.filters.push(input);
+    this.filters.push(propertyFilter(input));
     return this;
   }
   order(...input: unknown[]): this {
@@ -266,21 +292,7 @@ export class HistoryQuery {
       !this.ancestor.path.every((part, index) => key.path[index] === part)
     )
       return false;
-    return this.filters.every(([column, operator, expected]) => {
-      const actual = column === "__key__" ? row[keySymbol] : row[String(column)];
-      const comparison = compare(actual, expected);
-      return operator === "="
-        ? comparison === 0
-        : operator === "<"
-          ? comparison < 0
-          : operator === "<="
-            ? comparison <= 0
-            : operator === ">"
-              ? comparison > 0
-              : operator === ">="
-                ? comparison >= 0
-                : false;
-    });
+    return this.filters.every((filter) => matchesFilter(filter, row, keySymbol));
   }
   compare(
     left: Record<string | symbol, unknown>,
@@ -297,6 +309,78 @@ export class HistoryQuery {
     }
     return compare(left.key, right.key);
   }
+
+  cursorFor(row: Record<string | symbol, unknown>, keySymbol: symbol): Buffer {
+    return Buffer.from(
+      JSON.stringify(
+        this.orders.map(([column]) =>
+          column === "__key__"
+            ? { key: keyString(row[keySymbol] as HistoryKey) }
+            : row[String(column)],
+        ),
+      ),
+    );
+  }
+
+  after(
+    row: Record<string | symbol, unknown>,
+    cursor: Buffer | string,
+    keySymbol: symbol,
+  ): boolean {
+    const values = JSON.parse(cursor.toString()) as unknown[];
+    for (let index = 0; index < this.orders.length; index += 1) {
+      const [column, options] = this.orders[index] ?? [];
+      const encoded = values[index];
+      const expected =
+        typeof encoded === "object" && encoded !== null && "key" in encoded
+          ? parseKey(String(Reflect.get(encoded, "key")))
+          : encoded;
+      const actual = column === "__key__" ? row[keySymbol] : row[String(column)];
+      const comparison = compare(actual, expected);
+      if (comparison !== 0)
+        return (options as { descending?: boolean } | undefined)?.descending
+          ? comparison < 0
+          : comparison > 0;
+    }
+    return false;
+  }
+}
+function propertyFilter(input: readonly unknown[]): unknown {
+  const [first] = input;
+  if (typeof first !== "object" || first === null) return [...input];
+  const value = first as Record<string, unknown>;
+  return typeof value.name === "string" && typeof value.op === "string"
+    ? [value.name, value.op, value.val]
+    : value;
+}
+function matchesFilter(
+  filter: unknown,
+  row: Record<string | symbol, unknown>,
+  keySymbol: symbol,
+): boolean {
+  if (Array.isArray(filter)) {
+    const [column, operator, expected] = filter as unknown[];
+    const actual = column === "__key__" ? row[keySymbol] : row[String(column)];
+    const comparison = compare(actual, expected);
+    return operator === "="
+      ? comparison === 0
+      : operator === "<"
+        ? comparison < 0
+        : operator === "<="
+          ? comparison <= 0
+          : operator === ">"
+            ? comparison > 0
+            : operator === ">="
+              ? comparison >= 0
+              : false;
+  }
+  if (typeof filter !== "object" || filter === null) return false;
+  const value = filter as { name?: unknown; op?: unknown; val?: unknown; filters?: unknown[] };
+  if (typeof value.name === "string" && typeof value.op === "string")
+    return matchesFilter([value.name, value.op, value.val], row, keySymbol);
+  if (!Array.isArray(value.filters) || typeof value.op !== "string") return false;
+  const results = value.filters.map((nested) => matchesFilter(nested, row, keySymbol));
+  return value.op === "AND" ? results.every(Boolean) : value.op === "OR" && results.some(Boolean);
 }
 
 export interface QueryInfo {

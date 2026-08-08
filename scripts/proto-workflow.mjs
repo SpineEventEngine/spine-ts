@@ -62,6 +62,21 @@ export const atomicGeneratedTargets = [
   { displayPath: "examples/message-board/app/generated" },
 ];
 
+/**
+ * Removes generated modules for the retired private Stand subscription contract.
+ */
+export function removeRetiredStandSubscriptionOutputs(root = repoRoot) {
+  for (const path of [
+    "packages/proto/generated/spine/system/server/stand_subscription_pb.ts",
+    "packages/proto/dist/generated/spine/system/server/stand_subscription_pb.js",
+    "packages/proto/dist/generated/spine/system/server/stand_subscription_pb.d.ts",
+    "packages/proto/dist/generated/spine/system/server/stand_subscription_pb.js.map",
+    "packages/proto/dist/generated/spine/system/server/stand_subscription_pb.d.ts.map",
+  ]) {
+    rmSync(join(root, path), { force: true });
+  }
+}
+
 export function main(argv = process.argv.slice(2)) {
   const command = argv[0];
 
@@ -1064,6 +1079,7 @@ export function generateTargets(options = {}) {
           operations: options.publicationOperations,
           files: publicationFiles,
         });
+        removeRetiredStandSubscriptionOutputs(root);
         status = 0;
       }
     }

@@ -1,11 +1,7 @@
-import {
-  type ServerEnvironmentCloseable,
-  type ServerEnvironmentDelivery,
-  type DeliverySource,
-} from "@spine-event-engine/server";
+import { type ServerEnvironmentDelivery, type DeliverySource } from "@spine-event-engine/server";
 
 import { DeliveryClient, deliveryClientAccess } from "../client/client.js";
-import type { DeliveryClientOptions, RemovalQuarantine } from "../client/types.js";
+import type { DeliveryClientOptions } from "../client/types.js";
 import { RemoteInbox, RemoteWorkRegistry } from "./adapters.js";
 
 /**
@@ -20,11 +16,6 @@ export interface RemoteDeliveryConfig {
   readonly endpoint: string;
 
   /**
-   * Supplies durable recovery state whose close lifecycle transfers to this delivery.
-   */
-  readonly removalQuarantine: RemovalQuarantine & ServerEnvironmentCloseable;
-
-  /**
    * Optionally configures bounded client operations.
    */
   readonly clientOptions?: DeliveryClientOptions;
@@ -33,13 +24,12 @@ export interface RemoteDeliveryConfig {
 /**
  * Opens and closes one remote delivery facility for a server environment.
  *
- * The supplied quarantine transfers to this owner. Opening creates a fresh
- * client and remote adapters, verifies the bounded Admin snapshot, then
- * publishes them. Failed opening closes only that attempt and can be retried.
+ * Opening creates a fresh client and remote adapters, verifies the bounded
+ * Admin snapshot, then publishes them. Failed opening closes only that attempt
+ * and can be retried.
  */
 export class RemoteDelivery implements ServerEnvironmentDelivery {
   readonly #endpoint: string;
-  readonly #quarantine: RemoteDeliveryConfig["removalQuarantine"];
   readonly #options: DeliveryClientOptions;
   #bundle: RemoteDeliveryBundle | undefined;
   #client: DeliveryClient | undefined;
@@ -47,18 +37,16 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
   #closing: Promise<void> | undefined;
   #closed = false;
   #clientClosed = false;
-  #quarantineClosed = false;
 
   private constructor(config: RemoteDeliveryConfig) {
     this.#endpoint = config.endpoint;
-    this.#quarantine = config.removalQuarantine;
     this.#options = config.clientOptions ?? {};
   }
 
   /**
    * Creates an unopened remote delivery owner.
    *
-   * @param config Supplies remote endpoint, durable quarantine, and optional client bounds.
+   * @param config Supplies remote endpoint and optional client bounds.
    * @returns The environment-owned remote delivery.
    */
   static connectTo(config: RemoteDeliveryConfig): RemoteDelivery {
@@ -111,7 +99,7 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
   }
 
   /**
-   * Closes the client-owned HTTP/2 session, then the transferred quarantine.
+   * Closes the client-owned HTTP/2 session.
    *
    * @returns A promise that retries only unfinished close phases after a failure.
    */
@@ -127,7 +115,7 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
   async #open(): Promise<void> {
     const client = DeliveryClient.connectTo(this.#endpoint, this.#options);
     this.#client = client;
-    const inbox = new RemoteInbox(client, this.#quarantine);
+    const inbox = new RemoteInbox(client);
     const workRegistry = new RemoteWorkRegistry(client);
     try {
       await client.shardSnapshot();
@@ -185,14 +173,6 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
         await opening;
       } catch {
         // Closure makes a pending opening terminal; its resource is handled above.
-      }
-    }
-    if (!this.#quarantineClosed) {
-      try {
-        await this.#quarantine.close();
-        this.#quarantineClosed = true;
-      } catch (error) {
-        errors.push(error);
       }
     }
     if (errors.length > 0) throw new AggregateError(errors, "RemoteDelivery close failed.");

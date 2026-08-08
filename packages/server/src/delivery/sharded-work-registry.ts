@@ -1,259 +1,233 @@
-import { randomUUID } from "node:crypto";
-
 import { create } from "@bufbuild/protobuf";
-import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
+import {
+  ShardIndexSchema,
+  ShardSessionRecordSchema,
+  WorkerIdSchema,
+  type ShardIndex as WireShardIndex,
+  type ShardSessionRecord,
+  type WorkerId,
+} from "@spine-event-engine/proto/delivery";
 import {
   RecordSpec,
   type RecordStorage,
   type StorageContext,
   type StorageFactory,
 } from "@spine-event-engine/storage";
-
 import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
 import { DeliveryLeases } from "./delivery-lease.js";
 import { ShardIndex } from "./shard-index.js";
 
-const casRetryLimit = 8;
+const retries = 8;
+const leaseDefault = 30_000;
 
 /**
- * Storage-backed shard registry for pickup, renewal, and release.
- *
- * Delivery drains use renewal as framework-owned lease fencing while endpoint
- * callbacks are active. The registry records shard ownership durably; callers
- * still own production scheduling, supervision, retry policy, and transport
- * topology around these pickup/renew/release operations.
+ * Defines direct durable shard-session records keyed by their generated shard index.
+ */
+export const shardSessionRecordSpec: RecordSpec<WireShardIndex, ShardSessionRecord> =
+  new RecordSpec<WireShardIndex, ShardSessionRecord>({
+    sourceType: ShardSessionRecordSchema,
+    recordType: ShardSessionRecordSchema,
+    idSchema: ShardIndexSchema,
+    extractId: (record) => {
+      if (record.index === undefined)
+        throw new DeliveryStorageCorruptionError("Shard session index is missing.");
+      return record.index;
+    },
+  });
+
+/**
+ * Coordinates durable exclusive ownership of delivery shards.
  */
 export class ShardedWorkRegistry {
   // prettier-ignore
 
   /**
-   * Local registry pickups create renewable leased sessions.
+   * Identifies the renewable leased session model.
    */
   readonly sessionKind = "LEASED" as const;
   readonly #context: StorageContext;
-  readonly #leaseMs: number;
+  readonly #factory: StorageFactory;
+  readonly #lease: number;
   readonly #now: () => Date;
-  readonly #storageFactory: StorageFactory;
 
   /**
-   * Opens a shard registry over one storage context.
+   * Opens a registry over direct shard-session storage.
    *
-   * @param options Supplies durable storage, lease bounds, and an optional clock.
+   * @param options Configures durable storage, lease duration, and clock.
    */
   constructor(options: ShardedWorkRegistryOptions) {
-    this.#context = ShardRegistryValues.copyStorageContext(options.context);
-    this.#storageFactory = options.storageFactory;
-    this.#leaseMs = DeliveryLeases.requireMs(
-      "ShardedWorkRegistry",
-      options.leaseMs ?? defaultShardLeaseMs,
-    );
+    this.#context = copy(options.context);
+    this.#factory = options.storageFactory;
+    this.#lease = DeliveryLeases.requireMs("ShardedWorkRegistry", options.leaseMs ?? leaseDefault);
     this.#now = options.now ?? (() => new Date());
-    registryConfigs.set(this, {
-      context: this.#context,
-      storageFactory: this.#storageFactory,
-    });
+    configs.set(this, { context: this.#context, storageFactory: this.#factory });
     Object.freeze(this);
   }
 
   /**
-   * Acquires one shard if it is free or expired.
+   * Acquires a shard for one complete durable worker identity.
    *
-   * Invalid caller shard, node, and clock values throw before storage access.
-   *
-   * @param shard Selects the shard to acquire.
-   * @param node Identifies the worker acquiring the shard.
-   * @returns The leased session, when the shard is available.
+   * @param shard Identifies the shard to acquire.
+   * @param worker Identifies the worker requesting ownership.
+   * @returns The live owned session, or `undefined` when another worker owns it.
    */
-  async pickUp(shard: ShardIndex, node: string): Promise<ShardSession | undefined> {
-    const nextShard = ShardRegistryValues.requireInputShard(shard, "Shard index");
-    const nextNode = ShardRegistryValues.requireInputText(node, "Shard node", maxSessionTextBytes);
-    let now = ShardRegistryValues.requireInputTime(this.#now(), "Shard pickup time");
+  async pickUp(shard: ShardIndex, worker: WorkerId): Promise<ShardSession | undefined> {
+    const nextShard = checkedShard(shard);
+    const nextWorker = checkedWorker(worker);
     const storage = this.#storage();
-
     try {
-      for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
-        const currentRecord = await ShardRegistryValues.readShardRecord(storage, nextShard.key());
-        const current =
-          currentRecord === undefined
-            ? undefined
-            : ShardRegistryValues.readSession(currentRecord, nextShard.key());
-        now = ShardRegistryValues.requireInputTime(this.#now(), "Shard pickup time");
-        if (current !== undefined && current.expiresAt.getTime() > now) {
-          return undefined;
+      atomic(storage);
+      for (let i = 0; i < retries; i++) {
+        const id = wireId(nextShard);
+        const record = await storage.read(id);
+        const current = record === undefined ? undefined : session(record, nextShard, this.#lease);
+        const now = time(this.#now());
+        if (current?.worker !== undefined && current.expiresAt.getTime() > now) {
+          return sameWorker(current.worker, nextWorker) ? current : undefined;
         }
-
-        const next = new ShardSession(
-          randomUUID(),
-          nextShard,
-          nextNode,
-          new Date(now),
-          new Date(now + this.#leaseMs),
-        );
-        const nextRecord = ShardRegistryValues.writeSession(next);
-        const claimed = await ShardRegistryValues.casShardRecord(
-          storage,
-          nextShard.key(),
-          currentRecord,
-          nextRecord,
-        );
-
-        if (claimed) {
-          return next;
-        }
+        const next = owned(nextShard, nextWorker, now, this.#lease);
+        if (await storage.compareAndSet(id, record, toRecord(next))) return next;
       }
-
-      throw ShardRegistryValues.casRetriesExhausted("Shard pickup");
+      throw concurrent("Shard pickup");
     } finally {
       storage.close();
     }
   }
 
   /**
-   * Updates one shard session when it remains current.
+   * Returns one renewed exact live shard-session snapshot.
    *
-   * @param session Supplies the current shard session.
-   * @returns The renewed session, when the lease fence remains valid.
+   * @param expected Supplies the previously observed session.
+   * @returns The renewed session, or `undefined` when ownership was lost.
    */
-  async renew(session: ShardSession): Promise<ShardSession | undefined> {
-    const expected = ShardRegistryValues.snapshotSessionClaim(session);
-    let now = ShardRegistryValues.requireInputTime(this.#now(), "Shard renewal time");
-    const storage = this.#storage();
-
-    try {
-      for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
-        const currentRecord = await ShardRegistryValues.readShardRecord(storage, expected.key);
-        if (currentRecord === undefined) {
-          return undefined;
-        }
-
-        const current = ShardRegistryValues.readSession(currentRecord, expected.key);
-        now = ShardRegistryValues.requireInputTime(this.#now(), "Shard renewal time");
-        if (current.id !== expected.id || current.node !== expected.node) {
-          return undefined;
-        }
-        if (current.expiresAt.getTime() <= now) {
-          return undefined;
-        }
-
-        const next = new ShardSession(
-          current.id,
-          current.shard,
-          current.node,
-          current.pickedUpAt,
-          new Date(now + this.#leaseMs),
-        );
-        if (
-          await ShardRegistryValues.casShardRecord(
-            storage,
-            expected.key,
-            currentRecord,
-            ShardRegistryValues.writeSession(next),
-          )
-        ) {
-          return next;
-        }
-      }
-
-      throw ShardRegistryValues.casRetriesExhausted("Shard renewal");
-    } finally {
-      storage.close();
-    }
+  async renew(expected: ShardSession): Promise<ShardSession | undefined> {
+    return this.#update(expected);
   }
 
   /**
-   * Removes one shard session when it remains current.
+   * Returns the renewed exact ownership session.
    *
-   * @param session Supplies the current shard session.
-   * @returns Whether the session was released.
+   * @param expected Supplies the previously observed session.
+   * @returns The renewed session, or `undefined` when ownership was lost.
    */
-  async release(session: ShardSession): Promise<boolean> {
-    const expected = ShardRegistryValues.snapshotSessionClaim(session);
-    let now = ShardRegistryValues.requireInputTime(this.#now(), "Shard release time");
+  validateOwnership(expected: ShardSession): Promise<ShardSession | undefined> {
+    return this.renew(expected);
+  }
+
+  /**
+   * Returns whether one exact live shard-session snapshot became unowned.
+   *
+   * @param expected Supplies the session to release.
+   * @returns Whether the session is or became unowned.
+   */
+  async release(expected: ShardSession): Promise<boolean> {
     const storage = this.#storage();
-
     try {
-      for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
-        const currentRecord = await ShardRegistryValues.readShardRecord(storage, expected.key);
-        if (currentRecord === undefined) {
-          return false;
+      atomic(storage);
+      for (let i = 0; i < retries; i++) {
+        const record = await storage.read(wireId(expected.shard));
+        if (record === undefined) return false;
+        const current = session(record, expected.shard, this.#lease);
+        if (!same(current, expected) || current.expiresAt.getTime() <= time(this.#now())) {
+          return current.worker === undefined;
         }
-
-        const current = ShardRegistryValues.readSession(currentRecord, expected.key);
-        now = ShardRegistryValues.requireInputTime(this.#now(), "Shard release time");
-        if (current.id !== expected.id || current.node !== expected.node) {
-          return false;
-        }
-        if (current.expiresAt.getTime() <= now) {
-          return false;
-        }
-
-        if (
-          await ShardRegistryValues.casShardRecord(storage, expected.key, currentRecord, undefined)
-        ) {
+        if (await storage.compareAndSet(wireId(expected.shard), record, unowned(current)))
           return true;
-        }
       }
-
-      throw ShardRegistryValues.casRetriesExhausted("Shard release");
+      throw concurrent("Shard release");
     } finally {
       storage.close();
     }
   }
 
-  #storage(): RecordStorage<string, Any> {
-    return this.#storageFactory.createRecordStorage(
-      ShardRegistryValues.shardRegistryContext(this.#context),
-      shardSessionRecordSpec,
-    );
+  /**
+   * Returns after draining one exclusively owned shard until a full rescan is empty.
+   *
+   * @param shard Identifies the shard to drain.
+   * @param worker Identifies the worker retaining ownership.
+   * @param read Reads the next pending shard contents.
+   * @param deliver Delivers one pending value under the current session.
+   * @returns A promise that settles after release or ownership loss.
+   */
+  async drainUntilEmpty<T>(
+    shard: ShardIndex,
+    worker: WorkerId,
+    read: () => Promise<readonly T[]>,
+    deliver: (value: T, session: ShardSession) => Promise<void>,
+  ): Promise<void> {
+    let current = await this.pickUp(shard, worker);
+    if (current === undefined) return;
+    try {
+      for (;;) {
+        current = await this.renew(current);
+        if (current === undefined) return;
+        const values = await read();
+        if (values.length === 0) return;
+        for (const value of values) {
+          current = await this.renew(current);
+          if (current === undefined) return;
+          await deliver(value, current);
+        }
+      }
+    } finally {
+      if (current !== undefined) await this.release(current);
+    }
+  }
+  async #update(expected: ShardSession): Promise<ShardSession | undefined> {
+    const storage = this.#storage();
+    try {
+      atomic(storage);
+      for (let i = 0; i < retries; i++) {
+        const record = await storage.read(wireId(expected.shard));
+        if (record === undefined) return undefined;
+        const current = session(record, expected.shard, this.#lease);
+        const now = time(this.#now());
+        if (!same(current, expected)) {
+          return current.worker !== undefined &&
+            expected.worker !== undefined &&
+            sameWorker(current.worker, expected.worker) &&
+            current.expiresAt.getTime() > now
+            ? current
+            : undefined;
+        }
+        if (current.worker === undefined || current.expiresAt.getTime() <= now) return undefined;
+        const next = owned(current.shard, current.worker, now, this.#lease);
+        if (await storage.compareAndSet(wireId(expected.shard), record, toRecord(next)))
+          return next;
+      }
+      throw concurrent("Shard renewal");
+    } finally {
+      storage.close();
+    }
+  }
+  #storage(): RecordStorage<WireShardIndex, ShardSessionRecord> {
+    return this.#factory.createRecordStorage(context(this.#context), shardSessionRecordSpec);
   }
 }
 
 /**
- * One active shard pickup session.
+ * Represents one exact durable shard ownership snapshot.
  */
 export class ShardSession {
   // prettier-ignore
 
   /**
-   * This local session carries a renewable lease.
+   * Identifies the leased session model.
    */
   readonly kind = "LEASED" as const;
 
   /**
-   * Creates a shard session snapshot.
+   * Creates an immutable shard ownership snapshot.
    *
-   * @param id Identifies this pickup session.
-   * @param shard Identifies the held shard.
-   * @param node Identifies the owning worker node.
-   * @param pickedUpAt Records when the shard was acquired.
-   * @param expiresAt Records when the lease expires.
+   * @param shard Identifies the owned shard.
+   * @param worker Identifies the owner, or `undefined` for an unowned row.
+   * @param pickedUpAt Records the durable pickup time.
+   * @param expiresAt Records the derived lease-expiry time.
    */
   constructor(
-    // prettier-ignore
-
-    /**
-     * Unique pickup session identifier.
-     */
-    readonly id: string,
-
-    /**
-     * Shard held by this session.
-     */
     readonly shard: ShardIndex,
-
-    /**
-     * Worker node that owns this session.
-     */
-    readonly node: string,
-
-    /**
-     * Time when the shard was picked up.
-     */
+    readonly worker: WorkerId | undefined,
     readonly pickedUpAt: Date,
-
-    /**
-     * Time when the session lease expires.
-     */
     readonly expiresAt: Date,
   ) {
     Object.freeze(this);
@@ -261,485 +235,167 @@ export class ShardSession {
 }
 
 /**
- * Shard registry construction options.
+ * Configures direct durable shard-session coordination.
  */
 export interface ShardedWorkRegistryOptions {
   // prettier-ignore
 
   /**
-   * Storage context owning the shard registry.
+   * Storage context that owns the shard-session family.
    */
   readonly context: StorageContext;
 
   /**
-   * Storage factory used for durable session records.
+   * Factory that opens direct shard-session storage.
    */
   readonly storageFactory: StorageFactory;
 
   /**
-   * Session lease duration in milliseconds, from 1000 to 2147483647 inclusive.
+   * Optional lease duration in milliseconds.
    */
   readonly leaseMs?: number;
 
   /**
-   * Returns the optional clock used for lease expiry decisions.
+   * Returns the current time used to derive ownership expiry.
    *
-   * @returns The current registry time.
+   * @returns The current time.
    */
   readonly now?: () => Date;
 }
-
-interface RegistryConfig {
-  readonly context: StorageContext;
-  readonly storageFactory: StorageFactory;
-}
-
-const registryConfigs = new WeakMap<ShardedWorkRegistry, RegistryConfig>();
-
-interface ShardedWorkRegistryAccess {
-  matches(
-    registry: ShardedWorkRegistry,
-    context: StorageContext,
-    storageFactory: StorageFactory,
-  ): boolean;
-}
+const configs = new WeakMap<
+  ShardedWorkRegistry,
+  { context: StorageContext; storageFactory: StorageFactory }
+>();
 
 /**
- * Checks registry storage alignment for the delivery builder.
- * @internal
+ * Exposes package-internal registry construction observations for integrations.
  */
-export const shardedWorkRegistryAccess: ShardedWorkRegistryAccess = Object.freeze({
+export const shardedWorkRegistryAccess: Readonly<{
   matches(
     registry: ShardedWorkRegistry,
-    context: StorageContext,
+    contextValue: StorageContext,
+    storageFactory: StorageFactory,
+  ): boolean;
+}> = Object.freeze({
+  matches(
+    registry: ShardedWorkRegistry,
+    contextValue: StorageContext,
     storageFactory: StorageFactory,
   ): boolean {
-    const configured = registryConfigs.get(registry);
+    const value = configs.get(registry);
     return (
-      configured?.storageFactory === storageFactory &&
-      ShardRegistryValues.sameContext(configured.context, context)
+      value?.storageFactory === storageFactory &&
+      value.context.name === contextValue.name &&
+      value.context.multitenant === contextValue.multitenant &&
+      value.context.tenantId === contextValue.tenantId
     );
   },
 });
-
-interface StoredShardSession {
-  readonly key: string;
-  readonly id: string;
-  readonly node: string;
-  readonly shardIndex: number;
-  readonly shardTotal: number;
-  readonly pickedUpAtMs: number;
-  readonly expiresAtMs: number;
+function wireId(value: ShardIndex): WireShardIndex {
+  return create(ShardIndexSchema, { index: value.index, ofTotal: value.ofTotal });
 }
-
-interface SessionClaim {
-  readonly key: string;
-  readonly id: string;
-  readonly node: string;
+function checkedShard(value: ShardIndex): ShardIndex {
+  if (!(value instanceof ShardIndex)) throw new Error("Shard index is invalid.");
+  return value;
 }
-
-const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
-const defaultShardLeaseMs = 30_000;
-
-const shardSessionRecordSpec = new RecordSpec<string, Any>({
-  schema: AnySchema,
-  storageKey: "spine.delivery.ShardSession:current",
-  idKind: "string",
-  extractId: (record) => ShardRegistryValues.readStoredSession(record).key,
-});
-
-const ShardRegistryValues = Object.freeze({
-  readSession(record: Any, expectedKey?: string): ShardSession {
-    const stored = ShardRegistryValues.readStoredSession(record, expectedKey);
-
-    return new ShardSession(
-      stored.id,
-      new ShardIndex(stored.shardIndex, stored.shardTotal),
-      stored.node,
-      ShardRegistryValues.storedDate(stored.pickedUpAtMs, "Shard pickup time"),
-      ShardRegistryValues.storedDate(stored.expiresAtMs, "Shard expiry time"),
-    );
-  },
-
-  copyStorageContext(context: StorageContext): StorageContext {
-    const tenantId = context.tenantId;
-    return Object.freeze({
-      name: context.name,
-      multitenant: context.multitenant,
-      ...(tenantId === undefined ? {} : { tenantId }),
-    });
-  },
-
-  sameContext(first: StorageContext, second: StorageContext): boolean {
-    return (
-      first.name === second.name &&
-      first.multitenant === second.multitenant &&
-      first.tenantId === second.tenantId
-    );
-  },
-
-  casRetriesExhausted(label: string): Error {
-    return new Error(`${label} could not be completed due to concurrent changes.`);
-  },
-
-  readStoredSession(record: Any, expectedKey?: string): StoredShardSession {
-    const decoded = ShardRegistryValues.readSessionRecord(record);
-    const shard = ShardRegistryValues.readSessionShard(decoded);
-    const key = ShardRegistryValues.readSessionKey(decoded, shard, expectedKey);
-
-    return ShardRegistryValues.buildStoredSession(decoded, shard, key);
-  },
-
-  readSessionRecord(record: Any): Record<string, unknown> {
-    const typeUrl = ShardRegistryValues.readRecordTypeUrl(record);
-    if (typeUrl !== shardSessionTypeUrl) {
-      throw new DeliveryStorageCorruptionError(
-        `Shard session record type URL "${typeUrl}" is invalid.`,
-      );
-    }
-
-    const value = ShardRegistryValues.readStoredBytes(record);
-    if (value.byteLength > maxSessionRecordBytes) {
-      throw new DeliveryStorageCorruptionError(
-        `Shard session record exceeds ${String(maxSessionRecordBytes)} bytes and cannot be read.`,
-      );
-    }
-
-    try {
-      const decoded = JSON.parse(ShardRegistryValues.decodeStoredUtf8(value)) as unknown;
-      if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
-        throw new DeliveryStorageCorruptionError("Shard session record is not a JSON object.");
+function checkedWorker(value: WorkerId): WorkerId {
+  if (value.nodeId === undefined) throw new Error("Shard worker is invalid.");
+  const node = value.nodeId.value;
+  if (
+    typeof node !== "string" ||
+    node.trim() === "" ||
+    typeof value.value !== "string" ||
+    value.value.trim() === ""
+  )
+    throw new Error("Shard worker is invalid.");
+  return create(WorkerIdSchema, { nodeId: { value: node }, value: value.value });
+}
+function time(value: unknown): number {
+  if (!(value instanceof Date) || !Number.isFinite(value.getTime()))
+    throw new Error("Shard time is invalid.");
+  return value.getTime();
+}
+function session(record: ShardSessionRecord, expected: ShardIndex, lease: number): ShardSession {
+  const index = record.index;
+  if (index?.index !== expected.index || index.ofTotal !== expected.ofTotal)
+    throw new DeliveryStorageCorruptionError("Shard session does not match its storage ID.");
+  const picked = timestamp(record.whenLastPicked);
+  const worker = record.worker === undefined ? undefined : checkedWorker(record.worker);
+  const expires = picked.getTime() + lease;
+  if (!Number.isSafeInteger(expires) || !Number.isFinite(new Date(expires).getTime()))
+    throw new DeliveryStorageCorruptionError("Shard lease expiry is invalid.");
+  return new ShardSession(expected, worker, picked, new Date(expires));
+}
+function atomic(storage: RecordStorage<WireShardIndex, ShardSessionRecord>): void {
+  if (!storage.atomicCompareAndSet)
+    throw new DeliveryStorageCorruptionError("Shard storage requires atomic compare-and-set.");
+}
+function timestamp(value: ShardSessionRecord["whenLastPicked"]): Date {
+  if (
+    value === undefined ||
+    !Number.isInteger(value.nanos) ||
+    value.nanos < 0 ||
+    value.nanos >= 1e9
+  )
+    throw new DeliveryStorageCorruptionError("Shard pickup time is invalid.");
+  const ms = Number(value.seconds) * 1000 + Math.floor(value.nanos / 1e6);
+  if (!Number.isSafeInteger(ms))
+    throw new DeliveryStorageCorruptionError("Shard pickup time is invalid.");
+  return new Date(ms);
+}
+function owned(shard: ShardIndex, worker: WorkerId, now: number, lease: number): ShardSession {
+  const expiresAt = now + lease;
+  if (!Number.isSafeInteger(expiresAt) || !Number.isFinite(new Date(expiresAt).getTime()))
+    throw new Error("Shard lease expiry is invalid.");
+  return new ShardSession(shard, worker, new Date(now), new Date(expiresAt));
+}
+function toRecord(value: ShardSession): ShardSessionRecord {
+  if (value.worker === undefined) throw new Error("Shard worker is invalid.");
+  return create(ShardSessionRecordSchema, {
+    index: wireId(value.shard),
+    whenLastPicked: {
+      seconds: BigInt(Math.floor(value.pickedUpAt.getTime() / 1000)),
+      nanos: (value.pickedUpAt.getTime() % 1000) * 1e6,
+    },
+    worker: value.worker,
+  });
+}
+function unowned(value: ShardSession): ShardSessionRecord {
+  return create(ShardSessionRecordSchema, {
+    index: wireId(value.shard),
+    whenLastPicked: {
+      seconds: BigInt(Math.floor(value.pickedUpAt.getTime() / 1000)),
+      nanos: (value.pickedUpAt.getTime() % 1000) * 1e6,
+    },
+  });
+}
+function same(a: ShardSession, b: ShardSession): boolean {
+  return (
+    a.shard.key() === b.shard.key() &&
+    a.pickedUpAt.getTime() === b.pickedUpAt.getTime() &&
+    a.worker?.nodeId?.value === b.worker?.nodeId?.value &&
+    a.worker?.value === b.worker?.value
+  );
+}
+function sameWorker(a: WorkerId, b: WorkerId): boolean {
+  return a.nodeId?.value === b.nodeId?.value && a.value === b.value;
+}
+function context(value: StorageContext): StorageContext {
+  return value.multitenant
+    ? {
+        name: `${value.name}.delivery.shards`,
+        multitenant: true,
+        ...(value.tenantId === undefined ? {} : { tenantId: value.tenantId }),
       }
-
-      return decoded as Record<string, unknown>;
-    } catch (error) {
-      if (error instanceof DeliveryStorageCorruptionError) {
-        throw error;
-      }
-
-      throw new DeliveryStorageCorruptionError("Shard session record contains malformed JSON.", {
-        cause: error,
-      });
-    }
-  },
-
-  readRecordTypeUrl(record: Any): string {
-    try {
-      return ShardRegistryValues.requireStoredText(
-        Reflect.get(record, "typeUrl"),
-        "Shard session record type URL",
-      );
-    } catch (error) {
-      if (error instanceof DeliveryStorageCorruptionError) {
-        throw error;
-      }
-
-      throw new DeliveryStorageCorruptionError("Shard session record type URL is invalid.", {
-        cause: error,
-      });
-    }
-  },
-
-  readSessionShard(decoded: Record<string, unknown>): ShardIndex {
-    return ShardRegistryValues.storedShardIndex(
-      ShardRegistryValues.requireNumber(Reflect.get(decoded, "shardIndex"), "Shard session index"),
-      ShardRegistryValues.requireNumber(Reflect.get(decoded, "shardTotal"), "Shard session total"),
-      "Shard session",
-    );
-  },
-
-  readSessionKey(
-    decoded: Record<string, unknown>,
-    shard: ShardIndex,
-    expectedKey?: string,
-  ): string {
-    const key = ShardRegistryValues.requireStoredText(
-      Reflect.get(decoded, "key"),
-      "Shard session key",
-      maxSessionKeyBytes,
-    );
-    if (key !== shard.key()) {
-      throw new DeliveryStorageCorruptionError("Shard session key does not match shard.");
-    }
-    if (expectedKey !== undefined && key !== expectedKey) {
-      throw new DeliveryStorageCorruptionError(
-        `Shard session "${key}" does not match storage key "${expectedKey}".`,
-      );
-    }
-
-    return key;
-  },
-
-  buildStoredSession(
-    decoded: Record<string, unknown>,
-    shard: ShardIndex,
-    key: string,
-  ): StoredShardSession {
-    return Object.freeze({
-      key,
-      id: ShardRegistryValues.requireStoredText(
-        Reflect.get(decoded, "id"),
-        "Shard session ID",
-        maxSessionTextBytes,
-      ),
-      node: ShardRegistryValues.requireStoredText(
-        Reflect.get(decoded, "node"),
-        "Shard session node",
-        maxSessionTextBytes,
-      ),
-      shardIndex: shard.index,
-      shardTotal: shard.ofTotal,
-      pickedUpAtMs: ShardRegistryValues.requireNumber(
-        Reflect.get(decoded, "pickedUpAtMs"),
-        "Shard pickup time",
-      ),
-      expiresAtMs: ShardRegistryValues.requireNumber(
-        Reflect.get(decoded, "expiresAtMs"),
-        "Shard expiry time",
-      ),
-    });
-  },
-
-  decodeStoredUtf8(value: Uint8Array): string {
-    try {
-      return utf8Decoder.decode(value);
-    } catch (error) {
-      throw new DeliveryStorageCorruptionError("Shard session record contains invalid UTF-8.", {
-        cause: error,
-      });
-    }
-  },
-
-  async readShardRecord(
-    storage: RecordStorage<string, Any>,
-    key: string,
-  ): Promise<Any | undefined> {
-    try {
-      return await storage.read(key);
-    } catch (error) {
-      throw ShardRegistryValues.shardStorageError(error);
-    }
-  },
-
-  async casShardRecord(
-    storage: RecordStorage<string, Any>,
-    key: string,
-    expected: Any | undefined,
-    next: Any | undefined,
-  ): Promise<boolean> {
-    try {
-      return await storage.compareAndSet(key, expected, next);
-    } catch (error) {
-      throw ShardRegistryValues.shardStorageError(error);
-    }
-  },
-
-  shardStorageError(error: unknown): Error {
-    if (
-      error instanceof Error &&
-      (error.message === "Storage record could not be cloned." ||
-        error.message === "Storage value could not be cloned.")
-    ) {
-      return new DeliveryStorageCorruptionError("Shard session record is invalid.", {
-        cause: error,
-      });
-    }
-
-    return error instanceof Error ? error : new Error(String(error));
-  },
-
-  readStoredBytes(record: Any): Uint8Array {
-    try {
-      const value = Reflect.get(record, "value") as unknown;
-      if (!(value instanceof Uint8Array)) {
-        throw new DeliveryStorageCorruptionError(
-          "Shard session record value must be a Uint8Array.",
-        );
-      }
-
-      return value;
-    } catch (error) {
-      if (error instanceof DeliveryStorageCorruptionError) {
-        throw error;
-      }
-
-      throw new DeliveryStorageCorruptionError("Shard session record value is invalid.", {
-        cause: error,
-      });
-    }
-  },
-
-  storedShardIndex(index: number, total: number, label: string): ShardIndex {
-    try {
-      return new ShardIndex(index, total);
-    } catch (error) {
-      throw new DeliveryStorageCorruptionError(`${label} is invalid.`, { cause: error });
-    }
-  },
-
-  shardRegistryContext(context: StorageContext): StorageContext {
-    return context.multitenant
-      ? {
-          name: `${context.name}.delivery.shards`,
-          multitenant: true,
-          ...(context.tenantId === undefined ? {} : { tenantId: context.tenantId }),
-        }
-      : {
-          name: `${context.name}.delivery.shards`,
-          multitenant: false,
-        };
-  },
-
-  writeSession(session: ShardSession): Any {
-    const stored: StoredShardSession = {
-      key: session.shard.key(),
-      id: ShardRegistryValues.requireInputText(session.id, "Shard session ID", maxSessionTextBytes),
-      node: ShardRegistryValues.requireInputText(
-        session.node,
-        "Shard session node",
-        maxSessionTextBytes,
-      ),
-      shardIndex: session.shard.index,
-      shardTotal: session.shard.ofTotal,
-      pickedUpAtMs: ShardRegistryValues.requireInputTime(session.pickedUpAt, "Shard pickup time"),
-      expiresAtMs: ShardRegistryValues.requireInputTime(session.expiresAt, "Shard expiry time"),
-    };
-    const value = Buffer.from(JSON.stringify(stored), "utf8");
-
-    if (value.byteLength > maxSessionRecordBytes) {
-      throw new Error(
-        `Shard session record exceeds ${String(maxSessionRecordBytes)} bytes and cannot be stored.`,
-      );
-    }
-
-    return create(AnySchema, {
-      typeUrl: shardSessionTypeUrl,
-      value,
-    });
-  },
-
-  snapshotSessionClaim(session: unknown): SessionClaim {
-    if (typeof session !== "object" || session === null) {
-      throw new Error("Shard session is invalid.");
-    }
-
-    try {
-      const shard = ShardRegistryValues.requireInputShard(
-        Reflect.get(session, "shard"),
-        "Shard session shard",
-      );
-
-      return Object.freeze({
-        key: shard.key(),
-        id: ShardRegistryValues.requireInputText(
-          Reflect.get(session, "id"),
-          "Shard session ID",
-          maxSessionTextBytes,
-        ),
-        node: ShardRegistryValues.requireInputText(
-          Reflect.get(session, "node"),
-          "Shard session node",
-          maxSessionTextBytes,
-        ),
-      });
-    } catch (error) {
-      throw new Error("Shard session is invalid.", { cause: error });
-    }
-  },
-
-  requireNumber(value: unknown, label: string): number {
-    if (!Number.isInteger(value) || !Number.isFinite(value)) {
-      throw new DeliveryStorageCorruptionError(`${label} must be a finite integer.`);
-    }
-
-    return value as number;
-  },
-
-  requireStoredText(value: unknown, label: string, maxBytes = maxSessionTextBytes): string {
-    if (typeof value !== "string" || value.trim().length === 0) {
-      throw new DeliveryStorageCorruptionError(`${label} must be a non-empty string.`);
-    }
-    if (Buffer.byteLength(value, "utf8") > maxBytes) {
-      throw new DeliveryStorageCorruptionError(
-        `${label} exceeds ${String(maxBytes)} bytes and cannot be stored.`,
-      );
-    }
-
-    return value;
-  },
-
-  requireInputText(value: unknown, label: string, maxBytes = maxSessionTextBytes): string {
-    if (typeof value !== "string" || value.trim().length === 0) {
-      throw new Error(`${label} must be a non-empty string.`);
-    }
-    if (Buffer.byteLength(value, "utf8") > maxBytes) {
-      throw new Error(`${label} exceeds ${String(maxBytes)} bytes and cannot be stored.`);
-    }
-
-    return value;
-  },
-
-  requireInputShard(value: unknown, label: string): ShardIndex {
-    if (typeof value !== "object" || value === null) {
-      throw new Error(`${label} is invalid.`);
-    }
-
-    let indexValue: unknown;
-    let totalValue: unknown;
-    try {
-      indexValue = Reflect.get(value, "index");
-      totalValue = Reflect.get(value, "ofTotal");
-    } catch {
-      throw new Error(`${label} is invalid.`);
-    }
-
-    const index = ShardRegistryValues.requireInputInteger(indexValue, `${label} index`);
-    const total = ShardRegistryValues.requireInputInteger(totalValue, `${label} total`);
-
-    try {
-      return new ShardIndex(index, total);
-    } catch (error) {
-      throw new Error(`${label} is invalid.`, { cause: error });
-    }
-  },
-
-  requireInputInteger(value: unknown, label: string): number {
-    if (!Number.isInteger(value) || !Number.isFinite(value)) {
-      throw new Error(`${label} must be a finite integer.`);
-    }
-
-    return value as number;
-  },
-
-  requireInputTime(value: Date, label: string): number {
-    if (!(value instanceof Date)) {
-      throw new Error(`${label} is invalid.`);
-    }
-
-    let time: number;
-    try {
-      time = value.getTime();
-    } catch (error) {
-      throw new Error(`${label} is invalid.`, { cause: error });
-    }
-    if (!Number.isFinite(time)) {
-      throw new Error(`${label} is invalid.`);
-    }
-
-    return time;
-  },
-
-  storedDate(value: number, label: string): Date {
-    const date = new Date(value);
-    if (!Number.isFinite(date.getTime())) {
-      throw new DeliveryStorageCorruptionError(`${label} is invalid.`);
-    }
-
-    return date;
-  },
-});
-
-const shardSessionTypeUrl = "type.spine-ts.dev/internal/ShardSessionRecord";
-const maxSessionRecordBytes = 512 * 1024;
-const maxSessionTextBytes = 16 * 1024;
-const maxSessionKeyBytes = 64 * 1024;
+    : { name: `${value.name}.delivery.shards`, multitenant: false };
+}
+function copy(value: StorageContext): StorageContext {
+  return {
+    name: value.name,
+    multitenant: value.multitenant,
+    ...(value.tenantId === undefined ? {} : { tenantId: value.tenantId }),
+  };
+}
+function concurrent(label: string): Error {
+  return new Error(`${label} could not be completed due to concurrent changes.`);
+}

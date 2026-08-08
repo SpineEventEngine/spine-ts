@@ -1,113 +1,102 @@
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { randomBytes } from "node:crypto";
+import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
-  StandSubscriptionRecordSchema,
-  SubscriptionPhase,
-  type StandSubscriptionRecord,
-} from "@spine-event-engine/proto/generated/spine/system/server/stand_subscription_pb.js";
+  SubscriptionRecordSchema,
+  SubscriptionIdSchema,
+  SubscriptionSchema,
+  SubscriptionStatus,
+  type SubscriptionRecord,
+} from "@spine-event-engine/proto/client";
 
 import type { StandSubscriptionEntry } from "./subscription-registry.js";
 
 const maximumBytes = 1_048_576;
 
 /**
- * Encodes the frozen Stand subscription record with lifecycle validation.
+ * Encodes and validates the approved durable subscription record.
  */
-interface StandSubscriptionRecordCodec {
-  readonly schema: typeof StandSubscriptionRecordSchema;
-  read(record: StandSubscriptionRecord, expectedId?: string): StandSubscriptionEntry;
-  write(entry: StandSubscriptionEntry, generation?: Uint8Array): StandSubscriptionRecord;
+export const StandSubscriptionRecords: {
+  readonly schema: typeof SubscriptionRecordSchema;
+  read(record: SubscriptionRecord, expectedId?: string): StandSubscriptionEntry;
+  write(entry: StandSubscriptionEntry): SubscriptionRecord;
   decode(bytes: Uint8Array, expectedId?: string): StandSubscriptionEntry;
-}
+} = Object.freeze({
+  schema: SubscriptionRecordSchema,
 
-/**
- * Encodes and validates durable Stand subscription records.
- */
-export const StandSubscriptionRecords: StandSubscriptionRecordCodec = Object.freeze({
-  schema: StandSubscriptionRecordSchema,
-
-  read(record: StandSubscriptionRecord, expectedId?: string): StandSubscriptionEntry {
+  read(record: SubscriptionRecord, expectedId?: string): StandSubscriptionEntry {
     try {
+      const id = record.id?.value;
       const subscription = record.subscription;
-      if (subscription === undefined) throw Error();
-      const id = subscription.id?.value;
+      if (typeof id !== "string" || id.trim() === "" || id !== subscription?.id?.value)
+        throw Error();
+      if (expectedId !== undefined && id !== expectedId) throw Error();
       if (
-        typeof id !== "string" ||
-        id.trim() === "" ||
-        (expectedId !== undefined && id !== expectedId)
+        typeof subscription.topic?.id?.value !== "string" ||
+        subscription.topic.id.value.trim() === ""
       )
         throw Error();
-      const topicId = subscription.topic?.id?.value;
-      if (typeof topicId !== "string" || topicId.trim() === "") throw Error();
-      if (record.generation.byteLength !== 16) throw Error();
-      if (record.createdAt === undefined || record.createdAt.seconds < 0n) throw Error();
-      if (record.revision < 0n || record.revision > BigInt(Number.MAX_SAFE_INTEGER)) throw Error();
-      const createdAtMs =
-        Number(record.createdAt.seconds) * 1000 + Math.floor(record.createdAt.nanos / 1_000_000);
-      if (!Number.isSafeInteger(createdAtMs)) throw Error();
-      if (record.phase === SubscriptionPhase.PENDING) {
-        if (record.pendingUntil === undefined) throw Error();
-        const pendingUntilMs =
-          Number(record.pendingUntil.seconds) * 1000 +
-          Math.floor(record.pendingUntil.nanos / 1_000_000);
-        if (!Number.isSafeInteger(pendingUntilMs) || pendingUntilMs < createdAtMs) throw Error();
+      const createdAt = milliseconds(record.whenCreated);
+      if (record.status === SubscriptionStatus.PENDING) {
+        const pendingUntil = milliseconds(record.whenActivationExpires);
+        if (pendingUntil < createdAt) throw Error();
         return Object.freeze({
-          subscription,
-          phase: "pending",
-          createdAt: createdAtMs,
-          pendingUntil: pendingUntilMs,
-          revision: record.revision,
+          subscription: clone(SubscriptionSchema, subscription),
+          phase: "pending" as const,
+          createdAt,
+          pendingUntil,
         });
       }
-      if (record.phase !== SubscriptionPhase.ACTIVE || record.pendingUntil !== undefined)
+      if (record.status !== SubscriptionStatus.ACTIVE || record.whenActivationExpires !== undefined)
         throw Error();
       return Object.freeze({
-        subscription,
-        phase: "active",
-        createdAt: createdAtMs,
-        revision: record.revision,
+        subscription: clone(SubscriptionSchema, subscription),
+        phase: "active" as const,
+        createdAt,
       });
     } catch {
       throw new Error("Stand subscription record is invalid.");
     }
   },
 
-  write(entry: StandSubscriptionEntry, generation = randomBytes(16)): StandSubscriptionRecord {
-    if (generation.byteLength !== 16)
-      throw new RangeError("Stand subscription generation is invalid.");
-    const record = create(StandSubscriptionRecordSchema, {
-      subscription: entry.subscription as StandSubscriptionRecord["subscription"],
-      phase: entry.phase === "pending" ? SubscriptionPhase.PENDING : SubscriptionPhase.ACTIVE,
-      createdAt: timestamp(entry.createdAt),
-      ...(entry.pendingUntil === undefined ? {} : { pendingUntil: timestamp(entry.pendingUntil) }),
-      revision: entry.revision,
-      generation,
+  write(entry: StandSubscriptionEntry): SubscriptionRecord {
+    const id = entry.subscription.id;
+    if (id === undefined) throw new TypeError("Stand subscription ID must be non-blank.");
+    const record = create(SubscriptionRecordSchema, {
+      id: clone(SubscriptionIdSchema, id),
+      subscription: clone(SubscriptionSchema, entry.subscription),
+      status: entry.phase === "pending" ? SubscriptionStatus.PENDING : SubscriptionStatus.ACTIVE,
+      whenCreated: timestamp(entry.createdAt),
+      ...(entry.phase === "pending"
+        ? { whenActivationExpires: timestamp(entry.pendingUntil) }
+        : {}),
     });
-    StandSubscriptionRecords.read(record, entry.subscription.id?.value);
-    if (toBinary(StandSubscriptionRecordSchema, record).byteLength > maximumBytes) {
+    this.read(record, id.value);
+    if (toBinary(SubscriptionRecordSchema, record).byteLength > maximumBytes)
       throw new RangeError("Stand subscription record exceeds 1048576 bytes.");
-    }
     return record;
   },
 
   decode(bytes: Uint8Array, expectedId?: string): StandSubscriptionEntry {
     if (bytes.byteLength > maximumBytes) throw new Error("Malformed Stand subscription record.");
     try {
-      return StandSubscriptionRecords.read(
-        fromBinary(StandSubscriptionRecordSchema, bytes),
-        expectedId,
-      );
+      return this.read(fromBinary(SubscriptionRecordSchema, bytes), expectedId);
     } catch {
       throw new Error("Malformed Stand subscription record.");
     }
   },
 });
 
-function timestamp(milliseconds: number): { readonly seconds: bigint; readonly nanos: number } {
-  if (!Number.isSafeInteger(milliseconds) || milliseconds < 0)
+function milliseconds(
+  value: { readonly seconds: bigint; readonly nanos: number } | undefined,
+): number {
+  if (value === undefined || value.seconds < 0n || value.nanos < 0 || value.nanos >= 1_000_000_000)
+    throw Error();
+  const result = Number(value.seconds) * 1000 + Math.floor(value.nanos / 1_000_000);
+  if (!Number.isSafeInteger(result)) throw Error();
+  return result;
+}
+
+function timestamp(value: number): { readonly seconds: bigint; readonly nanos: number } {
+  if (!Number.isSafeInteger(value) || value < 0)
     throw new RangeError("Stand subscription time is invalid.");
-  return {
-    seconds: BigInt(Math.floor(milliseconds / 1000)),
-    nanos: (milliseconds % 1000) * 1_000_000,
-  };
+  return { seconds: BigInt(Math.floor(value / 1000)), nanos: (value % 1000) * 1_000_000 };
 }

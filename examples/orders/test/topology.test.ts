@@ -12,11 +12,15 @@ import { TopicIdSchema, TopicSchema } from "@spine-event-engine/proto/client";
 import { SubscriptionService } from "@spine-event-engine/proto/client";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { SignalMetadata } from "@spine-event-engine/server";
+import { Datastore } from "@google-cloud/datastore";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { CreateOrderSchema } from "../generated/spine/examples/orders/commands_pb.js";
+import {
+  CreateOrderSchema,
+  RegisterSkuSchema,
+} from "../generated/spine/examples/orders/commands_pb.js";
 import { OrderSummarySchema } from "../generated/spine/examples/orders/read_models_pb.js";
 
 const metadata = new SignalMetadata();
@@ -73,6 +77,17 @@ describe("datastore orders test app", () => {
         }),
       );
       expect(acknowledgement.status?.status.case).toBe("ok");
+      const skuAcknowledgement = await commands.post(
+        create(CommandSchema, {
+          id: metadata.commandId("sku-grpc-command"),
+          context: metadata.commandContext({ actorContext }),
+          message: AnyMessages.pack(
+            RegisterSkuSchema,
+            create(RegisterSkuSchema, { id: "sku-1", displayName: "SKU one" }),
+          ),
+        }),
+      );
+      expect(skuAcknowledgement.status?.status.case).toBe("ok");
       const response = await readEventually(queries, id, actorContext);
       expect(
         response.message.some(
@@ -89,6 +104,32 @@ describe("datastore orders test app", () => {
       await server.close();
     }
   }, 15_000);
+
+  it("updates both sales managers from their subscribed domain events", async () => {
+    const { OrderSalesManager, SkuSalesManager } = await import("../dist/src/index.js");
+    const order = manager(OrderSalesManager, "order-sales");
+    const sku = manager(SkuSalesManager, "sku-sales");
+
+    order.onOrderCreated(createOrderCreated("order-manager", "sku-manager"));
+    sku.onSkuRegistered(createSkuRegistered("sku-manager", "SKU manager"));
+
+    expect(order.state).toMatchObject({ id: "order-sales", updates: 1 });
+    expect(sku.state).toMatchObject({ id: "sku-sales", updates: 1 });
+  });
+
+  it("starts the in-memory orders server with default network options", async () => {
+    const { startDatastoreOrdersServer } = await import("../dist/src/index.js");
+    const server = await startDatastoreOrdersServer(new InMemoryStorageFactory());
+    await server.close();
+  });
+
+  it("builds a Datastore-backed server from the caller-owned client", async () => {
+    const { startOrdersDatastoreServer } = await import("../dist/src/index.js");
+    const server = await startOrdersDatastoreServer(
+      new Datastore({ projectId: "orders-coverage" }),
+    );
+    await server.close();
+  });
 
   it("exposes exactly 10, 100, and 1000 independent-user load scenarios", async () => {
     const { datastoreOrdersLoadLevels, runDatastoreOrdersLoad } =
@@ -154,4 +195,30 @@ function target(id: string) {
       }),
     },
   });
+}
+
+function manager(type: { readonly prototype: object }, id: string) {
+  const instance = Object.create(type.prototype) as {
+    id: string;
+    state: { id: string; updates: number };
+    update(change: (state: { id: string; updates: number }) => void): void;
+    onOrderCreated(event: unknown): void;
+    onSkuRegistered(event: unknown): void;
+  };
+  Object.defineProperty(instance, "id", { value: id });
+  Object.defineProperty(instance, "state", { value: { id, updates: 0 } });
+  Object.defineProperty(instance, "update", {
+    value: (change: (state: { id: string; updates: number }) => void) => {
+      change(instance.state);
+    },
+  });
+  return instance;
+}
+
+function createOrderCreated(id: string, skuId: string) {
+  return { id, skuId };
+}
+
+function createSkuRegistered(id: string, displayName: string) {
+  return { id, displayName };
 }

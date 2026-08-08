@@ -1,10 +1,11 @@
 import type { StorageContext, StorageFactory } from "@spine-event-engine/storage";
+import type { WorkerId } from "@spine-event-engine/proto/delivery";
 
 import { ServerEnvironment } from "../server/server-environment.js";
 import { Delivery as CoreDelivery, type OnDeliveryMessage } from "./delivery.js";
+import { DeliveryMonitor } from "./delivery-monitor.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "./delivery-ports.js";
 import type { DeliveryControlledRun } from "./delivery-run-control.js";
-import { inboxStorageAccess } from "./inbox-storage.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry, shardedWorkRegistryAccess } from "./sharded-work-registry.js";
 
@@ -13,8 +14,6 @@ const defaultContext: StorageContext = Object.freeze({
   multitenant: false,
 });
 const defaultPageSize = 100;
-const defaultBatchSize = 100;
-const maxBatchSize = 1_000;
 const controlledDeliveryRunners = new WeakMap<
   Delivery,
   (options: DeliveryControlledRun) => Promise<DeliveryResult>
@@ -133,48 +132,7 @@ export class UniformAcrossAllShards implements DeliveryStrategy {
   }
 }
 
-/**
- * Observes finite local delivery without owning scheduling or retry policy.
- */
-export interface DeliveryMonitor {
-  // prettier-ignore
-
-  /**
-   * Observes exclusive pickup before page work.
-   *
-   * @param shard The picked shard.
-   */
-  onStarted?(shard: ShardIndex): void;
-
-  /**
-   * Observes a released page.
-   *
-   * @param page The completed page.
-   * @returns `false` to stop the run, otherwise `undefined`.
-   */
-  onPage?(page: DeliveryPage): boolean | undefined;
-
-  /**
-   * Observes a shard owned by another node.
-   *
-   * @param shard The unavailable shard.
-   */
-  onSkipped?(shard: ShardIndex): void;
-
-  /**
-   * Observes a released failed page.
-   *
-   * @param page The failed page.
-   */
-  onFailure?(page: DeliveryPage): void;
-
-  /**
-   * Observes a fulfilled run after all release work.
-   *
-   * @param result The terminal run result.
-   */
-  onCompleted?(result: DeliveryResult): void;
-}
+export { DeliveryMonitor, type DeliveryStatistics } from "./delivery-monitor.js";
 
 /**
  * Immutable outcome of one finite local delivery run.
@@ -185,44 +143,7 @@ export interface DeliveryResult {
   /**
    * Terminal reason for this local run.
    */
-  readonly status: "COMPLETED" | "SKIPPED" | "STOPPED" | "FAILED" | "PAUSED";
-
-  /**
-   * Frozen ordered primitive page summaries, bounded by the configured batch size.
-   */
-  readonly pages: readonly DeliveryPage[];
-}
-
-/**
- * Immutable primitive summary of one bounded loop page.
- */
-export interface DeliveryPage {
-  // prettier-ignore
-
-  /**
-   * Why this bounded page stopped.
-   */
-  readonly status: "IDLE" | "SKIPPED" | "STOPPED" | "FAILED" | "PAUSED";
-
-  /**
-   * Pending rows examined.
-   */
-  readonly processed: number;
-
-  /**
-   * Rows whose endpoint callback ran.
-   */
-  readonly accepted: number;
-
-  /**
-   * Rows durably marked delivered.
-   */
-  readonly delivered: number;
-
-  /**
-   * Failures observed without exposing mutable payloads or errors.
-   */
-  readonly failed: number;
+  readonly status: "COMPLETED" | "SKIPPED" | "STOPPED" | "FAILED";
 }
 
 /**
@@ -270,14 +191,14 @@ export interface Delivery {
   readonly node: string;
 
   /**
+   * Identifies the complete opaque worker used for shard ownership.
+   */
+  readonly worker: WorkerId;
+
+  /**
    * Maximum accepted work per internal delivery page, from 1 through 1000.
    */
   readonly pageSize: number;
-
-  /**
-   * Maximum retained page summaries per finite run, from 1 through 1000.
-   */
-  readonly batchSize: number;
 
   /**
    * Durable inbox facade.
@@ -304,11 +225,11 @@ export class DeliveryBuilder {
   #strategy: DeliveryStrategy | undefined;
   #monitor: DeliveryMonitor | undefined;
   #pageSize: number | undefined;
-  #batchSize: number | undefined;
   #node: string | undefined;
+  #worker: WorkerId | undefined;
 
   /**
-   * Sets the storage namespace for inbox, attempts, and shard records.
+   * Sets the storage namespace for Inbox and shard records.
    *
    * @param context The delivery storage namespace.
    * @returns This builder.
@@ -380,22 +301,7 @@ export class DeliveryBuilder {
    * @returns This builder.
    */
   withPageSize(pageSize: number): this {
-    this.#pageSize = DeliveryValues.requireBound(
-      "Delivery page size",
-      pageSize,
-      inboxStorageAccess.maxReadLimit,
-    );
-    return this;
-  }
-
-  /**
-   * Sets the positive number of pages admitted by one local run.
-   *
-   * @param batchSize The positive page count.
-   * @returns This builder.
-   */
-  withBatchSize(batchSize: number): this {
-    this.#batchSize = DeliveryValues.requireBound("Delivery batch size", batchSize, maxBatchSize);
+    this.#pageSize = DeliveryValues.requireBound("Delivery page size", pageSize, 1_000);
     return this;
   }
 
@@ -409,7 +315,31 @@ export class DeliveryBuilder {
     if (typeof node !== "string" || node.length === 0) {
       throw new Error("Delivery node must be a non-empty string.");
     }
+    if (this.#worker?.nodeId?.value !== undefined && this.#worker.nodeId.value !== node) {
+      throw new Error("Delivery node must match the configured worker node.");
+    }
     this.#node = node;
+    return this;
+  }
+
+  /**
+   * Sets the complete opaque worker identity used for shard ownership.
+   *
+   * @param worker The generated worker identity for this delivery lifetime.
+   * @returns This builder.
+   */
+  withWorker(worker: WorkerId): this {
+    if (
+      worker.nodeId === undefined ||
+      worker.nodeId.value.trim() === "" ||
+      worker.value.trim() === ""
+    ) {
+      throw new Error("Delivery worker must contain non-blank node and value.");
+    }
+    if (this.#node !== undefined && this.#node !== worker.nodeId.value) {
+      throw new Error("Delivery worker node must match the configured delivery node.");
+    }
+    this.#worker = DeliveryValues.snapshotWorker(worker);
     return this;
   }
 
@@ -428,7 +358,7 @@ export class DeliveryBuilder {
     if (storageFactory === undefined || node === undefined) {
       const environment = ServerEnvironment.instance();
       storageFactory ??= environment.storageFactory;
-      node ??= environment.nodeId;
+      node ??= this.#worker?.nodeId?.value ?? environment.nodeId;
     }
     if (
       this.#workRegistry instanceof ShardedWorkRegistry &&
@@ -448,8 +378,8 @@ export class DeliveryBuilder {
       strategy,
       ...(this.#monitor === undefined ? {} : { monitor: this.#monitor }),
       pageSize: this.#pageSize ?? defaultPageSize,
-      batchSize: this.#batchSize ?? defaultBatchSize,
       node,
+      ...(this.#worker === undefined ? {} : { worker: this.#worker }),
     });
     return new BuiltDelivery(core);
   }
@@ -460,8 +390,8 @@ class BuiltDelivery implements Delivery {
   readonly storageFactory: StorageFactory;
   readonly strategy: DeliveryStrategy;
   readonly node: string;
+  readonly worker: WorkerId;
   readonly pageSize: number;
-  readonly batchSize: number;
   readonly inbox: DeliveryInbox;
   readonly #core: CoreDelivery;
 
@@ -471,8 +401,8 @@ class BuiltDelivery implements Delivery {
     this.storageFactory = core.storageFactory;
     this.strategy = core.strategy;
     this.node = core.node;
+    this.worker = core.worker;
     this.pageSize = core.pageSize;
-    this.batchSize = core.batchSize;
     this.inbox = core.inbox;
     controlledDeliveryRunners.set(this, (options) => core.runControlled(options));
     Object.freeze(this);
@@ -527,5 +457,13 @@ const DeliveryValues = Object.freeze({
       throw new Error("Delivery storage context name must be a non-empty string.");
     }
     return Object.freeze({ ...context });
+  },
+  snapshotWorker(worker: WorkerId): WorkerId {
+    const nodeId = worker.nodeId;
+    if (nodeId === undefined) throw new Error("Delivery worker must include a node identifier.");
+    return Object.freeze({
+      nodeId: Object.freeze({ value: nodeId.value }),
+      value: worker.value,
+    }) as WorkerId;
   },
 });

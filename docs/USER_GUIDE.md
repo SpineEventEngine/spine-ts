@@ -784,7 +784,6 @@ const browserServer = await new Server({
     authorize,
     contexts,
     clock,
-    fingerprint: (principal) => principal.id,
   },
 }).run();
 
@@ -1448,53 +1447,22 @@ import { Datastore } from "@google-cloud/datastore";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 
 const client = new Datastore({ projectId: "orders-development" });
-const storageFactory = new DatastoreStorageFactory({ client });
+const storageFactory = DatastoreStorageFactory.newBuilder().setClient(client).build();
 ```
 
-For ordinary caller-chosen Google client options, `create()` owns only the act
-of constructing the client; it does not establish an adapter credential policy
-or invoke client teardown:
-
-```ts
-import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-
-const storageFactory = DatastoreStorageFactory.create({
-  projectId: "orders-development",
-  // credentials or keyFilename may be supplied here when the Google client needs them.
-});
-```
-
+The builder requires a caller-owned client and makes no network request.
 Application Default Credentials are supported only to the extent supported by
-the Google client. Pass `credentials` or `keyFilename` as Google client options
-when that is the selected deployment configuration. Never log credentials,
-private keys, or stored payload bytes. Transaction failures that contain
-credential-, payload-, or secret-like provider messages are exposed as the
-redacted `Datastore transaction failed.` error; do not treat that redaction as
-a complete logging policy.
+the Google client. Pass `credentials` or `keyFilename` to the `Datastore`
+constructor when that is the selected deployment configuration. Never log
+credentials, private keys, or stored payload bytes. Provider failures cross a
+short, sanitized adapter error boundary; do not treat that redaction as a
+complete application logging policy.
 
 Compose the factory through `withStorageFactory()` or an environment, not in a
-handler. The runnable [Datastore orders example](../examples/orders/)
-keeps its domain topology provider-neutral and creates the adapter only at this
-composition boundary.
-
-```ts
-import { BoundedContext } from "@spine-event-engine/server";
-import type { StorageFactory } from "@spine-event-engine/storage";
-import { TaskAggregate, TaskListProjection, TaskWorkflowProcess } from "@example/tasks-domain";
-
-export function tasksBuilder(storageFactory: StorageFactory) {
-  return BoundedContext.singleTenant("Tasks")
-    .withStorageFactory(storageFactory)
-    .add(TaskAggregate)
-    .add(TaskWorkflowProcess)
-    .add(TaskListProjection)
-    .withGeneratedRegistryRoot(new URL("..", import.meta.url));
-}
-```
-
-This uses the consumer substitution introduced at the start of the guide and
-the entity classes from section 3. Do not call storage-provider APIs from a
-domain handler.
+handler. The complete runnable repository example is
+[orders](../examples/orders/README.md); it keeps domain topology
+provider-neutral and introduces the adapter only at composition. Do not call
+storage-provider APIs from a domain handler.
 
 ### Tenant slices, IDs, records, and indexes
 
@@ -1504,13 +1472,24 @@ tenant contexts add no per-tenant namespace; any default namespace configured
 on the Google client remains provider behavior. Treat tenant identity as part
 of the application's context construction and test isolation boundary.
 
-The adapter stores a private flat entity for each record: canonical Protobuf
-binary payload plus the record's declared indexed columns. Storage-slot IDs are
-reversibly and canonically encoded for keys, stored metadata, ID filters,
-continuations, and returned entries. The encoding preserves `undefined`,
-`bigint`, arrays, and object IDs regardless of object-property insertion order.
-It is an adapter implementation detail, not an identifier format for clients
-or other Datastore users.
+Each record family has its own Datastore kind. By default, an ungrouped family
+uses the source Proto type name. A grouped family, such as retained Entity
+history, uses the storage-group name followed by the short stored-record type.
+Applications can select another kind with `organizeRecords(...)` before
+building the factory.
+
+For example, a repository application can call the three-argument
+`organizeRecords(stateSchema, EntityRecordSchema, { kind: "Task" })` before
+`build()` to assign a shorter kind to current records while retaining default
+history families. Use that application's generated state schema; this guide
+does not invent a package import that cannot compile in the repository.
+
+Each stored entity contains `_scope`, the deterministic Protobuf `bytes`, and
+the record's declared indexed columns. Its Datastore key contains the resolved
+kind and a collision-free canonical record identity. IDs are not copied into a
+second property, and the adapter stores no schema fingerprint or layout
+metadata. This is a migration-free replacement: use a clean namespace or
+perform an application-owned migration from an older experimental layout.
 
 Indexed record-column values support strings, finite Datastore-compatible
 numbers, booleans, `null`, and exact signed 64-bit `bigint`. Other column value
@@ -1521,30 +1500,19 @@ orders. The adapter does not create or deploy those indexes.
 
 ### Queries have pushdown and a finite reconciliation bound
 
-`RecordQuery` ID constraints become Datastore key filters; supported equality
-filters and requested sorts become provider filters and orders. The adapter
-always adds a deterministic key tie-breaker. It fetches the complete provider
-record set within the finite scan bound before it applies canonical
-equality, typed continuations, offset, and requested limit locally once.
+`RecordQuery` ID constraints, provider-legal declared-column filters, and
+ordering are pushed to Datastore. Public offsets and mixed limits are applied
+locally after that provider row query. The adapter adds a stable key
+tie-breaker when Datastore permits it. A query shape that Datastore cannot execute in full
+uses finite reconciliation: it fetches at most `1,001` rows, then applies
+the shared query semantics locally. The extra row is a sentinel. If it is
+returned, `DatastoreQueryLimitError(1_000)` is thrown before any partial result
+can escape.
 
-Every provider query is limited to `maxClientSideScan + 1`: the default scan
-budget is `1000`, and a custom positive finite integer is configured through
-the constructor with an injected client (not through `create()`). The extra row
-is a sentinel. If it is returned, `DatastoreQueryLimitError` is thrown before
-local continuation processing and no partial result is returned. A
-continuation therefore cannot page around record-set overflow: provider
-filters must keep the complete record set within the configured bound.
-There is no unlimited setting and no adapter-specific generic cursor API.
-
-```ts
-import { Datastore } from "@google-cloud/datastore";
-import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-
-const boundedStorageFactory = new DatastoreStorageFactory({
-  client: new Datastore({ projectId: "orders-development" }),
-  maxClientSideScan: 500,
-});
-```
+The `1,000`-row reconciliation bound is fixed. There is no unlimited setting and no
+Datastore-specific public cursor API. Keep provider filters selective and
+create the composite indexes required by the application's filter-and-order
+combinations.
 
 ### Writes, batches, compare-and-set, and closure
 
@@ -1559,39 +1527,43 @@ across independently opened handles sharing the backing store. It returns
 `false` when the current payload does not match `expected`; `next: undefined`
 performs a conditional delete.
 
-Retriable Datastore transaction conflicts (code 10) receive at most three total
-attempts. That is the initial attempt plus at most two retries with bounded
-exponential delay and jitter. Other errors propagate, except sensitive-looking
-transaction messages are redacted as described above. This is a single-slot
-primitive, not a general multi-record transaction API.
+Retriable Datastore transaction conflicts (`ABORTED`, code 10) receive at most
+three total attempts. Other failures are not retried. This is a single-slot
+primitive, not a general public transaction API.
 
 Closing a `StorageFactory` prevents new storage creation; it does not close
 existing storage handles. Closing a storage handle prevents future operations
 on that handle, while independently opened handles remain separately closeable.
-Neither operation invokes teardown or close on an injected Google client, and
-the adapter does not invoke client teardown for a client made by `create()`
-either. Arrange application shutdown so servers/contexts finish their own
-closure before the caller tears down any shared client/resource.
+Neither operation invokes teardown or close on the injected Google client.
+Arrange application shutdown so servers and contexts finish their own closure
+before the caller tears down any shared client resource.
 
 ### Entity-history provider seam
 
-`createEntityStorage()` returns the documented structural
-`DatastoreEntityStorageHandle`: `current`, `states`, `events`, `close()`, and
-`isOpen()`. It is a framework/provider seam for the frozen internal storage
-input, not a remote history API. Handles bind a canonical scope and compatible
-fingerprint before access, are independently closeable, and never own the
-injected client. Current writes and separate history calls are not one
-cross-call transaction.
+`createEntityStorage()` is a framework/provider seam, not an application-facing
+history API. Its handle groups current records, retained state history,
+diagnostic event history, and Entity commits for one state type. Current state
+uses `EntityRecord`; retained states use `EntityStateKey` and `EntityRecord`;
+diagnostic history and the Bounded Context Event Store use generated `Event`
+records in separate families. Disabled histories open no family and issue no
+request.
 
-History uses fixed `$SpineEntity*` kinds and the checked-in two-index
-`index.yaml` deployment asset. Deploy it and wait for both indexes to become
-`SERVING` before history traffic. Immutable append, binding, and bounded
-retention are transactional; history reads stop at their requested depth,
-retention selects key-only chunks of at most eight rows, and truncate fixes one
-cut-key high-water boundary. Failed later chunks can leave earlier chunks
-durable, so callers retry. Existing dynamic history rows are not migrated: use
-an empty namespace/project or remove only task-owned prior data for this
-migration-free layout change.
+A repository commit preflights every record, reads the required keys, and then
+writes current state, enabled histories, and Event Store events in one
+Datastore transaction. It accepts at most 25 entity groups, 500 mutations, and
+a conservative payload below Datastore's 10 MiB transaction limit. A failure
+rolls back the whole unit. An identical retry after an uncertain response
+converges without a receipt or marker; a different immutable record at the same
+identity fails.
+
+History reads use explicit value-plus-physical-key finite pages. Trimming or
+truncating a long history can require several bounded delete chunks, so earlier
+completed chunks remain durable if a later chunk fails. Retrying the same
+maintenance operation is safe; appends newer than the page continuation are
+not deleted, while deliberately backdated concurrent appends are handled by a
+later maintenance run. The application must deploy any composite indexes
+required by its actual queries; the adapter does not create indexes
+automatically.
 
 ### Emulator-first verification and limited cloud smoke
 
@@ -1640,44 +1612,40 @@ import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
 
 const url = process.env.MYSQL_URL;
 if (url === undefined || url.trim().length === 0) throw new Error("MYSQL_URL is required.");
-const factory = await MysqlStorageFactory.create({
-  url,
-  connectionLimit: 8,
-  connectTimeoutMs: 5_000,
-  tls: { rejectUnauthorized: true },
-});
+const factory = await MysqlStorageFactory.newBuilder()
+  .setOptions({
+    url,
+    connectionLimit: 8,
+    connectTimeoutMs: 5_000,
+    tls: { rejectUnauthorized: true },
+  })
+  .build();
 try {
   // Supply factory to the provider-neutral context composition below.
 } finally {
-  await factory.close();
+  factory.close();
 }
 ```
 
 It is composed through the provider-neutral factory/`ServerEnvironment` seam,
 not mysql2. Single-tenant contexts share one scope; multitenant operations need
-a non-blank current `tenantId` and are isolated. It stores Protobuf payloads in
-fixed `spine_ts_records`/`spine_ts_columns` tables, creates/verifies them at
-startup, and executes `CREATE TABLE IF NOT EXISTS` on every factory creation.
+a non-blank current `tenantId` and are isolated. Each record family lazily
+creates and verifies its own private table on first use. No shared table or
+compatibility fingerprint is stored.
 The account therefore always needs that DDL permission plus normal DML
 privileges. Use a dedicated database/account.
 
-CRUD, ordered all-or-nothing `writeAll`, and slot-addressed payload CAS are
-transactional. Supported canonical IDs are nullish values, booleans, finite
-numbers, bigint, strings, bytes, arrays, and plain objects. Their canonical
-scope, tenant, and slot encodings are limited to 512, 255, and 768 bytes; a
-materialized column name's canonical encoding is limited to 255 bytes. Indexed
-columns accept null, boolean, finite number, signed-64
-bigint, and strings up to 256 JavaScript UTF-16 code units (encoded into fixed
-768-byte sortable data). Queries push IDs,
-AND filters (value arrays are OR), materialized-column sorting/keysets, offset,
-and limit into MySQL; missing columns match nothing and dotted payload paths
-are rejected. The lookup index helps equality/order, while filesort and large
-offsets can still be costly. Provider errors are sanitized; closing a factory
-blocks new operations, closes live handles, then drains its pool; an operation
-already admitted may finish and release before the shared close promise drains
-the pool. The account needs `CREATE TABLE IF NOT EXISTS` with its FK/index,
-information-schema reads, and transactional `SELECT`/`INSERT`/`UPDATE`/`DELETE`;
-precreating tables does not remove schema verification.
+InnoDB makes `writeAll` and payload CAS transactional. MyISAM and Aria use
+deterministic ordered writes and keyed serialization instead; a failed batch
+does not roll back earlier rows. Canonical IDs support nullish values, booleans,
+finite numbers, bigint, strings, bytes, arrays, and plain objects. Scope
+(context plus tenant encoding) is at most 224 bytes and IDs at most 768 bytes.
+Each family table is lazy and has `_scope VARBINARY(224)`, `ID VARBINARY(768)`,
+`bytes MEDIUMBLOB`, `_revision BIGINT UNSIGNED DEFAULT 0`, and primary key
+`(_scope, ID)`. Existing layouts are inspected, never migrated; the adapter
+creates no foreign keys or user-column indexes. Provider errors are sanitized;
+`factory.close()` returns `void` and starts pool draining. Accounts need table
+creation, metadata reads, and ordinary DML permissions.
 
 One query accepts at most 256 `ids`, 32 filters, 64 values per filter, eight
 sort fields, and 2,048 total bound values. The adapter rejects these fixed,
@@ -1698,27 +1666,26 @@ function orders(storage: StorageFactory) {
 ```
 
 `ServerEnvironment` can supply this factory to server/context assembly. Scope
-includes context name, tenant mode, and record type; single tenant uses the
+encodes context name and tenant mode/current tenant; single tenant uses the
 canonical null tenant key, while multitenant requires a nonblank current
 `tenantId`. Startup creates/verifies
-fixed tables and fails closed on incompatible metadata; it has no migrations.
-A dedicated account needs CREATE TABLE IF NOT EXISTS (FK/index), information-
-schema reads, and transactional SELECT/INSERT/UPDATE/DELETE.
+each record family table lazily and fails closed on incompatible metadata; it
+has no migrations or automatic foreign keys/indexes. A dedicated account needs
+CREATE TABLE, information-schema reads, and ordinary DML.
 
 ### Shared entity storage foundation
 
 The storage package defines adapter-facing current-record and history
 contracts. `EntityRecord` carries the canonical entity ID, state, version, and
 lifecycle flags for Aggregates, Projections, and Process Managers. The physical
-scope uses the bounded-context name, tenant mode/current tenant (or the fixed
-single-tenant marker), and the supplied storage key. The adapter then binds one
-fingerprint containing the ID codec, layout, and state type before rows are read
-or written; incompatible inputs fail before access.
+scope uses the bounded-context name, tenant mode/current tenant, the source
+Proto type, and an optional external `StorageGroup`. The provider then resolves
+one current record family before rows are read or written.
 
 In-memory factories are isolated by default. To deliberately share compatible
 record or adapter entity scopes across independently constructed factories,
 pass the same root-exported `InMemoryStorageBackend` token; a mismatched
-fingerprint still fails before access, and closing one factory leaves the
+configuration still fails before access, and closing one factory leaves the
 backend available to its siblings.
 
 State and diagnostic event history are asynchronous immutable journals. They
@@ -1791,9 +1758,11 @@ delivery protocol.
 ### IDs, columns, transactions, and errors
 
 Only materialized column names and `id` are queryable. A name not materialized
-for a record matches no rows. `writeAll` is one transaction and later duplicate
-slots win; CAS compares deterministic Protobuf payload bytes and addresses the
-supplied slot even when the body has another logical ID.
+for a record matches no rows. On InnoDB, `writeAll` uses one transaction. On
+MyISAM and Aria, it writes in deterministic input order and an identical retry
+can complete a partial prefix. Later duplicate slots win; CAS compares
+deterministic Protobuf payload bytes and addresses the supplied slot even when
+the body has another logical ID.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
@@ -1801,8 +1770,8 @@ import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 
 const spec = new RecordSpec({
-  schema: StringValueSchema,
-  storageKey: "StringValueSchema:legacy",
+  sourceType: StringValueSchema,
+  recordType: StringValueSchema,
   idKind: "string",
   extractId: (record) => record.value.slice(0, 1),
   columns: [new RecordColumn("state", (record) => record.value, "string")],
@@ -1832,9 +1801,9 @@ some orderings and large offsets are costly.
 `MysqlStorageSchemaError`, `MysqlStorageDataError`, and
 `MysqlStorageOperationError` are sanitized public error classes. Query LIMIT
 uses mysql2's parameterized `query()` route because server-prepared JS-number
-LIMIT binds are rejected; it never interpolates values. Pool-close failures are
-reported as `MysqlStorageConnectionError`; repeated close calls still return
-the same rejecting promise.
+LIMIT binds are rejected; it never interpolates values. `factory.close()` is a
+void, idempotent signal that starts draining the pool; it does not return a
+promise for observing pool-close failures.
 
 ### Lifecycle, verification, and future engines
 

@@ -1,741 +1,442 @@
+/* eslint-disable @typescript-eslint/require-await */
+
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
+import { create } from "@bufbuild/protobuf";
+import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
+import { describe, expect, it } from "vitest";
 
 import {
+  AlreadyPickedUp,
   DeliveryBuilder,
-  type DeliveryMonitor,
-  EnvironmentType,
-  ServerEnvironment,
+  DeliveryMonitor,
+  FailedPickUp,
+  FailedReception,
   ShardIndex,
-  ShardedWorkRegistry,
-  UniformAcrossAllShards,
 } from "../../src/index.js";
-import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
+import { Delivery as CoreDelivery } from "../../src/delivery/delivery.js";
 
-afterEach(async () => {
-  await resetServerEnvironmentForTest();
-});
-
-describe("DeliveryBuilder", () => {
-  it("rejects empty target coordinates for uniform shard assignment", () => {
-    const strategy = UniformAcrossAllShards.singleShard();
-
-    expect(() => strategy.shardFor("", "type.example.dev/Task")).toThrow(
-      "Delivery target ID must be a non-empty string.",
+describe("DeliveryMonitor delivery", () => {
+  it("is instantiable and permits direct or promised hook results", async () => {
+    const monitor = new DeliveryMonitor();
+    expect(await monitor.shouldContinueAfter("DELIVERY")).toBe(true);
+    await monitor.onDeliveryStarted(ShardIndex.single());
+    await monitor.onDeliveryCompleted({ processed: 0, delivered: 0, failed: 0 });
+    await (
+      await monitor.onShardPickUpFailure(new FailedPickUp(ShardIndex.single(), new Error()))
+    ).execute();
+    await (await monitor.onShardAlreadyPicked(new AlreadyPickedUp(ShardIndex.single()))).execute();
+    const reception = new FailedReception(
+      message("failed", "target", ShardIndex.single()),
+      new Error(),
+      async () => undefined,
+      async () => undefined,
     );
-    expect(() => strategy.shardFor("task", "")).toThrow(
-      "Delivery target type must be a non-empty string.",
-    );
+    await (await monitor.onReceptionFailure(reception)).execute();
+    await reception.repeatDispatching().execute();
   });
 
-  it("runs through supplied exclusive inbox and registry ports without renewal", async () => {
+  it("repeats one failed dispatch when the monitor selects the direct action", async () => {
     const shard = ShardIndex.single();
-    const message = {
-      id: { value: "message", shard },
-      inboxId: { targetId: "id", targetTypeUrl: "type" },
-      signalId: "signal",
-      label: "UPDATE_SUBSCRIBER" as const,
-      status: "TO_DELIVER" as const,
-      shard,
-      whenReceived: new Date(),
-      version: 1n,
-    };
-    let completed = 0;
-    let released = 0;
-    let renewed = 0;
-    const work = {
-      message,
-      synchronize: () => Promise.resolve(),
-      complete: () => Promise.resolve(++completed > 0),
-      abandon: () => Promise.resolve(),
-    };
+    const pending = message("pending", "target", shard);
+    let reads = 0;
+    let calls = 0;
+    let acknowledgements = 0;
+    class RepeatMonitor extends DeliveryMonitor {
+      override onReceptionFailure(reception: FailedReception) {
+        return reception.repeatDispatching();
+      }
+    }
+    await build()
+      .withMonitor(new RepeatMonitor())
+      .withInbox({
+        sessionKind: "LEASED",
+        receive: async () => {
+          throw new Error("not used");
+        },
+        read: async () => (reads++ === 0 ? [pending] : []),
+        readMessage: async () => undefined,
+        markDelivered: async (value) => {
+          acknowledgements += 1;
+          return value;
+        },
+      })
+      .withWorkRegistry(registry(shard))
+      .build()
+      .run({
+        shard,
+        onMessage: async () => {
+          calls += 1;
+          if (calls === 1) throw new Error("first dispatch fails");
+        },
+      });
+    expect(calls).toBe(2);
+    expect(acknowledgements).toBe(1);
+  });
+
+  it("allocates an opaque distinct WorkerId for each delivery lifetime", () => {
+    const first = build().withNode("node-a").build();
+    const second = build().withNode("node-a").build();
+    expect(first.worker.nodeId?.value).toBe("node-a");
+    expect(first.worker.value).not.toBe("node-a");
+    expect(second.worker.value).not.toBe(first.worker.value);
+  });
+
+  it("accepts an explicit complete WorkerId", () => {
+    const worker = create(WorkerIdSchema, { nodeId: { value: "node-a" }, value: "restart-a" });
+    const delivery = build().withWorker(worker).build();
+    if (worker.nodeId === undefined) throw new Error("Expected a complete worker node ID.");
+    worker.nodeId.value = "mutated";
+    worker.value = "mutated";
+    expect(delivery.worker).toMatchObject({ nodeId: { value: "node-a" }, value: "restart-a" });
+    const nodeId = delivery.worker.nodeId;
+    if (nodeId === undefined) throw new Error("Expected a complete worker node ID.");
+    expect(() => {
+      (nodeId as { value: string }).value = "mutated-again";
+    }).toThrow();
+  });
+
+  it("rejects conflicting direct worker and node identities", () => {
+    expect(() =>
+      build()
+        .withNode("node-a")
+        .withWorker(create(WorkerIdSchema, { nodeId: { value: "node-b" }, value: "x" })),
+    ).toThrow("must match");
+  });
+
+  it("maps skipped and failed pickup outcomes without rejecting", async () => {
+    const shard = ShardIndex.single();
     const inbox = {
-      sessionKind: "EXCLUSIVE" as const,
-      receive: () => Promise.resolve({ outcome: "WRITTEN" as const, message }),
-      read: () => Promise.resolve([message]),
-      readMessage: () => Promise.resolve(message),
-      begin: () => Promise.resolve(work),
+      sessionKind: "LEASED" as const,
+      receive: async () => {
+        throw new Error("not used");
+      },
+      read: async () => [],
+      readMessage: async () => undefined,
+      markDelivered: async () => undefined,
     };
-    const registry = {
-      sessionKind: "EXCLUSIVE" as const,
-      pickUp: () => Promise.resolve({ kind: "EXCLUSIVE" as const, shard }),
-      renew: () => Promise.resolve(((renewed += 1), undefined)),
-      release: () => Promise.resolve(((released += 1), true)),
-    };
-    const seen: string[] = [];
-    const result = await new DeliveryBuilder()
-      .withStorageFactory(new InMemoryStorageFactory())
+    const skipped = await build()
       .withInbox(inbox)
-      .withWorkRegistry(registry)
+      .withWorkRegistry({
+        sessionKind: "LEASED",
+        pickUp: async () => undefined,
+        validateOwnership: async () => undefined,
+        release: async () => true,
+      })
+      .build()
+      .run({ shard, onMessage: async () => undefined });
+    const failed = await build()
+      .withInbox(inbox)
+      .withWorkRegistry({
+        sessionKind: "LEASED",
+        pickUp: async () => {
+          throw new Error("pickup failed");
+        },
+        validateOwnership: async () => undefined,
+        release: async () => true,
+      })
+      .build()
+      .run({ shard, onMessage: async () => undefined });
+    expect(skipped.status).toBe("SKIPPED");
+    expect(failed.status).toBe("FAILED");
+  });
+
+  it("stops at monitor delivery and page continuation gates", async () => {
+    const shard = ShardIndex.single();
+    for (const stage of ["DELIVERY", "PAGE"] as const) {
+      let reads = 0;
+      class StopMonitor extends DeliveryMonitor {
+        override shouldContinueAfter(current: "DELIVERY" | "PAGE") {
+          return current !== stage;
+        }
+      }
+      await build()
+        .withMonitor(new StopMonitor())
+        .withInbox({
+          sessionKind: "LEASED",
+          receive: async () => {
+            throw new Error("not used");
+          },
+          read: async () => (reads++ === 0 ? [message("pending", "target", shard)] : []),
+          readMessage: async () => undefined,
+          markDelivered: async (value) => value,
+        })
+        .withWorkRegistry(registry(shard))
+        .build()
+        .run({ shard, onMessage: async () => undefined });
+      expect(reads).toBe(stage === "DELIVERY" ? 0 : 1);
+    }
+  });
+
+  it("contains a lost acknowledgement and uses the default acknowledgement fallback", async () => {
+    const shard = ShardIndex.single();
+    const pending = message("pending", "target", shard);
+    let reads = 0;
+    let acknowledgements = 0;
+    await build()
+      .withInbox({
+        sessionKind: "LEASED",
+        receive: async () => {
+          throw new Error("not used");
+        },
+        read: async () => (reads++ === 0 ? [pending] : []),
+        readMessage: async () => undefined,
+        markDelivered: async (value) => (acknowledgements++ === 0 ? undefined : value),
+      })
+      .withWorkRegistry(registry(shard))
+      .build()
+      .run({ shard, onMessage: async () => undefined });
+    expect(acknowledgements).toBe(2);
+  });
+
+  it("maps an abort raised by an in-flight endpoint to a stopped public run", async () => {
+    const shard = ShardIndex.single();
+    const controller = new AbortController();
+    const pending = message("pending", "target", shard);
+    const delivery = new CoreDelivery({
+      context: { name: `abort-${crypto.randomUUID()}`, multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      inbox: {
+        sessionKind: "LEASED",
+        receive: async () => {
+          throw new Error("not used");
+        },
+        read: async () => [pending],
+        readMessage: async () => undefined,
+        markDelivered: async (value) => value,
+      },
+      workRegistry: registry(shard),
+    });
+    const result = await delivery.runControlled({
+      shard,
+      signal: controller.signal,
+      onMessage: async () => {
+        controller.abort();
+      },
+    });
+    expect(result.status).toBe("STOPPED");
+  });
+
+  it("stops a controlled run before shard acquisition when already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const shard = ShardIndex.single();
+    let pickups = 0;
+    const delivery = new CoreDelivery({
+      context: { name: `pre-abort-${crypto.randomUUID()}`, multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      workRegistry: {
+        ...registry(shard),
+        pickUp: async () => {
+          pickups += 1;
+          return leasedSession(shard);
+        },
+      },
+    });
+    await expect(
+      delivery.runControlled({
+        shard,
+        signal: controller.signal,
+        onMessage: async () => undefined,
+      }),
+    ).resolves.toMatchObject({ status: "STOPPED" });
+    expect(pickups).toBe(0);
+  });
+
+  it("maps a controlled already-owned shard to SKIPPED", async () => {
+    const shard = ShardIndex.single();
+    const delivery = new CoreDelivery({
+      context: { name: `skip-${crypto.randomUUID()}`, multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      workRegistry: {
+        sessionKind: "LEASED",
+        pickUp: async () => undefined,
+        validateOwnership: async (session) => session,
+        release: async () => true,
+      },
+    });
+    await expect(
+      delivery.runControlled({
+        shard,
+        signal: new AbortController().signal,
+        onMessage: async () => undefined,
+      }),
+    ).resolves.toMatchObject({ status: "SKIPPED" });
+  });
+
+  it("drains an exclusive session without attempting lease renewal", async () => {
+    const shard = ShardIndex.single();
+    const pending = message("exclusive", "target", shard);
+    let reads = 0;
+    const delivery = new CoreDelivery({
+      context: { name: `exclusive-${crypto.randomUUID()}`, multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      inbox: {
+        sessionKind: "EXCLUSIVE",
+        receive: async () => {
+          throw new Error("not used");
+        },
+        read: async () => (reads++ === 0 ? [pending] : []),
+        readMessage: async () => undefined,
+        markDelivered: async (value) => value,
+      },
+      workRegistry: {
+        sessionKind: "EXCLUSIVE",
+        pickUp: async () => ({ kind: "EXCLUSIVE" as const, shard }),
+        validateOwnership: async (session) => session,
+        release: async () => true,
+      },
+    });
+    await expect(
+      delivery.drain(shard, { onMessage: async () => undefined }),
+    ).resolves.toMatchObject({
+      status: "DRAINED",
+    });
+  });
+
+  it("contains failed acknowledgement and continues an independent target", async () => {
+    const shard = ShardIndex.single();
+    const messages = [
+      message("first", "same", shard),
+      message("blocked", "same", shard),
+      message("other", "other", shard),
+    ];
+    let reads = 0;
+    const seen: string[] = [];
+    await build()
+      .withInbox({
+        sessionKind: "LEASED",
+        receive: async () => {
+          throw new Error("not used");
+        },
+        read: async () => (reads++ === 0 ? messages : []),
+        readMessage: async () => undefined,
+        markDelivered: async (value) => {
+          if (value.signalId === "first") throw new Error("acknowledgement failed");
+          return value;
+        },
+      })
+      .withWorkRegistry(registry(shard))
       .build()
       .run({
         onMessage: (value) => {
           seen.push(value.signalId);
+          if (value.signalId === "first") throw new Error("dispatch failed");
         },
       });
-    expect(result.status).toBe("COMPLETED");
-    expect(seen).toEqual(["signal"]);
-    expect(completed).toBe(1);
-    expect(released).toBe(1);
-    expect(renewed).toBe(0);
+    expect(seen).toEqual(["first", "other"]);
   });
-  it("accepts a supplied structural inbox port", () => {
-    const inbox = {
-      sessionKind: "LEASED" as const,
-      receive: () => Promise.reject(new Error("not used")),
-      read: () => Promise.resolve([]),
-      readMessage: () => Promise.resolve(undefined),
-      begin: () => Promise.resolve(undefined),
-    };
 
-    expect(new DeliveryBuilder().withInbox(inbox).build().inbox).toBe(inbox);
+  it("stops after one no-progress pass over a target blocked by acknowledgement failure", async () => {
+    const shard = ShardIndex.single();
+    const pending = message("pending", "same", shard);
+    let reads = 0;
+    await build()
+      .withInbox({
+        sessionKind: "LEASED",
+        receive: async () => {
+          throw new Error("not used");
+        },
+        read: async () => {
+          reads += 1;
+          return [pending];
+        },
+        readMessage: async () => undefined,
+        markDelivered: async () => {
+          throw new Error("mark failed");
+        },
+      })
+      .withWorkRegistry(registry(shard))
+      .build()
+      .run({
+        onMessage: () => {
+          throw new Error("dispatch failed");
+        },
+      });
+    expect(reads).toBe(1);
   });
-  it("fails fast when supplied inbox and registry session kinds differ", () => {
-    const inbox = {
-      sessionKind: "EXCLUSIVE" as const,
-      receive: () => Promise.reject(new Error("not used")),
-      read: () => Promise.resolve([]),
-      readMessage: () => Promise.resolve(undefined),
-      begin: () => Promise.resolve(undefined),
-    };
-    const registry = {
-      sessionKind: "LEASED" as const,
-      pickUp: () => Promise.resolve(undefined),
-      release: () => Promise.resolve(false),
-    };
 
-    expect(() => new DeliveryBuilder().withInbox(inbox).withWorkRegistry(registry).build()).toThrow(
-      "Delivery inbox and work registry session kinds must match.",
-    );
+  it("fences callback before dispatch after renewal loss", async () => {
+    const shard = ShardIndex.single();
+    let dispatched = 0;
+    await build()
+      .withInbox({
+        sessionKind: "LEASED",
+        receive: async () => {
+          throw new Error("not used");
+        },
+        read: async () => [message("pending", "target", shard)],
+        readMessage: async () => undefined,
+        markDelivered: async () => {
+          throw new Error("must not acknowledge");
+        },
+      })
+      .withWorkRegistry({ ...registry(shard), validateOwnership: async () => undefined })
+      .build()
+      .run({
+        onMessage: () => {
+          dispatched += 1;
+        },
+      });
+    expect(dispatched).toBe(0);
   });
-  it("compares each supplied port with the resolved local default session kind", () => {
-    const remoteInbox = {
-      sessionKind: "EXCLUSIVE" as const,
-      receive: () => Promise.reject(new Error("not used")),
-      read: () => Promise.resolve([]),
-      readMessage: () => Promise.resolve(undefined),
-      begin: () => Promise.resolve(undefined),
-    };
-    const remoteRegistry = {
-      sessionKind: "EXCLUSIVE" as const,
-      pickUp: () => Promise.resolve(undefined),
-      release: () => Promise.resolve(false),
-    };
 
-    expect(() => new DeliveryBuilder().withInbox(remoteInbox).build()).toThrow(
-      "Delivery inbox and work registry session kinds must match.",
-    );
-    expect(() => new DeliveryBuilder().withWorkRegistry(remoteRegistry).build()).toThrow(
-      "Delivery inbox and work registry session kinds must match.",
-    );
+  it("rejects incompatible supplied Inbox and shard-registry session kinds", () => {
+    const shard = ShardIndex.single();
     expect(() =>
-      new DeliveryBuilder().withInbox({ ...remoteInbox, sessionKind: "LEASED" }).build(),
-    ).not.toThrow();
-    expect(() =>
-      new DeliveryBuilder().withWorkRegistry({ ...remoteRegistry, sessionKind: "LEASED" }).build(),
-    ).not.toThrow();
-  });
-  it("rejects either direction of supplied session-kind mismatch and accepts a matching pair", () => {
-    const inbox = {
-      sessionKind: "LEASED" as const,
-      receive: () => Promise.reject(new Error("not used")),
-      read: () => Promise.resolve([]),
-      readMessage: () => Promise.resolve(undefined),
-      begin: () => Promise.resolve(undefined),
-    };
-    const exclusiveRegistry = {
-      sessionKind: "EXCLUSIVE" as const,
-      pickUp: () => Promise.resolve(undefined),
-      release: () => Promise.resolve(false),
-    };
-    const leasedRegistry = { ...exclusiveRegistry, sessionKind: "LEASED" as const };
-
-    expect(() =>
-      new DeliveryBuilder().withInbox(inbox).withWorkRegistry(exclusiveRegistry).build(),
+      build()
+        .withInbox({
+          sessionKind: "EXCLUSIVE",
+          receive: async () => {
+            throw new Error("not used");
+          },
+          read: async () => [],
+          readMessage: async () => undefined,
+          markDelivered: async () => undefined,
+        })
+        .withWorkRegistry(registry(shard))
+        .build(),
     ).toThrow("Delivery inbox and work registry session kinds must match.");
-    expect(() =>
-      new DeliveryBuilder().withInbox(inbox).withWorkRegistry(leasedRegistry).build(),
-    ).not.toThrow();
-  });
-  it("uses the singleton storage and node defaults for one immutable delivery", () => {
-    const storageFactory = new InMemoryStorageFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ storageFactory });
-
-    const delivery = new DeliveryBuilder().build();
-
-    expect(delivery.storageFactory).toBe(storageFactory);
-    expect(delivery.node).toBe(ServerEnvironment.instance().nodeId);
-    expect(delivery.context).toEqual({ name: "__System_Delivery__", multitenant: false });
-    expect(delivery.strategy.shardFor("target", "type.example.dev/Task")).toEqual(
-      ShardIndex.single(),
-    );
   });
 
-  it("runs finite pages until the shard is idle", async () => {
-    const delivery = new DeliveryBuilder()
-      .withContext({ name: "Tasks", multitenant: false })
-      .withStorageFactory(new InMemoryStorageFactory())
-      .withPageSize(1)
-      .build();
-    await delivery.inbox.receive({
-      inboxId: { targetId: "task-1", targetTypeUrl: "type.example.dev/Task" },
-      signalId: "signal-1",
-      label: "UPDATE_SUBSCRIBER",
-      status: "TO_DELIVER",
-      shard: ShardIndex.single(),
-      whenReceived: new Date("2026-07-23T05:00:00.000Z"),
-      version: 1n,
-    });
-    const seen: string[] = [];
-
-    const result = await delivery.run({
-      onMessage(message) {
-        seen.push(message.signalId);
-      },
-    });
-
-    expect(result.status).toBe("COMPLETED");
-    expect(result.pages).toHaveLength(1);
-    expect(seen).toEqual(["signal-1"]);
-  });
-
-  it("continues past a bounded unsupported prefix to a supported tail", async () => {
-    const delivery = new DeliveryBuilder()
-      .withContext({ name: "Tasks", multitenant: false })
-      .withStorageFactory(new InMemoryStorageFactory())
-      .withPageSize(1)
-      .withBatchSize(3)
-      .build();
-    for (let index = 1; index <= 1_001; index += 1) {
-      await receive(delivery, `unsupported-${String(index)}`, BigInt(index), "CATCH_UP");
-    }
-    await receive(delivery, "supported-tail", 1_002n);
-    const seen: string[] = [];
-
-    const result = await delivery.run({
-      onMessage(message) {
-        seen.push(message.signalId);
-      },
-    });
-
-    expect(result.status).toBe("COMPLETED");
-    expect(seen).toEqual(["supported-tail"]);
-  });
-
-  it("stops after a monitor-cancelled page and reports stable observations", async () => {
-    const events: string[] = [];
-    const delivery = new DeliveryBuilder()
-      .withContext({ name: "Tasks", multitenant: false })
-      .withStorageFactory(new InMemoryStorageFactory())
-      .withPageSize(1)
-      .withMonitor({
-        onStarted() {
-          events.push("started");
-        },
-        onPage() {
-          events.push("page");
-          return false;
-        },
-        onCompleted(result) {
-          events.push(result.status);
-        },
-      })
-      .build();
-    await delivery.inbox.receive({
-      inboxId: { targetId: "task-1", targetTypeUrl: "type.example.dev/Task" },
-      signalId: "signal-1",
-      label: "UPDATE_SUBSCRIBER",
-      status: "TO_DELIVER",
-      shard: ShardIndex.single(),
-      whenReceived: new Date("2026-07-23T05:00:00.000Z"),
-      version: 1n,
-    });
-
-    const result = await delivery.run({ onMessage: () => undefined });
-
-    expect(result.status).toBe("STOPPED");
-    expect(events).toEqual(["started", "page", "STOPPED"]);
-    await expect(
-      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
-    ).resolves.toEqual([]);
-  });
-
-  it("reports a failed page before the terminal result", async () => {
-    const events: string[] = [];
-    const delivery = new DeliveryBuilder()
-      .withContext({ name: "Tasks", multitenant: false })
-      .withStorageFactory(new InMemoryStorageFactory())
-      .withMonitor({
-        onStarted() {
-          events.push("started");
-        },
-        onPage() {
-          events.push("page");
-        },
-        onFailure() {
-          events.push("failed");
-        },
-        onCompleted(result) {
-          events.push(result.status);
-        },
-      })
-      .build();
-    await delivery.inbox.receive({
-      inboxId: { targetId: "task-1", targetTypeUrl: "type.example.dev/Task" },
-      signalId: "signal-1",
-      label: "UPDATE_SUBSCRIBER",
-      status: "TO_DELIVER",
-      shard: ShardIndex.single(),
-      whenReceived: new Date("2026-07-23T05:00:00.000Z"),
-      version: 1n,
-    });
-
-    const result = await delivery.run({
-      onMessage() {
-        throw new Error("endpoint failed");
-      },
-    });
-
-    expect(result.status).toBe("FAILED");
-    expect(events).toEqual(["started", "page", "failed", "FAILED"]);
-    const page = result.pages.at(0);
-    expect(page).toEqual({
-      status: "FAILED",
-      processed: 1,
-      accepted: 1,
-      delivered: 0,
-      failed: 1,
-    });
-    expect(Object.isFrozen(page)).toBe(true);
-    expect(page === undefined ? undefined : "failures" in page).toBe(false);
-  });
-
-  it("uses the configured work registry for shard pickup", async () => {
-    const storageFactory = new InMemoryStorageFactory();
-    const context = { name: "Tasks", multitenant: false };
-    recordedPickups = [];
-    const registry = new RecordingRegistry({ context, storageFactory });
-    const delivery = new DeliveryBuilder()
-      .withContext(context)
-      .withStorageFactory(storageFactory)
-      .withWorkRegistry(registry)
-      .build();
-
-    await delivery.run({ onMessage: () => undefined });
-
-    expect(recordedPickups).toEqual([ShardIndex.single().key()]);
-  });
-
-  it("reports an already-owned shard without reporting a start", async () => {
-    const storageFactory = new InMemoryStorageFactory();
-    const context = { name: "Tasks", multitenant: false };
-    const registry = new ShardedWorkRegistry({ context, storageFactory });
-    const session = await registry.pickUp(ShardIndex.single(), "node-owner");
-    const events: string[] = [];
-    const delivery = new DeliveryBuilder()
-      .withContext(context)
-      .withStorageFactory(storageFactory)
-      .withWorkRegistry(registry)
-      .withMonitor({
-        onStarted() {
-          events.push("started");
-        },
-        onSkipped() {
-          events.push("skipped");
-        },
-        onCompleted(result) {
-          events.push(result.status);
-        },
-      })
-      .build();
-
-    const result = await delivery.run({ onMessage: () => undefined });
-
-    expect(session).toBeDefined();
-    expect(result.status).toBe("SKIPPED");
-    expect(events).toEqual(["skipped", "SKIPPED"]);
-  });
-
-  it.each(["onStarted", "onPage", "onCompleted"] as const)(
-    "releases the shard when %s throws",
-    async (hook) => {
-      const storageFactory = new InMemoryStorageFactory();
-      const context = { name: "Tasks", multitenant: false };
-      const registry = new ShardedWorkRegistry({ context, storageFactory });
-      const failure = new Error(`${hook} failed`);
-      const monitor: DeliveryMonitor = {
-        ...(hook === "onStarted" ? { onStarted: () => raise(failure) } : {}),
-        ...(hook === "onPage" ? { onPage: () => raise(failure) } : {}),
-        ...(hook === "onCompleted" ? { onCompleted: () => raise(failure) } : {}),
-      };
-      const delivery = new DeliveryBuilder()
-        .withContext(context)
-        .withStorageFactory(storageFactory)
-        .withWorkRegistry(registry)
-        .withMonitor(monitor)
-        .withNode("node-a")
-        .build();
-
-      await expect(delivery.run({ onMessage: () => undefined })).rejects.toBe(failure);
-      const next = await registry.pickUp(ShardIndex.single(), "node-b");
-
-      expect(next).toBeDefined();
-      if (next !== undefined) {
-        await registry.release(next);
-      }
-    },
-  );
-
-  it("rejects a throwing failure hook without completion and releases its shard", async () => {
-    const storageFactory = new InMemoryStorageFactory();
-    const context = { name: "Tasks", multitenant: false };
-    const registry = new ShardedWorkRegistry({ context, storageFactory });
-    const failure = new Error("onFailure failed");
-    const events: string[] = [];
-    const delivery = new DeliveryBuilder()
-      .withContext(context)
-      .withStorageFactory(storageFactory)
-      .withWorkRegistry(registry)
-      .withMonitor({
-        onFailure() {
-          events.push("failure");
-          throw failure;
-        },
-        onCompleted() {
-          events.push("completed");
-        },
-      })
-      .withNode("node-a")
-      .build();
-    await receive(delivery, "signal-1", 1n);
-
-    await expect(
-      delivery.run({
-        onMessage() {
-          throw new Error("endpoint failed");
-        },
-      }),
-    ).rejects.toBe(failure);
-    expect(events).toEqual(["failure"]);
-    const next = await registry.pickUp(ShardIndex.single(), "node-b");
-    expect(next).toBeDefined();
-    if (next !== undefined) {
-      await registry.release(next);
-    }
-  });
-
-  it("rejects a throwing skipped hook without completion or disturbing the owner", async () => {
-    const storageFactory = new InMemoryStorageFactory();
-    const context = { name: "Tasks", multitenant: false };
-    const registry = new ShardedWorkRegistry({ context, storageFactory });
-    const owner = await registry.pickUp(ShardIndex.single(), "node-owner");
-    const failure = new Error("onSkipped failed");
-    const events: string[] = [];
-    const delivery = new DeliveryBuilder()
-      .withContext(context)
-      .withStorageFactory(storageFactory)
-      .withWorkRegistry(registry)
-      .withMonitor({
-        onSkipped() {
-          events.push("skipped");
-          throw failure;
-        },
-        onCompleted() {
-          events.push("completed");
-        },
-      })
-      .withNode("node-a")
-      .build();
-
-    await expect(delivery.run({ onMessage: () => undefined })).rejects.toBe(failure);
-    expect(events).toEqual(["skipped"]);
-    await expect(registry.pickUp(ShardIndex.single(), "node-b")).resolves.toBeUndefined();
-    expect(owner).toBeDefined();
-    if (owner !== undefined) {
-      await registry.release(owner);
-    }
-    const next = await registry.pickUp(ShardIndex.single(), "node-b");
-    expect(next).toBeDefined();
-    if (next !== undefined) {
-      await registry.release(next);
-    }
-  });
-
-  it("rejects a supplied work registry from another storage context", () => {
-    const context = { name: "Tasks", multitenant: false };
-    const storageFactory = new InMemoryStorageFactory();
-    const registry = new ShardedWorkRegistry({
-      context: { name: "Other", multitenant: false },
-      storageFactory,
-    });
-
-    expect(() =>
-      new DeliveryBuilder()
-        .withContext(context)
-        .withStorageFactory(storageFactory)
-        .withWorkRegistry(registry)
-        .withNode("node-a")
-        .build(),
-    ).toThrow("Delivery work registry must use the delivery storage context and factory.");
-  });
-
-  it("rejects a supplied work registry from another storage factory", () => {
-    const context = { name: "Tasks", multitenant: false };
-    const registry = new ShardedWorkRegistry({
-      context,
-      storageFactory: new InMemoryStorageFactory(),
-    });
-
-    expect(() =>
-      new DeliveryBuilder()
-        .withContext(context)
-        .withStorageFactory(new InMemoryStorageFactory())
-        .withWorkRegistry(registry)
-        .withNode("node-a")
-        .build(),
-    ).toThrow("Delivery work registry must use the delivery storage context and factory.");
-  });
-
-  it("rejects invalid finite builder bounds and target strategy inputs", () => {
-    const builder = new DeliveryBuilder();
-
-    expect(() => builder.withPageSize(0)).toThrow(
+  it("rejects invalid builder bounds and target coordinates", () => {
+    expect(() => new DeliveryBuilder().withPageSize(0)).toThrow(
       "Delivery page size must be a positive safe integer.",
     );
-    expect(() => builder.withBatchSize(Number.POSITIVE_INFINITY)).toThrow(
-      "Delivery batch size must be a positive safe integer.",
-    );
-    expect(() => builder.withNode("")).toThrow("Delivery node must be a non-empty string.");
-    expect(() => builder.withContext({ name: "", multitenant: false })).toThrow(
-      "Delivery storage context name must be a non-empty string.",
-    );
-    expect(() => UniformAcrossAllShards.forNumber(0)).toThrow(
-      "Delivery shard count must be a positive safe integer.",
-    );
-  });
-
-  it.each([0, Number.NaN, 1.5])(
-    "rejects a custom strategy with invalid shard count %s",
-    (shardCount) => {
-      const strategy = {
-        shardCount,
-        shardFor: () => ShardIndex.single(),
-      };
-
-      expect(() => new DeliveryBuilder().withStrategy(strategy)).toThrow(
-        "Delivery strategy shard count must be a positive safe integer.",
-      );
-    },
-  );
-
-  it("revalidates a custom strategy shard count when resolving configuration", () => {
-    const strategy = {
-      shardCount: 2,
-      shardFor: () => new ShardIndex(0, 2),
-    };
-    const builder = new DeliveryBuilder()
-      .withStorageFactory(new InMemoryStorageFactory())
-      .withNode("node-a")
-      .withStrategy(strategy);
-    strategy.shardCount = Number.NaN;
-
-    expect(() => builder.build()).toThrow(
-      "Delivery strategy shard count must be a positive safe integer.",
-    );
-  });
-
-  it("snapshots strategy cardinality without freezing the caller's object", async () => {
-    const strategy = {
-      shardCount: 2,
-      shardFor() {
-        return new ShardIndex(1, this.shardCount);
-      },
-    };
-    const delivery = new DeliveryBuilder()
-      .withContext({ name: "Tasks", multitenant: false })
-      .withStorageFactory(new InMemoryStorageFactory())
-      .withNode("node-a")
-      .withStrategy(strategy)
-      .build();
-    const originalShard = delivery.strategy.shardFor("task-1", "type.example.dev/Task");
-    await delivery.inbox.receive({
-      inboxId: { targetId: "task-1", targetTypeUrl: "type.example.dev/Task" },
-      signalId: "signal-1",
-      label: "UPDATE_SUBSCRIBER",
-      status: "TO_DELIVER",
-      shard: originalShard,
-      whenReceived: new Date("2026-07-23T05:00:00.000Z"),
-      version: 1n,
-    });
-    strategy.shardCount = 3;
-    const seen: string[] = [];
-
-    expect(strategy.shardCount).toBe(3);
-    expect(delivery.strategy.shardCount).toBe(2);
-    expect(() => delivery.strategy.shardFor("task-2", "type.example.dev/Task")).toThrow(
-      "Delivery strategy shard total must equal its resolved shard count.",
-    );
-    await expect(
-      delivery.run({
-        shard: originalShard,
-        onMessage(message) {
-          seen.push(message.signalId);
-        },
-      }),
-    ).resolves.toMatchObject({ status: "COMPLETED" });
-    expect(seen).toEqual(["signal-1"]);
-    await expect(
-      delivery.run({
-        shard: new ShardIndex(1, 3),
-        onMessage: () => undefined,
-      }),
-    ).rejects.toThrow("Delivery run shard total must equal the configured strategy shard count.");
-  });
-
-  it("accepts finite bounds at their maxima and rejects larger values", () => {
-    expect(() => new DeliveryBuilder().withPageSize(1_000)).not.toThrow();
-    expect(() => new DeliveryBuilder().withBatchSize(1_000)).not.toThrow();
-    expect(() => new DeliveryBuilder().withPageSize(1_001)).toThrow(
-      "Delivery page size must be at most 1000.",
-    );
-    expect(() => new DeliveryBuilder().withBatchSize(1_001)).toThrow(
-      "Delivery batch size must be at most 1000.",
-    );
-  });
-
-  it("snapshots overrides for each build while allowing deterministic builder reuse", () => {
-    const storageFactory = new InMemoryStorageFactory();
-    const context = { name: "Tasks", multitenant: false };
-    const strategy = UniformAcrossAllShards.forNumber(3);
-    const first = new DeliveryBuilder()
-      .withContext(context)
-      .withStorageFactory(storageFactory)
-      .withStrategy(strategy)
-      .withPageSize(2)
-      .withBatchSize(3)
-      .withNode("node-a");
-
-    const deliveryA = first.build();
-    context.name = "Changed";
-    const deliveryB = first.withPageSize(4).withNode("node-b").build();
-
-    expect(deliveryA).toMatchObject({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory,
-      strategy,
-      pageSize: 2,
-      batchSize: 3,
-      node: "node-a",
-    });
-    expect(deliveryB).toMatchObject({ pageSize: 4, batchSize: 3, node: "node-b" });
-    expect(deliveryB.context).toEqual({ name: "Tasks", multitenant: false });
-    expect(deliveryA).not.toBe(deliveryB);
-  });
-
-  it("requires an explicit run shard for a multi-shard strategy", async () => {
-    const strategy = UniformAcrossAllShards.forNumber(3);
-    const delivery = new DeliveryBuilder()
-      .withContext({ name: "Tasks", multitenant: false })
-      .withStorageFactory(new InMemoryStorageFactory())
-      .withStrategy(strategy)
-      .withNode("node-a")
-      .build();
-
-    expect(strategy.shardCount).toBe(3);
-    await expect(delivery.run({ onMessage: () => undefined })).rejects.toThrow(
-      "Delivery run requires an explicit shard for a multi-shard strategy.",
-    );
-  });
-
-  it("rejects an explicit run shard from a different durable shard set", async () => {
-    const mismatchedShard = new ShardIndex(0, 2);
-    const context = { name: "Tasks", multitenant: false };
-    const storageFactory = new InMemoryStorageFactory();
-    recordedPickups = [];
-    const registry = new RecordingRegistry({ context, storageFactory });
-    const delivery = new DeliveryBuilder()
-      .withContext(context)
-      .withStorageFactory(storageFactory)
-      .withWorkRegistry(registry)
-      .withStrategy(UniformAcrossAllShards.forNumber(3))
-      .withNode("node-a")
-      .build();
-    await delivery.inbox.receive({
-      inboxId: { targetId: "task-1", targetTypeUrl: "type.example.dev/Task" },
-      signalId: "signal-1",
-      label: "UPDATE_SUBSCRIBER",
-      status: "TO_DELIVER",
-      shard: mismatchedShard,
-      whenReceived: new Date("2026-07-23T05:00:00.000Z"),
-      version: 1n,
-    });
-
-    await expect(
-      delivery.run({ shard: mismatchedShard, onMessage: () => undefined }),
-    ).rejects.toThrow("Delivery run shard total must equal the configured strategy shard count.");
-    expect(recordedPickups).toEqual([]);
-    await expect(
-      delivery.inbox.read(mismatchedShard, { statuses: ["TO_DELIVER"] }),
-    ).resolves.toHaveLength(1);
-  });
-
-  it("does not resolve the server environment when storage and node are explicit", () => {
-    const delivery = new DeliveryBuilder()
-      .withContext({ name: "Tasks", multitenant: false })
-      .withStorageFactory(new InMemoryStorageFactory())
-      .withNode("node-a")
-      .build();
-
-    expect(delivery.node).toBe("node-a");
-    expect(() => {
-      ServerEnvironment.when(EnvironmentType.Local).use({});
-    }).not.toThrow();
-  });
-
-  it("exposes only builder-owned inbox, configuration, and run behavior", () => {
-    const delivery = new DeliveryBuilder()
-      .withContext({ name: "Tasks", multitenant: false })
-      .withStorageFactory(new InMemoryStorageFactory())
-      .withNode("node-a")
-      .build();
-
-    expectTypeOf(delivery).not.toHaveProperty("drain");
-    expectTypeOf(delivery).not.toHaveProperty("drainMessage");
-    expectTypeOf(delivery).not.toHaveProperty("attempts");
-    expectTypeOf(delivery).not.toHaveProperty("shards");
-    expect("drain" in delivery).toBe(false);
-    expect("drainMessage" in delivery).toBe(false);
-    expect("attempts" in delivery).toBe(false);
-    expect("shards" in delivery).toBe(false);
+    expect(() => ShardIndex.single()).not.toThrow();
   });
 });
 
-class RecordingRegistry extends ShardedWorkRegistry {
-  override pickUp(shard: ShardIndex): Promise<undefined> {
-    recordedPickups.push(shard.key());
-    return Promise.resolve(undefined);
-  }
+function build(): DeliveryBuilder {
+  return new DeliveryBuilder().withStorageFactory(new InMemoryStorageFactory());
 }
-
-let recordedPickups: string[] = [];
-
-function raise(error: Error): never {
-  throw error;
-}
-
-async function receive(
-  delivery: ReturnType<DeliveryBuilder["build"]>,
-  signalId: string,
-  version: bigint,
-  label: "CATCH_UP" | "UPDATE_SUBSCRIBER" = "UPDATE_SUBSCRIBER",
-): Promise<void> {
-  await delivery.inbox.receive({
-    inboxId: { targetId: "task-1", targetTypeUrl: "type.example.dev/Task" },
+function message(signalId: string, targetId: string, shard: ShardIndex) {
+  return {
+    id: { value: signalId, shard },
+    inboxId: { targetId, targetTypeUrl: "type" },
     signalId,
-    label,
-    status: "TO_DELIVER",
-    shard: ShardIndex.single(),
-    whenReceived: new Date("2026-07-23T05:00:00.000Z"),
-    version,
-  });
+    label: "UPDATE_SUBSCRIBER" as const,
+    status: "TO_DELIVER" as const,
+    shard,
+    whenReceived: new Date(),
+    version: 1n,
+  };
+}
+function registry(shard: ShardIndex) {
+  const session = leasedSession(shard);
+  return {
+    sessionKind: "LEASED" as const,
+    pickUp: async () => session,
+    validateOwnership: async () => session,
+    release: async () => true,
+  };
+}
+
+function leasedSession(shard: ShardIndex) {
+  return {
+    kind: "LEASED" as const,
+    shard,
+    worker: create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
+    pickedUpAt: new Date(0),
+    expiresAt: new Date(60_000),
+  };
 }

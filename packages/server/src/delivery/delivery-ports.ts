@@ -5,6 +5,7 @@ import type {
   InboxReadOptions,
   InboxWriteResult,
 } from "./inbox.js";
+import type { WorkerId } from "@spine-event-engine/proto/delivery";
 import type { ShardIndex } from "./shard-index.js";
 import type { ShardSession } from "./sharded-work-registry.js";
 
@@ -70,55 +71,16 @@ export interface DeliveryInbox {
   ): Promise<InboxMessage | undefined>;
 
   /**
-   * Returns work for an exact pending message under the supplied work-session fence.
+   * Marks one exact pending Inbox row delivered.
    *
-   * @param message Identifies the pending message snapshot.
-   * @param session Proves ownership of the shard fence.
+   * @param message Supplies the expected pending row snapshot.
    * @param options Propagates cancellation and a delivery deadline.
-   * @returns The admitted work, when the fence remains valid.
+   * @returns The delivered row, or `undefined` when durable acknowledgement failed.
    */
-  begin(
+  markDelivered(
     message: InboxMessage,
-    session: DeliveryWorkSession,
     options?: DeliveryOperationOptions,
-  ): Promise<DeliveryInboxWork | undefined>;
-}
-
-/**
- * One admitted exact-message delivery operation.
- */
-export interface DeliveryInboxWork {
-  // prettier-ignore
-
-  /**
-   * A defensive message snapshot admitted under this work fence; callers may mutate their copy.
-   */
-  readonly message: InboxMessage;
-
-  /**
-   * Ensures the work has a current matching session.
-   *
-   * @param session Supplies the current shard session.
-   * @param options Propagates cancellation and a delivery deadline.
-   * @returns A promise that resolves after the work has the matching session.
-   */
-  synchronize(session: DeliveryWorkSession, options?: DeliveryOperationOptions): Promise<void>;
-
-  /**
-   * Completes the admitted message once delivery succeeded.
-   *
-   * @param options Propagates cancellation and a delivery deadline.
-   * @returns Whether the message transitioned to complete.
-   */
-  complete(options?: DeliveryOperationOptions): Promise<boolean>;
-
-  /**
-   * Clears the admitted message without remote removal.
-   *
-   * @param options Propagates cancellation and a delivery deadline.
-   * @returns A promise that resolves after the admitted work is abandoned.
-   */
-  abandon(options?: DeliveryOperationOptions): Promise<void>;
+  ): Promise<InboxMessage | undefined>;
 }
 
 /**
@@ -136,13 +98,13 @@ export interface DeliveryWorkRegistry {
    * Acquires one shard work fence when it is available.
    *
    * @param shard Selects the shard to acquire.
-   * @param node Identifies the worker acquiring the fence.
+   * @param worker Identifies the complete worker acquiring the fence.
    * @param options Propagates cancellation and a delivery deadline.
    * @returns The acquired session, when the shard is available.
    */
   pickUp(
     shard: ShardIndex,
-    node: string,
+    worker: WorkerId,
     options?: DeliveryOperationOptions,
   ): Promise<DeliveryWorkSession | undefined>;
 
@@ -157,6 +119,22 @@ export interface DeliveryWorkRegistry {
     session: LeasedDeliveryWorkSession,
     options?: DeliveryOperationOptions,
   ): Promise<LeasedDeliveryWorkSession | undefined>;
+
+  /**
+   * Validates ownership immediately before a guarded side effect.
+   *
+   * Leased registries return the renewed session. Exclusive registries return
+   * the current session only while its authoritative remote fence still
+   * matches.
+   *
+   * @param session Supplies the session to validate.
+   * @param options Propagates cancellation and a delivery deadline.
+   * @returns The current session, or `undefined` after ownership loss.
+   */
+  validateOwnership(
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<DeliveryWorkSession | undefined>;
 
   /**
    * Removes a held work fence.

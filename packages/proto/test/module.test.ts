@@ -29,12 +29,12 @@ import * as timeOptionSchemas from "../generated/spine/time_options_pb.js";
 import * as languageSchemas from "../generated/spine/ui/language_pb.js";
 import * as validationSchemas from "../generated/spine/validation/validation_error_pb.js";
 import * as catchUpSchemas from "../generated/spine/server/catchup/catch_up_pb.js";
+import * as entitySchemas from "../generated/spine/server/entity/entity_pb.js";
+import * as entityStateKeySchemas from "../generated/spine/server/entity/state_key_pb.js";
 import * as environmentSchemas from "../generated/spine/server/server_environment_pb.js";
 import * as nodeDiscoverySchemas from "../generated/spine/deployment/node_discovery_pb.js";
-import * as deploymentSchemas from "../generated/spine/system/deployment/application_node_lease_pb.js";
 import * as systemEventSchemas from "../generated/spine/system/server/entity_log_events_pb.js";
 import * as systemTypeSchemas from "../generated/spine/system/server/entity_type_pb.js";
-import * as standSchemas from "../generated/spine/system/server/stand_subscription_pb.js";
 import { spineProtoModule } from "../generated/proto-module.js";
 
 interface SpineManifest {
@@ -129,12 +129,12 @@ describe("spineProtoModule", () => {
       ...schemaNames(deliverySchemas),
       ...schemaNames(deliveryServerSchemas),
       ...schemaNames(catchUpSchemas),
+      ...schemaNames(entitySchemas),
+      ...schemaNames(entityStateKeySchemas),
       ...schemaNames(environmentSchemas),
       ...schemaNames(nodeDiscoverySchemas),
-      ...schemaNames(deploymentSchemas),
       ...schemaNames(systemEventSchemas),
       ...schemaNames(systemTypeSchemas),
-      ...schemaNames(standSchemas),
     ].sort();
 
     expect(spineProtoModule.name).toBe("@spine-event-engine/proto");

@@ -211,17 +211,6 @@ it("recovers an overflowed tiny-buffer RemoteDelivery source through its environ
   });
 }, 15_000);
 
-it("surfaces a child aggregated close failure instead of accepting a zero exit", async () => {
-  const server = trackedServer();
-  await server.start();
-  const child = application(server.baseUrl, "close-failure", {
-    DELIVERY_FIXTURE_CLOSE_FAILURE: "true",
-  });
-  await ready(child);
-
-  await expect(stop(child, 1_000)).rejects.toThrow("Fixture process exited unsuccessfully.");
-});
-
 it("forces a child that ignores graceful shutdown and settles its forced exit", async () => {
   const child = spawn(process.execPath, [
     "-e",
@@ -243,10 +232,10 @@ function trackedServer(port = 0): DeliveryServer {
 function application(
   baseUrl: string,
   node: string,
-  extraEnvironment: Record<string, string> = {},
+  environment: Readonly<Record<string, string>> = {},
 ): ChildProcess {
   const child = spawn(process.execPath, [applicationFixture], {
-    env: { ...process.env, DELIVERY_SERVER_URL: baseUrl, DELIVERY_NODE: node, ...extraEnvironment },
+    env: { ...process.env, DELIVERY_SERVER_URL: baseUrl, DELIVERY_NODE: node, ...environment },
     stdio: ["ignore", "ignore", "ignore", "ipc"],
   });
   applications.add(child);

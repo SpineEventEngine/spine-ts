@@ -9,14 +9,11 @@ import type { Event, EventId } from "@spine-event-engine/proto";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
-import {
-  InMemoryRecordStorage,
-  InMemoryStorageFactory,
-  RecordColumn,
-  RecordSpec,
-  RecordStorage,
-} from "../../src/index.js";
-import type { NormalizedQueryPlan, RecordEntry } from "../../src/index.js";
+import { InMemoryRecordStorage } from "../../src/memory/in-memory-record-storage.js";
+import { RecordColumn } from "../../src/record/record-column.js";
+import { RecordSpec } from "../../src/record/record-spec.js";
+import { RecordStorage, type RecordEntry } from "../../src/record/record-storage.js";
+import type { NormalizedQueryPlan } from "../../src/query/query-policy.js";
 import { TenantRecords } from "../../src/memory/tenant-records.js";
 import { assertQueryProviderConformance } from "../query/query-provider-conformance.js";
 
@@ -77,8 +74,7 @@ describe("InMemoryRecordStorage", () => {
     const storage = new ObservedInMemoryStorage(
       { name: "QueryConformance", multitenant: false },
       new RecordSpec({
-        schema: StringValueSchema,
-        storageKey: "StringValueSchema:legacy",
+        recordType: StringValueSchema,
         idKind: "string",
         extractId: (record) => record.value,
         columns: [
@@ -218,6 +214,46 @@ describe("InMemoryRecordStorage", () => {
     expect(page.map((record) => record.id?.value)).toEqual(["event-2", "event-3"]);
   });
 
+  it("retains only the requested continued window while selecting tied records", async () => {
+    const storage = createStorage();
+    await storage.writeAll(
+      Array.from({ length: 128 }, (_, index) =>
+        createEvent(
+          `event-${String(index).padStart(3, "0")}`,
+          "type.spine.io/tasks.TaskClosed",
+          1n,
+        ),
+      ),
+    );
+
+    const originalSort = Array.prototype.sort;
+    Array.prototype.sort = function boundedSelectionSort<T>(
+      this: T[],
+      _compareFn?: (left: T, right: T) => number,
+    ): T[] {
+      void _compareFn;
+      if (this.length > 4) {
+        throw new Error("A finite query must not sort every matching record.");
+      }
+      return this;
+    };
+    try {
+      const page = await storage.query({
+        sort: [{ field: "timestamp", direction: "asc" }],
+        after: {
+          values: [{ field: "timestamp", value: 1n }],
+          id: create(EventIdSchema, { value: "event-016" }),
+        },
+        offset: 2,
+        limit: 2,
+      });
+
+      expect(page.map((record) => record.id?.value)).toEqual(["event-019", "event-020"]);
+    } finally {
+      Array.prototype.sort = originalSort;
+    }
+  });
+
   it("continues after an ordered row key before offsets, limits, and masks", async () => {
     const storage = createStorage();
 
@@ -244,6 +280,32 @@ describe("InMemoryRecordStorage", () => {
     expect(page).toHaveLength(1);
     expect(page[0]?.id?.value).toBe("event-5");
     expect(page[0]?.message).toBeUndefined();
+  });
+
+  it("uses canonical UTF-8 record IDs for tied ordering and continuation windows", async () => {
+    const storage = createStorage();
+    await storage.writeAll(
+      ["\uE000", "\u{10000}", "\u{10001}"].map((id) =>
+        createEvent(id, "type.spine.io/tasks.TaskClosed", 1n),
+      ),
+    );
+
+    const page = await storage.query({
+      sort: [
+        { field: "timestamp", direction: "asc" },
+        { field: "id", direction: "asc" },
+      ],
+      after: {
+        values: [
+          { field: "timestamp", value: 1n },
+          { field: "id", value: create(EventIdSchema, { value: "\uE000" }) },
+        ],
+        id: create(EventIdSchema, { value: "\uE000" }),
+      },
+      limit: 2,
+    });
+
+    expect(page.map((record) => record.id?.value)).toEqual(["\u{10000}", "\u{10001}"]);
   });
 
   it("continues descending pages after the ordered row key", async () => {
@@ -718,11 +780,10 @@ describe("InMemoryRecordStorage", () => {
   });
 
   it("does not persist earlier records when later materialization fails", async () => {
-    const storage = new InMemoryStorageFactory().createRecordStorage(
+    const storage = new InMemoryRecordStorage(
       { name: "Tasks", multitenant: false },
       new RecordSpec({
-        schema: EventSchema,
-        storageKey: "EventSchema:legacy",
+        recordType: EventSchema,
         idSchema: EventIdSchema,
         extractId: (event) => {
           if (event.id?.value === "event-2") {
@@ -884,7 +945,7 @@ function createStorage(
     multitenant: false,
   },
 ) {
-  return new InMemoryStorageFactory().createRecordStorage(context, createSpec());
+  return new InMemoryRecordStorage(context, createSpec());
 }
 
 function createLookupEvents(ids: readonly string[]) {
@@ -893,11 +954,10 @@ function createLookupEvents(ids: readonly string[]) {
 
 function createLookupStorage(values: Record<string, unknown>) {
   const kinds = [...new Set(Object.values(values).map(valueKind))].sort().join("-");
-  return new InMemoryStorageFactory().createRecordStorage(
+  return new InMemoryRecordStorage(
     { name: "Tasks", multitenant: false },
     new RecordSpec({
-      schema: EventSchema,
-      storageKey: `EventSchema:lookup-${kinds}`,
+      recordType: EventSchema,
       idSchema: EventIdSchema,
       extractId: (event) => {
         if (event.id === undefined) {
@@ -978,8 +1038,7 @@ class QueryEntriesStorage extends RecordStorage<EventId, Event> {
 
 function createSpec() {
   return new RecordSpec({
-    schema: EventSchema,
-    storageKey: "EventSchema:legacy",
+    recordType: EventSchema,
     idSchema: EventIdSchema,
     extractId: (event) => {
       if (event.id === undefined) {

@@ -7,12 +7,11 @@ import {
 } from "@spine-event-engine/server";
 import type { StorageFactory } from "@spine-event-engine/storage";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+import type { Datastore } from "@google-cloud/datastore";
 import { ZeroMqConfig, createZeroMqTransport } from "@spine-event-engine/transport/zeromq";
 import { randomUUID } from "node:crypto";
 import { createPrivateKey } from "node:crypto";
 
-import { DeliveryQuarantine } from "./delivery-quarantine.js";
-import { MessageBoardSessionRevocations } from "./session-revocations.js";
 import type { BoardServerOptions } from "./index.js";
 
 interface DeploymentConfig extends BoardServerOptions {
@@ -35,22 +34,19 @@ interface DeploymentContract {
   application(environment: NodeJS.ProcessEnv): DeploymentConfig;
   combined(environment: NodeJS.ProcessEnv): CombinedConfig;
   gateway(environment: NodeJS.ProcessEnv): GatewayConfig;
-  storage(config: DeploymentConfig): StorageFactory;
+  storage(client: Datastore): StorageFactory;
   bindings(config: CombinedConfig, storageFactory: StorageFactory): DurableSubscriptionBindings;
 
   /**
-   * Creates production browser sessions that share signing and revocation configuration.
+   * Creates production browser sessions from shared signing configuration.
    *
-   * The supplied factory owns the underlying revocation handle for the process
-   * lifetime. Closing that factory makes later revocation reads fail closed.
-   *
-   * @param storageFactory The application-selected storage factory.
    * @param environment The process environment that supplies shared settings.
    * @returns The configured signed-session resolver and issuer.
    */
-  sessions(storageFactory: StorageFactory, environment: NodeJS.ProcessEnv): SignedSessions;
+  sessions(environment: NodeJS.ProcessEnv): SignedSessions;
   configureServer(
     config: DeploymentConfig,
+    client: Datastore,
     environment: NodeJS.ProcessEnv,
   ): StorageFactory | undefined;
 }
@@ -96,8 +92,8 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     };
   },
 
-  storage(config: DeploymentConfig): StorageFactory {
-    return DatastoreStorageFactory.create({ projectId: config.projectId });
+  storage(client: Datastore): StorageFactory {
+    return DatastoreStorageFactory.newBuilder().setClient(client).build();
   },
 
   bindings(config: CombinedConfig, storageFactory: StorageFactory): DurableSubscriptionBindings {
@@ -105,15 +101,11 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
       storageFactory,
       namespace: config.subscriptionNamespace,
       nextId: randomUUID,
-      dispose: () => Promise.resolve(),
-      leaseMs: 60_000,
-      cleanupBatchSize: 100,
-      recordLimit: 10_000,
-      maxRecordBytes: 1_048_576,
+      cleanup: () => Promise.resolve(),
     });
   },
 
-  sessions(storageFactory: StorageFactory, environment: NodeJS.ProcessEnv): SignedSessions {
+  sessions(environment: NodeJS.ProcessEnv): SignedSessions {
     if (environment.NODE_ENV !== "production")
       throw new Error("Signed MessageBoard sessions require production configuration.");
     return new SignedSessions({
@@ -125,19 +117,16 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
           DeploymentValues.required(environment, "MESSAGE_BOARD_SESSION_PRIVATE_KEY"),
         ),
       },
-      revocation: new MessageBoardSessionRevocations(
-        storageFactory,
-        DeploymentValues.required(environment, "SUBSCRIPTION_REGISTRY_NAMESPACE"),
-      ),
     });
   },
 
   configureServer(
     config: DeploymentConfig,
+    client: Datastore,
     environment: NodeJS.ProcessEnv,
   ): StorageFactory | undefined {
     if (environment.NODE_ENV !== "production") return undefined;
-    const storageFactory = MessageBoardDeployment.storage(config);
+    const storageFactory = MessageBoardDeployment.storage(client);
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory,
       transport: createZeroMqTransport(
@@ -149,7 +138,6 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
         endpoint: DeploymentValues.url(
           DeploymentValues.required(environment, "DELIVERY_SERVER_URL"),
         ),
-        removalQuarantine: new DeliveryQuarantine(storageFactory),
       }),
     });
     return storageFactory;

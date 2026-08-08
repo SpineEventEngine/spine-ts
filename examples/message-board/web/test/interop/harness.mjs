@@ -185,7 +185,6 @@ export async function startTopology({ lifecycle = {} } = {}) {
       authorize: policy.authorize.bind(policy),
       contexts,
       clock,
-      fingerprint: (principal) => principal.id,
       creator: observedCreator,
     });
     const services = createNativeGatewayServices({

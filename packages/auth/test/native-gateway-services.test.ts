@@ -304,7 +304,6 @@ describe("createNativeGatewayServices", () => {
     ["forbidden", Code.PermissionDenied],
     ["denied", Code.PermissionDenied],
     ["request-too-large", Code.ResourceExhausted],
-    ["binding-capacity-exceeded", Code.ResourceExhausted],
     ["binding-busy", Code.Aborted],
     ["unknown-operation", Code.Unimplemented],
     ["malformed-request", Code.InvalidArgument],

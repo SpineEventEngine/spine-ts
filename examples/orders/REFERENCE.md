@@ -9,8 +9,9 @@ The fixed topology contains two Aggregates (`Order` and `Sku`), ten
 Projections, and two Process Managers: fourteen repositories in total.
 `createDatastoreOrdersContext` and `startDatastoreOrdersServer` accept a
 `StorageFactory` and remain provider-neutral. `startOrdersDatastoreServer` is
-the Datastore-specific composition entry point. Domain handlers must not import
-provider types.
+the Datastore-specific composition entry point: its caller owns the `Datastore`
+client and the function hands that same client to `DatastoreStorageFactory`.
+Domain handlers must not import provider types.
 
 Generated Protobuf and handler files are build outputs. Regenerate them through
 the workspace scripts; never edit them directly.

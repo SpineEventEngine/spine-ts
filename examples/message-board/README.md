@@ -193,10 +193,10 @@ request selects one private application node. The
 registry and delivery connections represent shared topology and subscription
 fan-in, not additional unary request routes.
 
-Application code selects and owns its storage, including logical session
-revocation records. Gateway code owns the separate durable subscription
-registry uses one namespace and the one browser-capable Gateway uses the
-session signing values. Operators own TLS, identity-provider setup, secrets,
+Application code selects and owns its storage. The example has no persisted
+session-revocation facility. Gateway code owns the separate durable subscription
+registry in one namespace, and browser-capable processes share session signing
+values. Operators own TLS, identity-provider setup, secrets,
 image distribution, network policy, and production delivery infrastructure.
 The reference simple delivery server is in-memory and not highly available;
 delivery remains best effort, so clients still re-query after gaps.

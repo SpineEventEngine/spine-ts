@@ -1,3 +1,5 @@
+import { create } from "@bufbuild/protobuf";
+import { SubscriptionIdSchema } from "@spine-event-engine/proto/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { SubscriptionRuntime } from "../../src/stand/subscription-runtime.js";
@@ -66,6 +68,67 @@ describe("SubscriptionRuntime", () => {
       vi.useRealTimers();
     }
   });
+
+  it("reports registry-close failure after draining local consumers", async () => {
+    const registry = new FailingCloseRegistry();
+    const runtime = new SubscriptionRuntime(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      registry,
+    );
+    await runtime.consume("one", () => undefined);
+    await expect(runtime.close()).rejects.toThrow("Subscription runtime close failed.");
+    expect(registry.closeCalls).toBe(1);
+  });
+
+  it("makes close idempotent after successful shutdown", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    const runtime = new SubscriptionRuntime(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      registry,
+    );
+    await runtime.close();
+    await runtime.close();
+    await expect(registry.get(create(SubscriptionIdSchema, { value: "one" }))).rejects.toThrow(
+      "closed",
+    );
+  });
+
+  it("exposes its registry and ignores a failed timer reconciliation", async () => {
+    vi.useFakeTimers();
+    const registry = new FailingSnapshotRegistry();
+    const runtime = new SubscriptionRuntime(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      registry,
+    );
+    expect(runtime.registry()).toBe(registry);
+    runtime.start();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await runtime.close();
+    vi.useRealTimers();
+  });
+
+  it("abort-closes a registry without exposing further operations", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    const runtime = new SubscriptionRuntime(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      registry,
+    );
+    runtime.abortClose();
+    await Promise.resolve();
+    await expect(runtime.consume("after-abort", () => undefined)).rejects.toThrow("closing");
+  });
 });
 
 class GatedCleanupRegistry extends InMemorySubscriptionRegistry {
@@ -90,5 +153,20 @@ class GatedCleanupRegistry extends InMemorySubscriptionRegistry {
       this.#release = resolve;
     });
     return await super.cleanup();
+  }
+}
+
+class FailingCloseRegistry extends InMemorySubscriptionRegistry {
+  closeCalls = 0;
+
+  override close(): Promise<void> {
+    this.closeCalls += 1;
+    return Promise.reject(new Error("close failed"));
+  }
+}
+
+class FailingSnapshotRegistry extends InMemorySubscriptionRegistry {
+  override snapshot() {
+    return Promise.reject(new Error("snapshot failed"));
   }
 }

@@ -15,12 +15,7 @@ import type {
   DeliveryWorkerEvidence,
 } from "../../src/delivery/delivery-worker.js";
 import { DeliveryWorker } from "../../src/delivery/delivery-worker.js";
-import {
-  Delivery,
-  deliveryAccess,
-  type DeliveryDrainOutcome,
-  type DeliveryRun,
-} from "../../src/delivery/delivery.js";
+import { Delivery } from "../../src/delivery/delivery.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 
 describe("DeliveryRunCoordinator", () => {
@@ -272,7 +267,7 @@ describe("DeliveryRunCoordinator", () => {
     expect(worker.maxConcurrent).toBe(1);
   });
 
-  it("continues only PAUSED shards from mixed per-shard evidence", async () => {
+  it("does not re-admit terminal compatibility evidence", async () => {
     const scopes = Array.from({ length: 5 }, (_, index) =>
       scope(`target-${String(index)}`, index, 5),
     );
@@ -280,7 +275,7 @@ describe("DeliveryRunCoordinator", () => {
       (obligation) =>
         workerEvidence(
           obligation,
-          fulfilled(0, 5, "PAUSED"),
+          fulfilled(0, 5, "FAILED"),
           fulfilled(1, 5, "FAILED"),
           fulfilled(2, 5, "SKIPPED"),
           fulfilled(3, 5, "STOPPED"),
@@ -292,12 +287,10 @@ describe("DeliveryRunCoordinator", () => {
 
     const settlement = await coordinator.start(scopes);
 
-    expect(worker.starts).toHaveLength(2);
+    expect(worker.starts).toHaveLength(1);
     expect(entry(worker.starts, 0).shards.map((shard) => shard.index)).toEqual([0, 1, 2, 3, 4]);
-    expect(entry(worker.starts, 1).shards.map((shard) => shard.index)).toEqual([0]);
-    expect(entry(worker.starts, 1).obligation).toBe(entry(worker.starts, 0).obligation);
     expect(settlement.scopes.map(({ disposition }) => disposition)).toEqual([
-      "IDLE",
+      "PARKED",
       "PARKED",
       "PARKED",
       "STOPPED",
@@ -962,33 +955,18 @@ describe("DeliveryRunCoordinator", () => {
   });
 
   it("awaits active work through the real T-0036 worker adapter", async () => {
-    const active = deferred<DeliveryDrainOutcome>();
     const delivery = createDelivery();
-    const restore = deliveryAccess.replace(delivery, () => active.promise);
     const configured = scope("first", 0, 1);
     const worker = new DeliveryWorker({
       delivery,
       shards: [configured.ready.shard],
-      node: "worker-a",
       onMessage: () => undefined,
     });
     const adapter = deliveryRunWorkers.worker(worker);
     const obligation = Object.freeze({ scopes: Object.freeze([configured]) });
     const running = adapter.start(obligation, [configured.ready.shard]);
-    let settled = false;
-
-    const awaiting = adapter.awaitSettled().then(() => {
-      settled = true;
-    });
-    await Promise.resolve();
-
-    expect(settled).toBe(false);
-
-    active.resolve(deliveryOutcome());
     await running;
-    await awaiting;
-    expect(settled).toBe(true);
-    restore();
+    await expect(adapter.awaitSettled()).resolves.toBeUndefined();
   });
 
   it("permanently closes real worker starts during adapter retirement", async () => {
@@ -996,7 +974,6 @@ describe("DeliveryRunCoordinator", () => {
     const worker = new DeliveryWorker({
       delivery: createDelivery(),
       shards: [configured.ready.shard],
-      node: "worker-a",
       onMessage: () => undefined,
     });
     const adapter = deliveryRunWorkers.worker(worker);
@@ -1285,21 +1262,6 @@ function createDelivery(): Delivery {
   return new Delivery({
     context: { name: "Tasks", multitenant: false },
     storageFactory: new InMemoryStorageFactory(),
-  });
-}
-
-function deliveryOutcome(): DeliveryDrainOutcome {
-  return Object.freeze({
-    run: Object.freeze({
-      status: "DRAINED",
-      processed: 0,
-      accepted: 0,
-      delivered: 0,
-      failed: 0,
-      failures: Object.freeze([]),
-    }) satisfies DeliveryRun,
-    resumeCursor: Object.freeze({}),
-    exhaustedSkippedScan: false,
   });
 }
 

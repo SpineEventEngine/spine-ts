@@ -1,4 +1,9 @@
-import { ShardIndex, type InboxMessage } from "../../src/index.js";
+import { create, toBinary } from "@bufbuild/protobuf";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { EventSchema } from "@spine-event-engine/proto";
+
+import type { InboxMessage } from "../../src/delivery/inbox.js";
+import { ShardIndex } from "../../src/delivery/shard-index.js";
 
 export function createMessage(
   id: string,
@@ -16,6 +21,10 @@ export function createMessage(
       targetTypeUrl: "type.example.dev/tasks.Projection",
     }),
     signalId,
+    signal: create(AnySchema, {
+      typeUrl: "type.spine.io/spine.core.Event",
+      value: toBinary(EventSchema, create(EventSchema)),
+    }),
     label: "UPDATE_SUBSCRIBER" as const,
     status: "TO_DELIVER" as const,
     shard: ShardIndex.single(),

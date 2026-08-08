@@ -17,8 +17,10 @@ discovery.replace([]);
 For storage-backed GCE-style discovery, create `LeasedNodeRegistry` with both
 the application's chosen `StorageFactory` and a separate operator-chosen
 namespace. The registry is a discovery directory, not a domain repository or
-Stand subscription registry. Read its [reference contract](REFERENCE.md) before
-assembling a registrar.
+Stand subscription registry. It persists the approved application-node lease
+record with a typed node identity, registration fence, and exact millisecond
+expiry. Read its [reference contract](REFERENCE.md) before assembling a
+registrar or selecting a MySQL or Datastore layout.
 
 ```ts
 import { ApplicationNode, LeasedNodeRegistry } from "@spine-event-engine/deployment";

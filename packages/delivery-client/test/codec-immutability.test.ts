@@ -1,6 +1,11 @@
 import { create, toBinary } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { ShardIndex } from "@spine-event-engine/server";
+import { EmptySchema } from "@bufbuild/protobuf/wkt";
+import {
+  OptionalInboxMessageSchema,
+  PageOfMessagesSchema,
+} from "@spine-event-engine/proto/delivery-server";
 import {
   InboxMessageIdSchema,
   InboxMessageSchema,
@@ -9,18 +14,40 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   DeliveryClient,
+  DeliveryPagingError,
   DeliveryProtocolError,
-  DeliveryQuarantineError,
   RemoteInbox,
 } from "../src/index.js";
 import { DeliveryMessageCodec } from "../src/wire/codec.js";
 import { domainMessage, message, transport } from "./shared-fixtures.js";
 
 describe("delivery codec and immutable snapshots", () => {
-  it("requires a durable removal quarantine before admitting remote inbox work", () => {
+  it("opens a remote inbox without retained removal state", () => {
     const client = DeliveryClient.usingTransport(transport().transport);
 
-    expect(() => new RemoteInbox(client, undefined as never)).toThrow(DeliveryQuarantineError);
+    expect(new RemoteInbox(client)).toBeInstanceOf(RemoteInbox);
+  });
+
+  it("writes, pages, and directly removes only an exact pending remote row", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport, { pageSize: 2 });
+    const inbox = new RemoteInbox(client);
+    const source = domainMessage();
+
+    fake.reply(create(EmptySchema));
+    await expect(inbox.receive(source)).resolves.toMatchObject({ outcome: "WRITTEN" });
+    fake.reply(create(PageOfMessagesSchema, { message: [message("command", "page")] }));
+    await expect(inbox.read(ShardIndex.single())).resolves.toHaveLength(1);
+    await expect(inbox.read(ShardIndex.single(), { offset: 1 })).rejects.toBeInstanceOf(
+      DeliveryPagingError,
+    );
+
+    fake.reply(create(OptionalInboxMessageSchema, { message: message("command", "work") }));
+    const current = await client.findOne({ value: "work", shard: ShardIndex.single() });
+    if (current === undefined) throw new Error("Expected remote message.");
+    fake.reply(create(OptionalInboxMessageSchema, { message: message("command", "work") }));
+    fake.reply(create(EmptySchema));
+    await expect(inbox.markDelivered(current)).resolves.toMatchObject({ status: "DELIVERED" });
   });
 
   it("keeps malformed wire-message decoding on the public protocol-error identity", () => {

@@ -74,19 +74,19 @@ normal choice for an application that uses generated handlers.
 
 ### Keep Stand subscription definitions
 
-Stand subscription definitions use your context storage by default. The default
-registry keeps up to 100 definitions; choose a smaller limit when that better
-fits the application.
+Stand subscription definitions use your context storage by default. One
+`spine.client.SubscriptionRecord` is stored for each explicit subscription ID.
+Pending definitions expire if they are not activated; reconciliation is
+best-effort at a ten-second interval, so subscription updates are not complete
+delivery and clients re-query after reconnects or gaps.
 
-```ts
-import { BoundedContext } from "@spine-event-engine/server";
-
-const context = BoundedContext.singleTenant("Tasks").withSubscriptionLimit(25).build();
-```
+The storage record exposes the physical columns `status` and
+`when_activation_expires`. Cleanup asks the provider for 26 pending records,
+ordered by `when_activation_expires` and then ID. It deletes at most 25 expired
+records and reports more work only when the observed 26th record is expired.
 
 For an application-specific registry, provide one complete implementation.
-The built context owns and closes it. Do not combine a custom registry with
-`withSubscriptionLimit()`.
+The built context owns and closes it.
 
 ```ts
 import { BoundedContext, type StandSubscriptionRegistry } from "@spine-event-engine/server";
@@ -105,9 +105,9 @@ still continues.
 
 The registry stores a definition first, then makes it active. Applications use
 the generated `SubscriptionId` throughout the lifecycle. `get()` and
-`snapshot()` return cloned, frozen message/object graphs, so treat them as
-observations rather than mutable working objects. Their cloned Protobuf byte
-arrays remain mutable, but do not alias stored or caller bytes.
+`snapshot()` return cloned values, so treat them as observations rather than
+mutable working objects. Their Protobuf byte arrays remain mutable, but do not
+alias stored or caller bytes.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
@@ -124,9 +124,9 @@ const definition = create(SubscriptionSchema, {
 await registry.create(definition); // pending for up to 30 seconds
 await registry.activate(id); // active definitions do not expire
 const current = await registry.get(id); // one isolated snapshot
-const all = await registry.snapshot(); // bounded, identifier-sorted copies
-if (current !== undefined) await registry.delete(id, current.revision);
-await registry.cleanup(); // removes one finite page of expired pending entries
+const all = await registry.snapshot(); // complete, identifier-sorted copies
+if (current !== undefined) await registry.delete(id);
+await registry.cleanup(); // removes at most 25 expired pending entries
 await registry.close();
 
 void all;
@@ -135,6 +135,11 @@ void all;
 The built-in durable registry requires record storage with atomic
 compare-and-set. Context construction fails fast when the selected storage
 provider cannot supply that capability; it never silently falls back to memory.
+
+Provider configuration for `SubscriptionRecord` applies to these definitions.
+For example, a MySQL factory can assign `SubscriptionRecordSchema` to a chosen
+table, and a Datastore factory can provide storage for that same schema. The
+registry uses the configured provider when the context is built.
 
 An aggregate receives a generated command type in an `@Assign` method. The
 generator discovers this method and writes the registry used by `buildAsync()`;
@@ -210,7 +215,7 @@ notifications on the paired System Context `EventBus`. Stand's default registry
 uses the application's `StorageFactory`; a builder may supply another
 implementation. A definition is pending for at most 30 seconds, active
 definitions have no framework TTL, and cancellation physically deletes the
-definition. Nodes reconcile their local listeners from a bounded complete
+definition. Nodes reconcile their local listeners from a complete
 snapshot every 10 seconds. Active streams and queues are process-local.
 
 ### Serve browser clients
@@ -260,11 +265,7 @@ const bindings = new DurableSubscriptionBindings({
   storageFactory: registryStorage,
   namespace: "my-app",
   nextId: () => crypto.randomUUID(),
-  dispose: async () => undefined,
-  leaseMs: 60_000,
-  cleanupBatchSize: 100,
-  recordLimit: 10_000,
-  maxRecordBytes: 1_048_576,
+  cleanup: async () => undefined,
 });
 
 const running = await new Server({
@@ -276,7 +277,6 @@ const running = await new Server({
     authorize,
     contexts: contextResolver,
     clock,
-    fingerprint: (principal) => principal.id,
     bindings,
   },
 }).run();
@@ -284,33 +284,28 @@ const running = await new Server({
 void running;
 ```
 
-In production, browser access needs bindings that declare the durable
-capability. `DurableSubscriptionBindings` is the supplied implementation;
-compatible bindings can be used by later standalone hosting as well. Startup
-rejects missing or volatile bindings before opening a listener. The registry
+In production, browser access requires `DurableSubscriptionBindings`. Startup
+rejects missing or in-memory bindings before opening a listener. The registry
 uses the storage factory that your application supplies and closes only its own
 handle, so you can use a separate factory from application-data storage or
 intentionally share one. Its namespace separates applications sharing a
-provider. `leaseMs` is milliseconds; `cleanupBatchSize`, `recordLimit`, and
-`maxRecordBytes` are positive safe integers. Combined browser mode may omit
-bindings to use an in-memory registry; standalone mode must always supply them
-explicitly.
+provider. Combined browser mode may omit bindings to use an in-memory registry;
+standalone mode must always supply them explicitly.
 
-Every durable reservation has its final public ID before the backend subscribe
-operation begins. Registries using the same namespace coordinate that finite
-capacity, so the limit applies across gateway processes rather than to each
-process separately. An activation uses a finite lease and fence. Before each
-backend effect and each forwarded update, a durable binding checks that it
-still owns its lease. A lost lease suppresses later effects and updates, and
-the local controller is aborted when a renewal observes the loss. It cannot
-later complete as owner.
-Cancellation can be retried after an uncertain backend result. Expired records
-are cleaned in bounded batches when requests call the registry; applications
-may also call `purgeExpired(nowMs)` from their own maintenance loop. A cleaner
-renews its fenced lease immediately before each disposal callback, so another
-registry cannot take over while that callback is still running. This is
-coordination only: it does not recover a live stream or promise replay,
-exactly-once updates, ordering, or cluster-complete notifications.
+Each durable binding stores one approved `GatewayAuthenticatedSubscription`:
+its public subscription ID, complete subscription, and expiry. The Topic keeps
+the trusted Actor and Tenant resolved for the request, so later Activate and
+Cancel requests must match that trusted context. Cancellation runs backend
+cleanup before exact record deletion; a failed cleanup leaves the record for a
+retry. Expired records are cleaned in finite batches when requests call the
+registry; applications may also call `purgeExpired(nowMs)` from a maintenance
+loop. This is a single-Gateway persistence model: it does not coordinate
+multiple Gateway processes, quotas, reservations, or durable fingerprints.
+On restart, unexpired definitions are rehydrated and expired definitions are
+removed only after cleanup succeeds. Configure MySQL with
+`setTableName(GatewayAuthenticatedSubscriptionSchema, table)` or Datastore with
+`useRecordStorage(GatewayAuthenticatedSubscriptionSchema, creator)` to target
+this record family.
 
 The server validates commands before handler code runs. Invalid payloads are
 returned as `COMMAND_VALIDATION_ERROR`; invalid state transitions are returned
@@ -339,12 +334,20 @@ updates, event replay for subscriptions, or exactly-once observation.
 ## 🌐 Delivery and environment
 
 `DeliveryBuilder` builds a delivery from its inbox, work registry, shard, and
-batch choices. `DeliverySupervisor({ source, delivery, onMessage })` receives
+page-size choices. `DeliverySupervisor({ source, delivery, onMessage })` receives
 the separate public `DeliverySource` used to observe remote shards.
 `Environment` resolves the Node deployment profile; the singleton
 `ServerEnvironment` exposes the configured storage, transport, optional
 delivery/tracing facilities, and their process lifecycle. They do not create a
 production transport topology or durable scheduler for you.
+
+`DeliveryMonitor` is the customizable explicit failure-policy seam. Its hooks
+may return a value or a promise; a failed reception defaults to durable
+`markDelivered()` and continues independent targets. Applications may instead
+select one immediate `repeatDispatching()` action. The monitor adds no attempts,
+quarantine, receipts, markers, timers, backoff, dead-letter storage, or
+scheduler policy. Each delivery lifetime has an opaque `WorkerId`; graceful
+stop waits for admitted work to settle before releasing its shard session.
 
 The default Entity Inbox has one shard. Configure more shards through the public
 builder chain:
@@ -369,7 +372,13 @@ the existing finite and supervisor delivery paths; a close-only local delivery
 remains supported. The environment stops attachments before closing delivery,
 transport, tracing, and storage in that order. Use `RemoteDelivery` from
 `@spine-event-engine/delivery-client` when an application selects a remote
-delivery endpoint and durable removal quarantine.
+delivery endpoint with direct authoritative removal.
+
+Shard ownership excludes concurrent delivery within a shard. Pending and
+delivered Inbox rows are stored directly, and delivered rows are the
+deduplication fact. Handler effects and the delivered-row compare-and-set are
+not transactional: a lost acknowledgement can redeliver after restart, so
+downstream handling must be idempotent.
 
 ## ⚠️ Runtime boundaries
 

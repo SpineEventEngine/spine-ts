@@ -1,5 +1,6 @@
 import { Server } from "@spine-event-engine/server";
 import { GkeNodeDiscovery } from "@spine-event-engine/deployment-gke";
+import { Datastore } from "@google-cloud/datastore";
 
 import { MessageBoardDeployment } from "./deployment-config.js";
 import { BoardAccessPolicy, BoardContextResolver } from "./board-access.js";
@@ -7,12 +8,13 @@ import { LocalBoardSession } from "./local-session.js";
 import { typeRegistry } from "./model-registry.js";
 
 const config = MessageBoardDeployment.gateway(process.env);
+const client = new Datastore({ projectId: config.projectId });
 const storage =
-  MessageBoardDeployment.configureServer(config, process.env) ??
-  MessageBoardDeployment.storage(config);
+  MessageBoardDeployment.configureServer(config, client, process.env) ??
+  MessageBoardDeployment.storage(client);
 const policy = new BoardAccessPolicy();
 const bindings = MessageBoardDeployment.bindings(config, storage);
-const sessions = MessageBoardDeployment.sessions(storage, process.env);
+const sessions = MessageBoardDeployment.sessions(process.env);
 const server = await Server.atPort(config.port, {
   host: config.host,
   browser: {
@@ -25,7 +27,6 @@ const server = await Server.atPort(config.port, {
     authorize: policy.authorize.bind(policy),
     contexts: new BoardContextResolver(),
     clock: LocalBoardSession.clock,
-    fingerprint: (principal) => principal.id,
     bindings,
   },
 }).run();

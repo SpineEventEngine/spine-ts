@@ -13,8 +13,18 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { EventStore, InMemoryStorageFactory } from "../../src/index.js";
+import { eventStoreAccess } from "../../src/internal/event-store.js";
 
 describe("EventStore", () => {
+  it("preserves a caller result through the provider-only Event Store lock", async () => {
+    const factory = new InMemoryStorageFactory();
+    await expect(
+      eventStoreAccess.withLock(factory, { name: "Tasks", multitenant: false }, () =>
+        Promise.resolve("sentinel"),
+      ),
+    ).resolves.toBe("sentinel");
+  });
+
   it("persists generated Spine events through record storage", async () => {
     const factory = new InMemoryStorageFactory();
     const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
@@ -25,7 +35,7 @@ describe("EventStore", () => {
     await store.appendAll([later, earlier]);
 
     const read = await store.read({
-      sort: [{ field: "timestamp", direction: "asc" }],
+      sort: [{ field: "created", direction: "asc" }],
     });
 
     expect(read.map((event) => event.id?.value)).toEqual(["event-1", "event-2"]);

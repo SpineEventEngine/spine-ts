@@ -629,7 +629,6 @@ export type {
   SubscriptionBindings,
   SubscriptionAbortSignal,
   SubscriptionBindingTransition,
-  SubscriptionCapacityReservation,
   SubscriptionTopicWire,
   PublicSubscriptionWire,
   BackendSubscriptionEnvelope,

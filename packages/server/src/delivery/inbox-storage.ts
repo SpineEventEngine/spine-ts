@@ -1,40 +1,30 @@
-import type { Any } from "@bufbuild/protobuf/wkt";
+import { create, toBinary } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type {
-  RecordContinuation,
-  RecordStorage,
-  StorageContext,
-  StorageFactory,
-} from "@spine-event-engine/storage";
+  InboxMessage as WireInboxMessage,
+  InboxMessageId as WireInboxMessageId,
+} from "@spine-event-engine/proto/delivery";
+import { InboxMessageIdSchema } from "@spine-event-engine/proto/delivery";
+import type { RecordStorage, StorageContext, StorageFactory } from "@spine-event-engine/storage";
 
-import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
 import {
   InboxMessageError,
   type DeliveryStatus,
   type InboxMessage,
   type InboxMessageId,
-  type InboxReadContinuation,
   type InboxReadOptions,
   type InboxWriteResult,
 } from "./inbox.js";
-import {
-  DedupRecords,
-  dedupRecordSpec,
-  InboxClaimRecords,
-  InboxRecords,
-  inboxRecordSpec,
-  type DedupGuardState,
-} from "./inbox-records.js";
-import type { ClaimedInboxMessage, InboxClaim, InboxRecordMessage } from "./inbox-claim.js";
-import type { ShardSession } from "./sharded-work-registry.js";
+import { InboxRecords, inboxRecordSpec } from "./inbox-records.js";
 import { ShardIndex } from "./shard-index.js";
 
 const defaultReadLimit = 100;
 const maxReadLimit = 1_000;
-const maxContinuationTextBytes = 16 * 1024;
-const casRetryLimit = 8;
+const dedupReadLimit = 2;
+const maxDedupReadPages = maxReadLimit / dedupReadLimit;
 
 /**
- * Durable inbox storage over record storage.
+ * Stores direct generated inbox records in the configured durable family.
  */
 export class InboxStorage {
   readonly #context: StorageContext;
@@ -42,1358 +32,300 @@ export class InboxStorage {
   readonly #now: () => Date;
 
   /**
-   * Opens inbox storage from one storage context and factory.
+   * Opens direct inbox storage.
    *
-   * @param options Supplies durable storage and an optional retention clock.
+   * @param options Configures the storage context, factory, and optional clock.
    */
   constructor(options: InboxStorageOptions) {
     this.#context = options.context;
     this.#storageFactory = options.storageFactory;
     this.#now = options.now ?? (() => new Date());
-    inboxStorageInternals.set(this, {
-      claim: (message, session) => this.#claimForDelivery(message, session),
-      renew: (message, session) => this.#renewForDelivery(message, session),
-      markDelivered: (message) => this.#markDelivered(message),
-      unclaim: (message) => this.#unclaim(message),
-    });
     Object.freeze(this);
   }
 
   /**
-   * Reads ordered inbox messages for one shard.
+   * Reads ordered direct inbox rows from one shard.
    *
-   * @param shard Selects the shard to inspect.
-   * @param options Filters and bounds the ordered page.
-   * @returns The matching message snapshots.
+   * @param shard Identifies the shard to query.
+   * @param options Filters and bounds the returned page.
+   * @returns The matching durable inbox messages.
    */
   async read(shard: ShardIndex, options: InboxReadOptions = {}): Promise<readonly InboxMessage[]> {
-    const nextShard = InboxStorageValues.requireReadShard(shard);
-    const limit = InboxStorageValues.requireInboxReadLimit(options.limit ?? defaultReadLimit);
-    const offset =
-      options.offset === undefined
-        ? undefined
-        : InboxStorageValues.requireInboxReadOffset(options.offset);
-    const after =
-      options.after === undefined
-        ? undefined
-        : InboxStorageValues.inboxContinuation(nextShard, options.after);
-    const storage = this.#inboxStorage();
-
+    const requested = Values.shard(shard);
+    const limit = Values.limit(options.limit ?? defaultReadLimit);
+    const offset = Values.offset(options.offset);
+    const after = Values.after(options.after, requested);
+    const storage = this.#storage();
     try {
-      const records = await this.#durableRead("Inbox record", () =>
-        storage.queryEntries({
-          filters: [
-            { column: "shard", value: nextShard.key() },
-            ...InboxReadValues.statusFilters(options.statuses),
-          ],
-          sort: [{ field: "receivedAt" }, { field: "version" }, { field: "messageId" }],
-          limit,
-          ...(after === undefined ? {} : { after }),
-          ...(offset === undefined ? {} : { offset }),
-        }),
-      );
-
-      return Object.freeze(
-        records.map((entry) =>
-          InboxStorageValues.publicMessage(InboxRecords.read(entry.record, entry.id)),
-        ),
-      );
+      const rows = await storage.queryEntries({
+        filters: [
+          { column: "shard_index", value: requested.index },
+          { column: "shard_total", value: requested.ofTotal },
+          ...(options.statuses === undefined
+            ? []
+            : [{ column: "status", value: options.statuses.map(Values.status) }]),
+        ],
+        sort: [{ field: "when_received" }, { field: "version" }, { field: "message_id" }],
+        limit,
+        ...(offset === undefined ? {} : { offset }),
+        ...(after === undefined ? {} : { after }),
+      });
+      return Object.freeze(rows.map((row) => InboxRecords.read(row.record, row.id)));
     } finally {
       storage.close();
     }
   }
 
   /**
-   * Reads one exact durable inbox message by ID.
+   * Reads one exact direct inbox row.
    *
-   * @param id Identifies the durable message.
-   * @returns The message when it remains durable.
+   * @param id Identifies the message and shard.
+   * @returns The durable message, or `undefined` when it is absent.
    */
   async readMessage(id: InboxMessageId): Promise<InboxMessage | undefined> {
-    const key = this.#messageKey(id);
-    const storage = this.#inboxStorage();
-
+    const wireId = Values.id(id);
+    const storage = this.#storage();
     try {
-      const record = await this.#durableRead("Inbox record", () => storage.read(key));
-      return record === undefined
-        ? undefined
-        : InboxStorageValues.publicMessage(InboxRecords.read(record, key));
+      const record = await storage.read(wireId);
+      return record === undefined ? undefined : InboxRecords.read(record, wireId);
     } finally {
       storage.close();
     }
   }
 
   /**
-   * Writes one inbox message unless a live dedup key already exists.
+   * Writes one direct inbox row without overwriting a collision.
    *
-   * @param message Supplies the message snapshot to write.
-   * @returns The write or deduplication outcome.
+   * @param message Supplies the message to persist.
+   * @returns Whether the row was written or matched an existing duplicate.
    */
   async write(message: InboxMessage): Promise<InboxWriteResult> {
-    // Serialize the inbox row once so validation and all later CAS keys use
-    // one immutable caller-input snapshot.
-    const snapshot = InboxRecords.read(
-      InboxRecords.write(InboxStorageValues.requirePublicMessage(message)),
-    );
-    DedupRecords.writeClaim(snapshot);
-
-    const inboxStorage = this.#inboxStorage();
-    const dedupStorage = this.#dedupStorage();
-
+    const record = InboxRecords.write(message);
+    const id = Values.wireId(record);
+    const storage = this.#storage();
     try {
-      return await this.#writeWithDedup(inboxStorage, dedupStorage, snapshot);
+      Values.atomic(storage);
+      if (await storage.compareAndSet(id, undefined, record)) {
+        return Object.freeze({ outcome: "WRITTEN", message: InboxRecords.read(record, id) });
+      }
+      const existing = await storage.read(id);
+      if (existing !== undefined && Values.same(existing, record)) {
+        return Object.freeze({ outcome: "DUPLICATE", message: InboxRecords.read(existing, id) });
+      }
+      throw new InboxMessageError("Inbox message ID already exists.");
     } finally {
-      inboxStorage.close();
-      dedupStorage.close();
+      storage.close();
     }
   }
 
   /**
-   * Updates one exact `TO_DELIVER` inbox message to `DELIVERED`.
+   * Marks one exact pending row delivered.
    *
-   * Returns `undefined` when the row is missing, is not pending, or does not
-   * match the caller-provided message snapshot. Already-delivered rows are
-   * returned idempotently only when they match the same message apart from the
-   * status transition.
-   *
-   * @param message Supplies the pending message snapshot.
-   * @returns The delivered message when the transition succeeds.
+   * @param message Supplies the expected pending snapshot.
+   * @returns The delivered row, or `undefined` when the snapshot no longer matches.
    */
   async markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
-    return this.#markDelivered(InboxStorageValues.requirePublicMessage(message));
-  }
-
-  async #markDelivered(message: InboxRecordMessage): Promise<InboxMessage | undefined> {
-    const snapshot = InboxRecords.read(InboxRecords.write(message));
-    const inboxStorage = this.#inboxStorage();
-    const dedupStorage = this.#dedupStorage();
-
+    const expected = InboxRecords.write(message);
+    const id = Values.wireId(expected);
+    const storage = this.#storage();
     try {
-      const delivered = await this.#markDeliveredWithDedup(inboxStorage, dedupStorage, snapshot);
-      return delivered === undefined ? undefined : InboxStorageValues.publicMessage(delivered);
+      Values.atomic(storage);
+      const current = await storage.read(id);
+      if (current === undefined) return undefined;
+      const decoded = InboxRecords.read(current, id);
+      if (decoded.status === "DELIVERED") {
+        return Values.same(current, InboxRecords.write({ ...message, status: "DELIVERED" }))
+          ? decoded
+          : undefined;
+      }
+      if (decoded.status !== "TO_DELIVER" || !Values.same(current, expected)) return undefined;
+      const delivered = InboxRecords.write({ ...decoded, status: "DELIVERED" });
+      if (await storage.compareAndSet(id, current, delivered))
+        return InboxRecords.read(delivered, id);
+      const successor = await storage.read(id);
+      return successor !== undefined && Values.same(successor, delivered)
+        ? InboxRecords.read(successor, id)
+        : undefined;
     } finally {
-      inboxStorage.close();
-      dedupStorage.close();
+      storage.close();
     }
   }
 
-  async #claimForDelivery(
-    message: InboxMessage,
-    session: ShardSession,
-  ): Promise<ClaimedInboxMessage | undefined> {
-    const snapshot = InboxRecords.read(InboxRecords.write(message));
-    const inboxStorage = this.#inboxStorage();
-
+  /**
+   * Returns one exact pending row while the caller owns its shard.
+   *
+   * @param message Supplies the expected pending snapshot.
+   * @returns The admitted row, or `undefined` when it is unavailable or duplicated.
+   */
+  async admit(message: InboxMessage): Promise<InboxMessage | undefined> {
+    const expected = InboxRecords.write(message);
+    const id = Values.wireId(expected);
+    const storage = this.#storage();
     try {
-      return await this.#claimMessage(
-        inboxStorage,
-        snapshot,
-        InboxStorageValues.claimFromSession(session),
-      );
-    } finally {
-      inboxStorage.close();
-    }
-  }
-
-  async #renewForDelivery(
-    message: ClaimedInboxMessage,
-    session: ShardSession,
-  ): Promise<ClaimedInboxMessage | undefined> {
-    const snapshot = InboxStorageValues.requireClaimed(
-      InboxRecords.read(InboxRecords.write(message)),
-    );
-    const inboxStorage = this.#inboxStorage();
-
-    try {
-      return await this.#renewClaim(
-        inboxStorage,
-        snapshot,
-        InboxStorageValues.claimFromSession(session),
-      );
-    } finally {
-      inboxStorage.close();
-    }
-  }
-
-  async #unclaim(message: ClaimedInboxMessage): Promise<InboxMessage | undefined> {
-    const snapshot = InboxRecords.read(InboxRecords.write(message));
-    const inboxStorage = this.#inboxStorage();
-
-    try {
-      const unclaimed = await this.#unclaimMessage(inboxStorage, snapshot);
-      return unclaimed === undefined ? undefined : InboxStorageValues.publicMessage(unclaimed);
-    } finally {
-      inboxStorage.close();
-    }
-  }
-
-  async #claimMessage(
-    inboxStorage: RecordStorage<string, Any>,
-    message: InboxRecordMessage,
-    claim: InboxClaim,
-  ): Promise<ClaimedInboxMessage | undefined> {
-    const key = this.#messageKey(message.id);
-    const nextClaim = InboxClaimRecords.snapshot(claim);
-
-    for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
-      const currentRecord = await this.#durableRead("Inbox record", () => inboxStorage.read(key));
-      if (currentRecord === undefined) {
-        return undefined;
-      }
-
-      const current = InboxRecords.read(currentRecord, key);
-      if (current.status !== "TO_DELIVER") {
-        return undefined;
-      }
-      if (!this.#sameMessageExceptClaim(current, message)) {
-        return undefined;
-      }
-      if (this.#hasLiveClaim(current)) {
-        return undefined;
-      }
-
-      const claimed = Object.freeze({
-        ...current,
-        claim: nextClaim,
-      });
-      const nextRecord = InboxRecords.write(claimed);
-      const updated = await this.#durableCompareAndSet(
-        "Inbox record",
-        inboxStorage,
-        key,
-        currentRecord,
-        nextRecord,
-      );
-      if (updated) {
-        return InboxStorageValues.requireClaimed(InboxRecords.read(nextRecord, key));
-      }
-    }
-
-    throw InboxStorageValues.casRetriesExhausted("Inbox claim");
-  }
-
-  #hasLiveClaim(message: InboxRecordMessage): boolean {
-    const claim = message.claim;
-
-    return claim !== undefined && claim.expiresAt.getTime() > this.#now().getTime();
-  }
-
-  async #renewClaim(
-    inboxStorage: RecordStorage<string, Any>,
-    message: ClaimedInboxMessage,
-    claim: InboxClaim,
-  ): Promise<ClaimedInboxMessage | undefined> {
-    const key = this.#messageKey(message.id);
-    const expectedRecord = InboxRecords.write(message);
-    const nextClaim = InboxClaimRecords.snapshot(claim);
-
-    for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
-      const currentRecord = await this.#durableRead("Inbox record", () => inboxStorage.read(key));
-      if (currentRecord === undefined) {
-        return undefined;
-      }
-
-      const current = InboxRecords.read(currentRecord, key);
-      if (current.status !== "TO_DELIVER" || !this.#sameRecord(currentRecord, expectedRecord)) {
-        return undefined;
-      }
-
-      const renewed = Object.freeze({
-        ...current,
-        claim: nextClaim,
-      });
-      const nextRecord = InboxRecords.write(renewed);
-      const updated = await this.#durableCompareAndSet(
-        "Inbox record",
-        inboxStorage,
-        key,
-        currentRecord,
-        nextRecord,
-      );
-      if (updated) {
-        return InboxStorageValues.requireClaimed(InboxRecords.read(nextRecord, key));
-      }
-    }
-
-    throw InboxStorageValues.casRetriesExhausted("Inbox claim renewal");
-  }
-
-  async #unclaimMessage(
-    inboxStorage: RecordStorage<string, Any>,
-    message: InboxRecordMessage,
-  ): Promise<InboxRecordMessage | undefined> {
-    const key = this.#messageKey(message.id);
-    const expectedRecord = InboxRecords.write(message);
-
-    for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
-      const currentRecord = await this.#durableRead("Inbox record", () => inboxStorage.read(key));
-      if (currentRecord === undefined) {
-        return undefined;
-      }
-
-      const current = InboxRecords.read(currentRecord, key);
-      if (current.status !== "TO_DELIVER" || !this.#sameRecord(currentRecord, expectedRecord)) {
-        return undefined;
-      }
-
-      const unclaimed = this.#withoutClaim(current);
-      const nextRecord = InboxRecords.write(unclaimed);
-      const updated = await this.#durableCompareAndSet(
-        "Inbox record",
-        inboxStorage,
-        key,
-        currentRecord,
-        nextRecord,
-      );
-      if (updated) {
-        return InboxRecords.read(nextRecord, key);
-      }
-    }
-
-    throw InboxStorageValues.casRetriesExhausted("Inbox claim release");
-  }
-
-  async #markDeliveredWithDedup(
-    inboxStorage: RecordStorage<string, Any>,
-    dedupStorage: RecordStorage<string, Any>,
-    message: InboxMessage,
-  ): Promise<InboxMessage | undefined> {
-    const key = this.#messageKey(message.id);
-
-    for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
-      const currentRecord = await this.#durableRead("Inbox record", () => inboxStorage.read(key));
-      if (currentRecord === undefined) {
-        return undefined;
-      }
-
-      const current = InboxRecords.read(currentRecord, key);
-      if (current.status === "DELIVERED") {
-        if (!this.#sameMessageExceptStatus(current, message)) {
+      Values.atomic(storage);
+      const current = await storage.read(id);
+      if (current === undefined || !Values.same(current, expected)) return undefined;
+      const pending = InboxRecords.read(current, id);
+      if (pending.status !== "TO_DELIVER") return undefined;
+      let after: ReturnType<typeof Values.after> | undefined;
+      for (let page = 0; page < maxDedupReadPages; page++) {
+        const delivered = await storage.queryEntries({
+          filters: [
+            { column: "inbox_id", value: expected.inboxId },
+            { column: "signal_id", value: expected.signalId },
+            { column: "status", value: Values.status("DELIVERED") },
+          ],
+          sort: [{ field: "when_received" }, { field: "version" }, { field: "message_id" }],
+          limit: dedupReadLimit,
+          ...(after === undefined ? {} : { after }),
+        });
+        const rows = delivered.map((row) => InboxRecords.read(row.record, row.id));
+        if (
+          rows.some(
+            (row) =>
+              row.signalId === pending.signalId &&
+              row.inboxId.targetId === pending.inboxId.targetId &&
+              row.inboxId.targetTypeUrl === pending.inboxId.targetTypeUrl &&
+              (row.keepUntil === undefined || row.keepUntil.getTime() > Values.now(this.#now)),
+          )
+        ) {
+          await storage.compareAndSet(
+            id,
+            current,
+            InboxRecords.write({ ...pending, status: "DELIVERED" }),
+          );
           return undefined;
         }
-        await this.#syncDeliveredDedupGuard(dedupStorage, current, current);
-        return current;
-      }
-      if (current.status !== "TO_DELIVER") {
-        return undefined;
-      }
-      if (!this.#sameRecord(currentRecord, InboxRecords.write(message))) {
-        return undefined;
-      }
-
-      const delivered = Object.freeze({
-        ...this.#withoutClaim(current),
-        status: "DELIVERED" as const,
-      });
-      await this.#syncDeliveredDedupGuard(dedupStorage, current, delivered);
-
-      const nextRecord = InboxRecords.write(delivered);
-      const marked = await this.#durableCompareAndSet(
-        "Inbox record",
-        inboxStorage,
-        key,
-        currentRecord,
-        nextRecord,
-      );
-      if (!marked) {
-        continue;
-      }
-
-      return delivered;
-    }
-
-    throw InboxStorageValues.casRetriesExhausted("Inbox delivery status");
-  }
-
-  async #syncDeliveredDedupGuard(
-    dedupStorage: RecordStorage<string, Any>,
-    expected: InboxMessage,
-    delivered: InboxMessage,
-  ): Promise<void> {
-    const dedupKey = DedupRecords.guardKey(delivered);
-    const nextRecord = DedupRecords.writeFinal(delivered);
-
-    for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
-      const currentRecord = await this.#durableRead("Inbox dedup guard", () =>
-        dedupStorage.read(dedupKey),
-      );
-      if (currentRecord === undefined) {
-        throw new DeliveryStorageCorruptionError(
-          `Inbox dedup guard "${dedupKey}" is missing for a delivered message.`,
+        if (rows.length < dedupReadLimit) return pending;
+        const last = rows.at(-1);
+        if (last === undefined) return pending;
+        after = Values.after(
+          { messageId: last.id.value, whenReceived: last.whenReceived, version: last.version },
+          pending.shard,
         );
       }
-
-      if (this.#sameRecord(currentRecord, nextRecord)) {
-        return;
-      }
-      if (this.#dedupGuardMatches(currentRecord, dedupKey, delivered)) {
-        return;
-      }
-      if (!this.#dedupGuardCanAdvance(currentRecord, dedupKey, expected)) {
-        throw new DeliveryStorageCorruptionError(
-          `Inbox dedup guard "${dedupKey}" does not match the delivered message.`,
-        );
-      }
-
-      const updated = await this.#durableCompareAndSet(
-        "Inbox dedup guard",
-        dedupStorage,
-        dedupKey,
-        currentRecord,
-        nextRecord,
-      );
-      if (updated) {
-        return;
-      }
-    }
-
-    throw InboxStorageValues.casRetriesExhausted("Inbox dedup guard");
-  }
-
-  #dedupGuardMatches(record: Any, dedupKey: string, message: InboxMessage): boolean {
-    const pending = DedupRecords.readPendingMessage(record);
-    if (pending !== undefined) {
-      return this.#sameRecord(InboxRecords.write(pending), InboxRecords.write(message));
-    }
-
-    const guard = DedupRecords.readGuard(record, dedupKey);
-    return (
-      this.#sameMessageId(guard.messageId, message.id) && this.#sameGuardMetadata(guard, message)
-    );
-  }
-
-  #dedupGuardCanAdvance(record: Any, dedupKey: string, expected: InboxMessage): boolean {
-    if (this.#dedupGuardMatches(record, dedupKey, expected)) {
-      return true;
-    }
-
-    if (expected.status !== "DELIVERED") {
-      return false;
-    }
-
-    return this.#dedupGuardMatches(
-      record,
-      dedupKey,
-      Object.freeze({
-        ...expected,
-        status: "TO_DELIVER" as const,
-      }),
-    );
-  }
-
-  async #writeWithDedup(
-    inboxStorage: RecordStorage<string, Any>,
-    dedupStorage: RecordStorage<string, Any>,
-    message: InboxMessage,
-  ): Promise<InboxWriteResult> {
-    const dedupKey = DedupRecords.guardKey(message);
-
-    for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
-      const step = await this.#readWriteStep(inboxStorage, dedupStorage, dedupKey, message);
-      if (step.kind === "RETURN") {
-        return step.result;
-      }
-      if (step.kind === "RETRY") {
-        continue;
-      }
-      const result = await this.#claimAndWrite(inboxStorage, dedupStorage, dedupKey, step);
-      if (result !== undefined) {
-        return result;
-      }
-    }
-
-    throw InboxStorageValues.casRetriesExhausted("Inbox dedup guard");
-  }
-
-  async #readWriteStep(
-    inboxStorage: RecordStorage<string, Any>,
-    dedupStorage: RecordStorage<string, Any>,
-    dedupKey: string,
-    message: InboxMessage,
-  ): Promise<WriteStep> {
-    const current = await this.#durableRead("Inbox dedup guard", () => dedupStorage.read(dedupKey));
-    if (current === undefined) {
-      return { kind: "CLAIM", expected: undefined, message };
-    }
-
-    const storedGuard = await this.#readGuardMessage(inboxStorage, dedupKey, current);
-
-    if (storedGuard !== undefined) {
-      return this.#handleStoredGuardMessage(
-        inboxStorage,
-        dedupStorage,
-        dedupKey,
-        current,
-        storedGuard,
-        message,
-      );
-    }
-
-    if (!DedupRecords.isPending(current)) {
-      throw new DeliveryStorageCorruptionError(
-        `Inbox dedup guard "${dedupKey}" points to a missing inbox message.`,
-      );
-    }
-
-    return this.#recoverPendingClaim(inboxStorage, dedupStorage, dedupKey, current, message);
-  }
-
-  async #handleStoredGuardMessage(
-    inboxStorage: RecordStorage<string, Any>,
-    dedupStorage: RecordStorage<string, Any>,
-    dedupKey: string,
-    current: Any,
-    storedGuard: GuardMessage,
-    message: InboxMessage,
-  ): Promise<WriteStep> {
-    const { guard, message: storedMessage } = storedGuard;
-
-    const expected = await this.#finalizeStoredGuard(dedupStorage, dedupKey, current, storedGuard);
-    if (expected === undefined) {
-      return { kind: "RETRY" };
-    }
-
-    const repaired = await this.#repairStoredGuardMessage(
-      inboxStorage,
-      guard,
-      storedGuard,
-      expected,
-      message,
-    );
-    if (repaired !== undefined) {
-      return repaired;
-    }
-
-    return this.#messageBlocks(storedMessage)
-      ? this.#duplicate(storedMessage)
-      : { kind: "CLAIM", expected, message };
-  }
-
-  async #finalizeStoredGuard(
-    dedupStorage: RecordStorage<string, Any>,
-    dedupKey: string,
-    current: Any,
-    storedGuard: GuardMessage,
-  ): Promise<Any | undefined> {
-    const { guard, message } = storedGuard;
-    const shouldFinalize =
-      DedupRecords.isPending(current) ||
-      (guard.status === "TO_DELIVER" && message.status === "DELIVERED");
-    if (!shouldFinalize) {
-      return current;
-    }
-
-    const next = DedupRecords.writeFinal(message);
-    const finalized = await this.#durableCompareAndSet(
-      "Inbox dedup guard",
-      dedupStorage,
-      dedupKey,
-      current,
-      next,
-    );
-
-    return finalized ? next : undefined;
-  }
-
-  async #repairStoredGuardMessage(
-    inboxStorage: RecordStorage<string, Any>,
-    guard: DedupGuardState,
-    storedGuard: GuardMessage,
-    expected: Any,
-    message: InboxMessage,
-  ): Promise<WriteStep | undefined> {
-    const storedMessage = storedGuard.message;
-    if (guard.status !== "DELIVERED" || storedMessage.status !== "TO_DELIVER") {
-      return undefined;
-    }
-
-    const delivered = Object.freeze({
-      ...storedMessage,
-      status: "DELIVERED" as const,
-    });
-    const repaired = await this.#durableCompareAndSet(
-      "Inbox record",
-      inboxStorage,
-      this.#messageKey(storedMessage.id),
-      storedGuard.record,
-      InboxRecords.write(delivered),
-    );
-    if (!repaired) {
-      return { kind: "RETRY" };
-    }
-
-    return this.#messageBlocks(delivered)
-      ? this.#duplicate(delivered)
-      : { kind: "CLAIM", expected, message };
-  }
-
-  async #recoverPendingClaim(
-    inboxStorage: RecordStorage<string, Any>,
-    dedupStorage: RecordStorage<string, Any>,
-    dedupKey: string,
-    current: Any,
-    message: InboxMessage,
-  ): Promise<WriteStep> {
-    const pendingMessage = DedupRecords.readPendingMessage(current);
-    if (pendingMessage === undefined) {
-      return { kind: "RETRY" };
-    }
-
-    const storedMessage = await this.#ensureInboxRow(
-      inboxStorage,
-      pendingMessage,
-      "STORAGE_CORRUPTION",
-    );
-
-    const finalRecord = DedupRecords.writeFinal(storedMessage);
-    const finalized = await this.#durableCompareAndSet(
-      "Inbox dedup guard",
-      dedupStorage,
-      dedupKey,
-      current,
-      finalRecord,
-    );
-    if (!finalized) {
-      return { kind: "RETRY" };
-    }
-
-    return this.#messageBlocks(storedMessage)
-      ? this.#written(storedMessage)
-      : { kind: "CLAIM", expected: finalRecord, message };
-  }
-
-  async #claimAndWrite(
-    inboxStorage: RecordStorage<string, Any>,
-    dedupStorage: RecordStorage<string, Any>,
-    dedupKey: string,
-    step: WriteClaim,
-  ): Promise<InboxWriteResult | undefined> {
-    const pending = DedupRecords.writeClaim(step.message);
-    const claimed = await this.#durableCompareAndSet(
-      "Inbox dedup guard",
-      dedupStorage,
-      dedupKey,
-      step.expected,
-      pending,
-    );
-    if (!claimed) {
-      return undefined;
-    }
-
-    let storedMessage: InboxMessage;
-    try {
-      storedMessage = await this.#ensureInboxRow(inboxStorage, step.message);
-    } catch (error) {
-      await this.#rollbackPendingGuard(dedupStorage, dedupKey, pending, step.expected);
-      throw error;
-    }
-
-    const finalized = await this.#durableCompareAndSet(
-      "Inbox dedup guard",
-      dedupStorage,
-      dedupKey,
-      pending,
-      DedupRecords.writeFinal(storedMessage),
-    );
-    return finalized ? this.#written(storedMessage).result : undefined;
-  }
-
-  async #rollbackPendingGuard(
-    dedupStorage: RecordStorage<string, Any>,
-    dedupKey: string,
-    pending: Any,
-    expected: Any | undefined,
-  ): Promise<void> {
-    try {
-      await this.#durableCompareAndSet(
-        "Inbox dedup guard",
-        dedupStorage,
-        dedupKey,
-        pending,
-        expected,
-      );
-    } catch {
-      // Preserve the original inbox-write failure even if rollback also fails.
+      throw new InboxMessageError("Inbox deduplication scan reached its finite bound.");
+    } finally {
+      storage.close();
     }
   }
 
-  async #ensureInboxRow(
-    inboxStorage: RecordStorage<string, Any>,
-    message: InboxMessage,
-    conflict: InboxConflict = "CALLER_INPUT",
-  ): Promise<InboxMessage> {
-    const key = this.#messageKey(message.id);
-    const record = InboxRecords.write(message);
-
-    for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
-      if (await this.#durableCompareAndSet("Inbox record", inboxStorage, key, undefined, record)) {
-        return InboxRecords.read(record);
-      }
-
-      const current = await this.#durableRead("Inbox record", () => inboxStorage.read(key));
-      if (current === undefined) {
-        continue;
-      }
-
-      const storedMessage = InboxRecords.read(current, key);
-      if (this.#sameRecord(InboxRecords.write(storedMessage), record)) {
-        return storedMessage;
-      }
-
-      if (conflict === "STORAGE_CORRUPTION") {
-        throw new DeliveryStorageCorruptionError(
-          `Inbox message "${key}" already exists with conflicting inbox bytes.`,
-        );
-      }
-
-      throw new InboxMessageError(`Inbox message "${key}" already exists.`);
-    }
-
-    throw InboxStorageValues.casRetriesExhausted("Inbox record");
-  }
-
-  async #readGuardMessage(
-    inboxStorage: RecordStorage<string, Any>,
-    dedupKey: string,
-    guard: Any,
-  ): Promise<GuardMessage | undefined> {
-    const guardState = DedupRecords.readGuard(guard, dedupKey);
-    const expectedKey = this.#messageKey(guardState.messageId);
-    const storedRecord = await this.#durableRead("Inbox record", () =>
-      inboxStorage.read(expectedKey),
-    );
-    if (storedRecord === undefined) {
-      return undefined;
-    }
-
-    const message = InboxRecords.read(storedRecord, expectedKey);
-    if (DedupRecords.guardKey(message) !== dedupKey) {
-      throw new DeliveryStorageCorruptionError(
-        `Inbox dedup guard "${dedupKey}" points to another dedup key.`,
-      );
-    }
-
-    const pendingMessage = DedupRecords.isPending(guard)
-      ? DedupRecords.readPendingMessage(guard)
-      : undefined;
-    if (
-      pendingMessage !== undefined &&
-      !this.#sameRecord(InboxRecords.write(pendingMessage), storedRecord)
-    ) {
-      throw new DeliveryStorageCorruptionError(
-        `Inbox pending dedup guard "${dedupKey}" does not match the visible inbox row.`,
-      );
-    }
-
-    if (
-      pendingMessage === undefined &&
-      !this.#sameGuardMetadata(guardState, message) &&
-      !this.#sameDeliveryTransitionGuard(guardState, message)
-    ) {
-      throw new DeliveryStorageCorruptionError(
-        `Inbox final dedup guard "${dedupKey}" does not match the visible inbox row.`,
-      );
-    }
-
-    return Object.freeze({ guard: guardState, message, record: storedRecord });
-  }
-
-  #messageBlocks(message: Pick<InboxMessage, "status" | "keepUntil">): boolean {
-    if (message.status !== "DELIVERED") {
-      return true;
-    }
-
-    const keepUntil = message.keepUntil;
-    if (keepUntil === undefined) {
-      return false;
-    }
-
-    return keepUntil.getTime() >= this.#dedupNow();
-  }
-
-  #dedupNow(): number {
-    const now = this.#now();
-    if (!(now instanceof Date)) {
-      throw new Error("Inbox storage clock must return a Date.");
-    }
-
-    const time = now.getTime();
-    if (!Number.isFinite(time)) {
-      throw new Error("Inbox storage clock returned an invalid time.");
-    }
-
-    return time;
-  }
-
-  #sameRecord(left: Any, right: Any): boolean {
-    return (
-      left.typeUrl === right.typeUrl && Buffer.from(left.value).equals(Buffer.from(right.value))
-    );
-  }
-
-  #sameGuardMetadata(
-    guard: Pick<DedupGuardState, "status" | "keepUntil">,
-    message: Pick<InboxMessage, "status" | "keepUntil">,
-  ): boolean {
-    return guard.status === message.status && this.#sameTime(guard.keepUntil, message.keepUntil);
-  }
-
-  #sameDeliveryTransitionGuard(
-    guard: Pick<DedupGuardState, "status" | "keepUntil">,
-    message: Pick<InboxMessage, "status" | "keepUntil">,
-  ): boolean {
-    return (
-      this.#sameTime(guard.keepUntil, message.keepUntil) &&
-      ((guard.status === "TO_DELIVER" && message.status === "DELIVERED") ||
-        (guard.status === "DELIVERED" && message.status === "TO_DELIVER"))
-    );
-  }
-
-  #sameTime(left: Date | undefined, right: Date | undefined): boolean {
-    return left?.getTime() === right?.getTime();
-  }
-
-  #sameMessageId(left: InboxMessage["id"], right: InboxMessage["id"]): boolean {
-    return left.value === right.value && left.shard.key() === right.shard.key();
-  }
-
-  #sameMessageExceptStatus(left: InboxRecordMessage, right: InboxRecordMessage): boolean {
-    return this.#sameRecord(
-      InboxRecords.write({
-        ...left,
-        status: right.status,
-      }),
-      InboxRecords.write(right),
-    );
-  }
-
-  #sameMessageExceptClaim(left: InboxRecordMessage, right: InboxRecordMessage): boolean {
-    return this.#sameRecord(
-      InboxRecords.write(this.#withClaim(left, right.claim)),
-      InboxRecords.write(right),
-    );
-  }
-
-  #withClaim(message: InboxRecordMessage, claim: InboxClaim | undefined): InboxRecordMessage {
-    const unclaimed = this.#withoutClaim(message);
-    return claim === undefined ? unclaimed : Object.freeze({ ...unclaimed, claim });
-  }
-
-  #withoutClaim(message: InboxRecordMessage): InboxMessage {
-    return InboxStorageValues.publicMessage(message);
-  }
-
-  async #durableRead<T>(label: string, read: () => Promise<T>): Promise<T> {
-    try {
-      return await read();
-    } catch (error) {
-      throw this.#storageCorruptionError(label, error);
-    }
-  }
-
-  async #durableCompareAndSet(
-    label: string,
-    storage: RecordStorage<string, Any>,
-    id: string,
-    expected: Any | undefined,
-    next: Any | undefined,
-  ): Promise<boolean> {
-    try {
-      return await storage.compareAndSet(id, expected, next);
-    } catch (error) {
-      throw this.#storageCorruptionError(label, error);
-    }
-  }
-
-  #storageCorruptionError(label: string, error: unknown): Error {
-    if (
-      error instanceof Error &&
-      (error.message === "Storage record could not be cloned." ||
-        error.message === "Storage value could not be cloned.")
-    ) {
-      return new DeliveryStorageCorruptionError(`${label} is invalid.`, {
-        cause: error,
-      });
-    }
-
-    return error instanceof Error ? error : new Error(String(error));
-  }
-
-  #written(message: InboxMessage): WriteReturn {
-    return {
-      kind: "RETURN",
-      result: Object.freeze({
-        outcome: "WRITTEN" as const,
-        message: InboxStorageValues.publicMessage(message),
-      }),
-    };
-  }
-
-  #duplicate(message: InboxMessage): WriteReturn {
-    return {
-      kind: "RETURN",
-      result: Object.freeze({
-        outcome: "DUPLICATE" as const,
-        message: InboxStorageValues.publicMessage(message),
-      }),
-    };
-  }
-
-  #messageKey(id: Pick<InboxMessage["id"], "value" | "shard">): string {
-    return InboxStorageValues.inboxMessageKey(id);
-  }
-
-  #inboxStorage(): RecordStorage<string, Any> {
-    return this.#storageFactory.createRecordStorage(
-      InboxStorageValues.inboxStorageContext(this.#context),
-      inboxRecordSpec,
-    );
-  }
-
-  #dedupStorage(): RecordStorage<string, Any> {
-    return this.#storageFactory.createRecordStorage(
-      InboxStorageValues.dedupStorageContext(this.#context),
-      dedupRecordSpec,
-    );
+  #storage(): RecordStorage<WireInboxMessageId, WireInboxMessage> {
+    return this.#storageFactory.createRecordStorage(Values.context(this.#context), inboxRecordSpec);
   }
 }
 
 /**
- * Defines claim-bearing access for delivery workers.
- * @internal
- */
-export interface InboxStorageAccess {
-  // prettier-ignore
-
-  /**
-   * Limits one internal ordered inbox read.
-   */
-  readonly maxReadLimit: number;
-
-  /**
-   * Validates one internal inbox read limit.
-   *
-   * @param value Supplies the requested read limit.
-   * @returns The validated bounded limit.
-   */
-  readonly readLimit: (value: unknown) => number;
-
-  /**
-   * Returns one pending message claimed under a shard session.
-   *
-   * @param storage Supplies the owning inbox storage.
-   * @param message Identifies the pending message.
-   * @param session Supplies the shard fence.
-   * @returns The claimed message when the claim succeeds.
-   */
-  readonly claim: (
-    storage: InboxStorage,
-    message: InboxMessage,
-    session: ShardSession,
-  ) => Promise<ClaimedInboxMessage | undefined>;
-
-  /**
-   * Returns one claimed message renewed under a shard session.
-   *
-   * @param storage Supplies the owning inbox storage.
-   * @param message Identifies the claimed message.
-   * @param session Supplies the renewed shard fence.
-   * @returns The renewed claim when it remains current.
-   */
-  readonly renew: (
-    storage: InboxStorage,
-    message: ClaimedInboxMessage,
-    session: ShardSession,
-  ) => Promise<ClaimedInboxMessage | undefined>;
-
-  /**
-   * Returns one claimed message updated to delivered.
-   *
-   * @param storage Supplies the owning inbox storage.
-   * @param message Identifies the claimed message.
-   * @returns The delivered message when the transition succeeds.
-   */
-  readonly markDelivered: (
-    storage: InboxStorage,
-    message: ClaimedInboxMessage,
-  ) => Promise<InboxMessage | undefined>;
-
-  /**
-   * Clears one claimed message without completing it.
-   *
-   * @param storage Supplies the owning inbox storage.
-   * @param message Identifies the claimed message.
-   * @returns The pending message when the claim is cleared.
-   */
-  readonly clear: (
-    storage: InboxStorage,
-    message: ClaimedInboxMessage,
-  ) => Promise<InboxMessage | undefined>;
-}
-
-/**
- * Exposes the claim-bearing operations used by delivery workers.
- * @internal
- */
-export const inboxStorageAccess: InboxStorageAccess = Object.freeze({
-  maxReadLimit,
-  readLimit(value: unknown = defaultReadLimit) {
-    return InboxStorageValues.requireInboxReadLimit(value);
-  },
-  claim(storage: InboxStorage, message: InboxMessage, session: ShardSession) {
-    return InboxStorageValues.requireInternals(storage).claim(message, session);
-  },
-  renew(storage: InboxStorage, message: ClaimedInboxMessage, session: ShardSession) {
-    return InboxStorageValues.requireInternals(storage).renew(message, session);
-  },
-  markDelivered(storage: InboxStorage, message: ClaimedInboxMessage) {
-    return InboxStorageValues.requireInternals(storage).markDelivered(message);
-  },
-  clear(storage: InboxStorage, message: ClaimedInboxMessage) {
-    return InboxStorageValues.requireInternals(storage).unclaim(message);
-  },
-});
-
-/**
- * Inbox storage construction options.
+ * Configures direct durable inbox storage.
  */
 export interface InboxStorageOptions {
   // prettier-ignore
 
   /**
-   * Storage context owning this inbox set.
+   * Storage context that owns this inbox family.
    */
   readonly context: StorageContext;
 
   /**
-   * Storage factory used for durable records.
+   * Factory that opens the direct inbox record storage.
    */
   readonly storageFactory: StorageFactory;
 
   /**
-   * Returns the optional clock used for deduplication retention decisions.
+   * Returns the current time used when evaluating delivered-row retention.
    *
-   * @returns The current storage time.
+   * @returns The current time.
    */
   readonly now?: () => Date;
 }
 
-/**
- * Builds storage filters for one optional set of delivery statuses.
- */
-const InboxReadValues = Object.freeze({
-  statusFilters(statuses: readonly DeliveryStatus[] | undefined) {
-    return statuses === undefined || statuses.length === 0
-      ? []
-      : [{ column: "status", value: [...statuses] as readonly DeliveryStatus[] }];
+const Values = Object.freeze({
+  status(value: DeliveryStatus): number {
+    return { TO_DELIVER: 1, SCHEDULED: 2, DELIVERED: 3, TO_CATCH_UP: 4 }[value];
   },
-});
-
-interface WriteClaim {
-  readonly kind: "CLAIM";
-  readonly expected: Any | undefined;
-  readonly message: InboxMessage;
-}
-
-interface WriteReturn {
-  readonly kind: "RETURN";
-  readonly result: InboxWriteResult;
-}
-
-interface GuardMessage {
-  readonly guard: DedupGuardState;
-  readonly message: InboxMessage;
-  readonly record: Any;
-}
-
-type InboxConflict = "CALLER_INPUT" | "STORAGE_CORRUPTION";
-type WriteStep = WriteClaim | WriteReturn | { readonly kind: "RETRY" };
-
-interface InboxStorageInternal {
-  readonly claim: (
-    message: InboxMessage,
-    session: ShardSession,
-  ) => Promise<ClaimedInboxMessage | undefined>;
-  readonly renew: (
-    message: ClaimedInboxMessage,
-    session: ShardSession,
-  ) => Promise<ClaimedInboxMessage | undefined>;
-  readonly markDelivered: (message: ClaimedInboxMessage) => Promise<InboxMessage | undefined>;
-  readonly unclaim: (message: ClaimedInboxMessage) => Promise<InboxMessage | undefined>;
-}
-
-const inboxStorageInternals = new WeakMap<InboxStorage, InboxStorageInternal>();
-
-const InboxStorageValues = Object.freeze({
-  requireInternals(storage: InboxStorage): InboxStorageInternal {
-    const internals = inboxStorageInternals.get(storage);
-    if (internals === undefined) {
-      throw new Error("Inbox storage internals are unavailable.");
-    }
-
-    return internals;
-  },
-
-  claimFromSession(session: ShardSession): InboxClaim {
-    return InboxClaimRecords.snapshot({
-      id: session.id,
-      node: session.node,
-      expiresAt: session.expiresAt,
+  id(value: InboxMessageId): WireInboxMessageId {
+    return create(InboxMessageIdSchema, {
+      uuid: value.value,
+      index: { index: value.shard.index, ofTotal: value.shard.ofTotal },
     });
   },
-
-  requireClaimed(message: InboxRecordMessage): ClaimedInboxMessage {
-    if (message.claim === undefined) {
-      throw new DeliveryStorageCorruptionError("Inbox claim is missing from claimed row.");
-    }
-
-    return message as ClaimedInboxMessage;
+  wireId(value: WireInboxMessage): WireInboxMessageId {
+    if (value.id === undefined) throw new InboxMessageError("Inbox message ID is invalid.");
+    return value.id;
   },
-
-  requirePublicMessage(message: InboxMessage): InboxMessage {
-    if (Reflect.has(message, "claim")) {
-      throw new InboxMessageError("Inbox message claim is internal.");
-    }
-
-    const id = InboxStorageValues.readPublicMessageProperty(
-      message,
-      "id",
-      "Inbox message ID",
-    ) as InboxMessage["id"];
-    const inboxId = InboxStorageValues.readPublicMessageProperty(
-      message,
-      "inboxId",
-      "Inbox target identity",
-    ) as InboxMessage["inboxId"];
-    const signalId = InboxStorageValues.readPublicMessageProperty(
-      message,
-      "signalId",
-      "Inbox signal ID",
-    ) as InboxMessage["signalId"];
-    const label = InboxStorageValues.readPublicMessageProperty(
-      message,
-      "label",
-      "Inbox delivery label",
-    ) as InboxMessage["label"];
-    const status = InboxStorageValues.readPublicMessageProperty(
-      message,
-      "status",
-      "Inbox delivery status",
-    ) as InboxMessage["status"];
-    const shard = InboxStorageValues.readPublicMessageProperty(
-      message,
-      "shard",
-      "Inbox message shard",
-    ) as InboxMessage["shard"];
-    const whenReceived = InboxStorageValues.readPublicMessageProperty(
-      message,
-      "whenReceived",
-      "Inbox receive time",
-    ) as InboxMessage["whenReceived"];
-    const version = InboxStorageValues.readPublicMessageProperty(
-      message,
-      "version",
-      "Inbox version",
-    ) as InboxMessage["version"];
-    const signal = InboxStorageValues.readPublicMessageProperty(
-      message,
-      "signal",
-      "Inbox signal",
-    ) as InboxMessage["signal"];
-    const keepUntil = InboxStorageValues.readPublicMessageProperty(
-      message,
-      "keepUntil",
-      "Inbox keep-until time",
-    ) as InboxMessage["keepUntil"];
-
-    return Object.freeze({
-      id,
-      inboxId,
-      signalId,
-      ...(signal === undefined ? {} : { signal }),
-      label,
-      status,
-      shard,
-      whenReceived,
-      version,
-      ...(keepUntil === undefined ? {} : { keepUntil }),
-    });
+  same(left: WireInboxMessage, right: WireInboxMessage): boolean {
+    return Buffer.from(toBinary(inboxRecordSpec.recordType, left)).equals(
+      Buffer.from(toBinary(inboxRecordSpec.recordType, right)),
+    );
   },
-
-  readPublicMessageProperty(
-    message: InboxMessage,
-    property: keyof InboxMessage,
-    label: string,
-  ): unknown {
-    try {
-      return Reflect.get(message, property);
-    } catch (error) {
-      throw new InboxMessageError(`${label} is invalid.`, { cause: error });
-    }
+  shard(value: unknown): ShardIndex {
+    if (!(value instanceof ShardIndex)) throw new InboxMessageError("Inbox shard is invalid.");
+    return value;
   },
-
-  publicMessage(message: InboxRecordMessage): InboxMessage {
-    if (message.claim === undefined) {
-      return message;
-    }
-
-    return Object.freeze({
-      id: Object.freeze({
-        value: message.id.value,
-        shard: message.id.shard,
-      }),
-      inboxId: Object.freeze({ ...message.inboxId }),
-      label: message.label,
-      status: message.status,
-      signalId: message.signalId,
-      shard: message.shard,
-      whenReceived: message.whenReceived,
-      version: message.version,
-      ...(message.signal === undefined ? {} : { signal: message.signal }),
-      ...(message.keepUntil === undefined ? {} : { keepUntil: message.keepUntil }),
-    });
-  },
-
-  dedupStorageContext(context: StorageContext): StorageContext {
-    return InboxStorageValues.deliveryStorageContext(context, "inbox-dedup");
-  },
-
-  inboxStorageContext(context: StorageContext): StorageContext {
-    return InboxStorageValues.deliveryStorageContext(context, "inbox");
-  },
-
-  deliveryStorageContext(context: StorageContext, name: string): StorageContext {
-    return context.multitenant
-      ? {
-          name: `${context.name}.delivery.${name}`,
-          multitenant: true,
-          ...(context.tenantId === undefined ? {} : { tenantId: context.tenantId }),
-        }
-      : {
-          name: `${context.name}.delivery.${name}`,
-          multitenant: false,
-        };
-  },
-
-  casRetriesExhausted(label: string): Error {
-    return new Error(`${label} could not be completed due to concurrent changes.`);
-  },
-
-  requireReadShard(value: unknown): ShardIndex {
-    if (typeof value !== "object" || value === null) {
-      throw new InboxMessageError("Inbox shard is invalid.");
-    }
-
-    try {
-      return new ShardIndex(
-        InboxStorageValues.requireReadInteger(Reflect.get(value, "index"), "Inbox shard index"),
-        InboxStorageValues.requireReadInteger(Reflect.get(value, "ofTotal"), "Inbox shard total"),
-      );
-    } catch (error) {
-      if (error instanceof InboxMessageError) {
-        throw error;
-      }
-
-      throw new InboxMessageError("Inbox shard is invalid.", { cause: error });
-    }
-  },
-
-  requireReadInteger(value: unknown, label: string): number {
-    if (!Number.isInteger(value) || !Number.isFinite(value)) {
-      throw new InboxMessageError(`${label} must be a finite integer.`);
-    }
-
-    return value as number;
-  },
-
-  requireInboxReadLimit(value: unknown): number {
+  limit(value: unknown): number {
     if (
       !Number.isSafeInteger(value) ||
-      (value as number) <= 0 ||
-      (value as number) > maxReadLimit
+      typeof value !== "number" ||
+      value <= 0 ||
+      value > maxReadLimit
     ) {
       throw new InboxMessageError(
         `Inbox read limit must be a positive safe integer at most ${String(maxReadLimit)}.`,
       );
     }
-
-    return value as number;
+    return value;
   },
-
-  requireInboxReadOffset(value: unknown): number {
-    if (!Number.isSafeInteger(value) || (value as number) < 0) {
+  offset(value: unknown): number | undefined {
+    if (value === undefined) return undefined;
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
       throw new InboxMessageError("Inbox read offset must be a non-negative safe integer.");
-    }
-
-    return value as number;
+    return value;
   },
-
-  inboxContinuation(shard: ShardIndex, value: InboxReadContinuation): RecordContinuation<string> {
-    const input = InboxStorageValues.requireContinuationObject(value);
-    const messageId = InboxStorageValues.requireContinuationText(
-      Reflect.get(input, "messageId"),
-      "Inbox read continuation message ID",
-    );
-    const whenReceived = InboxStorageValues.requireContinuationDate(
-      Reflect.get(input, "whenReceived"),
-      "Inbox read continuation receive time",
-    );
-    const version = InboxStorageValues.requireContinuationVersion(Reflect.get(input, "version"));
-
-    return Object.freeze({
-      id: InboxStorageValues.inboxMessageKey({ value: messageId, shard }),
-      values: Object.freeze([
-        Object.freeze({ field: "receivedAt", value: whenReceived.getTime() }),
-        Object.freeze({ field: "version", value: version }),
-        Object.freeze({ field: "messageId", value: messageId }),
-      ]),
+  after(value: InboxReadOptions["after"], shard: ShardIndex) {
+    if (value === undefined) return undefined;
+    if (
+      typeof value.messageId !== "string" ||
+      value.messageId.trim().length === 0 ||
+      !(value.whenReceived instanceof Date) ||
+      !Number.isFinite(value.whenReceived.getTime()) ||
+      typeof value.version !== "bigint" ||
+      value.version < 0n ||
+      value.version > BigInt(0x7fffffff)
+    )
+      throw new InboxMessageError("Inbox read continuation is invalid.");
+    return {
+      values: [
+        { field: "when_received", value: Values.timestamp(value.whenReceived.getTime()) },
+        { field: "version", value: Number(value.version) },
+        { field: "message_id", value: value.messageId },
+      ],
+      id: Values.id({ value: value.messageId, shard }),
+    };
+  },
+  timestamp(ms: number) {
+    const seconds = Math.floor(ms / 1_000);
+    return create(TimestampSchema, {
+      seconds: BigInt(seconds),
+      nanos: (ms - seconds * 1_000) * 1_000_000,
     });
   },
-
-  requireContinuationObject(value: unknown): Record<string, unknown> {
-    if (typeof value !== "object" || value === null || Array.isArray(value)) {
-      throw new InboxMessageError("Inbox read continuation is invalid.");
-    }
-
-    return value as Record<string, unknown>;
+  atomic(storage: RecordStorage<WireInboxMessageId, WireInboxMessage>): void {
+    if (!storage.atomicCompareAndSet)
+      throw new InboxMessageError("Inbox storage requires atomic compare-and-set.");
   },
-
-  requireContinuationText(value: unknown, label: string): string {
-    if (typeof value !== "string" || value.trim().length === 0) {
-      throw new InboxMessageError(`${label} must be a non-empty string.`);
-    }
-    if (Buffer.byteLength(value, "utf8") > maxContinuationTextBytes) {
-      throw new InboxMessageError(
-        `${label} exceeds ${String(maxContinuationTextBytes)} bytes and cannot be stored.`,
-      );
-    }
-
-    return value;
+  now(clock: () => Date): number {
+    const value = clock();
+    if (!(value instanceof Date) || !Number.isFinite(value.getTime()))
+      throw new InboxMessageError("Inbox storage clock returned an invalid time.");
+    return value.getTime();
   },
-
-  requireContinuationDate(value: unknown, label: string): Date {
-    if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
-      throw new InboxMessageError(`${label} must be a valid Date.`);
-    }
-
-    return new Date(value.getTime());
-  },
-
-  requireContinuationVersion(value: unknown): bigint {
-    if (typeof value !== "bigint") {
-      throw new InboxMessageError("Inbox read continuation version must be a bigint.");
-    }
-    const encoded = value.toString();
-    if (Buffer.byteLength(encoded, "utf8") > maxContinuationTextBytes) {
-      throw new InboxMessageError(
-        `Inbox read continuation version exceeds ${String(maxContinuationTextBytes)} bytes and cannot be stored.`,
-      );
-    }
-
-    return value;
-  },
-
-  inboxMessageKey(id: Pick<InboxMessage["id"], "value" | "shard">): string {
-    return `${id.shard.key()}:${id.value}`;
+  context(context: StorageContext): StorageContext {
+    return context.multitenant
+      ? {
+          name: `${context.name}.delivery.inbox`,
+          multitenant: true,
+          ...(context.tenantId === undefined ? {} : { tenantId: context.tenantId }),
+        }
+      : { name: `${context.name}.delivery.inbox`, multitenant: false };
   },
 });

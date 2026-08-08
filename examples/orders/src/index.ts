@@ -12,10 +12,8 @@ import {
 
 export { datastoreOrdersProtoModule } from "../generated/proto-module.js";
 import type { StorageFactory } from "@spine-event-engine/storage";
-import {
-  DatastoreStorageFactory,
-  type DatastoreStorageOptions,
-} from "@spine-event-engine/storage-datastore";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+import type { Datastore } from "@google-cloud/datastore";
 
 import {
   type CreateOrder,
@@ -395,13 +393,16 @@ export async function startDatastoreOrdersServer(
 /**
  * Creates a Datastore-backed server without leaking provider types into domain handlers.
  *
- * @param datastore The Datastore storage options used to create the factory.
+ * @param client The caller-owned Datastore client used to create the factory.
  * @param options The network binding options for the server.
  * @returns The running Datastore-backed server.
  */
 export async function startOrdersDatastoreServer(
-  datastore: DatastoreStorageOptions,
+  client: Datastore,
   options: DatastoreOrdersServerOptions = {},
 ): Promise<RunningServer> {
-  return startDatastoreOrdersServer(DatastoreStorageFactory.create(datastore), options);
+  return startDatastoreOrdersServer(
+    DatastoreStorageFactory.newBuilder().setClient(client).build(),
+    options,
+  );
 }

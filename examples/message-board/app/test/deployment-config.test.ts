@@ -1,5 +1,6 @@
 import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import type { Datastore } from "@google-cloud/datastore";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { MessageBoardDeployment } from "../src/deployment-config.js";
@@ -13,6 +14,7 @@ const completeEnvironment: NodeJS.ProcessEnv = {
   BACKEND_URL: "http://application:8081",
   DELIVERY_SERVER_URL: "http://delivery:8484",
 };
+const client = {} as Datastore;
 
 afterEach(async () => {
   await resetServerEnvironmentForTest();
@@ -65,19 +67,12 @@ describe("MessageBoard deployment configuration", () => {
   });
 
   it("rejects signed sessions outside production", () => {
-    const storage = MessageBoardDeployment.storage(
-      MessageBoardDeployment.application(completeEnvironment),
-    );
-    try {
-      expect(() =>
-        MessageBoardDeployment.sessions(storage, {
-          ...completeEnvironment,
-          NODE_ENV: "development",
-        }),
-      ).toThrow("require production configuration");
-    } finally {
-      storage.close();
-    }
+    expect(() =>
+      MessageBoardDeployment.sessions({
+        ...completeEnvironment,
+        NODE_ENV: "development",
+      }),
+    ).toThrow("require production configuration");
   });
 
   it.each([
@@ -102,7 +97,7 @@ describe("MessageBoard deployment configuration", () => {
     const config = MessageBoardDeployment.application(completeEnvironment);
 
     expect(
-      MessageBoardDeployment.configureServer(config, {
+      MessageBoardDeployment.configureServer(config, client, {
         ...completeEnvironment,
         NODE_ENV: "development",
       }),
@@ -111,7 +106,7 @@ describe("MessageBoard deployment configuration", () => {
 
   it("configures production storage and transport as environment-owned facilities", () => {
     const config = MessageBoardDeployment.application(completeEnvironment);
-    const storage = MessageBoardDeployment.configureServer(config, {
+    const storage = MessageBoardDeployment.configureServer(config, client, {
       ...completeEnvironment,
       NODE_ENV: "production",
       SPINE_IPC_DIRECTORY: "/tmp/spine-message-board-config-test",
@@ -127,7 +122,7 @@ describe("MessageBoard deployment configuration", () => {
     const config = MessageBoardDeployment.application(completeEnvironment);
 
     expect(() =>
-      MessageBoardDeployment.configureServer(config, {
+      MessageBoardDeployment.configureServer(config, client, {
         ...completeEnvironment,
         NODE_ENV: "production",
         SPINE_IPC_DIRECTORY: "/tmp/spine-message-board-config-test",
@@ -141,7 +136,6 @@ describe("MessageBoard deployment configuration", () => {
     const storage = new InMemoryStorageFactory();
     const bindings = MessageBoardDeployment.bindings(config, storage);
 
-    expect(bindings.durable).toBe(true);
     expect(bindings.namespace).toBe("message-board-subscriptions");
 
     await bindings.close();

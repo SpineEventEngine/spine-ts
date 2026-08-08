@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/delivery/delivery-monitor.ts",
+    "kind": "MethodDeclaration",
+    "identity": "MethodDeclaration:onShardPickUpFailure#1",
+    "name": "onShardPickUpFailure",
+    "disposition": "compatibility-exception",
+    "reason": "The onShardPickUpFailure hook preserves the controlling Spine JVM DeliveryMonitor vocabulary approved for the public TypeScript contract.",
+    "sourceContract": "Spine JVM io.spine.server.delivery.DeliveryMonitor method onShardPickUpFailure"
+  }
+]

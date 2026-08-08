@@ -1,13 +1,17 @@
-import { create } from "@bufbuild/protobuf";
-import { SubscriptionIdSchema, type SubscriptionUpdate } from "@spine-event-engine/proto/client";
+import { create, toBinary } from "@bufbuild/protobuf";
+import {
+  SubscriptionIdSchema,
+  SubscriptionSchema,
+  type SubscriptionUpdate,
+} from "@spine-event-engine/proto/client";
 
 import type { EventBus } from "../bus/event-bus.js";
 import { SubscriptionObservers } from "./subscription-observer.js";
 import { standAccess, type Stand, type StandSubscription } from "./stand.js";
-import type { StandSubscriptionRegistry } from "./subscription-registry.js";
+import type { StandSubscriptionEntry, StandSubscriptionRegistry } from "./subscription-registry.js";
 
 interface LocalSubscriptionAttachment {
-  readonly revision: bigint;
+  readonly identity: Uint8Array;
   readonly subscription: StandSubscription;
 }
 
@@ -19,7 +23,7 @@ interface LocalSubscriptionAttachment {
  * and consumer map. It classifies a target from domain Stand metadata before
  * attaching it: domain events observe only the domain bus, while entity-state
  * updates observe only the paired System bus. This keeps a subscription ID and
- * revision attached once, while allowing all active service streams to share
+ * attachment identity attached once, while allowing all active service streams to share
  * the same rendered update.
  *
  * @internal
@@ -109,7 +113,7 @@ export class SubscriptionRuntime {
         const id = entry.subscription.id?.value;
         if (id === undefined) continue;
         seen.add(id);
-        if (entry.phase === "active") await this.#attach(id, entry.revision);
+        if (entry.phase === "active") await this.#attach(id, entry);
         else this.remove(id);
       }
       for (const id of this.#attachments.keys()) if (!seen.has(id)) this.remove(id);
@@ -250,10 +254,11 @@ export class SubscriptionRuntime {
     if (consumers?.size === 0) this.#consumers.delete(id);
   }
 
-  async #attach(id: string, revision: bigint): Promise<void> {
+  async #attach(id: string, expected: StandSubscriptionEntry): Promise<void> {
     const current = await this.#registry.get(create(SubscriptionIdSchema, { value: id }));
-    if (current?.phase !== "active" || current.revision !== revision || this.#closing) return;
-    if (this.#attachments.get(id)?.revision === revision) return;
+    if (current?.phase !== "active" || !sameEntry(current, expected) || this.#closing) return;
+    const identity = entryIdentity(current);
+    if (sameBytes(this.#attachments.get(id)?.identity, identity)) return;
     this.#detach(id);
     const state = standAccess.observedState(
       this.#domainStand,
@@ -262,7 +267,7 @@ export class SubscriptionRuntime {
     const attachment =
       state === undefined
         ? SubscriptionObservers.observeEvent(
-            current.subscription as never,
+            current.subscription,
             this.#domainEventBus,
             (update) => {
               this.#notify(id, update);
@@ -270,14 +275,14 @@ export class SubscriptionRuntime {
           )
         : standAccess.observeState(
             this.#systemStand,
-            current.subscription as never,
+            current.subscription,
             state,
             this.#systemEventBus,
             (update) => {
               this.#notify(id, update);
             },
           );
-    if (attachment !== undefined) this.#attachments.set(id, { revision, subscription: attachment });
+    if (attachment !== undefined) this.#attachments.set(id, { identity, subscription: attachment });
   }
 
   static async #closePart(work: () => Promise<void>, errors: unknown[]): Promise<void> {
@@ -301,4 +306,26 @@ export class SubscriptionRuntime {
       }
     }
   }
+}
+
+function entryIdentity(entry: StandSubscriptionEntry): Uint8Array {
+  const subscription = toBinary(SubscriptionSchema, entry.subscription);
+  const createdAt = new Uint8Array(8);
+  new DataView(createdAt.buffer).setFloat64(0, entry.createdAt);
+  const identity = new Uint8Array(subscription.length + createdAt.length);
+  identity.set(subscription);
+  identity.set(createdAt, subscription.length);
+  return identity;
+}
+
+function sameEntry(left: StandSubscriptionEntry, right: StandSubscriptionEntry): boolean {
+  return (
+    left.phase === right.phase &&
+    left.createdAt === right.createdAt &&
+    sameBytes(entryIdentity(left), entryIdentity(right))
+  );
+}
+
+function sameBytes(left: Uint8Array | undefined, right: Uint8Array): boolean {
+  return left?.length === right.length && left.every((value, index) => value === right[index]);
 }

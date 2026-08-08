@@ -2,6 +2,8 @@ import { Code, ConnectError, createRouterTransport } from "@connectrpc/connect";
 import { describe, expect, it } from "vitest";
 
 import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
+import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
+import { create } from "@bufbuild/protobuf";
 import { ShardIndex } from "@spine-event-engine/server";
 import { InMemoryDelivery } from "../../delivery-server/src/index.js";
 import { DeliveryClient, DeliveryOutcomeUnknownError, RemoteWorkRegistry } from "../src/index.js";
@@ -44,7 +46,7 @@ describe("in-memory delivery core response loss", () => {
     await expect(client.findOne(message.id)).resolves.toBeUndefined();
   });
 
-  it("quarantines a lost pickup outcome without issuing another pickup", async () => {
+  it("retains no client-side marker after a lost pickup outcome", async () => {
     const core = InMemoryDelivery.create();
     let pickups = 0;
     const transport = createRouterTransport((router) => {
@@ -58,11 +60,19 @@ describe("in-memory delivery core response loss", () => {
       });
     });
     const registry = new RemoteWorkRegistry(DeliveryClient.usingTransport(transport));
-    await expect(registry.pickUp(ShardIndex.single(), "node")).rejects.toBeInstanceOf(
-      DeliveryOutcomeUnknownError,
-    );
-    await expect(registry.pickUp(ShardIndex.single(), "node")).resolves.toBeUndefined();
-    expect(pickups).toBe(1);
+    await expect(
+      registry.pickUp(
+        ShardIndex.single(),
+        create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker-1" }),
+      ),
+    ).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+    await expect(
+      registry.pickUp(
+        ShardIndex.single(),
+        create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker-2" }),
+      ),
+    ).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+    expect(pickups).toBe(2);
   });
 
   it("proves a lost release committed through a direct subsequent pickup", async () => {

@@ -34,21 +34,25 @@ export class DeliveryRunControl {
   run(options: DeliveryControlledRun): Promise<DeliveryResult> {
     if (options.signal.aborted) return Promise.reject(this.#abortError(options.signal));
     const settled = this.#runControlled(options);
-    const aborted = this.#abortPromise(options.signal);
-    void settled.catch(() => undefined);
-    void aborted.catch(() => undefined);
-    return Promise.race([settled, aborted]).finally(() => {
-      options.signal.removeEventListener("abort", aborted.abort);
-    });
-  }
-
-  #abortPromise(signal: AbortSignal): Promise<never> & { abort: () => void } {
-    const gate = Promise.withResolvers<never>();
+    let aborted: Error | undefined;
     const abort = () => {
-      gate.reject(this.#abortError(signal));
+      aborted = this.#abortError(options.signal);
     };
-    signal.addEventListener("abort", abort, { once: true });
-    return Object.assign(gate.promise, { abort });
+    options.signal.addEventListener("abort", abort, { once: true });
+    void settled.catch(() => undefined);
+    return settled
+      .then(
+        (result) => {
+          if (aborted !== undefined) throw aborted;
+          return result;
+        },
+        (error: unknown) => {
+          throw error;
+        },
+      )
+      .finally(() => {
+        options.signal.removeEventListener("abort", abort);
+      });
   }
 
   #abortError(signal: AbortSignal): Error {

@@ -1,4 +1,5 @@
-import { clone } from "@bufbuild/protobuf";
+import { clone, create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type { Event, EventId, TenantId } from "@spine-event-engine/proto";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 
@@ -148,7 +149,7 @@ export class EventStore {
     const ids = records.map((record) => EventIds.require(record));
     EventIds.rejectDuplicates(ids);
 
-    await EventStoreLocks.withLock(this.#factory, context, async () => {
+    await eventStoreAccess.withLock(this.#factory, context, async () => {
       const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec);
       try {
         await EventIds.rejectStored(storage, ids);
@@ -162,7 +163,7 @@ export class EventStore {
   private async deleteIds(ids: readonly EventId[], context: StorageContext): Promise<void> {
     this.requireOpen();
 
-    await EventStoreLocks.withLock(this.#factory, context, async () => {
+    await eventStoreAccess.withLock(this.#factory, context, async () => {
       const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec);
       try {
         for (const id of ids) {
@@ -178,7 +179,7 @@ export class EventStore {
     this.requireOpen();
     EventIds.rejectDuplicates(ids);
 
-    await EventStoreLocks.withLock(this.#factory, context, async () => {
+    await eventStoreAccess.withLock(this.#factory, context, async () => {
       const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec);
       try {
         await EventIds.rejectStored(storage, ids);
@@ -219,16 +220,23 @@ export interface EventRollback {
 const EventStoreLocks = Object.freeze({
   queues: new WeakMap<StorageFactory, Map<string, Promise<void>>>(),
 
-  async withLock(factory: StorageFactory, context: StorageContext, work: () => Promise<void>) {
+  async withLock<T>(
+    factory: StorageFactory,
+    context: StorageContext,
+    work: () => Promise<T>,
+  ): Promise<T> {
     const queues = this.queueMap(factory);
     const key = EventContexts.key(context);
     const previous = queues.get(key) ?? Promise.resolve();
     const next = previous.then(work, work);
-    const stored = next.catch(() => undefined);
+    const stored = next.then(
+      () => undefined,
+      () => undefined,
+    );
 
     queues.set(key, stored);
     try {
-      await next;
+      return await next;
     } finally {
       if (queues.get(key) === stored) {
         queues.delete(key);
@@ -243,6 +251,36 @@ const EventStoreLocks = Object.freeze({
       this.queues.set(factory, queues);
     }
     return queues;
+  },
+});
+
+/**
+ * Provider-only coordination access for the Event Store context lock.
+ * @internal
+ */
+export const eventStoreAccess: {
+  readonly withLock: <T>(
+    factory: StorageFactory,
+    context: StorageContext,
+    work: () => Promise<T>,
+  ) => Promise<T>;
+} = Object.freeze({
+  // prettier-ignore
+
+  /**
+   * Runs work under the same factory/context lock used by direct Event Store appends.
+   *
+   * @param factory The factory that owns the Event Store records.
+   * @param context The Event Store context to serialize.
+   * @param work The operation to run while holding the lock.
+   * @returns The operation result.
+   */
+  withLock<T>(
+    factory: StorageFactory,
+    context: StorageContext,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    return EventStoreLocks.withLock(factory, context, work);
   },
 });
 
@@ -378,12 +416,15 @@ const EventContexts = {
  * @internal
  */
 export const eventStoreRecordSpec: RecordSpec<EventId, Event> = new RecordSpec<EventId, Event>({
-  schema: EventSchema,
-  storageKey: "spine.core.Event:event-store",
+  recordType: EventSchema,
   idSchema: EventIdSchema,
   extractId: (event) => EventIds.require(event),
   columns: [
-    new RecordColumn("timestamp", (event) => event.context?.timestamp?.seconds ?? 0n, "int64"),
-    new RecordColumn("typeUrl", (event) => event.message?.typeUrl, "string"),
+    new RecordColumn(
+      "created",
+      (event) => event.context?.timestamp ?? create(TimestampSchema),
+      "timestamp",
+    ),
+    new RecordColumn("type", (event) => event.message?.typeUrl, "string"),
   ],
 });

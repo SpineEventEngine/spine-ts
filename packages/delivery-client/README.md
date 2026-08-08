@@ -63,35 +63,31 @@ for await (const update of updates) {
 ```
 
 `RemoteInbox` and `RemoteWorkRegistry` adapt a client to a server
-`DeliveryBuilder`. `RemoteInbox` requires caller-owned durable,
-capacity-bounded removal quarantine storage so recovery cannot replay an
-uncertain callback.
+`DeliveryBuilder`. The exclusively held remote shard and its pending Inbox row
+are authoritative; the client stores no removal state. Shard ownership excludes
+concurrent delivery, while delivered rows are the deduplication fact. Handler
+effects and the delivered transition are not transactional, so a lost
+acknowledgement can redeliver after restart and downstream handling must remain
+idempotent.
 
 ```ts
 // docs-snippet-path: packages/delivery-client/src/remote/adapters.ts
 import {
   DeliveryClient,
-  type RemovalQuarantine,
   RemoteInbox,
   RemoteWorkRegistry,
 } from "@spine-event-engine/delivery-client";
 import { DeliveryBuilder } from "@spine-event-engine/server";
 
-declare const quarantine: RemovalQuarantine;
-
 const client = DeliveryClient.connectTo("http://127.0.0.1:8484");
 const delivery = new DeliveryBuilder()
   .withNode("orders-worker")
-  .withInbox(new RemoteInbox(client, quarantine))
+  .withInbox(new RemoteInbox(client))
   .withWorkRegistry(new RemoteWorkRegistry(client))
   .build();
 client.close();
 void delivery;
 ```
-
-The quarantine must atomically store only a bounded record before callback
-admission and before removal. An in-memory `Map` is suitable only for a test:
-production recovery needs a durable, capacity-bounded implementation.
 
 For server assembly, pass one `RemoteDelivery` to the environment instead of
 manually wiring adapters. Each attached environment gets a bounded Admin
@@ -99,8 +95,7 @@ snapshot and later shard-update hints; after a stream loss or bounded-buffer
 overflow it takes a fresh snapshot before resuming updates. Inbox rows and the
 exclusive shard session remain authoritative, so notifications are best-effort
 wake-ups. `open()` runs before the first attachment/listener admission. A
-failed bounded readiness check closes its fresh client and can be retried; the
-transferred quarantine stays open until environment shutdown.
+failed bounded readiness check closes its fresh client and can be retried.
 
 When identically configured application nodes share a Delivery server, every
 node observes and attempts each reported shard. The remote registry admits one
@@ -112,25 +107,17 @@ shard. A pre-commit ownership probe fences known stale owners, but it is not a
 linearizable distributed transaction with Entity storage.
 
 ```ts
-import { RemoteDelivery, type RemovalQuarantine } from "@spine-event-engine/delivery-client";
-import {
-  EnvironmentType,
-  ServerEnvironment,
-  type ServerEnvironmentCloseable,
-} from "@spine-event-engine/server";
+import { RemoteDelivery } from "@spine-event-engine/delivery-client";
+import { EnvironmentType, ServerEnvironment } from "@spine-event-engine/server";
 import type { StorageFactory } from "@spine-event-engine/storage";
 import type { SignalTransport } from "@spine-event-engine/transport";
 
-declare const quarantine: RemovalQuarantine & ServerEnvironmentCloseable;
 declare const storageFactory: StorageFactory;
 declare const transport: SignalTransport;
 ServerEnvironment.when(EnvironmentType.Production).use({
   storageFactory,
   transport,
-  delivery: RemoteDelivery.connectTo({
-    endpoint: "https://delivery.example.test",
-    removalQuarantine: quarantine,
-  }),
+  delivery: RemoteDelivery.connectTo({ endpoint: "https://delivery.example.test" }),
 });
 ```
 

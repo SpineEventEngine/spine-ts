@@ -72,6 +72,38 @@ describe("MessageBoard Projection backend", () => {
     }
   });
 
+  it("persists a message-valued aggregate ID as the event producer ID", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const context = await application.createContext(storageFactory);
+    const server = await Server.atPort(0, { host: "127.0.0.1" }).add(context).start();
+    const client = Client.connectTo(server.baseUrl);
+    const eventStore = new EventStore({ name: "MessageBoard", multitenant: false }, storageFactory);
+    try {
+      await expect(
+        client
+          .asGuest()
+          .post(
+            PostMessageSchema,
+            post("producer-id", "board-a", create(UserIdSchema, { value: "ada" }), "hello"),
+          ),
+      ).resolves.toEqual({ kind: "ok" });
+      const event = (await waitForStoredEvents(eventStore, 1))[0];
+      const producerId = event?.context?.producerId;
+      if (producerId === undefined) throw new Error("Expected stored event producer ID.");
+      expect(AnyMessages.unpack(producerId, MessageIdSchema)).toEqual(
+        create(MessageIdSchema, { value: "producer-id" }),
+      );
+    } finally {
+      await closeResources([
+        () => {
+          eventStore.close();
+        },
+        () => client.close(),
+        () => server.close(),
+      ]);
+    }
+  });
+
   it("creates one board-filtered Projection row and subscription update per message", async () => {
     const context = await application.createContext();
     const server = await Server.atPort(0, { host: "127.0.0.1" }).add(context).start();
@@ -153,6 +185,11 @@ describe("MessageBoard Projection backend", () => {
       if (message === undefined) throw new Error("Expected stored message.");
       const winner = AnyMessages.unpack(message, MessagePostedSchema);
       expect(winner?.text).toBe("first");
+      const producerId = normalEvents[0]?.context?.producerId;
+      if (producerId === undefined) throw new Error("Expected stored event producer ID.");
+      expect(AnyMessages.unpack(producerId, MessageIdSchema)).toEqual(
+        create(MessageIdSchema, { value: "duplicate" }),
+      );
       expect(
         events.filter(
           (event) => event.message?.typeUrl === TypeUrls.derive(MessageAlreadyPostedSchema),

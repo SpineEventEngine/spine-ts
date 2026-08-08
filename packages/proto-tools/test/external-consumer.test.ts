@@ -195,6 +195,11 @@ function installTarballs(directory: string, packages: readonly PackedPackage[]):
 function linkRuntimeDependencies(directory: string, declared: ReadonlySet<string>): void {
   const modules = join(directory, "node_modules");
   const required = new Set(declared);
+  if (required.has("@spine-event-engine/validation")) {
+    required.add("temporal-polyfill");
+    required.add("temporal-spec");
+    required.add("temporal-utils");
+  }
   if (required.has("@bufbuild/protoplugin")) {
     required.add("@typescript/vfs");
     required.add("typescript");
@@ -219,8 +224,23 @@ function linkRuntimeDependencies(directory: string, declared: ReadonlySet<string
     ["typescript", join(repositoryRoot, "node_modules/typescript")],
     ["semver", join(repositoryRoot, "packages/proto-tools/node_modules/semver")],
     [
-      "@spine-event-engine/validation-ts",
-      join(repositoryRoot, "packages/core/node_modules/@spine-event-engine/validation-ts"),
+      "@spine-event-engine/validation",
+      join(repositoryRoot, "packages/core/node_modules/@spine-event-engine/validation"),
+    ],
+    [
+      "temporal-polyfill",
+      join(
+        repositoryRoot,
+        "node_modules/.pnpm/temporal-polyfill@1.0.1/node_modules/temporal-polyfill",
+      ),
+    ],
+    [
+      "temporal-spec",
+      join(repositoryRoot, "node_modules/.pnpm/temporal-spec@1.0.0/node_modules/temporal-spec"),
+    ],
+    [
+      "temporal-utils",
+      join(repositoryRoot, "node_modules/.pnpm/temporal-utils@1.0.1/node_modules/temporal-utils"),
     ],
   ] as const;
   for (const [name, source] of dependencies) {

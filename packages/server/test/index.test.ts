@@ -210,6 +210,7 @@ describe("@spine-event-engine/server", () => {
     expect(Object.keys(serverRoot).sort()).toEqual(
       [
         "Aggregate",
+        "AlreadyPickedUp",
         "Apply",
         "Assign",
         "BoundedContext",
@@ -218,6 +219,7 @@ describe("@spine-event-engine/server", () => {
         "CommandBus",
         "CommandRegistrationReadiness",
         "DeliveryBuilder",
+        "DeliveryMonitor",
         "DeliveryShutdownTimeoutError",
         "DeliveryStorageCorruptionError",
         "DeliverySupervisor",
@@ -233,6 +235,8 @@ describe("@spine-event-engine/server", () => {
         "Command",
         "EventBus",
         "EventRegistrationReadiness",
+        "FailedPickUp",
+        "FailedReception",
         "FixedClock",
         "HandlerMetadataError",
         "HandlerMetadataRegistry",
@@ -261,9 +265,9 @@ describe("@spine-event-engine/server", () => {
         "SignalIds",
         "SignalMetadata",
         "SingleProcessServerRuntime",
+        "SpecScanner",
         "SpineServices",
         "Stand",
-        "StandCapacityError",
         "StandConflictError",
         "StandStateTypeError",
         "StorageSubscriptionRegistry",
@@ -387,7 +391,7 @@ describe("@spine-event-engine/server", () => {
       ),
     ).toBeInstanceOf(Inbox);
     expect(
-      new ShardSession("session-1", ShardIndex.single(), "node-1", new Date(0), new Date(1)),
+      new ShardSession(ShardIndex.single(), undefined, new Date(0), new Date(1)),
     ).toBeInstanceOf(ShardSession);
     expect("dispatch" in new CommandBus()).toBe(false);
     expectTypeOf<CommandBus>().not.toHaveProperty("dispatch");

@@ -67,7 +67,6 @@ import { Stand } from "../stand/stand.js";
 import { SubscriptionRuntime } from "../stand/subscription-runtime.js";
 import {
   StorageSubscriptionRegistry,
-  standSubscriptionLimits,
   type StandSubscriptionRegistry,
 } from "../stand/subscription-registry.js";
 import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
@@ -492,7 +491,6 @@ const frameworkConstructionToken: FrameworkConstructionToken = Object.freeze({
 const dispatchFailureLimit = 10;
 const dispatchErrorMessageLimit = 500;
 const dispatchErrorStackLimit = 2_000;
-let catchUpCommitSequence = 0;
 const generatedRegistryFile = "generated/handler/generated-handler-registry.js";
 const moduleSchemeRe = /^[A-Za-z][A-Za-z\d+.-]*:/;
 const internalStoragePrefix = "__spine/";
@@ -728,7 +726,6 @@ export class BoundedContext {
       }
       for (const preparedRepository of preparedRepositories) {
         this.#stand.register(preparedRepository.snapshot.stateSchema, {
-          idField: preparedRepository.snapshot.idField.localName,
           columns: ContextParts.repositoryColumns(preparedRepository.snapshot),
         });
         preparedRepository.commit();
@@ -941,7 +938,6 @@ export class BoundedContext {
     const clearedStateTypes: string[] = [];
     let clearedEntityCount = 0;
     let replayedEventCount = 0;
-    const commitScope = ContextParts.nextCatchUpScope();
 
     for (const target of clearTargets) {
       clearedEntityCount += await this.#stand.clear(target.schema, tenantOptions);
@@ -956,7 +952,7 @@ export class BoundedContext {
         replayedEventCount += await ContextParts.dispatchStoredProjectionEvent(
           projections,
           event,
-          commitScope,
+          true,
         );
       } catch (error) {
         throw ContextParts.catchUpReplayError(event, error);
@@ -1156,7 +1152,6 @@ export class BoundedContextBuilder {
   #deliveryStrategy: DeliveryStrategy = UniformAcrossAllShards.singleShard();
   #storageFactory: StorageFactory | undefined;
   #subscriptionRegistry: StandSubscriptionRegistry | undefined;
-  #subscriptionLimit: number | undefined;
   #persistSystemEvents = false;
   #generatedRegistryRoot: string | URL | undefined;
 
@@ -1325,40 +1320,13 @@ export class BoundedContextBuilder {
    * Sets a complete custom registry and transfers it to the first build attempt.
    *
    * The built context closes the registry. A failed first build also begins its
-   * closure, so callers must not reuse it. This option cannot be combined with
-   * {@link withSubscriptionLimit}; either call order throws `Error`.
+   * closure, so callers must not reuse it.
    *
    * @param registry Stores this context's Stand subscription definitions.
    * @returns Returns this builder for further configuration.
-   * @throws Error when a built-in subscription limit is already configured.
    */
   withSubscriptionRegistry(registry: StandSubscriptionRegistry): this {
-    if (this.#subscriptionLimit !== undefined) {
-      throw new Error("A custom subscription registry cannot use a subscription limit.");
-    }
     this.#subscriptionRegistry = registry;
-    return this;
-  }
-
-  /**
-   * Sets the built-in registry capacity from one through 100.
-   *
-   * This option cannot be combined with {@link withSubscriptionRegistry};
-   * either call order throws `Error`.
-   *
-   * @param limit Maximum admitted subscription definitions.
-   * @returns Returns this builder for further configuration.
-   * @throws Error when a custom subscription registry is already configured.
-   * @throws RangeError when the limit is not a safe integer from one through 100.
-   */
-  withSubscriptionLimit(limit: number): this {
-    if (this.#subscriptionRegistry !== undefined) {
-      throw new Error("A custom subscription registry cannot use a subscription limit.");
-    }
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > standSubscriptionLimits.maximum) {
-      throw new RangeError("Stand subscription limit must be from 1 through 100.");
-    }
-    this.#subscriptionLimit = limit;
     return this;
   }
 
@@ -1472,7 +1440,6 @@ export class BoundedContextBuilder {
       registry ??= new StorageSubscriptionRegistry(
         ContextParts.createSubscriptionStorageContext(this.#specSnapshot),
         storageFactory,
-        this.#subscriptionLimit,
       );
       runtime = new SubscriptionRuntime(stand, systemStand, eventBus, systemEventBus, registry);
       return ContextParts.createBoundedContext(
@@ -2397,12 +2364,11 @@ const ContextParts = Object.freeze({
     }
   },
 
-  createRepositoryRecordSpec(snapshot: RegistrationSnapshot): RecordSpec<unknown, Message> {
-    return new RecordSpec<unknown, Message>({
-      schema: snapshot.stateSchema,
-      storageKey: `${snapshot.stateSchema.typeName}:current`,
+  createRepositoryRecordSpec(snapshot: RegistrationSnapshot): RecordSpec<string, Message> {
+    return new RecordSpec<string, Message>({
+      recordType: snapshot.stateSchema,
       idKind: "string",
-      extractId: (record) => ContextParts.readRecordId(record, snapshot),
+      extractId: (record) => String(ContextParts.readRecordId(record, snapshot)),
       columns: ContextParts.repositoryColumns(snapshot),
     });
   },
@@ -2589,7 +2555,7 @@ const ContextParts = Object.freeze({
   async dispatchStoredProjectionEvent(
     projections: readonly ProjectionDispatch[],
     event: Event,
-    commitScope: string,
+    rebuild: boolean,
   ): Promise<number> {
     const typeUrl = event.message?.typeUrl;
 
@@ -2606,16 +2572,11 @@ const ContextParts = Object.freeze({
       await repositoryAccess.dispatchProjectionDirect(
         projection.repository,
         clone(EventSchema, event),
-        commitScope,
+        rebuild,
       );
     }
 
     return matching.length > 0 ? 1 : 0;
-  },
-
-  nextCatchUpScope(): string {
-    catchUpCommitSequence += 1;
-    return `catch-up-${String(Date.now())}-${String(catchUpCommitSequence)}`;
   },
 
   catchUpReplayError(event: Event, cause: unknown): Error {

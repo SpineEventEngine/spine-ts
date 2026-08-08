@@ -162,7 +162,6 @@ export class DeliveryReadiness {
       strategy: delivery.strategy,
       node: delivery.node,
       pageSize: delivery.pageSize,
-      batchSize: delivery.batchSize,
       inbox: ports.inbox,
       workRegistry: ports.workRegistry,
     });

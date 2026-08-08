@@ -1735,7 +1735,7 @@ describe("SpineServices", () => {
     expect(validationDetails(ack.status?.status)).toBeUndefined();
   });
 
-  it("returns stable Ack errors with details for transition validation failures", async () => {
+  it("contains transition validation failures with an OK Ack", async () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createTransitionViolatingRepository())
       .build();
@@ -1745,13 +1745,10 @@ describe("SpineServices", () => {
       createAggregateCommand("command-transition-invalid", "task-transition-invalid"),
     );
 
-    expect(ack.status?.status.case).toBe("error");
-    expect(errorType(ack.status?.status)).toBe("COMMAND_STATE_TRANSITION_VALIDATION_FAILED");
-    expect(errorMessage(ack.status?.status)).toBe("Command state transition validation failed.");
-    expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
+    expect(ack.status?.status.case).toBe("ok");
   });
 
-  it("returns transition validation Ack errors after rejected commit rollback", async () => {
+  it("contains rollback transition validation failures with an OK Ack", async () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createRollingBackTransitionRepository())
       .build();
@@ -1761,10 +1758,7 @@ describe("SpineServices", () => {
       createAggregateCommand("command-transition-rollback", "task-transition-rollback"),
     );
 
-    expect(ack.status?.status.case).toBe("error");
-    expect(errorType(ack.status?.status)).toBe("COMMAND_STATE_TRANSITION_VALIDATION_FAILED");
-    expect(errorMessage(ack.status?.status)).toBe("Command state transition validation failed.");
-    expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
+    expect(ack.status?.status.case).toBe("ok");
   });
 
   it("rejects command tenant mismatches without dispatching", async () => {

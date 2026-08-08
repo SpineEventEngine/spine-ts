@@ -1,1 +1,38 @@
-[]
+[
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage/src/entity/entity-history-record-spec.ts",
+    "kind": "function-declaration",
+    "identity": "eventHistorySpec()#1",
+    "name": "eventHistorySpec",
+    "disposition": "necessity",
+    "reason": "TypeScript provider-SPI boundary: eventHistorySpec remains standalone because every storage adapter imports the same canonical event history spec factory."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage/src/entity/entity-history-record-spec.ts",
+    "kind": "function-declaration",
+    "identity": "stateHistorySpec()#1",
+    "name": "stateHistorySpec",
+    "disposition": "necessity",
+    "reason": "TypeScript provider-SPI boundary: stateHistorySpec remains standalone because every storage adapter imports the same canonical state history spec factory."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "kind": "function-declaration",
+    "identity": "disabledEventHistoryPort()#1",
+    "name": "disabledEventHistoryPort",
+    "disposition": "necessity",
+    "reason": "TypeScript provider-SPI boundary: disabledEventHistoryPort remains standalone because disabled history capabilities share this immutable event-history port across factories."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "kind": "function-declaration",
+    "identity": "disabledStateHistoryPort()#1",
+    "name": "disabledStateHistoryPort",
+    "disposition": "necessity",
+    "reason": "TypeScript provider-SPI boundary: disabledStateHistoryPort remains standalone because disabled history capabilities share this immutable state-history port across factories."
+  }
+]
