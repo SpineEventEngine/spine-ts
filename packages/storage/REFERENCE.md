@@ -5,7 +5,7 @@ This reference is for agents working with the Spine TS storage contract.
 ## Public entry point
 
 Import public types from `@spine-event-engine/storage`. The entry point exports
-`StorageFactory`, `RecordStorage`, `RecordSpec`, `RecordColumn`, `RecordQuery`,
+`StorageFactory`, `RecordStorage`, `RecordSpec`, `RecordSpecOptions`, `RecordColumn`, `RecordQuery`,
 `RecordMask`, `StorageGroup`, `InMemoryStorageFactory`,
 `InMemoryStorageBackend`, event-store types, normalized query policy/evaluator
 types, and entity history interfaces.
@@ -23,6 +23,7 @@ name, multitenancy flag, and optional tenant ID. A `RecordSpec` fixes the
 source type, stored record type, identity extractor, ID schema or primitive ID
 kind, and materialized columns. `sourceType` defaults to `recordType`; Entity
 record specifications use the entity state type as their source type.
+`RecordSpecOptions` is the public constructor-input contract for those fields.
 
 `StorageGroup` is an optional external physical-family identity. It is not part
 of `RecordSpec`: use it only when records with an otherwise compatible layout

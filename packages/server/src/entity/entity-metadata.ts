@@ -39,7 +39,7 @@ export function attachEntitySchema(
   schema: DescriptorMessageSchema,
 ): void {
   const current = Object.prototype.hasOwnProperty.call(entityType, entitySchema)
-    ? Reflect.get(entityType, entitySchema)
+    ? (Reflect.get(entityType, entitySchema) as unknown)
     : undefined;
   if (current !== undefined && current !== schema) {
     throw new Error("Entity class already has different generated state schema metadata.");

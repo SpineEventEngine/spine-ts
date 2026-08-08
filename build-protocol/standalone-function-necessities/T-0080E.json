@@ -1,1 +1,506 @@
-[]
+[
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "abortBackoff()#1",
+    "name": "abortBackoff",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore retry boundary: abortBackoff remains standalone because commit retries and rollback handling share the exact abort backoff decision."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "coalesceImmutableRows()#1",
+    "name": "coalesceImmutableRows",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore transaction boundary: coalesceImmutableRows remains standalone because current and immutable history paths share the exact coalesce immutable rows transformation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "currentSpec()#1",
+    "name": "currentSpec",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore transaction boundary: currentSpec remains standalone because current and immutable history paths share the exact current spec transformation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "entityFilter()#1",
+    "name": "entityFilter",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore query boundary: entityFilter remains standalone because state and event history queries share the exact stateless entity filter rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "entityTransactionError()#1",
+    "name": "entityTransactionError",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore retry boundary: entityTransactionError remains standalone because commit retries and rollback handling share the exact entity transaction error decision."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "first()#1",
+    "name": "first",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore transaction boundary: first remains standalone because current and immutable history paths share the exact first transformation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "immutable()#1",
+    "name": "immutable",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore transaction boundary: immutable remains standalone because current and immutable history paths share the exact immutable transformation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "isAborted()#1",
+    "name": "isAborted",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore retry boundary: isAborted remains standalone because commit retries and rollback handling share the exact is aborted decision."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "keyId()#1",
+    "name": "keyId",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore transaction boundary: keyId remains standalone because current and immutable history paths share the exact key id transformation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "numberFilter()#1",
+    "name": "numberFilter",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore query boundary: numberFilter remains standalone because state and event history queries share the exact stateless number filter rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "preparedRows()#1",
+    "name": "preparedRows",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore transaction boundary: preparedRows remains standalone because current and immutable history paths share the exact prepared rows transformation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "requireDepth()#1",
+    "name": "requireDepth",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore query boundary: requireDepth remains standalone because state and event history queries share the exact stateless require depth rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "requireKeep()#1",
+    "name": "requireKeep",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore query boundary: requireKeep remains standalone because state and event history queries share the exact stateless require keep rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "rollback()#1",
+    "name": "rollback",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore retry boundary: rollback remains standalone because commit retries and rollback handling share the exact rollback decision."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "same()#1",
+    "name": "same",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore transaction boundary: same remains standalone because current and immutable history paths share the exact same transformation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "sameData()#1",
+    "name": "sameData",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore transaction boundary: sameData remains standalone because current and immutable history paths share the exact same data transformation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "timestampFilter()#1",
+    "name": "timestampFilter",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore query boundary: timestampFilter remains standalone because state and event history queries share the exact stateless timestamp filter rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "uniqueKeys()#1",
+    "name": "uniqueKeys",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore transaction boundary: uniqueKeys remains standalone because current and immutable history paths share the exact unique keys transformation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "validateCommitEntityId()#1",
+    "name": "validateCommitEntityId",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore commit boundary: validateCommitEntityId remains standalone because current, state-history, and event-history writes share the exact validate commit entity id invariant."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "validateCommitSize()#1",
+    "name": "validateCommitSize",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore commit boundary: validateCommitSize remains standalone because current, state-history, and event-history writes share the exact validate commit size invariant."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "validateEvents()#1",
+    "name": "validateEvents",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore commit boundary: validateEvents remains standalone because current, state-history, and event-history writes share the exact validate events invariant."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "cursorJson()#1",
+    "name": "cursorJson",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore pagination boundary: cursorJson remains standalone because read, query, and continuation paths share the exact cursor json encoding rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "datastoreKey()#1",
+    "name": "datastoreKey",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore pagination boundary: datastoreKey remains standalone because read, query, and continuation paths share the exact datastore key encoding rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "datastoreKeyName()#1",
+    "name": "datastoreKeyName",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore pagination boundary: datastoreKeyName remains standalone because read, query, and continuation paths share the exact datastore key name encoding rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "keysetFilter()#1",
+    "name": "keysetFilter",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore pagination boundary: keysetFilter remains standalone because read, query, and continuation paths share the exact keyset filter encoding rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "pageCursor()#1",
+    "name": "pageCursor",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore pagination boundary: pageCursor remains standalone because read, query, and continuation paths share the exact page cursor encoding rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "sameCursor()#1",
+    "name": "sameCursor",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore pagination boundary: sameCursor remains standalone because read, query, and continuation paths share the exact same cursor encoding rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/storage-factory.ts",
+    "kind": "function-declaration",
+    "identity": "checkedLayout()#1",
+    "name": "checkedLayout",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore factory boundary: checkedLayout remains standalone because record and Entity storage creation share the exact checked layout validation rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/storage-factory.ts",
+    "kind": "function-declaration",
+    "identity": "key()#1",
+    "name": "key",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore factory boundary: key remains standalone because record and Entity storage creation share the exact key validation rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/storage-factory.ts",
+    "kind": "function-declaration",
+    "identity": "rejectKindCollisions()#1",
+    "name": "rejectKindCollisions",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore factory boundary: rejectKindCollisions remains standalone because record and Entity storage creation share the exact reject kind collisions validation rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/entity-commit.ts",
+    "kind": "function-declaration",
+    "identity": "isDeadlock()#1",
+    "name": "isDeadlock",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL transaction boundary: isDeadlock remains standalone because commit retries and advisory locking share the exact is deadlock rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/entity-commit.ts",
+    "kind": "function-declaration",
+    "identity": "mysqlEntityLockKey()#1",
+    "name": "mysqlEntityLockKey",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL transaction boundary: mysqlEntityLockKey remains standalone because commit retries and advisory locking share the exact mysql entity lock key rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "disabledEvents()#1",
+    "name": "disabledEvents",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL history boundary: disabledEvents remains standalone because state and event history ports share the exact disabled events operation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "disabledStates()#1",
+    "name": "disabledStates",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL history boundary: disabledStates remains standalone because state and event history ports share the exact disabled states operation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/entity-history.ts",
+    "kind": "function-declaration",
+    "identity": "sameEntityId()#1",
+    "name": "sameEntityId",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL history boundary: sameEntityId remains standalone because state and event history ports share the exact same entity id operation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/errors.ts",
+    "kind": "function-declaration",
+    "identity": "mysqlError()#1",
+    "name": "mysqlError",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL error boundary: mysqlError remains standalone because every adapter operation maps driver failures through this one public-error conversion."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "compatibleMysqlType()#1",
+    "name": "compatibleMysqlType",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL schema boundary: compatibleMysqlType remains standalone because table inspection, query, and mutation paths share the exact compatible mysql type rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "groupedIndexes()#1",
+    "name": "groupedIndexes",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL schema boundary: groupedIndexes remains standalone because table inspection, query, and mutation paths share the exact grouped indexes rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "isBinaryType()#1",
+    "name": "isBinaryType",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL schema boundary: isBinaryType remains standalone because table inspection, query, and mutation paths share the exact is binary type rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "isHarmlessExtraColumn()#1",
+    "name": "isHarmlessExtraColumn",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL schema boundary: isHarmlessExtraColumn remains standalone because table inspection, query, and mutation paths share the exact is harmless extra column rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "mysqlColumnDefinition()#1",
+    "name": "mysqlColumnDefinition",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL schema boundary: mysqlColumnDefinition remains standalone because table inspection, query, and mutation paths share the exact mysql column definition rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "mysqlDeadlock()#1",
+    "name": "mysqlDeadlock",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL schema boundary: mysqlDeadlock remains standalone because table inspection, query, and mutation paths share the exact mysql deadlock rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "mysqlParameter()#1",
+    "name": "mysqlParameter",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL schema boundary: mysqlParameter remains standalone because table inspection, query, and mutation paths share the exact mysql parameter rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "same()#1",
+    "name": "same",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL schema boundary: same remains standalone because table inspection, query, and mutation paths share the exact same rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
+    "kind": "function-declaration",
+    "identity": "sameDefault()#1",
+    "name": "sameDefault",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL schema boundary: sameDefault remains standalone because table inspection, query, and mutation paths share the exact same default rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/scope.ts",
+    "kind": "function-declaration",
+    "identity": "mysqlScopeKey()#1",
+    "name": "mysqlScopeKey",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL scope boundary: mysqlScopeKey remains standalone because record and Entity families require the same canonical binary scope encoding."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/storage-factory.ts",
+    "kind": "function-declaration",
+    "identity": "sameEntity()#1",
+    "name": "sameEntity",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL factory boundary: sameEntity remains standalone because reopened Entity families share this exact identity comparison."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/table-spec.ts",
+    "kind": "function-declaration",
+    "identity": "mysqlColumnType()#1",
+    "name": "mysqlColumnType",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL table-contract boundary: mysqlColumnType remains standalone because builders and schema inspection share the exact mysql column type derivation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/table-spec.ts",
+    "kind": "function-declaration",
+    "identity": "resolvedMysqlTableSpec()#1",
+    "name": "resolvedMysqlTableSpec",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL table-contract boundary: resolvedMysqlTableSpec remains standalone because builders and schema inspection share the exact resolved mysql table spec derivation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/testing.ts",
+    "kind": "function-declaration",
+    "identity": "mysqlCurrentRecord()#1",
+    "name": "mysqlCurrentRecord",
+    "disposition": "necessity",
+    "reason": "TypeScript provider-test SPI: mysqlCurrentRecord remains standalone because integration tests import this exact read-only mysql current record observation without exposing adapter internals."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/testing.ts",
+    "kind": "function-declaration",
+    "identity": "mysqlCurrentRevision()#1",
+    "name": "mysqlCurrentRevision",
+    "disposition": "necessity",
+    "reason": "TypeScript provider-test SPI: mysqlCurrentRevision remains standalone because integration tests import this exact read-only mysql current revision observation without exposing adapter internals."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/testing.ts",
+    "kind": "function-declaration",
+    "identity": "mysqlEntityTables()#1",
+    "name": "mysqlEntityTables",
+    "disposition": "necessity",
+    "reason": "TypeScript provider-test SPI: mysqlEntityTables remains standalone because integration tests import this exact read-only mysql entity tables observation without exposing adapter internals."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/testing.ts",
+    "kind": "function-declaration",
+    "identity": "mysqlHistoryCounts()#1",
+    "name": "mysqlHistoryCounts",
+    "disposition": "necessity",
+    "reason": "TypeScript provider-test SPI: mysqlHistoryCounts remains standalone because integration tests import this exact read-only mysql history counts observation without exposing adapter internals."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/testing.ts",
+    "kind": "function-declaration",
+    "identity": "mysqlRecordTableName()#1",
+    "name": "mysqlRecordTableName",
+    "disposition": "necessity",
+    "reason": "TypeScript provider-test SPI: mysqlRecordTableName remains standalone because integration tests import this exact read-only mysql record table name observation without exposing adapter internals."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/testing.ts",
+    "kind": "function-declaration",
+    "identity": "recordBytes()#1",
+    "name": "recordBytes",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL test-observation boundary: recordBytes remains standalone because both retained-history counts share its private canonical table read and decode path."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/testing.ts",
+    "kind": "function-declaration",
+    "identity": "sameAny()#1",
+    "name": "sameAny",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL test-observation boundary: sameAny remains standalone because private state and event count paths share one exact packed-identity comparison."
+  }
+]

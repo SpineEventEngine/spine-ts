@@ -1,15 +1,119 @@
 [
-  { "rule": "standalone-function", "file": "packages/auth/src/native/index.ts", "kind": "function-declaration", "identity": "createNativeGatewayServices()#1", "name": "createNativeGatewayServices", "disposition": "necessity", "reason": "TypeScript public-factory boundary: createNativeGatewayServices constructs Connect service implementations for application integration." },
-  { "rule": "standalone-function", "file": "packages/auth/src/providers/index.ts", "kind": "function-declaration", "identity": "createGitHubProvider()#1", "name": "createGitHubProvider", "disposition": "necessity", "reason": "TypeScript public-factory boundary: createGitHubProvider constructs the application-visible GitHub provider integration." },
-  { "rule": "standalone-function", "file": "packages/auth/src/providers/index.ts", "kind": "function-declaration", "identity": "createGoogleProvider()#1", "name": "createGoogleProvider", "disposition": "necessity", "reason": "TypeScript public-factory boundary: createGoogleProvider constructs the application-visible Google provider integration." },
-  { "rule": "standalone-function", "file": "packages/auth/src/providers/index.ts", "kind": "function-declaration", "identity": "createOidcProvider()#1", "name": "createOidcProvider", "disposition": "necessity", "reason": "TypeScript public-factory boundary: createOidcProvider constructs the application-visible OIDC provider integration." },
-  { "rule": "standalone-function", "file": "packages/auth/src/providers/index.ts", "kind": "function-declaration", "identity": "discoverOidcProvider()#1", "name": "discoverOidcProvider", "disposition": "necessity", "reason": "TypeScript public-factory boundary: discoverOidcProvider discovers the application-visible OIDC provider integration." },
-  { "rule": "standalone-function", "file": "packages/client-react/src/index.ts", "kind": "function-declaration", "identity": "SpineClientProvider()#1", "name": "SpineClientProvider", "disposition": "necessity", "reason": "React framework boundary: SpineClientProvider must remain an exported function component for React to render application request scope." },
-  { "rule": "standalone-function", "file": "packages/client-react/src/index.ts", "kind": "function-declaration", "identity": "useEntityQuery()#1", "name": "useEntityQuery", "disposition": "necessity", "reason": "React framework boundary: useEntityQuery must remain an exported hook so React can track its effect lifecycle." },
-  { "rule": "standalone-function", "file": "packages/client-react/src/index.ts", "kind": "function-declaration", "identity": "useEntitySubscription()#1", "name": "useEntitySubscription", "disposition": "necessity", "reason": "React framework boundary: useEntitySubscription must remain an exported hook so React can track its effect lifecycle." },
-  { "rule": "standalone-function", "file": "packages/client-react/src/index.ts", "kind": "function-declaration", "identity": "useEventSubscription()#1", "name": "useEventSubscription", "disposition": "necessity", "reason": "React framework boundary: useEventSubscription must remain an exported hook so React can track its effect lifecycle." },
-  { "rule": "standalone-function", "file": "packages/client-react/src/index.ts", "kind": "function-declaration", "identity": "useRequest()#1", "name": "useRequest", "disposition": "necessity", "reason": "React framework boundary: useRequest must remain an exported hook so React can track its effect lifecycle." },
-  { "rule": "standalone-function", "file": "packages/client-react/src/index.ts", "kind": "function-declaration", "identity": "useSpineClient()#1", "name": "useSpineClient", "disposition": "necessity", "reason": "React framework boundary: useSpineClient must remain an exported hook so React can read provider context." },
-  { "rule": "standalone-function", "file": "packages/client-react/src/index.ts", "kind": "function-declaration", "identity": "useSubscriptionDelivery()#1", "name": "useSubscriptionDelivery", "disposition": "necessity", "reason": "React framework boundary: useSubscriptionDelivery must remain an exported hook so React can derive delivered state." },
-  { "rule": "standalone-function", "file": "packages/client-react/src/index.ts", "kind": "function-declaration", "identity": "useSubscriptionLifecycle()#1", "name": "useSubscriptionLifecycle", "disposition": "necessity", "reason": "React framework boundary: useSubscriptionLifecycle must remain an exported hook so React can derive lifecycle state." }
+  {
+    "rule": "standalone-function",
+    "file": "packages/auth/src/native/index.ts",
+    "kind": "function-declaration",
+    "identity": "createNativeGatewayServices()#1",
+    "name": "createNativeGatewayServices",
+    "disposition": "necessity",
+    "reason": "TypeScript public-factory boundary: createNativeGatewayServices constructs Connect service implementations for application integration."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/auth/src/providers/index.ts",
+    "kind": "function-declaration",
+    "identity": "createGitHubProvider()#1",
+    "name": "createGitHubProvider",
+    "disposition": "necessity",
+    "reason": "TypeScript public-factory boundary: createGitHubProvider constructs the application-visible GitHub provider integration."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/auth/src/providers/index.ts",
+    "kind": "function-declaration",
+    "identity": "createGoogleProvider()#1",
+    "name": "createGoogleProvider",
+    "disposition": "necessity",
+    "reason": "TypeScript public-factory boundary: createGoogleProvider constructs the application-visible Google provider integration."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/auth/src/providers/index.ts",
+    "kind": "function-declaration",
+    "identity": "createOidcProvider()#1",
+    "name": "createOidcProvider",
+    "disposition": "necessity",
+    "reason": "TypeScript public-factory boundary: createOidcProvider constructs the application-visible OIDC provider integration."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/auth/src/providers/index.ts",
+    "kind": "function-declaration",
+    "identity": "discoverOidcProvider()#1",
+    "name": "discoverOidcProvider",
+    "disposition": "necessity",
+    "reason": "TypeScript public-factory boundary: discoverOidcProvider discovers the application-visible OIDC provider integration."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-react/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "SpineClientProvider()#1",
+    "name": "SpineClientProvider",
+    "disposition": "necessity",
+    "reason": "React framework boundary: SpineClientProvider must remain an exported function component for React to render application request scope."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-react/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "useEntityQuery()#1",
+    "name": "useEntityQuery",
+    "disposition": "necessity",
+    "reason": "React framework boundary: useEntityQuery must remain an exported hook so React can track its effect lifecycle."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-react/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "useEntitySubscription()#1",
+    "name": "useEntitySubscription",
+    "disposition": "necessity",
+    "reason": "React framework boundary: useEntitySubscription must remain an exported hook so React can track its effect lifecycle."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-react/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "useEventSubscription()#1",
+    "name": "useEventSubscription",
+    "disposition": "necessity",
+    "reason": "React framework boundary: useEventSubscription must remain an exported hook so React can track its effect lifecycle."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-react/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "useRequest()#1",
+    "name": "useRequest",
+    "disposition": "necessity",
+    "reason": "React framework boundary: useRequest must remain an exported hook so React can track its effect lifecycle."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-react/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "useSpineClient()#1",
+    "name": "useSpineClient",
+    "disposition": "necessity",
+    "reason": "React framework boundary: useSpineClient must remain an exported hook so React can read provider context."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-react/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "useSubscriptionDelivery()#1",
+    "name": "useSubscriptionDelivery",
+    "disposition": "necessity",
+    "reason": "React framework boundary: useSubscriptionDelivery must remain an exported hook so React can derive delivered state."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-react/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "useSubscriptionLifecycle()#1",
+    "name": "useSubscriptionLifecycle",
+    "disposition": "necessity",
+    "reason": "React framework boundary: useSubscriptionLifecycle must remain an exported hook so React can derive lifecycle state."
+  }
 ]

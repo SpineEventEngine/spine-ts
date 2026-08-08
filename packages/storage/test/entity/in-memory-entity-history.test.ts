@@ -23,10 +23,7 @@ import {
   disabledEventHistoryPort,
   disabledStateHistoryPort,
 } from "../../src/entity/entity-history-storage.js";
-import {
-  entityEventHistoryRecordSpec,
-  entityStateHistoryRecordSpec,
-} from "../../src/entity/entity-history-record-spec.js";
+import { eventHistorySpec, stateHistorySpec } from "../../src/entity/entity-history-record-spec.js";
 import type { EntityStorageInput } from "../../src/memory/in-memory-entity-history.js";
 import {
   MemoryEntityEventHistory,
@@ -108,7 +105,7 @@ describe("InMemoryEntityHistory", () => {
     await expect(storage.states.append(record("task", "first", 1))).rejects.toThrow(/disabled/);
     expect(createStorage).not.toHaveBeenCalled();
 
-    const layout = entityStateHistoryRecordSpec(StringValueSchema);
+    const layout = stateHistorySpec(StringValueSchema);
     const raw = factory.createRecordStorage(input(false).context, layout.spec, layout.group);
     await expect(raw.query()).resolves.toEqual([]);
   });
@@ -130,7 +127,7 @@ describe("InMemoryEntityHistory", () => {
       create(StringValueSchema, { value: "first" }),
     );
 
-    const layout = entityStateHistoryRecordSpec(StringValueSchema);
+    const layout = stateHistorySpec(StringValueSchema);
     const raw = factory.createRecordStorage(input(true).context, layout.spec, layout.group);
     expect(await raw.query()).toEqual([first, second]);
   });
@@ -257,7 +254,7 @@ describe("InMemoryEntityHistory", () => {
   it("uses bounded record-storage windows for history reads and maintenance", async () => {
     const factory = new InMemoryStorageFactory();
     const entity = input(true);
-    const layout = entityStateHistoryRecordSpec(StringValueSchema);
+    const layout = stateHistorySpec(StringValueSchema);
     const records = factory.createRecordStorage(entity.context, layout.spec, layout.group);
     const history = new InMemoryEntityHistory({
       id: entity.id,
@@ -397,7 +394,7 @@ describe("InMemoryEntityHistory", () => {
       "old",
     ]);
 
-    const layout = entityEventHistoryRecordSpec(StringValueSchema);
+    const layout = eventHistorySpec(StringValueSchema);
     const raw = factory.createRecordStorage(entity.context, layout.spec, layout.group);
     expect((await raw.query()).map((entry) => entry.id?.value).sort()).toEqual(
       ["a", "old", "é", "\uE000", "\u{10000}"].sort(),
@@ -603,7 +600,7 @@ function input(
 function createHistory(maintenance?: InMemoryMaintenance) {
   const factory = new InMemoryStorageFactory();
   const entity = input(true);
-  const layout = entityStateHistoryRecordSpec(StringValueSchema);
+  const layout = stateHistorySpec(StringValueSchema);
   return new InMemoryEntityHistory({
     id: entity.id,
     records: factory.createRecordStorage(entity.context, layout.spec, layout.group),
@@ -619,7 +616,7 @@ function createEventHistory(maintenance?: InMemoryMaintenance) {
 function createEventHistoryBundle(maintenance?: InMemoryMaintenance) {
   const factory = new InMemoryStorageFactory();
   const entity = input(false);
-  const layout = entityEventHistoryRecordSpec(StringValueSchema);
+  const layout = eventHistorySpec(StringValueSchema);
   const records = factory.createRecordStorage(entity.context, layout.spec, layout.group);
   return {
     history: new MemoryEntityEventHistory({

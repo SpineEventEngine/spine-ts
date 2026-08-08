@@ -9,8 +9,8 @@ import { eventStoreRecordSpec } from "@spine-event-engine/storage/internal/event
 import {
   disabledEventHistoryPort,
   disabledStateHistoryPort,
-  entityEventHistoryRecordSpec,
-  entityStateHistoryRecordSpec,
+  eventHistorySpec,
+  stateHistorySpec,
   type EntityCommitInput,
   type EntityCommitResult,
   type EntityCommitStorage,
@@ -78,14 +78,14 @@ export class DatastoreEntityStorage<I, S extends Message> {
     const current = openRecords(currentSpec(input));
     const states = input.stateHistory
       ? openRecords(
-          entityStateHistoryRecordSpec(input.stateSchema).spec,
-          entityStateHistoryRecordSpec(input.stateSchema).group,
+          stateHistorySpec(input.stateSchema).spec,
+          stateHistorySpec(input.stateSchema).group,
         )
       : undefined;
     const events = input.eventHistory
       ? openRecords(
-          entityEventHistoryRecordSpec(input.stateSchema).spec,
-          entityEventHistoryRecordSpec(input.stateSchema).group,
+          eventHistorySpec(input.stateSchema).spec,
+          eventHistorySpec(input.stateSchema).group,
         )
       : undefined;
     this.current = new CurrentStorage(input, current);
@@ -147,8 +147,8 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
       I,
       EntityRecord
     >;
-    const stateLayout = entityStateHistoryRecordSpec(input.entity.stateSchema);
-    const diagnosticLayout = entityEventHistoryRecordSpec(input.entity.stateSchema);
+    const stateLayout = stateHistorySpec(input.entity.stateSchema);
+    const diagnosticLayout = eventHistorySpec(input.entity.stateSchema);
     const states = input.entity.stateHistory
       ? (this.openRecords(stateLayout.spec, stateLayout.group) as DatastoreRecordStorage<
           unknown,

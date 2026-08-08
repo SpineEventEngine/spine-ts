@@ -14,7 +14,7 @@ import {
 import { describe, expect, it, vi } from "vitest";
 
 import { EventStore } from "../../src/event/event-store.js";
-import { entityStateHistoryRecordSpec } from "../../src/entity/entity-history-record-spec.js";
+import { stateHistorySpec } from "../../src/entity/entity-history-record-spec.js";
 import type { EntityCommitStorage } from "../../src/internal/entity-commit.js";
 import { EntityCommitStorageFactories } from "../../src/internal/entity-commit.js";
 import type { EntityStorageInput } from "../../src/internal/entity-history.js";
@@ -336,7 +336,7 @@ describe("MemoryEntityCommitStorage", () => {
   it("does not consult or close supplied history handles for a current-only commit", async () => {
     const factory = new InMemoryStorageFactory();
     const input = entityInput();
-    const layout = entityStateHistoryRecordSpec(StringValueSchema);
+    const layout = stateHistorySpec(StringValueSchema);
     const supplied = factory.createRecordStorage(input.context, layout.spec, layout.group);
     const read = vi.spyOn(supplied, "read");
     const close = vi.spyOn(supplied, "close");

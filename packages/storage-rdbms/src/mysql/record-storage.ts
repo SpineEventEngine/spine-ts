@@ -331,7 +331,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
       if (!transactional) {
         const [rows] = await connection.execute<(RowDataPacket & { acquired: number })[]>(
           "SELECT GET_LOCK(?, ?) AS acquired",
-          [this.compareAndSetLockKey(id), 30],
+          [this.casLockKey(id), 30],
         );
         if (rows[0]?.acquired !== 1)
           throw new MysqlStorageOperationError("Unable to acquire MySQL record lock.");
@@ -356,7 +356,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     } finally {
       if (locked)
         await connection
-          .execute("SELECT RELEASE_LOCK(?)", [this.compareAndSetLockKey(id)])
+          .execute("SELECT RELEASE_LOCK(?)", [this.casLockKey(id)])
           .catch(() => undefined);
       this.lifecycle.release(connection);
     }
@@ -426,12 +426,18 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   private async createAndInspect(
     connection: import("mysql2/promise").PoolConnection,
   ): Promise<void> {
+    const columnsSql = this.tableSpec.columns.map(mysqlColumnDefinition).join(", ");
+    const primarySql = this.tableSpec.primaryKey.map((name) => `\`${name}\``).join(", ");
     await connection.query(
       this.createOperation?.() ??
-        `CREATE TABLE IF NOT EXISTS \`${this.table.tableName}\` (${this.tableSpec.columns.map(mysqlColumnDefinition).join(", ")}, PRIMARY KEY (${this.tableSpec.primaryKey.map((name) => `\`${name}\``).join(", ")})) ENGINE=InnoDB`,
+        `CREATE TABLE IF NOT EXISTS \`${this.table.tableName}\` ` +
+          `(${columnsSql}, PRIMARY KEY (${primarySql})) ENGINE=InnoDB`,
     );
     const [columns] = await connection.query<ColumnRow[]>(
-      "SELECT column_name AS column_name, column_type AS column_type, is_nullable AS is_nullable, column_default AS column_default, collation_name AS collation_name, extra AS extra FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=?",
+      "SELECT column_name AS column_name, column_type AS column_type, " +
+        "is_nullable AS is_nullable, column_default AS column_default, " +
+        "collation_name AS collation_name, extra AS extra " +
+        "FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=?",
       [this.table.tableName],
     );
     const expected = new Map(
@@ -451,7 +457,9 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
           `MySQL table ${this.table.tableName} has incompatible extra column ${column.column_name}.`,
         );
     const [primary] = await connection.query<PrimaryKeyRow[]>(
-      "SELECT column_name AS column_name, seq_in_index AS seq_in_index FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name=? AND index_name='PRIMARY' ORDER BY seq_in_index",
+      "SELECT column_name AS column_name, seq_in_index AS seq_in_index " +
+        "FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name=? " +
+        "AND index_name='PRIMARY' ORDER BY seq_in_index",
       [this.table.tableName],
     );
     if (
@@ -464,7 +472,10 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     )
       throw new Error(`MySQL table ${this.table.tableName} has an incompatible primary key.`);
     const [indexes] = await connection.query<IndexRow[]>(
-      "SELECT index_name AS index_name, non_unique AS non_unique, column_name AS column_name, seq_in_index AS seq_in_index FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name=? ORDER BY index_name, seq_in_index",
+      "SELECT index_name AS index_name, non_unique AS non_unique, " +
+        "column_name AS column_name, seq_in_index AS seq_in_index " +
+        "FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name=? " +
+        "ORDER BY index_name, seq_in_index",
       [this.table.tableName],
     );
     for (const index of groupedIndexes(indexes))
@@ -536,7 +547,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     );
     return rows[0]?.engine?.toLowerCase() === "innodb";
   }
-  private compareAndSetLockKey(id: I): string {
+  private casLockKey(id: I): string {
     return createHash("sha256")
       .update(this.scopeKey())
       .update(this.idKey(id))
@@ -571,8 +582,11 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
       ...columns.map((column) => `\`${column.name}\`=VALUES(\`${column.name}\`)`),
       "_revision=_revision+1",
     ];
+    const fields = names.map((name) => `\`${name}\``).join(", ");
+    const placeholders = names.map(() => "?").join(", ");
     await connection.execute(
-      `INSERT INTO \`${this.table.tableName}\` (${names.map((name) => `\`${name}\``).join(", ")}) VALUES (${names.map(() => "?").join(", ")}) ON DUPLICATE KEY UPDATE ${update.join(", ")}`,
+      `INSERT INTO \`${this.table.tableName}\` (${fields}) VALUES (${placeholders}) ` +
+        `ON DUPLICATE KEY UPDATE ${update.join(", ")}`,
       values as never,
     );
   }
@@ -589,8 +603,10 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
       toBinary(this.recordSpec.recordType, record),
       ...columns.map((column) => mysqlParameter(materialized.columns.get(column.name))),
     ];
+    const fields = names.map((name) => `\`${name}\``).join(", ");
+    const placeholders = names.map(() => "?").join(", ");
     const [result] = await connection.execute<ResultSetHeader>(
-      `INSERT IGNORE INTO \`${this.table.tableName}\` (${names.map((name) => `\`${name}\``).join(", ")}) VALUES (${names.map(() => "?").join(", ")})`,
+      `INSERT IGNORE INTO \`${this.table.tableName}\` (${fields}) VALUES (${placeholders})`,
       values as never,
     );
     return result;
@@ -625,9 +641,9 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
               ? this.idKey(query.after.id)
               : query.after.values[order.indexOf(previous)]?.value,
           );
-        terms.push(
-          `${prefix.length === 0 ? "" : `${prefix.join(" AND ")} AND `}\`${field}\` ${item.direction === "desc" ? "<" : ">"} ?`,
-        );
+        const previous = prefix.length === 0 ? "" : `${prefix.join(" AND ")} AND `;
+        const operator = item.direction === "desc" ? "<" : ">";
+        terms.push(`${previous}\`${field}\` ${operator} ?`);
         values.push(field === "ID" ? this.idKey(query.after.id) : query.after.values[index]?.value);
       }
       const prefixes = order.map((item) => `\`${item.field === "id" ? "ID" : item.field}\` <=> ?`);
@@ -648,7 +664,9 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
       ),
       "ID ASC",
     ];
-    let sql = `SELECT ID, bytes FROM \`${this.table.tableName}\` WHERE ${clauses.join(" AND ")} ORDER BY ${orders.join(", ")}`;
+    let sql =
+      `SELECT ID, bytes FROM \`${this.table.tableName}\` ` +
+      `WHERE ${clauses.join(" AND ")} ORDER BY ${orders.join(", ")}`;
     if (query.limit !== undefined) {
       sql += " LIMIT ?";
       values.push(query.limit);
@@ -751,7 +769,9 @@ interface IndexRow extends RowDataPacket {
 function mysqlColumnDefinition(
   column: MysqlTableSpec<unknown, Message>["columns"][number],
 ): string {
-  return `\`${column.name}\` ${column.mysqlType}${column.nullable ? " NULL" : " NOT NULL"}${column.defaultSql === undefined ? "" : ` DEFAULT ${column.defaultSql}`}`;
+  const nullable = column.nullable ? " NULL" : " NOT NULL";
+  const defaultSql = column.defaultSql === undefined ? "" : ` DEFAULT ${column.defaultSql}`;
+  return `\`${column.name}\` ${column.mysqlType}${nullable}${defaultSql}`;
 }
 
 function compatibleMysqlType(expected: string, actual: string | undefined): boolean {

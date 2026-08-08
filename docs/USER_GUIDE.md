@@ -1502,14 +1502,14 @@ orders. The adapter does not create or deploy those indexes.
 
 `RecordQuery` ID constraints, provider-legal declared-column filters, and
 ordering are pushed to Datastore. Public offsets and mixed limits are applied
-locally after that provider candidate query. The adapter adds a stable key
+locally after that provider row query. The adapter adds a stable key
 tie-breaker when Datastore permits it. A query shape that Datastore cannot execute in full
-uses finite reconciliation: it fetches at most `1,001` candidates, then applies
+uses finite reconciliation: it fetches at most `1,001` rows, then applies
 the shared query semantics locally. The extra row is a sentinel. If it is
 returned, `DatastoreQueryLimitError(1_000)` is thrown before any partial result
 can escape.
 
-The `1,000`-candidate bound is fixed. There is no unlimited setting and no
+The `1,000`-row reconciliation bound is fixed. There is no unlimited setting and no
 Datastore-specific public cursor API. Keep provider filters selective and
 create the composite indexes required by the application's filter-and-order
 combinations.

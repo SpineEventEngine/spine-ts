@@ -358,8 +358,8 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     for (const controller of this.#active.values()) controller.abort();
     const joined = Promise.allSettled([...this.#running]);
     let rejectTimeout: (error: Error) => void = () => undefined;
-    const limit = new Promise<never>((_, reject: (error: Error) => void) => {
-      rejectTimeout = reject;
+    const limit = new Promise<never>((_, onReject: (error: Error) => void) => {
+      rejectTimeout = onReject;
     });
     const timeout = setTimeout(() => {
       rejectTimeout(new Error("subscription shutdown timed out"));
@@ -458,8 +458,8 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     controller: AbortController,
   ): Promise<void> {
     let rejectTimeout: (error: Error) => void = () => undefined;
-    const timeout = new Promise<never>((_, reject: (error: Error) => void) => {
-      rejectTimeout = reject;
+    const timeout = new Promise<never>((_, onReject: (error: Error) => void) => {
+      rejectTimeout = onReject;
     });
     const timer = setTimeout(() => {
       controller.abort();
@@ -506,7 +506,7 @@ export function isDurableSubscriptionBindings(
 }
 
 /**
- * Installs BrowserServer cancellation alongside the caller cleanup.
+ * Attaches BrowserServer cancellation alongside the caller cleanup.
  *
  * @internal
  * @param bindings Durable bindings receiving the internal cancellation effect.

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/require-await */
+
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { ActorContextSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";

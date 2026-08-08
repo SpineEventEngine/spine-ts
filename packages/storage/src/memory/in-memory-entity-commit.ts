@@ -3,10 +3,7 @@ import type { Event, EventId } from "@spine-event-engine/proto";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 
 import { eventStoreAccess, eventStoreRecordSpec } from "../event/event-store.js";
-import {
-  entityEventHistoryRecordSpec,
-  entityStateHistoryRecordSpec,
-} from "../entity/entity-history-record-spec.js";
+import { eventHistorySpec, stateHistorySpec } from "../entity/entity-history-record-spec.js";
 import type { EntityRecord } from "../entity/entity-record.js";
 import type {
   EntityCommitInput,
@@ -102,11 +99,11 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
     const stateLayout =
       input.states === undefined || input.states.length === 0
         ? undefined
-        : entityStateHistoryRecordSpec(input.entity.stateSchema);
+        : stateHistorySpec(input.entity.stateSchema);
     const eventLayout =
       input.diagnostics === undefined || input.diagnostics.length === 0
         ? undefined
-        : entityEventHistoryRecordSpec(input.entity.stateSchema);
+        : eventHistorySpec(input.entity.stateSchema);
     const liveStates =
       stateLayout === undefined
         ? undefined
@@ -164,14 +161,14 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
 
   #stagedInput<I, S extends Message>(
     entity: EntityStorageInput<I, S>,
-    stateLayout: ReturnType<typeof entityStateHistoryRecordSpec> | undefined,
+    stateLayout: ReturnType<typeof stateHistorySpec> | undefined,
     states:
       | TenantRecords<
           import("@spine-event-engine/proto/generated/spine/server/entity/state_key_pb.js").EntityStateKey,
           EntityRecord
         >
       | undefined,
-    eventLayout: ReturnType<typeof entityEventHistoryRecordSpec> | undefined,
+    eventLayout: ReturnType<typeof eventHistorySpec> | undefined,
     diagnostics: TenantRecords<EventId, Event> | undefined,
   ): EntityStorageInput<I, S> {
     const base = { ...entity };

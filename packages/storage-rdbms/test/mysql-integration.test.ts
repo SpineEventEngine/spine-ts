@@ -17,11 +17,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { MysqlStorageFactory } from "../src/index.js";
 import {
-  mysqlCurrentRecordForTesting,
-  mysqlCurrentRevisionForTesting,
-  mysqlEntityHistoryCountsForTesting,
-  mysqlEntityTableNamesForTesting,
-  mysqlRecordTableNameForTesting,
+  mysqlCurrentRecord,
+  mysqlCurrentRevision,
+  mysqlHistoryCounts,
+  mysqlEntityTables,
+  mysqlRecordTableName,
 } from "../src/mysql/testing.js";
 
 const url = process.env.SPINE_TS_MYSQL_URL;
@@ -93,8 +93,8 @@ live("MySQL-family record layout", () => {
       await commits.commit(mutation(context, input, "seed"));
       const initialEvents = (await eventStore.read()).length;
       const actualTables = [
-        ...mysqlEntityTableNamesForTesting(input),
-        mysqlRecordTableNameForTesting(eventStoreRecordSpec),
+        ...mysqlEntityTables(input),
+        mysqlRecordTableName(eventStoreRecordSpec),
       ];
       expect(actualTables).toHaveLength(4);
       for (const tableName of actualTables)
@@ -102,7 +102,9 @@ live("MySQL-family record layout", () => {
       const [engines] = await pool.query<
         (RowDataPacket & { table_name: string; engine: string })[]
       >(
-        "SELECT table_name AS table_name, engine AS engine FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN (?, ?, ?, ?)",
+        "SELECT table_name AS table_name, engine AS engine " +
+          "FROM information_schema.tables WHERE table_schema=DATABASE() " +
+          "AND table_name IN (?, ?, ?, ?)",
         actualTables,
       );
       expect(engines).toHaveLength(actualTables.length);
@@ -114,7 +116,8 @@ live("MySQL-family record layout", () => {
         if (admin === undefined)
           throw new Error("SPINE_TS_MYSQL_ADMIN_URL is required for trigger injection.");
         await admin.query(
-          `CREATE TRIGGER \`${trigger}\` BEFORE INSERT ON \`${tableName}\` FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='t0134 injected'`,
+          `CREATE TRIGGER \`${trigger}\` BEFORE INSERT ON \`${tableName}\` ` +
+            "FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='t0134 injected'",
         );
         try {
           await expect(commits.commit(mutation(context, input, id))).rejects.toThrow();
@@ -129,15 +132,15 @@ live("MySQL-family record layout", () => {
               { states: 1, entityEvents: 0, deliveryEvents: 0 },
               { states: 1, entityEvents: 1, deliveryEvents: 0 },
             ][index] ?? { states: 0, entityEvents: 0, deliveryEvents: 0 });
-        await expect(mysqlCurrentRecordForTesting(pool, input, id)).resolves.toBeUndefined();
-        const history = await mysqlEntityHistoryCountsForTesting(pool, input, id);
+        await expect(mysqlCurrentRecord(pool, input, id)).resolves.toBeUndefined();
+        const history = await mysqlHistoryCounts(pool, input, id);
         expect(history.states, `table ${String(index)} state prefix`).toBe(expected.states);
         expect(history.events, `table ${String(index)} event prefix`).toBe(expected.entityEvents);
         await expect(eventStore.read()).resolves.toHaveLength(
           initialEvents + index + expected.deliveryEvents,
         );
         await expect(commits.commit(mutation(context, input, id))).resolves.toBe("committed");
-        const persisted = await mysqlCurrentRecordForTesting(pool, input, id);
+        const persisted = await mysqlCurrentRecord(pool, input, id);
         if (persisted === undefined) throw new Error("Committed Entity record is missing.");
         expect(Buffer.from(toBinary(EntityRecordSchema, persisted))).toEqual(
           Buffer.from(toBinary(EntityRecordSchema, current(id))),
@@ -211,10 +214,7 @@ live("MySQL-family record layout", () => {
     let tables: readonly string[] = [];
     try {
       await commits.commit(mutation(context, input, "seed"));
-      tables = [
-        ...mysqlEntityTableNamesForTesting(input),
-        mysqlRecordTableNameForTesting(eventStoreRecordSpec),
-      ];
+      tables = [...mysqlEntityTables(input), mysqlRecordTableName(eventStoreRecordSpec)];
       for (const table of tables) await pool.query(`ALTER TABLE \`${table}\` ENGINE=MyISAM`);
 
       await expect(commits.commit(mutation(context, input, "with-history"))).resolves.toBe(
@@ -248,7 +248,7 @@ live("MySQL-family record layout", () => {
     try {
       const initial = create(StringValueSchema, { value: "present:initial" });
       await first.write(initial);
-      const table = mysqlRecordTableNameForTesting(spec);
+      const table = mysqlRecordTableName(spec);
       await pool.query(`ALTER TABLE \`${table}\` ENGINE=${engine}`);
       const present = await Promise.all([
         first.compareAndSet(
@@ -299,7 +299,7 @@ live("MySQL-family record layout", () => {
       const outcomes = await Promise.all([first.commit(left), second.commit(right)]);
       expect(outcomes.filter((outcome) => outcome === "committed")).toHaveLength(1);
       expect(outcomes.filter((outcome) => outcome === "conflict")).toHaveLength(1);
-      await expect(mysqlCurrentRecordForTesting(pool, input, "same")).resolves.toBeDefined();
+      await expect(mysqlCurrentRecord(pool, input, "same")).resolves.toBeDefined();
     } finally {
       first.close();
       second.close();
@@ -315,9 +315,9 @@ live("MySQL-family record layout", () => {
     try {
       const same = mutation(context, input, "same");
       await expect(commits.commit(same)).resolves.toBe("committed");
-      const before = await mysqlCurrentRevisionForTesting(pool, input, "same");
+      const before = await mysqlCurrentRevision(pool, input, "same");
       await expect(commits.commit(same)).resolves.toBe("committed");
-      await expect(mysqlCurrentRevisionForTesting(pool, input, "same")).resolves.toBe(before);
+      await expect(mysqlCurrentRevision(pool, input, "same")).resolves.toBe(before);
     } finally {
       commits.close();
       await pool.end();

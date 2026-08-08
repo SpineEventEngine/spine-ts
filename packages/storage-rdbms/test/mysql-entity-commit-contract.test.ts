@@ -6,10 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { mysqlEntityLockKey, MysqlEntityCommitCoordinator } from "../src/mysql/entity-commit.js";
 import { MysqlEntityStorage } from "../src/mysql/entity-history.js";
-import {
-  mysqlCurrentRevisionForTesting,
-  mysqlEntityTableNamesForTesting,
-} from "../src/mysql/testing.js";
+import { mysqlCurrentRevision, mysqlEntityTables } from "../src/mysql/testing.js";
 
 describe("MysqlEntityCommitCoordinator", () => {
   it("derives a 64-character lowercase hexadecimal advisory key for each entity identity", () => {
@@ -163,18 +160,18 @@ describe("MysqlEntityCommitCoordinator", () => {
 
 describe("MysqlEntityStorage history behavior", () => {
   it("resolves only enabled Entity-family tables", () => {
-    expect(mysqlEntityTableNamesForTesting(entityInput(false, false))).toHaveLength(1);
-    expect(mysqlEntityTableNamesForTesting(entityInput(true, true))).toHaveLength(3);
+    expect(mysqlEntityTables(entityInput(false, false))).toHaveLength(1);
+    expect(mysqlEntityTables(entityInput(true, true))).toHaveLength(3);
   });
 
   it("reads the internal current revision with canonical single and tenant scopes", async () => {
     const values: unknown[][] = [[{ revision: "4" }], [{ revision: "5" }], []];
     const pool = { query: () => Promise.resolve([values.shift() ?? [], []] as never) };
     await expect(
-      mysqlCurrentRevisionForTesting(pool as never, entityInput(false, false), "one"),
+      mysqlCurrentRevision(pool as never, entityInput(false, false), "one"),
     ).resolves.toBe(4n);
     await expect(
-      mysqlCurrentRevisionForTesting(
+      mysqlCurrentRevision(
         pool as never,
         {
           ...entityInput(false, false),
@@ -184,7 +181,7 @@ describe("MysqlEntityStorage history behavior", () => {
       ),
     ).resolves.toBe(5n);
     await expect(
-      mysqlCurrentRevisionForTesting(pool as never, entityInput(false, false), "missing"),
+      mysqlCurrentRevision(pool as never, entityInput(false, false), "missing"),
     ).rejects.toThrow(/missing/i);
   });
 

@@ -3,8 +3,8 @@ import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { EventSchema } from "@spine-event-engine/proto";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
-  entityEventHistoryRecordSpec,
-  entityStateHistoryRecordSpec,
+  eventHistorySpec,
+  stateHistorySpec,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/internal/entity-history";
 import type { RecordSpec, StorageGroup } from "@spine-event-engine/storage";
@@ -22,7 +22,7 @@ import { mysqlScopeKey } from "./scope.js";
  * @param group Identifies an optional storage group.
  * @returns The default physical table name.
  */
-export function mysqlRecordTableNameForTesting<I, R extends Message>(
+export function mysqlRecordTableName<I, R extends Message>(
   spec: RecordSpec<I, R>,
   group?: StorageGroup,
 ): string {
@@ -41,7 +41,7 @@ export function mysqlRecordTableNameForTesting<I, R extends Message>(
  * @param input Describes the Entity family and enabled histories.
  * @returns The current and enabled history table names.
  */
-export function mysqlEntityTableNamesForTesting<I, S extends Message>(
+export function mysqlEntityTables<I, S extends Message>(
   input: EntityStorageInput<I, S>,
 ): readonly string[] {
   const tables = [
@@ -53,12 +53,12 @@ export function mysqlEntityTableNamesForTesting<I, S extends Message>(
     ).tableName,
   ];
   if (input.stateHistory) {
-    const state = entityStateHistoryRecordSpec(input.stateSchema);
-    tables.push(mysqlRecordTableNameForTesting(state.spec, state.group));
+    const state = stateHistorySpec(input.stateSchema);
+    tables.push(mysqlRecordTableName(state.spec, state.group));
   }
   if (input.eventHistory) {
-    const event = entityEventHistoryRecordSpec(input.stateSchema);
-    tables.push(mysqlRecordTableNameForTesting(event.spec, event.group));
+    const event = eventHistorySpec(input.stateSchema);
+    tables.push(mysqlRecordTableName(event.spec, event.group));
   }
   return tables;
 }
@@ -72,7 +72,7 @@ export function mysqlEntityTableNamesForTesting<I, S extends Message>(
  * @param id Identifies the current Entity row.
  * @returns Resolves to the persisted revision.
  */
-export async function mysqlCurrentRevisionForTesting<I, S extends Message>(
+export async function mysqlCurrentRevision<I, S extends Message>(
   pool: Pool,
   input: EntityStorageInput<I, S>,
   id: I,
@@ -101,7 +101,7 @@ export async function mysqlCurrentRevisionForTesting<I, S extends Message>(
  * @param id Identifies the current Entity row.
  * @returns Resolves to the current record, or `undefined` when it is absent.
  */
-export async function mysqlCurrentRecordForTesting<I, S extends Message>(
+export async function mysqlCurrentRecord<I, S extends Message>(
   pool: Pool,
   input: EntityStorageInput<I, S>,
   id: I,
@@ -109,7 +109,7 @@ export async function mysqlCurrentRecordForTesting<I, S extends Message>(
   | import("@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js").EntityRecord
   | undefined
 > {
-  const table = mysqlEntityTableNamesForTesting(input)[0];
+  const table = mysqlEntityTables(input)[0];
   if (table === undefined) throw new Error("Current Entity table is missing.");
   const [rows] = await pool.query<(RowDataPacket & { bytes: Uint8Array })[]>(
     `SELECT bytes FROM \`${table}\` WHERE _scope=? AND ID=?`,
@@ -119,7 +119,7 @@ export async function mysqlCurrentRecordForTesting<I, S extends Message>(
 }
 
 /**
- * Counts retained state and diagnostic records for one Entity in a provider test.
+ * Returns retained state and diagnostic record counts for one Entity in a provider test.
  *
  * @internal
  * @param pool Queries the test database.
@@ -127,7 +127,7 @@ export async function mysqlCurrentRecordForTesting<I, S extends Message>(
  * @param id Identifies the Entity whose histories are counted.
  * @returns Resolves to the matching state and diagnostic counts.
  */
-export async function mysqlEntityHistoryCountsForTesting<I, S extends Message>(
+export async function mysqlHistoryCounts<I, S extends Message>(
   pool: Pool,
   input: EntityStorageInput<I, S>,
   id: I,
@@ -135,7 +135,7 @@ export async function mysqlEntityHistoryCountsForTesting<I, S extends Message>(
   const packedId = input.id.pack(id);
   let states = 0;
   if (input.stateHistory) {
-    const state = entityStateHistoryRecordSpec(input.stateSchema);
+    const state = stateHistorySpec(input.stateSchema);
     const rows = await recordBytes(pool, input, state.spec, state.group);
     states = rows.filter((bytes) => {
       const record = fromBinary(EntityRecordSchema, bytes);
@@ -144,7 +144,7 @@ export async function mysqlEntityHistoryCountsForTesting<I, S extends Message>(
   }
   let events = 0;
   if (input.eventHistory) {
-    const event = entityEventHistoryRecordSpec(input.stateSchema);
+    const event = eventHistorySpec(input.stateSchema);
     const rows = await recordBytes(pool, input, event.spec, event.group);
     events = rows.filter((bytes) => {
       const record = fromBinary(EventSchema, bytes);
@@ -160,7 +160,7 @@ async function recordBytes<I, J, R extends Message, S extends Message>(
   spec: RecordSpec<J, R>,
   group: StorageGroup,
 ): Promise<readonly Uint8Array[]> {
-  const table = mysqlRecordTableNameForTesting(spec, group);
+  const table = mysqlRecordTableName(spec, group);
   const [rows] = await pool.query<(RowDataPacket & { bytes: Uint8Array })[]>(
     `SELECT bytes FROM \`${table}\` WHERE _scope=?`,
     [mysqlScopeKey(input.context)],

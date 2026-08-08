@@ -42,7 +42,13 @@ export interface MysqlEntityLockIdentity {
 export function mysqlEntityLockKey(identity: MysqlEntityLockIdentity): string {
   return createHash("sha256")
     .update(
-      `${identity.databaseName}\u0000${identity.contextName}\u0000${identity.tenantId ?? ""}\u0000${identity.sourceTypeName}\u0000${identity.entityKey}`,
+      [
+        identity.databaseName,
+        identity.contextName,
+        identity.tenantId ?? "",
+        identity.sourceTypeName,
+        identity.entityKey,
+      ].join("\u0000"),
     )
     .digest("hex");
 }

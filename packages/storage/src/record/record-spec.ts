@@ -8,25 +8,51 @@ const storageHost = globalThis as typeof globalThis & {
   structuredClone<Value>(value: Value): Value;
 };
 
-type RecordSpecInput<I, R extends Message> = RecordSpecFields<I, R> &
-  ([I] extends [Message] ? RecordSpecMessageId<I> : RecordSpecPrimitiveId);
+/**
+ * Configures one direct Protobuf record family and its identity.
+ */
+// prettier-ignore
+export type RecordSpecOptions<I, R extends Message> = {
 
-interface RecordSpecFields<I, R extends Message> {
+  /**
+   * Original message type represented by the stored records.
+   */
   readonly sourceType?: GenMessage<Message>;
+
+  /**
+   * Protobuf record type stored by the family.
+   */
   readonly recordType: GenMessage<R>;
+
+  /**
+   * Returns the authoritative identity extracted from a direct record.
+   *
+   * @param record Supplies the direct record.
+   * @returns The authoritative record identity.
+   */
   readonly extractId: (record: R) => I;
+
+  /**
+   * Declared query columns materialized from each record.
+   */
   readonly columns?: readonly RecordColumn<R>[];
-}
+} & ([I] extends [Message]
+  ? {
 
-interface RecordSpecMessageId<I extends Message> {
-  readonly idSchema: GenMessage<I>;
-  readonly idKind?: never;
-}
+      /**
+       * Generated schema for a message-valued identity.
+       */
+      readonly idSchema: GenMessage<I & Message>;
+      readonly idKind?: never;
+    }
+  : {
+      readonly idSchema?: never;
 
-interface RecordSpecPrimitiveId {
-  readonly idSchema?: never;
-  readonly idKind: string;
-}
+      /**
+       * Stable kind name for a primitive identity.
+       */
+      readonly idKind: string;
+    });
 
 interface RuntimeRecordSpecInput {
   readonly idSchema?: GenMessage<Message>;
@@ -50,7 +76,7 @@ export class RecordSpec<I, R extends Message> {
    * @throws Error if the ID type is invalid or two declared columns have the same name.
    * @param input The source, record, identity, and column definitions.
    */
-  constructor(input: RecordSpecInput<I, R>) {
+  constructor(input: RecordSpecOptions<I, R>) {
     const runtimeInput = input as RuntimeRecordSpecInput;
     this.#columns = input.columns ?? [];
     const names = new Set<string>();

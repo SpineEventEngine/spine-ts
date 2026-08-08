@@ -48,14 +48,14 @@ histories allocate no record handle or Datastore row.
 ## Queries and commits
 
 Queries always constrain `_scope`. Provider-illegal plans reconcile a maximum
-of 1,000 candidate rows; the 1,001st row throws `DatastoreQueryLimitError`.
+of 1,000 rows; the 1,001st row throws `DatastoreQueryLimitError`.
 `writeAll()` uses batches of at most 500 mutations and is not atomic across
 batches.
 
 Provider-legal ID predicates, declared-property comparisons, and ordering are
 pushed only when Datastore can execute the whole selected conjunction. Local
 reconciliation preserves shared query semantics and never becomes an unlimited
-scan. A smaller caller-supplied candidate bound retains its own sentinel and
+scan. A smaller caller-supplied reconciliation bound retains its own sentinel and
 `QueryCandidateLimitError` behavior. There is no public Datastore cursor API.
 
 The internal Entity commit reads current and immutable keys then applies current,

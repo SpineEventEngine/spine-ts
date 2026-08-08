@@ -11,10 +11,7 @@ export {
   disabledStateHistoryPort,
 } from "../entity/entity-history-storage.js";
 export type { EntityRecord, EntityRecordStorage } from "../entity/entity-record.js";
-export {
-  entityEventHistoryRecordSpec,
-  entityStateHistoryRecordSpec,
-} from "../entity/entity-history-record-spec.js";
+export { eventHistorySpec, stateHistorySpec } from "../entity/entity-history-record-spec.js";
 export {
   EntityHistoryConformance,
   type EntityHistoryConformanceAdapter,

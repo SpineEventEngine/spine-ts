@@ -10,7 +10,13 @@ describe("authenticated subscription public contract", () => {
 
     expect(source).toContain("GatewayAuthenticatedSubscriptionSchema");
     expect(source).not.toMatch(
-      /AnySchema|type\.spine-event-engine\.gateway|JSON\.parse|JSON\.stringify|quotaId|cleanupId|admissionToken|reservationOwner|principalFingerprint|leaseUntilMs|retryAfterMs|receipt|marker/,
+      new RegExp(
+        [
+          "AnySchema|type\\.spine-event-engine\\.gateway|JSON\\.parse|JSON\\.stringify",
+          "quotaId|cleanupId|admissionToken|reservationOwner|principalFingerprint",
+          "leaseUntilMs|retryAfterMs|receipt|marker",
+        ].join("|"),
+      ),
     );
   });
 });

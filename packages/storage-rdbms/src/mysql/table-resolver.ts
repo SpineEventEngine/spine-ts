@@ -53,7 +53,9 @@ export class MysqlTableResolver {
       registered ??
       (group === undefined
         ? sourceType.replaceAll(".", "_")
-        : `${group.replaceAll(".", "_")}_${(recordType ?? sourceType).slice((recordType ?? sourceType).lastIndexOf(".") + 1)}`);
+        : `${group.replaceAll(".", "_")}_${(recordType ?? sourceType).slice(
+            (recordType ?? sourceType).lastIndexOf(".") + 1,
+          )}`);
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(readable) || Buffer.byteLength(readable) > 64) {
       throw new Error(`MySQL table name is invalid: ${readable}`);
     }

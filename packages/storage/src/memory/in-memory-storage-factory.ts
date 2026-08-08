@@ -1,9 +1,6 @@
 import type { Message } from "@bufbuild/protobuf";
 
-import {
-  entityEventHistoryRecordSpec,
-  entityStateHistoryRecordSpec,
-} from "../entity/entity-history-record-spec.js";
+import { eventHistorySpec, stateHistorySpec } from "../entity/entity-history-record-spec.js";
 import type { RecordSpec } from "../record/record-spec.js";
 import type { RecordStorage } from "../record/record-storage.js";
 import type { StorageGroup } from "../record/storage-group.js";
@@ -51,12 +48,8 @@ export class InMemoryStorageFactory extends StorageFactory {
   createEntityStorage(input: unknown): unknown {
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
     const entity = input as EntityStorageInput<unknown, Message>;
-    const stateHistory = entity.stateHistory
-      ? entityStateHistoryRecordSpec(entity.stateSchema)
-      : undefined;
-    const eventHistory = entity.eventHistory
-      ? entityEventHistoryRecordSpec(entity.stateSchema)
-      : undefined;
+    const stateHistory = entity.stateHistory ? stateHistorySpec(entity.stateSchema) : undefined;
+    const eventHistory = entity.eventHistory ? eventHistorySpec(entity.stateSchema) : undefined;
     return this.#entities.create({
       ...entity,
       ...(stateHistory === undefined

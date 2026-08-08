@@ -1,7 +1,13 @@
 import { Buffer } from "node:buffer";
 import type { StorageContext } from "@spine-event-engine/storage";
 
-/** Builds the canonical bounded MySQL scope key. @internal */
+/**
+ * Builds the canonical bounded MySQL scope key.
+ *
+ * @internal
+ * @param context Identifies the bounded storage scope.
+ * @returns The canonical binary scope key.
+ */
 export function mysqlScopeKey(context: StorageContext): Uint8Array {
   const name = Buffer.from(context.name, "utf8");
   const tenant = context.multitenant ? Buffer.from(context.tenantId ?? "", "utf8") : undefined;

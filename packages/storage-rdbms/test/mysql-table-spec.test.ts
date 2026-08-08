@@ -33,7 +33,10 @@ describe("MysqlTableResolver", () => {
   });
 
   it("uses the grouped record simple name in the default table name", () => {
-    expect(new MysqlTableResolver().resolve("example.Source", "history", undefined, "example.Event").tableName).toBe("history_Event");
+    expect(
+      new MysqlTableResolver().resolve("example.Source", "history", undefined, "example.Event")
+        .tableName,
+    ).toBe("history_Event");
   });
 
   it("uses the latest registration for the same identity", () => {
@@ -48,24 +51,32 @@ describe("MysqlTableResolver", () => {
     const resolver = new MysqlTableResolver();
 
     for (const name of ["", "has-dash", "1leading", "x".repeat(65)])
-      expect(() => { resolver.setRecordName("example.Record", name); }).toThrow(/invalid/i);
+      expect(() => {
+        resolver.setRecordName("example.Record", name);
+      }).toThrow(/invalid/i);
     expect(() => resolver.resolve("example.Record", undefined, "bad-name")).toThrow(/invalid/i);
 
     resolver.setRecordName("example.Record", "occupied");
-    expect(() => { resolver.setGroupName("example.Source", "example.Event", "occupied"); }).toThrow(
-      /collides/i,
-    );
+    expect(() => {
+      resolver.setGroupName("example.Source", "example.Event", "occupied");
+    }).toThrow(/collides/i);
   });
 
   it("rejects collisions between distinct default-resolved families", () => {
     const resolver = new MysqlTableResolver();
     resolver.resolve("example.Source", "group", undefined, "example.Record");
-    expect(() => resolver.resolve("other.Source", "group", undefined, "other.Record")).toThrow(/collides/i);
+    expect(() => resolver.resolve("other.Source", "group", undefined, "other.Record")).toThrow(
+      /collides/i,
+    );
   });
 
   it("maps declared columns to their native MySQL types", () => {
     expect(["boolean", "number", "bigint", "bytes", "string"].map(mysqlColumnType)).toEqual([
-      "BOOLEAN", "DOUBLE", "BIGINT", "MEDIUMBLOB", "VARCHAR(1024)",
+      "BOOLEAN",
+      "DOUBLE",
+      "BIGINT",
+      "MEDIUMBLOB",
+      "VARCHAR(1024)",
     ]);
   });
 });

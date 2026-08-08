@@ -589,7 +589,7 @@ export class SpineServices {
       const subscription = entry?.subscription;
       const topic = subscription?.topic;
       if (entry === undefined || subscription === undefined || topic === undefined) continue;
-      const canonicalTopic = clone(TopicSchema, topic as Topic);
+      const canonicalTopic = clone(TopicSchema, topic);
       const route = this.#subscriptionRoute(canonicalTopic);
       if (route.context !== context) continue;
       const tenantId = ServiceValues.topicTenant(canonicalTopic);
@@ -600,7 +600,7 @@ export class SpineServices {
       }
       return ServiceValues.createSubscriptionRecord({
         id,
-        subscription: clone(SubscriptionSchema, subscription as Subscription),
+        subscription: clone(SubscriptionSchema, subscription),
         shape: ServiceValues.createSubscriptionShape(canonicalTopic, route),
         tenantId,
         queueLimit: this.#queueLimit,

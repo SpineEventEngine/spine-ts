@@ -20,7 +20,7 @@ import { StorageGroup } from "../record/storage-group.js";
  * @param stateType The served Entity state message type.
  * @returns The separate group and record specification for retained states.
  */
-export function entityStateHistoryRecordSpec(stateType: GenMessage<Message>): {
+export function stateHistorySpec(stateType: GenMessage<Message>): {
   readonly group: StorageGroup;
   readonly spec: RecordSpec<EntityStateKey, EntityRecord>;
 } {
@@ -57,7 +57,7 @@ export function entityStateHistoryRecordSpec(stateType: GenMessage<Message>): {
  * @param stateType The served Entity state message type.
  * @returns The separate group and record specification for retained events.
  */
-export function entityEventHistoryRecordSpec(stateType: GenMessage<Message>): {
+export function eventHistorySpec(stateType: GenMessage<Message>): {
   readonly group: StorageGroup;
   readonly spec: RecordSpec<EventId, Event>;
 } {

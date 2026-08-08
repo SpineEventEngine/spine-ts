@@ -1515,7 +1515,7 @@ class AggregateCommandExecution {
       allowEnvelopes && EntityInvocation.isEventEnvelope(signal)
         ? clone(EventSchema, signal)
         : this.#packDomainEvent(signal, metadata);
-    bound.context = RepositorySignals.eventContextWithProducerId(
+    bound.context = RepositorySignals.eventContextWithProducer(
       metadata.context,
       this.#repository,
       entityId,
@@ -1805,7 +1805,7 @@ class AggregateEventExecution {
           })
         : metadata.id,
       message: AnyMessages.pack(schema, signal as never),
-      context: RepositorySignals.eventContextWithProducerId(
+      context: RepositorySignals.eventContextWithProducer(
         metadata.context,
         this.#repository,
         entityId,
@@ -2438,7 +2438,7 @@ class ProcessManagerCommandExecution {
     return create(EventSchema, {
       id: metadata.id,
       message: AnyMessages.pack(schema, signal as never),
-      context: RepositorySignals.eventContextWithProducerId(
+      context: RepositorySignals.eventContextWithProducer(
         metadata.context,
         this.#repository,
         entityId,
@@ -2696,7 +2696,7 @@ class ProcessManagerEventExecution {
     return create(EventSchema, {
       id: metadata.id,
       message: AnyMessages.pack(schema, signal as never),
-      context: RepositorySignals.eventContextWithProducerId(
+      context: RepositorySignals.eventContextWithProducer(
         metadata.context,
         this.#repository,
         entityId,
@@ -3121,7 +3121,7 @@ const RepositorySignals = {
     return PrimitiveIds.readFinite(entityId);
   },
 
-  eventContextWithProducerId(
+  eventContextWithProducer(
     context: NonNullable<Event["context"]>,
     repository: RepositoryView,
     entityId: unknown,

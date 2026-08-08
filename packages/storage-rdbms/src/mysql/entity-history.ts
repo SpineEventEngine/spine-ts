@@ -11,8 +11,8 @@ import {
 } from "@spine-event-engine/proto/generated/spine/server/entity/state_key_pb.js";
 import { RecordSpec } from "@spine-event-engine/storage";
 import {
-  entityEventHistoryRecordSpec,
-  entityStateHistoryRecordSpec,
+  eventHistorySpec,
+  stateHistorySpec,
   type EntityEventHistoryPort,
   type EntityRecordStorage,
   type EntityStateHistoryPort,
@@ -126,8 +126,8 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
     });
     this.#current = new CurrentStorage(input, open(currentSpec));
     this.current = this.#current;
-    const states = input.stateHistory ? entityStateHistoryRecordSpec(input.stateSchema) : undefined;
-    const events = input.eventHistory ? entityEventHistoryRecordSpec(input.stateSchema) : undefined;
+    const states = input.stateHistory ? stateHistorySpec(input.stateSchema) : undefined;
+    const events = input.eventHistory ? eventHistorySpec(input.stateSchema) : undefined;
     this.#states =
       states === undefined ? undefined : new States(input, open(states.spec, states.group));
     this.#events =

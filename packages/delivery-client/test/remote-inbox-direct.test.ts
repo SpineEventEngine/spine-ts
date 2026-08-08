@@ -109,6 +109,7 @@ describe("RemoteInbox direct behavior", () => {
     const inbox = new RemoteInbox(client as never);
     const pending = domainMessage("pending");
     const { signal: _signal, ...withoutSignal } = pending;
+    void _signal;
     for (const current of [
       { ...pending, id: { ...pending.id, value: "other" } },
       { ...pending, signalId: "other" },

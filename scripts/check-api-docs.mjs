@@ -390,6 +390,7 @@ const expectedStorageExports = [
   "RecordQuery",
   "RecordReadOptions",
   "RecordSpec",
+  "RecordSpecOptions",
   "RecordStorage",
   "Storage",
   "StorageContext",

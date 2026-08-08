@@ -1,7 +1,7 @@
 import {
   EntityHistoryConformance,
-  entityEventHistoryRecordSpec,
-  entityStateHistoryRecordSpec,
+  eventHistorySpec,
+  stateHistorySpec,
 } from "../../src/internal/entity-history.js";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import type { StringValue } from "@bufbuild/protobuf/wkt";
@@ -26,10 +26,6 @@ it("exposes the narrow provider-only entity history SPI", () => {
     | undefined = undefined;
   expect(types).toBeUndefined();
   expect(EntityHistoryConformance.check).toBeTypeOf("function");
-  expect(entityStateHistoryRecordSpec(StringValueSchema).group.name).toBe(
-    StringValueSchema.typeName,
-  );
-  expect(entityEventHistoryRecordSpec(StringValueSchema).group.name).toBe(
-    StringValueSchema.typeName,
-  );
+  expect(stateHistorySpec(StringValueSchema).group.name).toBe(StringValueSchema.typeName);
+  expect(eventHistorySpec(StringValueSchema).group.name).toBe(StringValueSchema.typeName);
 });

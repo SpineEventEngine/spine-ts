@@ -197,11 +197,8 @@ function target(id: string) {
   });
 }
 
-function manager(
-  type: { readonly prototype: object },
-  id: string,
-) {
-  const instance = Object.create(type.prototype as object) as {
+function manager(type: { readonly prototype: object }, id: string) {
+  const instance = Object.create(type.prototype) as {
     id: string;
     state: { id: string; updates: number };
     update(change: (state: { id: string; updates: number }) => void): void;

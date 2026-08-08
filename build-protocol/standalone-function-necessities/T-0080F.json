@@ -1,12 +1,264 @@
 [
   {
     "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery-loop.ts",
+    "kind": "function-declaration",
+    "identity": "empty()#1",
+    "name": "empty",
+    "disposition": "necessity",
+    "reason": "TypeScript immutable-value boundary: empty constructs the canonical zero progress snapshot without owning loop lifecycle state."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery-loop.ts",
+    "kind": "function-declaration",
+    "identity": "map()#1",
+    "name": "map",
+    "disposition": "necessity",
+    "reason": "TypeScript public-value boundary: map converts internal drain status into the documented loop status vocabulary."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "kind": "function-declaration",
+    "identity": "counts()#1",
+    "name": "counts",
+    "disposition": "necessity",
+    "reason": "TypeScript immutable-value boundary: counts creates fresh delivery counters without owning a mutable lifecycle object."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "kind": "function-declaration",
+    "identity": "isEndpointMessage()#1",
+    "name": "isEndpointMessage",
+    "disposition": "necessity",
+    "reason": "TypeScript dispatch boundary: isEndpointMessage classifies supported Inbox labels before endpoint invocation without retaining state."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "kind": "function-declaration",
+    "identity": "result()#1",
+    "name": "result",
+    "disposition": "necessity",
+    "reason": "TypeScript public-value boundary: result freezes one delivery outcome and its retained failure facts."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "kind": "function-declaration",
+    "identity": "safely()#1",
+    "name": "safely",
+    "disposition": "necessity",
+    "reason": "TypeScript callback boundary: safely contains direct or promised user hook failure without changing lifecycle state."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "kind": "function-declaration",
+    "identity": "safelyBoolean()#1",
+    "name": "safelyBoolean",
+    "disposition": "necessity",
+    "reason": "TypeScript callback boundary: safelyBoolean contains direct or promised boolean cleanup outcomes with a fail-closed default."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "kind": "function-declaration",
+    "identity": "safelyValue()#1",
+    "name": "safelyValue",
+    "disposition": "necessity",
+    "reason": "TypeScript callback boundary: safelyValue contains direct or promised monitor results using an explicit deterministic fallback."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "kind": "function-declaration",
+    "identity": "snapshot()#1",
+    "name": "snapshot",
+    "disposition": "necessity",
+    "reason": "TypeScript immutability boundary: snapshot clones Inbox and Protobuf values retained across asynchronous monitor actions."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "kind": "function-declaration",
+    "identity": "snapshotWorker()#1",
+    "name": "snapshotWorker",
+    "disposition": "necessity",
+    "reason": "TypeScript immutability boundary: snapshotWorker copies generated worker identity before asynchronous delivery lifecycle use."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "kind": "function-declaration",
+    "identity": "workerId()#1",
+    "name": "workerId",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: workerId creates one complete generated worker identity for a delivery owner."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "atomic()#1",
+    "name": "atomic",
+    "disposition": "necessity",
+    "reason": "TypeScript storage boundary: atomic rejects providers lacking compare-and-set semantics before ownership mutation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "checkedShard()#1",
+    "name": "checkedShard",
+    "disposition": "necessity",
+    "reason": "TypeScript public-value boundary: checkedShard validates and copies caller shard coordinates before storage access."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "checkedWorker()#1",
+    "name": "checkedWorker",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: checkedWorker validates and copies complete caller worker identity before ownership operations."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "concurrent()#1",
+    "name": "concurrent",
+    "disposition": "necessity",
+    "reason": "TypeScript concurrency boundary: concurrent creates one consistent stale-session error for compare-and-set rejection."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "context()#1",
+    "name": "context",
+    "disposition": "necessity",
+    "reason": "TypeScript storage boundary: context validates and freezes tenant context before resolving record storage."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "copy()#1",
+    "name": "copy",
+    "disposition": "necessity",
+    "reason": "TypeScript immutability boundary: copy snapshots storage context without retaining caller-owned tenant objects."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "owned()#1",
+    "name": "owned",
+    "disposition": "necessity",
+    "reason": "TypeScript immutable-value boundary: owned constructs exact leased session facts without provider object identity."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "same()#1",
+    "name": "same",
+    "disposition": "necessity",
+    "reason": "TypeScript compare-and-set boundary: same compares complete immutable session facts before durable mutation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "sameWorker()#1",
+    "name": "sameWorker",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: sameWorker compares complete generated worker identity without object-reference assumptions."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "session()#1",
+    "name": "session",
+    "disposition": "necessity",
+    "reason": "TypeScript persistence boundary: session validates a stored shard record before exposing immutable ownership facts."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "time()#1",
+    "name": "time",
+    "disposition": "necessity",
+    "reason": "TypeScript clock boundary: time validates injected clock output before lease arithmetic and durable writes."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "timestamp()#1",
+    "name": "timestamp",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: timestamp validates a stored generated timestamp before lease calculations."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "toRecord()#1",
+    "name": "toRecord",
+    "disposition": "necessity",
+    "reason": "TypeScript persistence boundary: toRecord serializes immutable session facts into the generated storage record."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "unowned()#1",
+    "name": "unowned",
+    "disposition": "necessity",
+    "reason": "TypeScript persistence boundary: unowned derives the exact released storage record from retained session facts."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "wireId()#1",
+    "name": "wireId",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: wireId converts a validated shard value into its generated record identifier."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/entity/entity-metadata.ts",
+    "kind": "function-declaration",
+    "identity": "attachEntitySchema()#1",
+    "name": "attachEntitySchema",
+    "disposition": "necessity",
+    "reason": "TypeScript Entity metadata boundary: attachEntitySchema remains standalone because repository registration and scanning share the same class-to-schema metadata operation."
+  },
+  {
+    "rule": "standalone-function",
     "file": "packages/server/src/entity/entity-metadata.ts",
     "kind": "function-declaration",
     "identity": "describeEntityMetadata()#1",
     "name": "describeEntityMetadata",
     "disposition": "migration-debt",
     "reason": "Pre-T-0080 observed standalone declaration describeEntityMetadata()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/entity/entity-metadata.ts",
+    "kind": "function-declaration",
+    "identity": "entitySchemaOf()#1",
+    "name": "entitySchemaOf",
+    "disposition": "necessity",
+    "reason": "TypeScript Entity metadata boundary: entitySchemaOf remains standalone because repository registration and scanning share the same class-to-schema metadata operation."
   },
   {
     "rule": "standalone-function",
@@ -30,10 +282,46 @@
     "rule": "standalone-function",
     "file": "packages/server/src/entity/entity-storage-descriptor.ts",
     "kind": "function-declaration",
+    "identity": "entityRecordSpec()#1",
+    "name": "entityRecordSpec",
+    "disposition": "necessity",
+    "reason": "TypeScript Entity storage-codec boundary: entityRecordSpec remains standalone because repository and provider construction share the exact entity record spec operation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/entity/entity-storage-descriptor.ts",
+    "kind": "function-declaration",
     "identity": "entityStorageDescriptor()#1",
     "name": "entityStorageDescriptor",
     "disposition": "migration-debt",
     "reason": "Pre-T-0080 observed standalone declaration entityStorageDescriptor()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/entity/entity-storage-descriptor.ts",
+    "kind": "function-declaration",
+    "identity": "standEntityStorageDescriptor()#1",
+    "name": "standEntityStorageDescriptor",
+    "disposition": "necessity",
+    "reason": "TypeScript Entity storage-codec boundary: standEntityStorageDescriptor remains standalone because repository and provider construction share the exact stand entity storage descriptor operation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/entity/entity-storage-descriptor.ts",
+    "kind": "function-declaration",
+    "identity": "unpackMessageId()#1",
+    "name": "unpackMessageId",
+    "disposition": "necessity",
+    "reason": "TypeScript Entity storage-codec boundary: unpackMessageId remains standalone because repository and provider construction share the exact unpack message id operation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/entity/entity-storage-descriptor.ts",
+    "kind": "function-declaration",
+    "identity": "unpackPrimitiveId()#1",
+    "name": "unpackPrimitiveId",
+    "disposition": "necessity",
+    "reason": "TypeScript Entity storage-codec boundary: unpackPrimitiveId remains standalone because repository and provider construction share the exact unpack primitive id operation."
   },
   {
     "rule": "standalone-function",
@@ -163,6 +451,24 @@
   },
   {
     "rule": "standalone-function",
+    "file": "packages/server/src/repository/commit-fence.ts",
+    "kind": "function-declaration",
+    "identity": "commitFenced()#1",
+    "name": "commitFenced",
+    "disposition": "necessity",
+    "reason": "TypeScript framework boundary: commitFenced awaits the active AsyncLocalStorage guard immediately before a synchronous repository commit."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/repository/commit-fence.ts",
+    "kind": "function-declaration",
+    "identity": "withDeliveryCommitFence()#1",
+    "name": "withDeliveryCommitFence",
+    "disposition": "necessity",
+    "reason": "TypeScript framework boundary: withDeliveryCommitFence establishes AsyncLocalStorage scope around one asynchronous delivery callback."
+  },
+  {
+    "rule": "standalone-function",
     "file": "packages/server/src/runtime/runtime-routing.ts",
     "kind": "function-declaration",
     "identity": "createContextRoutingPlan()#1",
@@ -196,6 +502,33 @@
     "name": "failSignalIntake",
     "disposition": "migration-debt",
     "reason": "Pre-T-0080 observed standalone declaration failSignalIntake()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/server/durable-subscription-bindings.ts",
+    "kind": "function-declaration",
+    "identity": "attachDurableSubscriptionCleanup()#1",
+    "name": "attachDurableSubscriptionCleanup",
+    "disposition": "necessity",
+    "reason": "TypeScript BrowserServer integration boundary: attachDurableSubscriptionCleanup remains standalone because package-internal startup composes backend cancellation without adding a public bindings method."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/server/durable-subscription-bindings.ts",
+    "kind": "function-declaration",
+    "identity": "durableCleanupFor()#1",
+    "name": "durableCleanupFor",
+    "disposition": "necessity",
+    "reason": "TypeScript BrowserServer integration boundary: durableCleanupFor remains standalone because package-internal startup composes backend cancellation without adding a public bindings method."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/server/durable-subscription-bindings.ts",
+    "kind": "function-declaration",
+    "identity": "isDurableSubscriptionBindings()#1",
+    "name": "isDurableSubscriptionBindings",
+    "disposition": "necessity",
+    "reason": "TypeScript public type-predicate boundary: isDurableSubscriptionBindings narrows an optional binding collaborator at server assembly without owning registry state."
   },
   {
     "rule": "standalone-function",
@@ -856,30 +1189,12 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/server/src/server/durable-subscription-bindings.ts",
+    "file": "packages/server/src/stand/subscription-records.ts",
     "kind": "function-declaration",
-    "identity": "isDurableSubscriptionBindings()#1",
-    "name": "isDurableSubscriptionBindings",
+    "identity": "milliseconds()#1",
+    "name": "milliseconds",
     "disposition": "necessity",
-    "reason": "TypeScript public type-predicate boundary: isDurableSubscriptionBindings narrows an optional binding collaborator at server assembly without owning registry state."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/repository/commit-fence.ts",
-    "kind": "function-declaration",
-    "identity": "withDeliveryCommitFence()#1",
-    "name": "withDeliveryCommitFence",
-    "disposition": "necessity",
-    "reason": "TypeScript framework boundary: withDeliveryCommitFence establishes AsyncLocalStorage scope around one asynchronous delivery callback."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/repository/commit-fence.ts",
-    "kind": "function-declaration",
-    "identity": "commitFenced()#1",
-    "name": "commitFenced",
-    "disposition": "necessity",
-    "reason": "TypeScript framework boundary: commitFenced awaits the active AsyncLocalStorage guard immediately before a synchronous repository commit."
+    "reason": "TypeScript direct-record codec boundary: milliseconds remains standalone because subscription expiry encoding and decoding share one exact millisecond conversion."
   },
   {
     "rule": "standalone-function",
@@ -894,82 +1209,46 @@
     "rule": "standalone-function",
     "file": "packages/server/src/stand/subscription-registry.ts",
     "kind": "function-declaration",
-    "identity": "controlWithOperation()#1",
-    "name": "controlWithOperation",
+    "identity": "copy()#1",
+    "name": "copy",
     "disposition": "necessity",
-    "reason": "TypeScript serialization boundary: controlWithOperation creates immutable CAS control values without owning registry lifecycle state."
+    "reason": "TypeScript SubscriptionRecord invariant boundary: copy remains standalone because registry read, CAS, recovery, and cleanup paths share the exact copy rule."
   },
   {
     "rule": "standalone-function",
     "file": "packages/server/src/stand/subscription-registry.ts",
     "kind": "function-declaration",
-    "identity": "controlCommitted()#1",
-    "name": "controlCommitted",
+    "identity": "expiresAt()#1",
+    "name": "expiresAt",
     "disposition": "necessity",
-    "reason": "TypeScript serialization boundary: controlCommitted derives immutable committed control state from a staged lifecycle operation."
+    "reason": "TypeScript SubscriptionRecord invariant boundary: expiresAt remains standalone because registry read, CAS, recovery, and cleanup paths share the exact expires at rule."
   },
   {
     "rule": "standalone-function",
     "file": "packages/server/src/stand/subscription-registry.ts",
     "kind": "function-declaration",
-    "identity": "committedCount()#1",
-    "name": "committedCount",
+    "identity": "fail()#1",
+    "name": "fail",
     "disposition": "necessity",
-    "reason": "TypeScript serialization boundary: committedCount derives capacity from one immutable committed lifecycle operation."
+    "reason": "TypeScript SubscriptionRecord invariant boundary: fail remains standalone because registry read, CAS, recovery, and cleanup paths share the exact fail rule."
   },
   {
     "rule": "standalone-function",
     "file": "packages/server/src/stand/subscription-registry.ts",
     "kind": "function-declaration",
-    "identity": "writeControl()#1",
-    "name": "writeControl",
+    "identity": "freeze()#1",
+    "name": "freeze",
     "disposition": "necessity",
-    "reason": "TypeScript serialization boundary: writeControl encodes an internal CAS value for provider-neutral record storage."
+    "reason": "TypeScript SubscriptionRecord invariant boundary: freeze remains standalone because registry read, CAS, recovery, and cleanup paths share the exact freeze rule."
   },
   {
     "rule": "standalone-function",
     "file": "packages/server/src/stand/subscription-registry.ts",
     "kind": "function-declaration",
-    "identity": "readControl()#1",
-    "name": "readControl",
+    "identity": "idValue()#1",
+    "name": "idValue",
     "disposition": "necessity",
-    "reason": "TypeScript serialization boundary: readControl validates a provider-neutral CAS value before registry state uses it."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/stand/subscription-registry.ts",
-    "kind": "function-declaration",
-    "identity": "recordDigest()#1",
-    "name": "recordDigest",
-    "disposition": "necessity",
-    "reason": "TypeScript persistence boundary: recordDigest identifies serialized records across CAS recovery without owning registry state."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/stand/subscription-registry.ts",
-    "kind": "function-declaration",
-    "identity": "generationToken()#1",
-    "name": "generationToken",
-    "disposition": "necessity",
-    "reason": "TypeScript persistence boundary: generationToken serializes a durable definition generation for exact control-operation fencing."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/stand/subscription-registry.ts",
-    "kind": "function-declaration",
-    "identity": "sameAny()#1",
-    "name": "sameAny",
-    "disposition": "necessity",
-    "reason": "TypeScript storage-value boundary: sameAny compares serialized control records without provider object identity."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/stand/subscription-registry.ts",
-    "kind": "function-declaration",
-    "identity": "matchesOperation()#1",
-    "name": "matchesOperation",
-    "disposition": "necessity",
-    "reason": "TypeScript persistence boundary: matchesOperation validates a durable row against its exact staged control-operation fence."
+    "reason": "TypeScript SubscriptionRecord invariant boundary: idValue remains standalone because registry read, CAS, recovery, and cleanup paths share the exact id value rule."
   },
   {
     "rule": "standalone-function",
@@ -984,279 +1263,45 @@
     "rule": "standalone-function",
     "file": "packages/server/src/stand/subscription-registry.ts",
     "kind": "function-declaration",
-    "identity": "subscriptionIdValue()#1",
-    "name": "subscriptionIdValue",
+    "identity": "subscriptionId()#1",
+    "name": "subscriptionId",
     "disposition": "necessity",
-    "reason": "TypeScript public-value boundary: subscriptionIdValue validates generated SubscriptionId input before registry storage access."
+    "reason": "TypeScript SubscriptionRecord invariant boundary: subscriptionId remains standalone because registry read, CAS, recovery, and cleanup paths share the exact subscription id rule."
   },
   {
     "rule": "standalone-function",
     "file": "packages/server/src/stand/subscription-registry.ts",
-    "kind": "function-declaration",
-    "identity": "subscriptionEntryId()#1",
-    "name": "subscriptionEntryId",
-    "disposition": "necessity",
-    "reason": "TypeScript storage boundary: subscriptionEntryId extracts a validated generated identifier from persisted entry data."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/stand/subscription-registry.ts",
-    "kind": "function-declaration",
-    "identity": "registryId()#1",
-    "name": "registryId",
-    "disposition": "necessity",
-    "reason": "TypeScript public boundary: registryId validates a generated SubscriptionId before durable registry operations."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/stand/subscription-registry.ts",
-    "kind": "function-declaration",
-    "identity": "requireTopicId()#1",
-    "name": "requireTopicId",
-    "disposition": "necessity",
-    "reason": "TypeScript public-value boundary: requireTopicId validates a shared immutable topic before memory or durable admission."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/stand/subscription-registry.ts",
-    "kind": "function-declaration",
-    "identity": "deepFreeze()#1",
-    "name": "deepFreeze",
-    "disposition": "necessity",
-    "reason": "TypeScript immutability boundary: deepFreeze protects cloned Protobuf values returned from registry lifecycle operations."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/delivery-loop.ts",
-    "kind": "function-declaration",
-    "identity": "empty()#1",
-    "name": "empty",
-    "disposition": "necessity",
-    "reason": "TypeScript immutable-value boundary: empty constructs the canonical zero progress snapshot without owning loop lifecycle state."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/delivery-loop.ts",
-    "kind": "function-declaration",
-    "identity": "map()#1",
-    "name": "map",
-    "disposition": "necessity",
-    "reason": "TypeScript public-value boundary: map converts internal drain status into the documented loop status vocabulary."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/delivery.ts",
-    "kind": "function-declaration",
-    "identity": "workerId()#1",
-    "name": "workerId",
-    "disposition": "necessity",
-    "reason": "TypeScript Protobuf boundary: workerId creates one complete generated worker identity for a delivery owner."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/delivery.ts",
-    "kind": "function-declaration",
-    "identity": "snapshotWorker()#1",
-    "name": "snapshotWorker",
-    "disposition": "necessity",
-    "reason": "TypeScript immutability boundary: snapshotWorker copies generated worker identity before asynchronous delivery lifecycle use."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/delivery.ts",
-    "kind": "function-declaration",
-    "identity": "counts()#1",
-    "name": "counts",
-    "disposition": "necessity",
-    "reason": "TypeScript immutable-value boundary: counts creates fresh delivery counters without owning a mutable lifecycle object."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/delivery.ts",
-    "kind": "function-declaration",
-    "identity": "result()#1",
-    "name": "result",
-    "disposition": "necessity",
-    "reason": "TypeScript public-value boundary: result freezes one delivery outcome and its retained failure facts."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/delivery.ts",
-    "kind": "function-declaration",
-    "identity": "snapshot()#1",
-    "name": "snapshot",
-    "disposition": "necessity",
-    "reason": "TypeScript immutability boundary: snapshot clones Inbox and Protobuf values retained across asynchronous monitor actions."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/delivery.ts",
-    "kind": "function-declaration",
-    "identity": "safely()#1",
-    "name": "safely",
-    "disposition": "necessity",
-    "reason": "TypeScript callback boundary: safely contains direct or promised user hook failure without changing lifecycle state."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/delivery.ts",
-    "kind": "function-declaration",
-    "identity": "safelyBoolean()#1",
-    "name": "safelyBoolean",
-    "disposition": "necessity",
-    "reason": "TypeScript callback boundary: safelyBoolean contains direct or promised boolean cleanup outcomes with a fail-closed default."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/delivery.ts",
-    "kind": "function-declaration",
-    "identity": "safelyValue()#1",
-    "name": "safelyValue",
-    "disposition": "necessity",
-    "reason": "TypeScript callback boundary: safelyValue contains direct or promised monitor results using an explicit deterministic fallback."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/delivery.ts",
-    "kind": "function-declaration",
-    "identity": "isEndpointMessage()#1",
-    "name": "isEndpointMessage",
-    "disposition": "necessity",
-    "reason": "TypeScript dispatch boundary: isEndpointMessage classifies supported Inbox labels before endpoint invocation without retaining state."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
-    "kind": "function-declaration",
-    "identity": "wireId()#1",
-    "name": "wireId",
-    "disposition": "necessity",
-    "reason": "TypeScript Protobuf boundary: wireId converts a validated shard value into its generated record identifier."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
-    "kind": "function-declaration",
-    "identity": "checkedShard()#1",
-    "name": "checkedShard",
-    "disposition": "necessity",
-    "reason": "TypeScript public-value boundary: checkedShard validates and copies caller shard coordinates before storage access."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
-    "kind": "function-declaration",
-    "identity": "checkedWorker()#1",
-    "name": "checkedWorker",
-    "disposition": "necessity",
-    "reason": "TypeScript Protobuf boundary: checkedWorker validates and copies complete caller worker identity before ownership operations."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
     "kind": "function-declaration",
     "identity": "time()#1",
     "name": "time",
     "disposition": "necessity",
-    "reason": "TypeScript clock boundary: time validates injected clock output before lease arithmetic and durable writes."
+    "reason": "TypeScript SubscriptionRecord invariant boundary: time remains standalone because registry read, CAS, recovery, and cleanup paths share the exact time rule."
   },
   {
     "rule": "standalone-function",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "file": "packages/server/src/stand/subscription-runtime.ts",
     "kind": "function-declaration",
-    "identity": "session()#1",
-    "name": "session",
+    "identity": "entryIdentity()#1",
+    "name": "entryIdentity",
     "disposition": "necessity",
-    "reason": "TypeScript persistence boundary: session validates a stored shard record before exposing immutable ownership facts."
+    "reason": "TypeScript subscription-runtime identity boundary: entryIdentity remains standalone because admission, replacement, and cancellation compare entries with the exact entry identity rule."
   },
   {
     "rule": "standalone-function",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "file": "packages/server/src/stand/subscription-runtime.ts",
     "kind": "function-declaration",
-    "identity": "atomic()#1",
-    "name": "atomic",
+    "identity": "sameBytes()#1",
+    "name": "sameBytes",
     "disposition": "necessity",
-    "reason": "TypeScript storage boundary: atomic rejects providers lacking compare-and-set semantics before ownership mutation."
+    "reason": "TypeScript subscription-runtime identity boundary: sameBytes remains standalone because admission, replacement, and cancellation compare entries with the exact same bytes rule."
   },
   {
     "rule": "standalone-function",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "file": "packages/server/src/stand/subscription-runtime.ts",
     "kind": "function-declaration",
-    "identity": "timestamp()#1",
-    "name": "timestamp",
+    "identity": "sameEntry()#1",
+    "name": "sameEntry",
     "disposition": "necessity",
-    "reason": "TypeScript Protobuf boundary: timestamp validates a stored generated timestamp before lease calculations."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
-    "kind": "function-declaration",
-    "identity": "owned()#1",
-    "name": "owned",
-    "disposition": "necessity",
-    "reason": "TypeScript immutable-value boundary: owned constructs exact leased session facts without provider object identity."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
-    "kind": "function-declaration",
-    "identity": "toRecord()#1",
-    "name": "toRecord",
-    "disposition": "necessity",
-    "reason": "TypeScript persistence boundary: toRecord serializes immutable session facts into the generated storage record."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
-    "kind": "function-declaration",
-    "identity": "unowned()#1",
-    "name": "unowned",
-    "disposition": "necessity",
-    "reason": "TypeScript persistence boundary: unowned derives the exact released storage record from retained session facts."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
-    "kind": "function-declaration",
-    "identity": "same()#1",
-    "name": "same",
-    "disposition": "necessity",
-    "reason": "TypeScript compare-and-set boundary: same compares complete immutable session facts before durable mutation."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
-    "kind": "function-declaration",
-    "identity": "sameWorker()#1",
-    "name": "sameWorker",
-    "disposition": "necessity",
-    "reason": "TypeScript Protobuf boundary: sameWorker compares complete generated worker identity without object-reference assumptions."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
-    "kind": "function-declaration",
-    "identity": "context()#1",
-    "name": "context",
-    "disposition": "necessity",
-    "reason": "TypeScript storage boundary: context validates and freezes tenant context before resolving record storage."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
-    "kind": "function-declaration",
-    "identity": "copy()#1",
-    "name": "copy",
-    "disposition": "necessity",
-    "reason": "TypeScript immutability boundary: copy snapshots storage context without retaining caller-owned tenant objects."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
-    "kind": "function-declaration",
-    "identity": "concurrent()#1",
-    "name": "concurrent",
-    "disposition": "necessity",
-    "reason": "TypeScript concurrency boundary: concurrent creates one consistent stale-session error for compare-and-set rejection."
+    "reason": "TypeScript subscription-runtime identity boundary: sameEntry remains standalone because admission, replacement, and cancellation compare entries with the exact same entry rule."
   }
 ]
