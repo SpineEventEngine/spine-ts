@@ -505,7 +505,14 @@ export function isDurableSubscriptionBindings(
   return bindings instanceof DurableSubscriptionBindings;
 }
 
-/** @internal Installs BrowserServer cancellation alongside the caller cleanup. */
+/**
+ * Installs BrowserServer cancellation alongside the caller cleanup.
+ *
+ * @internal
+ * @param bindings Durable bindings receiving the internal cancellation effect.
+ * @param cleanup BrowserServer backend cancellation callback.
+ * @returns Nothing.
+ */
 export function attachDurableSubscriptionCleanup(
   bindings: DurableSubscriptionBindings,
   cleanup: OnSubscriptionDefinition,
