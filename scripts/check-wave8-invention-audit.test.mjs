@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -33,6 +33,37 @@ describe("Wave 8 invention audit", () => {
     for (const { fixture } of manifest) expect(inventory).toContain(fixture);
   });
 
+  it("allows only the manifest-owned current public-Markdown lines", () => {
+    const root = fixture();
+    const contents = new Map();
+    for (const { markdownAllowlist = [] } of manifest) {
+      for (const { path, line } of markdownAllowlist) {
+        const lines = contents.get(path) ?? [];
+        lines.push(line);
+        contents.set(path, lines);
+      }
+    }
+    for (const [path, lines] of contents) {
+      mkdirSync(join(root, dirname(path)), { recursive: true });
+      writeFileSync(join(root, path), `${lines.join("\n")}\n`);
+    }
+
+    expect(auditWave8CurrentState(root, files)).toEqual([]);
+  });
+
+  it("rejects an appended positive claim on an allowlisted public-Markdown line", () => {
+    const root = fixture();
+    const { path, line } = manifest.find(
+      ({ markdownAllowlist = [] }) => markdownAllowlist.length > 0,
+    ).markdownAllowlist[0];
+    mkdirSync(join(root, dirname(path)), { recursive: true });
+    writeFileSync(join(root, path), `${line} is supported.\n`);
+
+    expect(auditWave8CurrentState(root, files)).toEqual([
+      `${path}:1: forbidden Wave 8 artifact: storage fingerprint`,
+    ]);
+  });
+
   it("rejects a forbidden runtime artifact while excluding historical evidence", () => {
     const root = fixture();
     writeFileSync(
@@ -49,11 +80,13 @@ describe("Wave 8 invention audit", () => {
     ]);
   });
 
-  it("allows a truthful negative public-document statement", () => {
+  it("rejects an unlisted truthful-negative public-document statement", () => {
     const root = fixture();
     writeFileSync(join(root, "docs", "GUIDE.md"), "The runtime has no RemovalQuarantine.\n");
 
-    expect(auditWave8CurrentState(root, files)).toEqual([]);
+    expect(auditWave8CurrentState(root, files)).toEqual([
+      "docs/GUIDE.md:1: forbidden Wave 8 artifact: RemovalQuarantine",
+    ]);
   });
 
   it.each([
@@ -84,6 +117,20 @@ describe("Wave 8 invention audit", () => {
 
     expect(auditWave8CurrentState(root, files)).toEqual([
       `packages/server/src/legacy.ts:1: forbidden Wave 8 artifact: ${name}`,
+    ]);
+  });
+
+  it.each([
+    ["removal_fingerprint", "removal fingerprint"],
+    ["revoked session", "revoked-session facility"],
+    ["schema fingerprint", "storage fingerprint"],
+    ["ApplicationNodeLease:v27", "versioned discovery key"],
+  ])("rejects alternate forbidden spelling %s", (artifact, description) => {
+    const root = fixture();
+    writeFileSync(join(root, "packages", "server", "src", "legacy.ts"), `${artifact}\n`);
+
+    expect(auditWave8CurrentState(root, files)).toEqual([
+      `packages/server/src/legacy.ts:1: forbidden Wave 8 artifact: ${description}`,
     ]);
   });
 
@@ -120,27 +167,17 @@ describe("Wave 8 invention audit", () => {
   });
 
   it.each([
-    "removal-fingerprint",
-    "RevokedSession",
-    "revoked_session",
-    "ApplicationNodeLease:v1",
-    "versioned discovery storage key",
-    "schema fingerprint",
-  ])("allows an exact direct negative for %s", (artifact) => {
+    "No RemovalQuarantine, it is supported.",
+    "No legacy behavior remains, RemovalQuarantine is supported.",
+    "No RemovalQuarantine remains; RemovalQuarantine is supported.",
+    "No RemovalQuarantine remains; it is supported and RemovalQuarantine is enabled.",
+  ])("rejects every unlisted bypass: %s", (line) => {
     const root = fixture();
-    writeFileSync(join(root, "docs", "GUIDE.md"), `No ${artifact} remains.\n`);
+    writeFileSync(join(root, "docs", "GUIDE.md"), `${line}\n`);
 
-    expect(auditWave8CurrentState(root, files)).toEqual([]);
-  });
-
-  it("allows an unambiguous no-list in one public-document clause", () => {
-    const root = fixture();
-    writeFileSync(
-      join(root, "docs", "GUIDE.md"),
-      "Rows contain no ID copy, schema fingerprint, marker, or compatibility entity.\n",
-    );
-
-    expect(auditWave8CurrentState(root, files)).toEqual([]);
+    expect(auditWave8CurrentState(root, files)).toEqual([
+      "docs/GUIDE.md:1: forbidden Wave 8 artifact: RemovalQuarantine",
+    ]);
   });
 
   it("rejects every versioned ApplicationNodeLease discovery key", () => {

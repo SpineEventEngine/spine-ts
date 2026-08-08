@@ -69,6 +69,16 @@
     "name": "storage fingerprint",
     "pattern": "\\bcompatibilityFingerprint\\b|\\bschema fingerprint\\b",
     "flags": "gu",
-    "fixture": "compatibilityFingerprint"
+    "fixture": "compatibilityFingerprint",
+    "markdownAllowlist": [
+      {
+        "path": "docs/USER_GUIDE.md",
+        "line": "second property, and the adapter stores no schema fingerprint or layout"
+      },
+      {
+        "path": "packages/storage-datastore/REFERENCE.md",
+        "line": "`bytes`, and native declared columns; no ID copy, schema fingerprint, marker,"
+      }
+    ]
   }
 ]

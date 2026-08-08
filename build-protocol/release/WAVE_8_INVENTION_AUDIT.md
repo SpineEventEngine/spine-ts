@@ -71,9 +71,10 @@ machine-readable source of truth is
 | Provider identity             | Datastore kind/key ≤1,500 UTF-8 bytes; MySQL scope 224 bytes/ID 768 bytes/bytes MEDIUMBLOB                                                                                                                          | physical scope is context+tenant+source+optional group; structural validation never migrates                                                                | [Datastore reference](../../packages/storage-datastore/REFERENCE.md), [MySQL reference](../../packages/storage-rdbms/REFERENCE.md)                                                                      |
 
 The checker scans current package/source/manifests/examples/public docs/active
-Proto surfaces only. It explicitly permits a truthful negative public-doc
-statement and excludes historical evidence, so the inventory cannot be passed
-by deleting history or by a blanket word ban.
+Proto surfaces only. It permits only manifest-owned exact public-Markdown
+path-and-line exceptions and excludes historical evidence, so the inventory
+cannot be passed by deleting history, appending prose to an exception, or by a
+blanket word ban.
 
 ## Result
 

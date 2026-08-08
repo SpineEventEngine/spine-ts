@@ -43,10 +43,10 @@ export const manifest = JSON.parse(
   readFileSync(join(repoRoot, ".wave8-forbidden-artifacts.json"), "utf8"),
 );
 export const forbiddenArtifacts = manifest.map(({ name, fixture }) => [name, fixture]);
-const forbidden = manifest.map(({ name, pattern, flags, fixture }) => [
+const forbidden = manifest.map(({ name, pattern, flags, markdownAllowlist = [] }) => [
   name,
   new RegExp(pattern, flags),
-  fixture,
+  new Set(markdownAllowlist.map(({ path, line }) => `${path}\u0000${line}`)),
 ]);
 export function files(root, directory = root) {
   if (!existsSync(directory)) return [];
@@ -87,31 +87,8 @@ function trackedFiles(root) {
   }
 }
 
-function truthfulNegative(path, line, match) {
-  if (!path.endsWith(".md")) return false;
-  const start = Math.max(
-    line.lastIndexOf(".", match.index - 1),
-    line.lastIndexOf("!", match.index - 1),
-    line.lastIndexOf("?", match.index - 1),
-    line.lastIndexOf(";", match.index - 1),
-  );
-  const clause = line.slice(start + 1);
-  const occurrence = match[0] ?? "";
-  const before = line.slice(start + 1, match.index);
-  const after = line.slice(match.index + occurrence.length);
-  if (/\b(?:but|yet|however)\b/iu.test(clause)) return false;
-  const noList = before.match(/\bno\s+(.+)$/iu)?.[1];
-  return (
-    /\b(?:no|without)\s*$/iu.test(before) ||
-    (noList !== undefined &&
-      !/\b(?:is|are|was|were|remain(?:s)?|exist(?:s)?|persist(?:s)?|support(?:s)?|contain(?:s)?|has|have)\b/iu.test(
-        noList,
-      )) ||
-    /\b(?:does not|never)\s+(?:persist|store|use|support|contain|have)\s*$/iu.test(before) ||
-    /^\s+(?:is|are|was|were|has been|have been)\s+(?:removed|deleted|absent|unsupported)\b/iu.test(
-      after,
-    )
-  );
+function allowedMarkdown(path, line, allowlist) {
+  return path.endsWith(".md") && allowlist.has(`${path}\u0000${line}`);
 }
 
 export function auditWave8CurrentState(root = repoRoot, enumerate = trackedFiles) {
@@ -119,11 +96,11 @@ export function auditWave8CurrentState(root = repoRoot, enumerate = trackedFiles
   for (const path of enumerate(root)) {
     const lines = readFileSync(join(root, path), "utf8").split("\n");
     for (const [index, line] of lines.entries()) {
-      for (const [name, pattern] of forbidden) {
+      for (const [name, pattern, markdownAllowlist] of forbidden) {
         pattern.lastIndex = 0;
         let positive = false;
         for (let match = pattern.exec(line); match !== null; match = pattern.exec(line)) {
-          if (!truthfulNegative(path, line, match)) {
+          if (!allowedMarkdown(path, line, markdownAllowlist)) {
             positive = true;
             break;
           }
