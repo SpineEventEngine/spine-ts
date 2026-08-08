@@ -401,5 +401,8 @@ export async function startOrdersDatastoreServer(
   client: Datastore,
   options: DatastoreOrdersServerOptions = {},
 ): Promise<RunningServer> {
-  return startDatastoreOrdersServer(DatastoreStorageFactory.newBuilder().setClient(client).build(), options);
+  return startDatastoreOrdersServer(
+    DatastoreStorageFactory.newBuilder().setClient(client).build(),
+    options,
+  );
 }
