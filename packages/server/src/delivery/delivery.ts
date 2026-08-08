@@ -168,8 +168,7 @@ export class Delivery {
             await options.onMessage(message);
             if (options.operation?.signal?.aborted) return result("STOPPED", statistics);
             if (!(await renew())) return result("STOPPED", statistics);
-            const work = await this.inbox.begin(message, current);
-            if (work === undefined || !(await work.complete()))
+            if ((await this.inbox.markDelivered(message, options.operation)) === undefined)
               throw new Error("Inbox message was not marked delivered.");
             statistics.delivered += 1;
           } catch (error) {
@@ -179,16 +178,14 @@ export class Delivery {
               error,
               async () => {
                 if (!(await renew())) throw new Error("Shard ownership was lost.");
-                const work = await this.inbox.begin(message, current!);
-                if (work === undefined || !(await work.complete()))
+                if ((await this.inbox.markDelivered(message, options.operation)) === undefined)
                   throw new Error("Inbox message was not marked delivered.");
                 statistics.delivered += 1;
               },
               async () => {
                 await options.onMessage(message);
                 if (!(await renew())) throw new Error("Shard ownership was lost.");
-                const work = await this.inbox.begin(message, current!);
-                if (work === undefined || !(await work.complete()))
+                if ((await this.inbox.markDelivered(message, options.operation)) === undefined)
                   throw new Error("Inbox message was not marked delivered.");
                 statistics.delivered += 1;
               },

@@ -40,15 +40,10 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => (reads++ === 0 ? messages : []),
         readMessage: async () => undefined,
-        begin: async (value) => ({
-          message: value,
-          synchronize: async () => undefined,
-          complete: async () => {
-            if (value.signalId === "first") throw new Error("acknowledgement failed");
-            return true;
-          },
-          abandon: async () => undefined,
-        }),
+        markDelivered: async (value) => {
+          if (value.signalId === "first") throw new Error("acknowledgement failed");
+          return value;
+        },
       })
       .withWorkRegistry(registry(shard))
       .build()
@@ -76,14 +71,9 @@ describe("DeliveryMonitor delivery", () => {
           return [pending];
         },
         readMessage: async () => undefined,
-        begin: async (value) => ({
-          message: value,
-          synchronize: async () => undefined,
-          complete: async () => {
-            throw new Error("mark failed");
-          },
-          abandon: async () => undefined,
-        }),
+        markDelivered: async () => {
+          throw new Error("mark failed");
+        },
       })
       .withWorkRegistry(registry(shard))
       .build()
@@ -106,8 +96,8 @@ describe("DeliveryMonitor delivery", () => {
         },
         read: async () => [message("pending", "target", shard)],
         readMessage: async () => undefined,
-        begin: async () => {
-          throw new Error("must not begin");
+        markDelivered: async () => {
+          throw new Error("must not acknowledge");
         },
       })
       .withWorkRegistry({ ...registry(shard), renew: async () => undefined })
@@ -131,7 +121,7 @@ describe("DeliveryMonitor delivery", () => {
           },
           read: async () => [],
           readMessage: async () => undefined,
-          begin: async () => undefined,
+          markDelivered: async () => undefined,
         })
         .withWorkRegistry(registry(shard))
         .build(),

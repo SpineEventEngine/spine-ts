@@ -71,6 +71,18 @@ export interface DeliveryInbox {
   ): Promise<InboxMessage | undefined>;
 
   /**
+   * Marks one exact pending Inbox row delivered.
+   *
+   * @param message Supplies the expected pending row snapshot.
+   * @param options Propagates cancellation and a delivery deadline.
+   * @returns The delivered row, or `undefined` when durable acknowledgement failed.
+   */
+  markDelivered(
+    message: InboxMessage,
+    options?: DeliveryOperationOptions,
+  ): Promise<InboxMessage | undefined>;
+
+  /**
    * Returns work for an exact pending message under the supplied work-session fence.
    *
    * @param message Identifies the pending message snapshot.
