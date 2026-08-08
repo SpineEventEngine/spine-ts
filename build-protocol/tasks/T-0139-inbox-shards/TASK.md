@@ -1,6 +1,6 @@
 # T-0139: Inbox And Shard Records
 
-Status: Final pre-epoch timestamp correction converged; correction commit and task-branch push pending.
+Status: Complete on stacked integration train; T-0140/T-0142 build handoffs recorded.
 
 ## Objective
 
