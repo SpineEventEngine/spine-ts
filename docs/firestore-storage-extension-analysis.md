@@ -1,3 +1,5 @@
+<!-- release-readiness: historical-or-migration -->
+
 # Firestore-compatible storage extension
 
 ## Reference and scope

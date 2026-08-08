@@ -14,6 +14,7 @@ const userFacingMarkdownExclusions = new Set([
   "human-review-22-jul.md",
 ]);
 const userFacingMarkdownExcludedPrefixes = ["build-protocol/", "docs/api/reference/"];
+const historicalOrMigrationMarker = "<!-- release-readiness: historical-or-migration -->";
 const staleDocumentationPatterns = [
   ["stale example topology", /examples\/(?:datastore-orders|project-management)\b/gu],
   ["stale Chat model topology", /examples\/chat\/users-model\b/gu],
@@ -266,10 +267,12 @@ export function collectUserFacingDocumentationProblems(repoRoot = defaultRepoRoo
 
   for (const path of collectUserFacingMarkdownFiles(repoRoot)) {
     const source = readFileSync(join(repoRoot, path), "utf8");
+    const historicalOrMigration = source.startsWith(historicalOrMigrationMarker);
     for (const [index, line] of source.split("\n").entries()) {
       for (const match of line.matchAll(executionHistoryPattern)) {
         problems.push(`${path}:${index + 1}: internal execution-history term: ${match[0]}`);
       }
+      if (historicalOrMigration) continue;
       for (const [description, pattern] of staleDocumentationPatterns) {
         for (const match of line.matchAll(pattern)) {
           problems.push(`${path}:${index + 1}: ${description}: ${match[0]}`);

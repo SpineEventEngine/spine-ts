@@ -326,6 +326,13 @@ the query in section 8 uses in both `gt(...)` and `orderBy(...)`. Fields without
 the option remain part of the state message, but are not query columns. Mark
 only fields that the application needs to filter or sort.
 
+There are two related layers. The `(column)` option belongs in your state Proto
+and tells the generated client Query API which state fields are available.
+Framework code then turns those declared state fields into `RecordColumn`
+values on its internal `EntityRecord` envelope before storage writes. You use
+the generated Entity columns in application queries; `RecordColumn` is the
+lower-level storage contract that providers materialize.
+
 Entity code generation emits a descriptor-backed definition next to the
 state schema. Register that value once and reuse the returned immutable column
 collection. The imports and exported declaration below come from
@@ -1146,8 +1153,15 @@ be invoked more than once when ownership changes or a prior invocation cannot
 be conclusively finalized, so handlers must make side effects replay-safe and
 tolerate at-least-once delivery.
 
-A failed supported delivery callback may remain pending after framework
-cleanup. No automatic retry scheduler or monitor revisits that row. Durable
+When a supported delivery callback fails, the default `DeliveryMonitor` action
+is `markDelivered()`: it records the row as delivered so independent targets
+can continue. A custom monitor may choose `repeatDispatching()` instead, which
+repeats that one callback immediately once and then acknowledges it; it does
+not create a retry schedule. If that chosen action and the fallback durable
+acknowledgement both fail, the row remains pending and blocks its target for
+this drain. The callback effect and the delivered-row compare-and-set are not
+one transaction, so a lost acknowledgement after a successful callback can
+redeliver the row after restart. Make callback side effects idempotent. Durable
 handoff records the work, but it is not an autonomous eventual-delivery
 guarantee.
 
@@ -1226,6 +1240,8 @@ it on a trusted private network. It owns the in-memory Inbox, Shard, Admin, and
 health services; each application machine owns its own `DeliveryClient`,
 `DeliveryBuilder`, and `DeliverySupervisor`. This is coordination for
 at-least-once local endpoint delivery, not shared application-state storage.
+The [Distributed Message Board](../examples/distributed-message-board/README.md)
+is the runnable two-application-machine example of this arrangement.
 
 ```ts
 import { DeliveryServer } from "@spine-event-engine/delivery-server";
@@ -1435,6 +1451,13 @@ and an optional `StorageGroup`. The source names an ungrouped family. A group
 separates related stored records, such as Entity history, from the current
 record family.
 
+```text
+ungrouped: source                    -> MySQL source_with_underscores
+                                     -> Datastore source.with.dots
+grouped:   source + group + record   -> MySQL group_with_underscores_Record
+                                     -> Datastore group.with.dots_Record
+```
+
 For example, imagine source type `acme.tasks.Task`, stored record type
 `spine.server.entity.EntityRecord`, and
 `new StorageGroup("acme.tasks.Task")`. The default grouped names are
@@ -1455,21 +1478,29 @@ therefore stored by default in MySQL table
 materialized beside the authoritative bytes, while `username` and `text` stay
 only in those bytes.
 
-When the Message Board web client asks for one board, its Query filters the
+When the Message Board web client asks for one board, its
+[Query source](../examples/message-board/web/src/board-view.ts) filters the
 `board` column and orders by `posted_at`. `QueryService` validates those
 declared column names, then reads the current `EntityRecord` family for the
-Projection. Providers push down legal filters and sorts: MySQL uses
-parameterized predicates, while Datastore may perform bounded reconciliation
-when it cannot execute a whole plan. This describes the storage/query path; it
-does not mean that the Message Board example configures MySQL.
+Projection. A legal provider plan is one the provider can execute while
+preserving the requested filter, ordering, and limit semantics. Providers push
+down legal filters and sorts: MySQL uses parameterized predicates, while
+Datastore may perform bounded reconciliation when it cannot execute a whole
+plan. This describes the storage/query path; it does not mean that the Message
+Board example configures MySQL.
 
 Use a factory mapping when an application needs a shorter or existing physical
-name. MySQL's `setTableName(sourceSchema, recordSchema, "task_history")` maps a
-grouped source/record pair to a table. Datastore's
-`organizeRecords(sourceSchema, recordSchema, { kind: "TaskHistory" })` maps
-the same pair to a kind. Set these mappings while building the factory, before
-creating storage handles. The exact source and record schemas matter; changing
-only the table or kind name does not change the stored Protobuf record.
+name. MySQL has separate registrations: `setTableName(recordType, "tasks")`
+names an ungrouped record family, while
+`setTableName(sourceSchema, recordSchema, "task_history")` names a grouped
+source/record family. Datastore's `organizeRecords(recordType, { kind: "Tasks" })`
+is a record-only fallback; its three-argument source/record registration is
+also used by a default Entity history when that history group has the same name
+as the source. It therefore cannot rename only current Entity records while
+leaving default history kinds unchanged. Use `useEntityStorage(...)` when an
+application needs a distinct coherent Entity layout. Set mappings while
+building the factory, before creating storage handles. Changing a table or kind
+name does not change the stored Protobuf record.
 
 `RecordSpec` can also declare `RecordColumn` values. On every write, providers
 materialize those named values beside the authoritative Protobuf bytes. A
@@ -1540,11 +1571,14 @@ history, uses the storage-group name followed by the short stored-record type.
 Applications can select another kind with `organizeRecords(...)` before
 building the factory.
 
-For example, a repository application can call the three-argument
-`organizeRecords(stateSchema, EntityRecordSchema, { kind: "Task" })` before
-`build()` to assign a shorter kind to current records while retaining default
-history families. Use that application's generated state schema; this guide
-does not invent a package import that cannot compile in the repository.
+The two-argument `organizeRecords(recordType, { kind })` registration is a
+record-only fallback. The three-argument source/record registration also
+matches default Entity history when the history group equals the source type,
+so it cannot give current records a kind while retaining default history kinds.
+When Entity current and history families need distinct custom layouts, provide
+one coherent `useEntityStorage(...)` implementation instead. Use the
+application's generated schemas; this guide does not invent a package import
+that cannot compile in the repository.
 
 Each stored entity contains `_scope`, the deterministic Protobuf `bytes`, and
 the record's declared indexed columns. Its Datastore key contains the resolved
