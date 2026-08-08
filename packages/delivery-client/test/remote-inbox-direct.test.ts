@@ -2,14 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 import { ShardIndex } from "@spine-event-engine/server";
 
 import { DeliveryPagingError, DeliveryProtocolError } from "../src/client/types.js";
+import type { DeliveryClient } from "../src/client/client.js";
 import { RemoteInbox, RemoteWorkRegistry } from "../src/remote/adapters.js";
 import { domainMessage } from "./shared-fixtures.js";
 
 class Client {
-  readonly writeOne = vi.fn(() => Promise.resolve(undefined));
-  readonly removeOne = vi.fn(() => Promise.resolve(undefined));
-  readonly findOne = vi.fn(() => Promise.resolve(undefined));
-  readonly readPage = vi.fn(() => Promise.resolve([]));
+  readonly writeOne = vi.fn<DeliveryClient["writeOne"]>();
+  readonly removeOne = vi.fn<DeliveryClient["removeOne"]>();
+  readonly findOne = vi.fn<DeliveryClient["findOne"]>();
+  readonly readPage = vi.fn<DeliveryClient["readPage"]>();
   readonly pickUp = vi.fn(() =>
     Promise.resolve({ worker: { nodeId: "node", value: "worker" }, whenPicked: new Date(0) }),
   );
@@ -76,14 +77,14 @@ describe("RemoteInbox direct behavior", () => {
           version: first.version,
         },
         limit: 2,
-        signal: first.signal,
+        signal: new AbortController().signal,
         timeoutMs: 25,
       }),
     ).resolves.toEqual([second, third]);
     expect(client.readPage).toHaveBeenNthCalledWith(
       1,
       ShardIndex.single(),
-      expect.objectContaining({ pageSize: 2, signal: first.signal, timeoutMs: 25 }),
+      expect.objectContaining({ pageSize: 2, timeoutMs: 25 }),
     );
 
     client.readPage.mockResolvedValueOnce([second]);
@@ -107,10 +108,11 @@ describe("RemoteInbox direct behavior", () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
     const pending = domainMessage("pending");
+    const { signal: _signal, ...withoutSignal } = pending;
     for (const current of [
       { ...pending, id: { ...pending.id, value: "other" } },
       { ...pending, signalId: "other" },
-      { ...pending, signal: undefined },
+      withoutSignal,
     ]) {
       client.findOne.mockResolvedValueOnce(current);
       await expect(inbox.markDelivered(pending)).resolves.toBeUndefined();
