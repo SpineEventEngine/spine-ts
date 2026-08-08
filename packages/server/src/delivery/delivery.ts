@@ -247,10 +247,8 @@ export class Delivery {
       return result("SKIPPED");
     }
     if (options.operation?.signal?.aborted) {
-      await safely(async () => {
-        await this.shards.release(session);
-      });
-      return result("STOPPED");
+      const released = await safelyValue(() => this.shards.release(session), false);
+      return result(released ? "STOPPED" : "FAILED");
     }
     const statistics = counts();
     const failures: DeliveryFailure[] = [];
