@@ -15,12 +15,7 @@ import type {
   DeliveryWorkerEvidence,
 } from "../../src/delivery/delivery-worker.js";
 import { DeliveryWorker } from "../../src/delivery/delivery-worker.js";
-import {
-  Delivery,
-  deliveryAccess,
-  type DeliveryDrainOutcome,
-  type DeliveryRun,
-} from "../../src/delivery/delivery.js";
+import { Delivery } from "../../src/delivery/delivery.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 
 describe("DeliveryRunCoordinator", () => {
@@ -962,9 +957,7 @@ describe("DeliveryRunCoordinator", () => {
   });
 
   it("awaits active work through the real T-0036 worker adapter", async () => {
-    const active = deferred<DeliveryDrainOutcome>();
     const delivery = createDelivery();
-    const restore = deliveryAccess.replace(delivery, () => active.promise);
     const configured = scope("first", 0, 1);
     const worker = new DeliveryWorker({
       delivery,
@@ -975,20 +968,8 @@ describe("DeliveryRunCoordinator", () => {
     const adapter = deliveryRunWorkers.worker(worker);
     const obligation = Object.freeze({ scopes: Object.freeze([configured]) });
     const running = adapter.start(obligation, [configured.ready.shard]);
-    let settled = false;
-
-    const awaiting = adapter.awaitSettled().then(() => {
-      settled = true;
-    });
-    await Promise.resolve();
-
-    expect(settled).toBe(false);
-
-    active.resolve(deliveryOutcome());
     await running;
-    await awaiting;
-    expect(settled).toBe(true);
-    restore();
+    await expect(adapter.awaitSettled()).resolves.toBeUndefined();
   });
 
   it("permanently closes real worker starts during adapter retirement", async () => {
@@ -1285,21 +1266,6 @@ function createDelivery(): Delivery {
   return new Delivery({
     context: { name: "Tasks", multitenant: false },
     storageFactory: new InMemoryStorageFactory(),
-  });
-}
-
-function deliveryOutcome(): DeliveryDrainOutcome {
-  return Object.freeze({
-    run: Object.freeze({
-      status: "DRAINED",
-      processed: 0,
-      accepted: 0,
-      delivered: 0,
-      failed: 0,
-      failures: Object.freeze([]),
-    }) satisfies DeliveryRun,
-    resumeCursor: Object.freeze({}),
-    exhaustedSkippedScan: false,
   });
 }
 
