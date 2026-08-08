@@ -31,7 +31,10 @@ import {
 } from "@spine-event-engine/proto/client";
 
 import type { BrowserAuthRoute, BrowserServerOptions, RunningServer } from "./server.js";
-import { isDurableSubscriptionBindings } from "./durable-subscription-bindings.js";
+import {
+  attachDurableSubscriptionCleanup,
+  isDurableSubscriptionBindings,
+} from "./durable-subscription-bindings.js";
 import reservedSpineRpcPaths from "./reserved-spine-rpc-paths.json" with { type: "json" };
 
 const gracefulBrowserDrainMs = 100;
@@ -149,8 +152,6 @@ export const BrowserServer: Readonly<{
         nextId: () => globalThis.crypto.randomUUID(),
         dispose: (definition, signal) => creator.cancel({ wire: definition }, signal),
       });
-    if (isDurableSubscriptionBindings(bindings))
-      bindings.attachCleanup((definition, signal) => creator.cancel({ wire: definition }, signal));
     const requests = BrowserServer.requests(options);
     const unary = new UnaryGateway({
       ...(options.registry === undefined ? {} : { registry: options.registry }),
@@ -170,6 +171,10 @@ export const BrowserServer: Readonly<{
       creator,
     });
     try {
+      if (isDurableSubscriptionBindings(bindings))
+        attachDurableSubscriptionCleanup(bindings, (definition, signal) =>
+          creator.cancel({ wire: definition }, signal),
+        );
       const durableBindings = bindings as SubscriptionBindings;
       if (durableBindings.recoverActive !== undefined) {
         const now = options.clock.now();

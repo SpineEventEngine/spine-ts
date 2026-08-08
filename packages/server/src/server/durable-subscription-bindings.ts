@@ -27,6 +27,12 @@ import {
 } from "@spine-event-engine/storage";
 
 const expiryBatchSize = 25;
+interface DurableCleanupState {
+  readonly caller: OnSubscriptionDefinition;
+  backend: OnSubscriptionDefinition | undefined;
+}
+
+const durableCleanupStates = new WeakMap<DurableSubscriptionBindings, DurableCleanupState>();
 
 /**
  * Configures one durable authenticated subscription store.
@@ -79,8 +85,6 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
    */
   readonly namespace: string;
   readonly #storage: RecordStorage<SubscriptionId, GatewayAuthenticatedSubscription>;
-  #cleanup: OnSubscriptionDefinition;
-  #cleanupAttached = false;
   readonly #nextId: () => string;
   readonly #pending = new Map<string, Promise<unknown>>();
   readonly #active = new Map<string, AbortController>();
@@ -104,7 +108,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     if (options.namespace.trim().length === 0)
       throw new Error("Gateway namespace must be non-blank.");
     this.namespace = options.namespace;
-    this.#cleanup = options.cleanup;
+    durableCleanupStates.set(this, { caller: options.cleanup, backend: undefined });
     this.#limits = {
       pendingOperationLimit: 1,
       operationTimeoutMs: 30_000,
@@ -137,19 +141,6 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       this.#storage.close();
       throw new Error("Authenticated subscription storage requires atomic compare-and-set.");
     }
-  }
-
-  /**
-   * Attaches the Gateway-owned backend cancellation effect before recovery or expiry work.
-   *
-   * @internal BrowserServer installs its topology-aware subscription creator exactly once.
-   * @param cleanup Cancels the retained backend subscription definition.
-   */
-  attachCleanup(cleanup: OnSubscriptionDefinition): void {
-    if (this.#cleanupAttached)
-      throw new Error("Authenticated subscription cleanup is already attached.");
-    this.#cleanup = cleanup;
-    this.#cleanupAttached = true;
   }
 
   /**
@@ -385,7 +376,11 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     try {
       const id = record.id?.value;
       if (id === undefined) throw new Error("Authenticated subscription has no ID.");
-      await this.#callbackForId(id, this.#cleanup, DurableSubscriptionValues.wire(record));
+      await this.#callbackForId(
+        id,
+        durableCleanupFor(this),
+        DurableSubscriptionValues.wire(record),
+      );
     } catch {
       return;
     }
@@ -508,6 +503,29 @@ export function isDurableSubscriptionBindings(
   bindings: SubscriptionBindings | undefined,
 ): bindings is DurableSubscriptionBindings {
   return bindings instanceof DurableSubscriptionBindings;
+}
+
+/** @internal Installs BrowserServer cancellation alongside the caller cleanup. */
+export function attachDurableSubscriptionCleanup(
+  bindings: DurableSubscriptionBindings,
+  cleanup: OnSubscriptionDefinition,
+): void {
+  const state = durableCleanupStates.get(bindings);
+  if (state === undefined)
+    throw new Error("Authenticated subscription cleanup state is unavailable.");
+  if (state.backend !== undefined)
+    throw new Error("Authenticated subscription cleanup is already attached.");
+  state.backend = cleanup;
+}
+
+function durableCleanupFor(bindings: DurableSubscriptionBindings): OnSubscriptionDefinition {
+  const state = durableCleanupStates.get(bindings);
+  if (state === undefined)
+    throw new Error("Authenticated subscription cleanup state is unavailable.");
+  return async (definition, signal) => {
+    if (state.backend !== undefined) await state.backend(definition, signal);
+    await state.caller(definition, signal);
+  };
 }
 
 const DurableSubscriptionValues = Object.freeze({

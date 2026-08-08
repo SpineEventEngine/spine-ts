@@ -11,6 +11,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { DurableSubscriptionBindings, isDurableSubscriptionBindings } from "../../src/index.js";
+import { attachDurableSubscriptionCleanup } from "../../src/server/durable-subscription-bindings.js";
 
 const context = create(ActorContextSchema, {
   actor: { value: "actor" },
@@ -1084,10 +1085,13 @@ describe("DurableSubscriptionBindings", () => {
       storageFactory: new InMemoryStorageFactory(),
       namespace: "attached-expiry",
       nextId: () => "attached",
-      cleanup: () => Promise.reject(new Error("unattached cleanup must not run")),
+      cleanup: (wire) => {
+        cleaned.push(`caller:${subscriptionId(wire.bytes)}`);
+        return Promise.resolve();
+      },
     });
-    bindings.attachCleanup((wire) => {
-      cleaned.push(subscriptionId(wire.bytes));
+    attachDurableSubscriptionCleanup(bindings, (wire) => {
+      cleaned.push(`backend:${subscriptionId(wire.bytes)}`);
       return Promise.resolve();
     });
     await bindings.create({
@@ -1105,7 +1109,7 @@ describe("DurableSubscriptionBindings", () => {
       },
     });
 
-    expect(cleaned).toEqual(["attached"]);
+    expect(cleaned).toEqual(["backend:attached", "caller:attached"]);
     expect(restored).toEqual([]);
   });
 
