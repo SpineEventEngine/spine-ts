@@ -18,6 +18,7 @@ import {
   DeliveryClient,
   DeliveryOutcomeUnknownError,
   DeliveryProtocolError,
+  DeliveryShardObservationError,
   ShardObservationOverflowError,
   RemoteWorkRegistry,
 } from "../src/index.js";
@@ -268,6 +269,105 @@ describe("DeliveryClient shard observation", () => {
       expect(fake.streamAborts).toBe(1);
     },
   );
+
+  it("keeps cancellation idempotent and subsequent iterator reads completed", async () => {
+    const fake = transport();
+    fake.streamReplyAndHold([
+      create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
+    ]);
+    const stream = DeliveryClient.usingTransport(fake.transport).observeShardUpdates();
+    const iterator = stream[Symbol.asyncIterator]();
+    await vi.waitFor(() => {
+      expect(fake.streamStarted).toBe(1);
+    });
+
+    stream.cancel();
+    stream.cancel();
+
+    await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined });
+    await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined });
+  });
+
+  it("delivers an update buffered before the consumer asks for it", async () => {
+    const fake = transport();
+    fake.streamReplyAndHold([
+      create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
+      create(SubscriptionResponseSchema, {
+        value: {
+          case: "update",
+          value: create(ShardInfoUpdateSchema, {
+            index: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
+            newStatus: ShardStatus.PICKED,
+            newMessagesCount: 4,
+          }),
+        },
+      }),
+    ]);
+    const stream = DeliveryClient.usingTransport(fake.transport).observeShardUpdates();
+    await vi.waitFor(() => {
+      expect(fake.streamStarted).toBe(1);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    await expect(stream[Symbol.asyncIterator]().next()).resolves.toMatchObject({
+      done: false,
+      value: { status: "PICKED", messages: 4 },
+    });
+    stream.cancel();
+  });
+
+  it("reports a stream that exhausts its configured reconnects", async () => {
+    const fake = transport();
+    fake.streamReply([
+      create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
+    ]);
+    const stream = DeliveryClient.usingTransport(fake.transport, {
+      observationReconnects: 0,
+    }).observeShardUpdates();
+
+    await expect(stream[Symbol.asyncIterator]().next()).rejects.toBeInstanceOf(
+      DeliveryShardObservationError,
+    );
+  });
+
+  it("resumes observation after a positive reconnect backoff", async () => {
+    vi.useFakeTimers();
+    try {
+      const fake = transport();
+      fake.streamReply([
+        create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
+      ]);
+      fake.streamReplyAndHold([
+        create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
+        create(SubscriptionResponseSchema, {
+          value: {
+            case: "update",
+            value: create(ShardInfoUpdateSchema, {
+              index: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
+              newStatus: ShardStatus.NOT_PICKED,
+              newMessagesCount: 2,
+            }),
+          },
+        }),
+      ]);
+      const stream = DeliveryClient.usingTransport(fake.transport, {
+        observationReconnects: 1,
+        observationReconnectBackoffMs: 100,
+      }).observeShardUpdates();
+      const pending = stream[Symbol.asyncIterator]().next();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(100);
+      await expect(pending).resolves.toMatchObject({
+        done: false,
+        value: { status: "NOT_PICKED", messages: 2 },
+      });
+      stream.cancel();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it("does not open an Admin stream for a pre-aborted caller signal", () => {
     const fake = transport();

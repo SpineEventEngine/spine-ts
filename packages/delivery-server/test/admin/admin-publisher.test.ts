@@ -26,7 +26,25 @@ describe("Admin publisher", () => {
     await expect(update).resolves.toMatchObject({
       value: { value: { case: "update", value: { index: shard, newMessagesCount: 0 } } },
     });
+    publisher.publish(shard);
+    await expect(stream.next()).resolves.toMatchObject({
+      value: { value: { case: "update", value: { index: shard } } },
+    });
     await requireReturn(stream)(undefined);
+  });
+
+  it("completes immediately after acknowledging an already aborted caller", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const publisher = AdminPublisher.create(new InMemoryDeliveryState());
+    const stream = publisher.service
+      .subscribeToShardUpdates(create(EmptySchema), { signal: controller.signal } as never)
+      [Symbol.asyncIterator]();
+
+    await expect(stream.next()).resolves.toMatchObject({
+      value: { value: { case: "created", value: true } },
+    });
+    await expect(stream.next()).resolves.toEqual({ done: true, value: undefined });
   });
 
   it("completes a waiting stream during publisher shutdown", async () => {
@@ -68,6 +86,9 @@ describe("Admin publisher", () => {
     expect(publisher.service.getShardInfo(create(EmptySchema), context)).toMatchObject({
       shards: [{ index: shard, status: 2, messages: 1 }],
     });
+    expect(() => {
+      publisher.recordMessageTransition(shard, -2);
+    }).toThrow("Delivery shard message count is invalid.");
   });
 
   it("removes an iterator returned by its caller", async () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { DeliveryServer, InMemoryDelivery } from "../../src/index.js";
+import { DeliveryConfig } from "../../src/server/config.js";
 
 describe("DeliveryServer configuration", () => {
   it("uses documented defaults and keeps configured zero", () => {
@@ -27,6 +28,18 @@ describe("DeliveryServer configuration", () => {
     );
     expect(() => InMemoryDelivery.create({ maxRetainedMessages: 0 })).toThrow(
       "Delivery server maxRetainedMessages is invalid.",
+    );
+  });
+
+  it("parses bounded numeric environment values without coercion", () => {
+    expect(DeliveryConfig.environmentNumber(undefined, 7, "test value")).toBe(7);
+    expect(DeliveryConfig.environmentNumber("", 7, "test value")).toBe(7);
+    expect(DeliveryConfig.environmentNumber("12", 7, "test value")).toBe(12);
+    expect(() => DeliveryConfig.environmentNumber("01", 7, "test value")).toThrow(
+      "Delivery server test value is invalid.",
+    );
+    expect(() => DeliveryConfig.environmentNumber("9007199254740992", 7, "test value")).toThrow(
+      "Delivery server test value is invalid.",
     );
   });
 });

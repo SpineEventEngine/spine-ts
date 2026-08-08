@@ -6,6 +6,27 @@ import {
 } from "../../src/delivery/parked-delivery-obligations.js";
 
 describe("ParkedDeliveryObligations", () => {
+  it("rejects missing generation domains and empty configured obligations", () => {
+    expect(() => new ParkedDeliveryObligations({ registrations: [], generation: [] })).toThrow(
+      "Parked delivery obligations require a generation obligation.",
+    );
+    expect(
+      () =>
+        new ParkedDeliveryObligations({
+          registrations: [{ token: "one", obligations: [{ key: "empty", units: [] }] }],
+          generation: [{ key: "generation", units: ["shard-0"] }],
+        }),
+    ).toThrow("Parked delivery obligations require unique non-empty configured obligations.");
+  });
+
+  it("ignores an empty registration extension", () => {
+    const obligations = table();
+
+    obligations.extendRegistration("one", "one-all", []);
+
+    expect(obligations.records()).toEqual([]);
+  });
+
   it("coalesces repeated rejected work into one canonical record with a saturating count", () => {
     const obligations = table();
     const first = new Error("first");
@@ -281,6 +302,34 @@ describe("ParkedDeliveryObligations", () => {
         hasCause: true,
         occurrences: 2,
       }),
+    ]);
+  });
+
+  it("skips unused generation destinations during owner removal", () => {
+    const obligations = new ParkedDeliveryObligations({
+      registrations: [{ token: "one", obligations: [{ key: "one", units: ["shard-0"] }] }],
+      generation: [
+        { key: "generation-0", units: ["shard-0"] },
+        { key: "generation-1", units: ["shard-1"] },
+      ],
+    });
+    const failure = new Error("failure");
+    obligations.park(registration("one"), "one", ["shard-0"], failure);
+
+    obligations.removeRegistration("one");
+
+    expect(obligations.records()).toEqual([
+      expect.objectContaining({ obligation: "generation-0", cause: failure }),
+    ]);
+  });
+
+  it("selects a representative after skipping an earlier configured unit", () => {
+    const obligations = table();
+    const failure = new Error("failure");
+    obligations.park(registration("one"), "one-all", ["shard-1"], failure);
+
+    expect(obligations.report([selection(registration("one"), "one-all", ["shard-1"])])).toEqual([
+      failure,
     ]);
   });
 

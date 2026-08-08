@@ -54,6 +54,34 @@ describe("in-memory Shards", () => {
     });
   });
 
+  it("labels fresh and conflicting revalidation outcomes", async () => {
+    const core = InMemoryDelivery.create();
+    const first = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "first" });
+    const second = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "second" });
+    const revalidate = () =>
+      ({
+        signal: new AbortController().signal,
+        requestHeader: new Headers([["x-spine-delivery-revalidate", "true"]]),
+        responseHeader: new Headers(),
+      }) as never;
+    const fresh = revalidate();
+
+    await core.shards.pickShard(create(PickUpShardSchema, { shard, worker: first }), fresh);
+    expect(
+      (fresh as { responseHeader: Headers }).responseHeader.get("x-spine-delivery-revalidation"),
+    ).toBe("picked");
+
+    const conflicting = revalidate();
+    await expect(
+      core.shards.pickShard(create(PickUpShardSchema, { shard, worker: second }), conflicting),
+    ).resolves.toMatchObject({ value: { case: "alreadyPickedUp" } });
+    expect(
+      (conflicting as { responseHeader: Headers }).responseHeader.get(
+        "x-spine-delivery-revalidation",
+      ),
+    ).toBe("lost");
+  });
+
   it("counts only TO_DELIVER messages across replacement and deletion", async () => {
     const core = InMemoryDelivery.create();
     const pending = {
@@ -281,6 +309,9 @@ describe("in-memory Shards", () => {
 
   it("rejects malformed shard workers and protobuf-overflow durations", async () => {
     const core = InMemoryDelivery.create();
+    await expect(
+      core.shards.releaseSessions(create(ReleaseExpiredSessionsSchema), context),
+    ).rejects.toMatchObject({ code: Code.InvalidArgument });
     await expect(
       core.shards.pickShard(
         create(PickUpShardSchema, { shard: { index: -1, ofTotal: 1 }, worker }),
