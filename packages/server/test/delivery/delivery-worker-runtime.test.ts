@@ -54,6 +54,20 @@ describe("DeliveryWorker", () => {
       "Delivery worker access requires a DeliveryWorker instance.",
     );
   });
+
+  it("settles an idle worker and requires stop before permanent retirement", async () => {
+    const worker = new DeliveryWorker({
+      delivery: delivery(),
+      shards: [ShardIndex.single()],
+      onMessage: () => undefined,
+    });
+    await expect(deliveryWorkerAccess.awaitSettled(worker)).resolves.toBeUndefined();
+    await expect(deliveryWorkerAccess.retire(worker)).rejects.toThrow(
+      "DeliveryWorker must be stopped before retirement.",
+    );
+    worker.stop();
+    await expect(deliveryWorkerAccess.retire(worker)).resolves.toBeUndefined();
+  });
 });
 function delivery(): Delivery {
   return new Delivery({
