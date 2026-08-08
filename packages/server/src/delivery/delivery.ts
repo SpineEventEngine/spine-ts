@@ -157,6 +157,7 @@ export class Delivery {
         const deliveredBefore = statistics.delivered;
         for (const message of messages) {
           if (options.operation?.signal?.aborted) return result("STOPPED", statistics);
+          if (!isEndpointMessage(message)) continue;
           const target = `${message.inboxId.targetTypeUrl}:${message.inboxId.targetId}`;
           if (blockedTargets.has(target)) continue;
           statistics.processed += 1;
@@ -270,4 +271,11 @@ async function safelyValue<T>(action: () => T | Promise<T>, fallback: T): Promis
   } catch {
     return fallback;
   }
+}
+function isEndpointMessage(message: InboxMessage): boolean {
+  return (
+    message.label === "HANDLE_COMMAND" ||
+    message.label === "UPDATE_SUBSCRIBER" ||
+    message.label === "REACT_UPON_EVENT"
+  );
 }
