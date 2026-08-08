@@ -1141,6 +1141,19 @@ class MessageIdTaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint
   }
 }
 
+class MessageIdProducingAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
+  assignTask(command: Task): TaskCreated {
+    this.update((draft) => Object.assign(draft, command));
+    return create(TaskCreatedSchema, { id: command.id, title: command.title });
+  }
+}
+
+class TaskCreatedScalarProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  subscribeTaskCreated(event: TaskCreated): void {
+    void event;
+  }
+}
+
 class MissingSubscriberMethodProjection extends Projection<
   string,
   typeof ProjectionStateSchema,
@@ -1830,6 +1843,8 @@ describe("repository signal routing", () => {
         context: { version: { number: 1 } },
       },
     ]);
+    const [stored] = await eventStore.read();
+    expect(readReadableProducerId(stored)).toBe("task-managed");
     await expect(storage.readCurrent("task-managed")).resolves.toMatchObject({
       entityId: "task-managed",
       version: 1n,
@@ -3012,6 +3027,21 @@ describe("repository signal routing", () => {
     expect(readReadableProducerId(stored)).toBe("task-producer-id");
   });
 
+  it("packs a message aggregate ID into its produced event producer ID", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createMessageIdProducingRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const taskId = create(TaskIdSchema, { value: "message-produced-task" });
+
+    await context.commandBus().post(createTaskCommand("command-message-producer", taskId.value));
+
+    const [stored] = await eventStore.read();
+    expect(AnyMessages.unpack(stored?.context?.producerId as never, TaskIdSchema)).toEqual(taskId);
+  });
+
   it("routes commands to one aggregate ID by the first command field", () => {
     const repository = createRoutingRepository();
     const command = createAggregateCommand("command-1", "task-1");
@@ -3146,6 +3176,58 @@ describe("repository signal routing", () => {
     );
 
     expect(route.entityIds).toEqual([taskId]);
+  });
+
+  it("rejects a message-valued producer ID that differs from a message target ID", () => {
+    const repository = createMessageIdTaskRepository();
+    const targetId = create(TaskIdSchema, { value: "message-target-task" });
+    const producerId = create(TaskIdSchema, { value: "different-message-producer" });
+
+    expect(() =>
+      repository.routeEvent(
+        SignalEnvelopes.event({
+          id: create(EventIdSchema, { value: "event-message-producer-mismatch" }),
+          context: create(EventContextSchema, {
+            producerId: AnyMessages.pack(TaskIdSchema, producerId),
+            version: create(VersionSchema, { number: 1 }),
+          }),
+          schema: TaskCreatedSchema,
+          message: create(TaskCreatedSchema, {
+            id: targetId,
+            title: "Mismatched message producer task",
+          }),
+        }),
+      ),
+    ).toThrow(
+      "Repository event routing requires producer ID and first field to identify the same entity.",
+    );
+  });
+
+  it("rejects a message-valued producer ID that differs from a scalar target ID", () => {
+    const repository = createTaskCreatedScalarProjectionRepository();
+    const targetId = create(TaskIdSchema, { value: "scalar-target" });
+
+    expect(() =>
+      repository.routeEvent(
+        SignalEnvelopes.event({
+          id: create(EventIdSchema, { value: "event-scalar-producer-mismatch" }),
+          context: create(EventContextSchema, {
+            producerId: AnyMessages.pack(
+              TaskIdSchema,
+              create(TaskIdSchema, { value: "different-scalar-producer" }),
+            ),
+            version: create(VersionSchema, { number: 1 }),
+          }),
+          schema: TaskCreatedSchema,
+          message: create(TaskCreatedSchema, {
+            id: targetId,
+            title: "Mismatched scalar producer task",
+          }),
+        }),
+      ),
+    ).toThrow(
+      "Repository event routing requires producer ID and first field to identify the same entity.",
+    );
   });
 
   it("rejects message-valued event IDs with the wrong message type", () => {
@@ -7871,6 +7953,35 @@ function createMessageIdTaskRepository(): Repository<typeof MessageIdTaskAggrega
   return new Repository({
     entityType: MessageIdTaskAggregate,
     schema: TaskSchema,
+    handlers,
+  });
+}
+
+function createMessageIdProducingRepository(): Repository<typeof MessageIdProducingAggregate> {
+  const handlers = EntityHandlers.define(MessageIdProducingAggregate, TaskSchema, (builder) => [
+    builder.assign(TaskSchema, "assignTask"),
+  ]);
+
+  return new Repository({
+    entityType: MessageIdProducingAggregate,
+    schema: TaskSchema,
+    handlers,
+    events: [TaskCreatedSchema],
+  });
+}
+
+function createTaskCreatedScalarProjectionRepository(): Repository<
+  typeof TaskCreatedScalarProjection
+> {
+  const handlers = EntityHandlers.define(
+    TaskCreatedScalarProjection,
+    ProjectionStateSchema,
+    (builder) => [builder.subscribe(TaskCreatedSchema, "subscribeTaskCreated")],
+  );
+
+  return new Repository({
+    entityType: TaskCreatedScalarProjection,
+    schema: ProjectionStateSchema,
     handlers,
   });
 }
