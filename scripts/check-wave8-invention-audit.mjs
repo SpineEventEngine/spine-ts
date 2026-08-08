@@ -39,7 +39,7 @@ const sourceExtensions = new Set([
   ".yaml",
   ".yml",
 ]);
-const manifest = JSON.parse(
+export const manifest = JSON.parse(
   readFileSync(join(repoRoot, ".wave8-forbidden-artifacts.json"), "utf8"),
 );
 export const forbiddenArtifacts = manifest.map(({ name, fixture }) => [name, fixture]);

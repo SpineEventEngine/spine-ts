@@ -52,11 +52,41 @@ current behavior. The deterministic companion is
 
 ## Removed artifacts protected by the deterministic audit
 
-`RemovalQuarantine` and removal fingerprints; receipts and markers; replacement
-dedup records and per-message claims; `DeliveryAttempt`, `AttemptExhaustion`,
-and `RetryDecision`; revoked-session facilities; `ApplicationNodeLease:v1` and
-versioned discovery keys; `@spine-event-engine/validation-ts`; shared-layout
-fingerprints; and the retired pre-Wave-8 persistence vocabulary.
+`RemovalQuarantine`; `RemovalFingerprint`; `DeliveryReceipt`; `DeliveryMarker`;
+`DeliveryClaim`/`DedupGuard`/`DedupRecord`; `DeliveryAttempt`;
+`AttemptExhaustion`; `RetryDecision`; `RevokedSession`;
+`ApplicationNodeLease:v9` (the manifest rejects every `:vN`); the retired
+`@spine-event-engine/validation-ts`; and `compatibilityFingerprint`. The
+machine-readable source of truth is
+[`.wave8-forbidden-artifacts.json`](../../.wave8-forbidden-artifacts.json).
+
+## Navigable contract evidence
+
+| Contract                                                                                             | Classification  | Exact evidence                                                                                                                                                                                                                                             |
+| ---------------------------------------------------------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RecordSpec`, `RecordSpecOptions`, `RecordColumn`, `StorageGroup`, `StorageFactory`, `RecordStorage` | JVM counterpart | [storage exports](../../packages/storage/src/index.ts), [options](../../packages/storage/src/record/record-spec.ts), [reference](../../packages/storage/REFERENCE.md)                                                                                      |
+| Entity/current/history/Event Store record specs                                                      | JVM counterpart | [Entity descriptor](../../packages/server/src/entity/entity-storage-descriptor.ts), [history specs](../../packages/storage/src/entity/entity-history-record-spec.ts), [Event Store](../../packages/storage/src/event/event-store.ts)                       |
+| Inbox, `InboxStorage`, shard session, `WorkerId`, `Delivery`, `DeliveryMonitor`                      | Human-approved  | [server exports](../../packages/server/src/index.ts), [Inbox records](../../packages/server/src/delivery/inbox-records.ts), [fencing](../../packages/server/src/delivery/sharded-work-registry.ts), [server reference](../../packages/server/REFERENCE.md) |
+| `SubscriptionRecord` and subscription registry                                                       | Human-approved  | [Proto](../../packages/proto/proto/spine/client/subscription_record.proto), [registry](../../packages/server/src/stand/subscription-registry.ts)                                                                                                           |
+| `GatewayAuthenticatedSubscription` and bindings                                                      | Human-approved  | [Proto](../../packages/proto/proto/spine/auth/authenticated_subscription.proto), [bindings](../../packages/server/src/server/durable-subscription-bindings.ts), [auth reference](../../packages/auth/REFERENCE.md)                                         |
+| `ApplicationNodeLease`, `NodeRegistrationId`, registry                                               | Human-approved  | [Proto](../../packages/proto/proto/spine/deployment/node_discovery.proto), [record spec](../../packages/deployment/src/registry/leased-node-registry.ts)                                                                                                   |
+| MySQL table/create configuration                                                                     | Human-approved  | [builder](../../packages/storage-rdbms/src/mysql/storage-factory.ts), [reference](../../packages/storage-rdbms/REFERENCE.md)                                                                                                                               |
+| Datastore layouts and custom creators                                                                | Human-approved  | [builder](../../packages/storage-datastore/src/datastore/storage-factory.ts), [reference](../../packages/storage-datastore/REFERENCE.md)                                                                                                                   |
+| Validation package                                                                                   | Human-approved  | [core manifest](../../packages/core/package.json), [facade](../../packages/core/src/index.ts)                                                                                                                                                              |
+
+## Exact bounded-mechanism ledger
+
+| Area                          | Value/scope                                                                  | Persistence, retry, cleanup outcome                                                                        | Evidence                                                                                                                   |
+| ----------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Inbox reads/dedup             | reads 1–1,000; dedup scan pages 2, max 500 pages                             | delivered row suppresses through optional `keepUntil`; absent is indefinite                                | [Inbox storage](../../packages/server/src/delivery/inbox-storage.ts)                                                       |
+| Repository handoff            | `keepUntil = whenReceived + 30,000 ms`                                       | repository choice only; no separate dedup record                                                           | [repository](../../packages/server/src/repository/repository.ts)                                                           |
+| Shard lease                   | default 30,000 ms; valid 1,000–2,147,483,647 ms                              | same complete worker renews; other worker waits for expiry; stale release is fenced                        | [registry](../../packages/server/src/delivery/sharded-work-registry.ts)                                                    |
+| Delivery monitor              | one immediate repeat action                                                  | default marks delivered; failed mark leaves row pending, blocks same target, continues independent targets | [delivery](../../packages/server/src/delivery/delivery.ts), [reference](../../packages/server/REFERENCE.md)                |
+| Stand registry                | pending 30,000 ms; scan 26/delete 25; definition ≤1 MiB                      | active has no TTL; bounded cleanup is idempotent                                                           | [registry](../../packages/server/src/stand/subscription-registry.ts), [reference](../../packages/server/REFERENCE.md)      |
+| Datastore                     | reconciliation 1,000; batch 500; transaction ≤25 groups/500 mutations        | only ABORTED retries, max 3; later chunk failure leaves earlier chunks durable                             | [reference](../../packages/storage-datastore/REFERENCE.md)                                                                 |
+| MySQL/MariaDB                 | query 256 IDs/32 filters/64 values/filter/8 sorts/2,048 bindings             | InnoDB transaction; MyISAM/Aria deterministic prefix and idempotent retry                                  | [reference](../../packages/storage-rdbms/REFERENCE.md)                                                                     |
+| Remote delivery server/client | page 1–1,000; write/remove batches 1–100                                     | one RPC mutation; lost acknowledgement may redeliver; no local removal state                               | [client reference](../../packages/delivery-client/REFERENCE.md), [server README](../../packages/delivery-server/README.md) |
+| Browser/auth and query        | browser auth default 64 active requests; Datastore query is provider-bounded | auth/session policy is application-owned; query never silently returns partial reconciliation              | [server README](../../packages/server/README.md), [Datastore reference](../../packages/storage-datastore/REFERENCE.md)     |
 
 The checker scans current package/source/manifests/examples/public docs/active
 Proto surfaces only. It explicitly permits a truthful negative public-doc

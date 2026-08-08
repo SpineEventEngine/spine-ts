@@ -1,10 +1,14 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { auditWave8CurrentState, forbiddenArtifacts } from "./check-wave8-invention-audit.mjs";
+import {
+  auditWave8CurrentState,
+  forbiddenArtifacts,
+  manifest,
+} from "./check-wave8-invention-audit.mjs";
 
 const fixtures = [];
 
@@ -22,6 +26,11 @@ afterEach(() => {
 });
 
 describe("Wave 8 invention audit", () => {
+  it("keeps the inventory's forbidden-artifact section in manifest parity", () => {
+    const inventory = readFileSync("build-protocol/release/WAVE_8_INVENTION_AUDIT.md", "utf8");
+    for (const { fixture } of manifest) expect(inventory).toContain(fixture);
+  });
+
   it("rejects a forbidden runtime artifact while excluding historical evidence", () => {
     const root = fixture();
     writeFileSync(
