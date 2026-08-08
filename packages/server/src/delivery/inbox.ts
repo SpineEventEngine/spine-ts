@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import type { Any } from "@bufbuild/protobuf/wkt";
 
 import type { InboxStorage } from "./inbox-storage.js";
-import { inboxStorageAccess } from "./inbox-storage.js";
 import type { DeliveryInboxWork, DeliveryWorkSession } from "./delivery-ports.js";
 import type { ShardIndex } from "./shard-index.js";
 
@@ -108,8 +107,8 @@ export class Inbox {
     session: DeliveryWorkSession,
   ): Promise<DeliveryInboxWork | undefined> {
     if (session.kind !== "LEASED") return undefined;
-    const claimed = await inboxStorageAccess.claim(this.storage, message, session);
-    return claimed === undefined ? undefined : new LocalInboxWork(this.storage, claimed);
+    const admitted = await this.storage.admit(message);
+    return admitted === undefined ? undefined : new LocalInboxWork(this.storage, admitted);
   }
 
   #inputObject(value: unknown, label: string): Record<string, unknown> {
@@ -130,59 +129,40 @@ export class Inbox {
 }
 
 class LocalInboxWork implements DeliveryInboxWork {
-  #claimed: import("./inbox-claim.js").ClaimedInboxMessage | undefined;
+  #message: InboxMessage | undefined;
 
   constructor(
     private readonly storage: InboxStorage,
-    claimed: import("./inbox-claim.js").ClaimedInboxMessage,
+    message: InboxMessage,
   ) {
-    this.#claimed = claimed;
+    this.#message = message;
   }
 
   get message(): InboxMessage {
-    const claimed = this.#requireClaimed();
-    const { claim: ignoredClaim, ...message } = claimed;
-    void ignoredClaim;
-    return message;
+    return this.#requireMessage();
   }
 
   async synchronize(session: DeliveryWorkSession): Promise<void> {
     if (session.kind !== "LEASED") throw new InboxMessageError("Inbox work session is not leased.");
-    const claimed = this.#requireClaimed();
-    if (
-      claimed.claim.id === session.id &&
-      claimed.claim.node === session.node &&
-      claimed.claim.expiresAt.getTime() === session.expiresAt.getTime()
-    ) {
-      return;
-    }
-    const renewed = await inboxStorageAccess.renew(this.storage, claimed, session);
-    if (renewed === undefined) throw new InboxMessageError("Inbox work claim was lost.");
-    this.#claimed = renewed;
+    if (this.#message === undefined) throw new InboxMessageError("Inbox work is no longer active.");
   }
 
   async complete(): Promise<boolean> {
-    const claimed = this.#requireClaimed();
-    const completed = await inboxStorageAccess.markDelivered(this.storage, claimed);
+    const message = this.#requireMessage();
+    const completed = await this.storage.markDelivered(message);
     if (completed !== undefined) {
-      this.#claimed = undefined;
+      this.#message = undefined;
     }
     return completed !== undefined;
   }
 
   async abandon(): Promise<void> {
-    const claimed = this.#claimed;
-    if (claimed === undefined) return;
-    const cleared = await inboxStorageAccess.clear(this.storage, claimed);
-    if (cleared === undefined) {
-      throw new InboxMessageError("Framework cleanup did not clear the pending row.");
-    }
-    this.#claimed = undefined;
+    this.#message = undefined;
   }
 
-  #requireClaimed(): import("./inbox-claim.js").ClaimedInboxMessage {
-    if (this.#claimed === undefined) throw new InboxMessageError("Inbox work is no longer active.");
-    return this.#claimed;
+  #requireMessage(): InboxMessage {
+    if (this.#message === undefined) throw new InboxMessageError("Inbox work is no longer active.");
+    return this.#message;
   }
 }
 

@@ -1,10 +1,8 @@
-import { create, type Message } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { create } from "@bufbuild/protobuf";
+import { TenantIdSchema, type TenantId } from "@spine-event-engine/proto";
 import { RecordSpec, type RecordStorage, type StorageFactory } from "@spine-event-engine/storage";
 
 type TenantMode = "single-tenant" | "multitenant";
-type TenantRecord = Message<"google.protobuf.StringValue"> & { value: string };
 
 /**
  * Tracks tenants that have been admitted by one bounded context.
@@ -38,11 +36,11 @@ export interface TenantIndex {
   close(): void;
 }
 
-const tenantRecordSpec = new RecordSpec<string, TenantRecord>({
-  schema: StringValueSchema,
-  storageKey: "spine.server.Tenant:current",
-  idKind: "string",
-  extractId: (record) => record.value,
+const tenantRecordSpec = new RecordSpec<TenantId, TenantId>({
+  sourceType: TenantIdSchema,
+  recordType: TenantIdSchema,
+  idSchema: TenantIdSchema,
+  extractId: (record) => record,
 });
 
 /**
@@ -119,7 +117,7 @@ class SingleTenantIndex implements TenantIndex {
 
 class StorageTenantIndex implements TenantIndex {
   readonly tenantMode = "multitenant";
-  readonly #storage: RecordStorage<string, TenantRecord>;
+  readonly #storage: RecordStorage<TenantId, TenantId>;
 
   constructor(contextName: string, storageFactory: StorageFactory) {
     this.#storage = storageFactory.createRecordStorage(
@@ -132,16 +130,19 @@ class StorageTenantIndex implements TenantIndex {
   }
 
   async all(): Promise<readonly string[]> {
-    return Object.freeze(await this.#storage.index());
+    return Object.freeze(
+      (await this.#storage.index()).map((tenant) => {
+        if (tenant.kind.case !== "value" || tenant.kind.value.trim().length === 0) {
+          throw new Error("Tenant index storage contains an invalid TenantId.");
+        }
+        return tenant.kind.value;
+      }),
+    );
   }
 
   async keep(tenantId: string): Promise<void> {
     const value = TenantIndexes.require(tenantId);
-    await this.#storage.write(
-      create(StringValueSchema as GenMessage<TenantRecord>, {
-        value,
-      }),
-    );
+    await this.#storage.write(create(TenantIdSchema, { kind: { case: "value", value } }));
   }
 
   close(): void {
