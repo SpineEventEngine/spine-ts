@@ -26,7 +26,7 @@ import {
   type TransportSubscriptionHandle,
 } from "@spine-event-engine/transport";
 import { createZeroMqTransport, ZeroMqConfig } from "@spine-event-engine/transport/zeromq";
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 import {
@@ -193,6 +193,89 @@ describe("RuntimeTransportBinding", () => {
     expect(calls).toEqual([]);
 
     await handle.close();
+  });
+
+  it("sanitizes primitive and non-string message type diagnostics", async () => {
+    const transport = new InMemorySignalTransport();
+    const runtime = new SingleProcessServerRuntime();
+    transport.bindRuntime(runtime);
+    const plan = createRuntimePlan();
+    const handle = await RuntimeTransportBinding.open({
+      plan,
+      runtime,
+      transport,
+      onCommand: () => undefined,
+      onEvent: () => undefined,
+    });
+    const topic = requireFirst(plan.commands.topics);
+
+    await expect(
+      transport.request({
+        topic,
+        envelope: { $typeName: EventSchema.typeName, message: "not-an-any" } as unknown as Command,
+      }),
+    ).resolves.toMatchObject({
+      status: "failed",
+      failure: { diagnostics: { reason: "unexpected envelope type" } },
+    });
+    await expect(
+      transport.request({
+        topic,
+        envelope: {
+          $typeName: EventSchema.typeName,
+          message: { typeUrl: 42 },
+        } as unknown as Command,
+      }),
+    ).resolves.toMatchObject({
+      status: "failed",
+      failure: { diagnostics: { reason: "unexpected envelope type" } },
+    });
+
+    await handle.close();
+  });
+
+  it("rejects a routing plan whose route has no subscription", async () => {
+    const transport = new InMemorySignalTransport();
+    const runtime = new SingleProcessServerRuntime();
+    transport.bindRuntime(runtime);
+    const plan = createRuntimePlan();
+    const route = requireFirst(plan.commands.routes);
+    const invalidPlan = {
+      ...plan,
+      commands: {
+        ...plan.commands,
+        routes: [{ ...route, subscriptionDescriptorKey: "missing-subscription" }],
+      },
+    };
+
+    await expect(
+      RuntimeTransportBinding.open({
+        plan: invalidPlan,
+        runtime,
+        transport,
+        onCommand: () => undefined,
+        onEvent: () => undefined,
+      }),
+    ).rejects.toThrow('missing subscription "missing-subscription"');
+    expect(runtime.state).toBe("closed");
+  });
+
+  it("formats envelope failures without an optional reason", () => {
+    const error = new RuntimeTransportEnvelopeError({
+      status: "failed",
+      signalKind: "event",
+      failure: {
+        code: "MALFORMED_ENVELOPE",
+        diagnostics: {},
+      },
+    });
+
+    expect(error.message).toBe("Runtime transport event envelope refused.");
+  });
+
+  it("does not retain failed-open cleanup for primitive values", () => {
+    expect(runtimeTransportBindingAccess.failedOpenCleanup(undefined)).toBeUndefined();
+    expect(runtimeTransportBindingAccess.failedOpenCleanup("failure")).toBeUndefined();
   });
 
   it("rejects malformed generated command envelopes without runtime intake", async () => {
@@ -383,6 +466,38 @@ describe("RuntimeTransportBinding", () => {
       },
     });
     expect(calls).toEqual([]);
+
+    await handle.close();
+  });
+
+  it("propagates unexpected synchronous runtime intake errors", async () => {
+    const transport = new InMemorySignalTransport();
+    const runtime = new SingleProcessServerRuntime();
+    transport.bindRuntime(runtime);
+    const plan = createRuntimePlan();
+    const handle = await RuntimeTransportBinding.open({
+      plan,
+      runtime,
+      transport,
+      onCommand: () => undefined,
+      onEvent: () => undefined,
+    });
+    vi.spyOn(runtime, "enqueue").mockImplementation(() => {
+      throw new Error("unexpected synchronous intake failure");
+    });
+
+    await expect(
+      transport.request({
+        topic: requireFirst(plan.commands.topics),
+        envelope: createCommandEnvelope(),
+      }),
+    ).rejects.toThrow("unexpected synchronous intake failure");
+    await expect(
+      transport.publish({
+        topic: requireFirst(plan.events.topics),
+        envelope: createEventEnvelope(),
+      }),
+    ).rejects.toThrow("unexpected synchronous intake failure");
 
     await handle.close();
   });
@@ -612,6 +727,27 @@ describe("RuntimeTransportBinding", () => {
       `handle:${requireFirst(plan.events.subscriptions).descriptorKey}:running`,
       `handle:${requireFirst(plan.commands.subscriptions).descriptorKey}:closed:retry`,
     ]);
+  });
+
+  it("aggregates primitive failures from multiple transport handles", async () => {
+    const transport = new InMemorySignalTransport([], (subscription) => ({
+      subscription,
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- verifies that adapter primitives are sanitized.
+      close: () => Promise.reject(`failed:${subscription.topic.signalKind}`),
+    }));
+    const runtime = new SingleProcessServerRuntime();
+    transport.bindRuntime(runtime);
+    const plan = createRuntimePlan();
+    const handle = await RuntimeTransportBinding.open({
+      plan,
+      runtime,
+      transport,
+      onCommand: () => undefined,
+      onEvent: () => undefined,
+    });
+
+    await expect(handle.close()).rejects.toThrow("Runtime transport close failed in 2 operations.");
+    expect(runtime.state).toBe("closed");
   });
 
   it("closes the runtime when transport registration fails during open", async () => {

@@ -212,6 +212,7 @@ describe("MysqlEntityStorage history behavior", () => {
           [
             { bytes: toBinary(EntityRecordSchema, record("task", 1n, 1n)) },
             { bytes: toBinary(EntityRecordSchema, record("other", 2n, 2n)) },
+            { bytes: toBinary(EntityRecordSchema, create(EntityRecordSchema)) },
           ],
           [],
         ])
@@ -219,6 +220,7 @@ describe("MysqlEntityStorage history behavior", () => {
           [
             { bytes: toBinary(EventSchema, event("task", "one", 1n, 1n)) },
             { bytes: toBinary(EventSchema, event("other", "two", 2n, 2n)) },
+            { bytes: toBinary(EventSchema, create(EventSchema)) },
           ],
           [],
         ]),
