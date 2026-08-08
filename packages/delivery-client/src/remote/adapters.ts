@@ -142,10 +142,11 @@ export class RemoteInbox implements DeliveryInbox {
   ): Promise<DeliveryInboxWork | undefined> {
     if (session.kind !== "EXCLUSIVE" || !RemoteValues.sameShard(session.shard, message.shard))
       return undefined;
+    if (!RemoteSessionOwner.for(this.client).owns(session)) return undefined;
     const current = await this.client.findOne(message.id, options);
     if (current?.status !== "TO_DELIVER" || !RemoteValues.sameMessage(current, message))
       return undefined;
-    return new RemoteInboxWork(this.client, current, options);
+    return new RemoteInboxWork(this.client, current, session, options);
   }
 }
 
@@ -154,6 +155,7 @@ class RemoteInboxWork implements DeliveryInboxWork {
   constructor(
     private readonly client: DeliveryClient,
     private readonly snapshot: InboxMessage,
+    private readonly session: ExclusiveDeliveryWorkSession,
     private readonly operation: DeliveryOperationOptions | undefined,
   ) {}
   get message(): InboxMessage {
@@ -175,6 +177,7 @@ class RemoteInboxWork implements DeliveryInboxWork {
   }
   async complete(options?: DeliveryOperationOptions): Promise<boolean> {
     if (!this.#active) return false;
+    if (!RemoteSessionOwner.for(this.client).owns(this.session)) throw new DeliveryProtocolError();
     // A failed or uncertain removal leaves this work active. The later reader
     // reconciles authoritative remote state; no client-side removal state exists.
     await this.client.removeOne(this.snapshot, options ?? this.operation);
@@ -321,6 +324,10 @@ class RemoteSessionOwner {
       if (error instanceof DeliveryOutcomeUnknownError) this.#quarantined.add(key);
       throw error;
     }
+  }
+  owns(session: ExclusiveDeliveryWorkSession): boolean {
+    const remote = this.#sessions.get(session);
+    return remote !== undefined && !this.#quarantined.has(RemoteValues.shardKey(session.shard));
   }
 
   async #cleanupAccidentalPickup(session: RemoteShardSession): Promise<void> {

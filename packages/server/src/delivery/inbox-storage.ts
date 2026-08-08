@@ -1,8 +1,9 @@
-import { toBinary } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
 import type {
   InboxMessage as WireInboxMessage,
   InboxMessageId as WireInboxMessageId,
 } from "@spine-event-engine/proto/delivery";
+import { InboxMessageIdSchema } from "@spine-event-engine/proto/delivery";
 import type { RecordStorage, StorageContext, StorageFactory } from "@spine-event-engine/storage";
 
 import {
@@ -49,6 +50,8 @@ export class InboxStorage {
   async read(shard: ShardIndex, options: InboxReadOptions = {}): Promise<readonly InboxMessage[]> {
     const requested = Values.shard(shard);
     const limit = Values.limit(options.limit ?? defaultReadLimit);
+    const offset = Values.offset(options.offset);
+    const after = Values.after(options.after, requested);
     const storage = this.#storage();
     try {
       const rows = await storage.queryEntries({
@@ -61,6 +64,8 @@ export class InboxStorage {
         ],
         sort: [{ field: "when_received" }, { field: "version" }, { field: "message_id" }],
         limit,
+        ...(offset === undefined ? {} : { offset }),
+        ...(after === undefined ? {} : { after }),
       });
       return Object.freeze(rows.map((row) => InboxRecords.read(row.record, row.id)));
     } finally {
@@ -96,6 +101,7 @@ export class InboxStorage {
     const id = Values.wireId(record);
     const storage = this.#storage();
     try {
+      Values.atomic(storage);
       if (await storage.compareAndSet(id, undefined, record)) {
         return Object.freeze({ outcome: "WRITTEN", message: InboxRecords.read(record, id) });
       }
@@ -120,6 +126,7 @@ export class InboxStorage {
     const id = Values.wireId(expected);
     const storage = this.#storage();
     try {
+      Values.atomic(storage);
       const current = await storage.read(id);
       if (current === undefined) return undefined;
       const decoded = InboxRecords.read(current, id);
@@ -130,8 +137,11 @@ export class InboxStorage {
       }
       if (decoded.status !== "TO_DELIVER" || !Values.same(current, expected)) return undefined;
       const delivered = InboxRecords.write({ ...decoded, status: "DELIVERED" });
-      return (await storage.compareAndSet(id, current, delivered))
-        ? InboxRecords.read(delivered, id)
+      if (await storage.compareAndSet(id, current, delivered))
+        return InboxRecords.read(delivered, id);
+      const successor = await storage.read(id);
+      return successor !== undefined && Values.same(successor, delivered)
+        ? InboxRecords.read(successor, id)
         : undefined;
     } finally {
       storage.close();
@@ -149,17 +159,18 @@ export class InboxStorage {
     const id = Values.wireId(expected);
     const storage = this.#storage();
     try {
+      Values.atomic(storage);
       const current = await storage.read(id);
       if (current === undefined || !Values.same(current, expected)) return undefined;
       const pending = InboxRecords.read(current, id);
       if (pending.status !== "TO_DELIVER") return undefined;
       const delivered = await storage.queryEntries({
         filters: [
-          { column: "shard_index", value: pending.shard.index },
-          { column: "shard_total", value: pending.shard.ofTotal },
+          { column: "inbox_id", value: expected.inboxId },
+          { column: "signal_id", value: expected.signalId },
           { column: "status", value: Values.status("DELIVERED") },
         ],
-        limit: maxReadLimit,
+        limit: 2,
       });
       const predecessor = delivered
         .map((row) => InboxRecords.read(row.record, row.id))
@@ -216,18 +227,10 @@ const Values = Object.freeze({
     return { TO_DELIVER: 1, SCHEDULED: 2, DELIVERED: 3, TO_CATCH_UP: 4 }[value];
   },
   id(value: InboxMessageId): WireInboxMessageId {
-    return Values.wireId(
-      InboxRecords.write({
-        id: value,
-        inboxId: { targetId: "id", targetTypeUrl: "id" },
-        signalId: "id",
-        label: "UPDATE_SUBSCRIBER",
-        status: "TO_DELIVER",
-        shard: value.shard,
-        whenReceived: new Date(0),
-        version: 0n,
-      }),
-    );
+    return create(InboxMessageIdSchema, {
+      uuid: value.value,
+      index: { index: value.shard.index, ofTotal: value.shard.ofTotal },
+    });
   },
   wireId(value: WireInboxMessage): WireInboxMessageId {
     if (value.id === undefined) throw new InboxMessageError("Inbox message ID is invalid.");
@@ -254,6 +257,36 @@ const Values = Object.freeze({
       );
     }
     return value;
+  },
+  offset(value: unknown): number | undefined {
+    if (value === undefined) return undefined;
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
+      throw new InboxMessageError("Inbox read offset must be a non-negative safe integer.");
+    return value;
+  },
+  after(value: InboxReadOptions["after"], shard: ShardIndex) {
+    if (value === undefined) return undefined;
+    if (
+      typeof value.messageId !== "string" ||
+      value.messageId.trim().length === 0 ||
+      !(value.whenReceived instanceof Date) ||
+      !Number.isFinite(value.whenReceived.getTime()) ||
+      typeof value.version !== "bigint" ||
+      value.version < 0n
+    )
+      throw new InboxMessageError("Inbox read continuation is invalid.");
+    return {
+      values: [
+        { field: "when_received", value: value.whenReceived },
+        { field: "version", value: value.version },
+        { field: "message_id", value: value.messageId },
+      ],
+      id: Values.id({ value: value.messageId, shard }),
+    };
+  },
+  atomic(storage: RecordStorage<WireInboxMessageId, WireInboxMessage>): void {
+    if (!storage.atomicCompareAndSet)
+      throw new InboxMessageError("Inbox storage requires atomic compare-and-set.");
   },
   now(clock: () => Date): number {
     const value = clock();

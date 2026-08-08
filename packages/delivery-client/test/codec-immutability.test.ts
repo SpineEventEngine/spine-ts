@@ -17,9 +17,10 @@ import {
   DeliveryPagingError,
   DeliveryProtocolError,
   RemoteInbox,
+  RemoteWorkRegistry,
 } from "../src/index.js";
 import { DeliveryMessageCodec } from "../src/wire/codec.js";
-import { domainMessage, message, transport } from "./shared-fixtures.js";
+import { domainMessage, echoPickup, message, transport } from "./shared-fixtures.js";
 
 describe("delivery codec and immutable snapshots", () => {
   it("opens a remote inbox without removal-quarantine state", () => {
@@ -32,6 +33,7 @@ describe("delivery codec and immutable snapshots", () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport, { pageSize: 2 });
     const inbox = new RemoteInbox(client);
+    const registry = new RemoteWorkRegistry(client);
     const source = domainMessage();
 
     fake.reply(create(EmptySchema));
@@ -45,11 +47,11 @@ describe("delivery codec and immutable snapshots", () => {
     fake.reply(create(OptionalInboxMessageSchema, { message: message("command", "work") }));
     const current = await client.findOne({ value: "work", shard: ShardIndex.single() });
     if (current === undefined) throw new Error("Expected remote message.");
+    echoPickup(fake);
+    const session = await registry.pickUp(ShardIndex.single(), "node");
+    if (session === undefined) throw new Error("Expected remote session.");
     fake.reply(create(OptionalInboxMessageSchema, { message: message("command", "work") }));
-    const work = await inbox.begin(
-      current,
-      Object.freeze({ kind: "EXCLUSIVE" as const, shard: ShardIndex.single() }),
-    );
+    const work = await inbox.begin(current, session);
     if (work === undefined) throw new Error("Expected remote work.");
     fake.reply(create(EmptySchema));
     await expect(work.complete()).resolves.toBe(true);

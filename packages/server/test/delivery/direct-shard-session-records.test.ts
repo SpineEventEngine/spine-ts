@@ -1,5 +1,5 @@
 import { create } from "@bufbuild/protobuf";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import {
   ShardIndexSchema,
@@ -21,6 +21,26 @@ describe("direct ShardSessionRecord storage", () => {
     expect(shardSessionRecordSpec.recordType).toBe(ShardSessionRecordSchema);
     expect(shardSessionRecordSpec.idType).toBe(ShardIndexSchema);
     expect(shardSessionRecordSpec.columns).toEqual([]);
+  });
+
+  it("rejects shard ownership mutations on a non-atomic handle", async () => {
+    const factory = new InMemoryStorageFactory();
+    const original = factory.createRecordStorage.bind(factory);
+    let atomic = true;
+    vi.spyOn(factory, "createRecordStorage").mockImplementation((context, spec) => {
+      const storage = original(context, spec);
+      Object.defineProperty(storage, "atomicCompareAndSet", { get: () => atomic });
+      return storage;
+    });
+    const shards = registry(factory, () => new Date(0), "Atomic");
+    const session = await shards.pickUp(ShardIndex.single(), worker("node", "worker"));
+    if (session === undefined) throw new Error("Expected initial shard ownership.");
+    atomic = false;
+    await expect(shards.pickUp(ShardIndex.single(), worker("node", "worker"))).rejects.toThrow(
+      "atomic",
+    );
+    await expect(shards.renew(session)).rejects.toThrow("atomic");
+    await expect(shards.release(session)).rejects.toThrow("atomic");
   });
 
   it("fences a stale complete worker after exact derived-lease expiry", async () => {
@@ -165,6 +185,29 @@ describe("direct ShardSessionRecord storage", () => {
     ).toBe(false);
     expect(shardedWorkRegistryAccess.matches(shards, context, new InMemoryStorageFactory())).toBe(
       false,
+    );
+  });
+
+  it("rejects a persisted pickup whose derived lease runs beyond the Date limit", async () => {
+    const record = create(ShardSessionRecordSchema, {
+      index: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
+      whenLastPicked: { seconds: 8_640_000_000_000n, nanos: 0 },
+      worker: worker("node", "worker"),
+    });
+    const handle = {
+      atomicCompareAndSet: true,
+      read: vi.fn(() => Promise.resolve(record)),
+      close: vi.fn(),
+    };
+    const shards = new ShardedWorkRegistry({
+      context: { name: "Limit", multitenant: false },
+      storageFactory: { createRecordStorage: () => handle } as never,
+      leaseMs: 1_000,
+      now: () => new Date(0),
+    });
+
+    await expect(shards.pickUp(ShardIndex.single(), worker("node", "worker"))).rejects.toThrow(
+      "lease expiry",
     );
   });
 

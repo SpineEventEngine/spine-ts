@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { create } from "@bufbuild/protobuf";
+import { describe, expect, it, vi } from "vitest";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { TenantIdSchema } from "@spine-event-engine/proto";
 
 import { TenantIndexes } from "../../src/context/tenant-index.js";
 
@@ -30,5 +32,31 @@ describe("direct TenantId index", () => {
     index.close();
     await expect(index.all()).rejects.toThrow("closed");
     await expect(index.keep("tenant-a")).rejects.toThrow("closed");
+  });
+
+  it("treats every non-value persisted TenantId mode as storage corruption", async () => {
+    const factory = new InMemoryStorageFactory();
+    const original = factory.createRecordStorage.bind(factory);
+    let direct: ReturnType<typeof factory.createRecordStorage> | undefined;
+    vi.spyOn(factory, "createRecordStorage").mockImplementation((context, spec) => {
+      const storage = original(context, spec);
+      direct = storage;
+      return storage;
+    });
+    const index = TenantIndexes.create({
+      contextName: "Tasks",
+      tenantMode: "multitenant",
+      storageFactory: factory,
+    });
+    if (direct === undefined) throw new Error("Expected direct TenantId storage.");
+
+    for (const tenant of [
+      create(TenantIdSchema, { kind: { case: "domain", value: { value: "example.test" } } }),
+      create(TenantIdSchema, { kind: { case: "email", value: { value: "a@example.test" } } }),
+      create(TenantIdSchema),
+    ]) {
+      vi.spyOn(direct, "index").mockResolvedValueOnce([tenant]);
+      await expect(index.all()).rejects.toThrow("invalid TenantId");
+    }
   });
 });

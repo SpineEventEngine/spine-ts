@@ -76,6 +76,7 @@ export class ShardedWorkRegistry {
     const nextWorker = checkedWorker(worker);
     const storage = this.#storage();
     try {
+      atomic(storage);
       for (let i = 0; i < retries; i++) {
         const id = wireId(nextShard);
         const record = await storage.read(id);
@@ -112,6 +113,7 @@ export class ShardedWorkRegistry {
   async release(expected: ShardSession): Promise<boolean> {
     const storage = this.#storage();
     try {
+      atomic(storage);
       for (let i = 0; i < retries; i++) {
         const record = await storage.read(wireId(expected.shard));
         if (record === undefined) return false;
@@ -164,6 +166,7 @@ export class ShardedWorkRegistry {
   async #update(expected: ShardSession): Promise<ShardSession | undefined> {
     const storage = this.#storage();
     try {
+      atomic(storage);
       for (let i = 0; i < retries; i++) {
         const record = await storage.read(wireId(expected.shard));
         if (record === undefined) return undefined;
@@ -308,7 +311,14 @@ function session(record: ShardSessionRecord, expected: ShardIndex, lease: number
     throw new DeliveryStorageCorruptionError("Shard session does not match its storage ID.");
   const picked = timestamp(record.whenLastPicked);
   const worker = record.worker === undefined ? undefined : checkedWorker(record.worker);
-  return new ShardSession(expected, worker, picked, new Date(picked.getTime() + lease));
+  const expires = picked.getTime() + lease;
+  if (!Number.isSafeInteger(expires) || !Number.isFinite(new Date(expires).getTime()))
+    throw new DeliveryStorageCorruptionError("Shard lease expiry is invalid.");
+  return new ShardSession(expected, worker, picked, new Date(expires));
+}
+function atomic(storage: RecordStorage<WireShardIndex, ShardSessionRecord>): void {
+  if (!storage.atomicCompareAndSet)
+    throw new DeliveryStorageCorruptionError("Shard storage requires atomic compare-and-set.");
 }
 function timestamp(value: ShardSessionRecord["whenLastPicked"]): Date {
   if (
@@ -325,7 +335,8 @@ function timestamp(value: ShardSessionRecord["whenLastPicked"]): Date {
 }
 function owned(shard: ShardIndex, worker: WorkerId, now: number, lease: number): ShardSession {
   const expiresAt = now + lease;
-  if (!Number.isSafeInteger(expiresAt)) throw new Error("Shard lease expiry is invalid.");
+  if (!Number.isSafeInteger(expiresAt) || !Number.isFinite(new Date(expiresAt).getTime()))
+    throw new Error("Shard lease expiry is invalid.");
   return new ShardSession(shard, worker, new Date(now), new Date(expiresAt));
 }
 function toRecord(value: ShardSession): ShardSessionRecord {

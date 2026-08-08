@@ -73,6 +73,7 @@ export const inboxRecordSpec: RecordSpec<WireInboxMessageId, WireInboxMessage> =
 const Values = Object.freeze({
   write(input: InboxMessage): WireInboxMessage {
     const message = Values.input(input);
+    Values.payloadForLabel(message.label, message.signal, InboxMessageError);
     const payload =
       message.signal === undefined ? { case: undefined } : Values.payload(message.signal);
     return create(InboxMessageSchema, {
@@ -143,6 +144,7 @@ const Values = Object.freeze({
       record.payload.case === undefined
         ? undefined
         : Values.signal(record.payload.case, record.payload.value);
+    Values.payloadForLabel(Values.readLabel(record.label), payload, DeliveryStorageCorruptionError);
     return Object.freeze({
       id: Object.freeze({ value: Values.text(id.uuid, "Inbox message ID"), shard }),
       inboxId: Object.freeze({ targetId, targetTypeUrl: inbox.typeUrl }),
@@ -199,6 +201,18 @@ const Values = Object.freeze({
     if (signal.typeUrl === "type.spine.io/spine.core.Event")
       return { case: "event" as const, value: fromBinary(EventSchema, signal.value) };
     throw new InboxMessageError("Inbox signal must contain a command or event payload.");
+  },
+  payloadForLabel(
+    label: DeliveryLabel,
+    signal: Any | undefined,
+    ErrorType: typeof InboxMessageError | typeof DeliveryStorageCorruptionError,
+  ): void {
+    const expected =
+      label === "HANDLE_COMMAND"
+        ? "type.spine.io/spine.core.Command"
+        : "type.spine.io/spine.core.Event";
+    if (signal?.typeUrl !== expected)
+      throw new ErrorType("Inbox delivery label does not match its signal payload.");
   },
   signal(kind: "command" | "event", payload: unknown): Any {
     return kind === "command"

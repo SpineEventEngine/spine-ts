@@ -10,6 +10,9 @@ class Client {
   readonly removeOne = vi.fn(() => Promise.resolve(undefined));
   readonly findOne = vi.fn(() => Promise.resolve(undefined));
   readonly readPage = vi.fn(() => Promise.resolve([]));
+  readonly pickUp = vi.fn(() =>
+    Promise.resolve({ worker: { nodeId: "node", value: "worker" }, whenPicked: new Date(0) }),
+  );
   pageSize = 2;
 }
 
@@ -45,7 +48,7 @@ describe("RemoteInbox direct behavior", () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
     const pending = domainMessage("pending");
-    const session = Object.freeze({ kind: "EXCLUSIVE" as const, shard: ShardIndex.single() });
+    const session = await ownedSession(client);
 
     await expect(
       inbox.begin(pending, { kind: "LEASED", shard: ShardIndex.single() }),
@@ -114,7 +117,7 @@ describe("RemoteInbox direct behavior", () => {
     const client = new Client();
     const inbox = new RemoteInbox(client as never);
     const pending = domainMessage("pending");
-    const session = Object.freeze({ kind: "EXCLUSIVE" as const, shard: ShardIndex.single() });
+    const session = await ownedSession(client);
 
     for (const current of [
       { ...pending, id: { ...pending.id, value: "other" } },
@@ -132,6 +135,23 @@ describe("RemoteInbox direct behavior", () => {
     expect(() => work.message).toThrow(DeliveryProtocolError);
     await expect(work.synchronize(session)).rejects.toBeInstanceOf(DeliveryProtocolError);
     expect(client.removeOne).toHaveBeenCalledWith(pending, { timeoutMs: 50 });
+  });
+
+  it("rejects a stale locally issued session before beginning or completing remote work", async () => {
+    const client = new Client();
+    const inbox = new RemoteInbox(client as never);
+    const registry = new RemoteWorkRegistry(client as never);
+    const pending = domainMessage("pending");
+    const session = await registry.pickUp(ShardIndex.single(), "node");
+    if (session === undefined) throw new Error("Expected remote shard session.");
+    client.findOne.mockResolvedValueOnce(pending);
+    const work = await inbox.begin(pending, session);
+    if (work === undefined) throw new Error("Expected remote work.");
+
+    registry.reconcile({ shard: ShardIndex.single(), status: "NOT_PICKED", messages: 0 });
+    await expect(inbox.begin(pending, session)).resolves.toBeUndefined();
+    await expect(work.complete()).rejects.toBeInstanceOf(DeliveryProtocolError);
+    expect(client.removeOne).not.toHaveBeenCalled();
   });
 
   it("rejects malformed shard observations before they can change remote ownership", () => {
@@ -157,3 +177,9 @@ describe("RemoteInbox direct behavior", () => {
     }).not.toThrow();
   });
 });
+
+async function ownedSession(client: Client) {
+  const session = await new RemoteWorkRegistry(client as never).pickUp(ShardIndex.single(), "node");
+  if (session === undefined) throw new Error("Expected remote shard session.");
+  return session;
+}

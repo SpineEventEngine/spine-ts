@@ -1,6 +1,6 @@
 # T-0139: Inbox And Shard Records
 
-Status: Implementation converged; focused verification recorded; review and final task verification pending.
+Status: Review corrections converged; correction commit and task-branch push pending.
 
 ## Objective
 
@@ -228,6 +228,17 @@ still import old retry/attempt policy.
 - Required verification: focused concurrency/corruption tests, provider
   conformance, changed-source coverage at least 90% in every metric, package
   checks, and one focused `verify:task` after convergence.
+
+### 2026-08-08 Review-Correction Evidence
+
+- Focused direct/provider/client suite: 8 files / 62 tests passed. The exact
+  six-source V8 profile passed at 94.59% statements, 91.19% branches, 97.18%
+  functions, and 96.69% lines, without coverage configuration changes.
+- Changed-file ESLint and Prettier, delivery-client typechecking, and
+  `git diff --check` pass. Server typechecking is limited to the frozen eight
+  T-0140 orchestration diagnostics; TSDoc is limited to inherited storage-rdbms
+  debt. Review correction re-review remains required only for reliability and
+  maintainability.
 
 ### 2026-08-08 Coverage Correction
 
