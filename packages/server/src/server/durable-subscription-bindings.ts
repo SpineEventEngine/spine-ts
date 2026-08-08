@@ -143,6 +143,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
    * Attaches the Gateway-owned backend cancellation effect before recovery or expiry work.
    *
    * @internal BrowserServer installs its topology-aware subscription creator exactly once.
+   * @param cleanup Cancels the retained backend subscription definition.
    */
   attachCleanup(cleanup: OnSubscriptionDefinition): void {
     if (this.#cleanupAttached)
