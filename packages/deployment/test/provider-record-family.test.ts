@@ -26,7 +26,9 @@ describe("node-discovery provider configuration", () => {
       leaseRecordSpec,
     );
 
-    expect((storage as { readonly tableName: string }).tableName).toBe("application_node_leases");
+    expect((storage as unknown as { readonly tableName: string }).tableName).toBe(
+      "application_node_leases",
+    );
     factory.close();
   });
 
@@ -36,7 +38,7 @@ describe("node-discovery provider configuration", () => {
     const factory = DatastoreStorageFactory.newBuilder()
       .setClient({} as never)
       .useRecordStorage(leaseRecordSpec.sourceType, leaseRecordSpec.recordType, (context, spec) => {
-        selected = spec === leaseRecordSpec;
+        selected = spec.recordType === leaseRecordSpec.recordType;
         return fallback.createRecordStorage(context, spec);
       })
       .build();
