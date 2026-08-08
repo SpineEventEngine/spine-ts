@@ -2,7 +2,7 @@ import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import { Delivery } from "../../src/delivery/delivery.js";
-import { DeliveryWorker } from "../../src/delivery/delivery-worker.js";
+import { deliveryWorkerAccess, DeliveryWorker } from "../../src/delivery/delivery-worker.js";
 import { ShardIndex } from "../../src/index.js";
 
 describe("DeliveryWorker", () => {
@@ -38,6 +38,21 @@ describe("DeliveryWorker", () => {
           onMessage: () => undefined,
         }),
     ).toThrow("DeliveryWorker shards must be a non-empty array.");
+  });
+
+  it.each([
+    [[{ status: "FAILED" }], "FAILED"],
+    [[{ status: "STOPPED" }], "STOPPED"],
+    [[{ status: "SKIPPED" }], "SKIPPED"],
+    [[{ status: "IDLE" }], "IDLE"],
+  ] as const)("prioritizes %s terminal loop status", (loops, expected) => {
+    expect(deliveryWorkerAccess.status(loops)).toBe(expected);
+  });
+
+  it("rejects internal lifecycle access for non-worker values", () => {
+    expect(() => deliveryWorkerAccess.awaitSettled({} as DeliveryWorker)).toThrow(
+      "Delivery worker access requires a DeliveryWorker instance.",
+    );
   });
 });
 function delivery(): Delivery {
