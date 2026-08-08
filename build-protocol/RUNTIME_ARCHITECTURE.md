@@ -185,7 +185,7 @@ Requirements:
 
 The framework starts storage with one adapter seam:
 
-- `StorageFactory.createRecordStorage(context, spec)`;
+- `StorageFactory.createRecordStorage(context, spec, group?)`;
 - `RecordSpec` for identified Protobuf records and query columns;
 - `RecordStorage` for write/read/delete/query operations;
 - `EventStore` as a delegate over `RecordStorage<EventId, Event>`.
@@ -244,8 +244,9 @@ delivery worker boundary:
   are the deduplication fact, with no per-message claim or separate dedup
   record;
 - shard pickup, renewal, and release persist lease-backed shard sessions through
-  storage compare-and-set rather than process-local locks. Renewal extends only
-  an unexpired current session for the same session ID and node;
+  storage compare-and-set rather than process-local locks. A complete `WorkerId`
+  can pick up or renew its own unexpired session; another worker is excluded
+  until expiry, and a stale owner cannot release a replacement session;
 - one direct drain run holds a shard through `ShardedWorkRegistry`, reads
   `TO_DELIVER` rows in inbox order, and keeps the storage lease renewed while
   the drain is active. Rows unavailable to the active worker are skipped before
@@ -265,45 +266,13 @@ delivery worker boundary:
   No attempt history, per-message claim, quarantine, receipt, marker, timer,
   backoff, dead-letter storage, scheduler persistence, or delivery policy is
   added. The run releases its shard in a `finally` path;
-- Package-internal loop code repeats those direct drains for one shard. Renewal
-  is framework-owned lease fencing for active drains. The package does not
-  expose a raw worker callback API; normal replay stays behind validated framework
-  endpoints. This is a lifecycle wrapper over the direct primitive, not
-  production retry policy, production supervision, or transport topology.
-  Direct drains/pages remain bounded. At the start of a new loop epoch, the
-  loop performs exactly one adapter-neutral inbox read and admits at most the
-  storage read limit, currently 1,000 ordered pending rows, into an immutable
-  canonical row snapshot. Admission detaches `Date` and `Any.value` state once;
-  the loop then passes its private frozen retained array directly to read-only
-  drain internals. This snapshot, rather than a caller-controlled
-  ordering key or a work counter, defines epoch membership, so a write between
-  storage pages cannot join the active epoch and callback writes remain outside
-  it. Admitted drains do not reread each row by ID; supported rows still pass
-  through durable claim and mark compare-and-set operations, so a status or
-  claim change after admission skips stale work without invoking the endpoint.
-  Each explicit `run()` starts at most two bounded drains. If admitted members remain,
-  `PAUSED` retains the snapshot and opaque index for a later explicit run;
-  otherwise `IDLE` completes the epoch. Capped epochs advance through finite
-  admission sweeps whose depth doubles after each pass. Each pass restarts at
-  the inbox head, so a post-admission row written behind a retained boundary is
-  eligible in a later explicit epoch, while increasing pass depth still makes
-  forward progress through an arbitrarily large finite unsupported prefix.
-  The sweep retains only one ordering continuation and two counters; it does
-  not retain an ever-growing set of prior rows. A stop observed
-  while admission is in flight prevents the first drain from starting. The
-  worker's package-internal invocation associates one opaque obligation with
-  configured shards and returns ordered fulfilled/rejected evidence. Fulfilled `FAILED` and
-  `SKIPPED` shards park, `IDLE` completes, `STOPPED` stops, and only `PAUSED`
-  or explicitly retriggered rejected work remains eligible for that obligation.
-  Rejected evidence preserves the original cause and last safely completed
-  epoch counters while fulfilled sibling evidence remains available. The
-  public/direct worker adapter still throws one original cause or an ordered
-  `AggregateError`. No cursor, epoch, obligation, shard result, or selective
-  invocation is exported from the package root, and no run starts
-  automatically. Renewal runs on the same JavaScript event loop as the endpoint
-  callback, so a CPU-bound synchronous callback can still starve timer-driven
-  renewal; this slice treats that as an in-process trust-boundary limitation;
-  and
+- Package-internal loop code runs one bounded direct drain for one shard at a
+  time. It has no epoch snapshot, retained array, claim, `PAUSED` state,
+  doubled sweep, second drain, timer renewal, cursor, or public worker callback
+  API. Renewal occurs through fencing at pickup, before callback work, and
+  before acknowledgement; loss of that fence stops the shard before the next
+  protected operation. The loop is a lifecycle wrapper, not retry policy,
+  supervision, or transport topology; and
 - malformed, oversized, or key-mismatched inbox, dedup, and shard-session
   records fail closed as storage corruption. Deprecated legacy stored
   `IMPORT_EVENT` rows are one such corruption path and abort read/drain with

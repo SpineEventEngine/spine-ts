@@ -623,7 +623,7 @@ separately.
 
 `@spine-event-engine/storage` owns a record-storage seam. The package exports
 `StorageFactory` with one mandatory adapter method,
-`createRecordStorage(context, spec)`, plus `RecordStorage`, `RecordSpec`,
+`createRecordStorage(context, spec, group?)`, plus `RecordStorage`, `RecordSpec`,
 `RecordColumn`, query/mask contracts, and an in-memory implementation. It does
 not implement repositories, transactions, buses, delivery workers, service
 APIs or delivery workers. Datastore and MySQL RDBMS adapters implement this
@@ -656,7 +656,8 @@ attempts, fan out to subscribers, or implement retry/bus behavior.
 
 `InMemoryStorageFactory` and `InMemoryRecordStorage` are
 test/development adapter. They are process-local, share backing records by
-factory, context name, tenant mode, tenant ID, and `RecordSpec` instance,
+factory, physical context, source type, and optional `StorageGroup`; compatible
+distinct `RecordSpec` instances therefore share backing records,
 return independently closeable handles, and clone stored values so later caller
 mutation cannot affect stored records. Payloads must remain cloneable, which
 preserves byte arrays used by packed Protobuf `Any` payloads.

@@ -238,7 +238,7 @@ const tasks = BoundedContext.singleTenant("Tasks")
 ```
 
 The current storage API is intentionally smaller than those future repository
-seams. Adapters implement `StorageFactory.createRecordStorage(context, spec)`,
+seams. Adapters implement `StorageFactory.createRecordStorage(context, spec, group?)`,
 and framework-owned delegates such as `EventStore` build on `RecordStorage`
 plus `RecordSpec` instead of depending on a broad storage adapter surface.
 `EventStore` currently stops at persistence and query behavior; it does not
@@ -366,12 +366,13 @@ live projection event subscribers with `UPDATE_SUBSCRIBER`. Process-manager
 event and projection subscriber rows store the original `Event` envelope as the
 signal payload, the original event ID as `signalId`, the target state type URL
 plus routed entity ID as `inboxId`, `TO_DELIVER` status, `ShardIndex.single()`,
-and the local 30-second dedup retention window. The context drains the local
+and optional row retention. The context drains the local
 shard immediately and replays only the exact row target before running the
 process-manager or projection transaction and `Stand` update. Before handler
 code runs, replay validates the row label, pending `TO_DELIVER` status, tenant,
 payload/schema, target type URL, and routed target ID.
-`InboxStorage` remains the durable dedup authority.
+Delivered rows are the durable deduplication fact; no separate dedup authority
+or fixed retention window is required.
 
 The package does not expose a raw worker callback API. Built contexts replay
 through validated framework endpoints. The current API does not provide a
