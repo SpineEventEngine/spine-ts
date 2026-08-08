@@ -18,8 +18,8 @@ describe("InboxRecords", () => {
     expect(() =>
       InboxRecords.write({
         ...createMessage("message", "signal", 1n),
-        id: { value: "message", shard: fakeShard as never },
-        shard: fakeShard as never,
+        id: { value: "message", shard: fakeShard },
+        shard: fakeShard,
       }),
     ).toThrow(InboxMessageError);
   });

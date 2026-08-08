@@ -538,6 +538,7 @@ const EnvironmentDeliveryValues = Object.freeze({
     const delivery = new Delivery({
       context: runtime.context,
       storageFactory: runtime.storageFactory,
+      node: nodeId ?? runtime.context.name,
       ...(ports ?? {}),
     });
     const worker = new DeliveryWorker({

@@ -85,8 +85,10 @@ describe("DeliveryMonitor delivery", () => {
     worker.nodeId.value = "mutated";
     worker.value = "mutated";
     expect(delivery.worker).toMatchObject({ nodeId: { value: "node-a" }, value: "restart-a" });
+    const nodeId = delivery.worker.nodeId;
+    if (nodeId === undefined) throw new Error("Expected a complete worker node ID.");
     expect(() => {
-      (delivery.worker.nodeId! as { value: string }).value = "mutated-again";
+      (nodeId as { value: string }).value = "mutated-again";
     }).toThrow();
   });
 

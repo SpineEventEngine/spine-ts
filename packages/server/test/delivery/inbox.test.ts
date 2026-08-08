@@ -61,6 +61,7 @@ function open(name: string, factory = new InMemoryStorageFactory()): Inbox {
   );
 }
 function input(message: ReturnType<typeof createMessage>) {
-  const { id: _id, ...value } = message;
+  const { id, ...value } = message;
+  void id;
   return value;
 }

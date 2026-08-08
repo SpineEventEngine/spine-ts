@@ -107,4 +107,3 @@ result, as required by the Wave 8 plan.
   authorization, credentials, or a trust boundary.
 - Collect one complete review wave, aggregate one correction batch, re-review
   only substantively affected lanes, then run `verify:task` once.
-

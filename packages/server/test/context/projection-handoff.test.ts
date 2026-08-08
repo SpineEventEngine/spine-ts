@@ -95,11 +95,10 @@ describe("LocalProjectionInbox", () => {
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toEqual([]);
-    await expect(
-      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toContainEqual(
-      expect.objectContaining({ inboxId: expect.objectContaining({ targetId: "buffered" }) }),
-    );
+    const delivered = await delivery.inbox.read(ShardIndex.single(), {
+      statuses: ["DELIVERED"],
+    });
+    expect(delivered.map(({ inboxId }) => inboxId.targetId)).toContain("buffered");
 
     await expect(
       inbox.receive(delivery, projectionInput(targetTypeUrl, "routed"), "tenant-a"),

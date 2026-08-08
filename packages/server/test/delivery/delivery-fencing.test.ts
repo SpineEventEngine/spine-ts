@@ -15,21 +15,19 @@ describe("Delivery fencing", () => {
       storageFactory: new InMemoryStorageFactory(),
       inbox: {
         sessionKind: "LEASED",
-        receive: async () => {
-          throw new Error("not used");
-        },
-        read: async () => [],
-        readMessage: async () => undefined,
-        markDelivered: async () => undefined,
-        begin: async () => undefined,
+        receive: () => Promise.reject(new Error("not used")),
+        read: () => Promise.resolve([]),
+        readMessage: () => Promise.resolve(undefined),
+        markDelivered: () => Promise.resolve(undefined),
+        begin: () => Promise.resolve(undefined),
       },
       workRegistry: {
         sessionKind: "LEASED",
-        pickUp: async () => {
+        pickUp: () => {
           pickups += 1;
-          return undefined;
+          return Promise.resolve(undefined);
         },
-        release: async () => true,
+        release: () => Promise.resolve(true),
       },
     });
     await expect(
@@ -54,26 +52,25 @@ describe("Delivery fencing", () => {
       })(),
       inbox: {
         sessionKind: "LEASED",
-        receive: async () => {
-          throw new Error("not used");
-        },
-        read: async () => [],
-        readMessage: async () => undefined,
-        markDelivered: async () => undefined,
-        begin: async () => undefined,
+        receive: () => Promise.reject(new Error("not used")),
+        read: () => Promise.resolve([]),
+        readMessage: () => Promise.resolve(undefined),
+        markDelivered: () => Promise.resolve(undefined),
+        begin: () => Promise.resolve(undefined),
       },
       workRegistry: {
         sessionKind: "LEASED",
-        pickUp: async () => ({
-          kind: "LEASED" as const,
-          shard,
-          worker: { nodeId: { value: "node" }, value: "worker" },
-          pickedUpAt: new Date(),
-          expiresAt: new Date(),
-        }),
-        release: async () => {
+        pickUp: () =>
+          Promise.resolve({
+            kind: "LEASED" as const,
+            shard,
+            worker: { nodeId: { value: "node" }, value: "worker" },
+            pickedUpAt: new Date(),
+            expiresAt: new Date(),
+          }),
+        release: () => {
           releases += 1;
-          return true;
+          return Promise.resolve(true);
         },
       },
     });

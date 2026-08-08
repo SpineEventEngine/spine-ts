@@ -36,6 +36,8 @@ export type OnDeliveryMessage = (message: DeliveryEndpointMessage) => void | Pro
  * Summarizes one finite direct delivery run.
  */
 export interface DeliveryRun {
+  // prettier-ignore
+
   /**
    * Identifies the terminal delivery outcome.
    */
@@ -71,6 +73,8 @@ export interface DeliveryRun {
  * Describes ephemeral delivery failure evidence that is never persisted.
  */
 export interface DeliveryFailure {
+  // prettier-ignore
+
   /**
    * Identifies the message associated with the failure.
    */
@@ -86,6 +90,8 @@ export interface DeliveryFailure {
  * Executes direct Inbox delivery for one complete worker identity.
  */
 export class Delivery {
+  // prettier-ignore
+
   /**
    * Identifies the immutable storage namespace.
    */
@@ -370,6 +376,8 @@ export class Delivery {
  * Configures one direct delivery owner.
  */
 export interface DeliveryOptions {
+  // prettier-ignore
+
   /**
    * Identifies the storage namespace.
    */
@@ -420,6 +428,8 @@ export interface DeliveryOptions {
  * Configures one direct shard drain.
  */
 export interface DeliveryDrainOptions {
+  // prettier-ignore
+
   /**
    * Dispatches supported Inbox messages.
    */

@@ -110,7 +110,7 @@ function controlledDelivery(
 class RunnerInbox implements DeliveryInbox {
   readonly sessionKind = "EXCLUSIVE" as const;
   readonly #run: (options: DeliveryRunOptions) => Promise<unknown>;
-  readonly started = Promise.withResolvers<void>();
+  readonly started = Promise.withResolvers<undefined>();
 
   constructor(run: (options: DeliveryRunOptions) => Promise<unknown>) {
     this.#run = run;

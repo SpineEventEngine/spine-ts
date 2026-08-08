@@ -106,6 +106,47 @@ All four review lanes reopen for substantive correction because the batch
 changes runtime behavior, public contracts, structure, and documentation.
 Security remains N/A unless correction changes a trust boundary.
 
+## Targeted Re-Review Result
+
+- TypeScript/API documentation confirms the page/batch/loop/port deletions,
+  API manifests, and stale attempts wording converged. One P2 remains: the
+  public core `Delivery.worker` snapshot is still mutable after build, and the
+  direct constructor does not enforce node/worker consistency.
+- Performance/reliability confirms continuation, read cancellation, joined
+  run settlement, and renewal containment. One P1 remains: abort-after-pickup
+  suppresses a failed cleanup release as `STOPPED` instead of routing through
+  `FAILED`. P2 proof/contract gaps remain for completion-hook suppression,
+  signal forwarding, rejected renewal, and deep immutable failure facts.
+- Style/maintainability confirms the major seam deletion. One P1 remains: the
+  repeat-action regression calls nonexistent `repeat()` and therefore tests
+  fallback rather than `repeatDispatching()`. P2 findings remain for mutable
+  loop options, unused worker node/retired `PAUSED` compatibility state, and
+  inconsistent release-failure counting/evidence.
+- Documentation confirms the original wording correction and all guarantee
+  claims. One P2 remains: README still advertises removed batch choices.
+- Reviewer profiles remained the explicitly dispatched/configured profiles;
+  runtime self-introspection was unavailable with no visible mismatch or
+  fallback. Security remains N/A.
+
+## Final Narrow Correction Batch
+
+1. Deep-snapshot/freeze public WorkerId state and enforce the same node/worker
+   consistency in direct construction; add mutation/conflict regressions.
+2. Route abort-after-pickup release false/rejection through the contained
+   failed-cleanup outcome, using a cleanup operation that is not itself
+   pre-cancelled where required; prove completion/takeover ordering.
+3. Use `repeatDispatching()` in the test and prove the second dispatch/action;
+   add exact signal-forwarding and rejected-renewal containment assertions.
+4. Deep-clone/freeze retained failure facts or narrow them to immutable
+   primitives, and keep `failed` consistent with the modeled evidence.
+5. Snapshot loop inputs; remove unused worker node and retired `PAUSED`
+   compatibility paths/fixtures.
+6. Replace the README's removed batch-choice claim with current shard/page-size
+   configuration.
+
+All four lanes require one final targeted re-review because this batch touches
+their remaining findings. No other concern is reopened.
+
 ## Correction Evidence
 
 - The bounded continuation finding is covered by a `pageSize=1` stable-keyset
