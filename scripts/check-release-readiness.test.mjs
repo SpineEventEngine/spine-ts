@@ -358,21 +358,26 @@ describe("check-release-readiness", () => {
       writeFileSync(
         join(repoRoot, "README.md"),
         [
-          "delivery.onPage(() => true);",
-          "builder.withBatchSize(10);",
-          "observer.onStarted();",
-          "observer.onSkipped();",
-          "observer.onCompleted();",
+          "The retired `onPage` callback stopped a delivery.",
+          "The old `withBatchSize` builder setting is unavailable.",
+          "`onStarted` follows pickup in the old prose.",
+          "`onSkipped` was another retired observer hook.",
+          "`onFailure` was another retired observer hook.",
+          "`onCompleted` with a summary is retired.",
+          "`DeliveryPage` and `DeliveryInboxWork` are removed types.",
         ].join("\n"),
       );
       execFileSync("git", ["add", "README.md"], { cwd: repoRoot });
 
       expect(collectUserFacingDocumentationProblems(repoRoot)).toEqual([
-        "README.md:1: retired delivery page callback: onPage(",
-        "README.md:2: retired delivery batch-size builder: withBatchSize(",
-        "README.md:3: retired delivery started hook: onStarted(",
-        "README.md:4: retired delivery skipped hook: onSkipped(",
-        "README.md:5: retired delivery completed hook: onCompleted(",
+        "README.md:1: retired delivery page callback: onPage",
+        "README.md:2: retired delivery batch-size builder: withBatchSize",
+        "README.md:3: retired delivery started hook: onStarted",
+        "README.md:4: retired delivery skipped hook: onSkipped",
+        "README.md:5: retired delivery failure hook: onFailure",
+        "README.md:6: retired delivery completed hook: onCompleted",
+        "README.md:7: retired delivery inbox-work type: DeliveryInboxWork",
+        "README.md:7: retired delivery page type: DeliveryPage",
       ]);
     });
   });

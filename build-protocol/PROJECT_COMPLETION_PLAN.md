@@ -161,7 +161,8 @@ durably closed.
   to use JVM-style per-record specifications and physical layouts; remove
   unsupported persisted inventions; correct the internal deployment,
   subscription, and authenticated-subscription Proto records; implement the
-  controlling JVM-style `DeliveryMonitor`; upgrade `validation-ts`; migrate all
+  controlling JVM-style `DeliveryMonitor`; complete the validation-package
+  migration; migrate all
   examples and affected documentation; and finish with a repository-wide
   invention audit. T-0129 owns the
   [frozen plan and dependency split](planning/WAVE_8_STORAGE_CORRECTION_PLAN.md).
@@ -592,6 +593,11 @@ Before spawning reviewers, perform a lightweight local audit and record it:
 8. Remove the completed worktree only when Git reports it clean.
 
 ## Runtime Execution Packets
+
+The packets in this section are retained execution history for completed
+pre-Wave-8 work. Their legacy `PAUSED` coordinator terminology records the
+then-current internal protocol; it is not a current public delivery status or
+acceptance criterion.
 
 ### T-0037b: Bounded Generation Run Coordinator
 

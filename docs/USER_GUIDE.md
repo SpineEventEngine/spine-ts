@@ -1181,19 +1181,20 @@ import {
 const context = { name: "Tasks", multitenant: false };
 const storageFactory = new InMemoryStorageFactory();
 const strategy = UniformAcrossAllShards.forNumber(4);
+
+class MarkFailedReceptionDelivered extends DeliveryMonitor {
+  override onReceptionFailure(reception: FailedReception) {
+    // This is the default action. Naming it makes the failure policy visible.
+    return reception.markDelivered();
+  }
+}
+
 const delivery = new DeliveryBuilder()
   .withContext(context)
   .withStorageFactory(storageFactory)
   .withWorkRegistry(new ShardedWorkRegistry({ context, storageFactory }))
   .withStrategy(strategy)
-  .withMonitor(
-    new (class extends DeliveryMonitor {
-      override onReceptionFailure(reception: FailedReception) {
-        // The default is reception.markDelivered(). Return this action to make it explicit.
-        return reception.markDelivered();
-      }
-    })(),
-  )
+  .withMonitor(new MarkFailedReceptionDelivered())
   .withPageSize(250)
   .withNode("worker-a")
   .build();
@@ -1443,6 +1444,24 @@ alone produces `acme_tasks_Task` in MySQL and `acme.tasks.Task` in Datastore.
 The adapters keep the original Protobuf payload in each row; the name decides
 which table or kind contains that record family, not how the message is
 decoded.
+
+Here is the same idea in the Message Board example. Its
+`spine.examples.messageboard.BoardMessageView` Projection declares
+`board`, `author`, and `posted_at` with `(column) = true`; `username` and
+`text` are ordinary message fields. The current Entity record family is
+therefore stored by default in MySQL table
+`spine_examples_messageboard_BoardMessageView` or Datastore kind
+`spine.examples.messageboard.BoardMessageView`. The marked values are
+materialized beside the authoritative bytes, while `username` and `text` stay
+only in those bytes.
+
+When the Message Board web client asks for one board, its Query filters the
+`board` column and orders by `posted_at`. `QueryService` validates those
+declared column names, then reads the current `EntityRecord` family for the
+Projection. Providers push down legal filters and sorts: MySQL uses
+parameterized predicates, while Datastore may perform bounded reconciliation
+when it cannot execute a whole plan. This describes the storage/query path; it
+does not mean that the Message Board example configures MySQL.
 
 Use a factory mapping when an application needs a shorter or existing physical
 name. MySQL's `setTableName(sourceSchema, recordSchema, "task_history")` maps a
