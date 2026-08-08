@@ -1,6 +1,6 @@
 # T-0140: Controlling DeliveryMonitor
 
-Status: In progress on stacked integration train.
+Status: Complete on stacked integration train; not merged to `main`.
 
 ## Objective
 
@@ -107,3 +107,16 @@ result, as required by the Wave 8 plan.
   authorization, credentials, or a trust boundary.
 - Collect one complete review wave, aggregate one correction batch, re-review
   only substantively affected lanes, then run `verify:task` once.
+
+## Closure
+
+- Focused Server delivery, delivery-client, and downstream integration tests
+  pass; affected package typechecks and changed-file ESLint pass.
+- Changed production coverage exceeds 90% in every metric for both Server
+  delivery and delivery-client adapters.
+- TypeScript/API documentation, performance/reliability,
+  style/maintainability, and documentation review lanes are closed. Security is
+  N/A because no trust boundary changed.
+- The one final `verify:task` reached the generated repository build and stopped
+  only on stale example APIs assigned to the remaining Wave example slice. The
+  exact handoff is recorded in `build-protocol/work-logs/T-0140.md`.
