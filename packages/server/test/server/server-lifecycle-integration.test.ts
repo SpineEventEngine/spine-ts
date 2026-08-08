@@ -497,7 +497,7 @@ describe("Server lifecycle integration", () => {
         events.push("session");
       });
       await once(session, "remoteSettings");
-      releaseActive = worker.holdNextStart("PAUSED");
+      releaseActive = worker.holdNextStart("STOPPED");
       const transportTopic = TransportTopics.create({
         signalKind: "system",
         messageTypeUrl: "type.spine.io/server.lifecycle.ActiveClose",

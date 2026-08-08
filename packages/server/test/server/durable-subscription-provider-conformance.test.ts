@@ -70,7 +70,7 @@ describe("DurableSubscriptionBindings provider selection", () => {
         queries.push(sql);
         if (sql.startsWith("CREATE TABLE")) {
           columns = [...(/\((.*), PRIMARY KEY/.exec(sql)?.[1] ?? "").matchAll(/`([^`]+)`/g)].map(
-            (match) => ({ column_name: match[1] }),
+            (match) => ({ column_name: match[1] ?? "" }),
           );
         }
         if (sql.includes("information_schema.columns")) return Promise.resolve([columns]);

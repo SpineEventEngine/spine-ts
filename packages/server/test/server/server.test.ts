@@ -2891,7 +2891,7 @@ class CloseTrackingStorageFactory extends InMemoryStorageFactory {
 
 class TrackingStorageFactory extends InMemoryStorageFactory {
   readonly contexts: StorageContext[] = [];
-  readonly storages: RecordStorage<unknown, Message>[] = [];
+  readonly storages: RecordStorage<never, Message>[] = [];
 
   override createRecordStorage<I, R extends Message>(
     context: StorageContext,
@@ -2900,7 +2900,7 @@ class TrackingStorageFactory extends InMemoryStorageFactory {
     this.contexts.push(context);
     const storage = super.createRecordStorage(context, recordSpec);
 
-    this.storages.push(storage);
+    this.storages.push(storage as unknown as RecordStorage<never, Message>);
     return storage;
   }
 

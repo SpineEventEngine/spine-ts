@@ -308,7 +308,7 @@ export class HeldStartupWorker implements EnvironmentGenerationWorker {
 }
 
 export class LifecycleTrackingStorageFactory extends InMemoryStorageFactory {
-  readonly storages: RecordStorage<unknown, Message>[] = [];
+  readonly storages: RecordStorage<never, Message>[] = [];
   readonly #events: string[];
   readonly #storageCloseCalls = new WeakMap<object, number>();
   #closeCalls = 0;
@@ -336,11 +336,11 @@ export class LifecycleTrackingStorageFactory extends InMemoryStorageFactory {
         closeStorage();
       },
     });
-    this.storages.push(storage);
+    this.storages.push(storage as unknown as RecordStorage<never, Message>);
     return storage;
   }
 
-  closeCallsFor(storage: RecordStorage<unknown, Message>): number {
+  closeCallsFor(storage: object): number {
     return this.#storageCloseCalls.get(storage) ?? 0;
   }
 
@@ -351,7 +351,7 @@ export class LifecycleTrackingStorageFactory extends InMemoryStorageFactory {
   }
 }
 
-type DeliveryLoopStatus = "IDLE" | "PAUSED" | "STOPPED";
+type DeliveryLoopStatus = "IDLE" | "STOPPED";
 
 function fulfilledEvidence(
   shard: ShardIndex,

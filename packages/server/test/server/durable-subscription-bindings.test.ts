@@ -1,10 +1,10 @@
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/auth";
 import { SubscriptionSchema, TopicSchema } from "@spine-event-engine/proto/client";
-import { ActorContextSchema } from "@spine-event-engine/proto";
+import { ActorContextSchema, TenantIdSchema } from "@spine-event-engine/proto";
 import {
   InMemoryStorageFactory,
-  type RecordSpec,
+  type RecordSpec as StorageRecordSpec,
   type StorageFactory,
   type StorageContext,
 } from "@spine-event-engine/storage";
@@ -13,9 +13,11 @@ import { describe, expect, it } from "vitest";
 import { DurableSubscriptionBindings, isDurableSubscriptionBindings } from "../../src/index.js";
 import { attachDurableSubscriptionCleanup } from "../../src/server/durable-subscription-bindings.js";
 
+type RecordSpec<I, R> = StorageRecordSpec<I, R extends Message ? R : Message>;
+
 const context = create(ActorContextSchema, {
   actor: { value: "actor" },
-  tenantId: { value: "tenant" },
+  tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant" } }),
 });
 
 function topic(): Uint8Array {
@@ -47,10 +49,10 @@ describe("DurableSubscriptionBindings", () => {
   it("stores the approved authenticated subscription record directly", () => {
     const factory = new InMemoryStorageFactory();
     const open = factory.createRecordStorage.bind(factory);
-    let spec: RecordSpec<unknown, unknown> | undefined;
+    let spec: RecordSpec<unknown, never> | undefined;
     factory.createRecordStorage = ((
       context: StorageContext,
-      candidate: RecordSpec<unknown, unknown>,
+      candidate: RecordSpec<unknown, never>,
     ) => {
       spec = candidate;
       return open(context, candidate as never);
@@ -137,12 +139,13 @@ describe("DurableSubscriptionBindings", () => {
 
   it("rejects a direct read whose storage slot differs from the retained ID", async () => {
     const backing = new InMemoryStorageFactory();
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
     const factory: StorageFactory = {
       createRecordStorage: ((
         storageContext: StorageContext,
         spec: RecordSpec<unknown, unknown>,
       ) => {
-        const storage = backing.createRecordStorage(storageContext, spec as never);
+        const storage = backing.createRecordStorage(storageContext, spec);
         Object.assign(storage, {
           read: () => Promise.resolve(rawRecord({ id: "retained", whenExpires: 2_000 })),
         });
@@ -170,12 +173,13 @@ describe("DurableSubscriptionBindings", () => {
   it("refuses a mismatched expiry query slot before backend cleanup", async () => {
     const backing = new InMemoryStorageFactory();
     let cleanups = 0;
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
     const factory: StorageFactory = {
       createRecordStorage: ((
         storageContext: StorageContext,
         spec: RecordSpec<unknown, unknown>,
       ) => {
-        const storage = backing.createRecordStorage(storageContext, spec as never);
+        const storage = backing.createRecordStorage(storageContext, spec);
         Object.assign(storage, {
           queryEntries: () =>
             Promise.resolve([
@@ -201,12 +205,13 @@ describe("DurableSubscriptionBindings", () => {
 
   it("refuses a mismatched recovery query slot before rehydration", async () => {
     const backing = new InMemoryStorageFactory();
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
     const factory: StorageFactory = {
       createRecordStorage: ((
         storageContext: StorageContext,
         spec: RecordSpec<unknown, unknown>,
       ) => {
-        const storage = backing.createRecordStorage(storageContext, spec as never);
+        const storage = backing.createRecordStorage(storageContext, spec);
         Object.assign(storage, {
           queryEntries: () =>
             Promise.resolve([
@@ -300,12 +305,13 @@ describe("DurableSubscriptionBindings", () => {
 
   it("refuses a storage seam that cannot provide atomic compare-and-set", () => {
     const backing = new InMemoryStorageFactory();
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
     const factory: StorageFactory = {
       createRecordStorage: ((
         storageContext: StorageContext,
         spec: RecordSpec<unknown, unknown>,
       ) => {
-        const storage = backing.createRecordStorage(storageContext, spec as never);
+        const storage = backing.createRecordStorage(storageContext, spec);
         Object.assign(storage, { atomicCompareAndSet: false });
         return storage;
       }) as never,
@@ -323,12 +329,13 @@ describe("DurableSubscriptionBindings", () => {
 
   it("accepts a create whose exact CAS was applied before its response was lost", async () => {
     const backing = new InMemoryStorageFactory();
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
     const factory: StorageFactory = {
       createRecordStorage: ((
         storageContext: StorageContext,
         spec: RecordSpec<unknown, unknown>,
       ) => {
-        const storage = backing.createRecordStorage(storageContext, spec as never);
+        const storage = backing.createRecordStorage(storageContext, spec);
         const compareAndSet = storage.compareAndSet.bind(storage);
         let first = true;
         Object.assign(storage, {
@@ -362,12 +369,13 @@ describe("DurableSubscriptionBindings", () => {
   it("reconciles an applied create whose CAS response throws, but propagates an absent write", async () => {
     for (const mode of ["applied", "absent"] as const) {
       const backing = new InMemoryStorageFactory();
+      // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
       const factory: StorageFactory = {
         createRecordStorage: ((
           storageContext: StorageContext,
           spec: RecordSpec<unknown, unknown>,
         ) => {
-          const storage = backing.createRecordStorage(storageContext, spec as never);
+          const storage = backing.createRecordStorage(storageContext, spec);
           const compareAndSet = storage.compareAndSet.bind(storage);
           Object.assign(storage, {
             compareAndSet: async (...input: Parameters<typeof compareAndSet>) => {
@@ -396,12 +404,13 @@ describe("DurableSubscriptionBindings", () => {
 
   it("does not accept a divergent reread after a create CAS error", async () => {
     const backing = new InMemoryStorageFactory();
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
     const factory: StorageFactory = {
       createRecordStorage: ((
         storageContext: StorageContext,
         spec: RecordSpec<unknown, unknown>,
       ) => {
-        const storage = backing.createRecordStorage(storageContext, spec as never);
+        const storage = backing.createRecordStorage(storageContext, spec);
         const compareAndSet = storage.compareAndSet.bind(storage);
         Object.assign(storage, {
           compareAndSet: async (...input: Parameters<typeof compareAndSet>) => {
@@ -465,12 +474,13 @@ describe("DurableSubscriptionBindings", () => {
 
   it("fails recovery without deletion when a stored record is malformed", async () => {
     const backing = new InMemoryStorageFactory();
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
     const factory: StorageFactory = {
       createRecordStorage: ((
         storageContext: StorageContext,
         spec: RecordSpec<unknown, unknown>,
       ) => {
-        const storage = backing.createRecordStorage(storageContext, spec as never);
+        const storage = backing.createRecordStorage(storageContext, spec);
         Object.assign(storage, {
           queryEntries: () =>
             Promise.resolve([
@@ -501,12 +511,13 @@ describe("DurableSubscriptionBindings", () => {
     for (const whenExpires of [undefined, { seconds: 9_007_199_254_740_992n }] as const) {
       const backing = new InMemoryStorageFactory();
       let cleanups = 0;
+      // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
       const factory: StorageFactory = {
         createRecordStorage: ((
           storageContext: StorageContext,
           spec: RecordSpec<unknown, unknown>,
         ) => {
-          const storage = backing.createRecordStorage(storageContext, spec as never);
+          const storage = backing.createRecordStorage(storageContext, spec);
           Object.assign(storage, {
             queryEntries: () =>
               Promise.resolve([
@@ -661,7 +672,7 @@ describe("DurableSubscriptionBindings", () => {
     const id = subscriptionId(created.bytes);
     const foreign = create(ActorContextSchema, {
       actor: { value: "different-actor" },
-      tenantId: { value: "tenant" },
+      tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant" } }),
     });
 
     await expect(
@@ -749,12 +760,13 @@ describe("DurableSubscriptionBindings", () => {
   it("returns denied after a false cancel CAS and closes on its retry", async () => {
     const backing = new InMemoryStorageFactory();
     let rejectDelete = true;
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
     const factory: StorageFactory = {
       createRecordStorage: ((
         storageContext: StorageContext,
         spec: RecordSpec<unknown, unknown>,
       ) => {
-        const storage = backing.createRecordStorage(storageContext, spec as never);
+        const storage = backing.createRecordStorage(storageContext, spec);
         const compareAndSet = storage.compareAndSet.bind(storage);
         Object.assign(storage, {
           compareAndSet: async (...input: Parameters<typeof compareAndSet>) => {
@@ -996,7 +1008,13 @@ describe("DurableSubscriptionBindings", () => {
       onDefinition: async (_wire, signal) => {
         resolveStarted();
         await new Promise<void>((resolve) => {
-          signal.addEventListener("abort", resolve, { once: true });
+          signal.addEventListener(
+            "abort",
+            () => {
+              resolve();
+            },
+            { once: true },
+          );
         });
       },
     });
@@ -1116,12 +1134,13 @@ describe("DurableSubscriptionBindings", () => {
   it("stops a raw expiry scan at its first unexpired row", async () => {
     const backing = new InMemoryStorageFactory();
     let cleanups = 0;
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
     const factory: StorageFactory = {
       createRecordStorage: ((
         storageContext: StorageContext,
         spec: RecordSpec<unknown, unknown>,
       ) => {
-        const storage = backing.createRecordStorage(storageContext, spec as never);
+        const storage = backing.createRecordStorage(storageContext, spec);
         Object.assign(storage, {
           queryEntries: () =>
             Promise.resolve([
@@ -1150,12 +1169,13 @@ describe("DurableSubscriptionBindings", () => {
   it("denies a raw cancel CAS loss when its reread still retains the row", async () => {
     const backing = new InMemoryStorageFactory();
     const stored = rawRecord({ id: "raw-cancel", whenExpires: 2_000 });
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
     const factory: StorageFactory = {
       createRecordStorage: ((
         storageContext: StorageContext,
         spec: RecordSpec<unknown, unknown>,
       ) => {
-        const storage = backing.createRecordStorage(storageContext, spec as never);
+        const storage = backing.createRecordStorage(storageContext, spec);
         Object.assign(storage, {
           read: () => Promise.resolve(stored),
           compareAndSet: () => Promise.resolve(false),
@@ -1192,12 +1212,13 @@ describe("DurableSubscriptionBindings", () => {
   it("accepts a cancel whose CAS response is lost after durable deletion", async () => {
     const backing = new InMemoryStorageFactory();
     let deleting = false;
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
     const factory: StorageFactory = {
       createRecordStorage: ((
         storageContext: StorageContext,
         spec: RecordSpec<unknown, unknown>,
       ) => {
-        const storage = backing.createRecordStorage(storageContext, spec as never);
+        const storage = backing.createRecordStorage(storageContext, spec);
         const compareAndSet = storage.compareAndSet.bind(storage);
         const read = storage.read.bind(storage);
         Object.assign(storage, {
@@ -1234,12 +1255,13 @@ describe("DurableSubscriptionBindings", () => {
   it("rejects raw records without an ID during cancellation and recovery", async () => {
     const backing = new InMemoryStorageFactory();
     const stored = rawRecord({ whenExpires: 2_000 });
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
     const factory: StorageFactory = {
       createRecordStorage: ((
         storageContext: StorageContext,
         spec: RecordSpec<unknown, unknown>,
       ) => {
-        const storage = backing.createRecordStorage(storageContext, spec as never);
+        const storage = backing.createRecordStorage(storageContext, spec);
         Object.assign(storage, {
           read: () => Promise.resolve(stored),
           queryEntries: () => Promise.resolve([{ id: { value: "raw" }, record: stored }]),
@@ -1274,12 +1296,13 @@ describe("DurableSubscriptionBindings", () => {
       whenExpires: 2_000,
       topic: create(TopicSchema, { id: { value: "topic" } }),
     });
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
     const factory: StorageFactory = {
       createRecordStorage: ((
         storageContext: StorageContext,
         spec: RecordSpec<unknown, unknown>,
       ) => {
-        const storage = backing.createRecordStorage(storageContext, spec as never);
+        const storage = backing.createRecordStorage(storageContext, spec);
         Object.assign(storage, { read: () => Promise.resolve(stored) });
         return storage;
       }) as never,
@@ -1369,12 +1392,13 @@ describe("DurableSubscriptionBindings", () => {
           resolveStarted?.();
         });
       let closes = 0;
+      // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
       const factory: StorageFactory = {
         createRecordStorage: ((
           storageContext: StorageContext,
           spec: RecordSpec<unknown, unknown>,
         ) => {
-          const storage = backing.createRecordStorage(storageContext, spec as never);
+          const storage = backing.createRecordStorage(storageContext, spec);
           const close = storage.close.bind(storage);
           if (operation === "create") {
             const compareAndSet = storage.compareAndSet.bind(storage);
@@ -1429,12 +1453,13 @@ describe("DurableSubscriptionBindings", () => {
   it("bounds noncooperative admitted work during shutdown and closes storage once", async () => {
     const backing = new InMemoryStorageFactory();
     let closes = 0;
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
     const factory: StorageFactory = {
       createRecordStorage: ((
         storageContext: StorageContext,
         spec: RecordSpec<unknown, unknown>,
       ) => {
-        const storage = backing.createRecordStorage(storageContext, spec as never);
+        const storage = backing.createRecordStorage(storageContext, spec);
         const close = storage.close.bind(storage);
         Object.assign(storage, {
           compareAndSet: () => new Promise<boolean>(() => undefined),

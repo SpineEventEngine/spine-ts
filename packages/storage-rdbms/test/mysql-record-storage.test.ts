@@ -83,7 +83,8 @@ describe("MysqlRecordStorage", () => {
       },
       /unique/i,
     ],
-  ])("rejects %s without altering the existing table", async (_name, layout) => {
+  ])("rejects %s without altering the existing table", async (_name, layout, _error) => {
+    void _error;
     const calls: string[] = [];
     const connection = schemaConnection(calls, layout);
     const storage = schemaStorage(connection);
