@@ -2,7 +2,7 @@ import { clone, create, fromBinary, getOption, hasOption, toBinary } from "@bufb
 import type { DescField, Message, MessageInitShape, MessageShape } from "@bufbuild/protobuf";
 import type { GenExtension, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { AnySchema, type Any, type FileOptions } from "@bufbuild/protobuf/wkt";
-import { validate as validateWithSpine } from "@spine-event-engine/validation-ts";
+import { validate as validateWithSpine } from "@spine-event-engine/validation";
 import {
   ActorContextSchema,
   type Command,

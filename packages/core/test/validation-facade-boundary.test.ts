@@ -5,13 +5,13 @@ import { ValidationErrorSchema } from "@spine-event-engine/proto";
 
 describe("@spine-event-engine/core validation facade upstream boundary", () => {
   afterEach(() => {
-    vi.doUnmock("@spine-event-engine/validation-ts");
+    vi.doUnmock("@spine-event-engine/validation");
     vi.resetModules();
   });
 
   it("redacts every upstream placeholder value by default", async () => {
     vi.resetModules();
-    vi.doMock("@spine-event-engine/validation-ts", () => ({
+    vi.doMock("@spine-event-engine/validation", () => ({
       validate: () => [
         {
           typeName: "spine.validation.ValidationError",
@@ -75,7 +75,7 @@ describe("@spine-event-engine/core validation facade upstream boundary", () => {
 
   it("returns structured validation failures when the upstream validator throws", async () => {
     vi.resetModules();
-    vi.doMock("@spine-event-engine/validation-ts", () => ({
+    vi.doMock("@spine-event-engine/validation", () => ({
       validate: () => {
         throw new Error("raw upstream payload secret");
       },

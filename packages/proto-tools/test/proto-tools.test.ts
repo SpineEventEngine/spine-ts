@@ -422,8 +422,23 @@ function linkThirdParty(app: string): void {
     ["zeromq", join(process.cwd(), "node_modules/zeromq")],
     ["semver", join(process.cwd(), "packages/proto-tools/node_modules/semver")],
     [
-      "@spine-event-engine/validation-ts",
-      join(process.cwd(), "packages/core/node_modules/@spine-event-engine/validation-ts"),
+      "@spine-event-engine/validation",
+      join(process.cwd(), "packages/core/node_modules/@spine-event-engine/validation"),
+    ],
+    [
+      "temporal-polyfill",
+      join(
+        process.cwd(),
+        "node_modules/.pnpm/temporal-polyfill@1.0.1/node_modules/temporal-polyfill",
+      ),
+    ],
+    [
+      "temporal-spec",
+      join(process.cwd(), "node_modules/.pnpm/temporal-spec@1.0.0/node_modules/temporal-spec"),
+    ],
+    [
+      "temporal-utils",
+      join(process.cwd(), "node_modules/.pnpm/temporal-utils@1.0.1/node_modules/temporal-utils"),
     ],
   ] as const) {
     const target = join(modules, ...name.split("/"));
