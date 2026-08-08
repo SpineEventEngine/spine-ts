@@ -59,11 +59,11 @@ describe("direct ShardSessionRecord storage", () => {
   });
 
   it("drains a shard until a rescan sees no pending work, including an arrival during the drain", async () => {
-    const registry = registry(new InMemoryStorageFactory(), () => new Date(0), "Tasks");
+    const shards = registry(new InMemoryStorageFactory(), () => new Date(0), "Tasks");
     const pending = ["first"];
     const delivered: string[] = [];
 
-    await registry.drainUntilEmpty(
+    await shards.drainUntilEmpty(
       ShardIndex.single(),
       worker("node-a", "worker-a"),
       async () => Object.freeze([...pending]),
