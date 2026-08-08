@@ -31,7 +31,10 @@ export type InboxRecordMessage = InboxMessage;
 /**
  * Converts between the ergonomic port view and the generated durable record.
  */
-export const InboxRecords = Object.freeze({
+export const InboxRecords: Readonly<{
+  read(record: WireInboxMessage, expectedId?: WireInboxMessageId): InboxMessage;
+  write(message: InboxMessage): WireInboxMessage;
+}> = Object.freeze({
   read(record: WireInboxMessage, expectedId?: WireInboxMessageId): InboxMessage {
     return Values.read(record, expectedId);
   },
@@ -43,7 +46,10 @@ export const InboxRecords = Object.freeze({
 /**
  * Defines the direct generated record specification for durable inbox rows.
  */
-export const inboxRecordSpec = new RecordSpec<WireInboxMessageId, WireInboxMessage>({
+export const inboxRecordSpec: RecordSpec<WireInboxMessageId, WireInboxMessage> = new RecordSpec<
+  WireInboxMessageId,
+  WireInboxMessage
+>({
   sourceType: InboxMessageSchema,
   recordType: InboxMessageSchema,
   idSchema: InboxMessageIdSchema,

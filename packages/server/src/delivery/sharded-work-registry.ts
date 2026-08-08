@@ -23,16 +23,17 @@ const leaseDefault = 30_000;
 /**
  * Defines direct durable shard-session records keyed by their generated shard index.
  */
-export const shardSessionRecordSpec = new RecordSpec<WireShardIndex, ShardSessionRecord>({
-  sourceType: ShardSessionRecordSchema,
-  recordType: ShardSessionRecordSchema,
-  idSchema: ShardIndexSchema,
-  extractId: (record) => {
-    if (record.index === undefined)
-      throw new DeliveryStorageCorruptionError("Shard session index is missing.");
-    return record.index;
-  },
-});
+export const shardSessionRecordSpec: RecordSpec<WireShardIndex, ShardSessionRecord> =
+  new RecordSpec<WireShardIndex, ShardSessionRecord>({
+    sourceType: ShardSessionRecordSchema,
+    recordType: ShardSessionRecordSchema,
+    idSchema: ShardIndexSchema,
+    extractId: (record) => {
+      if (record.index === undefined)
+        throw new DeliveryStorageCorruptionError("Shard session index is missing.");
+      return record.index;
+    },
+  });
 
 /**
  * Coordinates durable exclusive ownership of delivery shards.
@@ -256,12 +257,18 @@ const configs = new WeakMap<
 /**
  * Exposes package-internal registry construction observations for integrations.
  */
-export const shardedWorkRegistryAccess = Object.freeze({
+export const shardedWorkRegistryAccess: Readonly<{
   matches(
     registry: ShardedWorkRegistry,
     contextValue: StorageContext,
     storageFactory: StorageFactory,
-  ) {
+  ): boolean;
+}> = Object.freeze({
+  matches(
+    registry: ShardedWorkRegistry,
+    contextValue: StorageContext,
+    storageFactory: StorageFactory,
+  ): boolean {
     const value = configs.get(registry);
     return (
       value?.storageFactory === storageFactory &&
@@ -296,7 +303,8 @@ function time(value: unknown): number {
   return value.getTime();
 }
 function session(record: ShardSessionRecord, expected: ShardIndex, lease: number): ShardSession {
-  if (record.index.index !== expected.index || record.index.ofTotal !== expected.ofTotal)
+  const index = record.index;
+  if (index?.index !== expected.index || index.ofTotal !== expected.ofTotal)
     throw new DeliveryStorageCorruptionError("Shard session does not match its storage ID.");
   const picked = timestamp(record.whenLastPicked);
   const worker = record.worker === undefined ? undefined : checkedWorker(record.worker);
