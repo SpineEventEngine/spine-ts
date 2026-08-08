@@ -49,46 +49,59 @@ describe("DeliveryRunControl", () => {
     ).rejects.toThrow("Delivery run was aborted.");
   });
 
-  it("rejects a controlled caller on abort while observing a detached late settlement", async () => {
+  it("does not settle an aborted controlled caller before the underlying run settles", async () => {
     const controller = new AbortController();
     const settled = Promise.withResolvers<{ status: "COMPLETED"; pages: never[] }>();
-    const control = new DeliveryRunControl(controlledDelivery(() => settled.promise));
+    const inbox = new RunnerInbox(() => settled.promise);
+    const control = new DeliveryRunControl(controlledDelivery(() => settled.promise, inbox));
 
     const running = control.run({
       shard: new ShardIndex(0, 1),
       onMessage: () => Promise.resolve(),
       signal: controller.signal,
     });
+    await inbox.started.promise;
     controller.abort(new Error("stop"));
 
-    await expect(running).rejects.toThrow("stop");
+    let completed = false;
+    void running.catch(() => {
+      completed = true;
+    });
+    await Promise.resolve();
+    expect(completed).toBe(false);
     settled.resolve({ status: "COMPLETED", pages: [] });
+    await expect(running).rejects.toThrow("stop");
   });
 
-  it("rejects a controlled caller before a detached late rejection", async () => {
+  it("contains an abort until an underlying rejection settles", async () => {
     const controller = new AbortController();
     const settled = Promise.withResolvers<{ status: "COMPLETED"; pages: never[] }>();
-    const control = new DeliveryRunControl(controlledDelivery(() => settled.promise));
+    const inbox = new RunnerInbox(() => settled.promise);
+    const control = new DeliveryRunControl(controlledDelivery(() => settled.promise, inbox));
 
     const running = control.run({
       shard: new ShardIndex(0, 1),
       onMessage: () => Promise.resolve(),
       signal: controller.signal,
     });
+    await inbox.started.promise;
     controller.abort(new Error("deadline elapsed"));
 
-    await expect(running).rejects.toThrow("deadline elapsed");
+    void settled.promise.catch(() => undefined);
     settled.reject(new Error("late endpoint failure"));
-    await Promise.resolve();
+    await expect(running).rejects.toThrow("late endpoint failure");
   });
 });
 
-function controlledDelivery(run: (options: DeliveryRunOptions) => Promise<unknown>) {
+function controlledDelivery(
+  run: (options: DeliveryRunOptions) => Promise<unknown>,
+  inbox = new RunnerInbox(run),
+) {
   return new DeliveryBuilder()
     .withContext({ name: "run-control-test", multitenant: false })
     .withStorageFactory(new InMemoryStorageFactory())
     .withStrategy(UniformAcrossAllShards.singleShard())
-    .withInbox(new RunnerInbox(run))
+    .withInbox(inbox)
     .withWorkRegistry(new OpenRegistry())
     .withNode("test-node")
     .build();
@@ -97,6 +110,7 @@ function controlledDelivery(run: (options: DeliveryRunOptions) => Promise<unknow
 class RunnerInbox implements DeliveryInbox {
   readonly sessionKind = "EXCLUSIVE" as const;
   readonly #run: (options: DeliveryRunOptions) => Promise<unknown>;
+  readonly started = Promise.withResolvers<void>();
 
   constructor(run: (options: DeliveryRunOptions) => Promise<unknown>) {
     this.#run = run;
@@ -107,6 +121,7 @@ class RunnerInbox implements DeliveryInbox {
   }
 
   async read(shard: ShardIndex): Promise<readonly InboxMessage[]> {
+    this.started.resolve();
     await this.#run({ shard, onMessage: () => Promise.resolve() });
     return [];
   }

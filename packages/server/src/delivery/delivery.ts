@@ -146,7 +146,10 @@ export class Delivery {
     this.context = Object.freeze({ ...options.context });
     this.storageFactory = options.storageFactory;
     this.strategy = options.strategy ?? { shardCount: 1, shardFor: () => ShardIndex.single() };
-    this.worker = options.worker ?? workerId(options.node ?? "local");
+    this.worker =
+      options.worker === undefined
+        ? workerId(options.node ?? "local")
+        : snapshotWorker(options.worker);
     this.node = this.worker.nodeId?.value ?? "local";
     this.pageSize = options.pageSize ?? 100;
     this.batchSize = options.batchSize ?? 100;
@@ -247,11 +250,24 @@ export class Delivery {
       );
       return result("SKIPPED");
     }
+    if (options.operation?.signal?.aborted) {
+      await safely(async () => {
+        await this.shards.release(session, options.operation);
+      });
+      return result("STOPPED");
+    }
     const statistics = counts();
     let current = session;
     const renew = async (): Promise<boolean> => {
       if (current.kind !== "LEASED" || this.shards.renew === undefined) return true;
-      const renewed = await this.shards.renew(current, options.operation);
+      const renewed = await safelyValue(
+        () =>
+          this.shards.renew!(
+            current as Extract<typeof current, { kind: "LEASED" }>,
+            options.operation,
+          ),
+        undefined,
+      );
       if (renewed === undefined) return false;
       current = renewed;
       return true;
@@ -262,10 +278,13 @@ export class Delivery {
       if (!(await safely(() => this.#monitor.onDeliveryStarted(shard))))
         return result("STOPPED", statistics);
       const blockedTargets = new Set<string>();
+      let after: import("./inbox.js").InboxReadContinuation | undefined;
       for (;;) {
         const messages = await this.inbox.read(shard, {
           statuses: ["TO_DELIVER"],
           limit: this.pageSize,
+          ...(after === undefined ? {} : { after }),
+          ...(options.operation === undefined ? {} : options.operation),
         });
         if (messages.length === 0) break;
         const deliveredBefore = statistics.delivered;
@@ -317,24 +336,37 @@ export class Delivery {
             }
           }
         }
-        // A retained pending row whose target is blocked cannot become
-        // actionable in this ownership epoch. Stop rather than rescan it.
-        if (statistics.delivered === deliveredBefore) break;
+        const last = messages.at(-1);
+        if (statistics.delivered !== deliveredBefore) {
+          after = undefined;
+          continue;
+        }
+        if (last === undefined || messages.length < this.pageSize) break;
+        after = {
+          messageId: last.id.value,
+          whenReceived: last.whenReceived,
+          version: last.version,
+        };
+        // Reached a full page without progress: continue past it once. A later
+        // independent target may still be actionable; exhaustion ends the run.
       }
       return result("DRAINED", statistics);
     } finally {
-      await safely(async () => {
-        await this.shards.release(current, options.operation);
-      });
-      await safely(() =>
-        this.#monitor.onDeliveryCompleted(
-          Object.freeze({
-            processed: statistics.processed,
-            delivered: statistics.delivered,
-            failed: statistics.failed,
-          } satisfies DeliveryStatistics),
-        ),
+      const released = await safelyValue(
+        () => this.shards.release(current, options.operation),
+        false,
       );
+      if (released) {
+        await safely(() =>
+          this.#monitor.onDeliveryCompleted(
+            Object.freeze({
+              processed: statistics.processed,
+              delivered: statistics.delivered,
+              failed: statistics.failed,
+            } satisfies DeliveryStatistics),
+          ),
+        );
+      }
     }
   }
 }
@@ -414,6 +446,12 @@ export interface DeliveryDrainOptions {
 }
 function workerId(node: string): WorkerId {
   return create(WorkerIdSchema, { nodeId: { value: node }, value: randomUUID() });
+}
+function snapshotWorker(worker: WorkerId): WorkerId {
+  return create(WorkerIdSchema, {
+    nodeId: { value: worker.nodeId?.value ?? "" },
+    value: worker.value,
+  });
 }
 function counts() {
   return { processed: 0, accepted: 0, delivered: 0, failed: 0 };

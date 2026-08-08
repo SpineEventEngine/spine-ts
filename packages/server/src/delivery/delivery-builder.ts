@@ -274,7 +274,7 @@ export class DeliveryBuilder {
   #worker: WorkerId | undefined;
 
   /**
-   * Sets the storage namespace for inbox, attempts, and shard records.
+   * Sets the storage namespace for Inbox and shard records.
    *
    * @param context The delivery storage namespace.
    * @returns This builder.
@@ -371,6 +371,9 @@ export class DeliveryBuilder {
     if (typeof node !== "string" || node.length === 0) {
       throw new Error("Delivery node must be a non-empty string.");
     }
+    if (this.#worker?.nodeId?.value !== undefined && this.#worker.nodeId.value !== node) {
+      throw new Error("Delivery node must match the configured worker node.");
+    }
     this.#node = node;
     return this;
   }
@@ -389,7 +392,10 @@ export class DeliveryBuilder {
     ) {
       throw new Error("Delivery worker must contain non-blank node and value.");
     }
-    this.#worker = worker;
+    if (this.#node !== undefined && this.#node !== worker.nodeId.value) {
+      throw new Error("Delivery worker node must match the configured delivery node.");
+    }
+    this.#worker = DeliveryValues.snapshotWorker(worker);
     return this;
   }
 
@@ -510,5 +516,11 @@ const DeliveryValues = Object.freeze({
       throw new Error("Delivery storage context name must be a non-empty string.");
     }
     return Object.freeze({ ...context });
+  },
+  snapshotWorker(worker: WorkerId): WorkerId {
+    return Object.freeze({
+      nodeId: Object.freeze({ value: worker.nodeId!.value }),
+      value: worker.value,
+    }) as WorkerId;
   },
 });
