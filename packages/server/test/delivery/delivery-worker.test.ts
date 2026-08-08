@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { Delivery, type DeliveryEndpointMessage } from "../../src/delivery/delivery.js";
 import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
+import type { InboxReadOptions } from "../../src/delivery/inbox.js";
 import { ShardIndex } from "../../src/index.js";
 
 describe("Delivery direct worker", () => {
@@ -108,7 +109,9 @@ describe("Delivery direct worker", () => {
         return row;
       },
       monitor: new (class extends DeliveryMonitor {
-        override onReceptionFailure(reception: Parameters<DeliveryMonitor["onReceptionFailure"]>[0]) {
+        override onReceptionFailure(
+          reception: Parameters<DeliveryMonitor["onReceptionFailure"]>[0],
+        ) {
           return reception.repeat();
         }
       })(),
@@ -170,6 +173,43 @@ describe("Delivery direct worker", () => {
     expect(seen).toEqual(["first", "other"]);
     expect(reads).toBe(2);
     expect(rows.map((row) => row.signalId)).toEqual(["first", "blocked"]);
+  });
+
+  it("advances beyond a full blocked page to deliver an independent target", async () => {
+    const shard = ShardIndex.single();
+    const blocked = message("blocked", "a", shard);
+    const independent = message("independent", "b", shard);
+    const catalog = [blocked, independent];
+    const pending = new Set(catalog);
+    const seen: string[] = [];
+    const reads: (InboxReadOptions | undefined)[] = [];
+    const delivery = createDelivery({
+      pageSize: 1,
+      read: async (options) => {
+        reads.push(options);
+        const after = options?.after?.messageId;
+        const start =
+          after === undefined ? 0 : catalog.findIndex((row) => row.id.value === after) + 1;
+        return catalog.filter((row) => pending.has(row)).slice(start, start + 1);
+      },
+      mark: async (row) => {
+        if (row.signalId === "blocked") throw new Error("acknowledgement failed");
+        pending.delete(row);
+        return row;
+      },
+    });
+    const run = await delivery.drain(shard, {
+      onMessage: (row) => {
+        seen.push(row.signalId);
+        if (row.signalId === "blocked") throw new Error("dispatch failed");
+      },
+    });
+    expect(run).toMatchObject({ status: "DRAINED", delivered: 1, failed: 1 });
+    expect(seen).toEqual(["blocked", "independent"]);
+    expect(reads).toHaveLength(4);
+    expect(reads[1]?.after).toMatchObject({ messageId: "blocked" });
+    expect(reads[3]?.after).toMatchObject({ messageId: "blocked" });
+    expect([...pending].map((row) => row.signalId)).toEqual(["blocked"]);
   });
 
   it("rescans rows that arrive while a preceding page is dispatched", async () => {
@@ -239,7 +279,7 @@ describe("Delivery direct worker", () => {
   });
 });
 
-function createDelivery(options: {
+function createDelivery(config: {
   rows?: DeliveryEndpointMessage[];
   worker?: WorkerId;
   registry?: {
@@ -250,30 +290,32 @@ function createDelivery(options: {
     renew?: () => Promise<ReturnType<typeof session> | undefined>;
     release: () => Promise<boolean>;
   };
-  read?: () => Promise<DeliveryEndpointMessage[]>;
+  read?: (options?: InboxReadOptions) => Promise<DeliveryEndpointMessage[]>;
   mark?: (row: DeliveryEndpointMessage) => Promise<DeliveryEndpointMessage | undefined>;
   monitor?: DeliveryMonitor;
+  pageSize?: number;
 }): Delivery {
-  const rows = options.rows ?? [];
+  const rows = config.rows ?? [];
   return new Delivery({
     context: { name: "DeliveryWorker", multitenant: false },
     storageFactory: new InMemoryStorageFactory(),
-    worker: options.worker ?? workerId("node", "restart"),
-    monitor: options.monitor,
+    worker: config.worker ?? workerId("node", "restart"),
+    monitor: config.monitor,
+    pageSize: config.pageSize,
     inbox: {
       sessionKind: "LEASED",
       receive: async () => {
         throw new Error("not used");
       },
-      read: async () => options.read?.() ?? [...rows],
+      read: async (_shard, options) => config.read?.(options) ?? [...rows],
       readMessage: async () => undefined,
-      markDelivered: async (row) => options.mark?.(row) ?? row,
+      markDelivered: async (row) => config.mark?.(row) ?? row,
     },
     workRegistry: {
       sessionKind: "LEASED",
-      pickUp: async (shard, worker) => options.registry?.pickUp(shard, worker) ?? session(shard),
-      renew: async (current) => options.registry?.renew?.() ?? current,
-      release: async () => options.registry?.release() ?? true,
+      pickUp: async (shard, worker) => config.registry?.pickUp(shard, worker) ?? session(shard),
+      renew: async (current) => config.registry?.renew?.() ?? current,
+      release: async () => config.registry?.release() ?? true,
     },
   });
 }
