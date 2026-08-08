@@ -289,60 +289,19 @@ those policies are outside the initial release and no future stack is committed:
 Built bounded contexts use the same storage boundary internally for three
 narrow handoffs: process-manager command assignees with `HANDLE_COMMAND`,
 process-manager event reactions with `REACT_UPON_EVENT`, and live projection
-event subscribers with `UPDATE_SUBSCRIBER`. Internal replay picks up one shard
-with storage-backed lease fencing, scans `TO_DELIVER` rows in inbox order,
-skips rows unavailable to the active worker before endpoint invocation, and
-passes independent message snapshots only to validated framework endpoints.
-Those snapshots copy `Date` values and `Any.value` bytes from the claimed row.
-Its callback limit caps endpoint callbacks that actually run. Newly observed
-rows stop at the storage read cap plus that limit while replay advances past
-unavailable or worker-unsupported rows first using stable inbox row
-continuations over `receivedAt`, `version`, and message ID instead of absolute
-pending-row offsets. Valid worker-unsupported labels such as
-`CATCH_UP` remain pending and are skipped before callback invocation, row
-acceptance, failure recording, or failure-budget consumption. Successful rows
-are marked `DELIVERED`; endpoint callback failures leave the row `TO_DELIVER`
-for a later run only when framework-owned cleanup succeeds. Malformed or
-deprecated legacy label data such as stored `IMPORT_EVENT` remains a
-fail-closed `DeliveryStorageCorruptionError` path before replay. Cleanup,
-lease/fencing, and status-update failures are reported internally without an
-immediate retry or recovery guarantee in this slice. Supported endpoint
-failures also write internal sanitized attempt records with message/inbox/shard
-identity, label, node, attempted time, accepted flag, and stable failure
-stage/reason; retained attempts do not include raw `Any.value` payload bytes,
-raw user errors, stack traces, or unbounded exception text. Before a supported
-endpoint callback runs, the package-internal retry gate summarizes retained
-attempts for that exact inbox message by reading only its 100 known per-message
-retained slots. An exhausted row skips the callback and another retained-attempt
-write, then is claimed, synchronized to the live shard fence, and marked
-`DELIVERED` without incrementing accepted endpoint work or the internal failure
-bound. Lease/fencing failure through the final guard before durable marking
-remains `LEASE` / `LEASE_INACTIVE`, retains one bounded attempt at the 100-slot
-cap, counts one failure without accepted work, and leaves the row `TO_DELIVER`.
-If the mark fails and cleanup succeeds, the authoritative row remains
-`TO_DELIVER` and one frozen, bounded, stack-free exhaustion-facts object counts
-toward failed work and the internal failure bound. If cleanup also fails, the
-row remains `TO_DELIVER` and the same one-failure accounting returns a `CLEANUP`
-result whose `AggregateError` contains the original mark error plus cleanup
-error; that error is not promised frozen, bounded, or stack-free. Retryable
-endpoint failures continue through the existing callback path and remain
-available for later replay when cleanup leaves the row pending. Pre-callback
-claim, validation, and lease-fencing failures do not increment accepted
-endpoint work, but they do increment failed
-work and count toward the internal failure bound. This gate is not a public
-monitor/action, scheduler, backoff, dead-letter, topology, catch-up, or
-production-adapter API.
-Once the endpoint callback or `onMessage` path has been invoked, endpoint
-failures and later framework cleanup/status-update failures are accepted
-endpoint work and may appear in failed work. Live shard ownership plus live
-per-message ownership block competing callback dispatch while ownership is
-current; expired per-message ownership may be replaced during claim
-compare-and-set using the storage clock as abandoned-work recovery. If a stale
-owner continues after losing renewal, endpoint callback side effects are
-at-least-once/replay-safe: later final fencing can prevent stale finalization,
-but it cannot uninvoke a callback that already ran. Broader production
-supervision, cancellation, and retry-monitor policy are outside the initial
-release, with no future design committed.
+event subscribers with `UPDATE_SUBSCRIBER`. Pending and delivered
+`InboxMessage` rows are stored directly. Shard ownership is the only exclusion
+of concurrent workers; it creates neither a per-message claim nor a separate
+dedup record. A delivered row is the deduplication fact. Handler effects and
+the delivered-row compare-and-set are not one transaction, so a lost
+acknowledgement can redeliver after restart and downstream effects must be
+idempotent. `DeliveryMonitor` contains reception failures. Its default action
+marks a failed reception delivered and continues independent targets; a custom
+monitor may select one immediate repeat action. A failed durable action leaves
+the row pending, stops later same-target messages, continues independent
+targets, releases ownership, and allows a later run. The runtime adds no
+attempt history, exhaustion policy, quarantine, receipts, markers, timers,
+backoff, dead-letter storage, scheduler persistence, or delivery policy.
 
 Public error contract for this slice is intentionally small: callers should
 expect `InboxMessageError` for invalid inbox message input and
@@ -419,8 +378,7 @@ through validated framework endpoints. The current API does not provide a
 process-wide or production scheduler/supervisor, expose a generic repository
 delivery engine, run projection catch-up through inbox storage, run retry
 monitors, open transport topology, supervise worker processes, or retain raw
-attempt/error history beyond the sanitized internal attempt records and their
-package-internal exact-message summaries.
+attempt/error history.
 Event import and aggregate importers are removed from the active plan by
 upstream ADR 0001 D1; ordinary aggregate `@React` handlers are generated
 reactor handlers with current transaction semantics, not event-sourcing

@@ -240,9 +240,9 @@ delivery worker boundary:
   projection transaction and `Stand` update. Before handler code runs, replay
   validates the row label, pending `TO_DELIVER` status, tenant, payload/schema,
   target type URL, and routed target ID;
-- pending and final dedup guards block duplicate `(signalId, inboxId)` writes
-  during the same 30-second local retention window as JVM local delivery while
-  allowing crash recovery from a durable inbox row;
+- pending and delivered `InboxMessage` rows are stored directly; delivered rows
+  are the deduplication fact, with no per-message claim or separate dedup
+  record;
 - shard pickup, renewal, and release persist lease-backed shard sessions through
   storage compare-and-set rather than process-local locks. Renewal extends only
   an unexpired current session for the same session ID and node;
@@ -253,53 +253,18 @@ delivery worker boundary:
   worker-unsupported labels such as `CATCH_UP`. Validated endpoints and
   returned ordinary failures receive independent message snapshots only for
   `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; their `Date`
-  values and `Any.value` bytes are copied. Exhausted-row failure snapshots use
-  the same supported label/status shape but omit `signal`, avoiding payload
-  copies before callback-free finalization. `CATCH_UP` remains pending and never
-  reaches those endpoints or failures. The callback limit caps endpoint
-  callbacks that actually run. Newly observed rows stop at the storage read cap
-  plus that limit while the scan advances by a stable inbox row continuation
-  over `receivedAt`, `version`, and message ID. A skipped-only paused loop drops
-  that internal continuation before a later external run so earlier rows that
-  become available are reconsidered;
-  successful delivery marks the row `DELIVERED`, endpoint callback failures
-  leave the row pending only after framework cleanup succeeds, and endpoint
-  callback cleanup failures, lease/fencing failures, and delivery-status update
-  failures are reported without an immediate retry guarantee. Supported
-  endpoint failures also write internal sanitized delivery-attempt records with
-  message/inbox/shard identity, label, node, attempted time, accepted flag, and
-  stable failure stage/reason; these records do not store raw `Any.value`
-  payload bytes, raw user errors, stack traces, or unbounded exception text. A
-  package-internal pre-callback gate reads the 100 retained slots for one exact
-  inbox message. At that bound it skips the callback and another attempt,
-  claims the exact row, synchronizes the active claim to the live shard fence,
-  and marks it `DELIVERED` without accepted-work or failure-budget use.
-  Lease/fencing failure through the final guard before durable marking remains
-  `LEASE` / `LEASE_INACTIVE`, retains one bounded attempt at the 100-slot cap,
-  records one failure without accepted work, and leaves the row `TO_DELIVER`.
-  If the mark fails and cleanup succeeds, the authoritative row remains
-  `TO_DELIVER` and one frozen, bounded, stack-free exhaustion-facts object is
-  returned. If cleanup also fails, the row remains `TO_DELIVER` and the same
-  one-failure accounting returns a `CLEANUP` result whose `AggregateError`
-  contains the original mark error plus cleanup error; that error has no frozen,
-  bounded, or stack-free guarantee. This does not expose public
-  monitor/action, scheduler/backoff, dead-letter, production-topology,
-  catch-up, or adapter policy. Pre-callback
-  claim, validation, and lease/fencing failures do not increment accepted work,
-  but they do increment failed work and count toward a loop's `maxFailures`
-  bound. Once the endpoint callback or `onMessage` path has been
-  invoked, endpoint failures and later framework cleanup/status-update failures
-  are accepted work and may appear in failed work. Live shard ownership plus
-  live per-message ownership block competing callback dispatch while ownership
-  is current; expired per-message ownership may be replaced during claim
-  compare-and-set using the storage clock as abandoned-work recovery. If a
-  stale owner continues running after losing renewal, endpoint callback side
-  effects are at-least-once/replay-safe: later final fencing can prevent stale
-  finalization, but it cannot uninvoke a callback that already ran. Broader
-  production supervision, cancellation, and retry-monitor policy are outside
-  the initial release, with no future design committed. The run returns
-  simple counts plus
-  per-message failures and releases the shard in a `finally` path;
+  values and `Any.value` bytes are copied. `CATCH_UP` remains pending and never
+  reaches those endpoints. A successful callback marks the row delivered.
+  `DeliveryMonitor` contains reception failure: its default marks the failed
+  reception delivered and continues independent targets; a custom monitor may
+  choose one immediate repeat action. A durable acknowledgement failure leaves
+  the row pending, stops later same-target rows for that run, continues
+  independent targets, and releases ownership for a later run. Handler effects
+  and the delivered-row compare-and-set are not one transaction, so lost
+  acknowledgement can redeliver and downstream handling must be idempotent.
+  No attempt history, per-message claim, quarantine, receipt, marker, timer,
+  backoff, dead-letter storage, scheduler persistence, or delivery policy is
+  added. The run releases its shard in a `finally` path;
 - Package-internal loop code repeats those direct drains for one shard. Renewal
   is framework-owned lease fencing for active drains. The package does not
   expose a raw worker callback API; normal replay stays behind validated framework
@@ -346,12 +311,11 @@ delivery worker boundary:
 
 This slice stops at durable storage, ordered readback, narrow built-context
 process-manager command, process-manager event, and live projection subscriber
-handoffs, one direct drain call, and a closeable loop owner. The initial release
-excludes a generic repository delivery engine, projection catch-up through
-inbox storage, retry monitors, public or production retry-attempt counter policy
-beyond the internal retained-attempt gate, retained raw delivery error details,
-production worker supervision, and transport-backed topology. These exclusions
-make no future policy commitment. Event import and aggregate importers are
+handoffs, one direct drain call, and a closeable loop owner. It adds no generic
+repository delivery engine, projection catch-up through inbox storage, retry
+monitor, attempt/exhaustion counter, raw delivery-error history, production
+worker supervision, or transport-backed topology. These exclusions make no
+future policy commitment. Event import and aggregate importers are
 removed from the active plan by upstream ADR 0001 D1. Aggregate `@React`
 handlers, when present, use ordinary generated-reactor transaction semantics
 rather than event-sourcing applier/import delivery. `IMPORT_EVENT` is no longer
