@@ -1024,5 +1024,239 @@
     "name": "deepFreeze",
     "disposition": "necessity",
     "reason": "TypeScript immutability boundary: deepFreeze protects cloned Protobuf values returned from registry lifecycle operations."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery-loop.ts",
+    "kind": "function-declaration",
+    "identity": "empty()#1",
+    "name": "empty",
+    "disposition": "necessity",
+    "reason": "TypeScript immutable-value boundary: empty constructs the canonical zero progress snapshot without owning loop lifecycle state."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery-loop.ts",
+    "kind": "function-declaration",
+    "identity": "map()#1",
+    "name": "map",
+    "disposition": "necessity",
+    "reason": "TypeScript public-value boundary: map converts internal drain status into the documented loop status vocabulary."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "kind": "function-declaration",
+    "identity": "workerId()#1",
+    "name": "workerId",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: workerId creates one complete generated worker identity for a delivery owner."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "kind": "function-declaration",
+    "identity": "snapshotWorker()#1",
+    "name": "snapshotWorker",
+    "disposition": "necessity",
+    "reason": "TypeScript immutability boundary: snapshotWorker copies generated worker identity before asynchronous delivery lifecycle use."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "kind": "function-declaration",
+    "identity": "counts()#1",
+    "name": "counts",
+    "disposition": "necessity",
+    "reason": "TypeScript immutable-value boundary: counts creates fresh delivery counters without owning a mutable lifecycle object."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "kind": "function-declaration",
+    "identity": "result()#1",
+    "name": "result",
+    "disposition": "necessity",
+    "reason": "TypeScript public-value boundary: result freezes one delivery outcome and its retained failure facts."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "kind": "function-declaration",
+    "identity": "snapshot()#1",
+    "name": "snapshot",
+    "disposition": "necessity",
+    "reason": "TypeScript immutability boundary: snapshot clones Inbox and Protobuf values retained across asynchronous monitor actions."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "kind": "function-declaration",
+    "identity": "safely()#1",
+    "name": "safely",
+    "disposition": "necessity",
+    "reason": "TypeScript callback boundary: safely contains direct or promised user hook failure without changing lifecycle state."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "kind": "function-declaration",
+    "identity": "safelyBoolean()#1",
+    "name": "safelyBoolean",
+    "disposition": "necessity",
+    "reason": "TypeScript callback boundary: safelyBoolean contains direct or promised boolean cleanup outcomes with a fail-closed default."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "kind": "function-declaration",
+    "identity": "safelyValue()#1",
+    "name": "safelyValue",
+    "disposition": "necessity",
+    "reason": "TypeScript callback boundary: safelyValue contains direct or promised monitor results using an explicit deterministic fallback."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "kind": "function-declaration",
+    "identity": "isEndpointMessage()#1",
+    "name": "isEndpointMessage",
+    "disposition": "necessity",
+    "reason": "TypeScript dispatch boundary: isEndpointMessage classifies supported Inbox labels before endpoint invocation without retaining state."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "wireId()#1",
+    "name": "wireId",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: wireId converts a validated shard value into its generated record identifier."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "checkedShard()#1",
+    "name": "checkedShard",
+    "disposition": "necessity",
+    "reason": "TypeScript public-value boundary: checkedShard validates and copies caller shard coordinates before storage access."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "checkedWorker()#1",
+    "name": "checkedWorker",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: checkedWorker validates and copies complete caller worker identity before ownership operations."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "time()#1",
+    "name": "time",
+    "disposition": "necessity",
+    "reason": "TypeScript clock boundary: time validates injected clock output before lease arithmetic and durable writes."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "session()#1",
+    "name": "session",
+    "disposition": "necessity",
+    "reason": "TypeScript persistence boundary: session validates a stored shard record before exposing immutable ownership facts."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "atomic()#1",
+    "name": "atomic",
+    "disposition": "necessity",
+    "reason": "TypeScript storage boundary: atomic rejects providers lacking compare-and-set semantics before ownership mutation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "timestamp()#1",
+    "name": "timestamp",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: timestamp validates a stored generated timestamp before lease calculations."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "owned()#1",
+    "name": "owned",
+    "disposition": "necessity",
+    "reason": "TypeScript immutable-value boundary: owned constructs exact leased session facts without provider object identity."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "toRecord()#1",
+    "name": "toRecord",
+    "disposition": "necessity",
+    "reason": "TypeScript persistence boundary: toRecord serializes immutable session facts into the generated storage record."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "unowned()#1",
+    "name": "unowned",
+    "disposition": "necessity",
+    "reason": "TypeScript persistence boundary: unowned derives the exact released storage record from retained session facts."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "same()#1",
+    "name": "same",
+    "disposition": "necessity",
+    "reason": "TypeScript compare-and-set boundary: same compares complete immutable session facts before durable mutation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "sameWorker()#1",
+    "name": "sameWorker",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: sameWorker compares complete generated worker identity without object-reference assumptions."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "context()#1",
+    "name": "context",
+    "disposition": "necessity",
+    "reason": "TypeScript storage boundary: context validates and freezes tenant context before resolving record storage."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "copy()#1",
+    "name": "copy",
+    "disposition": "necessity",
+    "reason": "TypeScript immutability boundary: copy snapshots storage context without retaining caller-owned tenant objects."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "kind": "function-declaration",
+    "identity": "concurrent()#1",
+    "name": "concurrent",
+    "disposition": "necessity",
+    "reason": "TypeScript concurrency boundary: concurrent creates one consistent stale-session error for compare-and-set rejection."
   }
 ]

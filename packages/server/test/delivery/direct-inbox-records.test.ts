@@ -227,7 +227,7 @@ describe("direct InboxMessage storage", () => {
     await expect(storage.admit({ ...second, version: 3n })).resolves.toBeUndefined();
   });
 
-  it("suppresses a duplicate pending row before callback admission when its shard has a live delivered predecessor", async () => {
+  it("suppresses a pending duplicate when a live delivered predecessor exists", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),

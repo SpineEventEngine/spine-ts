@@ -1,4 +1,5 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/require-await */
+/* eslint-disable @typescript-eslint/no-non-null-assertion, @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/require-await */
 
 import { create } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
