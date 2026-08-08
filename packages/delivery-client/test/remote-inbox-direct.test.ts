@@ -6,10 +6,10 @@ import { RemoteInbox, RemoteWorkRegistry } from "../src/remote/adapters.js";
 import { domainMessage } from "./shared-fixtures.js";
 
 class Client {
-  readonly writeOne = vi.fn(async () => undefined);
-  readonly removeOne = vi.fn(async () => undefined);
-  readonly findOne = vi.fn(async () => undefined);
-  readonly readPage = vi.fn(async () => []);
+  readonly writeOne = vi.fn(() => Promise.resolve(undefined));
+  readonly removeOne = vi.fn(() => Promise.resolve(undefined));
+  readonly findOne = vi.fn(() => Promise.resolve(undefined));
+  readonly readPage = vi.fn(() => Promise.resolve([]));
   pageSize = 2;
 }
 
@@ -145,9 +145,15 @@ describe("RemoteInbox direct behavior", () => {
       { ...valid, lastPicked: {} },
       { ...valid, lastPicked: new Date(Number.NaN) },
     ]) {
-      expect(() => registry.reconcile(observation as never)).toThrow(DeliveryProtocolError);
+      expect(() => {
+        registry.reconcile(observation as never);
+      }).toThrow(DeliveryProtocolError);
     }
-    expect(() => registry.reconcile({ ...valid, status: "PICKED" })).not.toThrow();
-    expect(() => registry.reconcile(valid)).not.toThrow();
+    expect(() => {
+      registry.reconcile({ ...valid, status: "PICKED" });
+    }).not.toThrow();
+    expect(() => {
+      registry.reconcile(valid);
+    }).not.toThrow();
   });
 });

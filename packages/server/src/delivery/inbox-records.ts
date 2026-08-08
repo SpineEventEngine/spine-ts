@@ -23,10 +23,14 @@ import {
 } from "./inbox.js";
 import { ShardIndex } from "./shard-index.js";
 
-/** The durable and public inbox views are the same record. */
+/**
+ * Identifies the public inbox view that maps directly to the durable record.
+ */
 export type InboxRecordMessage = InboxMessage;
 
-/** Converts between the ergonomic port view and generated durable record. */
+/**
+ * Converts between the ergonomic port view and the generated durable record.
+ */
 export const InboxRecords = Object.freeze({
   read(record: WireInboxMessage, expectedId?: WireInboxMessageId): InboxMessage {
     return Values.read(record, expectedId);
@@ -36,7 +40,9 @@ export const InboxRecords = Object.freeze({
   },
 });
 
-/** Direct generated record specification for durable inbox rows. */
+/**
+ * Defines the direct generated record specification for durable inbox rows.
+ */
 export const inboxRecordSpec = new RecordSpec<WireInboxMessageId, WireInboxMessage>({
   sourceType: InboxMessageSchema,
   recordType: InboxMessageSchema,
@@ -109,8 +115,7 @@ const Values = Object.freeze({
     const signal = record.signalId?.value;
     if (
       inbox === undefined ||
-      entity === undefined ||
-      entity.typeUrl !== "type.googleapis.com/google.protobuf.StringValue" ||
+      entity?.typeUrl !== "type.googleapis.com/google.protobuf.StringValue" ||
       typeof signal !== "string" ||
       signal.trim().length === 0 ||
       typeof inbox.typeUrl !== "string" ||
@@ -148,13 +153,11 @@ const Values = Object.freeze({
     });
   },
   input(value: InboxMessage): InboxMessage {
-    if (typeof value !== "object" || value === null)
-      throw new InboxMessageError("Inbox message is invalid.");
     const id = value.id;
     const inbox = value.inboxId;
     const shard = value.shard;
     if (
-      typeof id?.value !== "string" ||
+      typeof id.value !== "string" ||
       id.value.trim().length === 0 ||
       !(id.shard instanceof ShardIndex) ||
       !(shard instanceof ShardIndex) ||
@@ -162,7 +165,7 @@ const Values = Object.freeze({
     )
       throw new InboxMessageError("Inbox message ID shard does not match message shard.");
     if (
-      typeof inbox?.targetId !== "string" ||
+      typeof inbox.targetId !== "string" ||
       inbox.targetId.trim().length === 0 ||
       typeof inbox.targetTypeUrl !== "string" ||
       inbox.targetTypeUrl.trim().length === 0 ||

@@ -33,6 +33,7 @@ describe("direct ShardSessionRecord storage", () => {
     const first = await firstRegistry.pickUp(shard, worker("node-a", "worker-a"));
 
     expect(first).toBeInstanceOf(ShardSession);
+    if (first === undefined) throw new Error("First worker did not acquire the shard.");
     await expect(
       secondRegistry.pickUp(shard, worker("node-b", "worker-b")),
     ).resolves.toBeUndefined();
@@ -40,8 +41,8 @@ describe("direct ShardSessionRecord storage", () => {
     const takeover = await secondRegistry.pickUp(shard, worker("node-b", "worker-b"));
     expect(takeover?.worker?.nodeId?.value).toBe("node-b");
     expect(takeover?.worker?.value).toBe("worker-b");
-    await expect(firstRegistry.renew(first!)).resolves.toBeUndefined();
-    await expect(firstRegistry.release(first!)).resolves.toBe(false);
+    await expect(firstRegistry.renew(first)).resolves.toBeUndefined();
+    await expect(firstRegistry.release(first)).resolves.toBe(false);
   });
 
   it("uses the supplied WorkerId unchanged across pickups and accepts a new restart identity", async () => {
@@ -65,17 +66,19 @@ describe("direct ShardSessionRecord storage", () => {
     const shard = ShardIndex.single();
     const currentWorker = worker("node-a", "worker-a");
     const pickup = await workRegistry.pickUp(shard, currentWorker);
+    if (pickup === undefined) throw new Error("Worker did not acquire the shard.");
 
     expect(await workRegistry.pickUp(shard, currentWorker)).toMatchObject({
       worker: currentWorker,
     });
 
     now = 100;
-    const renewed = await workRegistry.renew(pickup!);
-    expect(await workRegistry.renew(pickup!)).toMatchObject({ pickedUpAt: new Date(100) });
+    const renewed = await workRegistry.renew(pickup);
+    expect(await workRegistry.renew(pickup)).toMatchObject({ pickedUpAt: new Date(100) });
+    if (renewed === undefined) throw new Error("Worker did not renew the shard.");
 
-    expect(await workRegistry.release(renewed!)).toBe(true);
-    await expect(workRegistry.release(renewed!)).resolves.toBe(true);
+    expect(await workRegistry.release(renewed)).toBe(true);
+    await expect(workRegistry.release(renewed)).resolves.toBe(true);
   });
 
   it("drains a shard until a rescan sees no pending work, including an arrival during the drain", async () => {
@@ -86,11 +89,12 @@ describe("direct ShardSessionRecord storage", () => {
     await shards.drainUntilEmpty(
       ShardIndex.single(),
       worker("node-a", "worker-a"),
-      async () => Object.freeze([...pending]),
-      async (message) => {
+      () => Promise.resolve(Object.freeze([...pending])),
+      (message) => {
         delivered.push(message);
         pending.splice(pending.indexOf(message), 1);
         if (message === "first") pending.push("second");
+        return Promise.resolve();
       },
     );
 
@@ -108,7 +112,7 @@ describe("direct ShardSessionRecord storage", () => {
       first.drainUntilEmpty(
         ShardIndex.single(),
         worker("node-a", "worker-a"),
-        async () => Object.freeze([...pending]),
+        () => Promise.resolve(Object.freeze([...pending])),
         async (message) => {
           pending.splice(pending.indexOf(message), 1);
           now = 1_000;
@@ -202,8 +206,8 @@ describe("direct ShardSessionRecord storage", () => {
       shards.drainUntilEmpty(
         ShardIndex.single(),
         worker("node", "worker"),
-        async () => [],
-        async () => undefined,
+        () => Promise.resolve([]),
+        () => Promise.resolve(),
       ),
     ).resolves.toBeUndefined();
     for (const invalid of [
@@ -222,20 +226,21 @@ describe("direct ShardSessionRecord storage", () => {
     const second = registry(storage, () => new Date(now), "Tasks");
     const shard = ShardIndex.single();
     const session = await first.pickUp(shard, worker("node-a", "worker-a"));
+    if (session === undefined) throw new Error("First worker did not acquire the shard.");
     let reads = 0;
 
     await second.drainUntilEmpty(
       shard,
       worker("node-b", "worker-b"),
-      async () => {
+      () => {
         reads += 1;
-        return [];
+        return Promise.resolve([]);
       },
-      async () => undefined,
+      () => Promise.resolve(),
     );
     expect(reads).toBe(0);
     now = 1_000;
-    await expect(first.release(session!)).resolves.toBe(false);
+    await expect(first.release(session)).resolves.toBe(false);
 
     const defaultLease = new ShardedWorkRegistry({
       context: { name: "Tenanted", multitenant: true, tenantId: "tenant-a" },

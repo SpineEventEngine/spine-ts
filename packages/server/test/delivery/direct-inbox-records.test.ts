@@ -87,12 +87,15 @@ describe("direct InboxMessage storage", () => {
         create(InboxMessageIdSchema, { uuid: "other", index: stored.id?.index }),
       ),
     ).toThrow(DeliveryStorageCorruptionError);
-    expect(() => InboxRecords.read({ ...stored, label: InboxLabel.UNRECOGNIZED })).toThrow(
-      DeliveryStorageCorruptionError,
-    );
-    expect(() => InboxRecords.read({ ...stored, status: InboxMessageStatus.UNRECOGNIZED })).toThrow(
-      DeliveryStorageCorruptionError,
-    );
+    expect(() =>
+      InboxRecords.read({ ...stored, label: InboxLabel.UNRECOGNIZED as InboxLabel }),
+    ).toThrow(DeliveryStorageCorruptionError);
+    expect(() =>
+      InboxRecords.read({
+        ...stored,
+        status: InboxMessageStatus.UNRECOGNIZED as InboxMessageStatus,
+      }),
+    ).toThrow(DeliveryStorageCorruptionError);
     expect(() =>
       InboxRecords.read({ ...stored, whenReceived: { seconds: 0n, nanos: -1 } }),
     ).toThrow(DeliveryStorageCorruptionError);

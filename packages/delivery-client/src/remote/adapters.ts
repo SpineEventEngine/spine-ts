@@ -37,6 +37,7 @@ export class RemoteInbox implements DeliveryInbox {
    * Remote inbox work requires an exclusive remote shard session.
    */
   readonly sessionKind = "EXCLUSIVE" as const;
+
   /**
    * Creates a remote inbox.
    *

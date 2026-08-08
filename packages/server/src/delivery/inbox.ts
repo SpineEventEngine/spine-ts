@@ -142,9 +142,10 @@ class LocalInboxWork implements DeliveryInboxWork {
     return this.#requireMessage();
   }
 
-  async synchronize(session: DeliveryWorkSession): Promise<void> {
+  synchronize(session: DeliveryWorkSession): Promise<void> {
     if (session.kind !== "LEASED") throw new InboxMessageError("Inbox work session is not leased.");
     if (this.#message === undefined) throw new InboxMessageError("Inbox work is no longer active.");
+    return Promise.resolve();
   }
 
   /**
@@ -163,8 +164,9 @@ class LocalInboxWork implements DeliveryInboxWork {
     return completed !== undefined;
   }
 
-  async abandon(): Promise<void> {
+  abandon(): Promise<void> {
     this.#message = undefined;
+    return Promise.resolve();
   }
 
   #requireMessage(): InboxMessage {

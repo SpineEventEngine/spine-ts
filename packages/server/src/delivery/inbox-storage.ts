@@ -19,12 +19,19 @@ import { ShardIndex } from "./shard-index.js";
 const defaultReadLimit = 100;
 const maxReadLimit = 1_000;
 
-/** Durable storage for generated inbox records. */
+/**
+ * Stores direct generated inbox records in the configured durable family.
+ */
 export class InboxStorage {
   readonly #context: StorageContext;
   readonly #storageFactory: StorageFactory;
   readonly #now: () => Date;
 
+  /**
+   * Opens direct inbox storage.
+   *
+   * @param options Configures the storage context, factory, and optional clock.
+   */
   constructor(options: InboxStorageOptions) {
     this.#context = options.context;
     this.#storageFactory = options.storageFactory;
@@ -32,6 +39,13 @@ export class InboxStorage {
     Object.freeze(this);
   }
 
+  /**
+   * Reads ordered direct inbox rows from one shard.
+   *
+   * @param shard Identifies the shard to query.
+   * @param options Filters and bounds the returned page.
+   * @returns The matching durable inbox messages.
+   */
   async read(shard: ShardIndex, options: InboxReadOptions = {}): Promise<readonly InboxMessage[]> {
     const requested = Values.shard(shard);
     const limit = Values.limit(options.limit ?? defaultReadLimit);
@@ -54,6 +68,12 @@ export class InboxStorage {
     }
   }
 
+  /**
+   * Reads one exact direct inbox row.
+   *
+   * @param id Identifies the message and shard.
+   * @returns The durable message, or `undefined` when it is absent.
+   */
   async readMessage(id: InboxMessageId): Promise<InboxMessage | undefined> {
     const wireId = Values.id(id);
     const storage = this.#storage();
@@ -65,6 +85,12 @@ export class InboxStorage {
     }
   }
 
+  /**
+   * Writes one direct inbox row without overwriting a collision.
+   *
+   * @param message Supplies the message to persist.
+   * @returns Whether the row was written or matched an existing duplicate.
+   */
   async write(message: InboxMessage): Promise<InboxWriteResult> {
     const record = InboxRecords.write(message);
     const id = Values.wireId(record);
@@ -83,6 +109,12 @@ export class InboxStorage {
     }
   }
 
+  /**
+   * Marks one exact pending row delivered.
+   *
+   * @param message Supplies the expected pending snapshot.
+   * @returns The delivered row, or `undefined` when the snapshot no longer matches.
+   */
   async markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
     const expected = InboxRecords.write(message);
     const id = Values.wireId(expected);
@@ -106,7 +138,12 @@ export class InboxStorage {
     }
   }
 
-  /** Admits one exact pending row while the caller owns its shard. */
+  /**
+   * Returns one exact pending row while the caller owns its shard.
+   *
+   * @param message Supplies the expected pending snapshot.
+   * @returns The admitted row, or `undefined` when it is unavailable or duplicated.
+   */
   async admit(message: InboxMessage): Promise<InboxMessage | undefined> {
     const expected = InboxRecords.write(message);
     const id = Values.wireId(expected);
@@ -150,9 +187,27 @@ export class InboxStorage {
   }
 }
 
+/**
+ * Configures direct durable inbox storage.
+ */
 export interface InboxStorageOptions {
+  // prettier-ignore
+
+  /**
+   * Storage context that owns this inbox family.
+   */
   readonly context: StorageContext;
+
+  /**
+   * Factory that opens the direct inbox record storage.
+   */
   readonly storageFactory: StorageFactory;
+
+  /**
+   * Returns the current time used when evaluating delivered-row retention.
+   *
+   * @returns The current time.
+   */
   readonly now?: () => Date;
 }
 

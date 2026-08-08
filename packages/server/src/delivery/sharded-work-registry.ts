@@ -20,6 +20,9 @@ import { ShardIndex } from "./shard-index.js";
 const retries = 8;
 const leaseDefault = 30_000;
 
+/**
+ * Defines direct durable shard-session records keyed by their generated shard index.
+ */
 export const shardSessionRecordSpec = new RecordSpec<WireShardIndex, ShardSessionRecord>({
   sourceType: ShardSessionRecordSchema,
   recordType: ShardSessionRecordSchema,
@@ -31,12 +34,26 @@ export const shardSessionRecordSpec = new RecordSpec<WireShardIndex, ShardSessio
   },
 });
 
+/**
+ * Coordinates durable exclusive ownership of delivery shards.
+ */
 export class ShardedWorkRegistry {
+  // prettier-ignore
+
+  /**
+   * Identifies the renewable leased session model.
+   */
   readonly sessionKind = "LEASED" as const;
   readonly #context: StorageContext;
   readonly #factory: StorageFactory;
   readonly #lease: number;
   readonly #now: () => Date;
+
+  /**
+   * Opens a registry over direct shard-session storage.
+   *
+   * @param options Configures durable storage, lease duration, and clock.
+   */
   constructor(options: ShardedWorkRegistryOptions) {
     this.#context = copy(options.context);
     this.#factory = options.storageFactory;
@@ -45,6 +62,14 @@ export class ShardedWorkRegistry {
     configs.set(this, { context: this.#context, storageFactory: this.#factory });
     Object.freeze(this);
   }
+
+  /**
+   * Acquires a shard for one complete durable worker identity.
+   *
+   * @param shard Identifies the shard to acquire.
+   * @param worker Identifies the worker requesting ownership.
+   * @returns The live owned session, or `undefined` when another worker owns it.
+   */
   async pickUp(shard: ShardIndex, worker: WorkerId): Promise<ShardSession | undefined> {
     const nextShard = checkedShard(shard);
     const nextWorker = checkedWorker(worker);
@@ -66,9 +91,23 @@ export class ShardedWorkRegistry {
       storage.close();
     }
   }
+
+  /**
+   * Returns one renewed exact live shard-session snapshot.
+   *
+   * @param expected Supplies the previously observed session.
+   * @returns The renewed session, or `undefined` when ownership was lost.
+   */
   async renew(expected: ShardSession): Promise<ShardSession | undefined> {
-    return this.#update(expected, false);
+    return this.#update(expected);
   }
+
+  /**
+   * Returns whether one exact live shard-session snapshot became unowned.
+   *
+   * @param expected Supplies the session to release.
+   * @returns Whether the session is or became unowned.
+   */
   async release(expected: ShardSession): Promise<boolean> {
     const storage = this.#storage();
     try {
@@ -87,6 +126,16 @@ export class ShardedWorkRegistry {
       storage.close();
     }
   }
+
+  /**
+   * Returns after draining one exclusively owned shard until a full rescan is empty.
+   *
+   * @param shard Identifies the shard to drain.
+   * @param worker Identifies the worker retaining ownership.
+   * @param read Reads the next pending shard contents.
+   * @param deliver Delivers one pending value under the current session.
+   * @returns A promise that settles after release or ownership loss.
+   */
   async drainUntilEmpty<T>(
     shard: ShardIndex,
     worker: WorkerId,
@@ -111,7 +160,7 @@ export class ShardedWorkRegistry {
       if (current !== undefined) await this.release(current);
     }
   }
-  async #update(expected: ShardSession, _release: boolean): Promise<ShardSession | undefined> {
+  async #update(expected: ShardSession): Promise<ShardSession | undefined> {
     const storage = this.#storage();
     try {
       for (let i = 0; i < retries; i++) {
@@ -141,8 +190,26 @@ export class ShardedWorkRegistry {
     return this.#factory.createRecordStorage(context(this.#context), shardSessionRecordSpec);
   }
 }
+
+/**
+ * Represents one exact durable shard ownership snapshot.
+ */
 export class ShardSession {
+  // prettier-ignore
+
+  /**
+   * Identifies the leased session model.
+   */
   readonly kind = "LEASED" as const;
+
+  /**
+   * Creates an immutable shard ownership snapshot.
+   *
+   * @param shard Identifies the owned shard.
+   * @param worker Identifies the owner, or `undefined` for an unowned row.
+   * @param pickedUpAt Records the durable pickup time.
+   * @param expiresAt Records the derived lease-expiry time.
+   */
   constructor(
     readonly shard: ShardIndex,
     readonly worker: WorkerId | undefined,
@@ -152,16 +219,43 @@ export class ShardSession {
     Object.freeze(this);
   }
 }
+
+/**
+ * Configures direct durable shard-session coordination.
+ */
 export interface ShardedWorkRegistryOptions {
+  // prettier-ignore
+
+  /**
+   * Storage context that owns the shard-session family.
+   */
   readonly context: StorageContext;
+
+  /**
+   * Factory that opens direct shard-session storage.
+   */
   readonly storageFactory: StorageFactory;
+
+  /**
+   * Optional lease duration in milliseconds.
+   */
   readonly leaseMs?: number;
+
+  /**
+   * Returns the current time used to derive ownership expiry.
+   *
+   * @returns The current time.
+   */
   readonly now?: () => Date;
 }
 const configs = new WeakMap<
   ShardedWorkRegistry,
   { context: StorageContext; storageFactory: StorageFactory }
 >();
+
+/**
+ * Exposes package-internal registry construction observations for integrations.
+ */
 export const shardedWorkRegistryAccess = Object.freeze({
   matches(
     registry: ShardedWorkRegistry,
@@ -185,7 +279,8 @@ function checkedShard(value: ShardIndex): ShardIndex {
   return value;
 }
 function checkedWorker(value: WorkerId): WorkerId {
-  const node = value?.nodeId?.value;
+  if (value.nodeId === undefined) throw new Error("Shard worker is invalid.");
+  const node = value.nodeId.value;
   if (
     typeof node !== "string" ||
     node.trim() === "" ||
@@ -201,7 +296,7 @@ function time(value: unknown): number {
   return value.getTime();
 }
 function session(record: ShardSessionRecord, expected: ShardIndex, lease: number): ShardSession {
-  if (record.index?.index !== expected.index || record.index?.ofTotal !== expected.ofTotal)
+  if (record.index.index !== expected.index || record.index.ofTotal !== expected.ofTotal)
     throw new DeliveryStorageCorruptionError("Shard session does not match its storage ID.");
   const picked = timestamp(record.whenLastPicked);
   const worker = record.worker === undefined ? undefined : checkedWorker(record.worker);

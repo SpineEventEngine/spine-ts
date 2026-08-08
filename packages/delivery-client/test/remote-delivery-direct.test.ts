@@ -54,7 +54,10 @@ class FakeClient {
     }
   }
 }
-async function* empty(): AsyncIterable<never> {}
+async function* empty(): AsyncIterable<never> {
+  await Promise.resolve();
+  yield* [];
+}
 
 describe("RemoteDelivery without removal state", () => {
   beforeEach(() => {
@@ -71,6 +74,7 @@ describe("RemoteDelivery without removal state", () => {
     const update = { status: "PICKED" };
     state.readiness.push(() => Promise.resolve([snapshot]));
     state.updates.push(async function* () {
+      await Promise.resolve();
       yield update;
     });
     const delivery = RemoteDelivery.connectTo({ endpoint: "http://delivery.test" });
@@ -126,13 +130,17 @@ describe("RemoteDelivery without removal state", () => {
     state.readiness.push(
       () =>
         new Promise((resolve) => {
-          ready = () => resolve([]);
+          ready = () => {
+            resolve([]);
+          };
         }),
     );
     const delivery = RemoteDelivery.connectTo({ endpoint: "http://delivery.test" });
 
     const opening = delivery.open();
-    await vi.waitFor(() => expect(state.clients).toHaveLength(1));
+    await vi.waitFor(() => {
+      expect(state.clients).toHaveLength(1);
+    });
     const closing = delivery.close();
     ready();
     await expect(opening).rejects.toThrow("closed");
