@@ -290,12 +290,14 @@ describe("approved framework record sources", () => {
       expect(authFacet).not.toHaveProperty(obsolete);
       expect(deploymentFacet).not.toHaveProperty(obsolete);
     }
-    for (const temporaryPrivatePath of [
-      "packages/proto/proto/spine/system/server/stand_subscription.proto",
-      "packages/proto/proto/spine/system/deployment/application_node_lease.proto",
-    ]) {
-      expect(existsSync(resolve(temporaryPrivatePath))).toBe(true);
-    }
+    expect(
+      existsSync(resolve("packages/proto/proto/spine/system/server/stand_subscription.proto")),
+    ).toBe(true);
+    expect(
+      existsSync(
+        resolve("packages/proto/proto/spine/system/deployment/application_node_lease.proto"),
+      ),
+    ).toBe(false);
   });
 });
 

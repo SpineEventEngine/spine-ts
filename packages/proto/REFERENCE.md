@@ -26,11 +26,10 @@ used by the server runtime. They are intentionally absent from the root and
 named public subpaths: application code must not depend on them as a stable
 API.
 
-Two old generated paths remain temporarily for an intermediate framework
-build: `spine/system/server/stand_subscription.proto` and
-`spine/system/deployment/application_node_lease.proto`. They are private
-scaffolding, not compatibility aliases; the Stand and deployment consumer
-migrations delete them when they adopt the new records.
+One old generated path remains temporarily for an intermediate framework
+build: `spine/system/server/stand_subscription.proto`. It is private
+scaffolding, not a compatibility alias; the Stand consumer migration deletes
+it when it adopts the new record.
 
 Spine TS-owned Proto sources must not use the Proto `optional` keyword. Their
 documented declarations are separated by blank lines, and a multi-paragraph

@@ -1,4 +1,5 @@
 import { create } from "@bufbuild/protobuf";
+import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   RecordSpec,
   type RecordContinuation,
@@ -9,24 +10,29 @@ import {
 import {
   ApplicationNodeLeaseSchema,
   type ApplicationNodeLease,
-} from "@spine-event-engine/proto/generated/spine/system/deployment/application_node_lease_pb.js";
+} from "@spine-event-engine/proto/generated/spine/deployment/node_discovery_pb.js";
+import {
+  NodeIdSchema,
+  type NodeId,
+} from "@spine-event-engine/proto/generated/spine/server/server_environment_pb.js";
 
 import { ApplicationNode } from "../discovery/application-node.js";
 
-const storageKey = "spine.deployment.ApplicationNodeLease:v1";
 const defaultCleanupBatchSize = 32;
+const maximumCleanupBatchSize = 256;
+const maximumTimestampMilliseconds = 253_402_300_799_999;
 const readPageSize = 256;
 
 /**
  * Stores and reads live application-node leases in one caller-owned storage namespace.
  */
 export class LeasedNodeRegistry {
-  readonly #storage: RecordStorage<string, ApplicationNodeLease>;
+  readonly #storage: RecordStorage<NodeId, ApplicationNodeLease>;
   readonly #cleanupBatchSize: number;
   #closed = false;
   #closing: Promise<void> | undefined;
   readonly #operations = new Set<Promise<unknown>>();
-  #cleanupAfter: RecordContinuation<string> | undefined;
+  #cleanupAfter: RecordContinuation<NodeId> | undefined;
 
   /**
    * Creates a leased node registry over an explicit atomic record storage handle.
@@ -37,8 +43,15 @@ export class LeasedNodeRegistry {
     if (options.namespace.trim().length === 0)
       throw new Error("Lease storage namespace must be non-empty.");
     const cleanupBatchSize = options.cleanupBatchSize ?? defaultCleanupBatchSize;
-    if (!Number.isSafeInteger(cleanupBatchSize) || cleanupBatchSize < 1)
-      throw new RangeError("Lease cleanup batch size must be a positive safe integer.");
+    if (
+      !Number.isSafeInteger(cleanupBatchSize) ||
+      cleanupBatchSize < 1 ||
+      cleanupBatchSize > maximumCleanupBatchSize
+    ) {
+      throw new RangeError(
+        `Lease cleanup batch size must be between 1 and ${String(maximumCleanupBatchSize)}.`,
+      );
+    }
     this.#storage = options.factory.createRecordStorage(
       { name: options.namespace, multitenant: false },
       leaseRecordSpec,
@@ -61,7 +74,7 @@ export class LeasedNodeRegistry {
     return this.start(async () => {
       signal?.throwIfAborted();
       const record = LeaseRecords.write(lease);
-      const result = await this.#storage.compareAndSet(record.nodeId, undefined, record);
+      const result = await this.#storage.compareAndSet(LeaseRecords.id(record), undefined, record);
       signal?.throwIfAborted();
       return result;
     });
@@ -84,13 +97,14 @@ export class LeasedNodeRegistry {
   ): Promise<boolean> {
     return this.start(async () => {
       signal?.throwIfAborted();
-      const current = await this.#storage.read(nodeId);
+      const id = LeaseRecords.nodeId(nodeId);
+      const current = await this.#storage.read(id);
       signal?.throwIfAborted();
       if (current === undefined) return false;
-      const lease = LeaseRecords.read(current, nodeId);
+      const lease = LeaseRecords.read(current, id);
       if (lease.registrationId !== registrationId) return false;
       const result = await this.#storage.compareAndSet(
-        nodeId,
+        id,
         current,
         LeaseRecords.write({ ...lease, expiresAt }),
       );
@@ -110,14 +124,12 @@ export class LeasedNodeRegistry {
   remove(nodeId: string, registrationId: string, signal?: AbortSignal): Promise<boolean> {
     return this.start(async () => {
       signal?.throwIfAborted();
-      const current = await this.#storage.read(nodeId);
+      const id = LeaseRecords.nodeId(nodeId);
+      const current = await this.#storage.read(id);
       signal?.throwIfAborted();
-      if (
-        current === undefined ||
-        LeaseRecords.read(current, nodeId).registrationId !== registrationId
-      )
+      if (current === undefined || LeaseRecords.read(current, id).registrationId !== registrationId)
         return false;
-      const result = await this.#storage.compareAndSet(nodeId, current, undefined);
+      const result = await this.#storage.compareAndSet(id, current, undefined);
       signal?.throwIfAborted();
       return result;
     });
@@ -154,10 +166,11 @@ export class LeasedNodeRegistry {
     return this.start(async () => {
       signal?.throwIfAborted();
       LeaseRecords.requireTime(now);
-      const record = await this.#storage.read(nodeId);
+      const id = LeaseRecords.nodeId(nodeId);
+      const record = await this.#storage.read(id);
       signal?.throwIfAborted();
       if (record === undefined) return undefined;
-      const lease = LeaseRecords.read(record, nodeId);
+      const lease = LeaseRecords.read(record, id);
       return lease.expiresAt > now ? lease : undefined;
     });
   }
@@ -229,9 +242,9 @@ export class LeasedNodeRegistry {
 
   private async readAll(
     signal: AbortSignal | undefined,
-  ): Promise<readonly RecordEntry<string, ApplicationNodeLease>[]> {
-    const records: RecordEntry<string, ApplicationNodeLease>[] = [];
-    let after: RecordContinuation<string> | undefined;
+  ): Promise<readonly RecordEntry<NodeId, ApplicationNodeLease>[]> {
+    const records: RecordEntry<NodeId, ApplicationNodeLease>[] = [];
+    let after: RecordContinuation<NodeId> | undefined;
     for (;;) {
       signal?.throwIfAborted();
       const page = await this.#storage.queryEntries({
@@ -298,35 +311,38 @@ export interface NodeLease {
  *
  * @internal
  */
-export const leaseRecordSpec: RecordSpec<string, ApplicationNodeLease> = new RecordSpec<
-  string,
+export const leaseRecordSpec: RecordSpec<NodeId, ApplicationNodeLease> = new RecordSpec<
+  NodeId,
   ApplicationNodeLease
 >({
-  schema: ApplicationNodeLeaseSchema,
-  storageKey,
-  idKind: "string",
+  recordType: ApplicationNodeLeaseSchema,
+  idSchema: NodeIdSchema,
   extractId: (record) => LeaseRecords.id(record),
 });
 
 const LeaseRecords = Object.freeze({
-  id(record: ApplicationNodeLease): string {
-    if (!record.nodeId.trim()) throw new Error("Application node lease record has no node ID.");
+  id(record: ApplicationNodeLease): NodeId {
+    if (!record.nodeId?.value.trim())
+      throw new Error("Application node lease record has no node ID.");
     return record.nodeId;
   },
 
-  read(record: ApplicationNodeLease, expectedId?: string): NodeLease {
-    const version = record.encodingVersion;
-    const id = record.nodeId;
+  nodeId(value: string): NodeId {
+    if (!value.trim()) throw new Error("Application node lease record has no node ID.");
+    return create(NodeIdSchema, { value });
+  },
+
+  read(record: ApplicationNodeLease, expectedId?: NodeId): NodeLease {
+    const id = this.id(record);
     const endpoint = record.endpoint?.origin;
-    const expiresAt = Number(record.expiresAtMillis);
-    const registrationId = record.registrationId;
-    if (version !== 1) throw new Error("Application node lease record has unsupported version.");
-    if (expectedId !== undefined && id !== expectedId)
+    const expiresAt = this.milliseconds(record.whenExpires);
+    const registrationId = record.registrationId?.value;
+    if (expectedId !== undefined && id.value !== expectedId.value)
       throw new Error("Application node lease record is invalid.");
     try {
       if (endpoint === undefined || !Number.isSafeInteger(expiresAt)) throw Error();
       const node = new ApplicationNode({
-        id,
+        id: id.value,
         endpoint,
         ...(record.endpoint?.tlsServerName === undefined ||
         record.endpoint.tlsServerName.length === 0
@@ -334,7 +350,7 @@ const LeaseRecords = Object.freeze({
           : { tlsServerName: record.endpoint.tlsServerName }),
       });
       this.requireTime(expiresAt);
-      if (!registrationId.trim()) throw Error();
+      if (!registrationId?.trim()) throw Error();
       return Object.freeze({ node, registrationId, expiresAt });
     } catch {
       throw new Error("Application node lease record is invalid.");
@@ -353,27 +369,49 @@ const LeaseRecords = Object.freeze({
         : { tlsServerName: lease.node.tlsServerName }),
     });
     return create(ApplicationNodeLeaseSchema, {
-      encodingVersion: 1,
-      nodeId: node.id,
+      nodeId: { value: node.id },
       endpoint: {
         origin: node.endpoint,
         ...(node.tlsServerName === undefined ? {} : { tlsServerName: node.tlsServerName }),
       },
-      expiresAtMillis: BigInt(lease.expiresAt),
-      registrationId: lease.registrationId,
+      whenExpires: this.timestamp(lease.expiresAt),
+      registrationId: { value: lease.registrationId },
+    });
+  },
+
+  milliseconds(timestamp: Timestamp | undefined): number {
+    if (
+      timestamp === undefined ||
+      timestamp.seconds < 0n ||
+      timestamp.nanos < 0 ||
+      timestamp.nanos >= 1_000_000_000 ||
+      timestamp.nanos % 1_000_000 !== 0
+    ) {
+      throw new Error("Application node lease record is invalid.");
+    }
+    const milliseconds = timestamp.seconds * 1_000n + BigInt(timestamp.nanos / 1_000_000);
+    if (milliseconds > BigInt(maximumTimestampMilliseconds))
+      throw new Error("Application node lease record is invalid.");
+    return Number(milliseconds);
+  },
+
+  timestamp(milliseconds: number): Timestamp {
+    return create(TimestampSchema, {
+      seconds: BigInt(Math.floor(milliseconds / 1_000)),
+      nanos: (milliseconds % 1_000) * 1_000_000,
     });
   },
 
   requireTime(value: number): void {
-    if (!Number.isSafeInteger(value) || value < 0)
-      throw new RangeError("Lease expiry must be a non-negative safe integer.");
+    if (!Number.isSafeInteger(value) || value < 0 || value > maximumTimestampMilliseconds)
+      throw new RangeError("Lease expiry must be within the supported Protobuf Timestamp range.");
   },
 });
 
 const LeasePages = Object.freeze({
   continuation(
-    entry: RecordEntry<string, ApplicationNodeLease> | undefined,
-  ): RecordContinuation<string> {
+    entry: RecordEntry<NodeId, ApplicationNodeLease> | undefined,
+  ): RecordContinuation<NodeId> {
     if (entry === undefined) throw new Error("Lease page has no continuation row.");
     return { values: [{ field: "id", value: entry.id }], id: entry.id };
   },

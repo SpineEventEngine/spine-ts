@@ -437,6 +437,16 @@ importers:
       '@spine-event-engine/storage':
         specifier: workspace:*
         version: link:../storage
+    devDependencies:
+      '@spine-event-engine/storage-datastore':
+        specifier: workspace:*
+        version: link:../storage-datastore
+      '@spine-event-engine/storage-rdbms':
+        specifier: workspace:*
+        version: link:../storage-rdbms
+      mysql2:
+        specifier: 3.23.1
+        version: 3.23.1(@types/node@24.13.2)
 
   packages/deployment-gce:
     dependencies:

@@ -10,25 +10,46 @@ A consumer treats conflicting descriptors for one stable ID in one snapshot as a
 
 `LeasedNodeRegistry` persists application-node discovery leases through an
 explicit caller-owned `StorageFactory` and a non-empty operator-owned namespace.
-It requires atomic compare-and-set storage at construction. A lease contains
-only a stable node ID, canonical endpoint, epoch-millisecond expiry, and opaque
-registration identity. The v1 layout uses the storage key
-`spine.deployment.ApplicationNodeLease:v1`.
+It requires atomic compare-and-set storage at construction. It stores the
+approved `spine.deployment.ApplicationNodeLease` record, using its
+`spine.server.NodeId` message as the storage ID and its `NodeRegistrationId`
+message as the fencing identity. A lease contains only a stable node ID,
+canonical endpoint, epoch-millisecond expiry, and opaque registration identity.
+Its `when_expires` field is a `google.protobuf.Timestamp`: the registry accepts
+exact integer milliseconds from 0 through 253,402,300,799,999 and rejects
+values outside that range or stored sub-millisecond values.
 
 `register()` only creates an absent row. `renew()` and `remove()` compare the
 stored registration identity, fencing a stale process after node-ID reuse.
 `read(now)` validates the complete stored snapshot before it returns any live
-nodes, then excludes expiry values less than or equal to `now`. Malformed or
-unknown-version rows fail the entire read and are neither deleted nor rewritten.
-Future incompatible records use another versioned storage key; this package has
-no migration, compatibility, dual-read, or dual-write path.
+nodes, then excludes expiry values less than or equal to `now`. Malformed rows
+fail the entire read and are neither deleted nor rewritten. This package has no
+migration, compatibility, dual-read, or dual-write path.
 
-`cleanup(now)` conditionally removes one finite batch of expired rows. It is
-safe to repeat and to call concurrently; expiry makes abandoned scale-to-zero
-rows immediately undiscoverable even before a later healthy node resumes
-physical cleanup. `close()` is idempotent, closes this registry's storage handle,
+`cleanup(now)` conditionally removes one finite batch of at most 256 expired
+rows. Its configured batch size must be from 1 through 256; the default is 32.
+It is safe to repeat and to call concurrently; expiry makes abandoned
+scale-to-zero rows immediately undiscoverable even before a later healthy node
+resumes physical cleanup. `close()` is idempotent, closes this registry's storage handle,
 fences later operations, and waits for already-started operations to settle
 before it closes the handle. It never closes the caller's factory. The typed
 lease record preserves an explicit normalized HTTPS TLS authority alongside its
 canonical origin, so a read returns the same `ApplicationNode` descriptor that
 was registered.
+
+## Provider layout selection
+
+Provider configuration selects the `ApplicationNodeLease` record family. For
+MySQL, use the record-only table-name registration because this lease has the
+same source and record type:
+
+```ts
+MysqlStorageFactory.newBuilder().setTableName(
+  ApplicationNodeLeaseSchema,
+  "application_node_leases",
+);
+```
+
+For Datastore, use the same record family with `organizeRecords()` to select a
+kind, or `useRecordStorage()` to supply an application-owned storage adapter.
+Both APIs take `ApplicationNodeLeaseSchema` as their record-only selector.

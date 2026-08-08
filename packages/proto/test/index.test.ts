@@ -65,7 +65,7 @@ describe("@spine-event-engine/proto", () => {
     ) as ProtoSourceManifest;
 
     expect(manifest.schemaVersion).toBe(1);
-    expect(manifest.sources).toHaveLength(41);
+    expect(manifest.sources).toHaveLength(43);
 
     for (const source of manifest.sources) {
       const contents = readFileSync(resolve(source.localPath));
