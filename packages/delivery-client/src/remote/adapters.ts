@@ -163,15 +163,7 @@ class RemoteSessionOwner {
    *
    * @param client Sends shard operations to the delivery server.
    */
-  private constructor(private readonly client: DeliveryClient) {}
-
-  static for(client: DeliveryClient): RemoteSessionOwner {
-    const current = remoteSessionOwners.get(client);
-    if (current !== undefined) return current;
-    const owner = new RemoteSessionOwner(client);
-    remoteSessionOwners.set(client, owner);
-    return owner;
-  }
+  constructor(private readonly client: DeliveryClient) {}
 
   /**
    * Acquires a shard for the supplied complete worker identity.
@@ -228,14 +220,14 @@ class RemoteSessionOwner {
   /**
    * Validates that an exclusive remote session still owns its shard.
    *
-   * A free shard may be reacquired by the same complete worker and replaces
-   * the existing local session value. A different current owner invalidates
-   * the local session. Unknown probe outcomes fail closed without storing a
-   * quarantine or marker.
+   * An exact worker and pickup-time match retains the local session. A free
+   * shard accidentally acquired by the probe is released and invalidated, as
+   * is a session held by a different current owner. Unknown outcomes fail
+   * closed without storing quarantine or marker state.
    *
    * @param session Supplies the locally issued exclusive session.
    * @param options Bounds or cancels the authoritative probe.
-   * @returns Whether the session owns the shard after the probe.
+   * @returns The retained session, or `undefined` when validation fails.
    */
   async validateOwnership(
     session: DeliveryWorkSession,
@@ -333,7 +325,7 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
    * @param client Sends shard operations to the delivery server.
    */
   constructor(client: DeliveryClient) {
-    this.#owner = RemoteSessionOwner.for(client);
+    this.#owner = new RemoteSessionOwner(client);
     conditionalPickUp.register(this, (shard, worker, options) =>
       this.#owner.pickUp(shard, worker, options),
     );
@@ -372,7 +364,7 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
    *
    * @param session Supplies the exclusive session to validate.
    * @param options Bounds or cancels the authoritative probe.
-   * @returns Whether the session still owns the shard.
+   * @returns The retained session, or `undefined` when validation fails.
    */
   validateOwnership(
     session: DeliveryWorkSession,
@@ -394,8 +386,6 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
 /**
  * Groups immutable remote-adapter value operations.
  */
-const remoteSessionOwners = new WeakMap<DeliveryClient, RemoteSessionOwner>();
-
 const RemoteValues = Object.freeze({
   receiveMessage(input: InboxMessageInput): InboxMessage {
     const message = DeliveryMessageCodec.snapshot({

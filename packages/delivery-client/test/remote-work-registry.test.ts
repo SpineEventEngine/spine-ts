@@ -54,6 +54,19 @@ describe("RemoteWorkRegistry", () => {
     expect(fake.unary).not.toHaveBeenCalled();
   });
 
+  it("keeps issued sessions private to one registry wrapper", async () => {
+    const workers: { nodeId: string; value: string }[] = [];
+    const client = DeliveryClient.usingTransport(workerTransport(workers));
+    const owner = new RemoteWorkRegistry(client);
+    const sibling = new RemoteWorkRegistry(client);
+    const session = await owner.pickUp(ShardIndex.single(), workerId("node", "worker-1"));
+    if (session === undefined) throw new Error("Remote shard was not acquired.");
+
+    await expect(sibling.validateOwnership(session)).resolves.toBeUndefined();
+    await expect(sibling.release(session)).resolves.toBe(false);
+    await expect(owner.release(session)).resolves.toBe(true);
+  });
+
   it("forwards both operation bounds when acquiring a remote shard", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport);

@@ -157,3 +157,65 @@ their remaining findings. No other concern is reopened.
 - Targeted re-review remains pending for TypeScript/API documentation,
   performance/reliability, style/maintainability, and documentation. Security
   remains N/A.
+
+## Final Re-Review Dispatch
+
+Endpoint: `3baa2ff1`.
+
+- Existing TypeScript/API documentation reviewer; explicit configured profile
+  `gpt-5.6-terra` / `high`. Scope: the required
+  `DeliveryWorkRegistry.validateOwnership()` contract, root declarations,
+  direct remote acknowledgement cutover, and removal of retired work exports.
+- Existing performance/reliability reviewer; explicit configured profile
+  `gpt-5.6-terra` / `high`. Scope: validation ordering before dispatch,
+  repository commit, and acknowledgement; exact remote worker/timestamp probe;
+  takeover, accidental pickup cleanup, unknown outcome, release, and bounded
+  lifecycle behavior.
+- Existing style/maintainability reviewer; explicit configured profile
+  `gpt-5.6-terra` / `high`. Scope: the final direct-port and ownership-fence
+  delta, with special attention to hidden replacement state or compatibility
+  seams.
+- Documentation reviewer will run after one slot returns using its immutable
+  configured `gpt-5.6-luna` / `medium` profile. Security remains N/A because
+  the change restores an existing ownership boundary and introduces no new
+  principal, credential, or external trust boundary.
+
+Runtime metadata will be recorded when exposed; otherwise the immutable
+configured role/profile and metadata limitation satisfy the acceptance gate.
+
+## Final Re-Review Results
+
+- TypeScript/API documentation: one P2 comment-only correction. The remote
+  validation TSDoc described an accidental pickup as replacing the local
+  session and described a boolean result. The implementation correctly
+  releases/invalidate that pickup and returns the retained session or
+  `undefined`; the comments were aligned. Public port/root exports, direct
+  acknowledgement, and deleted compatibility surfaces are otherwise clean.
+- Performance/reliability: CLEAN. Exact worker/timestamp validation, ordering
+  before dispatch/commit/acknowledgement/actions, current-session propagation,
+  bounded accidental cleanup, fail-closed unknown probes, release ordering,
+  forced-expiry evidence, and absence of replacement state were confirmed.
+  Reviewer-focused verification passed 2 files / 33 tests.
+- The API and reliability reviewers retained their explicitly configured
+  `gpt-5.6-terra` / `high` profiles; runtime introspection was unavailable with
+  no visible mismatch or fallback.
+- Documentation: CLEAN. The corrected ownership-validation TSDoc and the
+  server/delivery-client README and reference guarantees accurately describe
+  exact worker fencing, accidental-probe cleanup, fail-closed unknown outcomes,
+  direct acknowledgement, and the absence of replacement persistence. The
+  reviewer retained its immutable configured `gpt-5.6-luna` / `medium` profile;
+  runtime introspection was unavailable.
+- Style/maintainability: one P2 correction. `RemoteSessionOwner` was cached in a
+  module-level `WeakMap` by `DeliveryClient`, which allowed sibling
+  `RemoteWorkRegistry` wrappers to validate or release one another's locally
+  issued sessions. The cache was removed; each registry now owns a private
+  session owner, with a regression covering sibling isolation. The reviewer
+  retained its explicitly configured `gpt-5.6-terra` / `high` profile; runtime
+  introspection was unavailable with no visible mismatch or fallback.
+- The correction passes the complete delivery-client suite (12 files / 96
+  tests), its package TypeScript check, changed-file ESLint and Prettier, and
+  `git diff --check`.
+- Targeted style/maintainability and performance/reliability re-review remain
+  pending. TypeScript/API documentation and documentation are closed because
+  their only corrections were comment-only and did not change again. Security
+  remains N/A.
