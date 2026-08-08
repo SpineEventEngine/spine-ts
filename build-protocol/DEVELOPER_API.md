@@ -371,8 +371,11 @@ shard immediately and replays only the exact row target before running the
 process-manager or projection transaction and `Stand` update. Before handler
 code runs, replay validates the row label, pending `TO_DELIVER` status, tenant,
 payload/schema, target type URL, and routed target ID.
-Delivered rows are the durable deduplication fact; no separate dedup authority
-or fixed retention window is required.
+At the lower-level Inbox boundary, `keepUntil` is optional: a delivered row
+suppresses a matching duplicate until that deadline, or indefinitely when it is
+absent. Built-context repository handoffs deliberately set `keepUntil` to 30
+seconds after `whenReceived`; this is their retention choice, not a separate
+dedup authority or a universal Inbox rule.
 
 The package does not expose a raw worker callback API. Built contexts replay
 through validated framework endpoints. The current API does not provide a

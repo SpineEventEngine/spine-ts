@@ -273,8 +273,8 @@ delivery worker boundary:
   before acknowledgement; loss of that fence stops the shard before the next
   protected operation. The loop is a lifecycle wrapper, not retry policy,
   supervision, or transport topology; and
-- malformed, oversized, or key-mismatched inbox, dedup, and shard-session
-  records fail closed as storage corruption. Deprecated legacy stored
+- malformed, oversized, or key-mismatched inbox and shard-session records fail
+  closed as storage corruption. Deprecated legacy stored
   `IMPORT_EVENT` rows are one such corruption path and abort read/drain with
   `DeliveryStorageCorruptionError` before any `DeliveryRun` is returned.
 

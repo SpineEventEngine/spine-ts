@@ -52,9 +52,27 @@ Status: Specialist review wave in progress at `f7f247eb`.
 Documentation, TypeScript/API, and reliability reviewers all reported their
 configured profiles explicitly; runtime-profile introspection was unavailable.
 
+## Targeted Re-review
+
+- Documentation: CLEAN at `95bf415c`.
+- TypeScript/API P2: `RUNTIME_ARCHITECTURE.md` still names malformed “dedup”
+  records although delivered inbox rows are the deduplication facts.
+- Reliability P1: distinguish the lower-level optional `keepUntil` field from
+  built-context repository handoffs, which currently set `keepUntil` to 30
+  seconds after receipt; delivered rows suppress duplicates only until that
+  boundary (or indefinitely when the lower-level field is absent).
+
 ## Implementation Correction
 
 All five aggregated findings were corrected in the serialized implementation
 context. Documentation, TypeScript/API, and performance/reliability lanes are
 substantively affected and require targeted re-review. Style remains N/A for
 prose-only changes; security remains N/A because no trust-boundary claim changed.
+
+## Targeted Correction Resolution
+
+- TypeScript/API P2 resolved: malformed-record prose names inbox and
+  shard-session records only.
+- Reliability P1 resolved: active guidance distinguishes optional lower-level
+  `keepUntil` from the repository handoff's `whenReceived + 30 seconds` value,
+  including the delivered-row suppression boundary.
