@@ -228,3 +228,18 @@ still import old retry/attempt policy.
 - Required verification: focused concurrency/corruption tests, provider
   conformance, changed-source coverage at least 90% in every metric, package
   checks, and one focused `verify:task` after convergence.
+
+### 2026-08-08 Coverage Correction
+
+The test-only coverage correction preserves the frozen runtime and T-0140
+boundary. The exact V8 command targeted only the six behavior-changed runtime
+sources: `context/tenant-index.ts`, `delivery/inbox-records.ts`,
+`delivery/inbox-storage.ts`, `delivery/sharded-work-registry.ts`, remote
+`adapters.ts`, and remote `remote-delivery.ts`. It passed 7 files / 52 tests
+with 93.49% statements (532/569), 90.11% branches (392/435), 97.05% functions
+(132/136), and 95.86% lines (487/508), with no threshold or configuration
+exclusions. Direct tests cover TenantId modes/corruption, Inbox mapping and
+CAS/dedup branches, shard ownership/corruption/drain branches, RemoteInbox
+pagination/admission, and RemoteDelivery lifecycle/close branches. Export-only
+and TSDoc-only changed files remain deterministic API/documentation targets,
+not runtime coverage sources.

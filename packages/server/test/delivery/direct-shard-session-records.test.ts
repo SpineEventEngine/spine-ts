@@ -11,6 +11,7 @@ import {
   ShardSession,
   ShardedWorkRegistry,
   shardSessionRecordSpec,
+  shardedWorkRegistryAccess,
 } from "../../src/delivery/sharded-work-registry.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 
@@ -115,6 +116,133 @@ describe("direct ShardSessionRecord storage", () => {
         },
       ),
     ).resolves.toBeUndefined();
+  });
+
+  it("rejects invalid worker, clock, and lease inputs before durable mutation", async () => {
+    const storage = new InMemoryStorageFactory();
+    const shards = registry(storage, () => new Date(0), "Tasks");
+
+    await expect(shards.pickUp(ShardIndex.single(), worker("", "worker"))).rejects.toThrow(
+      "worker",
+    );
+    await expect(
+      registry(storage, () => new Date(Number.NaN), "Invalid").pickUp(
+        ShardIndex.single(),
+        worker("node", "worker"),
+      ),
+    ).rejects.toThrow("time");
+    expect(() => registry(storage, () => new Date(0), "Invalid")).not.toThrow();
+  });
+
+  it("fails closed for corrupt records and identifies its exact storage configuration", async () => {
+    const storage = new InMemoryStorageFactory();
+    const context = { name: "Tasks", multitenant: false } as const;
+    const shards = new ShardedWorkRegistry({
+      context,
+      storageFactory: storage,
+      now: () => new Date(0),
+    });
+    const records = storage.createRecordStorage(
+      { name: "Tasks.delivery.shards", multitenant: false },
+      shardSessionRecordSpec,
+    );
+    await records.write(
+      create(ShardSessionRecordSchema, {
+        index: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
+        whenLastPicked: { seconds: 0n, nanos: -1 },
+      }),
+    );
+    await expect(shards.pickUp(ShardIndex.single(), worker("node", "worker"))).rejects.toThrow(
+      "time",
+    );
+    expect(shardedWorkRegistryAccess.matches(shards, context, storage)).toBe(true);
+    expect(
+      shardedWorkRegistryAccess.matches(shards, { name: "Other", multitenant: false }, storage),
+    ).toBe(false);
+    expect(shardedWorkRegistryAccess.matches(shards, context, new InMemoryStorageFactory())).toBe(
+      false,
+    );
+  });
+
+  it("handles absent, expired, unowned, and malformed direct session rows", async () => {
+    let now = 0;
+    const storage = new InMemoryStorageFactory();
+    const shards = registry(storage, () => new Date(now), "Tasks");
+    const shard = ShardIndex.single();
+    const expected = new ShardSession(
+      shard,
+      worker("node", "worker"),
+      new Date(0),
+      new Date(1_000),
+    );
+
+    await expect(shards.renew(expected)).resolves.toBeUndefined();
+    await expect(shards.release(expected)).resolves.toBe(false);
+    await shards.pickUp(shard, worker("node", "worker"));
+    now = 1_000;
+    await expect(shards.renew(expected)).resolves.toBeUndefined();
+
+    const records = storage.createRecordStorage(
+      { name: "Unowned.delivery.shards", multitenant: false },
+      shardSessionRecordSpec,
+    );
+    await records.write(
+      create(ShardSessionRecordSchema, {
+        index: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
+        whenLastPicked: { seconds: 0n, nanos: 0 },
+      }),
+    );
+    const unowned = registry(storage, () => new Date(0), "Unowned");
+    await expect(unowned.release(expected)).resolves.toBe(true);
+  });
+
+  it("releases an empty drain and rejects every incomplete WorkerId form", async () => {
+    const shards = registry(new InMemoryStorageFactory(), () => new Date(0), "Tasks");
+    await expect(
+      shards.drainUntilEmpty(
+        ShardIndex.single(),
+        worker("node", "worker"),
+        async () => [],
+        async () => undefined,
+      ),
+    ).resolves.toBeUndefined();
+    for (const invalid of [
+      create(WorkerIdSchema),
+      create(WorkerIdSchema, { nodeId: { value: "node" } }),
+      create(WorkerIdSchema, { nodeId: { value: " " }, value: "worker" }),
+    ]) {
+      await expect(shards.pickUp(ShardIndex.single(), invalid)).rejects.toThrow("worker");
+    }
+  });
+
+  it("returns without draining unavailable ownership and retains an expired owned row", async () => {
+    let now = 0;
+    const storage = new InMemoryStorageFactory();
+    const first = registry(storage, () => new Date(now), "Tasks");
+    const second = registry(storage, () => new Date(now), "Tasks");
+    const shard = ShardIndex.single();
+    const session = await first.pickUp(shard, worker("node-a", "worker-a"));
+    let reads = 0;
+
+    await second.drainUntilEmpty(
+      shard,
+      worker("node-b", "worker-b"),
+      async () => {
+        reads += 1;
+        return [];
+      },
+      async () => undefined,
+    );
+    expect(reads).toBe(0);
+    now = 1_000;
+    await expect(first.release(session!)).resolves.toBe(false);
+
+    const defaultLease = new ShardedWorkRegistry({
+      context: { name: "Tenanted", multitenant: true, tenantId: "tenant-a" },
+      storageFactory: storage,
+      now: () => new Date(0),
+    });
+    await expect(defaultLease.pickUp(shard, worker("node-c", "worker-c"))).resolves.toBeTruthy();
   });
 });
 
