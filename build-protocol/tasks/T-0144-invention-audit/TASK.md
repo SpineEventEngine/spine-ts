@@ -1,6 +1,6 @@
 # T-0144: Invention Audit And Wave 8 Closure
 
-Status: In progress from integrated Wave 8 commit `4e64bacb`.
+Status: Release verified; integration and remote synchronization in progress.
 
 ## Objective
 

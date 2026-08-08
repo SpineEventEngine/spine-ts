@@ -732,7 +732,8 @@ describe("RuntimeTransportBinding", () => {
   it("aggregates primitive failures from multiple transport handles", async () => {
     const transport = new InMemorySignalTransport([], (subscription) => ({
       subscription,
-      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- verifies that adapter primitives are sanitized.
+      // Verifies that adapter primitives are sanitized.
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
       close: () => Promise.reject(`failed:${subscription.topic.signalKind}`),
     }));
     const runtime = new SingleProcessServerRuntime();
