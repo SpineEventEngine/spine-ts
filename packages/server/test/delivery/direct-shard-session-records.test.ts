@@ -158,6 +158,14 @@ describe("direct ShardSessionRecord storage", () => {
     expect(() => registry(storage, () => new Date(0), "Invalid")).not.toThrow();
   });
 
+  it("rejects non-ShardIndex input before opening durable shard storage", async () => {
+    const shards = registry(new InMemoryStorageFactory(), () => new Date(0), "InvalidShard");
+
+    await expect(shards.pickUp({} as ShardIndex, worker("node", "worker"))).rejects.toThrow(
+      "Shard index is invalid.",
+    );
+  });
+
   it("fails closed for corrupt records and identifies its exact storage configuration", async () => {
     const storage = new InMemoryStorageFactory();
     const context = { name: "Tasks", multitenant: false } as const;
@@ -186,6 +194,32 @@ describe("direct ShardSessionRecord storage", () => {
     expect(shardedWorkRegistryAccess.matches(shards, context, new InMemoryStorageFactory())).toBe(
       false,
     );
+  });
+
+  it("rejects a persisted session whose embedded shard differs from its storage key", async () => {
+    const handle = {
+      atomicCompareAndSet: true,
+      read: vi.fn(() =>
+        Promise.resolve(
+          create(ShardSessionRecordSchema, {
+            index: create(ShardIndexSchema, { index: 1, ofTotal: 2 }),
+            whenLastPicked: { seconds: 0n, nanos: 0 },
+            worker: worker("node", "worker"),
+          }),
+        ),
+      ),
+      close: vi.fn(),
+    };
+    const shards = new ShardedWorkRegistry({
+      context: { name: "Mismatched", multitenant: false },
+      storageFactory: { createRecordStorage: () => handle } as never,
+      now: () => new Date(0),
+    });
+
+    await expect(shards.pickUp(ShardIndex.single(), worker("node", "worker"))).rejects.toThrow(
+      "does not match its storage ID",
+    );
+    expect(handle.close).toHaveBeenCalledOnce();
   });
 
   it("rejects a persisted pickup whose derived lease runs beyond the Date limit", async () => {
