@@ -1,4 +1,4 @@
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { InMemoryStorageFactory, type StorageContext } from "@spine-event-engine/storage";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { EventSchema } from "@spine-event-engine/proto";
