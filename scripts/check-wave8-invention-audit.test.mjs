@@ -104,6 +104,45 @@ describe("Wave 8 invention audit", () => {
     ]);
   });
 
+  it.each([
+    "No RemovalQuarantine remains; RemovalQuarantine is supported.",
+    "No legacy behavior remains; RemovalQuarantine is supported.",
+    "No legacy behavior remains, RemovalQuarantine is supported.",
+    "No RemovalQuarantine, but it is supported.",
+    "No RemovalQuarantine, yet it is supported.",
+  ])("rejects a positive occurrence after a negative clause: %s", (line) => {
+    const root = fixture();
+    writeFileSync(join(root, "docs", "GUIDE.md"), `${line}\n`);
+
+    expect(auditWave8CurrentState(root, files)).toEqual([
+      "docs/GUIDE.md:1: forbidden Wave 8 artifact: RemovalQuarantine",
+    ]);
+  });
+
+  it.each([
+    "removal-fingerprint",
+    "RevokedSession",
+    "revoked_session",
+    "ApplicationNodeLease:v1",
+    "versioned discovery storage key",
+    "schema fingerprint",
+  ])("allows an exact direct negative for %s", (artifact) => {
+    const root = fixture();
+    writeFileSync(join(root, "docs", "GUIDE.md"), `No ${artifact} remains.\n`);
+
+    expect(auditWave8CurrentState(root, files)).toEqual([]);
+  });
+
+  it("allows an unambiguous no-list in one public-document clause", () => {
+    const root = fixture();
+    writeFileSync(
+      join(root, "docs", "GUIDE.md"),
+      "Rows contain no ID copy, schema fingerprint, marker, or compatibility entity.\n",
+    );
+
+    expect(auditWave8CurrentState(root, files)).toEqual([]);
+  });
+
   it("rejects every versioned ApplicationNodeLease discovery key", () => {
     const root = fixture();
     writeFileSync(

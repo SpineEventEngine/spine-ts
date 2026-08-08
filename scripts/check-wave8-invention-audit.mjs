@@ -87,13 +87,30 @@ function trackedFiles(root) {
   }
 }
 
-function truthfulNegative(path, line, artifact) {
+function truthfulNegative(path, line, match) {
   if (!path.endsWith(".md")) return false;
-  const escaped = artifact.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  const before = line.slice(0, line.search(new RegExp(escaped, "iu")));
+  const start = Math.max(
+    line.lastIndexOf(".", match.index - 1),
+    line.lastIndexOf("!", match.index - 1),
+    line.lastIndexOf("?", match.index - 1),
+    line.lastIndexOf(";", match.index - 1),
+  );
+  const clause = line.slice(start + 1);
+  const occurrence = match[0] ?? "";
+  const before = line.slice(start + 1, match.index);
+  const after = line.slice(match.index + occurrence.length);
+  if (/\b(?:but|yet|however)\b/iu.test(clause)) return false;
+  const noList = before.match(/\bno\s+(.+)$/iu)?.[1];
   return (
-    /\b(?:no|without|removed|delete(?:d)?|does not|never)\b/iu.test(before) &&
-    !/\bbut\b/iu.test(before)
+    /\b(?:no|without)\s*$/iu.test(before) ||
+    (noList !== undefined &&
+      !/\b(?:is|are|was|were|remain(?:s)?|exist(?:s)?|persist(?:s)?|support(?:s)?|contain(?:s)?|has|have)\b/iu.test(
+        noList,
+      )) ||
+    /\b(?:does not|never)\s+(?:persist|store|use|support|contain|have)\s*$/iu.test(before) ||
+    /^\s+(?:is|are|was|were|has been|have been)\s+(?:removed|deleted|absent|unsupported)\b/iu.test(
+      after,
+    )
   );
 }
 
@@ -102,11 +119,16 @@ export function auditWave8CurrentState(root = repoRoot, enumerate = trackedFiles
   for (const path of enumerate(root)) {
     const lines = readFileSync(join(root, path), "utf8").split("\n");
     for (const [index, line] of lines.entries()) {
-      for (const [name, pattern, artifact = pattern.source] of forbidden) {
+      for (const [name, pattern] of forbidden) {
         pattern.lastIndex = 0;
-        const match = pattern.exec(line);
-        if (match === null || truthfulNegative(path, line, match[0] ?? artifact)) continue;
-        problems.push(`${path}:${index + 1}: forbidden Wave 8 artifact: ${name}`);
+        let positive = false;
+        for (let match = pattern.exec(line); match !== null; match = pattern.exec(line)) {
+          if (!truthfulNegative(path, line, match)) {
+            positive = true;
+            break;
+          }
+        }
+        if (positive) problems.push(`${path}:${index + 1}: forbidden Wave 8 artifact: ${name}`);
       }
     }
   }
