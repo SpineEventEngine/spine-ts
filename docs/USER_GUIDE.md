@@ -1640,44 +1640,40 @@ import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
 
 const url = process.env.MYSQL_URL;
 if (url === undefined || url.trim().length === 0) throw new Error("MYSQL_URL is required.");
-const factory = await MysqlStorageFactory.create({
-  url,
-  connectionLimit: 8,
-  connectTimeoutMs: 5_000,
-  tls: { rejectUnauthorized: true },
-});
+const factory = await MysqlStorageFactory.newBuilder()
+  .setOptions({
+    url,
+    connectionLimit: 8,
+    connectTimeoutMs: 5_000,
+    tls: { rejectUnauthorized: true },
+  })
+  .build();
 try {
   // Supply factory to the provider-neutral context composition below.
 } finally {
-  await factory.close();
+  factory.close();
 }
 ```
 
 It is composed through the provider-neutral factory/`ServerEnvironment` seam,
 not mysql2. Single-tenant contexts share one scope; multitenant operations need
-a non-blank current `tenantId` and are isolated. It stores Protobuf payloads in
-fixed `spine_ts_records`/`spine_ts_columns` tables, creates/verifies them at
-startup, and executes `CREATE TABLE IF NOT EXISTS` on every factory creation.
+a non-blank current `tenantId` and are isolated. Each record family lazily
+creates and verifies its own private table on first use. No shared table or
+compatibility fingerprint is stored.
 The account therefore always needs that DDL permission plus normal DML
 privileges. Use a dedicated database/account.
 
-CRUD, ordered all-or-nothing `writeAll`, and slot-addressed payload CAS are
-transactional. Supported canonical IDs are nullish values, booleans, finite
-numbers, bigint, strings, bytes, arrays, and plain objects. Their canonical
-scope, tenant, and slot encodings are limited to 512, 255, and 768 bytes; a
-materialized column name's canonical encoding is limited to 255 bytes. Indexed
-columns accept null, boolean, finite number, signed-64
-bigint, and strings up to 256 JavaScript UTF-16 code units (encoded into fixed
-768-byte sortable data). Queries push IDs,
-AND filters (value arrays are OR), materialized-column sorting/keysets, offset,
-and limit into MySQL; missing columns match nothing and dotted payload paths
-are rejected. The lookup index helps equality/order, while filesort and large
-offsets can still be costly. Provider errors are sanitized; closing a factory
-blocks new operations, closes live handles, then drains its pool; an operation
-already admitted may finish and release before the shared close promise drains
-the pool. The account needs `CREATE TABLE IF NOT EXISTS` with its FK/index,
-information-schema reads, and transactional `SELECT`/`INSERT`/`UPDATE`/`DELETE`;
-precreating tables does not remove schema verification.
+InnoDB makes `writeAll` and payload CAS transactional. MyISAM and Aria use
+deterministic ordered writes and keyed serialization instead; a failed batch
+does not roll back earlier rows. Canonical IDs support nullish values, booleans,
+finite numbers, bigint, strings, bytes, arrays, and plain objects. Scope
+(context plus tenant encoding) is at most 224 bytes and IDs at most 768 bytes.
+Each family table is lazy and has `_scope VARBINARY(224)`, `ID VARBINARY(768)`,
+`bytes MEDIUMBLOB`, `_revision BIGINT UNSIGNED DEFAULT 0`, and primary key
+`(_scope, ID)`. Existing layouts are inspected, never migrated; the adapter
+creates no foreign keys or user-column indexes. Provider errors are sanitized;
+`factory.close()` returns `void` and starts pool draining. Accounts need table
+creation, metadata reads, and ordinary DML permissions.
 
 One query accepts at most 256 `ids`, 32 filters, 64 values per filter, eight
 sort fields, and 2,048 total bound values. The adapter rejects these fixed,
@@ -1698,12 +1694,12 @@ function orders(storage: StorageFactory) {
 ```
 
 `ServerEnvironment` can supply this factory to server/context assembly. Scope
-includes context name, tenant mode, and record type; single tenant uses the
+encodes context name and tenant mode/current tenant; single tenant uses the
 canonical null tenant key, while multitenant requires a nonblank current
 `tenantId`. Startup creates/verifies
-fixed tables and fails closed on incompatible metadata; it has no migrations.
-A dedicated account needs CREATE TABLE IF NOT EXISTS (FK/index), information-
-schema reads, and transactional SELECT/INSERT/UPDATE/DELETE.
+each record family table lazily and fails closed on incompatible metadata; it
+has no migrations or automatic foreign keys/indexes. A dedicated account needs
+CREATE TABLE, information-schema reads, and ordinary DML.
 
 ### Shared entity storage foundation
 
@@ -1712,13 +1708,13 @@ contracts. `EntityRecord` carries the canonical entity ID, state, version, and
 lifecycle flags for Aggregates, Projections, and Process Managers. The physical
 scope uses the bounded-context name, tenant mode/current tenant (or the fixed
 single-tenant marker), and the supplied storage key. The adapter then binds one
-fingerprint containing the ID codec, layout, and state type before rows are read
-or written; incompatible inputs fail before access.
+current family/table layout before rows are read or written; incompatible table
+metadata fails before access.
 
 In-memory factories are isolated by default. To deliberately share compatible
 record or adapter entity scopes across independently constructed factories,
 pass the same root-exported `InMemoryStorageBackend` token; a mismatched
-fingerprint still fails before access, and closing one factory leaves the
+configuration still fails before access, and closing one factory leaves the
 backend available to its siblings.
 
 State and diagnostic event history are asynchronous immutable journals. They
@@ -1791,9 +1787,11 @@ delivery protocol.
 ### IDs, columns, transactions, and errors
 
 Only materialized column names and `id` are queryable. A name not materialized
-for a record matches no rows. `writeAll` is one transaction and later duplicate
-slots win; CAS compares deterministic Protobuf payload bytes and addresses the
-supplied slot even when the body has another logical ID.
+for a record matches no rows. On InnoDB, `writeAll` uses one transaction. On
+MyISAM and Aria, it writes in deterministic input order and an identical retry
+can complete a partial prefix. Later duplicate slots win; CAS compares
+deterministic Protobuf payload bytes and addresses the supplied slot even when
+the body has another logical ID.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
@@ -1832,9 +1830,9 @@ some orderings and large offsets are costly.
 `MysqlStorageSchemaError`, `MysqlStorageDataError`, and
 `MysqlStorageOperationError` are sanitized public error classes. Query LIMIT
 uses mysql2's parameterized `query()` route because server-prepared JS-number
-LIMIT binds are rejected; it never interpolates values. Pool-close failures are
-reported as `MysqlStorageConnectionError`; repeated close calls still return
-the same rejecting promise.
+LIMIT binds are rejected; it never interpolates values. `factory.close()` is a
+void, idempotent signal that starts draining the pool; it does not return a
+promise for observing pool-close failures.
 
 ### Lifecycle, verification, and future engines
 

@@ -136,7 +136,7 @@ async function providerFactory(): Promise<StorageFactory> {
     case "mysql":
       if (mysqlUrl === undefined)
         throw new Error("SPINE_TS_MYSQL_URL is required for MySQL conformance.");
-      return await MysqlStorageFactory.create({ url: mysqlUrl });
+      return await MysqlStorageFactory.newBuilder().setOptions({ url: mysqlUrl }).build();
     case "datastore":
       if (datastoreHost === undefined)
         throw new Error("DATASTORE_EMULATOR_HOST is required for Datastore conformance.");

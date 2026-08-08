@@ -2,6 +2,8 @@
  * Internal canonical UTF-8 ordering shared by in-memory storage components.
  */
 export const CanonicalUtf8 = {
+  // prettier-ignore
+
   /**
    * Compares strings by their canonical UTF-8 byte sequences.
    *

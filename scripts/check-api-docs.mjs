@@ -413,14 +413,19 @@ const expectedDatastoreStorageExports = [
   "DatastoreStorageOptions",
 ];
 const expectedRdbmsStorageExports = [
+  "CreateOperationFactory",
+  "MysqlColumnSpec",
+  "MysqlCreateOperation",
   "MysqlEntityStorageHandle",
   "MysqlStorageConfigurationError",
   "MysqlStorageConnectionError",
   "MysqlStorageDataError",
   "MysqlStorageFactory",
+  "MysqlStorageFactoryBuilder",
   "MysqlStorageOptions",
   "MysqlStorageOperationError",
   "MysqlStorageSchemaError",
+  "MysqlTableSpec",
 ];
 const expectedTransportExports = [
   "AsyncCloseable",

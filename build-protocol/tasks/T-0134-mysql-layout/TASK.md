@@ -1,6 +1,6 @@
 # T-0134: MySQL And MariaDB Record Layout
 
-Status: Ready for RED-first implementation
+Status: Complete on the Wave 8 integration train; reviewed and verified
 
 ## Objective
 
@@ -138,13 +138,21 @@ export interface MysqlColumnSpec {
 
 Each resolved record family owns one table with this required structure:
 
-- `_context VARBINARY(512) NOT NULL`;
-- `_tenant VARBINARY(255) NOT NULL`;
+- `_scope VARBINARY(224) NOT NULL`;
 - `ID VARBINARY(768) NOT NULL`;
 - `bytes MEDIUMBLOB NOT NULL`;
 - `_revision BIGINT UNSIGNED NOT NULL DEFAULT 0`;
 - one nullable native SQL column per declared framework/user `RecordColumn`;
-- `PRIMARY KEY (_context, _tenant, ID)` in that exact order.
+- `PRIMARY KEY (_scope, ID)` in that exact order.
+
+`_scope` is an injective byte tuple containing a big-endian context-name byte
+length, the exact UTF-8 context name, a single-/multitenant tag, and—only for a
+multitenant context—a big-endian tenant byte length plus exact UTF-8 tenant.
+The complete scope may not exceed 224 bytes; a canonical ID may not exceed 768
+bytes. Oversized values fail before connection acquisition or SQL. No prefix,
+truncation, normalization, digest, hash, surrogate key, or fallback is allowed.
+The resulting 992-byte declared primary key fits MyISAM's 1,000-byte limit while
+retaining the existing TS ID capacity.
 
 Fixed names are reserved case-insensitively. Declared values map to stable
 native SQL types; absent values are `NULL`. No declared user/framework column
@@ -160,9 +168,20 @@ and redundant unique indexes containing the complete primary key are accepted.
 The adapter never executes `ALTER TABLE`.
 
 Queries address one table, bind values, push declared-column filters/order,
-include context and tenant in every predicate, and use `ID ASC` as the stable
+include `_scope` in every predicate, and use `ID ASC` as the stable
 tie-breaker. Continuations use the same canonical ID ordering. Protobuf payload
 decoding uses `recordType`; masks remain post-decode.
+
+## Accepted Key-Length Amendment
+
+Live MySQL 8.4 proved the earlier three-part 1,535-byte primary key impossible
+on MyISAM (`ERROR 1071`). Current Spine JDBC uses direct IDs and no digest,
+fingerprint, or surrogate-key mechanism. The revised `_scope` plus direct `ID`
+layout above is therefore the minimal collision-free cross-engine correction.
+Schema inspection rejects the former three-part key, prefix keys, digest or
+surrogate layouts, and wrong primary-key order. Live tests cover boundary
+lengths, single/multitenant separation, Unicode/zero/trailing bytes, and the
+same ID in different contexts and tenants.
 
 ## Frozen Commit Semantics
 
@@ -203,3 +222,68 @@ implementation is introduced.
 - Verification: provider-focused coverage-enabled `verify:task`, MySQL and
   MariaDB live fixtures for InnoDB/MyISAM/Aria, and exact unavailable-engine or
   Docker blocker evidence when environmental support is genuinely absent.
+
+## 2026-08-08 Schema-Correction Evidence
+
+- `MysqlTableSpec` is now the canonical layout threaded by the factory into
+  `MysqlRecordStorage`; one spec drives the creation callback, default DDL, and
+  existing-table inspection. The resolver supplies the physical identity only;
+  it does not derive DDL or compatibility rules.
+- A parameterized record-storage matrix rejects missing/reordered primary keys,
+  narrow/wrong native columns, nullability/default/collation mismatches,
+  incompatible declared native columns, harmful required extra columns, and
+  harmful unique constraints. It accepts capacity widening, nullable/defaulted/
+  generated additions, non-unique indexes, and redundant unique indexes that
+  contain the complete primary key. The provider still issues no `ALTER TABLE`.
+- Fresh focused evidence: `pnpm --config.verify-deps-before-run=false exec
+vitest run packages/storage-rdbms/test` passed 65 tests with 6 URL-gated live
+  tests skipped; package `tsc --noEmit`, exact source ESLint, Prettier check,
+  and `git diff --check` exited 0.
+- Limitation: the focused non-live suite does not establish the Docker MySQL /
+  MariaDB engine matrix or repository-wide `verify:task`; those remain with the
+  orchestrator's next verification wave.
+
+## 2026-08-08 Remaining-Correction Evidence
+
+- Focused RED/GREEN covered pre-acquisition oversized query and CAS keys and
+  Entity close/idempotence. The non-live suite now passes 66 tests with six
+  URL-gated skips; package TypeScript, Prettier, and diff checks pass.
+- Completion remains blocked by the live MySQL trigger fixture's hard-coded
+  table name, an InnoDB concurrent immutable-prefix deadlock, the 90% all-
+  metric coverage gate, and TSDoc/TypeDoc debt. No commit, push, or merge is
+  authorized from this implementation context.
+
+## 2026-08-08 Wave 2 Verification
+
+- Provider coverage validation: 74 tests pass with 94.06% statements, 90.01%
+  branches, 93.83% functions, and 95.82% lines.
+- Live matrix: MySQL 8 InnoDB/MyISAM and MariaDB 11.4 InnoDB/Aria, each 7/7,
+  including canonical-name trigger, Entity race, and present/absent CAS races.
+- Package typecheck, changed lint, Prettier, TSDoc, docs audience, and diff
+  checks pass. API inspection remains blocked by unrelated shared-train
+  compilation failures; no commit/push/merge is in scope.
+
+## 2026-08-08 Final Correction Verification
+
+- Disabled-history commits fail fast; canonical Entity replays avoid current-row
+  replacement; advisory lock identity includes database name.
+- Live MySQL 8 InnoDB/MyISAM and MariaDB 11.4 InnoDB/Aria each pass 9/9.
+- Provider coverage is 94.26% statements, 90.08% branches, 93.86% functions,
+  and 95.87% lines. Typecheck, changed lint, Prettier, TSDoc, audience, and
+  diff checks pass.
+
+## 2026-08-08 Final Acceptance
+
+- All required review concerns are clean after correction. Security remains N/A
+  because this task introduced no authentication, authorization, secret, or
+  deployment trust boundary.
+- Final provider coverage passes 79/79 at 93.96% statements, 90.01% branches,
+  92.98% functions, and 95.52% lines.
+- The final live MySQL InnoDB suite passes 9/9. The accepted engine matrix also
+  passes MySQL InnoDB/MyISAM and MariaDB InnoDB/Aria at 9/9 each; the final
+  micro changes are typed test helpers and documentation only.
+- Package TypeScript, strict changed-file lint, TSDoc, documentation snippets,
+  documentation audience, Prettier, and diff checks pass.
+- Repository-wide API/verification profiles remain unable to pass the stacked
+  train's downstream Datastore/server/deployment compilation until T-0135 and
+  later consumers are migrated. No T-0134 provider error is present.
