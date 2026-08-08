@@ -2,6 +2,7 @@ import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import { Delivery } from "../../src/delivery/delivery.js";
+import type { DeliveryLoopRun, DeliveryLoopStatus } from "../../src/delivery/delivery-loop.js";
 import { deliveryWorkerAccess, DeliveryWorker } from "../../src/delivery/delivery-worker.js";
 import { ShardIndex } from "../../src/index.js";
 
@@ -40,14 +41,12 @@ describe("DeliveryWorker", () => {
     ).toThrow("DeliveryWorker shards must be a non-empty array.");
   });
 
-  it.each([
-    [[{ status: "FAILED" }], "FAILED"],
-    [[{ status: "STOPPED" }], "STOPPED"],
-    [[{ status: "SKIPPED" }], "SKIPPED"],
-    [[{ status: "IDLE" }], "IDLE"],
-  ] as const)("prioritizes %s terminal loop status", (loops, expected) => {
-    expect(deliveryWorkerAccess.status(loops)).toBe(expected);
-  });
+  it.each(["FAILED", "STOPPED", "SKIPPED", "IDLE"] as const)(
+    "prioritizes %s terminal loop status",
+    (status) => {
+      expect(deliveryWorkerAccess.status([loopRun(status)])).toBe(status);
+    },
+  );
 
   it("rejects internal lifecycle access for non-worker values", () => {
     expect(() => deliveryWorkerAccess.awaitSettled({} as DeliveryWorker)).toThrow(
@@ -73,5 +72,17 @@ function delivery(): Delivery {
   return new Delivery({
     context: { name: "WorkerRuntime", multitenant: false },
     storageFactory: new InMemoryStorageFactory(),
+  });
+}
+
+function loopRun(status: DeliveryLoopStatus): DeliveryLoopRun {
+  return Object.freeze({
+    status,
+    runs: 0,
+    processed: 0,
+    accepted: 0,
+    delivered: 0,
+    failed: 0,
+    failures: Object.freeze([]),
   });
 }

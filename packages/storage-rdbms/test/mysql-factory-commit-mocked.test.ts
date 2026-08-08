@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
+/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
@@ -72,8 +72,9 @@ describe("MysqlStorageFactory mocked entity commits", () => {
       const factory = await MysqlStorageFactory.newBuilder()
         .setOptions({ url: "mysql://db.example/commit_mock" })
         .build();
+      const context = { name: "orders", multitenant: true, tenantId: "acme" };
       const entity = {
-        context: { name: "orders", multitenant: true, tenantId: "acme" },
+        context,
         id: { key: (id: string) => id },
         columns: [],
         sourceType: StringValueSchema,
@@ -85,10 +86,9 @@ describe("MysqlStorageFactory mocked entity commits", () => {
       const next = create(EntityRecordSchema);
       await expect(
         commits.commit({
-          context: entity.context,
+          context,
           entity,
           entityId: "order-1",
-          expected: undefined,
           next,
           states: [next],
           diagnostics: [create(EventSchema)],
@@ -96,17 +96,18 @@ describe("MysqlStorageFactory mocked entity commits", () => {
         }),
       ).resolves.toBe("committed");
       expect(seam.calls).toEqual(
-        expect.arrayContaining([
-          "families.prepare",
-          "events.prepare",
-          "state",
-          "diagnostic",
-          "event",
-          "write",
-        ]),
-      );
-      expect(transactional ? seam.calls : seam.calls).toContain(
-        transactional ? "state" : "preflight",
+        transactional
+          ? ["families.prepare", "events.prepare", "state", "diagnostic", "event", "write"]
+          : [
+              "families.prepare",
+              "events.prepare",
+              "preflight",
+              "assert",
+              "state",
+              "diagnostic",
+              "event",
+              "write",
+            ],
       );
       commits.close();
       commits.close();

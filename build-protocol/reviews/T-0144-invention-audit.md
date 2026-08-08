@@ -109,3 +109,44 @@ documentation lanes are substantively affected and require targeted re-review.
 - Security remains N/A because no trust boundary changed.
 - Reviewer runtime metadata was unavailable; immutable/explicit configured
   profiles were reported and no mismatch or fallback was visible.
+
+## Coverage-correction review dispatch
+
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicitly `gpt-5.6-terra` / `high`, reviews only whether the test-only
+  correction exercises truthful behavior without timing, database, lifecycle,
+  or order-dependent fragility.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicitly
+  `gpt-5.6-terra` / `high`, reviews only the changed test fixtures for focused,
+  maintainable behavior coverage and avoidance of implementation-coupled hacks.
+- TypeScript/API and documentation: N/A because the correction changes no
+  production source, declaration, public export, TSDoc, README, reference, or
+  generated API artifact.
+- Security: N/A because the correction changes no trust boundary or runtime
+  behavior.
+- Runtime metadata will be recorded if exposed; otherwise the immutable
+  configured role/profile and metadata limitation satisfy the acceptance gate.
+
+## Coverage-correction findings and resolution
+
+- P1 reliability: the mocked nontransactional MySQL commit case asserted only
+  presence, not the retry-safety invariant that family and event immutability
+  preflights precede every append/write. Corrected to assert the exact ordered
+  transactional and nontransactional call sequences.
+- P2 reliability/style: new shard-observation and service subscription tests
+  used elapsed-time sleeps that did not prove attachment or pre-buffering.
+  Corrected with a decode-completion barrier and registry/consumer attachment
+  probe; the tenant mismatch assertions now check non-settlement before posting
+  the matching event.
+- P2 style: removed an inert conditional in the MySQL assertion.
+- Mechanical preflight findings: corrected complete `DeliveryLoopRun` fixtures,
+  exact-optional commit input construction, and the bounded counter-error test.
+- The correction changes tests only. Reliability and style require narrow
+  re-review; API, documentation, and security dispositions remain N/A.
+- Targeted reliability re-review is CLEAN: exact MySQL mode ordering, the
+  decode-to-buffer latch, and registry-activation/reconciliation attachment
+  barrier are deterministic; its focused run passed 3 files / 136 tests.
+- Targeted style re-review is CLEAN: the prior timer and inert conditional are
+  gone, fixtures remain contained, and no production workaround was added.
+- Both reviewers reported the explicitly configured `gpt-5.6-terra` / `high`
+  profile; runtime metadata was unavailable and no fallback was visible.

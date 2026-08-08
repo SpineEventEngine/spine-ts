@@ -2341,15 +2341,17 @@ describe("SpineServices", () => {
     const subscription = await handlers.subscribe(createEventTopic("tenant-a"));
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
     const nextUpdate = iterator.next();
+    const attachment = await awaitSubscriptionAttachment(context, subscription);
+    let settled = false;
+    void nextUpdate.then(() => {
+      settled = true;
+    });
 
-    await delay(25);
     await context
       .eventBus()
       .post(createAggregateEvent("event-tenant-b", "aggregate-1", "Tenant B", "tenant-b"));
-    const beforeMatchingTenant = await Promise.race([
-      nextUpdate.then(() => "delivered"),
-      delay(50).then(() => "pending"),
-    ]);
+    await Promise.resolve();
+    expect(settled).toBe(false);
 
     await context
       .eventBus()
@@ -2357,12 +2359,12 @@ describe("SpineServices", () => {
     const delivered = await withTimeout(nextUpdate, "tenant event subscription update");
     const update = delivered.value as SubscriptionUpdate | undefined;
 
-    expect(beforeMatchingTenant).toBe("pending");
     expect(delivered.done).toBe(false);
     if (update?.update.case !== "eventUpdates") {
       throw new Error("Expected tenant event subscription update.");
     }
     expect(update.update.value.event.map((event) => event.id?.value)).toEqual(["event-tenant-a"]);
+    attachment.unsubscribe();
     await iterator.return?.();
   });
 
@@ -2374,15 +2376,17 @@ describe("SpineServices", () => {
     const subscription = await handlers.subscribe(createEventTopic("tenant-past"));
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
     const nextUpdate = iterator.next();
+    const attachment = await awaitSubscriptionAttachment(context, subscription);
+    let settled = false;
+    void nextUpdate.then(() => {
+      settled = true;
+    });
 
-    await delay(25);
     await context
       .eventBus()
       .post(createPastMessageAggregateEvent("event-past-other", "tenant-other"));
-    const beforeMatchingTenant = await Promise.race([
-      nextUpdate.then(() => "delivered"),
-      delay(50).then(() => "pending"),
-    ]);
+    await Promise.resolve();
+    expect(settled).toBe(false);
     await context
       .eventBus()
       .post(createPastMessageAggregateEvent("event-past-match", "tenant-past"));
@@ -2390,7 +2394,6 @@ describe("SpineServices", () => {
     const delivered = await withTimeout(nextUpdate, "past-message tenant subscription update");
     const update = delivered.value as SubscriptionUpdate | undefined;
 
-    expect(beforeMatchingTenant).toBe("pending");
     expect(delivered.done).toBe(false);
     expect(update?.update.case).toBe("eventUpdates");
     expect(
@@ -2398,6 +2401,7 @@ describe("SpineServices", () => {
         ? update.update.value.event.map((event) => event.id?.value)
         : [],
     ).toEqual(["event-past-match"]);
+    attachment.unsubscribe();
     await iterator.return?.();
   });
 
@@ -3270,8 +3274,8 @@ describe("SpineServices", () => {
     const subscription = await handlers.subscribe(createMessageIdFilteredTopic(taskId));
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
     const next = iterator.next();
+    const attachment = await awaitSubscriptionAttachment(context, subscription);
 
-    await delay(25);
     await postEntityStateChanged(
       context,
       TaskSchema,
@@ -3301,6 +3305,7 @@ describe("SpineServices", () => {
         title: "Matched",
       }),
     );
+    attachment.unsubscribe();
     await iterator.return?.();
   });
 
@@ -3333,8 +3338,8 @@ describe("SpineServices", () => {
     );
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
     const next = iterator.next();
+    const attachment = await awaitSubscriptionAttachment(context, subscription);
 
-    await delay(25);
     await postEntityStateChanged(
       context,
       TaskSchema,
@@ -3358,6 +3363,7 @@ describe("SpineServices", () => {
     expect(AnyMessages.unpack(entityUpdateKind(delivered)?.value as Any, TaskSchema)).toEqual(
       create(TaskSchema, { id: taskId, title: "Matched" }),
     );
+    attachment.unsubscribe();
     await iterator.return?.();
   });
 
@@ -5149,6 +5155,22 @@ function registeredSubscriptionHandlers(
   }
 
   return handlers;
+}
+
+async function awaitSubscriptionAttachment(context: BoundedContext, subscription: Subscription) {
+  const id = subscription.id;
+  if (id === undefined) throw new Error("Expected a subscription ID.");
+  const registry = boundedContextAccess.subscriptionRegistry(context);
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const entry = await registry.get(id);
+    if (entry?.phase === "active") {
+      return await boundedContextAccess.consumeSubscription(context, id.value, () => undefined);
+    }
+    await Promise.resolve();
+  }
+
+  throw new Error("Subscription did not become active.");
 }
 
 function registeredQueryHandlers(

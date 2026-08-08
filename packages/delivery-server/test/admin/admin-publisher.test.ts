@@ -86,8 +86,9 @@ describe("Admin publisher", () => {
     expect(publisher.service.getShardInfo(create(EmptySchema), context)).toMatchObject({
       shards: [{ index: shard, status: 2, messages: 1 }],
     });
+    const invalid = AdminPublisher.create(new InMemoryDeliveryState());
     expect(() => {
-      publisher.recordMessageTransition(shard, -2);
+      invalid.recordMessageTransition(shard, -1);
     }).toThrow("Delivery shard message count is invalid.");
   });
 
