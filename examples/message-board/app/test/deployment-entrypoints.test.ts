@@ -48,7 +48,7 @@ describe("MessageBoard deployment entrypoints", () => {
   it("executes application and combined startup entries with caller-owned Datastore clients", async () => {
     const calls = startupMocks();
 
-    await import("../src/application-entry.ts");
+    await import("../src/application-entry.js");
     expect(calls.datastore).toHaveBeenCalledWith({ projectId: "project" });
     expect(calls.storage).toHaveBeenCalledWith(calls.client);
     expect(calls.configureServer).toHaveBeenCalledWith(
@@ -59,7 +59,7 @@ describe("MessageBoard deployment entrypoints", () => {
     expect(calls.runApplication).toHaveBeenCalledWith(calls.applicationConfig, calls.storageResult);
 
     vi.resetModules();
-    await import("../src/combined-entry.ts");
+    await import("../src/combined-entry.js");
     expect(calls.datastore).toHaveBeenCalledWith({ projectId: "project" });
     expect(calls.storage).toHaveBeenCalledWith(calls.client);
     expect(calls.configureServer).toHaveBeenCalledWith(
@@ -76,7 +76,7 @@ describe("MessageBoard deployment entrypoints", () => {
   it("executes gateway startup with configured browser bindings", async () => {
     const calls = startupMocks();
 
-    await import("../src/gateway-entry.ts");
+    await import("../src/gateway-entry.js");
 
     expect(calls.datastore).toHaveBeenCalledWith({ projectId: "project" });
     expect(calls.storage).toHaveBeenCalledWith(calls.client);
@@ -99,7 +99,7 @@ describe("MessageBoard deployment entrypoints", () => {
     const calls = startupMocks();
     calls.gatewayConfig.discovery = { namespace: "boards" };
 
-    await import("../src/gateway-entry.ts");
+    await import("../src/gateway-entry.js");
 
     expect(calls.serverAtPort).toHaveBeenCalledOnce();
   });
