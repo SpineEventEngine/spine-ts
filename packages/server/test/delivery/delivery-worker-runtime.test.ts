@@ -10,7 +10,6 @@ describe("DeliveryWorker", () => {
     const worker = new DeliveryWorker({
       delivery: delivery(),
       shards: [new ShardIndex(0, 2), new ShardIndex(1, 2)],
-      node: "node",
       onMessage: () => undefined,
     });
     await expect(worker.start()).resolves.toMatchObject({
@@ -23,7 +22,6 @@ describe("DeliveryWorker", () => {
     const worker = new DeliveryWorker({
       delivery: delivery(),
       shards: [ShardIndex.single()],
-      node: "node",
       onMessage: () => undefined,
     });
     const running = worker.start();
@@ -37,7 +35,6 @@ describe("DeliveryWorker", () => {
         new DeliveryWorker({
           delivery: delivery(),
           shards: [],
-          node: "node",
           onMessage: () => undefined,
         }),
     ).toThrow("DeliveryWorker shards must be a non-empty array.");

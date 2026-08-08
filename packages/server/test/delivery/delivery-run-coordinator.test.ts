@@ -960,7 +960,6 @@ describe("DeliveryRunCoordinator", () => {
     const worker = new DeliveryWorker({
       delivery,
       shards: [configured.ready.shard],
-      node: "worker-a",
       onMessage: () => undefined,
     });
     const adapter = deliveryRunWorkers.worker(worker);
@@ -975,7 +974,6 @@ describe("DeliveryRunCoordinator", () => {
     const worker = new DeliveryWorker({
       delivery: createDelivery(),
       shards: [configured.ready.shard],
-      node: "worker-a",
       onMessage: () => undefined,
     });
     const adapter = deliveryRunWorkers.worker(worker);

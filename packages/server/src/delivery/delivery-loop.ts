@@ -1,6 +1,6 @@
 import type { Delivery, DeliveryRun, OnDeliveryMessage } from "./delivery.js";
 import type { DeliveryOperationOptions } from "./delivery-ports.js";
-import type { ShardIndex } from "./shard-index.js";
+import { ShardIndex } from "./shard-index.js";
 
 /**
  * Runs one finite direct delivery drain at a time.
@@ -17,7 +17,12 @@ export class DeliveryLoop {
    * @param options The immutable drain configuration.
    */
   constructor(options: DeliveryLoopOptions) {
-    this.#options = options;
+    this.#options = Object.freeze({
+      delivery: options.delivery,
+      shard: new ShardIndex(options.shard.index, options.shard.ofTotal),
+      onMessage: options.onMessage,
+      ...(options.operation === undefined ? {} : { operation: Object.freeze({ ...options.operation }) }),
+    });
   }
 
   /**

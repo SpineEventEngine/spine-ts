@@ -358,7 +358,7 @@ export class DeliveryBuilder {
     if (storageFactory === undefined || node === undefined) {
       const environment = ServerEnvironment.instance();
       storageFactory ??= environment.storageFactory;
-      node ??= environment.nodeId;
+      node ??= this.#worker?.nodeId?.value ?? environment.nodeId;
     }
     if (
       this.#workRegistry instanceof ShardedWorkRegistry &&

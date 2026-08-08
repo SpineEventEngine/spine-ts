@@ -28,7 +28,7 @@ describe("Delivery direct worker", () => {
         throw new Error("must not dispatch");
       },
     });
-    expect(picked).toEqual(worker);
+    expect(picked).toMatchObject({ nodeId: { value: "node-a" }, value: "restart-a" });
     expect(run.status).toBe("SKIPPED");
   });
 
@@ -112,7 +112,7 @@ describe("Delivery direct worker", () => {
         override onReceptionFailure(
           reception: Parameters<DeliveryMonitor["onReceptionFailure"]>[0],
         ) {
-          return reception.repeat();
+          return reception.repeatDispatching();
         }
       })(),
     });
@@ -122,7 +122,7 @@ describe("Delivery direct worker", () => {
         if (calls === 1) throw new Error("first dispatch failed");
       },
     });
-    expect(run).toMatchObject({ status: "DRAINED", failed: 1, delivered: 2 });
+    expect(run).toMatchObject({ status: "DRAINED", failed: 1, delivered: 1 });
     expect(calls).toBe(2);
   });
 

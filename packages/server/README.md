@@ -334,7 +334,7 @@ updates, event replay for subscriptions, or exactly-once observation.
 ## 🌐 Delivery and environment
 
 `DeliveryBuilder` builds a delivery from its inbox, work registry, shard, and
-batch choices. `DeliverySupervisor({ source, delivery, onMessage })` receives
+page-size choices. `DeliverySupervisor({ source, delivery, onMessage })` receives
 the separate public `DeliverySource` used to observe remote shards.
 `Environment` resolves the Node deployment profile; the singleton
 `ServerEnvironment` exposes the configured storage, transport, optional

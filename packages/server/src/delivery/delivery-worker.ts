@@ -110,7 +110,7 @@ export class DeliveryWorker {
     const selected = shards === undefined ? undefined : new Set(shards.map((shard) => shard.key()));
     const entries = this.#allEntries().filter(({ index, shard }) => {
       const state = this.#states[index];
-      const eligible = state === "READY" || state === "PAUSED" || state === "REJECTED";
+      const eligible = state === "READY" || state === "REJECTED";
       return eligible && (selected === undefined || selected.has(shard.key()));
     });
     const running = this.#settle(entries, obligation).finally(() => {
@@ -193,11 +193,6 @@ export interface DeliveryWorkerOptions {
    * Non-empty list of shards this worker drains for its node.
    */
   readonly shards: readonly ShardIndex[];
-
-  /**
-   * Worker node name used for shard pickup.
-   */
-  readonly node: string;
 
   /**
    * Framework endpoint callback invoked for each available supported worker row.
@@ -378,7 +373,7 @@ interface DeliveryShardEntry {
   readonly loop: DeliveryLoop;
 }
 
-type DeliveryShardState = "READY" | "PAUSED" | "REJECTED" | "PARKED" | "COMPLETE" | "STOPPED";
+type DeliveryShardState = "READY" | "REJECTED" | "PARKED" | "COMPLETE" | "STOPPED";
 
 const deliveryWorkerInternals = new WeakMap<DeliveryWorker, DeliveryWorkerInternals>();
 

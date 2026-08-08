@@ -135,6 +135,13 @@ export class Delivery {
    * @param options The delivery configuration.
    */
   constructor(options: DeliveryOptions) {
+    if (
+      options.worker !== undefined &&
+      options.node !== undefined &&
+      options.worker.nodeId?.value !== options.node
+    ) {
+      throw new Error("Delivery worker node must match the configured delivery node.");
+    }
     this.context = Object.freeze({ ...options.context });
     this.storageFactory = options.storageFactory;
     this.strategy = options.strategy ?? { shardCount: 1, shardFor: () => ShardIndex.single() };
@@ -241,7 +248,7 @@ export class Delivery {
     }
     if (options.operation?.signal?.aborted) {
       await safely(async () => {
-        await this.shards.release(session, options.operation);
+        await this.shards.release(session);
       });
       return result("STOPPED");
     }
@@ -348,7 +355,7 @@ export class Delivery {
         // The release result changes the terminal delivery outcome: a shard is
         // not complete until ownership is confirmed released.
         // eslint-disable-next-line no-unsafe-finally
-        return result("FAILED", { ...statistics, failed: statistics.failed + 1 }, failures);
+        return result("FAILED", statistics, failures);
       }
       await safely(() =>
         this.#monitor.onDeliveryCompleted(
@@ -433,10 +440,10 @@ function workerId(node: string): WorkerId {
   return create(WorkerIdSchema, { nodeId: { value: node }, value: randomUUID() });
 }
 function snapshotWorker(worker: WorkerId): WorkerId {
-  return create(WorkerIdSchema, {
-    nodeId: { value: worker.nodeId?.value ?? "" },
+  return Object.freeze({
+    nodeId: Object.freeze({ value: worker.nodeId?.value ?? "" }),
     value: worker.value,
-  });
+  }) as WorkerId;
 }
 function counts() {
   return { processed: 0, accepted: 0, delivered: 0, failed: 0 };
@@ -451,7 +458,7 @@ function result(
 function snapshot(message: InboxMessage): InboxMessage {
   return Object.freeze({
     ...message,
-    id: Object.freeze({ ...message.id }),
+    id: Object.freeze({ ...message.id, shard: new ShardIndex(message.id.shard.index, message.id.shard.ofTotal) }),
     inboxId: Object.freeze({ ...message.inboxId }),
     shard: new ShardIndex(message.shard.index, message.shard.ofTotal),
     whenReceived: new Date(message.whenReceived),
