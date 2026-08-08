@@ -142,9 +142,6 @@ export const BrowserServer: Readonly<{
         };
       },
     }));
-    if (options.discovery !== undefined)
-      stopDiscovery = await BrowserServerValues.watch(options.discovery, dynamic);
-    else await dynamic.reconcile(fixedNodes);
     const creator = new DynamicSubscriptionCreator(dynamic);
     const bindings =
       options.bindings ??
@@ -171,6 +168,9 @@ export const BrowserServer: Readonly<{
       creator,
     });
     try {
+      if (options.discovery !== undefined)
+        stopDiscovery = await BrowserServerValues.watch(options.discovery, dynamic);
+      else await dynamic.reconcile(fixedNodes);
       if (isDurableSubscriptionBindings(bindings))
         attachDurableSubscriptionCleanup(bindings, (definition, signal) =>
           creator.cancel({ wire: definition }, signal),
