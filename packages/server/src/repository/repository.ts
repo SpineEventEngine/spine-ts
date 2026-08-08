@@ -1503,16 +1503,18 @@ class AggregateCommandExecution {
     allowEnvelopes: boolean,
     sequence: number,
   ): Event {
-    const producerId = RepositorySignals.runtimeProducerId(entityId);
     const metadata = this.#runtime.signalMetadata.eventFromCommand(this.#command, sequence, {
-      ...(producerId === undefined ? {} : { producerId }),
       version: RepositorySignals.eventVersionNumber(version),
     });
     const bound =
       allowEnvelopes && EntityInvocation.isEventEnvelope(signal)
         ? clone(EventSchema, signal)
         : this.#packDomainEvent(signal, metadata);
-    bound.context = metadata.context;
+    bound.context = RepositorySignals.eventContextWithProducerId(
+      metadata.context,
+      this.#repository,
+      entityId,
+    );
     return bound;
   }
 
@@ -1785,9 +1787,7 @@ class AggregateEventExecution {
       throw new Error(`Repository aggregate execution cannot pack event message "${typeName}".`);
     }
 
-    const producerId = RepositorySignals.runtimeProducerId(entityId);
     const metadata = this.#runtime.signalMetadata.eventFromEvent(this.#event, sequence, {
-      ...(producerId === undefined ? {} : { producerId }),
       version: RepositorySignals.eventVersionNumber(version),
     });
 
@@ -1800,7 +1800,11 @@ class AggregateEventExecution {
           })
         : metadata.id,
       message: AnyMessages.pack(schema, signal as never),
-      context: metadata.context,
+      context: RepositorySignals.eventContextWithProducerId(
+        metadata.context,
+        this.#repository,
+        entityId,
+      ),
     });
   }
 
@@ -2422,16 +2426,18 @@ class ProcessManagerCommandExecution {
       );
     }
 
-    const producerId = RepositorySignals.runtimeProducerId(entityId);
     const metadata = this.#runtime.signalMetadata.eventFromCommand(this.#command, sequence, {
-      ...(producerId === undefined ? {} : { producerId }),
       version: RepositoryStand.processManagerProducedVersion(sequence),
     });
 
     return create(EventSchema, {
       id: metadata.id,
       message: AnyMessages.pack(schema, signal as never),
-      context: metadata.context,
+      context: RepositorySignals.eventContextWithProducerId(
+        metadata.context,
+        this.#repository,
+        entityId,
+      ),
     });
   }
 
@@ -2678,16 +2684,18 @@ class ProcessManagerEventExecution {
       );
     }
 
-    const producerId = RepositorySignals.runtimeProducerId(entityId);
     const metadata = this.#runtime.signalMetadata.eventFromEvent(this.#event, sequence, {
-      ...(producerId === undefined ? {} : { producerId }),
       version: RepositoryStand.processManagerProducedVersion(sequence),
     });
 
     return create(EventSchema, {
       id: metadata.id,
       message: AnyMessages.pack(schema, signal as never),
-      context: metadata.context,
+      context: RepositorySignals.eventContextWithProducerId(
+        metadata.context,
+        this.#repository,
+        entityId,
+      ),
     });
   }
 
@@ -3106,6 +3114,19 @@ const RepositorySignals = {
 
   runtimeProducerId(entityId: unknown): string | number | boolean | undefined {
     return PrimitiveIds.readFinite(entityId);
+  },
+
+  eventContextWithProducerId(
+    context: NonNullable<Event["context"]>,
+    repository: RepositoryView,
+    entityId: unknown,
+  ): NonNullable<Event["context"]> {
+    const idField = repository.idField.descriptor;
+    const producerId =
+      idField.fieldKind === "message"
+        ? AnyMessages.pack(idField.message as MessageSchema, entityId as never)
+        : PrimitiveIds.pack(entityId as never);
+    return create(EventContextSchema, { ...context, producerId });
   },
 
   postRejectionEvent(
