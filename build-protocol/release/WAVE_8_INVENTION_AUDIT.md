@@ -20,7 +20,7 @@ current behavior. The deterministic companion is
 `RemovalQuarantine`; `RemovalFingerprint`; `DeliveryReceipt`; `DeliveryMarker`;
 `DeliveryClaim`/`DedupGuard`/`DedupRecord`; `DeliveryAttempt`;
 `AttemptExhaustion`; `RetryDecision`; `RevokedSession`;
-`ApplicationNodeLease:v9` (the manifest rejects every `:vN`); the retired
+`ApplicationNodeLease:v1` (the manifest rejects every `:vN`); the retired
 `@spine-event-engine/validation-ts`; and `compatibilityFingerprint`. The
 machine-readable source of truth is
 [`.wave8-forbidden-artifacts.json`](../../.wave8-forbidden-artifacts.json).

@@ -48,7 +48,7 @@ const forbidden = manifest.map(({ name, pattern, flags, fixture }) => [
   new RegExp(pattern, flags),
   fixture,
 ]);
-function files(root, directory = root) {
+export function files(root, directory = root) {
   if (!existsSync(directory)) return [];
   const result = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -82,27 +82,30 @@ function trackedFiles(root) {
       .filter((path) => !path.includes("/dist/") && !path.includes("/test/"))
       .filter((path) => sourceExtensions.has(`.${path.split(".").at(-1)}`))
       .sort();
-  } catch {
-    return files(root);
+  } catch (error) {
+    throw new Error(`Wave 8 audit requires tracked-file enumeration: ${String(error)}`);
   }
 }
 
 function truthfulNegative(path, line, artifact) {
   if (!path.endsWith(".md")) return false;
   const escaped = artifact.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  return new RegExp(`(?:no|without|removed|delete(?:d)?|does not|never)\\s+${escaped}`, "iu").test(
-    line,
+  const before = line.slice(0, line.search(new RegExp(escaped, "iu")));
+  return (
+    /\b(?:no|without|removed|delete(?:d)?|does not|never)\b/iu.test(before) &&
+    !/\bbut\b/iu.test(before)
   );
 }
 
-export function auditWave8CurrentState(root = repoRoot) {
+export function auditWave8CurrentState(root = repoRoot, enumerate = trackedFiles) {
   const problems = [];
-  for (const path of trackedFiles(root)) {
+  for (const path of enumerate(root)) {
     const lines = readFileSync(join(root, path), "utf8").split("\n");
     for (const [index, line] of lines.entries()) {
       for (const [name, pattern, artifact = pattern.source] of forbidden) {
         pattern.lastIndex = 0;
-        if (!pattern.test(line) || truthfulNegative(path, line, artifact)) continue;
+        const match = pattern.exec(line);
+        if (match === null || truthfulNegative(path, line, match[0] ?? artifact)) continue;
         problems.push(`${path}:${index + 1}: forbidden Wave 8 artifact: ${name}`);
       }
     }

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   auditWave8CurrentState,
+  files,
   forbiddenArtifacts,
   manifest,
 } from "./check-wave8-invention-audit.mjs";
@@ -42,7 +43,7 @@ describe("Wave 8 invention audit", () => {
       "RemovalQuarantine was removed.\n",
     );
 
-    expect(auditWave8CurrentState(root)).toEqual([
+    expect(auditWave8CurrentState(root, files)).toEqual([
       "packages/server/src/legacy.ts:1: forbidden Wave 8 artifact: RemovalQuarantine",
     ]);
   });
@@ -51,7 +52,7 @@ describe("Wave 8 invention audit", () => {
     const root = fixture();
     writeFileSync(join(root, "docs", "GUIDE.md"), "The runtime has no RemovalQuarantine.\n");
 
-    expect(auditWave8CurrentState(root)).toEqual([]);
+    expect(auditWave8CurrentState(root, files)).toEqual([]);
   });
 
   it.each([
@@ -63,7 +64,7 @@ describe("Wave 8 invention audit", () => {
     const root = fixture();
     writeFileSync(join(root, "packages", "server", "src", "legacy.ts"), `${artifact}\n`);
 
-    expect(auditWave8CurrentState(root)).toEqual([
+    expect(auditWave8CurrentState(root, files)).toEqual([
       `packages/server/src/legacy.ts:1: forbidden Wave 8 artifact: ${description}`,
     ]);
   });
@@ -72,14 +73,14 @@ describe("Wave 8 invention audit", () => {
     const root = fixture();
     writeFileSync(join(root, "docs", "GUIDE.md"), "The adapter has no shared records table.\n");
 
-    expect(auditWave8CurrentState(root)).toEqual([]);
+    expect(auditWave8CurrentState(root, files)).toEqual([]);
   });
 
   it.each(forbiddenArtifacts)("rejects every manifest rule: %s", (name, expression) => {
     const root = fixture();
     writeFileSync(join(root, "packages", "server", "src", "legacy.ts"), `${expression}\n`);
 
-    expect(auditWave8CurrentState(root)).toEqual([
+    expect(auditWave8CurrentState(root, files)).toEqual([
       `packages/server/src/legacy.ts:1: forbidden Wave 8 artifact: ${name}`,
     ]);
   });
@@ -95,9 +96,20 @@ describe("Wave 8 invention audit", () => {
       "No old one, but RemovalQuarantine is supported.\n",
     );
 
-    expect(auditWave8CurrentState(root)).toEqual([
+    expect(auditWave8CurrentState(root, files)).toEqual([
       "docs/GUIDE.md:1: forbidden Wave 8 artifact: RemovalQuarantine",
       "packages/server/src/legacy.ts:1: forbidden Wave 8 artifact: RemovalQuarantine",
+    ]);
+  });
+
+  it("rejects a non-v1 versioned discovery key", () => {
+    const root = fixture();
+    writeFileSync(
+      join(root, "packages", "server", "src", "legacy.ts"),
+      "ApplicationNodeLease:v9\n",
+    );
+    expect(auditWave8CurrentState(root, files)).toEqual([
+      "packages/server/src/legacy.ts:1: forbidden Wave 8 artifact: versioned discovery key",
     ]);
   });
 });

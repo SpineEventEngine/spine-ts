@@ -7,7 +7,7 @@
   },
   {
     "name": "removal fingerprint",
-    "pattern": "\\bRemovalFingerprint\\b",
+    "pattern": "\\bRemovalFingerprint\\b|\\bremoval[-_ ]fingerprint\\b",
     "flags": "gu",
     "fixture": "RemovalFingerprint"
   },
@@ -49,15 +49,15 @@
   },
   {
     "name": "revoked-session facility",
-    "pattern": "\\bRevokedSession\\b",
+    "pattern": "\\bRevokedSession\\b|\\brevoked[-_ ]session\\b",
     "flags": "gu",
     "fixture": "RevokedSession"
   },
   {
     "name": "versioned discovery key",
-    "pattern": "\\bApplicationNodeLease:v[0-9]+\\b",
+    "pattern": "\\bApplicationNodeLease:v[0-9]+\\b|\\bversioned discovery[-_ ]?(?:storage )?key\\b",
     "flags": "gu",
-    "fixture": "ApplicationNodeLease:v9"
+    "fixture": "ApplicationNodeLease:v1"
   },
   {
     "name": "retired validation package",
@@ -67,7 +67,7 @@
   },
   {
     "name": "storage fingerprint",
-    "pattern": "\\bcompatibilityFingerprint\\b",
+    "pattern": "\\bcompatibilityFingerprint\\b|\\bschema fingerprint\\b",
     "flags": "gu",
     "fixture": "compatibilityFingerprint"
   }
