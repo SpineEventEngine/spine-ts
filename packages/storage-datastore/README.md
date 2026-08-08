@@ -11,8 +11,8 @@ For exact query limits, entity-storage behavior, and failure handling, see
 ## 💡 Why use it?
 
 - ✅ Stores Spine records in Google Cloud Datastore or Firestore in Datastore mode.
-- ✅ Pushes supported filters, ordering, offsets, and limits to Datastore.
-- ✅ Preserves atomic record writes through provider transactions.
+- ✅ Pushes supported filters and ordering to Datastore.
+- ✅ Preserves atomic compare-and-set writes through provider transactions.
 - ✅ Rejects queries that exceed a finite reconciliation budget instead of
   returning incomplete results.
 
@@ -35,15 +35,14 @@ controls Google authentication and client lifetime.
 import { Datastore } from "@google-cloud/datastore";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 
-const factory = new DatastoreStorageFactory({
-  client: new Datastore({ projectId: "my-project" }),
-  maxClientSideScan: 1_000,
-});
+const factory = DatastoreStorageFactory.newBuilder()
+  .setClient(new Datastore({ projectId: "my-project" }))
+  .build();
 ```
 
-Alternatively, `DatastoreStorageFactory.create({ projectId: "my-project" })`
-constructs a Google client from the supplied official client options. Pass the
-factory to the server or create record storage through the normal storage API.
+The builder always uses a caller-owned client. Its fixed finite reconciliation
+bound is 1,000 records. Pass the factory to the server or create record storage
+through the normal storage API.
 
 ## 🔐 Configure credentials and indexes
 
@@ -53,24 +52,63 @@ application can use Application Default Credentials or pass `credentials` or
 logs.
 
 Queries that combine equality filters and ordering can require composite
-indexes. Deploy this package's entity-history indexes when using the provider
-entity-history queries:
+indexes. Kind names depend on the application's Proto types and layout choices,
+so the framework cannot ship one universal index file. Keep the required
+indexes in the application and deploy them before serving those queries. For
+example:
+
+```yaml
+indexes:
+  - kind: spine.examples.orders.OrderView
+    properties:
+      - name: _scope
+      - name: status
+      - name: when_created
+        direction: desc
+```
 
 ```sh
-gcloud datastore indexes create packages/storage-datastore/index.yaml
+gcloud datastore indexes create index.yaml
 gcloud datastore indexes list
 ```
 
-Create any additional composite indexes required by the application's own
-record-query combinations before serving production traffic.
+Wait until each required index is ready before serving its query combinations.
+
+Retained Entity histories need their own indexes because their kinds and
+ordering differ from current state. For a state type named
+`spine.examples.board.Message`, the usual backward-history index is:
+
+```yaml
+indexes:
+  - kind: spine.examples.board.Message_EntityRecord
+    properties:
+      - name: _scope
+      - name: entity_id
+      - name: version
+        direction: desc
+      - name: created
+        direction: desc
+```
+
+`stateAt()` instead orders `created` and then `version`, both descending.
+Diagnostic event history uses the corresponding
+`<state-source>_Event` grouped kind and the same `entity_id`, `version`, and
+`created` columns. Inspect the concrete query shapes your application serves
+and add the matching Datastore composite indexes; the adapter never creates
+them automatically.
 
 ## 📏 Understand query limits
 
-The adapter has a finite client-side reconciliation budget. It is `1000` by
-default and can be set to another positive finite integer with
-`maxClientSideScan`. When a query needs more candidates than that budget,
+The adapter has a fixed finite client-side reconciliation budget of `1000`.
+When a query needs more candidates than that budget,
 `DatastoreQueryLimitError` is thrown instead of returning a partial result.
 There is no unlimited scan setting or Datastore-specific cursor API.
+Provider filters and ordering are pushed down; public query offsets and mixed
+local/provider limits are reconciled locally within that finite bound.
+
+Ordinary `write()` and `writeAll()` calls are independent provider writes. Use
+compare-and-set for an atomic conditional record update, or an Entity commit
+for one atomic current-state/history/event mutation.
 
 ## 🧪 Verify with a local emulator
 
@@ -96,5 +134,5 @@ cursor API.
 ## 🔗 Learn more
 
 - [Storage API](../storage/README.md)
-- [Datastore guide](../../docs/USER_GUIDE.md#google-cloud-datastore)
+- [Datastore guide](../../docs/USER_GUIDE.md#12-develop-with-google-cloud-datastore)
 - [Reference for coding agents](REFERENCE.md)

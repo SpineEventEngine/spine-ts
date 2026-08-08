@@ -1,5 +1,5 @@
 import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import { Datastore } from "@google-cloud/datastore";
+import { and, Datastore, or, PropertyFilter } from "@google-cloud/datastore";
 import {
   RecordStorage,
   type NormalizedQueryPlan,
@@ -8,20 +8,114 @@ import {
   type RecordQuery,
   type RecordSpec,
   type StorageContext,
+  type StorageGroup,
   type StorageQueryCapabilities,
 } from "@spine-event-engine/storage";
 
 import { CanonicalValue } from "./value-codec.js";
-import { DatastoreRecordKinds } from "./record-kind.js";
-
-const payloadProperty = "$spine.payload";
-const idProperty = "$spine.id";
-const columnPrefix = "$spine.column.";
-const columnTypePrefix = "$spine.columnType.";
+const payloadProperty = "bytes";
+const scopeProperty = "_scope";
 const maxMutationsPerBatch = 500;
 const maxCasAttempts = 3;
 const casRetryDelayMs = 100;
 const wrappedReadOptions = { wrapNumbers: true } as const;
+
+/**
+ * Describes one provider-side Datastore range filter.
+ *
+ * This is deliberately package-private adapter machinery. It is used by the
+ * generated Entity-history implementation to keep large histories on the
+ * provider rather than materializing them in Node.js.
+ */
+export interface DatastoreRangeFilter {
+  // prettier-ignore
+
+  /**
+   * Names the Datastore property compared by this filter.
+   */
+  readonly property: string;
+
+  /**
+   * Selects the comparison applied by Datastore.
+   */
+  readonly operator: "=" | "<" | "<=" | ">" | ">=";
+
+  /**
+   * Provides the value on the right side of the comparison.
+   */
+  readonly value: unknown;
+
+  /**
+   * Identifies the Protobuf value type when provider conversion requires it.
+   */
+  readonly valueType?: string;
+}
+
+/**
+ * Describes a bounded provider-side page over one Datastore record kind.
+ */
+export interface DatastorePageQuery {
+  // prettier-ignore
+
+  /**
+   * Narrows the page with provider-side comparisons.
+   */
+  readonly filters?: readonly DatastoreRangeFilter[];
+
+  /**
+   * Defines the stable provider-side ordering of the page.
+   */
+  readonly order?: readonly { readonly property: string; readonly direction: "asc" | "desc" }[];
+
+  /**
+   * Continues after the last row returned by the preceding provider page.
+   */
+  readonly cursor?: DatastorePageCursor;
+
+  /**
+   * Limits the number of rows decoded for this page.
+   */
+  readonly limit: number;
+}
+
+/**
+ * Returns one bounded Datastore page and its explicit keyset continuation.
+ */
+export interface DatastorePage<I, R extends Message> {
+  // prettier-ignore
+
+  /**
+   * Contains the decoded records in provider order.
+   */
+  readonly entries: readonly RecordEntry<I, R>[];
+
+  /**
+   * Continues the next request after this page.
+   */
+  readonly cursor: DatastorePageCursor | undefined;
+
+  /**
+   * Tells whether Datastore reported another page.
+   */
+  readonly hasMore: boolean;
+}
+
+/**
+ * Identifies the last provider row in a stable ordered page.
+ */
+export interface DatastorePageCursor {
+  // prettier-ignore
+
+  /**
+   * Values for the requested provider ordering.
+   */
+  readonly values: readonly unknown[];
+
+  /**
+   * Physical key used as the deterministic final tie-breaker.
+   */
+  readonly key: unknown;
+}
 
 /**
  * Private flat Datastore-entity codec for one record storage handle.
@@ -33,69 +127,76 @@ class FlatEntityCodec<I, R extends Message> {
     private readonly context: StorageContext,
     private readonly recordSpec: RecordSpec<I, R>,
     private readonly maxClientSideScan: number,
+    private readonly group: StorageGroup | undefined,
+    kind: string | undefined,
   ) {
-    this.#kind = DatastoreRecordKinds.derive(context, recordSpec.storageKey);
+    this.#kind =
+      kind ??
+      (group === undefined
+        ? recordSpec.sourceType.typeName
+        : `${group.name}_${recordSpec.recordType.typeName.split(".").at(-1) ?? ""}`);
+    if (this.#kind.trim().length === 0 || Buffer.byteLength(this.#kind, "utf8") > 1_500)
+      throw new Error("Datastore record kind must be non-blank and at most 1,500 bytes.");
   }
 
   key(client: Datastore, id: I): ReturnType<Datastore["key"]> {
     return client.key({
-      path: [this.#kind, CanonicalValue.encode(id)],
+      path: [this.#kind, this.keyName(id)],
       ...(this.context.multitenant ? { namespace: this.requiredTenantId() } : {}),
     });
   }
 
-  encode(record: R, columns: ReadonlyMap<string, unknown>, id: I): Record<string, unknown> {
+  encode(record: R, columns: ReadonlyMap<string, unknown>): Record<string, unknown> {
     const data: Record<string, unknown> = {
-      [idProperty]: CanonicalValue.encode(id),
+      [scopeProperty]: this.scope(),
       [payloadProperty]: Buffer.from(
-        toBinary(this.recordSpec.schema, record, { writeUnknownFields: false }),
+        toBinary(this.recordSpec.recordType, record, { writeUnknownFields: false }),
       ),
     };
 
     for (const [name, value] of columns) {
-      data[`${columnPrefix}${name}`] = RecordValues.provider(
+      if (value === undefined) continue;
+      data[name] = RecordValues.provider(
         value,
         `Datastore record column "${name}"`,
+        this.recordSpec.columns.find((column) => column.name === name)?.valueType,
       );
-      if (typeof value === "bigint") data[`${columnTypePrefix}${name}`] = "bigint";
     }
 
     return data;
   }
 
-  id(entity: Record<string | symbol, unknown>): I {
-    const encodedId = entity[idProperty];
-
-    if (typeof encodedId !== "string") {
+  id(entity: Record<string | symbol, unknown>, client: Datastore): I {
+    const key = datastoreKey(entity, client.KEY);
+    const name = datastoreKeyName(key);
+    if (typeof name !== "string") {
       throw new Error("Datastore entity has no valid Spine record identifier.");
     }
-
-    return CanonicalValue.decode(encodedId) as I;
+    const encoded = name.slice(name.lastIndexOf("\u0000") + 1);
+    return CanonicalValue.decode(encoded) as I;
   }
 
   columns(entity: Record<string | symbol, unknown>): ReadonlyMap<string, unknown> {
     return new Map(
-      Object.entries(entity)
-        .filter(([name]) => name.startsWith(columnPrefix))
-        .map(([name, value]) => {
-          const column = name.slice(columnPrefix.length);
-          return [column, RecordValues.local(value, entity[`${columnTypePrefix}${column}`])];
-        }),
+      this.recordSpec.columns.map((column) => [column.name, column.valueIn(this.decode(entity))]),
     );
   }
 
   unindexedProperties(data: Readonly<Record<string, unknown>>): readonly string[] {
-    return Object.keys(data).filter((name) => name.startsWith(columnTypePrefix));
+    void data;
+    return [payloadProperty];
   }
 
   createQuery(client: Datastore): ReturnType<Datastore["createQuery"]> {
-    return this.context.multitenant
+    const query = this.context.multitenant
       ? client.createQuery(this.requiredTenantId(), this.#kind)
       : client.createQuery(this.#kind);
+    query.filter(new PropertyFilter(scopeProperty, "=", this.scope()));
+    return query;
   }
 
   columnProperty(column: string): string {
-    return `${columnPrefix}${column}`;
+    return column;
   }
 
   queryLimit(): number {
@@ -110,7 +211,7 @@ class FlatEntityCodec<I, R extends Message> {
     }
 
     try {
-      return fromBinary(this.recordSpec.schema, payload, { readUnknownFields: false });
+      return fromBinary(this.recordSpec.recordType, payload, { readUnknownFields: false });
     } catch {
       throw new Error("Datastore entity cannot be decoded.");
     }
@@ -125,10 +226,80 @@ class FlatEntityCodec<I, R extends Message> {
 
     return tenantId;
   }
+
+  private scope(): string {
+    return CanonicalValue.encode([
+      this.context.name,
+      this.context.multitenant ? this.requiredTenantId() : "",
+      this.recordSpec.sourceType.typeName,
+      this.group?.name ?? "",
+    ]);
+  }
+
+  private keyName(id: I): string {
+    const name = `${this.scope()}\u0000${CanonicalValue.encode(id)}`;
+    if (Buffer.byteLength(name, "utf8") > 1_500)
+      throw new Error("Datastore record key exceeds the 1,500-byte provider limit.");
+    return name;
+  }
+}
+
+function datastoreKey(entity: Record<string | symbol, unknown>, property: unknown): unknown {
+  return typeof property === "symbol" ? entity[property] : undefined;
+}
+
+function datastoreKeyName(key: unknown): unknown {
+  if (typeof key !== "object" || key === null) return undefined;
+  const value = key as Record<string, unknown>;
+  return value.name ?? (Array.isArray(value.path) ? value.path.at(-1) : undefined);
+}
+
+function keysetFilter(
+  order: readonly { readonly property: string; readonly direction: "asc" | "desc" }[],
+  cursor: DatastorePageCursor,
+  keySymbol: unknown,
+) {
+  if (cursor.values.length !== order.length)
+    throw new Error("Datastore provider page continuation is malformed.");
+  const fields = [...order, { property: "__key__", direction: order.at(-1)?.direction ?? "asc" }];
+  const values = [...cursor.values, cursor.key];
+  const alternatives = fields.map((field, index) => {
+    const equal = fields
+      .slice(0, index)
+      .map((prior, priorIndex) => new PropertyFilter(prior.property, "=", values[priorIndex]));
+    const operator = field.direction === "asc" ? ">" : "<";
+    const current = new PropertyFilter(field.property, operator, values[index]);
+    return equal.length === 0 ? current : and([...equal, current]);
+  });
+  if (cursor.key === undefined || keySymbol === undefined)
+    throw new Error("Datastore provider page continuation is malformed.");
+  return or(alternatives);
+}
+
+function pageCursor(
+  entity: Record<string | symbol, unknown>,
+  order: readonly { readonly property: string; readonly direction: "asc" | "desc" }[],
+  keySymbol: unknown,
+): DatastorePageCursor {
+  const key = datastoreKey(entity, keySymbol);
+  const values = order.map((item) => entity[item.property]);
+  if (key === undefined || values.some((value) => value === undefined))
+    throw new Error("Datastore provider page continuation is malformed.");
+  return { values, key };
+}
+
+function sameCursor(left: DatastorePageCursor, right: DatastorePageCursor | undefined): boolean {
+  return (
+    right !== undefined && JSON.stringify(left, cursorJson) === JSON.stringify(right, cursorJson)
+  );
+}
+
+function cursorJson(_key: string, value: unknown): unknown {
+  return typeof value === "bigint" ? value.toString() : value;
 }
 
 /**
- * Private initial handle for the Datastore adapter.
+ * Provides one Datastore-backed storage handle for a record family.
  */
 export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   // prettier-ignore
@@ -146,15 +317,115 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
    * @param recordSpec Schema, identifier, and column materialization contract.
    * @param client Injected Datastore client owned by the factory.
    * @param maxClientSideScan Maximum candidate records to materialize locally.
+   * @param group The optional generated storage group.
+   * @param kind The optional physical Datastore kind override.
    */
   constructor(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
     readonly client: Datastore,
     maxClientSideScan: number,
+    group?: StorageGroup,
+    kind?: string,
   ) {
     super(context, recordSpec);
-    this.#codec = new FlatEntityCodec(context, recordSpec, maxClientSideScan);
+    this.#codec = new FlatEntityCodec(context, recordSpec, maxClientSideScan, group, kind);
+  }
+
+  /**
+   * Prepares one resolved physical row for an enclosing transaction.
+   *
+   * @param record The record to materialize.
+   * @returns The Datastore key and property map.
+   * @internal
+   */
+  transactionEntity(record: R): {
+    readonly key: ReturnType<Datastore["key"]>;
+    readonly data: Record<string, unknown>;
+    readonly excludeFromIndexes: readonly string[];
+  } {
+    const materialized = this.recordSpec.materialize(record);
+    return {
+      key: this.#codec.key(this.client, materialized.id),
+      data: this.#codec.encode(materialized.record, materialized.columns),
+      excludeFromIndexes: [payloadProperty],
+    };
+  }
+
+  /**
+   * Reads one bounded, fully provider-executed page.
+   *
+   * Entity history uses this internal seam for records that would otherwise
+   * exceed the public query materialization budget.
+   *
+   * @param request The provider filters, ordering, continuation, and row limit.
+   * @returns The decoded page and an explicit continuation when more rows remain.
+   * @internal
+   */
+  async queryProviderPage(request: DatastorePageQuery): Promise<DatastorePage<I, R>> {
+    if (!Number.isSafeInteger(request.limit) || request.limit <= 0 || request.limit > 128)
+      throw new Error(
+        "Datastore provider page limit must be a positive integer no greater than 128.",
+      );
+    const query = this.#codec.createQuery(this.client);
+    for (const filter of request.filters ?? []) {
+      query.filter(
+        new PropertyFilter(
+          filter.property,
+          filter.operator,
+          RecordValues.provider(
+            filter.value,
+            `Datastore query filter "${filter.property}"`,
+            filter.valueType,
+          ),
+        ),
+      );
+    }
+    const order = request.order ?? [];
+    for (const item of order) query.order(item.property, { descending: item.direction === "desc" });
+    if (!order.some((item) => item.property === "__key__"))
+      query.order("__key__", {
+        descending: order.at(-1)?.direction === "desc",
+      });
+    if (request.cursor !== undefined) {
+      const continuation = keysetFilter(order, request.cursor, this.client.KEY);
+      query.filter(continuation);
+    }
+    query.limit(request.limit);
+    const response = await this.provider(() => this.client.runQuery(query, wrappedReadOptions));
+    const entities = DatastoreResults.entities(response);
+    const info = DatastoreResults.queryInfo(response);
+    const entries = entities.map((entity) => ({
+      id: this.#codec.id(entity, this.client),
+      record: this.#codec.decode(entity),
+    }));
+    const cursor = entities.at(-1);
+    if (info.more && cursor === undefined)
+      throw new Error("Datastore provider page continuation is malformed.");
+    const next = cursor === undefined ? undefined : pageCursor(cursor, order, this.client.KEY);
+    if (info.more && request.cursor !== undefined && sameCursor(request.cursor, next))
+      throw new Error("Datastore provider page continuation did not advance.");
+    return {
+      entries,
+      cursor: info.more ? next : undefined,
+      hasMore: info.more,
+    };
+  }
+
+  /**
+   * Deletes a bounded group of provider entries.
+   *
+   * @param entries The entries selected by a preceding provider page.
+   * @returns Completes after the provider deletes the group.
+   * @internal
+   */
+  async deleteProviderEntries(entries: readonly RecordEntry<I, R>[]): Promise<void> {
+    if (entries.length === 0) return;
+    if (entries.length > 128)
+      throw new Error("Datastore provider delete group must contain no more than 128 entries.");
+    await this.provider(() =>
+      this.client.delete(entries.map((entry) => this.#codec.key(this.client, entry.id))),
+    );
   }
 
   /**
@@ -164,13 +435,15 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
    */
   protected async deleteRecord(id: I): Promise<boolean> {
     const key = this.#codec.key(this.client, id);
-    const entity = DatastoreResults.first(await this.client.get(key, wrappedReadOptions));
+    const entity = DatastoreResults.first(
+      await this.provider(() => this.client.get(key, wrappedReadOptions)),
+    );
 
     if (entity === undefined) {
       return false;
     }
 
-    await this.client.delete(key);
+    await this.provider(() => this.client.delete(key));
     return true;
   }
 
@@ -192,13 +465,13 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     );
     query.limit(providerLimit);
     const entities = DatastoreResults.entities(
-      await this.client.runQuery(query, wrappedReadOptions),
+      await this.provider(() => this.client.runQuery(query, wrappedReadOptions)),
     );
     if (providerLimit === this.#codec.queryLimit() && entities.length >= providerLimit) {
       throw new DatastoreQueryLimitError(providerLimit - 1);
     }
     const entries = entities.map((entity) => ({
-      id: this.#codec.id(entity),
+      id: this.#codec.id(entity, this.client),
       record: this.#codec.decode(entity),
       columns: this.#codec.columns(entity),
     }));
@@ -240,13 +513,13 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     );
     query.limit(providerLimit);
     const entities = DatastoreResults.entities(
-      await this.client.runQuery(query, wrappedReadOptions),
+      await this.provider(() => this.client.runQuery(query, wrappedReadOptions)),
     );
     if (entities.length >= providerLimit && providerLimit === this.#codec.queryLimit()) {
       throw new DatastoreQueryLimitError(providerLimit - 1);
     }
     return entities.map((entity) => ({
-      id: this.#codec.id(entity),
+      id: this.#codec.id(entity, this.client),
       record: this.#codec.decode(entity),
     }));
   }
@@ -258,7 +531,9 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
    */
   protected async readRecord(id: I): Promise<R | undefined> {
     const entity = DatastoreResults.first(
-      await this.client.get(this.#codec.key(this.client, id), wrappedReadOptions),
+      await this.provider(() =>
+        this.client.get(this.#codec.key(this.client, id), wrappedReadOptions),
+      ),
     );
 
     return entity === undefined ? undefined : this.#codec.decode(entity);
@@ -304,7 +579,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
       const expectedPayload =
         expected === undefined
           ? undefined
-          : this.#codec.encode(expected.record, expected.columns, expected.id)[payloadProperty];
+          : this.#codec.encode(expected.record, expected.columns)[payloadProperty];
       if (
         entity === undefined
           ? expected !== undefined
@@ -315,7 +590,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
       }
       if (next === undefined) transaction.delete(key);
       else {
-        const data = this.#codec.encode(next.record, next.columns, next.id);
+        const data = this.#codec.encode(next.record, next.columns);
         transaction.save({ key, data, excludeFromIndexes: this.#codec.unindexedProperties(data) });
       }
       await transaction.commit();
@@ -335,16 +610,15 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
   ): Promise<void> {
     for (let offset = 0; offset < records.length; offset += maxMutationsPerBatch) {
-      await this.client.save(
-        records.slice(offset, offset + maxMutationsPerBatch).map((record) => {
-          const data = this.#codec.encode(record.record, record.columns, record.id);
-          return {
-            key: this.#codec.key(this.client, record.id),
-            data,
-            excludeFromIndexes: this.#codec.unindexedProperties(data),
-          };
-        }),
-      );
+      const rows = records.slice(offset, offset + maxMutationsPerBatch).map((record) => {
+        const data = this.#codec.encode(record.record, record.columns);
+        return {
+          key: this.#codec.key(this.client, record.id),
+          data,
+          excludeFromIndexes: this.#codec.unindexedProperties(data),
+        };
+      });
+      await this.provider(() => this.client.save(rows));
     }
   }
 
@@ -354,20 +628,27 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
    * @returns Completes when the record is written.
    */
   protected async writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
-    const data = this.#codec.encode(record.record, record.columns, record.id);
-    await this.client.save({
-      key: this.#codec.key(this.client, record.id),
-      data,
-      excludeFromIndexes: this.#codec.unindexedProperties(data),
-    });
+    const data = this.#codec.encode(record.record, record.columns);
+    const key = this.#codec.key(this.client, record.id);
+    await this.provider(() =>
+      this.client.save({
+        key,
+        data,
+        excludeFromIndexes: this.#codec.unindexedProperties(data),
+      }),
+    );
+  }
+
+  private async provider<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch {
+      throw new Error("Datastore provider operation failed.");
+    }
   }
 }
 
 type QueryableValue = string | number | boolean | bigint | null;
-
-/**
- * Converts values between Spine records and the Datastore provider representation.
- */
 
 /**
  * Converts values between Spine records and the Datastore provider representation.
@@ -388,7 +669,8 @@ const RecordValues = Object.freeze(
     /**
      * Encodes one queryable local value for the Datastore provider.
      */
-    provider(value: unknown, label: string): unknown {
+    provider(value: unknown, label: string, valueType?: string): unknown {
+      if (valueType === "timestamp") return this.timestamp(value, label);
       if (typeof value === "bigint") {
         if (!this.queryable(value))
           throw new Error(`${label} must be an exact signed 64-bit integer.`);
@@ -398,26 +680,33 @@ const RecordValues = Object.freeze(
         if (!Number.isFinite(value)) throw new Error(`${label} must be finite.`);
         return Datastore.double(value);
       }
+      if (value instanceof Uint8Array) return Buffer.from(value);
+      if (typeof value === "object" && value !== null) return CanonicalValue.encode(value);
       if (!this.queryable(value)) throw new Error(`${label} has an unsupported value.`);
       return value;
     }
 
     /**
-     * Decodes a Datastore property to the type retained in a record column.
+     * Encodes a Protobuf timestamp so string ranges retain full signed-second
+     * and nanosecond order in Datastore.
      */
-    local(value: unknown, type: unknown): unknown {
-      if (type === "bigint") {
-        if (typeof value === "bigint") return value;
-        if (typeof value === "number" && Number.isSafeInteger(value)) return BigInt(value);
-        if (typeof value === "object" && value !== null && Datastore.isInt(value))
-          return BigInt(value.value);
-        throw new Error("Datastore entity has an invalid bigint record column.");
-      }
-      if (typeof value === "object" && value !== null && Datastore.isInt(value)) {
-        const integer = Number(value.value);
-        return Number.isSafeInteger(integer) ? integer : BigInt(value.value);
-      }
-      return value;
+    timestamp(value: unknown, label: string): string {
+      if (typeof value !== "object" || value === null)
+        throw new Error(`${label} must be a Protobuf timestamp.`);
+      const seconds: unknown = Reflect.get(value, "seconds");
+      const nanos: unknown = Reflect.get(value, "nanos");
+      if (
+        typeof seconds !== "bigint" ||
+        typeof nanos !== "number" ||
+        !Number.isInteger(nanos) ||
+        nanos < 0 ||
+        nanos > 999_999_999
+      )
+        throw new Error(`${label} must be a valid Protobuf timestamp.`);
+      const shifted = seconds + (1n << 63n);
+      if (shifted < 0n || shifted >= 1n << 64n)
+        throw new Error(`${label} seconds are outside the supported signed 64-bit range.`);
+      return `${shifted.toString().padStart(20, "0")}:${String(nanos).padStart(9, "0")}`;
     }
 
     /**
@@ -473,29 +762,29 @@ interface QueriedEntry<I, R extends Message> extends RecordEntry<I, R> {
  * Translates safe normalized record queries to Datastore query operations.
  */
 
-/**
- * Translates safe normalized record queries to Datastore query operations.
- */
-const DatastoreQueryPushdown = Object.freeze(
-  new (class {
-    // prettier-ignore
+class DatastoreQueryPushdownHelper {
+  // prettier-ignore
 
-    /**
-     * Translates the legacy record-query surface.
-     */
-    translate<I>(
+  /**
+   * Translates the legacy record-query surface.
+   */
+  translate<I>(
       query: ReturnType<Datastore["createQuery"]>,
       recordQuery: RecordQuery<I>,
       keyFor: (id: I) => ReturnType<Datastore["key"]>,
       columnProperty: (column: string) => string,
     ): void {
       if (recordQuery.ids !== undefined && recordQuery.ids.length > 0) {
+        const keys = recordQuery.ids.map(keyFor);
+        const first = recordQuery.ids[0];
+        if (first === undefined) throw new Error("Datastore record query ID is invalid.");
+        const key = keyFor(first);
         query.filter(
-          "__key__",
-          recordQuery.ids.length === 1 ? "=" : "IN",
-          recordQuery.ids.length === 1
-            ? keyFor(recordQuery.ids[0] as I)
-            : recordQuery.ids.map(keyFor),
+          new PropertyFilter(
+            "__key__",
+            keys.length === 1 ? "=" : "IN",
+            keys.length === 1 ? key : keys,
+          ),
         );
       }
       for (const filter of recordQuery.filters ?? []) {
@@ -507,9 +796,11 @@ const DatastoreQueryPushdown = Object.freeze(
                 RecordValues.provider(value, `Datastore query filter "${filter.column}"`),
               );
         query.filter(
-          filter.column === "id" ? "__key__" : columnProperty(filter.column),
-          values.length === 1 ? "=" : "IN",
-          values.length === 1 ? providerValues[0] : providerValues,
+          new PropertyFilter(
+            filter.column === "id" ? "__key__" : columnProperty(filter.column),
+            values.length === 1 ? "=" : "IN",
+            values.length === 1 ? providerValues[0] : providerValues,
+          ),
         );
       }
       for (const order of recordQuery.sort ?? []) {
@@ -519,102 +810,108 @@ const DatastoreQueryPushdown = Object.freeze(
       }
       if (!(recordQuery.sort ?? []).some((order) => order.field === "id")) query.order("__key__");
       if (recordQuery.after !== undefined && DatastoreRecordQuery.isKeysetPage(recordQuery))
-        query.filter("__key__", ">", keyFor(recordQuery.after.id));
+        query.filter(new PropertyFilter("__key__", ">", keyFor(recordQuery.after.id)));
     }
 
-    /**
-     * Applies the all-or-nothing legal portion of a normalized query plan.
-     */
-    plan<I>(
-      query: ReturnType<Datastore["createQuery"]>,
-      plan: NormalizedQueryPlan<I>,
-      keyFor: (id: I) => ReturnType<Datastore["key"]>,
-      columnProperty: (column: string) => string,
-    ): void {
-      const legal = this.legal(plan);
-      if (legal !== undefined) {
-        this.predicate(query, legal, keyFor, columnProperty);
+  /**
+   * Applies the all-or-nothing legal portion of a normalized query plan.
+   */
+  plan<I>(
+    query: ReturnType<Datastore["createQuery"]>,
+    plan: NormalizedQueryPlan<I>,
+    keyFor: (id: I) => ReturnType<Datastore["key"]>,
+    columnProperty: (column: string) => string,
+  ): void {
+    const legal = this.legal(plan);
+    if (legal !== undefined) {
+      this.predicate(query, legal, keyFor, columnProperty);
+    }
+    if (legal !== undefined || plan.predicate === undefined) {
+      for (const order of plan.order ?? []) {
+        query.order(columnProperty(order.column), { descending: order.direction === "desc" });
       }
-      if (legal !== undefined || plan.predicate === undefined) {
-        for (const order of plan.order ?? []) {
-          query.order(columnProperty(order.column), { descending: order.direction === "desc" });
-        }
-        if ((plan.order?.length ?? 0) > 0) query.order("__key__");
+      if ((plan.order?.length ?? 0) > 0) query.order("__key__");
+    }
+  }
+
+  /**
+   * Returns the predicate only when every clause satisfies provider restrictions.
+   */
+  legal<I>(plan: NormalizedQueryPlan<I>): NormalizedQueryPredicate<I> | undefined {
+    const predicate = plan.predicate;
+    if (predicate === undefined) return undefined;
+    const leaves = predicate.kind === "all" ? predicate.predicates : [predicate];
+    let idCount = 0;
+    const inequalityColumns = new Set<string>();
+    for (const leaf of leaves) {
+      if (leaf.kind !== "ids" && leaf.kind !== "comparison") return undefined;
+      if (leaf.kind === "ids") {
+        idCount += leaf.ids.length;
+        if (idCount > 30) return undefined;
+        continue;
+      }
+      if (leaf.operator !== "equal") {
+        inequalityColumns.add(leaf.column);
       }
     }
-
-    /**
-     * Returns the predicate only when every clause satisfies provider restrictions.
-     */
-    legal<I>(plan: NormalizedQueryPlan<I>): NormalizedQueryPredicate<I> | undefined {
-      const predicate = plan.predicate;
-      if (predicate === undefined) return undefined;
-      const leaves = predicate.kind === "all" ? predicate.predicates : [predicate];
-      let idCount = 0;
-      const inequalityColumns = new Set<string>();
-      for (const leaf of leaves) {
-        if (leaf.kind !== "ids" && leaf.kind !== "comparison") return undefined;
-        if (leaf.kind === "ids") {
-          idCount += leaf.ids.length;
-          if (idCount > 30) return undefined;
-          continue;
-        }
-        if (leaf.operator !== "equal") {
-          inequalityColumns.add(leaf.column);
-        }
-      }
-      if (inequalityColumns.size > 1) return undefined;
-      const inequalityColumn = inequalityColumns.values().next().value;
-      if (inequalityColumn !== undefined && plan.order?.[0]?.column !== inequalityColumn) {
-        return undefined;
-      }
-      return predicate;
+    if (inequalityColumns.size > 1) return undefined;
+    const inequalityColumn = inequalityColumns.values().next().value;
+    if (inequalityColumn !== undefined && plan.order?.[0]?.column !== inequalityColumn) {
+      return undefined;
     }
+    return predicate;
+  }
 
-    /**
-     * Adds one already-legal normalized predicate to the provider query.
-     */
-    predicate<I>(
-      query: ReturnType<Datastore["createQuery"]>,
-      predicate: NormalizedQueryPredicate<I>,
-      keyFor: (id: I) => ReturnType<Datastore["key"]>,
-      columnProperty: (column: string) => string,
-    ): void {
-      if (predicate.kind === "all") {
-        predicate.predicates.forEach((child) => {
-          this.predicate(query, child, keyFor, columnProperty);
-        });
-        return;
+  /**
+   * Adds one already-legal normalized predicate to the provider query.
+   */
+  predicate<I>(
+    query: ReturnType<Datastore["createQuery"]>,
+    predicate: NormalizedQueryPredicate<I>,
+    keyFor: (id: I) => ReturnType<Datastore["key"]>,
+    columnProperty: (column: string) => string,
+  ): void {
+    if (predicate.kind === "all") {
+      predicate.predicates.forEach((child) => {
+        this.predicate(query, child, keyFor, columnProperty);
+      });
+      return;
+    }
+    if (predicate.kind === "ids") {
+      const keys = predicate.ids.map(keyFor);
+      const firstKey = keys[0];
+      if (keys.length === 1 && firstKey !== undefined) {
+        query.filter(new PropertyFilter("__key__", "=", firstKey));
+      } else {
+        query.filter(new PropertyFilter("__key__", "IN", keys));
       }
-      if (predicate.kind === "ids") {
-        const keys = predicate.ids.map(keyFor);
-        const firstKey = keys[0];
-        if (keys.length === 1 && firstKey !== undefined) {
-          query.filter("__key__", "=", firstKey);
-        } else {
-          query.filter("__key__", "IN", keys);
-        }
-        return;
-      }
-      if (predicate.kind !== "comparison") return;
-      const operator =
-        predicate.operator === "equal"
-          ? "="
-          : predicate.operator === "greaterThan"
-            ? ">"
-            : predicate.operator === "lessThan"
-              ? "<"
-              : predicate.operator === "greaterOrEqual"
-                ? ">="
-                : "<=";
-      query.filter(
+      return;
+    }
+    if (predicate.kind !== "comparison") return;
+    const operator =
+      predicate.operator === "equal"
+        ? "="
+        : predicate.operator === "greaterThan"
+          ? ">"
+          : predicate.operator === "lessThan"
+            ? "<"
+            : predicate.operator === "greaterOrEqual"
+              ? ">="
+              : "<=";
+    query.filter(
+      new PropertyFilter(
         columnProperty(predicate.column),
         operator,
         RecordValues.provider(predicate.value, `Datastore query filter "${predicate.column}"`),
-      );
-    }
-  })(),
-);
+      ),
+    );
+  }
+}
+
+/**
+ * Frozen Datastore query pushdown operations.
+ */
+const DatastoreQueryPushdown = Object.freeze(new DatastoreQueryPushdownHelper());
 
 /**
  * Selects safe provider bounds for direct record queries.
@@ -664,10 +961,8 @@ const DatastoreRecordQuery = Object.freeze(
         order[0]?.field === "id" &&
         order[0].direction !== "desc" &&
         (continuation === undefined ||
-          (typeof continuation.id === "string" &&
-            continuation.values.length === 1 &&
+          (continuation.values.length === 1 &&
             continuationValue?.field === "id" &&
-            typeof continuationValue.value === "string" &&
             RecordValues.equal(continuationValue.value, continuation.id)))
       );
     }
@@ -678,17 +973,13 @@ const DatastoreRecordQuery = Object.freeze(
  * Applies record-query filtering, ordering, continuation, and paging locally.
  */
 
-/**
- * Applies record-query filtering, ordering, continuation, and paging locally.
- */
-const LocalQueryResults = Object.freeze(
-  new (class {
-    // prettier-ignore
+class LocalQueryResultsHelper {
+  // prettier-ignore
 
-    /**
-     * Applies one legacy record query to materialized candidate entries.
-     */
-    apply<I, R extends Message>(
+  /**
+   * Applies one legacy record query to materialized candidate entries.
+   */
+  apply<I, R extends Message>(
       entries: readonly QueriedEntry<I, R>[],
       query: RecordQuery<I>,
     ): readonly RecordEntry<I, R>[] {
@@ -706,151 +997,181 @@ const LocalQueryResults = Object.freeze(
       return continued.slice(start, end).map(({ id, record }) => ({ id, record }));
     }
 
-    /**
-     * Tests whether a candidate satisfies the ID and equality filters.
-     */
-    matches<I, R extends Message>(entry: QueriedEntry<I, R>, query: RecordQuery<I>): boolean {
-      return (
-        (query.ids === undefined ||
-          query.ids.length === 0 ||
-          query.ids.some((id) => RecordValues.equal(id, entry.id))) &&
-        (query.filters ?? []).every((filter) => {
-          const actual = filter.column === "id" ? entry.id : entry.columns.get(filter.column);
-          const expected = Array.isArray(filter.value) ? filter.value : [filter.value];
-          return expected.some((value) => RecordValues.equal(value, actual));
-        })
+  /**
+   * Tests whether a candidate satisfies the ID and equality filters.
+   */
+  matches<I, R extends Message>(entry: QueriedEntry<I, R>, query: RecordQuery<I>): boolean {
+    return (
+      (query.ids === undefined ||
+        query.ids.length === 0 ||
+        query.ids.some((id) => RecordValues.equal(id, entry.id))) &&
+      (query.filters ?? []).every((filter) => {
+        const actual = filter.column === "id" ? entry.id : entry.columns.get(filter.column);
+        const expected = Array.isArray(filter.value) ? filter.value : [filter.value];
+        return expected.some((value) => RecordValues.equal(value, actual));
+      })
+    );
+  }
+
+  /**
+   * Orders candidates by requested sort fields and canonical ID tie-breaker.
+   */
+  order<I, R extends Message>(
+    left: QueriedEntry<I, R>,
+    right: QueriedEntry<I, R>,
+    orders: readonly NonNullable<RecordQuery<I>["sort"]>[number][],
+  ): number {
+    for (const order of orders) {
+      const comparison = RecordValues.compare(
+        this.value(left, order.field),
+        this.value(right, order.field),
       );
+      if (comparison !== 0) return order.direction === "desc" ? comparison * -1 : comparison;
     }
+    return RecordValues.compare(left.id, right.id);
+  }
 
-    /**
-     * Orders candidates by requested sort fields and canonical ID tie-breaker.
-     */
-    order<I, R extends Message>(
-      left: QueriedEntry<I, R>,
-      right: QueriedEntry<I, R>,
-      orders: readonly NonNullable<RecordQuery<I>["sort"]>[number][],
-    ): number {
-      for (const order of orders) {
-        const comparison = RecordValues.compare(
-          this.value(left, order.field),
-          this.value(right, order.field),
-        );
-        if (comparison !== 0) return order.direction === "desc" ? comparison * -1 : comparison;
-      }
-      return RecordValues.compare(left.id, right.id);
+  /**
+   * Compares a candidate with a normalized continuation cursor.
+   */
+  continuation<I, R extends Message>(
+    entry: QueriedEntry<I, R>,
+    orders: readonly NonNullable<RecordQuery<I>["sort"]>[number][],
+    after: NonNullable<RecordQuery<I>["after"]>,
+  ): number {
+    for (let index = 0; index < orders.length; index += 1) {
+      const order = orders[index];
+      if (order === undefined) throw new Error("Record query continuation sort order is invalid.");
+      const comparison = RecordValues.compare(
+        this.value(entry, order.field),
+        after.values[index]?.value,
+      );
+      if (comparison !== 0) return order.direction === "desc" ? comparison * -1 : comparison;
     }
+    return RecordValues.compare(entry.id, after.id);
+  }
 
-    /**
-     * Compares a candidate with a normalized continuation cursor.
-     */
-    continuation<I, R extends Message>(
-      entry: QueriedEntry<I, R>,
-      orders: readonly NonNullable<RecordQuery<I>["sort"]>[number][],
-      after: NonNullable<RecordQuery<I>["after"]>,
-    ): number {
-      for (let index = 0; index < orders.length; index += 1) {
-        const order = orders[index];
-        if (order === undefined)
-          throw new Error("Record query continuation sort order is invalid.");
-        const comparison = RecordValues.compare(
-          this.value(entry, order.field),
-          after.values[index]?.value,
-        );
-        if (comparison !== 0) return order.direction === "desc" ? comparison * -1 : comparison;
-      }
-      return RecordValues.compare(entry.id, after.id);
-    }
+  /**
+   * Obtains an ID or indexed column value from a candidate.
+   */
+  value<I, R extends Message>(entry: QueriedEntry<I, R>, field: string): unknown {
+    return field === "id" ? entry.id : entry.columns.get(field);
+  }
+}
 
-    /**
-     * Obtains an ID or indexed column value from a candidate.
-     */
-    value<I, R extends Message>(entry: QueriedEntry<I, R>, field: string): unknown {
-      return field === "id" ? entry.id : entry.columns.get(field);
-    }
-  })(),
-);
+/**
+ * Frozen local record-query reconciliation operations.
+ */
+const LocalQueryResults = Object.freeze(new LocalQueryResultsHelper());
 
 /**
  * Protects transaction failures and coordinates bounded CAS retries.
  */
 
-/**
- * Protects transaction failures and coordinates bounded CAS retries.
- */
-const DatastoreTransactions = Object.freeze(
-  new (class {
-    // prettier-ignore
+class DatastoreTransactionsHelper {
+  // prettier-ignore
 
-    /**
-     * Redacts credential-like errors while preserving safe provider failures.
-     */
-    redact(error: unknown): Error {
-      if (error instanceof Error && !/(credential|payload|secret)/i.test(error.message))
-        return error;
+  /**
+   * Redacts credential-like errors while preserving safe provider failures.
+   */
+  redact(error: unknown): Error {
+      void error;
       return new Error("Datastore transaction failed.");
     }
 
-    /**
-     * Identifies a safe-to-retry Datastore transaction conflict.
-     */
-    retry(error: unknown): boolean {
-      return (
-        error instanceof Error &&
-        !/(credential|payload|secret)/i.test(error.message) &&
-        Reflect.get(error, "code") === 10
-      );
-    }
+  /**
+   * Identifies a safe-to-retry Datastore transaction conflict.
+   */
+  retry(error: unknown): boolean {
+    return (
+      error instanceof Error &&
+      !/(credential|payload|secret)/i.test(error.message) &&
+      Reflect.get(error, "code") === 10
+    );
+  }
 
-    /**
-     * Waits using exponential jitter before a bounded CAS retry.
-     */
-    async wait(attempt: number): Promise<void> {
-      const exponentialDelay = casRetryDelayMs * 2 ** attempt;
-      const jitter = Math.floor(Math.random() * exponentialDelay);
-      await new Promise<void>((resolve) => setTimeout(resolve, exponentialDelay + jitter));
-    }
-  })(),
-);
+  /**
+   * Waits using exponential jitter before a bounded CAS retry.
+   */
+  async wait(attempt: number): Promise<void> {
+    const exponentialDelay = casRetryDelayMs * 2 ** attempt;
+    const jitter = Math.floor(Math.random() * exponentialDelay);
+    await new Promise<void>((resolve) => setTimeout(resolve, exponentialDelay + jitter));
+  }
+}
+
+/**
+ * Frozen Datastore transaction retry and redaction operations.
+ */
+const DatastoreTransactions = Object.freeze(new DatastoreTransactionsHelper());
 
 /**
  * Validates Datastore read and query response shapes.
  */
 
-/**
- * Validates Datastore read and query response shapes.
- */
-const DatastoreResults = Object.freeze(
-  new (class {
-    // prettier-ignore
+class DatastoreResultsHelper {
+  // prettier-ignore
 
-    /**
-     * Extracts the optional first entity from a Datastore read response.
-     */
-    first(response: unknown): Record<string | symbol, unknown> | undefined {
+  /**
+   * Extracts the optional first entity from a Datastore read response.
+   */
+  first(response: unknown): Record<string | symbol, unknown> | undefined {
       if (!Array.isArray(response))
         throw new Error("Datastore returned an invalid entity response.");
       const entity = (response as unknown[])[0];
       return entity === undefined ? undefined : this.entity(entity);
     }
 
-    /**
-     * Extracts entity rows from a Datastore query response.
-     */
-    entities(response: unknown): readonly Record<string | symbol, unknown>[] {
-      if (!Array.isArray(response) || !Array.isArray(response[0])) {
-        throw new Error("Datastore returned an invalid query response.");
-      }
-      return (response[0] as unknown[]).map((value) => this.entity(value));
+  /**
+   * Extracts entity rows from a Datastore query response.
+   */
+  entities(response: unknown): readonly Record<string | symbol, unknown>[] {
+    if (!Array.isArray(response) || !Array.isArray(response[0])) {
+      throw new Error("Datastore returned an invalid query response.");
     }
+    return (response[0] as unknown[]).map((value) => this.entity(value));
+  }
 
-    /**
-     * Validates one provider entity object.
-     */
-    entity(value: unknown): Record<string | symbol, unknown> {
-      if (typeof value !== "object" || value === null) {
-        throw new Error("Datastore returned an invalid entity response.");
-      }
-      return value as Record<string | symbol, unknown>;
+  /**
+   * Extracts the provider continuation and the remaining-row indication.
+   */
+  queryInfo(response: unknown): {
+    readonly cursor: Buffer | string | undefined;
+    readonly more: boolean;
+  } {
+    if (!Array.isArray(response) || typeof response[1] !== "object" || response[1] === null)
+      throw new Error("Datastore returned an invalid query response.");
+    const info = response[1] as Record<string, unknown>;
+    const cursor = info.endCursor;
+    const moreResults = info.moreResults;
+    if (
+      moreResults !== "NO_MORE_RESULTS" &&
+      moreResults !== "MORE_RESULTS_AFTER_LIMIT" &&
+      moreResults !== "MORE_RESULTS_AFTER_CURSOR"
+    )
+      throw new Error("Datastore returned an invalid query response.");
+    const more =
+      moreResults === "MORE_RESULTS_AFTER_LIMIT" || moreResults === "MORE_RESULTS_AFTER_CURSOR";
+    if (more && !(cursor instanceof Buffer || typeof cursor === "string"))
+      throw new Error("Datastore returned an invalid query response.");
+    return {
+      cursor: cursor instanceof Buffer || typeof cursor === "string" ? cursor : undefined,
+      more,
+    };
+  }
+
+  /**
+   * Validates one provider entity object.
+   */
+  entity(value: unknown): Record<string | symbol, unknown> {
+    if (typeof value !== "object" || value === null) {
+      throw new Error("Datastore returned an invalid entity response.");
     }
-  })(),
-);
+    return value as Record<string | symbol, unknown>;
+  }
+}
+
+/**
+ * Frozen Datastore provider response parsing operations.
+ */
+const DatastoreResults = Object.freeze(new DatastoreResultsHelper());

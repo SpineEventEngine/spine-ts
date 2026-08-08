@@ -406,11 +406,13 @@ const expectedStorageExports = [
   "StorageQueryPolicy",
 ];
 const expectedDatastoreStorageExports = [
+  "CreateEntityStorage",
+  "CreateRecordStorage",
   "DatastoreEntityStorageHandle",
   "DatastoreQueryLimitError",
   "DatastoreStorageFactory",
-  "DatastoreStorageFactoryInput",
-  "DatastoreStorageOptions",
+  "DatastoreStorageFactoryBuilder",
+  "RecordLayout",
 ];
 const expectedRdbmsStorageExports = [
   "CreateOperationFactory",
