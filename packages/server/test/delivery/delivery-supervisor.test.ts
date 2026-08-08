@@ -1,4 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import { create, toBinary } from "@bufbuild/protobuf";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { EventSchema } from "@spine-event-engine/proto";
+import type { WorkerId } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 
 import {
@@ -20,6 +24,8 @@ import type {
   DeliveryWorkSession,
   DeliveryWorkRegistry,
 } from "../../src/delivery/delivery-ports.js";
+import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
+
 import type {
   InboxMessage,
   InboxMessageId,
@@ -235,9 +241,10 @@ describe("DeliverySupervisor", () => {
       await starting;
       await supervisor.whenIdle();
 
-      expect(fixture.inbox.admissions).toBe(2);
-      expect(fixture.registry.pickups).toEqual([shard.key()]);
-      expect(fixture.registry.releases).toEqual([shard.key()]);
+      // A direct worker scans the owned shard through its empty terminal read.
+      expect(fixture.inbox.admissions).toBe(3);
+      expect(fixture.registry.pickups).toEqual([shard.key(), shard.key()]);
+      expect(fixture.registry.releases).toEqual([shard.key(), shard.key()]);
       expect(fixture.delivered).toEqual(["first"]);
       await supervisor.close();
     },
@@ -257,9 +264,9 @@ describe("DeliverySupervisor", () => {
     first.resume.resolve(undefined);
     await supervisor.whenIdle();
 
-    expect(fixture.inbox.admissions).toBe(2);
-    expect(fixture.registry.pickups).toHaveLength(1);
-    expect(fixture.registry.releases).toHaveLength(1);
+    expect(fixture.inbox.admissions).toBe(3);
+    expect(fixture.registry.pickups).toHaveLength(2);
+    expect(fixture.registry.releases).toHaveLength(2);
     expect(fixture.delivered).toEqual(["storm"]);
     await supervisor.close();
   });
@@ -279,7 +286,7 @@ describe("DeliverySupervisor", () => {
     first.resume.resolve(undefined);
     await supervisor.whenIdle();
 
-    expect(fixture.inbox.admissions).toBe(2);
+    expect(fixture.inbox.admissions).toBe(4);
     expect(fixture.registry.pickups).toHaveLength(2);
     expect(fixture.registry.releases).toHaveLength(2);
     expect(fixture.delivered).toEqual(["first", "after-first-admission"]);
@@ -305,7 +312,7 @@ describe("DeliverySupervisor", () => {
     empty.resume.resolve(undefined);
     await supervisor.whenIdle();
 
-    expect(fixture.inbox.admissions).toBe(3);
+    expect(fixture.inbox.admissions).toBe(4);
     expect(fixture.registry.pickups).toHaveLength(2);
     expect(fixture.registry.releases).toHaveLength(2);
     expect(fixture.delivered).toEqual(["first", "during-empty-admission"]);
@@ -348,14 +355,14 @@ describe("DeliverySupervisor", () => {
     await supervisor.whenIdle();
 
     expect(snapshots).toBe(2);
-    expect(fixture.inbox.admissions).toBe(3);
+    expect(fixture.inbox.admissions).toBe(6);
     expect(fixture.registry.pickups).toEqual(["0/3", "1/3", "2/3"]);
     expect(fixture.registry.releases).toEqual(["0/3", "1/3", "2/3"]);
     expect(fixture.delivered).toEqual(["zero", "one", "two"]);
     await supervisor.close();
   });
 
-  it("fences close during empty admission without ownership or completion", async () => {
+  it("fences an in-flight direct empty read, releases ownership, and reports bounded close", async () => {
     const fixture = realDeliveryFixture();
     const empty = fixture.inbox.pauseAfter(1);
     const supervisor = fixture.supervisor();
@@ -367,9 +374,9 @@ describe("DeliverySupervisor", () => {
     empty.resume.resolve(undefined);
 
     await expect(closing).rejects.toBeInstanceOf(DeliveryShutdownTimeoutError);
-    expect(fixture.registry.pickups).toEqual([]);
-    expect(fixture.registry.releases).toEqual([]);
-    expect(fixture.completions).toBe(0);
+    expect(fixture.registry.pickups).toEqual(["0/1"]);
+    expect(fixture.registry.releases).toEqual(["0/1"]);
+    expect(fixture.completions).toBe(1);
   });
 
   it("settles one failed empty successor admission without spinning", async () => {
@@ -387,9 +394,9 @@ describe("DeliverySupervisor", () => {
     first.resume.resolve(undefined);
     await supervisor.whenIdle();
 
-    expect(fixture.inbox.admissions).toBe(2);
-    expect(fixture.registry.pickups).toHaveLength(1);
-    expect(fixture.registry.releases).toHaveLength(1);
+    expect(fixture.inbox.admissions).toBe(3);
+    expect(fixture.registry.pickups).toHaveLength(2);
+    expect(fixture.registry.releases).toHaveLength(2);
     expect(fixture.delivered).toEqual(["first"]);
     await supervisor.close();
   });
@@ -898,11 +905,11 @@ class RealDeliveryFixture {
       .withStrategy(UniformAcrossAllShards.forNumber(shardCount))
       .withInbox(this.inbox)
       .withWorkRegistry(this.registry)
-      .withMonitor({
-        onCompleted: () => {
+      .withMonitor(
+        new FixtureMonitor(() => {
           this.completions += 1;
-        },
-      })
+        }),
+      )
       .withNode("worker-node")
       .build();
   }
@@ -935,6 +942,10 @@ class RealDeliveryFixture {
       shard,
       whenReceived: new Date("2026-07-23T12:00:00.000Z"),
       version,
+      signal: create(AnySchema, {
+        typeUrl: "type.spine.io/spine.core.Event",
+        value: toBinary(EventSchema, create(EventSchema)),
+      }),
     });
   }
 }
@@ -985,6 +996,13 @@ class AdmissionInbox implements DeliveryInbox {
     return this.#delegate.readMessage(id, options);
   }
 
+  markDelivered(
+    message: InboxMessage,
+    options?: DeliveryOperationOptions,
+  ): Promise<InboxMessage | undefined> {
+    return this.#delegate.markDelivered(message, options);
+  }
+
   begin(
     message: InboxMessage,
     session: DeliveryWorkSession,
@@ -1011,11 +1029,11 @@ class ObservedRegistry implements DeliveryWorkRegistry {
 
   async pickUp(
     shard: ShardIndex,
-    node: string,
+    worker: WorkerId,
     options?: DeliveryOperationOptions,
   ): Promise<DeliveryWorkSession | undefined> {
     void options;
-    const session = await this.#delegate.pickUp(shard, node);
+    const session = await this.#delegate.pickUp(shard, worker);
     if (session !== undefined) this.pickups.push(shard.key());
     return session;
   }
@@ -1037,6 +1055,15 @@ class ObservedRegistry implements DeliveryWorkRegistry {
     const released = await this.#delegate.release(session);
     if (released) this.releases.push(session.shard.key());
     return released;
+  }
+}
+
+class FixtureMonitor extends DeliveryMonitor {
+  constructor(private readonly completed: () => void) {
+    super();
+  }
+  override onDeliveryCompleted(): void {
+    this.completed();
   }
 }
 
