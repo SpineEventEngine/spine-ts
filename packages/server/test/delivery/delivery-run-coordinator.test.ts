@@ -267,7 +267,7 @@ describe("DeliveryRunCoordinator", () => {
     expect(worker.maxConcurrent).toBe(1);
   });
 
-  it("does not re-admit retired PAUSED compatibility evidence", async () => {
+  it("does not re-admit terminal compatibility evidence", async () => {
     const scopes = Array.from({ length: 5 }, (_, index) =>
       scope(`target-${String(index)}`, index, 5),
     );
@@ -275,7 +275,7 @@ describe("DeliveryRunCoordinator", () => {
       (obligation) =>
         workerEvidence(
           obligation,
-          fulfilled(0, 5, "PAUSED"),
+          fulfilled(0, 5, "FAILED"),
           fulfilled(1, 5, "FAILED"),
           fulfilled(2, 5, "SKIPPED"),
           fulfilled(3, 5, "STOPPED"),
@@ -290,7 +290,7 @@ describe("DeliveryRunCoordinator", () => {
     expect(worker.starts).toHaveLength(1);
     expect(entry(worker.starts, 0).shards.map((shard) => shard.index)).toEqual([0, 1, 2, 3, 4]);
     expect(settlement.scopes.map(({ disposition }) => disposition)).toEqual([
-      undefined,
+      "PARKED",
       "PARKED",
       "PARKED",
       "STOPPED",

@@ -121,7 +121,7 @@ class RunnerInbox implements DeliveryInbox {
   }
 
   async read(shard: ShardIndex): Promise<readonly InboxMessage[]> {
-    this.started.resolve();
+    this.started.resolve(undefined);
     await this.#run({ shard, onMessage: () => Promise.resolve() });
     return [];
   }
@@ -130,7 +130,7 @@ class RunnerInbox implements DeliveryInbox {
     return Promise.resolve(undefined);
   }
 
-  begin(): Promise<undefined> {
+  markDelivered(): Promise<undefined> {
     return Promise.resolve(undefined);
   }
 }
@@ -144,5 +144,9 @@ class OpenRegistry implements DeliveryWorkRegistry {
 
   release(): Promise<boolean> {
     return Promise.resolve(true);
+  }
+
+  validateOwnership(session: Parameters<DeliveryWorkRegistry["validateOwnership"]>[0]) {
+    return Promise.resolve(session);
   }
 }

@@ -73,7 +73,7 @@ describe("DeliveryLoop", () => {
     let received: unknown;
     const loop = new DeliveryLoop({
       delivery: {
-        drain: async (_shard, options) => {
+        drain: async (_shard: ShardIndex, options: Parameters<Delivery["drain"]>[1]) => {
           received = options.operation;
           return {
             status: "FAILED" as const,
@@ -84,7 +84,7 @@ describe("DeliveryLoop", () => {
             failures: [],
           };
         },
-      } as Delivery,
+      } as unknown as Delivery,
       shard: ShardIndex.single(),
       operation: { signal: controller.signal },
       onMessage: () => undefined,
@@ -116,7 +116,7 @@ describe("DeliveryLoop", () => {
           failures: [],
         };
       },
-    } as Delivery;
+    } as unknown as Delivery;
     const options = {
       delivery: original,
       shard: originalShard,
@@ -131,7 +131,7 @@ describe("DeliveryLoop", () => {
     options.onMessage = () => {
       throw new Error("mutated callback");
     };
-    options.operation = {};
+    options.operation = { signal: new AbortController().signal };
     await loop.run();
     expect(receivedShard).toMatchObject({ index: 0, ofTotal: 2 });
     expect(receivedSignal).toBe(controller.signal);

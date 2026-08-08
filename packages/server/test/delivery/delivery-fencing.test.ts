@@ -1,4 +1,6 @@
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { create } from "@bufbuild/protobuf";
+import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { describe, expect, it } from "vitest";
 
 import { Delivery } from "../../src/delivery/delivery.js";
@@ -19,7 +21,6 @@ describe("Delivery fencing", () => {
         read: () => Promise.resolve([]),
         readMessage: () => Promise.resolve(undefined),
         markDelivered: () => Promise.resolve(undefined),
-        begin: () => Promise.resolve(undefined),
       },
       workRegistry: {
         sessionKind: "LEASED",
@@ -28,6 +29,7 @@ describe("Delivery fencing", () => {
           return Promise.resolve(undefined);
         },
         release: () => Promise.resolve(true),
+        validateOwnership: () => Promise.resolve(undefined),
       },
     });
     await expect(
@@ -56,7 +58,6 @@ describe("Delivery fencing", () => {
         read: () => Promise.resolve([]),
         readMessage: () => Promise.resolve(undefined),
         markDelivered: () => Promise.resolve(undefined),
-        begin: () => Promise.resolve(undefined),
       },
       workRegistry: {
         sessionKind: "LEASED",
@@ -64,7 +65,7 @@ describe("Delivery fencing", () => {
           Promise.resolve({
             kind: "LEASED" as const,
             shard,
-            worker: { nodeId: { value: "node" }, value: "worker" },
+            worker: create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
             pickedUpAt: new Date(),
             expiresAt: new Date(),
           }),
@@ -72,6 +73,7 @@ describe("Delivery fencing", () => {
           releases += 1;
           return Promise.resolve(true);
         },
+        validateOwnership: (session) => Promise.resolve(session),
       },
     });
     await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({

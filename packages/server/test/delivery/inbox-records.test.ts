@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { create } from "@bufbuild/protobuf";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
 
 import { InboxRecords } from "../../src/delivery/inbox-records.js";
 import { InboxMessageError, ShardIndex } from "../../src/index.js";
@@ -28,7 +30,7 @@ describe("InboxRecords", () => {
     expect(() =>
       InboxRecords.write({
         ...createMessage("message", "signal", 1n),
-        signal: { typeUrl: "type", value: "not-bytes" as never },
+        signal: create(AnySchema, { typeUrl: "type", value: "not-bytes" as never }),
       }),
     ).toThrow(InboxMessageError);
   });

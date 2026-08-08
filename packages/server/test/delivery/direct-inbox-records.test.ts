@@ -1,5 +1,5 @@
 import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
@@ -103,12 +103,9 @@ describe("direct InboxMessage storage", () => {
     expect(InboxRecords.read(InboxRecords.write(command)).signal?.typeUrl).toContain("Command");
     expect(InboxRecords.read(InboxRecords.write(event)).signal?.typeUrl).toContain("Event");
     expect(() => InboxRecords.write({ ...command, label: "UNKNOWN" as never })).toThrow();
-    for (const invalid of [
-      { ...command, signal: undefined },
-      { ...command, label: "REACT_UPON_EVENT" as const },
-      { ...event, label: "HANDLE_COMMAND" as const },
-    ])
-      expect(() => InboxRecords.write(invalid)).toThrow("label");
+    expect(() => InboxRecords.write({ ...command, signal: undefined } as never)).toThrow("label");
+    expect(() => InboxRecords.write({ ...command, label: "REACT_UPON_EVENT" })).toThrow("label");
+    expect(() => InboxRecords.write({ ...event, label: "HANDLE_COMMAND" })).toThrow("label");
     expect(() => InboxRecords.write({ ...command, version: -1n })).toThrow();
 
     const stored = InboxRecords.write(command);
@@ -118,13 +115,13 @@ describe("direct InboxMessage storage", () => {
         create(InboxMessageIdSchema, { uuid: "other", index: stored.id?.index }),
       ),
     ).toThrow(DeliveryStorageCorruptionError);
-    expect(() =>
-      InboxRecords.read({ ...stored, label: InboxLabel.UNRECOGNIZED as InboxLabel }),
-    ).toThrow(DeliveryStorageCorruptionError);
+    expect(() => InboxRecords.read({ ...stored, label: 99 as InboxLabel })).toThrow(
+      DeliveryStorageCorruptionError,
+    );
     expect(() =>
       InboxRecords.read({
         ...stored,
-        status: InboxMessageStatus.UNRECOGNIZED as InboxMessageStatus,
+        status: 99 as InboxMessageStatus,
       }),
     ).toThrow(DeliveryStorageCorruptionError);
     for (const invalid of [
@@ -133,14 +130,20 @@ describe("direct InboxMessage storage", () => {
     ])
       expect(() => InboxRecords.read(invalid)).toThrow(DeliveryStorageCorruptionError);
     expect(() =>
-      InboxRecords.read({ ...stored, whenReceived: { seconds: 0n, nanos: -1 } }),
+      InboxRecords.read({
+        ...stored,
+        whenReceived: create(TimestampSchema, { seconds: 0n, nanos: -1 }),
+      }),
     ).toThrow(DeliveryStorageCorruptionError);
     expect(() => InboxRecords.write({ ...command, keepUntil: new Date(Number.NaN) })).toThrow();
     expect(() => InboxRecords.write({ ...command, id: { ...command.id, value: " " } })).toThrow();
     expect(() => InboxRecords.write({ ...command, signalId: " " })).toThrow();
     expect(() => InboxRecords.write({ ...command, shard: {} as never })).toThrow();
     expect(() =>
-      InboxRecords.write({ ...command, signal: { typeUrl: "unknown", value: new Uint8Array() } }),
+      InboxRecords.write({
+        ...command,
+        signal: create(AnySchema, { typeUrl: "unknown", value: new Uint8Array() }),
+      }),
     ).toThrow();
     expect(() => InboxRecords.read({ ...stored, id: undefined })).toThrow(
       DeliveryStorageCorruptionError,
@@ -193,9 +196,11 @@ describe("direct InboxMessage storage", () => {
 
       await storage.write(pending);
       race = true;
-      await expect(storage.markDelivered(pending)).resolves.toMatchObject(
-        outcome === "delivered" ? { status: "DELIVERED" } : undefined,
-      );
+      if (outcome === "delivered")
+        await expect(storage.markDelivered(pending)).resolves.toMatchObject({
+          status: "DELIVERED",
+        });
+      else await expect(storage.markDelivered(pending)).resolves.toBeUndefined();
     }
   });
 

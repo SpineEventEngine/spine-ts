@@ -1129,7 +1129,7 @@ class RunnerInbox implements DeliveryInbox {
     return Promise.resolve(undefined);
   }
 
-  begin(): Promise<undefined> {
+  markDelivered(): Promise<undefined> {
     return Promise.resolve(undefined);
   }
 }

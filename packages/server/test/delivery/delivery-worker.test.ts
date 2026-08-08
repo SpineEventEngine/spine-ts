@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion, @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
 /* eslint-disable @typescript-eslint/require-await */
 
 import { create } from "@bufbuild/protobuf";
@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import { Delivery, type DeliveryEndpointMessage } from "../../src/delivery/delivery.js";
 import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
+import type { DeliveryOperationOptions } from "../../src/delivery/delivery-ports.js";
 import type { InboxReadOptions } from "../../src/delivery/inbox.js";
 import { commitFenced } from "../../src/repository/commit-fence.js";
 import { ShardIndex } from "../../src/index.js";
@@ -230,12 +231,20 @@ describe("Delivery direct worker", () => {
         throw new Error("failed");
       },
     });
-    row.id.value = "mutated";
-    row.inboxId.targetId = "mutated";
-    row.shard = new ShardIndex(0, 2);
-    row.whenReceived.setTime(20_000);
-    row.keepUntil.setTime(30_000);
-    row.signal.value[0] = 9;
+    const mutable = row as unknown as {
+      id: { value: string };
+      inboxId: { targetId: string };
+      shard: ShardIndex;
+      whenReceived: Date;
+      keepUntil: Date;
+      signal: { value: Uint8Array };
+    };
+    mutable.id.value = "mutated";
+    mutable.inboxId.targetId = "mutated";
+    mutable.shard = new ShardIndex(0, 2);
+    mutable.whenReceived.setTime(20_000);
+    mutable.keepUntil.setTime(30_000);
+    mutable.signal.value[0] = 9;
     const fact = run.failures[0]!.message;
     expect(fact).toMatchObject({ id: { value: "failed" }, inboxId: { targetId: "target" } });
     expect(fact.shard).toMatchObject({ index: 0, ofTotal: 1 });
@@ -437,9 +446,11 @@ function createDelivery(config: {
       worker: WorkerId,
     ) => Promise<ReturnType<typeof session> | undefined>;
     renew?: () => Promise<ReturnType<typeof session> | undefined>;
-    release: (session: ReturnType<typeof session>, operation?: unknown) => Promise<boolean>;
+    release: (current: ReturnType<typeof session>, operation?: unknown) => Promise<boolean>;
   };
-  read?: (options?: InboxReadOptions) => Promise<DeliveryEndpointMessage[]>;
+  read?: (
+    options?: InboxReadOptions & DeliveryOperationOptions,
+  ) => Promise<DeliveryEndpointMessage[]>;
   mark?: (row: DeliveryEndpointMessage) => Promise<DeliveryEndpointMessage | undefined>;
   monitor?: DeliveryMonitor;
   pageSize?: number;
@@ -449,8 +460,8 @@ function createDelivery(config: {
     context: { name: "DeliveryWorker", multitenant: false },
     storageFactory: new InMemoryStorageFactory(),
     worker: config.worker ?? workerId("node", "restart"),
-    monitor: config.monitor,
-    pageSize: config.pageSize,
+    ...(config.monitor === undefined ? {} : { monitor: config.monitor }),
+    ...(config.pageSize === undefined ? {} : { pageSize: config.pageSize }),
     inbox: {
       sessionKind: "LEASED",
       receive: async () => {
@@ -465,7 +476,8 @@ function createDelivery(config: {
       pickUp: async (shard, worker) => config.registry?.pickUp(shard, worker) ?? session(shard),
       renew: async (current) => config.registry?.renew?.() ?? current,
       validateOwnership: async (current) => config.registry?.renew?.() ?? current,
-      release: async (current, operation) => config.registry?.release(current, operation) ?? true,
+      release: async (current, operation) =>
+        config.registry?.release(current as ReturnType<typeof session>, operation) ?? true,
     },
   });
 }

@@ -84,6 +84,7 @@ describe("DeliveryMonitor delivery", () => {
   it("accepts an explicit complete WorkerId", () => {
     const worker = create(WorkerIdSchema, { nodeId: { value: "node-a" }, value: "restart-a" });
     const delivery = build().withWorker(worker).build();
+    if (worker.nodeId === undefined) throw new Error("Expected a complete worker node ID.");
     worker.nodeId.value = "mutated";
     worker.value = "mutated";
     expect(delivery.worker).toMatchObject({ nodeId: { value: "node-a" }, value: "restart-a" });
