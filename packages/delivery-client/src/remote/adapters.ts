@@ -308,7 +308,7 @@ class RemoteSessionOwner {
 }
 
 /**
- * Adapts the one per-client remote session owner to the server work-registry port.
+ * Adapts one per-registry remote session owner to the server work-registry port.
  */
 export class RemoteWorkRegistry implements DeliveryWorkRegistry {
   // prettier-ignore

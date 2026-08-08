@@ -219,3 +219,37 @@ configured role/profile and metadata limitation satisfy the acceptance gate.
   pending. TypeScript/API documentation and documentation are closed because
   their only corrections were comment-only and did not change again. Security
   remains N/A.
+
+## Targeted Final Re-Review Dispatch
+
+Endpoint: `ae8c8560`.
+
+- Existing style/maintainability reviewer; explicit configured profile
+  `gpt-5.6-terra` / `high`. Scope: confirm that per-registry session ownership
+  removes the hidden compatibility/state seam without introducing lifecycle or
+  maintainability regressions.
+- Existing performance/reliability reviewer; explicit configured profile
+  `gpt-5.6-terra` / `high`. Scope: sibling registry isolation, authoritative
+  remote release/validation behavior, bounded ownership state, and absence of
+  concurrency or lifecycle regressions.
+
+Subagents must not spawn subagents. Runtime metadata will be recorded when
+exposed; otherwise the immutable configured role/profile and metadata
+limitation satisfy the acceptance gate.
+
+## Targeted Final Re-Review Results
+
+- Style/maintainability: the shared `WeakMap` seam is removed and sibling
+  coverage proves that only the issuing registry can validate or release its
+  session. One P3 comment still said the owner was per-client; it was corrected
+  to per-registry. No behavior or API changed. The reviewer retained its
+  explicitly configured `gpt-5.6-terra` / `high` profile; runtime introspection
+  was unavailable with no visible fallback.
+- Performance/reliability: CLEAN. Per-wrapper session identity remains bounded
+  and does not weaken authoritative pickup, validation, release, or lifecycle
+  cleanup. Reviewer-focused evidence passed 3 files / 40 tests and the diff
+  check. The reviewer retained its explicitly configured `gpt-5.6-terra` /
+  `high` profile; runtime introspection was unavailable.
+- All required review lanes are closed. Security remains N/A because no
+  authentication, authorization, credential, principal, or external trust
+  boundary changed.
