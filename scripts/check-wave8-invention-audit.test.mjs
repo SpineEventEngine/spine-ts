@@ -44,4 +44,25 @@ describe("Wave 8 invention audit", () => {
 
     expect(auditWave8CurrentState(root)).toEqual([]);
   });
+
+  it.each([
+    ["DeliveryReceipt", "receipt"],
+    ["DeliveryMarker", "marker"],
+    ["DedupRecord", "replacement dedup claim"],
+    ["DeliveryClaim", "replacement dedup claim"],
+  ])("rejects forbidden %s", (artifact, description) => {
+    const root = fixture();
+    writeFileSync(join(root, "packages", "server", "src", "legacy.ts"), `${artifact}\n`);
+
+    expect(auditWave8CurrentState(root)).toEqual([
+      `packages/server/src/legacy.ts:1: forbidden Wave 8 artifact: ${description}`,
+    ]);
+  });
+
+  it("allows a precise negative statement for a retired shared layout", () => {
+    const root = fixture();
+    writeFileSync(join(root, "docs", "GUIDE.md"), "The adapter has no shared records table.\n");
+
+    expect(auditWave8CurrentState(root)).toEqual([]);
+  });
 });

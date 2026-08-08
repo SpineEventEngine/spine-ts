@@ -9,6 +9,7 @@ const historicalPrefixes = [
   "build-protocol/work-logs/",
   "build-protocol/reviews/",
   "build-protocol/release/",
+  "build-protocol/reports/",
   "build-protocol/security/",
 ];
 const excludedPrefixes = [
@@ -38,6 +39,9 @@ const sourceExtensions = new Set([
 const forbidden = [
   ["RemovalQuarantine", /\bRemovalQuarantine\b/gu],
   ["removal fingerprint", /\bRemovalFingerprint\b|\bremoval[-_ ]fingerprint\b/giu],
+  ["receipt", /\b(?:Commit|Replay|Delivery)Receipt\b/gu],
+  ["marker", /\b(?:Delivery|Commit|Replay)Marker\b/gu],
+  ["replacement dedup claim", /\b(?:DeliveryClaim|DedupGuard|DedupRecord)\b/gu],
   ["delivery attempt", /\bDeliveryAttempt\b/gu],
   ["attempt exhaustion", /\bAttemptExhaustion\b/gu],
   ["retry decision", /\bRetryDecision\b/gu],
@@ -77,12 +81,11 @@ function truthfulNegative(line) {
 export function auditWave8CurrentState(root = repoRoot) {
   const problems = [];
   for (const path of files(root)) {
-    const markdown = path.endsWith(".md");
     const lines = readFileSync(join(root, path), "utf8").split("\n");
     for (const [index, line] of lines.entries()) {
       for (const [name, pattern] of forbidden) {
         pattern.lastIndex = 0;
-        if (!pattern.test(line) || (markdown && truthfulNegative(line))) continue;
+        if (!pattern.test(line) || truthfulNegative(line)) continue;
         problems.push(`${path}:${index + 1}: forbidden Wave 8 artifact: ${name}`);
       }
     }
