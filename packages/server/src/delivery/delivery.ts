@@ -60,8 +60,12 @@ export class Delivery {
     this.node = this.worker.nodeId?.value ?? "local";
     this.pageSize = options.pageSize ?? 100;
     this.batchSize = options.batchSize ?? 100;
-    this.inbox = options.inbox ?? new Inbox(new InboxStorage({ context: this.context, storageFactory: this.storageFactory }));
-    this.shards = options.workRegistry ?? new ShardedWorkRegistry({ context: this.context, storageFactory: this.storageFactory });
+    this.inbox =
+      options.inbox ??
+      new Inbox(new InboxStorage({ context: this.context, storageFactory: this.storageFactory }));
+    this.shards =
+      options.workRegistry ??
+      new ShardedWorkRegistry({ context: this.context, storageFactory: this.storageFactory });
     this.#monitor = options.monitor ?? new DeliveryMonitor();
     Object.freeze(this);
   }
@@ -69,24 +73,36 @@ export class Delivery {
   async run(options: DeliveryRunOptions): Promise<DeliveryResult> {
     const shard = options.shard ?? ShardIndex.single();
     const run = await this.drain(shard, { onMessage: options.onMessage });
-    return Object.freeze({ status: run.status === "SKIPPED" ? "SKIPPED" : run.status === "FAILED" ? "FAILED" : run.status === "STOPPED" ? "STOPPED" : "COMPLETED", pages: Object.freeze([]) });
+    return Object.freeze({
+      status:
+        run.status === "SKIPPED"
+          ? "SKIPPED"
+          : run.status === "FAILED"
+            ? "FAILED"
+            : run.status === "STOPPED"
+              ? "STOPPED"
+              : "COMPLETED",
+      pages: Object.freeze([]),
+    });
   }
 
   runControlled(options: DeliveryControlledRun): Promise<DeliveryResult> {
     const shard = options.shard;
-    return this.drain(shard, { onMessage: options.onMessage, operation: { signal: options.signal } }).then(
-      (run) =>
-        Object.freeze({
-          status:
-            run.status === "SKIPPED"
-              ? "SKIPPED"
-              : run.status === "FAILED"
-                ? "FAILED"
-                : run.status === "STOPPED"
-                  ? "STOPPED"
-                  : "COMPLETED",
-          pages: Object.freeze([]),
-        }),
+    return this.drain(shard, {
+      onMessage: options.onMessage,
+      operation: { signal: options.signal },
+    }).then((run) =>
+      Object.freeze({
+        status:
+          run.status === "SKIPPED"
+            ? "SKIPPED"
+            : run.status === "FAILED"
+              ? "FAILED"
+              : run.status === "STOPPED"
+                ? "STOPPED"
+                : "COMPLETED",
+        pages: Object.freeze([]),
+      }),
     );
   }
 
@@ -106,11 +122,15 @@ export class Delivery {
     try {
       session = await this.shards.pickUp(shard, this.worker, options.operation);
     } catch (error) {
-      await safely(async () => (await this.#monitor.onShardPickUpFailure(new FailedPickUp(shard, error))).execute());
+      await safely(async () =>
+        (await this.#monitor.onShardPickUpFailure(new FailedPickUp(shard, error))).execute(),
+      );
       return result("FAILED");
     }
     if (session === undefined) {
-      await safely(async () => (await this.#monitor.onShardAlreadyPicked(new AlreadyPickedUp(shard))).execute());
+      await safely(async () =>
+        (await this.#monitor.onShardAlreadyPicked(new AlreadyPickedUp(shard))).execute(),
+      );
       return result("SKIPPED");
     }
     const statistics = counts();
@@ -123,8 +143,10 @@ export class Delivery {
       return true;
     };
     try {
-      if (!(await safelyBoolean(() => this.#monitor.shouldContinueAfter("DELIVERY")))) return result("STOPPED", statistics);
-      if (!(await safely(() => this.#monitor.onDeliveryStarted(shard)))) return result("STOPPED", statistics);
+      if (!(await safelyBoolean(() => this.#monitor.shouldContinueAfter("DELIVERY"))))
+        return result("STOPPED", statistics);
+      if (!(await safely(() => this.#monitor.onDeliveryStarted(shard))))
+        return result("STOPPED", statistics);
       const blockedTargets = new Set<string>();
       for (;;) {
         const messages = await this.inbox.read(shard, {
@@ -132,53 +154,75 @@ export class Delivery {
           limit: this.pageSize,
         });
         if (messages.length === 0) break;
+        const deliveredBefore = statistics.delivered;
         for (const message of messages) {
-        if (options.operation?.signal?.aborted) return result("STOPPED", statistics);
-        const target = `${message.inboxId.targetTypeUrl}:${message.inboxId.targetId}`;
-        if (blockedTargets.has(target)) continue;
-        statistics.processed += 1;
-        if (!(await safelyBoolean(() => this.#monitor.shouldContinueAfter("PAGE")))) return result("STOPPED", statistics);
-        if (!(await renew())) return result("STOPPED", statistics);
-        try {
-          statistics.accepted += 1;
-          await options.onMessage(message);
           if (options.operation?.signal?.aborted) return result("STOPPED", statistics);
+          const target = `${message.inboxId.targetTypeUrl}:${message.inboxId.targetId}`;
+          if (blockedTargets.has(target)) continue;
+          statistics.processed += 1;
+          if (!(await safelyBoolean(() => this.#monitor.shouldContinueAfter("PAGE"))))
+            return result("STOPPED", statistics);
           if (!(await renew())) return result("STOPPED", statistics);
-          const work = await this.inbox.begin(message, current);
-          if (work === undefined || !(await work.complete())) throw new Error("Inbox message was not marked delivered.");
-          statistics.delivered += 1;
-        } catch (error) {
-          statistics.failed += 1;
-          const reception = new FailedReception(
-            message,
-            error,
-            async () => {
-              if (!(await renew())) throw new Error("Shard ownership was lost.");
-              const work = await this.inbox.begin(message, current!);
-              if (work === undefined || !(await work.complete())) throw new Error("Inbox message was not marked delivered.");
-              statistics.delivered += 1;
-            },
-            async () => {
-              await options.onMessage(message);
-              if (!(await renew())) throw new Error("Shard ownership was lost.");
-              const work = await this.inbox.begin(message, current!);
-              if (work === undefined || !(await work.complete())) throw new Error("Inbox message was not marked delivered.");
-              statistics.delivered += 1;
-            },
-          );
-          const action = await safelyValue(() => this.#monitor.onReceptionFailure(reception), reception.markDelivered());
-          if (!(await safely(() => action.execute())) && !(await safely(() => reception.markDelivered().execute()))) {
-            blockedTargets.add(target);
+          try {
+            statistics.accepted += 1;
+            await options.onMessage(message);
+            if (options.operation?.signal?.aborted) return result("STOPPED", statistics);
+            if (!(await renew())) return result("STOPPED", statistics);
+            const work = await this.inbox.begin(message, current);
+            if (work === undefined || !(await work.complete()))
+              throw new Error("Inbox message was not marked delivered.");
+            statistics.delivered += 1;
+          } catch (error) {
+            statistics.failed += 1;
+            const reception = new FailedReception(
+              message,
+              error,
+              async () => {
+                if (!(await renew())) throw new Error("Shard ownership was lost.");
+                const work = await this.inbox.begin(message, current!);
+                if (work === undefined || !(await work.complete()))
+                  throw new Error("Inbox message was not marked delivered.");
+                statistics.delivered += 1;
+              },
+              async () => {
+                await options.onMessage(message);
+                if (!(await renew())) throw new Error("Shard ownership was lost.");
+                const work = await this.inbox.begin(message, current!);
+                if (work === undefined || !(await work.complete()))
+                  throw new Error("Inbox message was not marked delivered.");
+                statistics.delivered += 1;
+              },
+            );
+            const action = await safelyValue(
+              () => this.#monitor.onReceptionFailure(reception),
+              reception.markDelivered(),
+            );
+            if (
+              !(await safely(() => action.execute())) &&
+              !(await safely(() => reception.markDelivered().execute()))
+            ) {
+              blockedTargets.add(target);
+            }
           }
         }
-        }
+        // A retained pending row whose target is blocked cannot become
+        // actionable in this ownership epoch. Stop rather than rescan it.
+        if (statistics.delivered === deliveredBefore) break;
       }
       return result("DRAINED", statistics);
     } finally {
       await safely(async () => {
         await this.shards.release(current!, options.operation);
       });
-      await safely(() => this.#monitor.onDeliveryCompleted(Object.freeze({ processed: statistics.processed, delivered: statistics.delivered, failed: statistics.failed } satisfies DeliveryStatistics)));
+      await safely(() =>
+        this.#monitor.onDeliveryCompleted(
+          Object.freeze({
+            processed: statistics.processed,
+            delivered: statistics.delivered,
+            failed: statistics.failed,
+          } satisfies DeliveryStatistics),
+        ),
+      );
     }
   }
 }
@@ -195,12 +239,38 @@ export interface DeliveryOptions {
   readonly pageSize?: number;
   readonly batchSize?: number;
 }
-export interface DeliveryDrainOptions { readonly onMessage: OnDeliveryMessage; readonly operation?: import("./delivery-ports.js").DeliveryOperationOptions; }
+export interface DeliveryDrainOptions {
+  readonly onMessage: OnDeliveryMessage;
+  readonly operation?: import("./delivery-ports.js").DeliveryOperationOptions;
+}
 function workerId(node: string): WorkerId {
   return create(WorkerIdSchema, { nodeId: { value: node }, value: randomUUID() });
 }
-function counts() { return { processed: 0, accepted: 0, delivered: 0, failed: 0 }; }
-function result(status: DeliveryRun["status"], value = counts()): DeliveryRun { return Object.freeze({ status, ...value, failures: Object.freeze([]) }); }
-async function safely(action: () => void | Promise<void>): Promise<boolean> { try { await action(); return true; } catch { return false; } }
-async function safelyBoolean(action: () => boolean | Promise<boolean>): Promise<boolean> { try { return await action(); } catch { return false; } }
-async function safelyValue<T>(action: () => T | Promise<T>, fallback: T): Promise<T> { try { return await action(); } catch { return fallback; } }
+function counts() {
+  return { processed: 0, accepted: 0, delivered: 0, failed: 0 };
+}
+function result(status: DeliveryRun["status"], value = counts()): DeliveryRun {
+  return Object.freeze({ status, ...value, failures: Object.freeze([]) });
+}
+async function safely(action: () => void | Promise<void>): Promise<boolean> {
+  try {
+    await action();
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function safelyBoolean(action: () => boolean | Promise<boolean>): Promise<boolean> {
+  try {
+    return await action();
+  } catch {
+    return false;
+  }
+}
+async function safelyValue<T>(action: () => T | Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await action();
+  } catch {
+    return fallback;
+  }
+}

@@ -344,11 +344,7 @@ export class DeliveryBuilder {
    * @returns This builder.
    */
   withPageSize(pageSize: number): this {
-    this.#pageSize = DeliveryValues.requireBound(
-      "Delivery page size",
-      pageSize,
-      1_000,
-    );
+    this.#pageSize = DeliveryValues.requireBound("Delivery page size", pageSize, 1_000);
     return this;
   }
 
