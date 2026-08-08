@@ -1,258 +1,148 @@
 import { create } from "@bufbuild/protobuf";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import {
   SubscriptionIdSchema,
+  SubscriptionRecordSchema,
   SubscriptionSchema,
-  type Subscription,
   type SubscriptionId,
+  type SubscriptionRecord,
 } from "@spine-event-engine/proto/client";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
 import {
   InMemoryStorageFactory,
-  RecordSpec,
+  type RecordSpec,
   type StorageContext,
   type StorageFactory,
 } from "@spine-event-engine/storage";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createPool } from "../../../storage-rdbms/node_modules/mysql2/promise.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  StandCapacityError,
-  StorageSubscriptionRegistry,
-  type StandSubscriptionEntry,
-  type StandSubscriptionRegistry,
-} from "../../src/index.js";
+import { StorageSubscriptionRegistry } from "../../src/stand/subscription-registry.js";
+import { MysqlStorageFactory } from "../../../storage-rdbms/src/index.js";
 
-const provider = process.env.STAND_REGISTRY_PROVIDER ?? "memory";
-const mysqlUrl = process.env.SPINE_TS_MYSQL_URL;
-const datastoreHost = process.env.DATASTORE_EMULATOR_HOST;
-const datastoreProject = process.env.DATASTORE_PROJECT_ID ?? "spine-t0108";
-let sequence = 0;
-
-interface RegistryFixture {
-  readonly name: string;
-  readonly factory: StorageFactory;
-  readonly context: StorageContext;
-  registry(limit?: number): StorageSubscriptionRegistry;
-  dispose(): Promise<void>;
-}
+vi.mock("../../../storage-rdbms/node_modules/mysql2/promise.js", () => ({ createPool: vi.fn() }));
 
 function id(value: string): SubscriptionId {
   return create(SubscriptionIdSchema, { value });
 }
 
-function subscription(value: string, topic = "topic"): Subscription {
-  return create(SubscriptionSchema, { id: id(value), topic: { id: { value: topic } } });
-}
-
-async function createFixture(): Promise<RegistryFixture> {
-  sequence += 1;
-  const name = `T0108Provider${provider}${String(process.pid)}${String(sequence)}`;
-  const context = { name, multitenant: false };
-  const factory = await providerFactory();
-  const registries = new Set<StorageSubscriptionRegistry>();
-  const registry = (limit?: number): StorageSubscriptionRegistry => {
-    const created = new StorageSubscriptionRegistry(context, factory, limit);
-    registries.add(created);
-    return created;
-  };
-  return {
-    name,
-    factory,
-    context,
-    registry,
-    async dispose(): Promise<void> {
-      let cleanupError: unknown;
-      try {
-        const cleaner = registry();
-        for (const entry of await cleaner.snapshot())
-          await cleaner.delete(requiredId(entry.subscription), entry.revision);
-      } catch (error) {
-        if (error instanceof Error && error.message.includes("closed")) {
-          try {
-            const cleaner = registry();
-            for (const entry of await cleaner.snapshot())
-              await cleaner.delete(requiredId(entry.subscription), entry.revision);
-          } catch (retryError) {
-            cleanupError = retryError;
-          }
-        } else {
-          cleanupError = error;
-        }
-      } finally {
-        await disposeFixtureResources(registries, factory, cleanupError);
-      }
-    },
-  };
-}
-
-async function disposeFixtureResources(
-  registries: ReadonlySet<{ close(): Promise<void> }>,
-  factory: StorageFactory,
-  cleanupError?: unknown,
-): Promise<void> {
-  const registryResults = await Promise.allSettled(
-    [...registries].map(async (value) => {
-      await value.close();
-    }),
-  );
-  const factoryResult = await Promise.allSettled([closeFactory(factory)]);
-  const errors: unknown[] = cleanupError === undefined ? [] : [cleanupError];
-  for (const result of registryResults)
-    if (result.status === "rejected") errors.push(result.reason);
-  for (const result of factoryResult) if (result.status === "rejected") errors.push(result.reason);
-  if (errors.length > 0) throw new AggregateError(errors, "Stand registry fixture cleanup failed.");
-}
-
-async function closeFactory(factory: StorageFactory): Promise<void> {
-  const closable: { close(): void | Promise<void> } = factory;
-  await closable.close();
-}
-
-describe("provider fixture disposal", () => {
-  it("attempts factory close after a registry close fails", async () => {
-    let factoryClosed = false;
-    const factory = { close: () => (factoryClosed = true) } as unknown as StorageFactory;
-    const registry = {
-      close: async () => await Promise.reject(new Error("registry close failed")),
-    };
-
-    await expect(disposeFixtureResources(new Set([registry]), factory)).rejects.toThrow(
-      AggregateError,
-    );
-    expect(factoryClosed).toBe(true);
+function subscription(value: string) {
+  return create(SubscriptionSchema, {
+    id: id(value),
+    topic: { id: { value: "provider.selection" } },
   });
+}
+
+async function exerciseRegistry(factory: StorageFactory): Promise<void> {
+  const registry = new StorageSubscriptionRegistry(
+    { name: "provider-selection", multitenant: false },
+    factory,
+  );
+  await expect(registry.create(subscription("one"))).resolves.toMatchObject({ kind: "created" });
+  await expect(registry.get(id("one"))).resolves.toMatchObject({
+    subscription: { id: { value: "one" } },
+  });
+  await expect(registry.delete(id("one"))).resolves.toBe("deleted");
+  await registry.close();
+}
+
+afterEach(() => {
+  vi.clearAllMocks();
 });
 
-function requiredId(value: StandSubscriptionEntry["subscription"]): SubscriptionId {
-  if (value.id === undefined) throw new Error("Expected a subscription ID.");
-  return id(value.id.value);
-}
+describe("StorageSubscriptionRegistry provider configuration", () => {
+  it("exposes the approved physical activation-expiry column name", () => {
+    const factory = new InMemoryStorageFactory();
+    const open = factory.createRecordStorage.bind(factory);
+    let columns: readonly string[] = [];
+    factory.createRecordStorage = ((
+      context: StorageContext,
+      spec: RecordSpec<SubscriptionId, SubscriptionRecord>,
+    ) => {
+      columns = spec.columns.map((column) => column.name);
+      return open(context, spec);
+    }) as never;
 
-async function providerFactory(): Promise<StorageFactory> {
-  switch (provider) {
-    case "memory":
-      return new InMemoryStorageFactory();
-    case "mysql":
-      if (mysqlUrl === undefined)
-        throw new Error("SPINE_TS_MYSQL_URL is required for MySQL conformance.");
-      return await MysqlStorageFactory.newBuilder().setOptions({ url: mysqlUrl }).build();
-    case "datastore":
-      if (datastoreHost === undefined)
-        throw new Error("DATASTORE_EMULATOR_HOST is required for Datastore conformance.");
-      return DatastoreStorageFactory.create({ projectId: datastoreProject });
-    default:
-      throw new Error(`Unknown Stand registry provider: ${provider}.`);
-  }
-}
+    new StorageSubscriptionRegistry({ name: "provider-columns", multitenant: false }, factory);
 
-describe(`StorageSubscriptionRegistry ${provider} conformance`, () => {
-  let fixture: RegistryFixture;
-  let registry: StandSubscriptionRegistry;
-
-  beforeEach(async () => {
-    fixture = await createFixture();
-    registry = fixture.registry();
+    expect(columns).toContain("when_activation_expires");
+    expect(columns).not.toContain("whenActivationExpires");
   });
 
-  afterEach(async () => {
-    vi.useRealTimers();
-    await fixture.dispose();
-  });
-
-  it("is persistent and creates, reads, snapshots, and activates a pending definition", async () => {
-    expect(registry.persistent).toBe(true);
-    await expect(registry.create(subscription("one"))).resolves.toMatchObject({
-      kind: "created",
-      entry: { phase: "pending", revision: 1n },
-    });
-    await expect(registry.get(id("one"))).resolves.toMatchObject({ phase: "pending" });
-    await expect(registry.snapshot()).resolves.toMatchObject([
-      { subscription: { id: { value: "one" } }, phase: "pending" },
-    ]);
-    await expect(registry.activate(id("one"))).resolves.toMatchObject({
-      kind: "activated",
-      entry: { phase: "active", revision: 2n },
-    });
-  });
-
-  it("uses an atomic compare-and-set provider", () => {
-    const storage = fixture.factory.createRecordStorage(
-      fixture.context,
-      new RecordSpec({
-        schema: StringValueSchema,
-        storageKey: "spine.server.T0108ProviderCapability",
-        idKind: "string",
-        extractId: (record) => record.value,
+  it("uses the configured MySQL SubscriptionRecord table", async () => {
+    const queries: string[] = [];
+    const records = new Map<string, Uint8Array>();
+    let schemaColumns: readonly { readonly column_name: string }[] = [];
+    const connection = {
+      release: vi.fn(),
+      beginTransaction: vi.fn(() => Promise.resolve()),
+      commit: vi.fn(() => Promise.resolve()),
+      rollback: vi.fn(() => Promise.resolve()),
+      query: vi.fn(async (sql: string) => {
+        await Promise.resolve();
+        queries.push(sql);
+        if (sql.startsWith("CREATE TABLE")) {
+          const definitions = /\((.*), PRIMARY KEY/.exec(sql)?.[1] ?? "";
+          schemaColumns = [...definitions.matchAll(/`([^`]+)`/g)].map((match) => ({
+            column_name: match[1],
+          }));
+          return [[]];
+        }
+        if (sql.includes("information_schema.columns")) return [schemaColumns];
+        if (sql.includes("information_schema.tables")) return [[{ engine: "InnoDB" }]];
+        return [[]];
       }),
-    );
+      execute: vi.fn(async (sql: string, values: readonly unknown[] = []) => {
+        await Promise.resolve();
+        queries.push(sql);
+        if (sql.startsWith("SELECT bytes")) {
+          const value = records.get(Buffer.from(values[1] as Uint8Array).toString("base64"));
+          return [value === undefined ? [] : [{ bytes: value }]];
+        }
+        if (sql.startsWith("INSERT INTO")) {
+          records.set(
+            Buffer.from(values[1] as Uint8Array).toString("base64"),
+            values[2] as Uint8Array,
+          );
+          return [{ affectedRows: 1 }];
+        }
+        if (sql.startsWith("DELETE FROM")) {
+          const key = Buffer.from(values[1] as Uint8Array).toString("base64");
+          const deleted = records.delete(key);
+          return [{ affectedRows: deleted ? 1 : 0 }];
+        }
+        return [[]];
+      }),
+    };
+    expect(vi.isMockFunction(createPool)).toBe(true);
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve(connection)),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/provider_selection" })
+      .setTableName(SubscriptionRecordSchema, "stand_subscription_records")
+      .build();
 
-    expect(storage.atomicCompareAndSet).toBe(true);
-    storage.close();
+    await exerciseRegistry(factory);
+
+    expect(queries.some((sql) => sql.includes("`stand_subscription_records`"))).toBe(true);
+    factory.close();
   });
 
-  it("physically deletes a definition and permits same-ID recreation", async () => {
-    const created = await registry.create(subscription("reusable"));
-    if (created.kind !== "created") throw new Error("Expected a new definition.");
-    await expect(registry.delete(id("reusable"), created.entry.revision)).resolves.toBe("deleted");
-    await expect(registry.get(id("reusable"))).resolves.toBeUndefined();
-    await expect(registry.create(subscription("reusable", "replacement"))).resolves.toMatchObject({
-      kind: "created",
-      entry: { revision: 1n },
-    });
-  });
+  it("uses the configured Datastore SubscriptionRecord storage handle", async () => {
+    const backing = new InMemoryStorageFactory();
+    let selected = false;
+    const factory = DatastoreStorageFactory.newBuilder()
+      .setClient({} as never)
+      .useRecordStorage(SubscriptionRecordSchema, (context, spec) => {
+        selected = spec.recordType === SubscriptionRecordSchema;
+        return backing.createRecordStorage(context, spec);
+      })
+      .build();
 
-  it("expires pending definitions, cleans them up, and releases capacity", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(1_000_000);
-    registry = fixture.registry(1);
-    await registry.create(subscription("expired"));
-    vi.setSystemTime(1_030_000);
-    await expect(registry.cleanup()).resolves.toEqual({ scanned: 1, deleted: 1, more: false });
-    await expect(registry.create(subscription("replacement"))).resolves.toMatchObject({
-      kind: "created",
-    });
-  });
+    await exerciseRegistry(factory);
 
-  it("rejects capacity above the configured limit and invalid public revisions", async () => {
-    expect(() => fixture.registry(101)).toThrow(RangeError);
-    registry = fixture.registry(1);
-    await registry.create(subscription("one"));
-    await expect(registry.create(subscription("two"))).rejects.toBeInstanceOf(StandCapacityError);
-    await expect(
-      registry.create(create(SubscriptionSchema, { id: id("missing-topic") })),
-    ).rejects.toBeInstanceOf(TypeError);
-    await expect(registry.delete(id("one"), -1n)).rejects.toBeInstanceOf(RangeError);
-    await expect(registry.activate(id(" "))).rejects.toBeInstanceOf(TypeError);
-  });
-
-  it("admits one concurrent create and leaves capacity recoverable", async () => {
-    const first = fixture.registry(1);
-    const second = fixture.registry(1);
-    registry = first;
-    const results = await Promise.allSettled([
-      first.create(subscription("first")),
-      second.create(subscription("second")),
-    ]);
-    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
-    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
-    const admitted = await first.snapshot();
-    expect(admitted).toHaveLength(1);
-    const entry = admitted[0];
-    if (entry === undefined) throw new Error("Expected an admitted definition.");
-    await expect(first.delete(requiredId(entry.subscription), entry.revision)).resolves.toBe(
-      "deleted",
-    );
-    await expect(second.create(subscription("recovered"))).resolves.toMatchObject({
-      kind: "created",
-    });
-    await second.close();
-  });
-
-  it("closes permanently after admitted work settles", async () => {
-    await registry.create(subscription("one"));
-    await registry.close();
-    await expect(registry.create(subscription("after-close"))).rejects.toThrow("closed");
-    await expect(registry.snapshot()).rejects.toThrow("closed");
+    expect(selected).toBe(true);
+    factory.close();
   });
 });

@@ -292,7 +292,7 @@ describe("approved framework record sources", () => {
     }
     expect(
       existsSync(resolve("packages/proto/proto/spine/system/server/stand_subscription.proto")),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       existsSync(
         resolve("packages/proto/proto/spine/system/deployment/application_node_lease.proto"),

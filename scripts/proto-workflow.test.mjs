@@ -344,6 +344,47 @@ function stagedHandlerRegistryFixture() {
 }
 
 describe("proto-workflow", () => {
+  it("removes retired Stand subscription generated artifacts after full publication", () => {
+    const repoRoot = todoTransactionFixture();
+    const paths = [
+      "packages/proto/generated/spine/system/server/stand_subscription_pb.ts",
+      "packages/proto/dist/generated/spine/system/server/stand_subscription_pb.js",
+      "packages/proto/dist/generated/spine/system/server/stand_subscription_pb.d.ts",
+      "packages/proto/dist/generated/spine/system/server/stand_subscription_pb.js.map",
+      "packages/proto/dist/generated/spine/system/server/stand_subscription_pb.d.ts.map",
+    ];
+    for (const path of paths) {
+      mkdirSync(dirname(join(repoRoot, path)), { recursive: true });
+      writeFileSync(join(repoRoot, path), "stale\n");
+    }
+
+    const targets = [...modelAtomicTargets];
+    modelAtomicTargets.splice(1);
+    try {
+      expect(
+        generateTargets({
+          repoRoot,
+          runCommand(label, executable, args, cwd) {
+            const status = rootStageCommand(label, executable, args, cwd);
+            if (label.startsWith("buf generate")) {
+              const template = readFileSync(args.at(-1), "utf8");
+              const output = template.match(/^\s*out:\s*(.+)$/mu)?.[1];
+              if (output !== undefined)
+                writeFileSync(join(dirname(output), "spine-proto-manifest.json"), "root next\n");
+            }
+            return status;
+          },
+          runModelCommand: todoStageCommand(undefined),
+        }),
+      ).toBe(0);
+    } finally {
+      modelAtomicTargets.splice(0, modelAtomicTargets.length, ...targets);
+    }
+
+    for (const path of paths) expect(existsSync(join(repoRoot, path))).toBe(false);
+    rmSync(repoRoot, { recursive: true, force: true });
+  });
+
   it("builds and reuses a clean Proto Tools bootstrap executable", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-bootstrap-"));
     let calls = 0;

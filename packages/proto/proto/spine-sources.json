@@ -406,10 +406,6 @@
     {
       "localPath": "packages/proto/proto/spine/deployment/node_discovery.proto",
       "sha256": "7edb53736c468c38715889277c8e0c762024a7268814e6861459621d79b3e95d"
-    },
-    {
-      "localPath": "packages/proto/proto/spine/system/server/stand_subscription.proto",
-      "sha256": "14b27564b72ffa98cf56945812812ff95889f00c76469984b9e8f4fecb1f72a4"
     }
   ]
 }

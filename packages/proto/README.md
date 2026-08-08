@@ -51,10 +51,6 @@ The generated wildcard subpath is a low-level compatibility surface used by
 framework packages and advanced model tooling. Prefer the package root or a
 named subpath when one exports the schema you need.
 
-The old `spine/system/server/stand_subscription.proto` file is a temporary
-private build input while its server consumer moves to the record above. It is
-not a supported compatibility contract or application API.
-
 ## 📦 Depend on it from an application model
 
 An application-owned model package declares this package both as an npm

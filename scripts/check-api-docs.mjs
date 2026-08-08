@@ -613,7 +613,6 @@ const expectedServerExports = [
   "Stand",
   "InMemorySubscriptionRegistry",
   "StandActivateResult",
-  "StandCapacityError",
   "StandCleanupResult",
   "StandConflictError",
   "StandCreateResult",

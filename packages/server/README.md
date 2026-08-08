@@ -74,19 +74,19 @@ normal choice for an application that uses generated handlers.
 
 ### Keep Stand subscription definitions
 
-Stand subscription definitions use your context storage by default. The default
-registry keeps up to 100 definitions; choose a smaller limit when that better
-fits the application.
+Stand subscription definitions use your context storage by default. One
+`spine.client.SubscriptionRecord` is stored for each explicit subscription ID.
+Pending definitions expire if they are not activated; reconciliation is
+best-effort at a ten-second interval, so subscription updates are not complete
+delivery and clients re-query after reconnects or gaps.
 
-```ts
-import { BoundedContext } from "@spine-event-engine/server";
-
-const context = BoundedContext.singleTenant("Tasks").withSubscriptionLimit(25).build();
-```
+The storage record exposes the physical columns `status` and
+`when_activation_expires`. Cleanup asks the provider for 26 pending records,
+ordered by `when_activation_expires` and then ID. It deletes at most 25 expired
+records and reports more work only when the observed 26th record is expired.
 
 For an application-specific registry, provide one complete implementation.
-The built context owns and closes it. Do not combine a custom registry with
-`withSubscriptionLimit()`.
+The built context owns and closes it.
 
 ```ts
 import { BoundedContext, type StandSubscriptionRegistry } from "@spine-event-engine/server";
@@ -105,9 +105,9 @@ still continues.
 
 The registry stores a definition first, then makes it active. Applications use
 the generated `SubscriptionId` throughout the lifecycle. `get()` and
-`snapshot()` return cloned, frozen message/object graphs, so treat them as
-observations rather than mutable working objects. Their cloned Protobuf byte
-arrays remain mutable, but do not alias stored or caller bytes.
+`snapshot()` return cloned values, so treat them as observations rather than
+mutable working objects. Their Protobuf byte arrays remain mutable, but do not
+alias stored or caller bytes.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
@@ -124,9 +124,9 @@ const definition = create(SubscriptionSchema, {
 await registry.create(definition); // pending for up to 30 seconds
 await registry.activate(id); // active definitions do not expire
 const current = await registry.get(id); // one isolated snapshot
-const all = await registry.snapshot(); // bounded, identifier-sorted copies
-if (current !== undefined) await registry.delete(id, current.revision);
-await registry.cleanup(); // removes one finite page of expired pending entries
+const all = await registry.snapshot(); // complete, identifier-sorted copies
+if (current !== undefined) await registry.delete(id);
+await registry.cleanup(); // removes at most 25 expired pending entries
 await registry.close();
 
 void all;
@@ -135,6 +135,11 @@ void all;
 The built-in durable registry requires record storage with atomic
 compare-and-set. Context construction fails fast when the selected storage
 provider cannot supply that capability; it never silently falls back to memory.
+
+Provider configuration for `SubscriptionRecord` applies to these definitions.
+For example, a MySQL factory can assign `SubscriptionRecordSchema` to a chosen
+table, and a Datastore factory can provide storage for that same schema. The
+registry uses the configured provider when the context is built.
 
 An aggregate receives a generated command type in an `@Assign` method. The
 generator discovers this method and writes the registry used by `buildAsync()`;
@@ -210,7 +215,7 @@ notifications on the paired System Context `EventBus`. Stand's default registry
 uses the application's `StorageFactory`; a builder may supply another
 implementation. A definition is pending for at most 30 seconds, active
 definitions have no framework TTL, and cancellation physically deletes the
-definition. Nodes reconcile their local listeners from a bounded complete
+definition. Nodes reconcile their local listeners from a complete
 snapshot every 10 seconds. Active streams and queues are process-local.
 
 ### Serve browser clients

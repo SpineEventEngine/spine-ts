@@ -30,7 +30,6 @@ export {
 export {
   InMemorySubscriptionRegistry,
   StorageSubscriptionRegistry,
-  StandCapacityError,
   StandConflictError,
   type StandActivateResult,
   type StandCleanupResult,

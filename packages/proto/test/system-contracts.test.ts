@@ -6,17 +6,12 @@ import { describe, expect, it } from "vitest";
 import { type_url_prefix } from "../src/index.js";
 import * as curatedSchemas from "../src/index.js";
 import { InboxLabel } from "../generated/spine/server/delivery/inbox_pb.js";
-import { internal_all, required, validate } from "../generated/spine/options_pb.js";
+import { required, validate } from "../generated/spine/options_pb.js";
 import {
   EntityStateChangedSchema,
   file_spine_system_server_entity_log_events,
 } from "../generated/spine/system/server/entity_log_events_pb.js";
 import { EntityTypeNameSchema } from "../generated/spine/system/server/entity_type_pb.js";
-import {
-  file_spine_system_server_stand_subscription,
-  StandSubscriptionRecordSchema,
-  SubscriptionPhase,
-} from "../generated/spine/system/server/stand_subscription_pb.js";
 
 interface SourceEntry {
   readonly localPath: string;
@@ -37,14 +32,6 @@ function source(manifest: SourceManifest, localPath: string): SourceEntry {
   const entry = manifest.sources.find((candidate) => candidate.localPath === localPath);
   if (entry === undefined) {
     throw new Error(`Expected frozen source ${localPath}.`);
-  }
-  return entry;
-}
-
-function ownedSource(manifest: SourceManifest, localPath: string): { readonly sha256: string } {
-  const entry = manifest.ownedSources?.find((candidate) => candidate.localPath === localPath);
-  if (entry === undefined) {
-    throw new Error(`Expected Spine TS-owned source ${localPath}.`);
   }
   return entry;
 }
@@ -89,13 +76,9 @@ describe("distributed delivery system contracts", () => {
     }
   });
 
-  it("keeps EntityStateChanged and the Stand record on their exact wire shapes", () => {
+  it("keeps EntityStateChanged on its exact wire shape", () => {
     const eventSource = readFileSync(
       resolve("packages/proto/proto/spine/system/server/entity_log_events.proto"),
-      "utf8",
-    );
-    const standSource = readFileSync(
-      resolve("packages/proto/proto/spine/system/server/stand_subscription.proto"),
       "utf8",
     );
 
@@ -109,29 +92,14 @@ describe("distributed delivery system contracts", () => {
     expect(eventSource).toMatch(/google\.protobuf\.Timestamp when = 4;/u);
     expect(eventSource).toMatch(/core\.Version new_version = 5;/u);
     expect(eventSource).toMatch(/google\.protobuf\.Any old_state = 6;/u);
-
-    expect(standSource).toContain("option (internal_all) = true;");
-    expect(standSource).toMatch(/spine\.client\.Subscription subscription = 1;/u);
-    expect(standSource).toMatch(/SubscriptionPhase phase = 2;/u);
-    expect(standSource).toMatch(/google\.protobuf\.Timestamp created_at = 3;/u);
-    expect(standSource).toMatch(/google\.protobuf\.Timestamp pending_until = 4;/u);
-    expect(standSource).toMatch(/uint64 revision = 5;/u);
-    expect(standSource).not.toContain("Topic topic");
   });
 
   it("generates internal schemas with the exact field numbers and type URL prefix", () => {
     expect(EntityStateChangedSchema.typeName).toBe("spine.system.server.EntityStateChanged");
     expect(EntityTypeNameSchema.typeName).toBe("spine.system.server.EntityTypeName");
-    expect(StandSubscriptionRecordSchema.typeName).toBe(
-      "spine.system.server.StandSubscriptionRecord",
-    );
     expect(getOption(file_spine_system_server_entity_log_events, type_url_prefix)).toBe(
       "type.spine.io",
     );
-    expect(getOption(file_spine_system_server_stand_subscription, type_url_prefix)).toBe(
-      "type.spine.io",
-    );
-    expect(getOption(file_spine_system_server_stand_subscription, internal_all)).toBe(true);
     expect(EntityStateChangedSchema.fields.map((field) => [field.name, field.number])).toEqual([
       ["entity", 1],
       ["old_state", 6],
@@ -140,18 +108,6 @@ describe("distributed delivery system contracts", () => {
       ["when", 4],
       ["new_version", 5],
     ]);
-    expect(StandSubscriptionRecordSchema.fields.map((field) => [field.name, field.number])).toEqual(
-      [
-        ["subscription", 1],
-        ["phase", 2],
-        ["created_at", 3],
-        ["pending_until", 4],
-        ["revision", 5],
-        ["generation", 6],
-      ],
-    );
-    expect(SubscriptionPhase.PENDING).toBe(1);
-    expect(SubscriptionPhase.ACTIVE).toBe(2);
     expect(
       getOption(field(EntityStateChangedSchema.fields, "entity", "EntityStateChanged"), required),
     ).toBe(true);
@@ -167,31 +123,14 @@ describe("distributed delivery system contracts", () => {
         validate,
       ),
     ).toBe(true);
-    expect(
-      getOption(
-        field(StandSubscriptionRecordSchema.fields, "pending_until", "StandSubscriptionRecord"),
-        required,
-      ),
-    ).toBe(false);
   });
 
-  it("records the owned Stand contract and reuses the frozen Inbox labels", () => {
-    const manifest = JSON.parse(
-      readFileSync(resolve("packages/proto/proto/spine-sources.json"), "utf8"),
-    ) as SourceManifest;
-    const owned = ownedSource(
-      manifest,
-      "packages/proto/proto/spine/system/server/stand_subscription.proto",
-    );
-    const standBytes = readFileSync(
-      resolve("packages/proto/proto/spine/system/server/stand_subscription.proto"),
-    );
+  it("reuses the frozen Inbox labels", () => {
     const inboxSource = readFileSync(
       resolve("packages/proto/proto/spine/server/delivery/inbox.proto"),
       "utf8",
     );
 
-    expect(createHash("sha256").update(standBytes).digest("hex")).toBe(owned.sha256);
     expect(inboxSource).toMatch(/HANDLE_COMMAND = 1;/u);
     expect(inboxSource).toMatch(/UPDATE_SUBSCRIBER = 3;/u);
     expect(inboxSource).toMatch(/REACT_UPON_EVENT = 4;/u);
@@ -203,7 +142,6 @@ describe("distributed delivery system contracts", () => {
   it("keeps system contracts out of curated end-user exports", () => {
     expect(curatedSchemas).not.toHaveProperty("EntityStateChangedSchema");
     expect(curatedSchemas).not.toHaveProperty("EntityTypeNameSchema");
-    expect(curatedSchemas).not.toHaveProperty("StandSubscriptionRecordSchema");
     const packageJson = JSON.parse(
       readFileSync(resolve("packages/proto/package.json"), "utf8"),
     ) as { readonly exports: Readonly<Record<string, unknown>> };

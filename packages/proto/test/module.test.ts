@@ -35,7 +35,6 @@ import * as environmentSchemas from "../generated/spine/server/server_environmen
 import * as nodeDiscoverySchemas from "../generated/spine/deployment/node_discovery_pb.js";
 import * as systemEventSchemas from "../generated/spine/system/server/entity_log_events_pb.js";
 import * as systemTypeSchemas from "../generated/spine/system/server/entity_type_pb.js";
-import * as standSchemas from "../generated/spine/system/server/stand_subscription_pb.js";
 import { spineProtoModule } from "../generated/proto-module.js";
 
 interface SpineManifest {
@@ -86,7 +85,7 @@ describe("spineProtoModule", () => {
       dependencies: [],
       moduleExport: "spineProtoModule",
     });
-    expect(manifest.protoFiles).toHaveLength(48);
+    expect(manifest.protoFiles).toHaveLength(47);
     expect(Object.keys(manifest.generatedExports)).toEqual(manifest.protoFiles);
     expect(Object.values(manifest.generatedExports)).toEqual(
       manifest.protoFiles.map((path) => `generated/${path.replace(/\.proto$/, "_pb.js")}`),
@@ -136,7 +135,6 @@ describe("spineProtoModule", () => {
       ...schemaNames(nodeDiscoverySchemas),
       ...schemaNames(systemEventSchemas),
       ...schemaNames(systemTypeSchemas),
-      ...schemaNames(standSchemas),
     ].sort();
 
     expect(spineProtoModule.name).toBe("@spine-event-engine/proto");

@@ -24,7 +24,6 @@ import {
   VersionSchema,
   file_spine_options,
 } from "@spine-event-engine/proto";
-import { SubscriptionIdSchema, SubscriptionSchema } from "@spine-event-engine/proto/client";
 import {
   EventStore,
   InMemoryStorageFactory,
@@ -1828,49 +1827,6 @@ describe("BoundedContext assembly", () => {
       expect(registry.snapshotCalls).toBe(1);
     });
     await context.close();
-  });
-
-  it("rejects combining a custom subscription registry and a built-in limit in either order", () => {
-    expect(() =>
-      BoundedContext.singleTenant("Tasks")
-        .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
-        .withSubscriptionLimit(1),
-    ).toThrow("A custom subscription registry cannot use a subscription limit.");
-    expect(() =>
-      BoundedContext.singleTenant("Tasks")
-        .withSubscriptionLimit(1)
-        .withSubscriptionRegistry(new InMemorySubscriptionRegistry()),
-    ).toThrow("A custom subscription registry cannot use a subscription limit.");
-  });
-
-  it("builds the limited default registry from the configured storage factory", async () => {
-    const storageFactory = new ObservingStorageFactory([]);
-    const context = BoundedContext.singleTenant("Tasks")
-      .withStorageFactory(storageFactory)
-      .withSubscriptionLimit(1)
-      .build();
-    const registry = boundedContextAccess.subscriptionRegistry(context);
-
-    try {
-      await registry.create(
-        create(SubscriptionSchema, {
-          id: create(SubscriptionIdSchema, { value: "one" }),
-          topic: { id: { value: "tasks" } },
-        }),
-      );
-      await expect(
-        registry.create(
-          create(SubscriptionSchema, {
-            id: create(SubscriptionIdSchema, { value: "two" }),
-            topic: { id: { value: "tasks" } },
-          }),
-        ),
-      ).rejects.toThrow("Stand subscription capacity of 1 is exhausted.");
-      expect(registry.persistent).toBe(true);
-      expect(storageFactory.creations).toHaveLength(4);
-    } finally {
-      await context.close();
-    }
   });
 
   it("waits for in-flight direct Stand updates before closing subscriptions", async () => {

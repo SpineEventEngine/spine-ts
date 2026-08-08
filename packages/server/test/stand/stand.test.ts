@@ -18,11 +18,11 @@ import {
   type NormalizedQueryPlan,
   type StorageContext,
 } from "@spine-event-engine/storage";
-import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
   InMemorySubscriptionRegistry,
+  StorageSubscriptionRegistry,
   EventBus,
   Stand,
   StandStateTypeError,
@@ -137,7 +137,7 @@ describe("Stand", () => {
       /Stand instance/,
     );
     expect(() =>
-      standAccess.observeState(invalid, {} as never, {} as never, {} as never, () => {}),
+      standAccess.observeState(invalid, {} as never, {} as never, {} as never, () => undefined),
     ).toThrow(/Stand instance/);
     expect(() => standAccess.readCurrent(invalid, ProjectionStateSchema, "task", {})).toThrow(
       /Stand instance/,
@@ -163,7 +163,9 @@ describe("Stand", () => {
     );
     deferred.cancel();
     await stand.close();
-    expect(() => stand.register(ProjectionStateSchema)).toThrow(/closed/);
+    expect(() => {
+      stand.register(ProjectionStateSchema);
+    }).toThrow(/closed/);
   });
 
   it("does not attach a deleted definition after its snapshot is released", async () => {
@@ -339,7 +341,7 @@ describe("Stand", () => {
     await Promise.all([runtime.close(), stand.close(), eventBus.close()]);
   });
 
-  it("fences Stand-owned observers by the exact active revision and sweeps absent snapshots", async () => {
+  it("attaches only the exact active subscription identity and sweeps absent snapshots", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const stand = new Stand({
       context: { name: "Subscriptions", multitenant: false },
@@ -347,7 +349,7 @@ describe("Stand", () => {
     });
     const eventBus = eventBusAccess.createSystemBus(undefined);
     stand.register(ProjectionStateSchema);
-    const registry = new RevisionFencedRegistry();
+    const registry = new AttachmentIdentityRegistry();
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: "s-1" }),
       topic: {
@@ -370,7 +372,7 @@ describe("Stand", () => {
     await postStateChange(eventBus, ProjectionStateSchema, createState("one", "Before fence"));
     expect(observed).toEqual([]);
 
-    registry.allowExactRevision = true;
+    registry.allowExactAttachment = true;
     await runtime.reconcile();
     await postStateChange(eventBus, ProjectionStateSchema, createState("two", "After fence"));
     expect(observed).toEqual([1]);
@@ -380,6 +382,83 @@ describe("Stand", () => {
     await postStateChange(eventBus, ProjectionStateSchema, createState("three", "After sweep"));
     expect(observed).toEqual([1]);
     await Promise.all([runtime.close(), stand.close(), eventBus.close()]);
+  });
+
+  it("replaces an attachment when canonical subscription content changes in the same millisecond", async () => {
+    observedEventBusSubscriptions.length = 0;
+    const storageFactory = new InMemoryStorageFactory();
+    const stand = new Stand({
+      context: { name: "Replacement", multitenant: false },
+      storageFactory,
+    });
+    const bus = eventBusAccess.createSystemBus(undefined);
+    const registry = new AttachmentIdentityRegistry();
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "same-millisecond" }),
+      topic: {
+        id: { value: "first" },
+        target: {
+          type: TypeUrls.derive(ProjectionStateSchema),
+          criterion: { case: "includeAll", value: true },
+        },
+      },
+    });
+    if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+    stand.register(ProjectionStateSchema);
+    eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
+    await registry.create(subscription);
+    await registry.activate(subscription.id);
+    registry.allowExactAttachment = true;
+    const runtime = pairedRuntime(stand, storageFactory, registry, bus, bus);
+    await runtime.consume("same-millisecond", () => undefined);
+    const previous = [...observedEventBusSubscriptions];
+
+    registry.replaceContent = true;
+    await runtime.reconcile();
+
+    expect(previous.every((observer) => observer.closed)).toBe(true);
+    expect(observedEventBusSubscriptions.length).toBeGreaterThan(previous.length);
+    await Promise.all([runtime.close(), stand.close(), bus.close()]);
+  });
+
+  it("rediscovers an active durable definition after restart and detaches it on the next poll", async () => {
+    vi.useFakeTimers();
+    observedEventBusSubscriptions.length = 0;
+    const storageFactory = new InMemoryStorageFactory();
+    const context = { name: "DurableRestart", multitenant: false };
+    const first = new StorageSubscriptionRegistry(context, storageFactory);
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "restart" }),
+      topic: {
+        id: { value: "updates" },
+        target: {
+          type: TypeUrls.derive(ProjectionStateSchema),
+          criterion: { case: "includeAll", value: true },
+        },
+      },
+    });
+    if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+    await first.create(subscription);
+    await first.activate(subscription.id);
+    await first.close();
+
+    const stand = new Stand({ context, storageFactory });
+    const bus = eventBusAccess.createSystemBus(undefined);
+    stand.register(ProjectionStateSchema);
+    eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
+    const restarted = new StorageSubscriptionRegistry(context, storageFactory);
+    const runtime = pairedRuntime(stand, storageFactory, restarted, bus, bus);
+    runtime.start();
+    await runtime.consume("restart", () => undefined);
+    expect(observedEventBusSubscriptions.some((observer) => !observer.closed)).toBe(true);
+
+    const remote = new StorageSubscriptionRegistry(context, storageFactory);
+    await remote.delete(subscription.id);
+    await remote.close();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(observedEventBusSubscriptions.every((observer) => observer.closed)).toBe(true);
+    await Promise.all([runtime.close(), stand.close(), bus.close()]);
+    vi.useRealTimers();
   });
 
   it("observes one shared definition from both nodes without crossing local buses", async () => {
@@ -1238,7 +1317,7 @@ describe("Stand", () => {
 function pairedRuntime(
   domainStand: Stand,
   storageFactory: InMemoryStorageFactory,
-  registry: InMemorySubscriptionRegistry,
+  registry: InMemorySubscriptionRegistry | StorageSubscriptionRegistry,
   domainEventBus: EventBusType,
   systemEventBus: EventBusType,
 ): SubscriptionRuntime {
@@ -1383,15 +1462,30 @@ class CountingReadStorageFactory extends InMemoryStorageFactory {
   }
 }
 
-class RevisionFencedRegistry extends InMemorySubscriptionRegistry {
-  allowExactRevision = false;
+class AttachmentIdentityRegistry extends InMemorySubscriptionRegistry {
+  allowExactAttachment = false;
+  replaceContent = false;
 
   override async get(id: Parameters<InMemorySubscriptionRegistry["get"]>[0]) {
     const entry = await super.get(id);
-    if (entry === undefined || this.allowExactRevision) {
-      return entry;
-    }
-    return Object.freeze({ ...entry, revision: entry.revision + 1n });
+    if (entry === undefined || this.replaceContent || this.allowExactAttachment)
+      return this.replaceContent ? this.#replacement(entry) : entry;
+    return Object.freeze({
+      ...entry,
+      createdAt: entry.createdAt + 1,
+    });
+  }
+
+  override async snapshot() {
+    const entries = await super.snapshot();
+    return this.replaceContent ? entries.map((entry) => this.#replacement(entry)) : entries;
+  }
+
+  #replacement(entry: Awaited<ReturnType<InMemorySubscriptionRegistry["get"]>>) {
+    if (entry === undefined) return entry;
+    const subscription = clone(SubscriptionSchema, entry.subscription);
+    if (subscription.topic?.id !== undefined) subscription.topic.id.value = "replacement";
+    return Object.freeze({ ...entry, subscription });
   }
 }
 
