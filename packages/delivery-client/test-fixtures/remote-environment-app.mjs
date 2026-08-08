@@ -10,27 +10,10 @@ import process from "node:process";
 const endpoint = process.env.DELIVERY_SERVER_URL;
 const node = process.env.DELIVERY_NODE;
 const observationBufferSize = Number(process.env.DELIVERY_OBSERVATION_BUFFER ?? "100");
-const forceCloseFailure = process.env.DELIVERY_FIXTURE_CLOSE_FAILURE === "true";
 if (endpoint === undefined || node === undefined || process.send === undefined) process.exit(1);
 
-const quarantine = new Map();
 const delivery = RemoteDelivery.connectTo({
   endpoint,
-  removalQuarantine: {
-    get: (id) => Promise.resolve(quarantine.get(id)),
-    put: (record) => {
-      quarantine.set(record.id, record);
-      return Promise.resolve();
-    },
-    delete: (id) => {
-      quarantine.delete(id);
-      return Promise.resolve();
-    },
-    close: () =>
-      forceCloseFailure
-        ? Promise.reject(new Error("Fixture close failure requested."))
-        : Promise.resolve(),
-  },
   clientOptions: { observationBufferSize, observationReconnects: 0 },
 });
 await delivery.open();

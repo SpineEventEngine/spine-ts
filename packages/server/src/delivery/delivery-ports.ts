@@ -107,6 +107,10 @@ export interface DeliveryInboxWork {
   /**
    * Completes the admitted message once delivery succeeded.
    *
+   * Shard ownership excludes concurrent delivery, but the handler effect and
+   * durable delivered transition are not transactional. A lost acknowledgement
+   * can therefore redeliver; downstream handling must be idempotent.
+   *
    * @param options Propagates cancellation and a delivery deadline.
    * @returns Whether the message transitioned to complete.
    */

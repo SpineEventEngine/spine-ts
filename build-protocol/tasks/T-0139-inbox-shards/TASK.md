@@ -1,6 +1,6 @@
 # T-0139: Inbox And Shard Records
 
-Status: Approved architecture; implementation in progress (Slice 1)
+Status: Implementation converged; focused verification recorded; review and final task verification pending.
 
 ## Objective
 
@@ -205,6 +205,20 @@ still import old retry/attempt policy.
 
 - 2026-08-08: Slice 1 direct `InboxMessage` record specification is GREEN;
   generated mapping, validation, and storage round trip remain in progress.
+- 2026-08-08: Slices 7 and 8 now have focused direct-family provider evidence
+  and direct remote removal without persistent client state. Slice 9 deletion
+  removed attempts/retry decisions and the removal-quarantine API. The remaining
+  package TypeScript inventory is deliberately confined to the T-0140 delivery
+  orchestration boundary and requires no T-0139 compatibility facade.
+- 2026-08-08: All nine implementation slices are converged in the bounded
+  worktree. Direct Inbox coverage is independent of the server-root/T-0140
+  graph and covers corrupt stored records, exact pending-to-delivered CAS,
+  live delivered suppression, and expired delivered admission. Direct shard
+  coverage includes same-worker lost-acknowledgement convergence, takeover and
+  stale fencing, distinct worker/restart identities, and mid-drain arrival or
+  ownership loss. Runtime provider construction proves all three direct
+  families reach the configured MySQL and Datastore record hooks. Narrow API
+  documentation states the at-least-once/idempotency boundary truthfully.
 
 ## Verification And Review
 

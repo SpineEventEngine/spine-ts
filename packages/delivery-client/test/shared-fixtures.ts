@@ -18,7 +18,6 @@ import {
   InboxSignalIdSchema,
   ShardIndexSchema,
 } from "@spine-event-engine/proto/delivery";
-import type { RemovalQuarantine, RemovalQuarantineRecord } from "../src/index.js";
 import { vi } from "vitest";
 
 export function transport(): {
@@ -255,19 +254,4 @@ export function domainMessage(id = "message-1"): InboxMessage {
     whenReceived: new Date(1_000),
     version: 2n,
   });
-}
-
-export function quarantine(): RemovalQuarantine {
-  const records = new Map<string, RemovalQuarantineRecord>();
-  return {
-    get: (id) => Promise.resolve(records.get(id)),
-    put: (record) => {
-      records.set(record.id, record);
-      return Promise.resolve();
-    },
-    delete: (id) => {
-      records.delete(id);
-      return Promise.resolve();
-    },
-  };
 }

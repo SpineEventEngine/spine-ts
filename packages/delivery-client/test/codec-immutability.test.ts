@@ -7,20 +7,15 @@ import {
   ShardIndexSchema,
 } from "@spine-event-engine/proto/delivery";
 import { describe, expect, it } from "vitest";
-import {
-  DeliveryClient,
-  DeliveryProtocolError,
-  DeliveryQuarantineError,
-  RemoteInbox,
-} from "../src/index.js";
+import { DeliveryClient, DeliveryProtocolError, RemoteInbox } from "../src/index.js";
 import { DeliveryMessageCodec } from "../src/wire/codec.js";
 import { domainMessage, message, transport } from "./shared-fixtures.js";
 
 describe("delivery codec and immutable snapshots", () => {
-  it("requires a durable removal quarantine before admitting remote inbox work", () => {
+  it("opens a remote inbox without removal-quarantine state", () => {
     const client = DeliveryClient.usingTransport(transport().transport);
 
-    expect(() => new RemoteInbox(client, undefined as never)).toThrow(DeliveryQuarantineError);
+    expect(new RemoteInbox(client)).toBeInstanceOf(RemoteInbox);
   });
 
   it("keeps malformed wire-message decoding on the public protocol-error identity", () => {

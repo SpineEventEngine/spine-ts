@@ -48,25 +48,27 @@ The remote protocol has no renewable fence or worker-conditional release. A
 a stale local session and permits a new pickup. Do not release a stale session.
 
 `RemoteInbox` and `RemoteWorkRegistry` satisfy the server delivery-builder
-ports. `RemoteInbox` requires durable, atomically persisted, capacity-bounded
-`RemovalQuarantine` records. `ADMITTED` recovery remains fail-closed for an
-operator; `REMOVING` recovery reconciles/removes without replaying a callback.
-This package does not add authentication, authorization, durability,
-exactly-once effects, or a production topology.
+ports. `RemoteInbox` rereads the pending remote row before admission and calls
+the authoritative removal operation directly on completion, without a local
+receipt, fingerprint, or quarantine record. Shard ownership excludes concurrent
+delivery and delivered rows are the deduplication fact. Handler effects and the
+delivered transition are not transactional: a lost acknowledgement can
+redeliver after restart, so downstream handling must be idempotent. This
+package does not add authentication, authorization, durability, exactly-once
+effects, or a production topology.
 
 ## Environment-owned remote delivery
 
-`RemoteDelivery.connectTo({ endpoint, removalQuarantine, clientOptions? })`
-creates one lazy `ServerEnvironmentDelivery`. The supplied durable quarantine
-transfers to that owner. Its `open()` creates one client plus one remote inbox
-and work registry, then completes the client's bounded `shardSnapshot()`
+`RemoteDelivery.connectTo({ endpoint, clientOptions? })` creates one lazy
+`ServerEnvironmentDelivery`. Its `open()` creates one client plus one remote
+inbox and work registry, then completes the client's bounded `shardSnapshot()`
 readiness call before publishing those generic ports and its Admin source.
 Every attached environment supervisor takes bounded snapshots, consumes later
 updates as wake-up hints, and takes a fresh snapshot after a watch failure or
 bounded observation overflow before consuming updates again. Durable Inbox rows
 and exclusive shard pickup remain authoritative. Concurrent opens share an
-attempt. A failed attempt closes only its client, does not close the quarantine,
-and a later open creates a fresh client.
+attempt. A failed attempt closes only its client, and a later open creates a
+fresh client.
 
 Every identically configured node observes and attempts every reported shard.
 The remote registry admits exactly one current owner per shard; notifications
@@ -78,7 +80,7 @@ immediate pre-commit ownership probe fences a detected stale owner, but cannot
 make remote ownership and Entity storage one linearizable distributed
 transaction.
 
-Environment shutdown closes the client-owned HTTP/2 session, then quarantine.
-Concurrent/repeated close calls share work; a failed phase is the only phase
-retried. This adds no health route, provider selector, worker, or
+Environment shutdown closes the client-owned HTTP/2 session. Concurrent/repeated
+close calls share work; a failed phase is the only phase retried. This adds no
+health route, provider selector, worker, or
 delivery-server mode.

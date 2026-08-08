@@ -1,0 +1,170 @@
+import { create, toBinary } from "@bufbuild/protobuf";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { access } from "node:fs/promises";
+import {
+  InboxMessageSchema,
+  ShardSessionRecordSchema,
+  WorkerIdSchema,
+} from "@spine-event-engine/proto/delivery";
+import { TenantIdSchema } from "@spine-event-engine/proto";
+import { CommandSchema } from "@spine-event-engine/proto";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { createPool } from "../../../storage-rdbms/node_modules/mysql2/promise.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { TenantIndexes } from "../../src/context/tenant-index.js";
+import { DatastoreStorageFactory } from "../../../storage-datastore/src/index.js";
+import { MysqlStorageFactory } from "../../../storage-rdbms/src/index.js";
+import { InboxStorage } from "../../src/delivery/inbox-storage.js";
+import { ShardIndex } from "../../src/delivery/shard-index.js";
+import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
+
+vi.mock("../../../storage-rdbms/node_modules/mysql2/promise.js", () => ({ createPool: vi.fn() }));
+
+afterEach(() => vi.clearAllMocks());
+
+describe("direct durable record provider selection", () => {
+  it("has no durable delivery-attempt family", async () => {
+    await expect(
+      access(new URL("../../src/delivery/delivery-attempts.ts", import.meta.url)),
+    ).rejects.toThrow();
+  });
+
+  it("routes InboxMessage, ShardSessionRecord, and TenantId through Datastore record creators", async () => {
+    const backing = new InMemoryStorageFactory();
+    const selected: unknown[] = [];
+    const factory = DatastoreStorageFactory.newBuilder()
+      .setClient({} as never)
+      .useRecordStorage(InboxMessageSchema, (context, spec) => {
+        selected.push(spec.recordType);
+        return backing.createRecordStorage(context, spec);
+      })
+      .useRecordStorage(ShardSessionRecordSchema, (context, spec) => {
+        selected.push(spec.recordType);
+        return backing.createRecordStorage(context, spec);
+      })
+      .useRecordStorage(TenantIdSchema, (context, spec) => {
+        selected.push(spec.recordType);
+        return backing.createRecordStorage(context, spec);
+      })
+      .build();
+    const inbox = new InboxStorage({
+      context: { name: "provider-inbox", multitenant: false },
+      storageFactory: factory,
+    });
+    const registry = new ShardedWorkRegistry({
+      context: { name: "provider-shard", multitenant: false },
+      storageFactory: factory,
+      now: () => new Date(1_000),
+    });
+    const tenants = TenantIndexes.create({
+      contextName: "provider-tenants",
+      tenantMode: "multitenant",
+      storageFactory: factory,
+    });
+
+    await inbox.write(message());
+    await registry.pickUp(
+      ShardIndex.single(),
+      create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
+    );
+    await tenants.keep("tenant");
+
+    expect(selected.map((type) => (type as { readonly typeName: string }).typeName).sort()).toEqual(
+      [
+        InboxMessageSchema.typeName,
+        ShardSessionRecordSchema.typeName,
+        TenantIdSchema.typeName,
+      ].sort(),
+    );
+
+    tenants.close();
+    factory.close();
+  });
+
+  it("opens the configured MySQL table for each direct durable record family", async () => {
+    const queries: string[] = [];
+    let columns: readonly { readonly column_name: string }[] = [];
+    const connection = {
+      release: vi.fn(),
+      beginTransaction: vi.fn(() => Promise.resolve()),
+      commit: vi.fn(() => Promise.resolve()),
+      rollback: vi.fn(() => Promise.resolve()),
+      query: vi.fn((sql: string) => {
+        queries.push(sql);
+        if (sql.startsWith("CREATE TABLE")) {
+          columns = [...(/\((.*), PRIMARY KEY/.exec(sql)?.[1] ?? "").matchAll(/`([^`]+)`/g)].map(
+            (match) => ({ column_name: match[1] }),
+          );
+        }
+        if (sql.includes("information_schema.columns")) return Promise.resolve([columns]);
+        if (sql.includes("information_schema.tables"))
+          return Promise.resolve([[{ engine: "InnoDB" }]]);
+        return Promise.resolve([[]]);
+      }),
+      execute: vi.fn((sql: string) => {
+        queries.push(sql);
+        if (sql.startsWith("SELECT bytes")) return Promise.resolve([[]]);
+        return Promise.resolve([{ affectedRows: 1 }]);
+      }),
+    };
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve(connection)),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/direct-records" })
+      .setTableName(InboxMessageSchema, "delivery_inbox_messages")
+      .setTableName(ShardSessionRecordSchema, "delivery_shard_sessions")
+      .setTableName(TenantIdSchema, "delivery_tenants")
+      .build();
+    const inbox = new InboxStorage({
+      context: { name: "mysql-inbox", multitenant: false },
+      storageFactory: factory,
+    });
+    const registry = new ShardedWorkRegistry({
+      context: { name: "mysql-shard", multitenant: false },
+      storageFactory: factory,
+      now: () => new Date(1_000),
+    });
+    const tenants = TenantIndexes.create({
+      contextName: "mysql-tenants",
+      tenantMode: "multitenant",
+      storageFactory: factory,
+    });
+
+    await inbox.write(message());
+    await registry.pickUp(
+      ShardIndex.single(),
+      create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
+    );
+    await tenants.keep("tenant");
+
+    const schema = queries.join("\n");
+    expect(schema).toContain("`delivery_inbox_messages`");
+    expect(schema).toContain("`delivery_shard_sessions`");
+    expect(schema).toContain("`delivery_tenants`");
+    expect(schema).not.toContain("provider-inbox");
+    expect(schema).not.toContain("provider-shard");
+
+    tenants.close();
+    factory.close();
+  });
+});
+
+function message() {
+  return {
+    id: { value: "provider-message", shard: new ShardIndex(0, 1) },
+    inboxId: { targetId: "entity", targetTypeUrl: "type.spine.io/test.Entity" },
+    signalId: "signal",
+    signal: create(AnySchema, {
+      typeUrl: "type.spine.io/spine.core.Command",
+      value: toBinary(CommandSchema, create(CommandSchema)),
+    }),
+    label: "HANDLE_COMMAND" as const,
+    status: "TO_DELIVER" as const,
+    shard: new ShardIndex(0, 1),
+    whenReceived: new Date(1_000),
+    version: 1n,
+  };
+}

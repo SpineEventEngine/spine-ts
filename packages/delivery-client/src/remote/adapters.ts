@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import type {
   DeliveryInbox,
@@ -21,9 +21,6 @@ import {
   DeliveryOutcomeUnknownError,
   DeliveryPagingError,
   DeliveryProtocolError,
-  DeliveryQuarantineError,
-  type RemovalQuarantine,
-  type RemovalQuarantineRecord,
   type DeliveryWorkerId,
   type RemoteShardObservation,
   type RemoteShardSession,
@@ -40,20 +37,12 @@ export class RemoteInbox implements DeliveryInbox {
    * Remote inbox work requires an exclusive remote shard session.
    */
   readonly sessionKind = "EXCLUSIVE" as const;
-  private readonly quarantine: RemovalQuarantine;
-
   /**
-   * Creates a remote inbox with durable removal recovery.
+   * Creates a remote inbox.
    *
    * @param client Sends inbox calls to the delivery server.
-   * @param quarantine Persists recovery state before callback admission and removal.
    */
-  constructor(
-    private readonly client: DeliveryClient,
-    quarantine: RemovalQuarantine | undefined,
-  ) {
-    if (quarantine === undefined) throw new DeliveryQuarantineError();
-    this.quarantine = quarantine;
+  constructor(private readonly client: DeliveryClient) {
     Object.freeze(this);
   }
 
@@ -138,7 +127,7 @@ export class RemoteInbox implements DeliveryInbox {
   }
 
   /**
-   * Creates exclusive work after durable admission.
+   * Creates exclusive work from the authoritative pending row.
    *
    * @param message Supplies the expected message snapshot.
    * @param session Supplies the exclusive shard session.
@@ -152,29 +141,10 @@ export class RemoteInbox implements DeliveryInbox {
   ): Promise<DeliveryInboxWork | undefined> {
     if (session.kind !== "EXCLUSIVE" || !RemoteValues.sameShard(session.shard, message.shard))
       return undefined;
-    const key = RemoteValues.inboxKey(message);
-    const quarantined = await RemoteValues.quarantineGet(this.quarantine, key);
-    if (quarantined !== undefined) {
-      const current = await this.client.findOne(message.id, options);
-      if (current === undefined) {
-        await RemoteValues.quarantineDelete(this.quarantine, key);
-        return undefined;
-      }
-      if (quarantined.fingerprint !== RemoteValues.fingerprint(current)) return undefined;
-      if (quarantined.phase === "ADMITTED") return undefined;
-      await this.client.removeOne(current, options);
-      await RemoteValues.quarantineDelete(this.quarantine, key);
-      return undefined;
-    }
     const current = await this.client.findOne(message.id, options);
     if (current?.status !== "TO_DELIVER" || !RemoteValues.sameMessage(current, message))
       return undefined;
-    await RemoteValues.quarantinePut(this.quarantine, {
-      id: key,
-      phase: "ADMITTED",
-      fingerprint: RemoteValues.fingerprint(current),
-    });
-    return new RemoteInboxWork(this.client, current, this.quarantine, options);
+    return new RemoteInboxWork(this.client, current, options);
   }
 }
 
@@ -183,7 +153,6 @@ class RemoteInboxWork implements DeliveryInboxWork {
   constructor(
     private readonly client: DeliveryClient,
     private readonly snapshot: InboxMessage,
-    private readonly quarantine: RemovalQuarantine,
     private readonly operation: DeliveryOperationOptions | undefined,
   ) {}
   get message(): InboxMessage {
@@ -205,13 +174,9 @@ class RemoteInboxWork implements DeliveryInboxWork {
   }
   async complete(options?: DeliveryOperationOptions): Promise<boolean> {
     if (!this.#active) return false;
-    await RemoteValues.quarantinePut(this.quarantine, {
-      id: RemoteValues.inboxKey(this.snapshot),
-      phase: "REMOVING",
-      fingerprint: RemoteValues.fingerprint(this.snapshot),
-    });
+    // A failed or uncertain removal leaves this work active. The later reader
+    // reconciles authoritative remote state; no client-side removal state exists.
     await this.client.removeOne(this.snapshot, options ?? this.operation);
-    await RemoteValues.quarantineDelete(this.quarantine, RemoteValues.inboxKey(this.snapshot));
     this.#active = false;
     return true;
   }
@@ -493,10 +458,6 @@ const RemoteValues = Object.freeze({
     return `${String(value.index)}/${String(value.ofTotal)}`;
   },
 
-  inboxKey(message: InboxMessage): string {
-    return `${RemoteValues.shardKey(message.id.shard)}:${message.id.value}`;
-  },
-
   pageAnchor(value: Date): Date {
     const milliseconds = value.getTime();
     if (milliseconds <= -62_135_596_800_000) throw new DeliveryPagingError();
@@ -549,46 +510,6 @@ const RemoteValues = Object.freeze({
       : left.typeUrl === right.typeUrl &&
           left.value.length === right.value.length &&
           left.value.every((value, index) => value === right.value[index]);
-  },
-
-  fingerprint(message: InboxMessage): string {
-    return createHash("sha256")
-      .update(message.id.value)
-      .update(String(message.version))
-      .update(String(message.whenReceived.getTime()))
-      .update(message.signal?.typeUrl ?? "")
-      .update(message.signal?.value ?? new Uint8Array())
-      .digest("hex");
-  },
-
-  async quarantineGet(
-    quarantine: RemovalQuarantine,
-    id: string,
-  ): Promise<RemovalQuarantineRecord | undefined> {
-    try {
-      return await quarantine.get(id);
-    } catch {
-      throw new DeliveryQuarantineError();
-    }
-  },
-
-  async quarantinePut(
-    quarantine: RemovalQuarantine,
-    record: RemovalQuarantineRecord,
-  ): Promise<void> {
-    try {
-      await quarantine.put(Object.freeze({ ...record }));
-    } catch {
-      throw new DeliveryQuarantineError();
-    }
-  },
-
-  async quarantineDelete(quarantine: RemovalQuarantine, id: string): Promise<void> {
-    try {
-      await quarantine.delete(id);
-    } catch {
-      throw new DeliveryQuarantineError();
-    }
   },
 
   workerFor(node: string): DeliveryWorkerId {

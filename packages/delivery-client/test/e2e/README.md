@@ -40,8 +40,7 @@ seconds.
 
 ## ⚠️ Limits
 
-The test uses bounded IPC control/result frames and a disposable in-memory
-removal quarantine. It is test support, not a production supervisor or
-persistence adapter. The topology is TypeScript-to-TypeScript only; it does
+The test uses bounded IPC control/result frames. It is test support, not a
+production supervisor or persistence adapter. The topology is TypeScript-to-TypeScript only; it does
 not establish live JVM interoperability. Redis, Hazelcast, durable recovery,
 public-network hardening, and a human admin UI are outside this test suite.

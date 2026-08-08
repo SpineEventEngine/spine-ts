@@ -23,7 +23,7 @@ import {
   RemoteWorkRegistry,
 } from "../src/index.js";
 import { deliveryClientAccess } from "../src/client/client.js";
-import { echoPickup, message, quarantine, transport } from "./shared-fixtures.js";
+import { echoPickup, message, transport } from "./shared-fixtures.js";
 
 describe("RemoteWorkRegistry", () => {
   it("fails closed when package-internal client access is unavailable", () => {
@@ -107,7 +107,7 @@ describe("RemoteWorkRegistry", () => {
     const registry = new RemoteWorkRegistry(client);
     const session = await registry.pickUp(ShardIndex.single(), "node");
     if (session === undefined) throw new Error("Remote shard was not acquired.");
-    const inbox = new RemoteInbox(client, quarantine());
+    const inbox = new RemoteInbox(client);
     const fake = client;
     void fake;
 
@@ -131,7 +131,7 @@ describe("RemoteWorkRegistry", () => {
     const registry = new RemoteWorkRegistry(client);
     const session = await registry.pickUp(ShardIndex.single(), "node");
     if (session === undefined) throw new Error("Remote shard was not acquired.");
-    const inbox = new RemoteInbox(client, quarantine());
+    const inbox = new RemoteInbox(client);
     const remoteMessage = await client.findOne({
       value: "synchronize",
       shard: ShardIndex.single(),

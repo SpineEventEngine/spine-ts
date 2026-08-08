@@ -223,6 +223,13 @@ updates, and process-manager reactions. Callbacks are at-least-once/replay-safe:
 lost renewal can prevent stale finalization but cannot undo a callback already
 run. The package exposes no general raw worker callback API.
 
+Shard ownership is the only delivery exclusion mechanism and excludes
+concurrent delivery within that shard. Pending and delivered `InboxMessage`
+rows are direct records; a delivered row is the deduplication fact. A handler
+effect and the exact pending-to-delivered compare-and-set are not one
+transaction, so a lost acknowledgement can redeliver after restart. Downstream
+signal handling must be idempotent.
+
 `BoundedContextBuilder.withDeliveryStrategy(strategy)` snapshots a validated
 immutable strategy for its Entity Inbox; the default is one shard. For example,
 use the public builder chain:

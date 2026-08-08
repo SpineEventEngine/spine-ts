@@ -25,7 +25,7 @@ export class Inbox {
   /**
    * Opens an inbox over durable inbox storage.
    *
-   * @param storage Stores the inbox rows and deduplication guards.
+   * @param storage Stores pending and delivered inbox rows directly.
    */
   constructor(storage: InboxStorage) {
     this.storage = storage;
@@ -96,11 +96,11 @@ export class Inbox {
   }
 
   /**
-   * Returns exact-row work behind local claim fencing.
+   * Returns exact-row work while the caller owns the message shard.
    *
    * @param message Identifies the pending message.
    * @param session Supplies the leased shard fence.
-   * @returns The admitted work, when the claim succeeds.
+   * @returns The admitted work, when the exact pending row remains current.
    */
   async begin(
     message: InboxMessage,
@@ -147,6 +147,13 @@ class LocalInboxWork implements DeliveryInboxWork {
     if (this.#message === undefined) throw new InboxMessageError("Inbox work is no longer active.");
   }
 
+  /**
+   * Marks the exact pending row delivered after the handler effect has succeeded.
+   *
+   * The handler effect and this durable transition are not transactional. A lost
+   * acknowledgement can therefore redeliver after restart; downstream handling
+   * must remain idempotent.
+   */
   async complete(): Promise<boolean> {
     const message = this.#requireMessage();
     const completed = await this.storage.markDelivered(message);

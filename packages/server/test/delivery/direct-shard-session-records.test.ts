@@ -58,6 +58,25 @@ describe("direct ShardSessionRecord storage", () => {
     expect(restartedPickup?.worker?.value).toBe("worker-b");
   });
 
+  it("converges lost acquisition, renewal, and release acknowledgements for the same worker", async () => {
+    let now = 0;
+    const workRegistry = registry(new InMemoryStorageFactory(), () => new Date(now), "Tasks");
+    const shard = ShardIndex.single();
+    const currentWorker = worker("node-a", "worker-a");
+    const pickup = await workRegistry.pickUp(shard, currentWorker);
+
+    expect(await workRegistry.pickUp(shard, currentWorker)).toMatchObject({
+      worker: currentWorker,
+    });
+
+    now = 100;
+    const renewed = await workRegistry.renew(pickup!);
+    expect(await workRegistry.renew(pickup!)).toMatchObject({ pickedUpAt: new Date(100) });
+
+    expect(await workRegistry.release(renewed!)).toBe(true);
+    await expect(workRegistry.release(renewed!)).resolves.toBe(true);
+  });
+
   it("drains a shard until a rescan sees no pending work, including an arrival during the drain", async () => {
     const shards = registry(new InMemoryStorageFactory(), () => new Date(0), "Tasks");
     const pending = ["first"];
@@ -75,6 +94,27 @@ describe("direct ShardSessionRecord storage", () => {
     );
 
     expect(delivered).toEqual(["first", "second"]);
+  });
+
+  it("returns cleanly when a replacement takes ownership during a drain", async () => {
+    let now = 0;
+    const storageFactory = new InMemoryStorageFactory();
+    const first = registry(storageFactory, () => new Date(now), "Tasks");
+    const replacement = registry(storageFactory, () => new Date(now), "Tasks");
+    const pending = ["first", "second"];
+
+    await expect(
+      first.drainUntilEmpty(
+        ShardIndex.single(),
+        worker("node-a", "worker-a"),
+        async () => Object.freeze([...pending]),
+        async (message) => {
+          pending.splice(pending.indexOf(message), 1);
+          now = 1_000;
+          await replacement.pickUp(ShardIndex.single(), worker("node-b", "worker-b"));
+        },
+      ),
+    ).resolves.toBeUndefined();
   });
 });
 

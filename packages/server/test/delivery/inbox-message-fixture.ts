@@ -1,4 +1,5 @@
-import { ShardIndex, type InboxMessage } from "../../src/index.js";
+import type { InboxMessage } from "../../src/delivery/inbox.js";
+import { ShardIndex } from "../../src/delivery/shard-index.js";
 
 export function createMessage(
   id: string,

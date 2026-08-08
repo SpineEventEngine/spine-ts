@@ -55,7 +55,9 @@ export class ShardedWorkRegistry {
         const record = await storage.read(id);
         const current = record === undefined ? undefined : session(record, nextShard, this.#lease);
         const now = time(this.#now());
-        if (current?.worker !== undefined && current.expiresAt.getTime() > now) return undefined;
+        if (current?.worker !== undefined && current.expiresAt.getTime() > now) {
+          return sameWorker(current.worker, nextWorker) ? current : undefined;
+        }
         const next = owned(nextShard, nextWorker, now, this.#lease);
         if (await storage.compareAndSet(id, record, toRecord(next))) return next;
       }
@@ -74,8 +76,9 @@ export class ShardedWorkRegistry {
         const record = await storage.read(wireId(expected.shard));
         if (record === undefined) return false;
         const current = session(record, expected.shard, this.#lease);
-        if (!same(current, expected) || current.expiresAt.getTime() <= time(this.#now()))
-          return false;
+        if (!same(current, expected) || current.expiresAt.getTime() <= time(this.#now())) {
+          return current.worker === undefined;
+        }
         if (await storage.compareAndSet(wireId(expected.shard), record, unowned(current)))
           return true;
       }
@@ -105,7 +108,7 @@ export class ShardedWorkRegistry {
         }
       }
     } finally {
-      await this.release(current);
+      if (current !== undefined) await this.release(current);
     }
   }
   async #update(expected: ShardSession, _release: boolean): Promise<ShardSession | undefined> {
@@ -116,12 +119,15 @@ export class ShardedWorkRegistry {
         if (record === undefined) return undefined;
         const current = session(record, expected.shard, this.#lease);
         const now = time(this.#now());
-        if (
-          !same(current, expected) ||
-          current.worker === undefined ||
-          current.expiresAt.getTime() <= now
-        )
-          return undefined;
+        if (!same(current, expected)) {
+          return current.worker !== undefined &&
+            expected.worker !== undefined &&
+            sameWorker(current.worker, expected.worker) &&
+            current.expiresAt.getTime() > now
+            ? current
+            : undefined;
+        }
+        if (current.worker === undefined || current.expiresAt.getTime() <= now) return undefined;
         const next = owned(current.shard, current.worker, now, this.#lease);
         if (await storage.compareAndSet(wireId(expected.shard), record, toRecord(next)))
           return next;
@@ -215,7 +221,9 @@ function timestamp(value: ShardSessionRecord["whenLastPicked"]): Date {
   return new Date(ms);
 }
 function owned(shard: ShardIndex, worker: WorkerId, now: number, lease: number): ShardSession {
-  return new ShardSession(shard, worker, new Date(now), new Date(now + lease));
+  const expiresAt = now + lease;
+  if (!Number.isSafeInteger(expiresAt)) throw new Error("Shard lease expiry is invalid.");
+  return new ShardSession(shard, worker, new Date(now), new Date(expiresAt));
 }
 function toRecord(value: ShardSession): ShardSessionRecord {
   if (value.worker === undefined) throw new Error("Shard worker is invalid.");
@@ -244,6 +252,9 @@ function same(a: ShardSession, b: ShardSession): boolean {
     a.worker?.nodeId?.value === b.worker?.nodeId?.value &&
     a.worker?.value === b.worker?.value
   );
+}
+function sameWorker(a: WorkerId, b: WorkerId): boolean {
+  return a.nodeId?.value === b.nodeId?.value && a.value === b.value;
 }
 function context(value: StorageContext): StorageContext {
   return value.multitenant

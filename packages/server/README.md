@@ -364,7 +364,13 @@ the existing finite and supervisor delivery paths; a close-only local delivery
 remains supported. The environment stops attachments before closing delivery,
 transport, tracing, and storage in that order. Use `RemoteDelivery` from
 `@spine-event-engine/delivery-client` when an application selects a remote
-delivery endpoint and durable removal quarantine.
+delivery endpoint with direct authoritative removal.
+
+Shard ownership excludes concurrent delivery within a shard. Pending and
+delivered Inbox rows are stored directly, and delivered rows are the
+deduplication fact. Handler effects and the delivered-row compare-and-set are
+not transactional: a lost acknowledgement can redeliver after restart, so
+downstream handling must be idempotent.
 
 ## ⚠️ Runtime boundaries
 

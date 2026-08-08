@@ -19,18 +19,7 @@ export function createMultiMachineApplication({ baseUrl, node }) {
     observationReconnects: 2,
     observationReconnectBackoffMs: 50,
   });
-  const quarantine = new Map();
-  const inbox = new RemoteInbox(client, {
-    get: (id) => Promise.resolve(quarantine.get(id)),
-    put: (record) => {
-      quarantine.set(record.id, record);
-      return Promise.resolve();
-    },
-    delete: (id) => {
-      quarantine.delete(id);
-      return Promise.resolve();
-    },
-  });
+  const inbox = new RemoteInbox(client);
   const registry = new RemoteWorkRegistry(client);
   const delivery = new DeliveryBuilder()
     .withInbox(inbox)
