@@ -100,7 +100,6 @@ describe("MessageBoard gateway policy", () => {
       authorize: policy.authorize.bind(policy),
       contexts,
       clock,
-      fingerprint: (candidate) => candidate.id,
       creator: {
         subscribe: (wire) => {
           subscriptionWires.push(wire.bytes.slice());

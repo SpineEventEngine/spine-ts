@@ -12,6 +12,7 @@ describe("Wave 8 MessageBoard and Orders example migration", () => {
       "examples/message-board/app/src/deployment-config.ts",
       "examples/message-board/app/src/index.ts",
       "examples/message-board/app/src/gateway-entry.ts",
+      "examples/message-board/web/test/interop/harness.mjs",
     ] as const;
     const retired = [
       "DatastoreStorageOptions",
@@ -19,7 +20,6 @@ describe("Wave 8 MessageBoard and Orders example migration", () => {
       "RemovalQuarantine",
       "removalQuarantine",
       "fingerprint:",
-      "dispose:",
       "leaseMs:",
       "cleanupBatchSize:",
       "recordLimit:",
@@ -32,11 +32,18 @@ describe("Wave 8 MessageBoard and Orders example migration", () => {
       for (const token of retired) expect(text, `${source}: ${token}`).not.toContain(token);
     }
 
-    expect(existsSync(join(repositoryRoot, "examples/message-board/app/src/delivery-quarantine.ts"))).toBe(
-      false,
-    );
-    expect(existsSync(join(repositoryRoot, "examples/message-board/app/src/session-revocations.ts"))).toBe(
-      false,
-    );
+    expect(
+      readFileSync(
+        join(repositoryRoot, "examples/message-board/app/src/deployment-config.ts"),
+        "utf8",
+      ),
+    ).not.toContain("dispose:");
+
+    expect(
+      existsSync(join(repositoryRoot, "examples/message-board/app/src/delivery-quarantine.ts")),
+    ).toBe(false);
+    expect(
+      existsSync(join(repositoryRoot, "examples/message-board/app/src/session-revocations.ts")),
+    ).toBe(false);
   });
 });

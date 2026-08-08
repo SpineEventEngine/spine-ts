@@ -28,7 +28,9 @@ describe("MessageBoard deployment entrypoints", () => {
     const deployment = readFileSync(join(sourceRoot, "deployment-config.ts"), "utf8");
     for (const entrypoint of ["application-entry.ts", "combined-entry.ts", "gateway-entry.ts"]) {
       const source = readFileSync(join(sourceRoot, entrypoint), "utf8");
-      expect(source).toContain("MessageBoardDeployment.configureServer(config, process.env)");
+      expect(source).toContain(
+        "MessageBoardDeployment.configureServer(config, client, process.env)",
+      );
     }
     expect(deployment).toContain("ServerEnvironment.when(EnvironmentType.Production)");
     expect(deployment).toContain('"SPINE_IPC_DIRECTORY"');
@@ -40,6 +42,6 @@ describe("MessageBoard deployment entrypoints", () => {
 
     expect(deployment).toContain("RemoteDelivery.connectTo");
     expect(deployment).toContain('"DELIVERY_SERVER_URL"');
-    expect(deployment).toContain("DeliveryQuarantine");
+    expect(deployment).not.toContain("DeliveryQuarantine");
   });
 });
