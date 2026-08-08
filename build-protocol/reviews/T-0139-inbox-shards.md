@@ -90,3 +90,31 @@ Status: Review wave 1 assigned at endpoint `56a37d50`
 - Deferred unchanged: local Inbox exact-session orchestration and the scalar
   `DeliveryWorkRegistry` boundary remain T-0140, represented by the exact
   eight server TypeScript diagnostics. No compatibility facade was introduced.
+
+## Targeted Re-Review
+
+- Performance/reliability and style/maintainability ran again with their
+  explicitly dispatched immutable `gpt-5.6-terra` / `high` profiles; runtime
+  self-introspection remained unavailable with no visible mismatch or fallback.
+- Both lanes confirmed the atomic-CAS, label/payload, contested completion,
+  lease-overflow, remote-session, exact-ID query, and direct TenantId-mode
+  corrections, and confirmed the T-0140 scope disposition is coherent.
+- Accepted final batch: P1 encode Inbox continuation values with the generated
+  Timestamp/number column types so the cursor row is excluded; P1 remove the
+  unsafe two-row same-key dedup assumption by continuing bounded exact-key pages
+  until a live predecessor is found or failing closed at the finite bound; P2
+  classify non-value persisted TenantId modes as
+  `DeliveryStorageCorruptionError` and assert that type.
+- Only performance/reliability and style/maintainability reopen for this final
+  production/test batch. API documentation and documentation remain closed;
+  security remains N/A.
+
+## Final Targeted Correction Pending Re-Review
+
+- The accepted continuation, exact-key paging, and typed TenantIndex corruption
+  corrections are implemented with RED/GREEN evidence. The bounded direct suite
+  is 65/65 and exact changed-source coverage remains at least 90% in all metrics.
+- Performance/reliability and style/maintainability remain awaiting final
+  re-review because this batch changed the direct Inbox query/paging behavior
+  and its tests. TypeScript/API documentation and documentation remain closed;
+  security remains N/A. The deferred T-0140 inventory is unchanged.

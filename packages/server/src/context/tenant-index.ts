@@ -1,6 +1,7 @@
 import { create } from "@bufbuild/protobuf";
 import { TenantIdSchema, type TenantId } from "@spine-event-engine/proto";
 import { RecordSpec, type RecordStorage, type StorageFactory } from "@spine-event-engine/storage";
+import { DeliveryStorageCorruptionError } from "../delivery/delivery-storage-error.js";
 
 type TenantMode = "single-tenant" | "multitenant";
 
@@ -133,7 +134,9 @@ class StorageTenantIndex implements TenantIndex {
     return Object.freeze(
       (await this.#storage.index()).map((tenant) => {
         if (tenant.kind.case !== "value" || tenant.kind.value.trim().length === 0) {
-          throw new Error("Tenant index storage contains an invalid TenantId.");
+          throw new DeliveryStorageCorruptionError(
+            "Tenant index storage contains an invalid TenantId.",
+          );
         }
         return tenant.kind.value;
       }),

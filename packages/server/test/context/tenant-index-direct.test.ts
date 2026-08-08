@@ -4,6 +4,7 @@ import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { TenantIdSchema } from "@spine-event-engine/proto";
 
 import { TenantIndexes } from "../../src/context/tenant-index.js";
+import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
 
 describe("direct TenantId index", () => {
   it("stores direct value TenantIds and rejects invalid caller IDs", async () => {
@@ -56,7 +57,7 @@ describe("direct TenantId index", () => {
       create(TenantIdSchema),
     ]) {
       vi.spyOn(direct, "index").mockResolvedValueOnce([tenant]);
-      await expect(index.all()).rejects.toThrow("invalid TenantId");
+      await expect(index.all()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
     }
   });
 });

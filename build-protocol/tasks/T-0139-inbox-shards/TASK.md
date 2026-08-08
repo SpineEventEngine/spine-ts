@@ -1,6 +1,6 @@
 # T-0139: Inbox And Shard Records
 
-Status: Review corrections converged; correction commit and task-branch push pending.
+Status: Final targeted re-review corrections converged; correction commit and task-branch push pending.
 
 ## Objective
 
@@ -239,6 +239,17 @@ still import old retry/attempt policy.
   T-0140 orchestration diagnostics; TSDoc is limited to inherited storage-rdbms
   debt. Review correction re-review remains required only for reliability and
   maintainability.
+
+### 2026-08-08 Final Targeted Re-Review Evidence
+
+- RED/GREEN tests prove durable Timestamp/number cursor values exclude the
+  cursor row, bounded same-key delivered scans continue beyond expired pages to
+  a live predecessor and fail closed at their finite 500-page bound, and direct
+  TenantId domain/email/unset corruption throws `DeliveryStorageCorruptionError`.
+- The exact six-source coverage profile passed 8 files / 65 tests at 94.36%
+  statements, 90.70% branches, 97.20% functions, and 96.56% lines. Reliability
+  and maintainability await their final re-review; all other lane dispositions
+  remain unchanged.
 
 ### 2026-08-08 Coverage Correction
 

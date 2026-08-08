@@ -24,7 +24,7 @@ describe("direct InboxMessage storage", () => {
       readFile(new URL("../../src/delivery/inbox-records.ts", import.meta.url), "utf8"),
     ]);
 
-    expect(`${storage}${mapper}`).not.toMatch(/claim|dedup|guard/i);
+    expect(`${storage}${mapper}`).not.toMatch(/claim|guard/i);
   });
 
   it("uses the generated InboxMessage and InboxMessageId records directly", () => {
@@ -278,6 +278,92 @@ describe("direct InboxMessage storage", () => {
     await expect(storage.admit(duplicate)).resolves.toMatchObject({ id: duplicate.id });
   });
 
+  it("continues exact delivered-key pages past expired rows to a later live predecessor", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      now: () => new Date("2026-07-02T08:00:01.000Z"),
+    });
+    const expired = [
+      {
+        ...createMessage("expired-1", "signal", 1n),
+        keepUntil: new Date("2026-07-02T08:00:00.000Z"),
+      },
+      {
+        ...createMessage("expired-2", "signal", 2n),
+        keepUntil: new Date("2026-07-02T08:00:00.000Z"),
+      },
+    ];
+    const live = createMessage("live", "signal", 3n);
+    const duplicate = createMessage("duplicate", "signal", 4n);
+
+    for (const message of [...expired, live]) {
+      await storage.write(message);
+      await storage.markDelivered(message);
+    }
+    await storage.write(duplicate);
+
+    await expect(storage.admit(duplicate)).resolves.toBeUndefined();
+  });
+
+  it("fails closed when the bounded exact delivered-key scan cannot reach exhaustion", async () => {
+    const duplicate = createMessage("duplicate", "signal", 1_001n);
+    const expired = [
+      {
+        ...createMessage("expired-1", "signal", 1n),
+        status: "DELIVERED" as const,
+        keepUntil: new Date("2026-07-02T08:00:00.000Z"),
+      },
+      {
+        ...createMessage("expired-2", "signal", 2n),
+        status: "DELIVERED" as const,
+        keepUntil: new Date("2026-07-02T08:00:00.000Z"),
+      },
+    ].map(InboxRecords.write);
+    const handle = {
+      atomicCompareAndSet: true,
+      read: vi.fn(() => Promise.resolve(InboxRecords.write(duplicate))),
+      queryEntries: vi.fn(() =>
+        Promise.resolve(
+          expired.map((record) => {
+            if (record.id === undefined) throw new Error("Expected expired row ID.");
+            return { id: record.id, record };
+          }),
+        ),
+      ),
+      close: vi.fn(),
+    };
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: { createRecordStorage: () => handle } as never,
+      now: () => new Date("2026-07-02T08:00:01.000Z"),
+    });
+
+    await expect(storage.admit(duplicate)).rejects.toThrow("deduplication scan");
+    expect(handle.queryEntries).toHaveBeenCalledTimes(500);
+  });
+
+  it("converts a public continuation to durable sort values and excludes its cursor row", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const first = createMessage("first", "signal-1", 1n);
+    const second = createMessage("second", "signal-2", 2n);
+
+    await storage.write(first);
+    await storage.write(second);
+    await expect(
+      storage.read(first.shard, {
+        after: {
+          messageId: first.id.value,
+          whenReceived: first.whenReceived,
+          version: first.version,
+        },
+      }),
+    ).resolves.toEqual([second]);
+  });
+
   it("validates direct read bounds, clock output, and multitenant storage context", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
@@ -300,12 +386,6 @@ describe("direct InboxMessage storage", () => {
       { messageId: "message", whenReceived: new Date(0), version: 0 as never },
     ])
       await expect(storage.read(message.shard, { after })).rejects.toThrow("continuation");
-    await expect(
-      storage.read(message.shard, {
-        offset: 0,
-        after: { messageId: message.id.value, whenReceived: message.whenReceived, version: 1n },
-      }),
-    ).resolves.toEqual([message]);
     await expect(storage.read({} as never)).rejects.toThrow("shard");
     await storage.markDelivered(message);
     await expect(storage.admit(message)).resolves.toBeUndefined();

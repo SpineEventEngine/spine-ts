@@ -1,4 +1,5 @@
 import { create, toBinary } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type {
   InboxMessage as WireInboxMessage,
   InboxMessageId as WireInboxMessageId,
@@ -19,6 +20,8 @@ import { ShardIndex } from "./shard-index.js";
 
 const defaultReadLimit = 100;
 const maxReadLimit = 1_000;
+const dedupReadLimit = 2;
+const maxDedupReadPages = maxReadLimit / dedupReadLimit;
 
 /**
  * Stores direct generated inbox records in the configured durable family.
@@ -164,30 +167,44 @@ export class InboxStorage {
       if (current === undefined || !Values.same(current, expected)) return undefined;
       const pending = InboxRecords.read(current, id);
       if (pending.status !== "TO_DELIVER") return undefined;
-      const delivered = await storage.queryEntries({
-        filters: [
-          { column: "inbox_id", value: expected.inboxId },
-          { column: "signal_id", value: expected.signalId },
-          { column: "status", value: Values.status("DELIVERED") },
-        ],
-        limit: 2,
-      });
-      const predecessor = delivered
-        .map((row) => InboxRecords.read(row.record, row.id))
-        .find(
-          (row) =>
-            row.signalId === pending.signalId &&
-            row.inboxId.targetId === pending.inboxId.targetId &&
-            row.inboxId.targetTypeUrl === pending.inboxId.targetTypeUrl &&
-            (row.keepUntil === undefined || row.keepUntil.getTime() > Values.now(this.#now)),
+      let after: ReturnType<typeof Values.after> | undefined;
+      for (let page = 0; page < maxDedupReadPages; page++) {
+        const delivered = await storage.queryEntries({
+          filters: [
+            { column: "inbox_id", value: expected.inboxId },
+            { column: "signal_id", value: expected.signalId },
+            { column: "status", value: Values.status("DELIVERED") },
+          ],
+          sort: [{ field: "when_received" }, { field: "version" }, { field: "message_id" }],
+          limit: dedupReadLimit,
+          ...(after === undefined ? {} : { after }),
+        });
+        const rows = delivered.map((row) => InboxRecords.read(row.record, row.id));
+        if (
+          rows.some(
+            (row) =>
+              row.signalId === pending.signalId &&
+              row.inboxId.targetId === pending.inboxId.targetId &&
+              row.inboxId.targetTypeUrl === pending.inboxId.targetTypeUrl &&
+              (row.keepUntil === undefined || row.keepUntil.getTime() > Values.now(this.#now)),
+          )
+        ) {
+          await storage.compareAndSet(
+            id,
+            current,
+            InboxRecords.write({ ...pending, status: "DELIVERED" }),
+          );
+          return undefined;
+        }
+        if (rows.length < dedupReadLimit) return pending;
+        const last = rows.at(-1);
+        if (last === undefined) return pending;
+        after = Values.after(
+          { messageId: last.id.value, whenReceived: last.whenReceived, version: last.version },
+          pending.shard,
         );
-      if (predecessor === undefined) return pending;
-      await storage.compareAndSet(
-        id,
-        current,
-        InboxRecords.write({ ...pending, status: "DELIVERED" }),
-      );
-      return undefined;
+      }
+      throw new InboxMessageError("Inbox deduplication scan reached its finite bound.");
     } finally {
       storage.close();
     }
@@ -272,17 +289,24 @@ const Values = Object.freeze({
       !(value.whenReceived instanceof Date) ||
       !Number.isFinite(value.whenReceived.getTime()) ||
       typeof value.version !== "bigint" ||
-      value.version < 0n
+      value.version < 0n ||
+      value.version > BigInt(0x7fffffff)
     )
       throw new InboxMessageError("Inbox read continuation is invalid.");
     return {
       values: [
-        { field: "when_received", value: value.whenReceived },
-        { field: "version", value: value.version },
+        { field: "when_received", value: Values.timestamp(value.whenReceived.getTime()) },
+        { field: "version", value: Number(value.version) },
         { field: "message_id", value: value.messageId },
       ],
       id: Values.id({ value: value.messageId, shard }),
     };
+  },
+  timestamp(ms: number) {
+    return create(TimestampSchema, {
+      seconds: BigInt(Math.floor(ms / 1_000)),
+      nanos: (ms % 1_000) * 1_000_000,
+    });
   },
   atomic(storage: RecordStorage<WireInboxMessageId, WireInboxMessage>): void {
     if (!storage.atomicCompareAndSet)
