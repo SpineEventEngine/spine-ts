@@ -62,6 +62,7 @@ import {
 } from "../../src/index.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 import { BrowserServer } from "../../src/server/browser-server.js";
+import { attachDurableSubscriptionCleanup } from "../../src/server/durable-subscription-bindings.js";
 import { EnvironmentTests } from "../../src/server/environment.js";
 
 describe("Server", () => {
@@ -261,6 +262,48 @@ describe("Server", () => {
     await Promise.all([running.close(), running.close()]);
     expect(stops).toBe(1);
     expect(created).toEqual(["node/a"]);
+  });
+
+  it("rolls back discovery and dynamic resources once when durable cleanup is pre-attached", async () => {
+    let stops = 0;
+    const aborted: string[] = [];
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: new InMemoryStorageFactory(),
+      namespace: "pre-attached",
+      nextId: () => "subscription",
+      cleanup: () => Promise.resolve(),
+    });
+    attachDurableSubscriptionCleanup(bindings, () => Promise.resolve());
+
+    await expect(
+      BrowserServer.open("http://127.0.0.1:65534", {
+        ...browserGateway(),
+        bindings,
+        discovery: {
+          watch: (publish) => {
+            publish([
+              new ApplicationNode({ id: "node/pre-attached", endpoint: "https://10.0.0.1" }),
+            ]);
+            return async () => {
+              stops++;
+            };
+          },
+        },
+        dynamicManagerFactory: (node) =>
+          ({
+            abort: () => {
+              aborted.push(node.id);
+            },
+          }) as never,
+        host: "127.0.0.1",
+        port: 0,
+        readMaxBytes: 1_048_576,
+        writeMaxBytes: 1_048_576,
+        production: false,
+      }),
+    ).rejects.toThrow("already attached");
+    expect(stops).toBe(1);
+    expect(aborted).toEqual(["node/pre-attached"]);
   });
 
   it("aborts owned dynamic session managers on removal and browser close", async () => {
