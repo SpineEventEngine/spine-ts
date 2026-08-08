@@ -1,7 +1,7 @@
 # T-0144 Invention Audit Review
 
-Status: Specialist review wave in progress at `e1d9b6f8` plus the recorded
-preflight formatting correction.
+Status: All four concerns converged CLEAN at `0ef233da` plus the deterministic
+test-maintenance correction; final release verification pending.
 
 ## Required Concerns
 
@@ -66,3 +66,46 @@ The manifest-backed checker, tracked-file scope, `.tsx` coverage, artifact-
 specific Markdown-negative logic, arbitrary versioned discovery-key coverage,
 and adversarial fixtures are corrected. TypeScript/API, reliability, style, and
 documentation lanes are substantively affected and require targeted re-review.
+
+## Targeted Re-review Residuals
+
+- P1: delivery-server ledger must distinguish the 1 MiB payload limit from the
+  `4 MiB - 64 bytes` serialized-record ceiling.
+- P2: the document must name required retired `ApplicationNodeLease:v1` while
+  the rule continues to reject every numeric version.
+- P2: name concrete affected exports including `DeliverySupervisor` and its
+  options, `DatastoreStorageFactory`/builder contracts, and
+  `MysqlStorageFactory`/builder contracts.
+- P1: enumerate exact browser/auth route byte, timeout, request, active-capacity,
+  and opaque-session bounds.
+- P1: Markdown negative matching must use the actual matched spelling, including
+  alternations and numeric discovery versions, not one manifest fixture.
+- P1: build a real temporary Git index fixture proving tracked `.tsx` scanning
+  and ignored/untracked/generated/worktree exclusion.
+- P1: restore semantic forbidden spellings narrowed by manifest migration:
+  removal-fingerprint variants, revoked-session variants, versioned discovery
+  key prose, and schema-fingerprint prose; cover positive and exact negative
+  cases.
+- P2: production Git enumeration must fail closed; unit tests may inject an
+  enumerator or construct a Git repository, but production must not silently
+  fall back to recursive traversal.
+- P2: delivery acknowledgement prose must state that the row remains pending
+  only when the selected action and fallback durable acknowledgement both fail.
+- Final P1: Markdown exemption must iterate every regex occurrence and require
+  clause-local negation for each occurrence. An unrelated earlier “no,” or a
+  first negated artifact followed by a positive occurrence after punctuation,
+  must not suppress the finding. Add both regression forms.
+
+## Final Resolution
+
+- Replaced natural-language negation heuristics with exactly two
+  manifest-owned, path-and-full-line Markdown allowances. Every unlisted or
+  altered occurrence fails closed.
+- Documentation, TypeScript/API, performance/reliability, and
+  style/maintainability final targeted re-reviews are CLEAN.
+- Removed one vacuous non-matching test and one duplicate regression after the
+  style P2; the narrow style confirmation is CLEAN and no behavior lane
+  reopened.
+- Security remains N/A because no trust boundary changed.
+- Reviewer runtime metadata was unavailable; immutable/explicit configured
+  profiles were reported and no mismatch or fallback was visible.

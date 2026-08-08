@@ -104,13 +104,6 @@ describe("Wave 8 invention audit", () => {
     ]);
   });
 
-  it("allows a precise negative statement for a retired shared layout", () => {
-    const root = fixture();
-    writeFileSync(join(root, "docs", "GUIDE.md"), "The adapter has no shared records table.\n");
-
-    expect(auditWave8CurrentState(root, files)).toEqual([]);
-  });
-
   it.each(forbiddenArtifacts)("rejects every manifest rule: %s", (name, expression) => {
     const root = fixture();
     writeFileSync(join(root, "packages", "server", "src", "legacy.ts"), `${expression}\n`);
@@ -169,7 +162,6 @@ describe("Wave 8 invention audit", () => {
   it.each([
     "No RemovalQuarantine, it is supported.",
     "No legacy behavior remains, RemovalQuarantine is supported.",
-    "No RemovalQuarantine remains; RemovalQuarantine is supported.",
     "No RemovalQuarantine remains; it is supported and RemovalQuarantine is enabled.",
   ])("rejects every unlisted bypass: %s", (line) => {
     const root = fixture();
