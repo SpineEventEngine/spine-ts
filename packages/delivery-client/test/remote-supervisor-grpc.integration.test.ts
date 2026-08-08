@@ -229,9 +229,13 @@ function trackedServer(port = 0): DeliveryServer {
   return server;
 }
 
-function application(baseUrl: string, node: string): ChildProcess {
+function application(
+  baseUrl: string,
+  node: string,
+  environment: Readonly<Record<string, string>> = {},
+): ChildProcess {
   const child = spawn(process.execPath, [applicationFixture], {
-    env: { ...process.env, DELIVERY_SERVER_URL: baseUrl, DELIVERY_NODE: node },
+    env: { ...process.env, DELIVERY_SERVER_URL: baseUrl, DELIVERY_NODE: node, ...environment },
     stdio: ["ignore", "ignore", "ignore", "ipc"],
   });
   applications.add(child);
