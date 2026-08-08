@@ -336,7 +336,7 @@ interface PhysicalRow {
 
 function physicalRow(value: unknown, key: symbol): PhysicalRow {
   if (typeof value !== "object" || value === null) throw new Error("Expected Datastore entity.");
-  const source: Record<PropertyKey, unknown> = value;
+  const source = value as Record<PropertyKey, unknown>;
   const row: PhysicalRow = {};
   for (const [name, property] of Object.entries(source)) row[name] = property;
   row.key = source[key];

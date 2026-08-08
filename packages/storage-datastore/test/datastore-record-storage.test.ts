@@ -690,7 +690,7 @@ class FlatDatastore {
     id: string,
   ): void {
     const prepared = records.transactionEntity(message(id));
-    const key = { path: [prepared.key.path[0], "not-canonical"] as const };
+    const key = { path: [String(prepared.key.path[0]), "not-canonical"] as const };
     this.#rows.set(this.#name(key), {
       [this.KEY]: key,
       bytes: prepared.data.bytes,
@@ -724,7 +724,7 @@ class FlatDatastore {
     return entity === undefined ? undefined : { ...entity };
   }
 
-  #name(key: Key): string {
+  #name(key: { readonly path: readonly unknown[] }): string {
     return key.path.join("/");
   }
 }

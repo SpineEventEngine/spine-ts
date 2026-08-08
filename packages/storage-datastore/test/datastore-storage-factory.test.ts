@@ -69,9 +69,11 @@ describe("DatastoreStorageFactory", () => {
     await storage.write(create(StringValueSchema, { value: "one" }));
 
     expect(client.saved).toHaveLength(1);
-    expect(Object.keys(client.saved[0].data).sort()).toEqual(["_scope", "bytes", "value"]);
-    expect(client.saved[0].key.path[0]).toBe("google.protobuf.StringValue");
-    expect(client.saved[0].data.value).toBe("one");
+    const [saved] = client.saved;
+    if (saved === undefined) throw new Error("Expected a saved Datastore row.");
+    expect(Object.keys(saved.data).sort()).toEqual(["_scope", "bytes", "value"]);
+    expect(saved.key.path[0]).toBe("google.protobuf.StringValue");
+    expect(saved.data.value).toBe("one");
   });
 
   it("uses a 1,001-row sentinel for finite reconciliation", async () => {

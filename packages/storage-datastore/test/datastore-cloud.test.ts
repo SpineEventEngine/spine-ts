@@ -10,7 +10,8 @@ const cloudTestEnabled =
   process.env.DATASTORE_CLOUD_TEST === "1" && process.env.DATASTORE_PROJECT_ID !== undefined;
 describe.skipIf(!cloudTestEnabled)("Datastore cloud smoke", () => {
   it("writes and removes one source-family record", async () => {
-    const client = new Datastore({ projectId: process.env.DATASTORE_PROJECT_ID });
+    const projectId = process.env.DATASTORE_PROJECT_ID;
+    const client = new Datastore(projectId === undefined ? {} : { projectId });
     const storage = DatastoreStorageFactory.newBuilder()
       .setClient(client)
       .build()

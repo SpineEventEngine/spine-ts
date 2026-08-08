@@ -398,7 +398,9 @@ describe("Datastore generated Entity records", () => {
     expect(
       client.queries
         .slice(-2)
-        .every((query) => query.filters.some(([property]) => property === "entity_id")),
+        .every((query) =>
+          query.filters.some((filter) => Array.isArray(filter) && filter[0] === "entity_id"),
+        ),
     ).toBe(true);
 
     await storage.states.trim("task", 17);
