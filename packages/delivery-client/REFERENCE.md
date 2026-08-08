@@ -48,8 +48,8 @@ The remote protocol has no renewable fence or worker-conditional release. A
 a stale local session and permits a new pickup. Do not release a stale session.
 
 `RemoteInbox` and `RemoteWorkRegistry` satisfy the server delivery-builder
-ports. `RemoteInbox` rereads the pending remote row before admission and calls
-the authoritative removal operation directly on completion, without a local
+ports. `RemoteInbox` rereads the exact pending remote row before acknowledgement
+and calls the authoritative removal operation directly, without a local
 receipt, fingerprint, or quarantine record. Shard ownership excludes concurrent
 delivery and delivered rows are the deduplication fact. Handler effects and the
 delivered transition are not transactional: a lost acknowledgement can

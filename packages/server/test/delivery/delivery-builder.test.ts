@@ -245,6 +245,7 @@ describe("DeliveryMonitor delivery", () => {
       workRegistry: {
         sessionKind: "LEASED",
         pickUp: async () => undefined,
+        validateOwnership: async (session) => session,
         release: async () => true,
       },
     });
@@ -276,6 +277,7 @@ describe("DeliveryMonitor delivery", () => {
       workRegistry: {
         sessionKind: "EXCLUSIVE",
         pickUp: async () => ({ kind: "EXCLUSIVE" as const, shard }),
+        validateOwnership: async (session) => session,
         release: async () => true,
       },
     });
@@ -363,7 +365,7 @@ describe("DeliveryMonitor delivery", () => {
           throw new Error("must not acknowledge");
         },
       })
-      .withWorkRegistry({ ...registry(shard), renew: async () => undefined })
+      .withWorkRegistry({ ...registry(shard), validateOwnership: async () => undefined })
       .build()
       .run({
         onMessage: () => {
@@ -418,6 +420,8 @@ function registry(shard: ShardIndex) {
   return {
     sessionKind: "LEASED" as const,
     pickUp: async () => ({ kind: "LEASED" as const, shard }),
+    validateOwnership: async (session: { readonly kind: "LEASED"; readonly shard: ShardIndex }) =>
+      session,
     release: async () => true,
   };
 }

@@ -17,6 +17,7 @@ import { Inbox, type InboxMessage } from "./inbox.js";
 import { InboxStorage } from "./inbox-storage.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry } from "./sharded-work-registry.js";
+import { withDeliveryCommitFence } from "../repository/commit-fence.js";
 import type { DeliveryResult, DeliveryRunOptions, DeliveryStrategy } from "./delivery-builder.js";
 
 /**
@@ -257,17 +258,26 @@ export class Delivery {
     const statistics = counts();
     const failures: DeliveryFailure[] = [];
     let current = session;
-    const renew = async (): Promise<boolean> => {
-      const renewShard = this.shards.renew?.bind(this.shards);
-      if (current.kind !== "LEASED" || renewShard === undefined) return true;
-      const renewed = await safelyValue(
-        () => renewShard(current as Extract<typeof current, { kind: "LEASED" }>, options.operation),
+    const ownership = { lost: false };
+    const validate = async (): Promise<boolean> => {
+      const validated = await safelyValue(
+        () => this.shards.validateOwnership(current, options.operation),
         undefined,
       );
-      if (renewed === undefined) return false;
-      current = renewed;
+      if (validated === undefined) {
+        ownership.lost = true;
+        return false;
+      }
+      current = validated;
       return true;
     };
+    const dispatch = (message: InboxMessage): Promise<void> =>
+      withDeliveryCommitFence(
+        async () => {
+          if (!(await validate())) throw new Error("Shard ownership was lost.");
+        },
+        () => Promise.resolve(options.onMessage(message)),
+      );
     try {
       if (!(await safelyBoolean(() => this.#monitor.shouldContinueAfter("DELIVERY"))))
         return result("STOPPED", statistics);
@@ -292,12 +302,12 @@ export class Delivery {
           statistics.processed += 1;
           if (!(await safelyBoolean(() => this.#monitor.shouldContinueAfter("PAGE"))))
             return result("STOPPED", statistics);
-          if (!(await renew())) return result("STOPPED", statistics);
+          if (!(await validate())) return result("STOPPED", statistics);
           try {
             statistics.accepted += 1;
-            await options.onMessage(message);
+            await dispatch(message);
             if (options.operation?.signal?.aborted) return result("STOPPED", statistics);
-            if (!(await renew())) return result("STOPPED", statistics);
+            if (!(await validate())) return result("STOPPED", statistics);
             if ((await this.inbox.markDelivered(message, options.operation)) === undefined)
               throw new Error("Inbox message was not marked delivered.");
             statistics.delivered += 1;
@@ -308,14 +318,14 @@ export class Delivery {
               message,
               error,
               async () => {
-                if (!(await renew())) throw new Error("Shard ownership was lost.");
+                if (!(await validate())) throw new Error("Shard ownership was lost.");
                 if ((await this.inbox.markDelivered(message, options.operation)) === undefined)
                   throw new Error("Inbox message was not marked delivered.");
                 statistics.delivered += 1;
               },
               async () => {
-                await options.onMessage(message);
-                if (!(await renew())) throw new Error("Shard ownership was lost.");
+                await dispatch(message);
+                if (!(await validate())) throw new Error("Shard ownership was lost.");
                 if ((await this.inbox.markDelivered(message, options.operation)) === undefined)
                   throw new Error("Inbox message was not marked delivered.");
                 statistics.delivered += 1;
@@ -331,6 +341,7 @@ export class Delivery {
             ) {
               blockedTargets.add(target);
             }
+            if (ownership.lost) return result("STOPPED", statistics, failures);
           }
         }
         const last = messages.at(-1);

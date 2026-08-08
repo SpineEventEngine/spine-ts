@@ -228,7 +228,11 @@ concurrent delivery within that shard. Pending and delivered `InboxMessage`
 rows are direct records; a delivered row is the deduplication fact. A handler
 effect and the exact pending-to-delivered compare-and-set are not one
 transaction, so a lost acknowledgement can redeliver after restart. Downstream
-signal handling must be idempotent.
+signal handling must be idempotent. A customized `DeliveryWorkRegistry`
+implements `validateOwnership()` so delivery can validate before dispatch, at
+repository commit time, and before acknowledgement. Validation is a fence
+against an observed takeover, not a distributed transaction with handler
+storage.
 
 `BoundedContextBuilder.withDeliveryStrategy(strategy)` snapshots a validated
 immutable strategy for its Entity Inbox; the default is one shard. For example,

@@ -121,6 +121,22 @@ export interface DeliveryWorkRegistry {
   ): Promise<LeasedDeliveryWorkSession | undefined>;
 
   /**
+   * Validates ownership immediately before a guarded side effect.
+   *
+   * Leased registries return the renewed session. Exclusive registries return
+   * the current session only while its authoritative remote fence still
+   * matches.
+   *
+   * @param session Supplies the session to validate.
+   * @param options Propagates cancellation and a delivery deadline.
+   * @returns The current session, or `undefined` after ownership loss.
+   */
+  validateOwnership(
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<DeliveryWorkSession | undefined>;
+
+  /**
    * Removes a held work fence.
    *
    * @param session Supplies the session to release.

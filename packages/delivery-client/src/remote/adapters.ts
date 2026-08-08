@@ -16,7 +16,7 @@ import { ShardIndex } from "@spine-event-engine/server";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
 
 import { conditionalPickUp } from "@spine-event-engine/server/internal/conditional-pickup";
-import { DeliveryClient } from "../client/client.js";
+import { DeliveryClient, deliveryClientAccess } from "../client/client.js";
 import {
   DeliveryPagingError,
   DeliveryProtocolError,
@@ -226,6 +226,59 @@ class RemoteSessionOwner {
   }
 
   /**
+   * Validates that an exclusive remote session still owns its shard.
+   *
+   * A free shard may be reacquired by the same complete worker and replaces
+   * the existing local session value. A different current owner invalidates
+   * the local session. Unknown probe outcomes fail closed without storing a
+   * quarantine or marker.
+   *
+   * @param session Supplies the locally issued exclusive session.
+   * @param options Bounds or cancels the authoritative probe.
+   * @returns Whether the session owns the shard after the probe.
+   */
+  async validateOwnership(
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<ExclusiveDeliveryWorkSession | undefined> {
+    if (session.kind !== "EXCLUSIVE") return undefined;
+    const remote = this.#sessions.get(session);
+    if (remote === undefined) return undefined;
+    const probe = await deliveryClientAccess.probePickUp(
+      this.client,
+      session.shard,
+      remote.worker,
+      options ?? {},
+    );
+    if (probe.kind === "PICKED") {
+      await this.#cleanupAccidentalPickup(probe.session);
+      this.#invalidate(session);
+      return undefined;
+    }
+    if (
+      RemoteValues.sameWorker(probe.session.worker, remote.worker) &&
+      probe.session.whenPicked.getTime() === remote.whenPicked.getTime()
+    ) {
+      return session;
+    }
+    this.#invalidate(session);
+    return undefined;
+  }
+
+  async #cleanupAccidentalPickup(session: RemoteShardSession): Promise<void> {
+    try {
+      await this.client.release(session, { timeoutMs: 1_000 });
+    } catch {
+      // Validation remains failed closed when bounded cleanup is uncertain.
+    }
+  }
+
+  #invalidate(session: ExclusiveDeliveryWorkSession): void {
+    this.#sessions.delete(session);
+    this.#removeSession(RemoteValues.shardKey(session.shard), session);
+  }
+
+  /**
    * Applies a validated Admin observation to local remote-session state.
    *
    * A `PICKED` observation cannot prove ownership because the frozen wire
@@ -315,6 +368,20 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
   }
 
   /**
+   * Validates current remote ownership before a guarded side effect.
+   *
+   * @param session Supplies the exclusive session to validate.
+   * @param options Bounds or cancels the authoritative probe.
+   * @returns Whether the session still owns the shard.
+   */
+  validateOwnership(
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<ExclusiveDeliveryWorkSession | undefined> {
+    return this.#owner.validateOwnership(session, options);
+  }
+
+  /**
    * Applies an Admin shard observation to local ownership.
    *
    * @param observation Describes the current remote shard state.
@@ -359,6 +426,10 @@ const RemoteValues = Object.freeze({
 
   sameShard(left: ShardIndex, right: ShardIndex): boolean {
     return left.index === right.index && left.ofTotal === right.ofTotal;
+  },
+
+  sameWorker(left: DeliveryWorkerId, right: DeliveryWorkerId): boolean {
+    return left.nodeId === right.nodeId && left.value === right.value;
   },
 
   exactAfter(page: readonly InboxMessage[], after: NonNullable<InboxReadOptions["after"]>): number {

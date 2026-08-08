@@ -103,6 +103,56 @@ describe("RemoteWorkRegistry", () => {
     expect(workers[0]?.value).not.toBe(workers[1]?.value);
   });
 
+  it("validates only the exact retained remote worker and pickup time", async () => {
+    const workers: { nodeId: string; value: string }[] = [];
+    const registry = new RemoteWorkRegistry(
+      DeliveryClient.usingTransport(workerTransport(workers, "same-owner")),
+    );
+    const session = await registry.pickUp(ShardIndex.single(), workerId("node", "worker-1"));
+    if (session === undefined) throw new Error("Remote shard was not acquired.");
+
+    await expect(registry.validateOwnership(session)).resolves.toBe(session);
+    expect(workers).toHaveLength(2);
+  });
+
+  it("invalidates a retained session after a different worker takes over", async () => {
+    const workers: { nodeId: string; value: string }[] = [];
+    const registry = new RemoteWorkRegistry(
+      DeliveryClient.usingTransport(workerTransport(workers, "other-owner")),
+    );
+    const session = await registry.pickUp(ShardIndex.single(), workerId("node", "worker-1"));
+    if (session === undefined) throw new Error("Remote shard was not acquired.");
+
+    await expect(registry.validateOwnership(session)).resolves.toBeUndefined();
+    await expect(registry.release(session)).resolves.toBe(false);
+  });
+
+  it("releases an accidental probe pickup and fails validation closed", async () => {
+    const workers: { nodeId: string; value: string }[] = [];
+    const registry = new RemoteWorkRegistry(
+      DeliveryClient.usingTransport(workerTransport(workers)),
+    );
+    const session = await registry.pickUp(ShardIndex.single(), workerId("node", "worker-1"));
+    if (session === undefined) throw new Error("Remote shard was not acquired.");
+
+    await expect(registry.validateOwnership(session)).resolves.toBeUndefined();
+    await expect(registry.release(session)).resolves.toBe(false);
+    expect(workers).toHaveLength(2);
+  });
+
+  it("fails an uncertain ownership probe closed without retaining a marker", async () => {
+    const fake = transport();
+    const registry = new RemoteWorkRegistry(DeliveryClient.usingTransport(fake.transport));
+    echoPickup(fake);
+    const session = await registry.pickUp(ShardIndex.single(), workerId("node", "worker-1"));
+    if (session === undefined) throw new Error("Remote shard was not acquired.");
+    fake.fail(new Error("probe outcome lost"));
+
+    await expect(registry.validateOwnership(session)).rejects.toBeInstanceOf(
+      DeliveryOutcomeUnknownError,
+    );
+  });
+
   it("retains no client-side release marker after an unknown outcome", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport);
@@ -334,7 +384,10 @@ describe("RemoteWorkRegistry", () => {
   });
 });
 
-function workerTransport(workers: { nodeId: string; value: string }[]): Transport {
+function workerTransport(
+  workers: { nodeId: string; value: string }[],
+  probeOutcome?: "same-owner" | "other-owner",
+): Transport {
   let pickups = 0;
   const unaryTransport: Pick<Transport, "unary"> = {
     unary: (method, _signal, _timeoutMs, _header, input) => {
@@ -377,19 +430,43 @@ function workerTransport(workers: { nodeId: string; value: string }[]): Transpor
           header: new Headers(),
           trailer: new Headers(),
           service: method.parent,
-          message: create(LiquorPickUpOutcomeSchema, {
-            value: {
-              case: "pickedUp",
-              value: create(ShardPickedUpSchema, {
-                shard: request.shard as never,
-                worker: create(WorkerIdSchema, {
-                  nodeId: { value: worker.nodeId },
-                  value: worker.value,
-                }),
-                whenPicked: { seconds: BigInt(pickups), nanos: 0 },
-              }),
-            },
-          }),
+          message: create(
+            LiquorPickUpOutcomeSchema,
+            pickups > 1 && probeOutcome !== undefined
+              ? {
+                  value: {
+                    case: "alreadyPickedUp",
+                    value: create(ShardAlreadyPickedUpSchema, {
+                      worker: create(WorkerIdSchema, {
+                        nodeId: {
+                          value:
+                            probeOutcome === "same-owner"
+                              ? (workers[0]?.nodeId ?? "")
+                              : "replacement-node",
+                        },
+                        value:
+                          probeOutcome === "same-owner"
+                            ? (workers[0]?.value ?? "")
+                            : "replacement-worker",
+                      }),
+                      whenPicked: { seconds: 1n, nanos: 0 },
+                    }),
+                  },
+                }
+              : {
+                  value: {
+                    case: "pickedUp",
+                    value: create(ShardPickedUpSchema, {
+                      shard: request.shard as never,
+                      worker: create(WorkerIdSchema, {
+                        nodeId: { value: worker.nodeId },
+                        value: worker.value,
+                      }),
+                      whenPicked: { seconds: BigInt(pickups), nanos: 0 },
+                    }),
+                  },
+                },
+          ),
         } as never);
       }
       throw new Error(`Unexpected method ${method.name}`);

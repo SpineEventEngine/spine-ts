@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import { Delivery, type DeliveryEndpointMessage } from "../../src/delivery/delivery.js";
 import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
 import type { InboxReadOptions } from "../../src/delivery/inbox.js";
+import { commitFenced } from "../../src/repository/commit-fence.js";
 import { ShardIndex } from "../../src/index.js";
 
 describe("Delivery direct worker", () => {
@@ -80,6 +81,34 @@ describe("Delivery direct worker", () => {
     });
     expect(run.status).toBe("STOPPED");
     expect(dispatched).toBe(0);
+  });
+
+  it("validates ownership at repository commit time", async () => {
+    const shard = ShardIndex.single();
+    const rows = [message("one", "target", shard)];
+    let validations = 0;
+    let commits = 0;
+    const delivery = createDelivery({
+      rows,
+      registry: {
+        pickUp: async () => session(shard),
+        renew: async () => (++validations === 1 ? session(shard) : undefined),
+        release: async () => true,
+      },
+    });
+
+    const run = await delivery.drain(shard, {
+      onMessage: async () => {
+        await commitFenced({}, () => {
+          commits += 1;
+          return { status: "committed" };
+        });
+      },
+    });
+
+    expect(run).toMatchObject({ status: "STOPPED", delivered: 0, failed: 1 });
+    expect(commits).toBe(0);
+    expect(rows).toHaveLength(1);
   });
 
   it("contains a thrown renewal before callback or acknowledgement", async () => {
@@ -434,6 +463,7 @@ function createDelivery(config: {
       sessionKind: "LEASED",
       pickUp: async (shard, worker) => config.registry?.pickUp(shard, worker) ?? session(shard),
       renew: async (current) => config.registry?.renew?.() ?? current,
+      validateOwnership: async (current) => config.registry?.renew?.() ?? current,
       release: async (current, operation) => config.registry?.release(current, operation) ?? true,
     },
   });

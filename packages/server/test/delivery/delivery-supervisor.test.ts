@@ -1037,6 +1037,14 @@ class ObservedRegistry implements DeliveryWorkRegistry {
     return this.#delegate.renew(session);
   }
 
+  validateOwnership(
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<DeliveryWorkSession | undefined> {
+    if (session.kind !== "LEASED") return Promise.resolve(undefined);
+    return this.renew(session, options);
+  }
+
   async release(
     session: DeliveryWorkSession,
     options?: DeliveryOperationOptions,
@@ -1131,6 +1139,10 @@ class OpenRegistry implements DeliveryWorkRegistry {
 
   pickUp(shard: ShardIndex) {
     return Promise.resolve({ kind: "EXCLUSIVE" as const, shard });
+  }
+
+  validateOwnership(session: DeliveryWorkSession): Promise<DeliveryWorkSession | undefined> {
+    return Promise.resolve(session);
   }
 
   release(

@@ -105,6 +105,16 @@ export class ShardedWorkRegistry {
   }
 
   /**
+   * Returns the renewed exact ownership session.
+   *
+   * @param expected Supplies the previously observed session.
+   * @returns The renewed session, or `undefined` when ownership was lost.
+   */
+  validateOwnership(expected: ShardSession): Promise<ShardSession | undefined> {
+    return this.renew(expected);
+  }
+
+  /**
    * Returns whether one exact live shard-session snapshot became unowned.
    *
    * @param expected Supplies the session to release.
