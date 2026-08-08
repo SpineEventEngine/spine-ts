@@ -3,11 +3,12 @@ import type {
   DeliveryWorkRegistry,
   DeliveryWorkSession,
 } from "./delivery-ports.js";
+import type { WorkerId } from "@spine-event-engine/proto/delivery";
 import type { ShardIndex } from "./shard-index.js";
 
 type OnConditionalPickUp = (
   shard: ShardIndex,
-  node: string,
+  worker: WorkerId,
   options?: DeliveryOperationOptions,
 ) => Promise<DeliveryWorkSession | undefined>;
 const pickups = new WeakMap<DeliveryWorkRegistry, OnConditionalPickUp>();

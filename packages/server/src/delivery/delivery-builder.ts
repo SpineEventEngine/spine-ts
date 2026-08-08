@@ -2,9 +2,9 @@ import type { StorageContext, StorageFactory } from "@spine-event-engine/storage
 
 import { ServerEnvironment } from "../server/server-environment.js";
 import { Delivery as CoreDelivery, type OnDeliveryMessage } from "./delivery.js";
+import { DeliveryMonitor, type DeliveryStatistics } from "./delivery-monitor.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "./delivery-ports.js";
 import type { DeliveryControlledRun } from "./delivery-run-control.js";
-import { inboxStorageAccess } from "./inbox-storage.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry, shardedWorkRegistryAccess } from "./sharded-work-registry.js";
 
@@ -133,48 +133,7 @@ export class UniformAcrossAllShards implements DeliveryStrategy {
   }
 }
 
-/**
- * Observes finite local delivery without owning scheduling or retry policy.
- */
-export interface DeliveryMonitor {
-  // prettier-ignore
-
-  /**
-   * Observes exclusive pickup before page work.
-   *
-   * @param shard The picked shard.
-   */
-  onStarted?(shard: ShardIndex): void;
-
-  /**
-   * Observes a released page.
-   *
-   * @param page The completed page.
-   * @returns `false` to stop the run, otherwise `undefined`.
-   */
-  onPage?(page: DeliveryPage): boolean | undefined;
-
-  /**
-   * Observes a shard owned by another node.
-   *
-   * @param shard The unavailable shard.
-   */
-  onSkipped?(shard: ShardIndex): void;
-
-  /**
-   * Observes a released failed page.
-   *
-   * @param page The failed page.
-   */
-  onFailure?(page: DeliveryPage): void;
-
-  /**
-   * Observes a fulfilled run after all release work.
-   *
-   * @param result The terminal run result.
-   */
-  onCompleted?(result: DeliveryResult): void;
-}
+export { DeliveryMonitor, type DeliveryStatistics } from "./delivery-monitor.js";
 
 /**
  * Immutable outcome of one finite local delivery run.
@@ -383,7 +342,7 @@ export class DeliveryBuilder {
     this.#pageSize = DeliveryValues.requireBound(
       "Delivery page size",
       pageSize,
-      inboxStorageAccess.maxReadLimit,
+      1_000,
     );
     return this;
   }

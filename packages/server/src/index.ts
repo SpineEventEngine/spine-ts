@@ -77,14 +77,23 @@ export type {
 export { type DeliveryEndpointMessage } from "./delivery/delivery.js";
 export {
   DeliveryBuilder,
+  DeliveryMonitor,
   type Delivery,
-  type DeliveryMonitor,
   type DeliveryPage,
   type DeliveryResult,
   type DeliveryRunOptions,
   type DeliveryStrategy,
   UniformAcrossAllShards,
 } from "./delivery/delivery-builder.js";
+export {
+  AlreadyPickedUp,
+  FailedPickUp,
+  FailedReception,
+  type DeliveryStage,
+  type DeliveryStatistics,
+  type PickUpAction,
+  type ReceptionAction,
+} from "./delivery/delivery-monitor.js";
 export {
   DeliverySupervisor,
   DeliveryShutdownTimeoutError,

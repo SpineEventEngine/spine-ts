@@ -5,6 +5,7 @@ import type {
   InboxReadOptions,
   InboxWriteResult,
 } from "./inbox.js";
+import type { WorkerId } from "@spine-event-engine/proto/delivery";
 import type { ShardIndex } from "./shard-index.js";
 import type { ShardSession } from "./sharded-work-registry.js";
 
@@ -146,7 +147,7 @@ export interface DeliveryWorkRegistry {
    */
   pickUp(
     shard: ShardIndex,
-    node: string,
+    worker: WorkerId,
     options?: DeliveryOperationOptions,
   ): Promise<DeliveryWorkSession | undefined>;
 

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   DeliveryBuilder,
-  type DeliveryMonitor,
+  DeliveryMonitor,
   EnvironmentType,
   ServerEnvironment,
   ShardIndex,
@@ -17,6 +17,60 @@ afterEach(async () => {
 });
 
 describe("DeliveryBuilder", () => {
+  it("exposes an instantiable monitor with asynchronous default hooks", async () => {
+    const monitor = new DeliveryMonitor();
+
+    expect(await monitor.shouldContinueAfter("DELIVERY")).toBe(true);
+  });
+
+  it("continues an independent target when failed-reception acknowledgement is unavailable", async () => {
+    const shard = ShardIndex.single();
+    const messages = ["first", "blocked", "independent"].map((signalId, index) => ({
+      id: { value: signalId, shard },
+      inboxId: { targetId: index === 2 ? "other" : "same", targetTypeUrl: "type" },
+      signalId,
+      label: "UPDATE_SUBSCRIBER" as const,
+      status: "TO_DELIVER" as const,
+      shard,
+      whenReceived: new Date(),
+      version: BigInt(index + 1),
+    }));
+    const seen: string[] = [];
+    const inbox = {
+      sessionKind: "LEASED" as const,
+      receive: () => Promise.reject(new Error("not used")),
+      read: () => Promise.resolve(messages),
+      readMessage: () => Promise.resolve(undefined),
+      begin: (message: (typeof messages)[number]) =>
+        Promise.resolve({
+          message,
+          synchronize: () => Promise.resolve(),
+          complete: () =>
+            message.signalId === "first" ? Promise.reject(new Error("acknowledgement failed")) : Promise.resolve(true),
+          abandon: () => Promise.resolve(),
+        }),
+    };
+    const registry = {
+      sessionKind: "LEASED" as const,
+      pickUp: () => Promise.resolve({ kind: "LEASED" as const, shard }),
+      release: () => Promise.resolve(true),
+    };
+
+    await new DeliveryBuilder()
+      .withStorageFactory(new InMemoryStorageFactory())
+      .withInbox(inbox)
+      .withWorkRegistry(registry)
+      .build()
+      .run({
+        onMessage(message) {
+          seen.push(message.signalId);
+          if (message.signalId === "first") throw new Error("dispatch failed");
+        },
+      });
+
+    expect(seen).toEqual(["first", "independent"]);
+  });
+
   it("rejects empty target coordinates for uniform shard assignment", () => {
     const strategy = UniformAcrossAllShards.singleShard();
 
