@@ -589,7 +589,7 @@ describe("SubscriptionGateway", () => {
         new InMemorySubscriptionBindings({
           nextId: () => "one",
           dispose: () => Promise.resolve(),
-          limits: { maxPendingOperations: 0 },
+          limits: { pendingOperationLimit: 0 },
         }),
     ).toThrow("positive safe integers");
   });

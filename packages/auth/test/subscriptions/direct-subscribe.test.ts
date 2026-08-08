@@ -52,7 +52,7 @@ describe("direct subscription creation", () => {
       contexts: {
         resolve: async () => ({
           actor: create(UserIdSchema, { value: "actor" }),
-          tenant: context.tenantId,
+          ...(context.tenantId === undefined ? {} : { tenant: context.tenantId }),
           timestamp: create(TimestampSchema),
         }),
         resolveContext: async () => ({
@@ -83,14 +83,50 @@ describe("direct subscription creation", () => {
   });
 
   it("retains a direct subscription when failed creation cannot be compensated", async () => {
-    const bindings = new InMemorySubscriptionBindings({ nextId: () => "direct-id", dispose: async () => undefined });
-    const gateway = new SubscriptionGateway({
-      bindings, sessions: { resolve: async () => ({ principal: { id: "actor" }, expiresAt: create(TimestampSchema, { seconds: 100n }) }) },
-      authorize: async () => true, contexts: { resolve: async () => ({ actor: create(UserIdSchema, { value: "actor" }), tenant: context.tenantId, timestamp: create(TimestampSchema) }), resolveContext: async () => ({ actor: create(UserIdSchema, { value: "actor" }), timestamp: create(TimestampSchema) }) },
-      clock: { now: () => create(TimestampSchema, { seconds: 1n }) },
-      creator: { subscribe: async () => { throw new Error("backend failed"); }, activate: async () => undefined, cancel: async () => { throw new Error("cleanup failed"); } },
+    const bindings = new InMemorySubscriptionBindings({
+      nextId: () => "direct-id",
+      dispose: async () => undefined,
     });
-    await expect(gateway.handle({ service, method: "Subscribe", wire: { kind: "subscription-topic", bytes: topic }, credential: { kind: "bearer", value: "credential" }, transport: TransportFacts.from({ service, method: "Subscribe" }) })).rejects.toThrow("backend failed");
+    const gateway = new SubscriptionGateway({
+      bindings,
+      sessions: {
+        resolve: async () => ({
+          principal: { id: "actor" },
+          expiresAt: create(TimestampSchema, { seconds: 100n }),
+        }),
+      },
+      authorize: async () => true,
+      contexts: {
+        resolve: async () => ({
+          actor: create(UserIdSchema, { value: "actor" }),
+          ...(context.tenantId === undefined ? {} : { tenant: context.tenantId }),
+          timestamp: create(TimestampSchema),
+        }),
+        resolveContext: async () => ({
+          actor: create(UserIdSchema, { value: "actor" }),
+          timestamp: create(TimestampSchema),
+        }),
+      },
+      clock: { now: () => create(TimestampSchema, { seconds: 1n }) },
+      creator: {
+        subscribe: async () => {
+          throw new Error("backend failed");
+        },
+        activate: async () => undefined,
+        cancel: async () => {
+          throw new Error("cleanup failed");
+        },
+      },
+    });
+    await expect(
+      gateway.handle({
+        service,
+        method: "Subscribe",
+        wire: { kind: "subscription-topic", bytes: topic },
+        credential: { kind: "bearer", value: "credential" },
+        transport: TransportFacts.from({ service, method: "Subscribe" }),
+      }),
+    ).rejects.toThrow("backend failed");
     expect(bindings.size).toBe(1);
   });
 
