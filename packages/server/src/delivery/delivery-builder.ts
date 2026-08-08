@@ -1,4 +1,5 @@
 import type { StorageContext, StorageFactory } from "@spine-event-engine/storage";
+import type { WorkerId } from "@spine-event-engine/proto/delivery";
 
 import { ServerEnvironment } from "../server/server-environment.js";
 import { Delivery as CoreDelivery, type OnDeliveryMessage } from "./delivery.js";
@@ -228,6 +229,9 @@ export interface Delivery {
    */
   readonly node: string;
 
+  /** Complete opaque worker identity used for shard ownership. */
+  readonly worker: WorkerId;
+
   /**
    * Maximum accepted work per internal delivery page, from 1 through 1000.
    */
@@ -265,6 +269,7 @@ export class DeliveryBuilder {
   #pageSize: number | undefined;
   #batchSize: number | undefined;
   #node: string | undefined;
+  #worker: WorkerId | undefined;
 
   /**
    * Sets the storage namespace for inbox, attempts, and shard records.
@@ -373,6 +378,24 @@ export class DeliveryBuilder {
   }
 
   /**
+   * Sets the complete opaque worker identity used for shard ownership.
+   *
+   * @param worker The generated worker identity for this delivery lifetime.
+   * @returns This builder.
+   */
+  withWorker(worker: WorkerId): this {
+    if (
+      worker.nodeId === undefined ||
+      worker.nodeId.value.trim() === "" ||
+      worker.value.trim() === ""
+    ) {
+      throw new Error("Delivery worker must contain non-blank node and value.");
+    }
+    this.#worker = worker;
+    return this;
+  }
+
+  /**
    * Creates one immutable delivery from the current builder configuration.
    *
    * @returns The configured delivery.
@@ -409,6 +432,7 @@ export class DeliveryBuilder {
       pageSize: this.#pageSize ?? defaultPageSize,
       batchSize: this.#batchSize ?? defaultBatchSize,
       node,
+      ...(this.#worker === undefined ? {} : { worker: this.#worker }),
     });
     return new BuiltDelivery(core);
   }
@@ -419,6 +443,7 @@ class BuiltDelivery implements Delivery {
   readonly storageFactory: StorageFactory;
   readonly strategy: DeliveryStrategy;
   readonly node: string;
+  readonly worker: WorkerId;
   readonly pageSize: number;
   readonly batchSize: number;
   readonly inbox: DeliveryInbox;
@@ -430,6 +455,7 @@ class BuiltDelivery implements Delivery {
     this.storageFactory = core.storageFactory;
     this.strategy = core.strategy;
     this.node = core.node;
+    this.worker = core.worker;
     this.pageSize = core.pageSize;
     this.batchSize = core.batchSize;
     this.inbox = core.inbox;

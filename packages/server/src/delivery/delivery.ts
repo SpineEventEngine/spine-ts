@@ -1,4 +1,5 @@
 import { create } from "@bufbuild/protobuf";
+import { randomUUID } from "node:crypto";
 import { WorkerIdSchema, type WorkerId } from "@spine-event-engine/proto/delivery";
 import type { StorageContext, StorageFactory } from "@spine-event-engine/storage";
 
@@ -72,7 +73,21 @@ export class Delivery {
   }
 
   runControlled(options: DeliveryControlledRun): Promise<DeliveryResult> {
-    return this.run(options);
+    const shard = options.shard;
+    return this.drain(shard, { onMessage: options.onMessage, operation: { signal: options.signal } }).then(
+      (run) =>
+        Object.freeze({
+          status:
+            run.status === "SKIPPED"
+              ? "SKIPPED"
+              : run.status === "FAILED"
+                ? "FAILED"
+                : run.status === "STOPPED"
+                  ? "STOPPED"
+                  : "COMPLETED",
+          pages: Object.freeze([]),
+        }),
+    );
   }
 
   /** Delivers one exact direct Inbox row for local handoff integration. */
@@ -86,6 +101,7 @@ export class Delivery {
 
   /** Drains one owned shard and always contains monitor and endpoint failures. */
   async drain(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
+    if (options.operation?.signal?.aborted) return result("STOPPED");
     let session;
     try {
       session = await this.shards.pickUp(shard, this.worker, options.operation);
@@ -98,20 +114,37 @@ export class Delivery {
       return result("SKIPPED");
     }
     const statistics = counts();
+    let current = session;
+    const renew = async (): Promise<boolean> => {
+      if (current?.kind !== "LEASED" || this.shards.renew === undefined) return true;
+      const renewed = await this.shards.renew(current, options.operation);
+      if (renewed === undefined) return false;
+      current = renewed;
+      return true;
+    };
     try {
       if (!(await safelyBoolean(() => this.#monitor.shouldContinueAfter("DELIVERY")))) return result("STOPPED", statistics);
       if (!(await safely(() => this.#monitor.onDeliveryStarted(shard)))) return result("STOPPED", statistics);
-      const messages = await this.inbox.read(shard, { statuses: ["TO_DELIVER"], limit: this.pageSize });
       const blockedTargets = new Set<string>();
-      for (const message of messages) {
+      for (;;) {
+        const messages = await this.inbox.read(shard, {
+          statuses: ["TO_DELIVER"],
+          limit: this.pageSize,
+        });
+        if (messages.length === 0) break;
+        for (const message of messages) {
+        if (options.operation?.signal?.aborted) return result("STOPPED", statistics);
         const target = `${message.inboxId.targetTypeUrl}:${message.inboxId.targetId}`;
         if (blockedTargets.has(target)) continue;
         statistics.processed += 1;
         if (!(await safelyBoolean(() => this.#monitor.shouldContinueAfter("PAGE")))) return result("STOPPED", statistics);
+        if (!(await renew())) return result("STOPPED", statistics);
         try {
           statistics.accepted += 1;
           await options.onMessage(message);
-          const work = await this.inbox.begin(message, session);
+          if (options.operation?.signal?.aborted) return result("STOPPED", statistics);
+          if (!(await renew())) return result("STOPPED", statistics);
+          const work = await this.inbox.begin(message, current);
           if (work === undefined || !(await work.complete())) throw new Error("Inbox message was not marked delivered.");
           statistics.delivered += 1;
         } catch (error) {
@@ -120,13 +153,15 @@ export class Delivery {
             message,
             error,
             async () => {
-              const work = await this.inbox.begin(message, session!);
+              if (!(await renew())) throw new Error("Shard ownership was lost.");
+              const work = await this.inbox.begin(message, current!);
               if (work === undefined || !(await work.complete())) throw new Error("Inbox message was not marked delivered.");
               statistics.delivered += 1;
             },
             async () => {
               await options.onMessage(message);
-              const work = await this.inbox.begin(message, session!);
+              if (!(await renew())) throw new Error("Shard ownership was lost.");
+              const work = await this.inbox.begin(message, current!);
               if (work === undefined || !(await work.complete())) throw new Error("Inbox message was not marked delivered.");
               statistics.delivered += 1;
             },
@@ -136,11 +171,12 @@ export class Delivery {
             blockedTargets.add(target);
           }
         }
+        }
       }
       return result("DRAINED", statistics);
     } finally {
       await safely(async () => {
-        await this.shards.release(session!, options.operation);
+        await this.shards.release(current!, options.operation);
       });
       await safely(() => this.#monitor.onDeliveryCompleted(Object.freeze({ processed: statistics.processed, delivered: statistics.delivered, failed: statistics.failed } satisfies DeliveryStatistics)));
     }
@@ -160,7 +196,9 @@ export interface DeliveryOptions {
   readonly batchSize?: number;
 }
 export interface DeliveryDrainOptions { readonly onMessage: OnDeliveryMessage; readonly operation?: import("./delivery-ports.js").DeliveryOperationOptions; }
-function workerId(node: string): WorkerId { return create(WorkerIdSchema, { nodeId: { value: node }, value: node }); }
+function workerId(node: string): WorkerId {
+  return create(WorkerIdSchema, { nodeId: { value: node }, value: randomUUID() });
+}
 function counts() { return { processed: 0, accepted: 0, delivered: 0, failed: 0 }; }
 function result(status: DeliveryRun["status"], value = counts()): DeliveryRun { return Object.freeze({ status, ...value, failures: Object.freeze([]) }); }
 async function safely(action: () => void | Promise<void>): Promise<boolean> { try { await action(); return true; } catch { return false; } }
