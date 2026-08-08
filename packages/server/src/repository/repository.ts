@@ -4131,18 +4131,18 @@ const RepositoryRoutes = {
     );
     const producerId = event.context?.producerId;
 
-    if (targetIdField.descriptor.fieldKind === "message" && producerId !== undefined) {
-      const producer = AnyMessages.unpack(
-        producerId,
-        targetIdField.descriptor.message as MessageSchema,
-      );
+    const eventIdField = schema.fields[0];
+    if (eventIdField?.fieldKind === "message" && producerId !== undefined) {
+      const producer = AnyMessages.unpack(producerId, eventIdField.message as MessageSchema);
       if (producer !== undefined) {
         if (
-          !RepositoryRoutes.sameMessageId(
-            targetIdField.descriptor.message as MessageSchema,
-            producer,
-            fieldId.id,
-          )
+          targetIdField.descriptor.fieldKind === "message"
+            ? !RepositoryRoutes.sameMessageId(
+                targetIdField.descriptor.message as MessageSchema,
+                producer,
+                fieldId.id,
+              )
+            : MessageIds.readValue(producer) !== fieldId.value
         ) {
           throw new Error(
             "Repository event routing requires producer ID and first field to identify the same entity.",
