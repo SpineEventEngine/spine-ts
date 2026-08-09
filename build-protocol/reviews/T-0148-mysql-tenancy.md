@@ -1,6 +1,6 @@
 # T-0148 Review Record
 
-Status: Targeted re-review residuals corrected; final lane confirmation pending.
+Status: Complete; targeted re-review clean.
 
 ## Required lanes
 
@@ -73,5 +73,21 @@ by the factory and has custom message-ID coverage. The factory regression
 asserts the exact `SELECT` filter operand and keyset continuation values. The
 guide and public package references now state the corrected API and physical
 identity. Focused execution passes 2 files / 32 tests. Reliability, style, and
-documentation require narrow final confirmation; the code/API lane is closed
-apart from deterministic documentation inventory checks.
+documentation received narrow final confirmation; the code/API lane is also
+closed after deterministic documentation inventory checks.
+
+## Final disposition
+
+- TypeScript/API: clean after the aggregated correction; no residual code/API
+  finding.
+- Performance/reliability: clean; focused current-Entity helper execution
+  passes 1 file / 19 tests.
+- Style/maintainability: clean; the filter and continuation assertions isolate
+  all custom-mapped SQL operands deterministically.
+- Documentation: clean; MySQL/shared beginner and reference claims match the
+  corrected database-per-tenant and direct-table contract. Remaining
+  Datastore `_scope` prose is assigned to T-0149.
+- Security: deferred as recorded to the complete T-0150 trust-boundary review.
+
+T-0148 is a reviewed, pushed provider checkpoint. It remains intentionally
+non-releasable until T-0149 and T-0150 migrate downstream consumers.
