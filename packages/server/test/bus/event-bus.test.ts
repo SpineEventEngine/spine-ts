@@ -5,6 +5,7 @@ import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
+  ActorContextSchema,
   EventContextSchema,
   EventIdSchema,
   EventSchema,
@@ -24,6 +25,7 @@ import { EventBus, type EventDispatcher } from "../../src/index.js";
 import { eventBusAccess } from "../../src/bus/event-bus.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
+import { tenant } from "../tenant-fixture.js";
 
 const validationChecks = vi.hoisted(() => vi.fn());
 
@@ -350,35 +352,44 @@ describe("EventBus", () => {
     expect(observed).toEqual([]);
   });
 
-  it("uses one tenant context snapshot for acceptance and append", async () => {
-    let currentTenantId = "tenant-a";
-    const store = new EventStore(
-      {
-        name: "Tasks",
-        multitenant: true,
-        get tenantId() {
-          return currentTenantId;
-        },
-      },
-      new InMemoryStorageFactory(),
-    );
+  it("uses one event-envelope tenant snapshot for acceptance and append", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = new EventStore({ name: "Tasks", multitenant: true }, factory);
+    const event = createProjectionEvent("event-tenant-captured");
+    if (event.context === undefined) throw new Error("Expected generated event context.");
+    event.context.origin = {
+      case: "importContext",
+      value: create(ActorContextSchema, { tenantId: tenant("tenant-a") }),
+    };
     const bus = new EventBus(store, [
       {
         messageSchemas: () => [ProjectionStateSchema],
         accept: () => {
-          currentTenantId = "tenant-b";
+          if (event.context === undefined) throw new Error("Expected generated event context.");
+          event.context.origin = {
+            case: "importContext",
+            value: create(ActorContextSchema, { tenantId: tenant("tenant-b") }),
+          };
           return Promise.resolve();
         },
         dispatch: () => Promise.resolve(),
       },
     ]);
 
-    await bus.post(createProjectionEvent("event-tenant-captured"));
+    await bus.post(event);
 
-    currentTenantId = "tenant-a";
-    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-tenant-captured" } }]);
-    currentTenantId = "tenant-b";
-    await expect(store.read()).resolves.toEqual([]);
+    await expect(
+      new EventStore(
+        { name: "Tasks", multitenant: true, tenantId: tenant("tenant-a") },
+        factory,
+      ).read(),
+    ).resolves.toMatchObject([{ id: { value: "event-tenant-captured" } }]);
+    await expect(
+      new EventStore(
+        { name: "Tasks", multitenant: true, tenantId: tenant("tenant-b") },
+        factory,
+      ).read(),
+    ).resolves.toEqual([]);
   });
 
   it("validates matching dispatchers before storing events", async () => {
