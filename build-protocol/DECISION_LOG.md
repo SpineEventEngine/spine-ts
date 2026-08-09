@@ -5162,3 +5162,72 @@ Consequences:
   service continues across all nodes.
 - Wave 7 implementation begins only after the completed dependency plan is
   explicitly approved.
+
+## D-0111: Match Spine JVM Physical Storage Values
+
+Status: Accepted
+
+Date: 2026-08-09
+
+Task: T-0146 planning and T-0147 through T-0150 implementation
+
+Context:
+
+- Wave 8 introduced TS-only ID/key encodings, free-form column value kinds,
+  and provider paths that do not map stored values and query operands through
+  one typed conversion.
+- The human requires Spine TS and Spine JVM to share physical MySQL and
+  Datastore storage, not merely agree on logical domain values.
+- JVM retains the declared Proto type in `RecordColumn`, uses provider
+  `ColumnMapping` conversion for both writes and queries, validates supported
+  IDs through `Identifier`, and uses reversible `Stringifiers` where provider
+  values are textual.
+
+Decision:
+
+- Preserve generated Proto ID and column schemas through the storage contract.
+- Add JVM-shaped identifier and reversible stringifier behavior plus typed
+  provider column mappings.
+- Apply the identical provider mapping to stored column values, query
+  operands, ordering, and continuation values.
+- Match JVM's provider-visible default values, including compact Proto JSON for
+  ordinary message values where JVM stores text, native Datastore scalar/blob/
+  timestamp values, and the corresponding JDBC scalar/binary/numeric values.
+- Replace TS-only raw message-ID binary and tagged key/ID formats during the
+  provider cutovers. Keep serialized record bodies as standard Protobuf wire
+  bytes.
+- Require shared JVM/TS golden vectors and bidirectional provider fixtures;
+  visually similar JSON is not compatibility evidence.
+- Do not offer simultaneous old and new layouts. Existing Wave 8 data requires
+  empty corrected storage or a separately approved offline migration.
+
+Alternatives considered:
+
+- Preserve TS-private encodings and translate at runtime: rejected because JVM
+  cannot address or query the same physical rows and keys.
+- Require only logical equality: rejected because provider equality operates on
+  physical key/property/column values.
+- Use generic `JSON.stringify()`: rejected because it does not guarantee the
+  Protobuf JSON rules for enums, 64-bit values, bytes, well-known types,
+  defaults, or field names.
+
+Security impact:
+
+- Tenant boundaries: mapping occurs only after the provider tenant database or
+  namespace is selected; no Bounded Context or hidden scope value substitutes
+  for tenant isolation.
+- Validation and deserialization: schema-bound parsing rejects malformed or
+  wrong-type persisted/query values instead of accepting arbitrary objects.
+- Dependencies: use the repository's existing Protobuf-ES runtime; no new
+  serializer dependency is approved by this decision.
+- Secrets, IPC, and logging: no direct impact.
+
+Consequences:
+
+- T-0147 through T-0150 are one non-releasable breaking-layout correction.
+- Record-column declarations and provider adapters must be schema-aware.
+- MySQL and Datastore writes and queries must share one provider mapping.
+- Compatibility tests must cover message/primitive IDs, all supported column
+  categories, and both JVM-to-TS and TS-to-JVM fixtures.
+- Active beginner documentation must explain the physical mapping without
+  exposing internal codecs as user configuration.

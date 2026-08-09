@@ -1,6 +1,7 @@
 # Storage Tenancy Correction Plan
 
-Status: Proposed for implementation after review.
+Status: Implementation started under the non-releasable T-0147 through T-0150
+stacked train.
 
 ## Why this correction exists
 
