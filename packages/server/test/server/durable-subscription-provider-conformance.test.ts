@@ -83,7 +83,7 @@ describe("DurableSubscriptionBindings provider selection", () => {
         if (sql.startsWith("SELECT bytes"))
           return Promise.resolve([records.size === 0 ? [] : [{ bytes: [...records.values()][0] }]]);
         if (sql.startsWith("INSERT INTO")) {
-          records.set("record", values[2] as Uint8Array);
+          records.set("record", values[1] as Uint8Array);
           return Promise.resolve([{ affectedRows: 1 }]);
         }
         if (sql.startsWith("DELETE FROM")) {

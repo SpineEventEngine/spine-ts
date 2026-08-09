@@ -1,7 +1,7 @@
 import { InMemoryStorageFactory, type StorageContext } from "@spine-event-engine/storage";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
-import { EventSchema } from "@spine-event-engine/proto";
+import { EventSchema, type TenantId } from "@spine-event-engine/proto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -41,6 +41,7 @@ import {
   serverEnvironmentAccess,
 } from "../../src/server/server-environment.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
+import { tenant } from "../tenant-fixture.js";
 
 afterEach(async () => {
   await resetServerEnvironmentForTest();
@@ -133,7 +134,7 @@ describe("RegistrationReadiness", () => {
     const target = descriptor("Dynamic", "type.example.dev/Dynamic", new InMemoryStorageFactory());
     const dynamic = runScope("owner-dynamic", {
       ...target.ready,
-      tenantId: "tenant-dynamic",
+      tenantId: tenant("tenant-dynamic"),
     });
     const routed: DeliveryRunScope[] = [];
     const readiness = new RegistrationReadiness(
@@ -974,7 +975,7 @@ describe("ServerEnvironment attachment", () => {
       transferred.readiness
         .claim({
           ...transferred.ready,
-          tenantId: `unknown-${index.toString()}`,
+          tenantId: tenant(`unknown-${index.toString()}`),
         })
         .complete(() => {
           exactDrains += 1;
@@ -1017,10 +1018,11 @@ describe("ServerEnvironment attachment", () => {
     const target = descriptor("Tenants", "type.example.dev/Tenants", storageFactory, {
       tenants: ["tenant-a", "tenant-b"],
     });
-    for (const tenantId of ["tenant-a", "tenant-b"]) {
+    for (const tenantValue of ["tenant-a", "tenant-b"]) {
+      const tenantId = tenant(tenantValue);
       const context = target.value.storageContext({ tenantId });
       const delivery = new Delivery({ context, storageFactory });
-      await delivery.inbox.receive(message({ ...target.ready, tenantId }, tenantId));
+      await delivery.inbox.receive(message({ ...target.ready, tenantId }, tenantValue));
     }
 
     const handle = await serverEnvironmentAccess.attach(serverEnvironment(), {
@@ -1028,10 +1030,9 @@ describe("ServerEnvironment attachment", () => {
       descriptors: [target.value],
     });
 
-    expect(handle.startup.scopes.map(({ scope }) => scope.ready.tenantId)).toEqual([
-      "tenant-a",
-      "tenant-b",
-    ]);
+    expect(
+      handle.startup.scopes.map(({ scope }) => scope.ready.tenantId?.kind.value?.valueOf()),
+    ).toEqual(["tenant-a", "tenant-b"]);
     expect(target.replayTenants).toEqual(["tenant-a", "tenant-b"]);
     await serverEnvironmentAccess.detach(ServerEnvironment.instance(), handle);
   });
@@ -1047,9 +1048,9 @@ describe("ServerEnvironment attachment", () => {
       descriptors: [target.value],
     });
     expect(target.transitions).toBe(1);
-    const ready = Object.freeze({ ...target.ready, tenantId: "tenant-b" });
+    const ready = Object.freeze({ ...target.ready, tenantId: tenant("tenant-b") });
     const delivery = new Delivery({
-      context: target.value.storageContext({ tenantId: "tenant-b" }),
+      context: target.value.storageContext({ tenantId: tenant("tenant-b") }),
       storageFactory,
     });
     await delivery.inbox.receive(message(ready, "tenant-b-later"));
@@ -1565,7 +1566,10 @@ describe("non-last registration detach", () => {
       descriptors: [departing.value],
     });
     await attachments.attach({ ownership: "caller", descriptors: [sibling.value] });
-    const dynamicReady = Object.freeze({ ...departing.ready, tenantId: "tenant-dynamic" });
+    const dynamicReady = Object.freeze({
+      ...departing.ready,
+      tenantId: tenant("tenant-dynamic"),
+    });
     await departing.readiness.claim(dynamicReady).complete(() => Promise.resolve());
     await until(() => worker.starts === 3);
 
@@ -2548,7 +2552,7 @@ describe("failed attachment rollback", () => {
 
     const failedAttach = attachments.attach({ ownership: "caller", descriptors: [failed.value] });
     await until(() => worker.starts === 2);
-    const dynamicReady = Object.freeze({ ...failed.ready, tenantId: "tenant-dynamic" });
+    const dynamicReady = Object.freeze({ ...failed.ready, tenantId: tenant("tenant-dynamic") });
     await failed.readiness.claim(dynamicReady).complete(() => Promise.resolve());
     await failed.readiness.claim(dynamicReady).complete(() => Promise.resolve());
 
@@ -2573,7 +2577,7 @@ describe("failed attachment rollback", () => {
     const startsAfterRollback = worker.starts;
     await failed.readiness.claim(dynamicReady).complete(() => Promise.resolve());
     await failed.readiness
-      .claim({ ...failed.ready, tenantId: "tenant-after-failure" })
+      .claim({ ...failed.ready, tenantId: tenant("tenant-after-failure") })
       .complete(() => Promise.resolve());
     await Promise.resolve();
     expect(worker.starts).toBe(startsAfterRollback);
@@ -3235,7 +3239,7 @@ function descriptor(
         Object.freeze(
           options.tenants === undefined
             ? [Object.freeze({})]
-            : options.tenants.map((tenantId) => Object.freeze({ tenantId })),
+            : options.tenants.map((value) => Object.freeze({ tenantId: tenant(value) })),
         ),
       );
     },
@@ -3267,9 +3271,9 @@ function descriptor(
       );
       testDescriptor.completedTransitions += 1;
     },
-    replay: (next: DeliveryEndpointMessage, tenantId?: string) => {
+    replay: (next: DeliveryEndpointMessage, tenantId?: TenantId) => {
       replayed.push(next.signalId);
-      replayTenants.push(tenantId);
+      replayTenants.push(tenantId?.kind.value?.valueOf());
       return options.onReplay?.(next) ?? Promise.resolve();
     },
   });

@@ -6,6 +6,7 @@ import type {
 } from "../../src/delivery/delivery-run-coordinator.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { EnvironmentDeliveryRecords } from "../../src/server/environment-delivery-records.js";
+import { tenant } from "../tenant-fixture.js";
 
 describe("EnvironmentDeliveryRecords", () => {
   it("represents and detaches a zero-scope registration as a no-record operation", () => {
@@ -327,7 +328,7 @@ function scope(owner: string, target: string, index: number): DeliveryRunScope {
   return Object.freeze({
     owner: Object.freeze({ key: owner }),
     ready: Object.freeze({
-      tenantId: "tenant",
+      tenantId: tenant("tenant"),
       label: "UPDATE_SUBSCRIBER",
       targetTypeUrl: `type.example.dev/${target}`,
       shard: new ShardIndex(index, 2),

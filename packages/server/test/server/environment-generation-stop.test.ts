@@ -1,4 +1,5 @@
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import type { TenantId } from "@spine-event-engine/proto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type {
@@ -27,6 +28,7 @@ import type { EnvironmentDeliveryRuntime } from "../../src/server/environment-de
 import { EnvironmentType } from "../../src/server/environment.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "../../src/server/server-environment.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
+import { tenant } from "../tenant-fixture.js";
 
 describe("environment generation stop", () => {
   beforeEach(async () => {
@@ -1413,7 +1415,7 @@ describe("environment generation stop", () => {
     target.readiness.claim(
       Object.freeze({
         ...target.ready,
-        tenantId: "tenant-new",
+        tenantId: tenant("tenant-new"),
       }),
     );
     await Promise.resolve();
@@ -1506,7 +1508,7 @@ describe("environment generation stop", () => {
     target.readiness.claim(
       Object.freeze({
         ...target.ready,
-        tenantId: "tenant-buffered-while-stop-failed",
+        tenantId: tenant("tenant-buffered-while-stop-failed"),
       }),
     );
     expect(target.notifications).toBe(1);
@@ -2093,14 +2095,14 @@ describe("environment generation stop", () => {
     const configured: DeliveryRunScope = Object.freeze({
       owner,
       ready: Object.freeze({
-        tenantId: "tenant-original",
+        tenantId: tenant("tenant-original"),
         label: "UPDATE_SUBSCRIBER",
         targetTypeUrl,
         shard: ShardIndex.single(),
       }),
     });
     const mutableReady = {
-      tenantId: "tenant-original",
+      tenantId: tenant("tenant-original"),
       label: "UPDATE_SUBSCRIBER" as DeliveryReady["label"],
       targetTypeUrl,
       shard: ShardIndex.single(),
@@ -2118,7 +2120,7 @@ describe("environment generation stop", () => {
     });
 
     route.notify(target.value, mutableReady);
-    mutableReady.tenantId = "tenant-mutated";
+    mutableReady.tenantId = tenant("tenant-mutated");
     mutableReady.label = "HANDLE_COMMAND";
     mutableReady.targetTypeUrl = "type.example.dev/Mutated";
     route.rebind(
@@ -2132,7 +2134,7 @@ describe("environment generation stop", () => {
 
     expect(transitionReady).toBe(reopenedReady);
     expect(transitionReady).toMatchObject({
-      tenantId: "tenant-original",
+      tenantId: tenant("tenant-original"),
       label: "UPDATE_SUBSCRIBER",
       targetTypeUrl,
     });
@@ -2396,7 +2398,7 @@ function descriptor(
             Object.freeze(
               startupTenantIds === undefined
                 ? [Object.freeze({})]
-                : startupTenantIds.map((tenantId) => Object.freeze({ tenantId })),
+                : startupTenantIds.map((value) => Object.freeze({ tenantId: tenant(value) })),
             ),
           )
         : Promise.reject(failure);
@@ -2486,13 +2488,13 @@ class ControlledWorker implements EnvironmentGenerationWorker {
   }
   add(runtime: EnvironmentDeliveryRuntime): void {
     this.addCalls += 1;
-    this.addAttemptTenants.push(runtime.tenant.tenantId);
+    this.addAttemptTenants.push(tenantValue(runtime.tenant.tenantId));
     const failure = this.addFailures.get(this.addCalls);
     if (failure !== undefined) {
       this.addFailures.delete(this.addCalls);
       throw failure;
     }
-    this.addedTenants.push(runtime.tenant.tenantId);
+    this.addedTenants.push(tenantValue(runtime.tenant.tenantId));
   }
   start(
     obligation: DeliveryRunObligation,
@@ -2502,7 +2504,7 @@ class ControlledWorker implements EnvironmentGenerationWorker {
     this.#events.push(`${this.#name}:start`);
     this.onStarts.shift()?.();
     this.targets.push(...obligation.scopes.map((scope) => scope.ready.targetTypeUrl));
-    this.tenants.push(...obligation.scopes.map((scope) => scope.ready.tenantId));
+    this.tenants.push(...obligation.scopes.map((scope) => tenantValue(scope.ready.tenantId)));
     const failure = this.startFailures.shift();
     if (failure !== undefined) return Promise.reject(failure);
     const gate = this.gates.shift() ?? Promise.resolve();
@@ -2628,4 +2630,14 @@ async function expectRetainedTransitionFailure(reason: unknown, name: string): P
   expect(candidateWorker.addCalls).toBe(1);
   expect(transferAttempts).toBe(2);
   await attachments.detach(handle);
+}
+
+function tenantValue(tenantId: TenantId | undefined): string | undefined {
+  if (tenantId === undefined) return undefined;
+  const kind = tenantId.kind;
+  return kind.case === "value"
+    ? kind.value
+    : kind.case === "domain" || kind.case === "email"
+      ? kind.value.value
+      : undefined;
 }

@@ -2545,7 +2545,7 @@ describe("Server", () => {
     }).start();
 
     try {
-      expect(storageFactory.contextNames()).toContain("Tasks");
+      expect(storageFactory.contextNames()).toContain("Tasks:subscriptions");
     } finally {
       await server.close();
     }
@@ -2562,7 +2562,7 @@ describe("Server", () => {
       .start();
 
     try {
-      expect(builderStorage.contextNames()).toContain("Tasks");
+      expect(builderStorage.contextNames()).toContain("Tasks:subscriptions");
       expect(environmentStorage.contextNames()).toEqual([]);
     } finally {
       await server.close();
@@ -2583,7 +2583,7 @@ describe("Server", () => {
       Server.atPort(0).add(BoundedContext.singleTenant("Tasks")).add(brokenBuilder).start(),
     ).rejects.toThrow("Cannot read event schemas.");
 
-    expect(storageFactory.contextNames()).toContain("Tasks");
+    expect(storageFactory.contextNames()).toContain("Tasks:subscriptions");
     expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
   });
 
