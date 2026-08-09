@@ -105,6 +105,13 @@ in-memory cache for newly admitted tenants. `keep()` stores no `TenantId` row or
 other discovery record; Datastore exposes native metadata after an application
 entity is written in that namespace.
 
+Before deployment to an existing project, run `pnpm --dir
+packages/storage-datastore inventory:legacy -- --project <project-id>`. It
+enumerates native namespaces and kinds and fails closed on discovery errors,
+an old `_scope` property, or a scope-derived key name. Passing the inventory is
+a startup prerequisite; migration is application-owned and offline, with no
+dual-layout reads or automatic conflict winner.
+
 ## Operations and errors
 
 Malformed payloads fail with a redacted decoding error. Physical Datastore

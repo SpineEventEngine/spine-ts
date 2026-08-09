@@ -766,8 +766,8 @@ non-negative offsets, positive limits, and simple field masks over cloned
 results. The in-memory adapter is process-local, tenant-aware through
 `StorageContext`, and non-durable. A factory without an
 `InMemoryStorageBackend` owns an isolated backend; independently constructed
-factories deliberately share compatible canonical scopes only when supplied
-the same backend token.
+factories deliberately share compatible tenant and record-family slices only
+when supplied the same backend token.
 `StorageGroup` is an optional named identity that separates record families
 with the same source type. Calls in one logical backend share backing records
 only when their context, source type, and group identity match; two omitted
@@ -895,7 +895,8 @@ the same grouped backing; use distinct groups to separate otherwise equal
 source-type families. Omitting the group selects the ungrouped family.
 `InMemoryStorageBackend` is a root-exported opaque token for deliberate
 in-memory sharing: factories constructed without one are isolated, while
-factories supplied the same token share only compatible canonical scopes.
+factories supplied the same token share only compatible tenant and
+record-family slices.
 Closing one such factory does not clear the backend for its siblings.
 The public entity-history surface is deliberately limited to
 `EntityStateHistoryStorage` (`trim`, `truncate`) and `EntityEventStorage`

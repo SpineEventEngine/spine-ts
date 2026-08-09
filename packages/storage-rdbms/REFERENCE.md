@@ -32,6 +32,13 @@ It creates and verifies a family table lazily. An account therefore needs DDL
 permission, metadata reads, and DML. Existing tables are inspected and never
 altered.
 
+Before deployment, run `pnpm --dir packages/storage-rdbms inventory:legacy --
+--url <database-url>` once for every configured tenant database. The command
+fails closed on connection errors, `_scope`, `_revision`, or an old primary key
+containing `_scope`. Passing this inventory is a startup prerequisite for an
+upgraded application; the runtime has no dual-layout reader or automatic
+conflict winner.
+
 ## Lifecycle and tenancy
 
 `close(): void` marks the factory and its live handles closed and starts pool

@@ -65,7 +65,7 @@ const MemoryBackendScopes = {
   // prettier-ignore
 
   /**
-   * Binds one canonical scope to one backend-owned value.
+   * Binds one tenant and record family to one backend-owned value.
    */
   bind<T>(
     backend: InMemoryStorageBackend,

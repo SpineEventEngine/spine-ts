@@ -116,6 +116,21 @@ TLS, and plan backups, monitoring, and migrations. Indexed `bigint` values must
 fit the exact signed 64-bit MySQL range. PostgreSQL support is planned for the
 same package but is not implemented.
 
+Before starting this corrected layout against an existing database, run the
+legacy-layout inventory for every configured tenant database:
+
+```sh
+pnpm --dir packages/storage-rdbms inventory:legacy -- \
+  --url 'mysql://user:password@127.0.0.1:3306/tenant_a' \
+  --url 'mysql://user:password@127.0.0.1:3306/tenant_b'
+```
+
+The command exits nonzero if a database is unreachable or contains the old
+`_scope`, `_revision`, or compound scope key. Do not start the corrected
+runtime until it passes. The runtime does not read both layouts or choose
+between rows that old Bounded Context partitions would collapse onto the same
+new `ID`; migrate those rows offline and stop on every conflict.
+
 ## 🔗 Learn more
 
 - [Storage API](../storage/README.md)

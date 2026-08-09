@@ -177,6 +177,19 @@ policy for its workload, and keep Google credentials outside source control.
 This adapter does not provide an unlimited scan mode or a Datastore-specific
 cursor API.
 
+Before starting this corrected layout in an existing project, inventory every
+native namespace and kind:
+
+```sh
+pnpm --dir packages/storage-datastore inventory:legacy -- --project my-project
+```
+
+The command exits nonzero if discovery fails or it finds an old `_scope`
+property or scope-derived key name. Do not start the corrected runtime until it
+passes. Old rows are invisible to direct keys; move them offline, and stop if
+rows from old Bounded Context partitions would become the same namespace,
+kind, and key. The runtime never chooses a winner.
+
 ## 🔗 Learn more
 
 - [Storage API](../storage/README.md)

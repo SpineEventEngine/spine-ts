@@ -1592,8 +1592,20 @@ declared indexed columns. Its Datastore key contains only the resolved kind and
 mapped record ID. Message-valued IDs use compact Proto JSON by default; string,
 int32, and int64 IDs use their direct text form. IDs are not copied into another
 property, and the adapter stores no `_scope`, revision, schema fingerprint, or
-layout metadata. This is a migration-free replacement: use a clean namespace
-or perform an application-owned migration from an older experimental layout.
+layout metadata. Use a clean namespace or perform an application-owned offline
+migration from an older experimental layout.
+
+Before the upgraded application can use an existing Datastore project, stop
+its writers and inspect every namespace for the retired layout:
+
+```bash
+pnpm --dir packages/storage-datastore inventory:legacy -- --project my-project
+```
+
+The command exits unsuccessfully if discovery is incomplete or it finds an old
+`_scope` property or scope-derived key. Migrate those records offline into the
+direct kind/key layout, resolve conflicts explicitly, and run the inventory
+again. Do not start old and new binaries against the same data.
 
 Declared columns follow Spine JVM mapping. Strings and booleans stay native;
 integer types use Datastore integers; float/double use Datastore doubles; bytes
@@ -1790,6 +1802,21 @@ changes the database, table, row key, lock, or query. Startup creates or verifie
 each record-family table lazily and fails closed on incompatible metadata; it
 has no migrations or automatic foreign keys/indexes. A dedicated account needs
 CREATE TABLE, information-schema reads, and ordinary DML.
+
+Before the upgraded application can use existing MySQL databases, stop their
+writers and inspect every tenant database for the retired layout:
+
+```bash
+pnpm --dir packages/storage-rdbms inventory:legacy -- \
+  --url mysql://user:password@host/tenant_a \
+  --url mysql://user:password@host/tenant_b
+```
+
+The command exits unsuccessfully if a database cannot be inspected or it finds
+an old `_scope` column, `_revision` column, or scope-based primary key. Migrate
+those rows offline into the direct ID/bytes/declared-column tables, resolve
+conflicts explicitly, and run the inventory again. Do not start old and new
+binaries against the same data.
 
 ### Shared entity storage foundation
 

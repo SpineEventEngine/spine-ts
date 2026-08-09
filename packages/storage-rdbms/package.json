@@ -16,6 +16,7 @@
     "REFERENCE.md"
   ],
   "scripts": {
+    "inventory:legacy": "node scripts/inventory-legacy-layout.mjs",
     "test:mysql": "node scripts/mysql.mjs&&pnpm exec vitest --root ../.. run test/mysql-integration.test.ts"
   },
   "dependencies": {
