@@ -1,0 +1,91 @@
+{
+  "format": "spine-jvm-storage-values-v1",
+  "identifiers": [
+    {
+      "name": "MessageId",
+      "protoJson": "{\"value\":\"message-42\"}",
+      "mysql": { "type": "string", "value": "{\"value\":\"message-42\"}" },
+      "datastore": { "type": "key-name", "value": "{\"value\":\"message-42\"}" }
+    },
+    {
+      "name": "BoardId",
+      "protoJson": "{\"value\":\"board-42\"}",
+      "mysql": { "type": "string", "value": "{\"value\":\"board-42\"}" },
+      "datastore": { "type": "key-name", "value": "{\"value\":\"board-42\"}" }
+    },
+    {
+      "name": "UserId",
+      "protoJson": "{\"value\":\"user-42\"}",
+      "mysql": { "type": "string", "value": "{\"value\":\"user-42\"}" },
+      "datastore": { "type": "key-name", "value": "{\"value\":\"user-42\"}" }
+    },
+    {
+      "name": "string",
+      "mysql": { "type": "string", "value": "record-42" },
+      "datastore": { "type": "key-name", "value": "record-42" }
+    },
+    {
+      "name": "int32",
+      "mysql": { "type": "int", "value": 42 },
+      "datastore": { "type": "key-name", "value": "42" }
+    },
+    {
+      "name": "int64",
+      "mysql": { "type": "long", "decimal": "42" },
+      "datastore": { "type": "key-name", "value": "42" }
+    }
+  ],
+  "columns": [
+    {
+      "name": "string",
+      "mysql": { "type": "string", "value": "open" },
+      "datastore": { "type": "string", "value": "open" }
+    },
+    {
+      "name": "int32",
+      "mysql": { "type": "int", "value": 42 },
+      "datastore": { "type": "long", "decimal": "42" }
+    },
+    {
+      "name": "int64",
+      "mysql": { "type": "long", "decimal": "42" },
+      "datastore": { "type": "long", "decimal": "42" }
+    },
+    {
+      "name": "boolean",
+      "mysql": { "type": "boolean", "value": true },
+      "datastore": { "type": "boolean", "value": true }
+    },
+    {
+      "name": "bytes",
+      "mysql": { "type": "bytes", "base64": "AP8=" },
+      "datastore": { "type": "blob", "base64": "AP8=" }
+    },
+    {
+      "name": "enum",
+      "mysql": { "type": "int", "value": 2 },
+      "datastore": { "type": "long", "decimal": "2" }
+    },
+    {
+      "name": "ordinary-message",
+      "protoJson": "{\"value\":\"user-42\"}",
+      "mysql": { "type": "string", "value": "{\"value\":\"user-42\"}" },
+      "datastore": { "type": "string", "value": "{\"value\":\"user-42\"}" }
+    },
+    {
+      "name": "timestamp",
+      "mysql": { "type": "long", "decimal": "42000000007" },
+      "datastore": { "type": "timestamp", "seconds": "42", "nanos": 7 }
+    },
+    {
+      "name": "version",
+      "mysql": { "type": "int", "value": 7 },
+      "datastore": { "type": "long", "decimal": "7" }
+    },
+    {
+      "name": "null",
+      "mysql": { "type": "null", "value": null },
+      "datastore": { "type": "null", "value": null }
+    }
+  ]
+}

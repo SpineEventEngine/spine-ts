@@ -1,5 +1,6 @@
 import { create, ScalarType } from "@bufbuild/protobuf";
-import { EventIdSchema } from "@spine-event-engine/proto";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { EventIdSchema, VersionSchema } from "@spine-event-engine/proto";
 import { SubscriptionRecordSchema, SubscriptionStatus } from "@spine-event-engine/proto/client";
 import { describe, expect, it } from "vitest";
 
@@ -69,6 +70,19 @@ describe("RecordColumn", () => {
     expect(columnTypes.message(EventIdSchema)).toEqual({
       kind: "message",
       message: EventIdSchema,
+    });
+  });
+
+  it("retains well-known Timestamp and Spine Version schemas", () => {
+    const columnTypes = Reflect.get(Storage, "ColumnTypes") as ColumnTypesContract;
+
+    expect(columnTypes.message(TimestampSchema)).toMatchObject({
+      kind: "message",
+      message: { typeName: "google.protobuf.Timestamp" },
+    });
+    expect(columnTypes.message(VersionSchema)).toMatchObject({
+      kind: "message",
+      message: { typeName: "spine.core.Version" },
     });
   });
 });
