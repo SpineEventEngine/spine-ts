@@ -39,15 +39,26 @@ indexed columns; no scope, ID copy, revision, schema fingerprint, marker, or
 compatibility entity is stored. The Bounded Context name is diagnostic only.
 
 Single tenancy preserves the caller client's configured/default namespace.
-Multitenancy converts the complete generated `TenantId` to a native namespace
-with the JVM-compatible `D`, `E`, or `V` prefix. The key contains only the
-resolved kind and mapped record ID. Message IDs use compact Proto JSON or their
+Multitenancy converts the complete generated `TenantId` to a native namespace.
+The default converter supports the reversible JVM `D<domain>` and `V<value>`
+forms. It rejects email tenants because JVM's `E` conversion replaces `@` with
+`-at-` and is not injective. Email tenants require one reversible custom
+converter installed in both TS and JVM. Catalog admission rejects empty,
+non-round-tripping, or colliding converter results before provider work. The
+key contains only the resolved kind and mapped record ID. Message IDs use
+compact Proto JSON or their
 registered custom stringifier; `string`, `int32`, and `int64` IDs use their
 direct text form as the key name. `bytes` and `__key__` are reserved. Blank
 kinds, kinds or key names over 1,500 UTF-8 bytes, unsupported values, non-finite
 numbers, and integers outside their declared/provider range fail before an
 RPC. Stored `bytes` remain authoritative; declared properties are rematerialized
 after decoding.
+
+`keep()` bridges native `__namespace__` metadata lag without storing a tenant
+record. Its early-admission cache retains at most 1,000 tenants for at most 60
+seconds and removes an entry sooner when native metadata becomes visible. A
+full cache fails closed; applications can retry after metadata appears or an
+entry expires.
 
 Declared string and boolean columns use native values. Integer columns use
 Datastore int values, float/double columns use Datastore double values, bytes

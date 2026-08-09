@@ -5,13 +5,29 @@ import {
   type TenantCatalog,
 } from "@spine-event-engine/storage";
 
-import type { NamespaceConverter } from "./namespace.js";
+import { NamespaceAssignments, type NamespaceConverter } from "./namespace.js";
+
+const earlyTenantTtlMs = 60_000;
+const maxEarlyTenants = 1_000;
+
+interface EarlyTenantOptions {
+  readonly now?: () => number;
+  readonly earlyTenantTtlMs?: number;
+  readonly maxEarlyTenants?: number;
+}
 
 /**
  * Discovers Spine tenants from Datastore's native namespace metadata.
  */
 export class DatastoreTenantCatalog implements TenantCatalog {
-  readonly #kept = new Map<string, TenantBoundaryValue>();
+  readonly #kept = new Map<
+    string,
+    { readonly boundary: TenantBoundaryValue; readonly expiresAt: number }
+  >();
+  readonly #converter: NamespaceAssignments;
+  readonly #now: () => number;
+  readonly #earlyTenantTtlMs: number;
+  readonly #maxEarlyTenants: number;
   #open = true;
 
   /**
@@ -19,11 +35,19 @@ export class DatastoreTenantCatalog implements TenantCatalog {
    *
    * @param client The caller-owned Datastore client.
    * @param converter Converts owned native namespaces to tenant identifiers.
+   * @param options Internal deterministic early-admission cache controls.
    */
   constructor(
     private readonly client: Datastore,
-    private readonly converter: NamespaceConverter,
-  ) {}
+    converter: NamespaceConverter,
+    options: EarlyTenantOptions = {},
+  ) {
+    this.#converter =
+      converter instanceof NamespaceAssignments ? converter : new NamespaceAssignments(converter);
+    this.#now = options.now ?? Date.now;
+    this.#earlyTenantTtlMs = options.earlyTenantTtlMs ?? earlyTenantTtlMs;
+    this.#maxEarlyTenants = options.maxEarlyTenants ?? maxEarlyTenants;
+  }
 
   /**
    * Lists tenant boundaries represented by owned native namespaces.
@@ -42,19 +66,21 @@ export class DatastoreTenantCatalog implements TenantCatalog {
     if (!Array.isArray(response) || !Array.isArray(response[0]))
       throw new Error("Datastore returned invalid namespace metadata.");
 
+    this.purgeExpired();
     const byBoundary = new Map<string, { namespace: string; boundary: TenantBoundaryValue }>();
     for (const value of response[0] as unknown[]) {
       const namespace = namespaceName(value, this.client.KEY);
       if (namespace === undefined || namespace.length === 0) continue;
-      const tenantId = this.converter.fromNamespace(namespace);
+      const tenantId = this.#converter.fromNamespace(namespace);
       if (tenantId === undefined) continue;
       const boundary = TenantBoundary.from(tenantId);
       const prior = byBoundary.get(String(boundary.key));
       if (prior !== undefined && prior.namespace !== namespace)
         throw new Error("Datastore namespaces resolve to the same tenant boundary.");
       byBoundary.set(String(boundary.key), { namespace, boundary });
+      this.#kept.delete(namespace);
     }
-    for (const [namespace, boundary] of this.#kept) {
+    for (const [namespace, { boundary }] of this.#kept) {
       const prior = byBoundary.get(String(boundary.key));
       if (prior !== undefined && prior.namespace !== namespace)
         throw new Error("Datastore namespaces resolve to the same tenant boundary.");
@@ -75,17 +101,26 @@ export class DatastoreTenantCatalog implements TenantCatalog {
    * @returns Completion of the in-memory catalog update.
    */
   keep(boundary: TenantBoundaryValue): Promise<void> {
+    return Promise.resolve().then(() => {
+      this.keepNow(boundary);
+    });
+  }
+
+  private keepNow(boundary: TenantBoundaryValue): void {
     this.requireOpen();
     if (boundary.single || boundary.tenantId === undefined)
-      return Promise.reject(new Error("Datastore tenant catalog requires a tenant boundary."));
-    const namespace = this.converter.toNamespace(boundary.tenantId);
+      throw new Error("Datastore tenant catalog requires a tenant boundary.");
+    this.purgeExpired();
+    const namespace = this.#converter.toNamespace(boundary.tenantId);
     const existing = this.#kept.get(namespace);
-    if (existing !== undefined && existing.key !== boundary.key)
-      return Promise.reject(
-        new Error("Datastore namespace is already assigned to another tenant."),
-      );
-    this.#kept.set(namespace, boundary);
-    return Promise.resolve();
+    if (existing !== undefined && existing.boundary.key !== boundary.key)
+      throw new Error("Datastore namespace is already assigned to another tenant.");
+    if (existing === undefined && this.#kept.size >= this.#maxEarlyTenants)
+      throw new Error("Datastore early-admission cache is full.");
+    this.#kept.set(namespace, {
+      boundary,
+      expiresAt: this.#now() + this.#earlyTenantTtlMs,
+    });
   }
 
   /**
@@ -101,6 +136,13 @@ export class DatastoreTenantCatalog implements TenantCatalog {
 
   private requireOpen(): void {
     if (!this.#open) throw new Error("Datastore tenant catalog is closed.");
+  }
+
+  private purgeExpired(): void {
+    const now = this.#now();
+    for (const [namespace, admission] of this.#kept) {
+      if (admission.expiresAt <= now) this.#kept.delete(namespace);
+    }
   }
 }
 

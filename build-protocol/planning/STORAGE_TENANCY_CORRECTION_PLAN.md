@@ -118,12 +118,14 @@ is equal:
 domain(example.test) != email(example.test) != value(example.test)
 ```
 
-The default Datastore converter follows JVM's typed namespace convention:
-`D<domain>`, `E<email>`, and `V<value>`, including the provider's namespace
-character rules. Conversion must be tested in both directions. A custom
-converter must be injective over admitted tenants and return “not a tenant” for
-namespaces it does not own. Default/empty TenantIds are invalid in multitenant
-mode.
+The safe default Datastore converter follows JVM's reversible typed namespace
+forms: `D<domain>` and `V<value>`. JVM's `E<email>` form replaces `@` with
+`-at-`; it is neither reversible nor injective, so TS rejects it by default
+instead of risking cross-tenant aliasing. Email tenants require the same custom
+injective converter in both runtimes. Conversion must be tested in both
+directions. A custom converter must be injective over admitted tenants and
+return “not a tenant” for namespaces it does not own. Default/empty TenantIds
+are invalid in multitenant mode.
 
 ## JVM-compatible ID and column mapping
 
@@ -435,9 +437,10 @@ Wave 8's invented layout.
 - Startup discovers tenants through the provider catalog.
 - Admission updates only provider-native/in-memory catalog state.
 - Two Bounded Contexts do not create duplicate tenant persistence.
-- Typed value, domain, and email tenants round-trip through admission and
-  startup discovery without collision; unrelated Datastore namespaces are
-  excluded.
+- Typed value and domain tenants round-trip through default admission and
+  startup discovery without collision. Email tenants round-trip when both
+  runtimes use the same injective custom converter. Unrelated Datastore
+  namespaces are excluded.
 - Direct delivery families retain acquisition, renewal, release, takeover,
   stale fencing, acknowledgment recovery, and restart behavior.
 

@@ -26,7 +26,11 @@ import {
   type OpenEntityRecords,
 } from "./entity-history.js";
 import { DatastoreRecordStorage } from "./record-storage.js";
-import { DefaultNamespaceConverter, type NamespaceConverter } from "./namespace.js";
+import {
+  DefaultNamespaceConverter,
+  NamespaceAssignments,
+  type NamespaceConverter,
+} from "./namespace.js";
 import { DatastoreTenantCatalog } from "./tenant-catalog.js";
 
 const maxClientSideScan = 1_000;
@@ -217,7 +221,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   readonly #recordCreators: ReadonlyMap<string, CreateRecordStorage>;
   readonly #layouts: ReadonlyMap<string, RecordLayout>;
   readonly #entityCreators: ReadonlyMap<string, CreateEntityStorage>;
-  readonly #namespaceConverter: NamespaceConverter;
+  readonly #namespaceConverter: NamespaceAssignments;
   readonly #stringifiers: StringifierRegistry;
   readonly #catalog: DatastoreTenantCatalog;
 
@@ -264,9 +268,9 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     this.#recordCreators = recordCreators;
     this.#layouts = layouts;
     this.#entityCreators = entityCreators;
-    this.#namespaceConverter = namespaceConverter;
+    this.#namespaceConverter = new NamespaceAssignments(namespaceConverter);
     this.#stringifiers = new StringifierRegistry(stringifiers);
-    this.#catalog = new DatastoreTenantCatalog(client, namespaceConverter);
+    this.#catalog = new DatastoreTenantCatalog(client, this.#namespaceConverter);
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityStorage(input).commits,
     });

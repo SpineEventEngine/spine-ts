@@ -18,7 +18,11 @@ import { StorageQueryValues } from "@spine-event-engine/storage/internal/query-v
 
 import { DatastoreColumnMapping } from "./column-mapping.js";
 import { DatastoreIdColumn } from "./id-column.js";
-import { DefaultNamespaceConverter, type NamespaceConverter } from "./namespace.js";
+import {
+  DefaultNamespaceConverter,
+  NamespaceAssignments,
+  type NamespaceConverter,
+} from "./namespace.js";
 const payloadProperty = "bytes";
 const maxMutationsPerBatch = 500;
 const maxCasAttempts = 3;
@@ -335,7 +339,9 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
       maxClientSideScan,
       group,
       kind,
-      namespaceConverter,
+      namespaceConverter instanceof NamespaceAssignments
+        ? namespaceConverter
+        : new NamespaceAssignments(namespaceConverter),
       stringifiers,
     );
   }

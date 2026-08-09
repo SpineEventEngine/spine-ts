@@ -39,6 +39,23 @@ describe("DatastoreRecordStorage physical identity", () => {
     expect(client.saved[0]?.key.namespace).toBe("caller-owned");
   });
 
+  it("validates a custom namespace before creating a multitenant key", () => {
+    const client = new RecordingClient();
+    expect(
+      () =>
+        new DatastoreRecordStorage(
+          multitenant("same"),
+          spec(),
+          client as never,
+          1_000,
+          undefined,
+          undefined,
+          { toNamespace: () => "", fromNamespace: () => undefined },
+        ),
+    ).toThrow(/non-empty native namespace/i);
+    expect(client.saved).toHaveLength(0);
+  });
+
   it("rejects an oversized explicit layout before client activity", () => {
     const client = new RecordingClient();
     expect(

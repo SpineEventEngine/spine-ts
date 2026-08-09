@@ -46,12 +46,15 @@ through the normal storage API.
 
 ## 🧭 Understand tenants and kinds
 
-Datastore uses its native namespace as the tenant boundary. Spine converts a
-complete generated `TenantId` to the same namespace form as Spine JVM:
-`Dexample.org` for a domain, `Eada-at-example.org` for an email, or `Vtenant-a`
-for a plain value. Single-tenant storage keeps the namespace already configured
-on the caller-owned client. A Bounded Context name helps diagnostics; it never
-changes a namespace, kind, or key.
+Datastore uses its native namespace as the tenant boundary. By default, Spine
+converts a complete generated `TenantId` to the safe reversible Spine JVM forms:
+`Dexample.org` for a domain or `Vtenant-a` for a plain value. Spine JVM's email
+form replaces `@` with `-at-`; two different emails can therefore become the
+same namespace. Spine TS rejects that unsafe default. To use email tenant IDs,
+install the same reversible custom namespace converter in both runtimes.
+Single-tenant storage keeps the namespace already configured on the
+caller-owned client. A Bounded Context name helps diagnostics; it never changes
+a namespace, kind, or key.
 
 Suppose a projection state is declared like this:
 

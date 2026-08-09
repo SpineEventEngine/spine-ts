@@ -4,6 +4,7 @@ import { TenantBoundary } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import { DatastoreStorageFactory, DefaultNamespaceConverter } from "../src/index.js";
+import { NamespaceAssignments } from "../src/datastore/namespace.js";
 import { DatastoreTenantCatalog } from "../src/datastore/tenant-catalog.js";
 
 describe("DatastoreTenantCatalog", () => {
@@ -67,16 +68,40 @@ describe("DatastoreTenantCatalog", () => {
       fromNamespace: () => tenant("same-tenant"),
     });
 
-    await expect(catalog.all()).rejects.toThrow("same tenant boundary");
+    await expect(catalog.all()).rejects.toThrow(/round trip|same tenant boundary/);
 
     const kept = new DatastoreTenantCatalog(new NamespaceClient([]) as never, {
       toNamespace: () => "same",
-      fromNamespace: () => undefined,
+      fromNamespace: () => tenant("first"),
     });
     await kept.keep(TenantBoundary.from(tenant("first")));
     await expect(kept.keep(TenantBoundary.from(tenant("second")))).rejects.toThrow(
-      "already assigned",
+      /round trip|already assigned/,
     );
+  });
+
+  it("drops observed and expired early admissions and bounds the cache", async () => {
+    let now = 100;
+    const client = new NamespaceClient([]);
+    const catalog = new DatastoreTenantCatalog(
+      client as never,
+      new NamespaceAssignments(new DefaultNamespaceConverter()),
+      { now: () => now, earlyTenantTtlMs: 10, maxEarlyTenants: 2 },
+    );
+    await catalog.keep(TenantBoundary.from(tenant("one")));
+    await catalog.keep(TenantBoundary.from(tenant("two")));
+    await expect(catalog.keep(TenantBoundary.from(tenant("three")))).rejects.toThrow(
+      /early-admission cache is full/i,
+    );
+
+    client.response = [[{ [client.KEY]: { name: "Vone" } }]];
+    await expect(catalog.all()).resolves.toHaveLength(2);
+    await expect(catalog.keep(TenantBoundary.from(tenant("three")))).resolves.toBeUndefined();
+
+    now = 111;
+    await expect(catalog.all()).resolves.toMatchObject([
+      { key: TenantBoundary.from(tenant("one")).key },
+    ]);
   });
 });
 

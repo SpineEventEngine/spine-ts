@@ -20,9 +20,11 @@ records without aliases or a dual layout.
 
 ## Acceptance
 
-- The default converter matches JVM namespaces `D<domain>`, `E<escaped-email>`,
-  and `V<value>`. Native discovery applies the JVM reverse mapping, and catalog
-  admission fails closed if distinct complete tenants map to one namespace.
+- The safe default converter matches reversible JVM namespaces `D<domain>` and
+  `V<value>`. The JVM `E<escaped-email>` mapping is rejected because it is not
+  injective; email tenants require the same reversible custom converter in TS
+  and JVM. Native discovery and catalog admission fail closed on empty,
+  non-round-tripping, or colliding mappings.
 - Every multitenant key, query, and transaction carries the selected native
   namespace. Single-tenant operations preserve the client default.
 - Kinds derive from the approved record-family type/group mapping without a

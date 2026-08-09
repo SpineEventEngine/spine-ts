@@ -1562,9 +1562,12 @@ storage-provider APIs from a domain handler.
 ### Tenant slices, IDs, records, and indexes
 
 For a multitenant `StorageContext`, a complete generated `TenantId` selects the
-Datastore native namespace. The default conversion matches Spine JVM:
-`Dexample.org` for a domain, `Eada-at-example.org` for an email, and `Vtenant-a`
-for a plain value. An incomplete tenant fails before provider work. A
+Datastore native namespace. The safe default supports Spine JVM's reversible
+`Dexample.org` domain form and `Vtenant-a` plain-value form. JVM's email form
+changes `@` to `-at-`, so different emails can collide. Spine TS rejects that
+unsafe default. Applications using email tenant IDs must configure the same
+injective, reversible namespace converter in both TS and JVM. Empty,
+non-round-tripping, and colliding mappings fail before provider work. A
 single-tenant context preserves any default namespace configured on the Google
 client. The Bounded Context name is diagnostic only; it never changes a
 namespace, kind, key, transaction, or query.
