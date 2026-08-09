@@ -1,10 +1,7 @@
 import { create, fromBinary, type Message } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { Event, EventId } from "@spine-event-engine/proto";
-import {
-  EntityRecordSchema,
-  type EntityRecord,
-} from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
   EntityStateKeySchema,
   type EntityStateKey,
@@ -18,21 +15,17 @@ import {
   type EntityStateHistoryPort,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/internal/entity-history";
-import type {
-  NormalizedQueryEntry,
-  NormalizedQueryPlan,
-  NormalizedQueryPredicate,
-} from "@spine-event-engine/storage";
+import type { NormalizedQueryEntry, NormalizedQueryPlan } from "@spine-event-engine/storage";
 import { MysqlRecordStorage } from "./record-storage.js";
 
-interface EntityFamilyCommitCapability {
+interface EntityFamilyCommitCapability<I> {
   prepare(): Promise<void>;
   tableNames(): readonly string[];
   withConnection<T>(
     connection: import("mysql2/promise").PoolConnection,
     work: () => Promise<T>,
   ): Promise<T>;
-  readCurrentLockedKey(key: string): Promise<EntityRecord | undefined>;
+  readCurrentLocked(id: I): Promise<EntityRecord | undefined>;
   preflightImmutable(states: readonly EntityRecord[], diagnostics: readonly Event[]): Promise<void>;
   appendStateImmutable(record: EntityRecord): Promise<void>;
   appendDiagnosticImmutable(record: Event): Promise<void>;
@@ -112,19 +105,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
     ) => MysqlRecordStorage<Id, R>,
     private readonly onClose: () => void = () => undefined,
   ) {
-    const currentSpec = new RecordSpec<string, EntityRecord>({
-      sourceType: input.sourceType,
-      recordType: EntityRecordSchema,
-      idKind: "entity",
-      extractId: (record) => {
-        if (record.entityId === undefined) throw new Error("EntityRecord requires entityId.");
-        const id = input.id.unpack(record.entityId);
-        if (id === undefined) throw new Error("EntityRecord ID does not match storage.");
-        return input.id.key(id);
-      },
-      columns: input.columns,
-    });
-    this.#current = new CurrentStorage(input, open(currentSpec));
+    this.#current = new CurrentStorage(input, open(input.recordSpec));
     this.current = this.#current;
     const states = input.stateHistory ? stateHistorySpec(input.stateSchema) : undefined;
     const events = input.eventHistory ? eventHistorySpec(input.stateSchema) : undefined;
@@ -233,12 +214,12 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
    * @internal
    * @returns Returns the private Entity-family commit capability.
    */
-  commitCapability(): EntityFamilyCommitCapability {
+  commitCapability(): EntityFamilyCommitCapability<I> {
     return {
       prepare: () => this.prepare(),
       tableNames: () => this.tableNames(),
       withConnection: (connection, work) => this.withConnection(connection, work),
-      readCurrentLockedKey: (key) => this.#current.readKeyLocked(key),
+      readCurrentLocked: (id) => this.#current.readLocked(id),
       preflightImmutable: (states, diagnostics) => this.preflightImmutable(states, diagnostics),
       appendStateImmutable: (record) => this.#states?.appendImmutable(record) ?? Promise.resolve(),
       appendDiagnosticImmutable: (record) =>
@@ -249,16 +230,13 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
 class CurrentStorage<I, S extends Message> implements EntityRecordStorage<I> {
   constructor(
     private readonly input: EntityStorageInput<I, S>,
-    private readonly records: MysqlRecordStorage<string, EntityRecord>,
+    private readonly records: MysqlRecordStorage<I, EntityRecord>,
   ) {}
   read(id: I): Promise<EntityRecord | undefined> {
-    return this.records.read(this.input.id.key(id));
+    return this.records.read(id);
   }
   readLocked(id: I): Promise<EntityRecord | undefined> {
-    return this.records.readLocked(this.input.id.key(id));
-  }
-  readKeyLocked(key: string): Promise<EntityRecord | undefined> {
-    return this.records.readLocked(key);
+    return this.records.readLocked(id);
   }
   write(record: EntityRecord): Promise<void> {
     return this.records.write(record);
@@ -266,16 +244,7 @@ class CurrentStorage<I, S extends Message> implements EntityRecordStorage<I> {
   async query(
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly NormalizedQueryEntry<I, EntityRecord>[]> {
-    const translated: NormalizedQueryPlan<string> = {
-      ...(plan.order === undefined ? {} : { order: plan.order }),
-      ...(plan.mask === undefined ? {} : { mask: plan.mask }),
-      ...(plan.limit === undefined ? {} : { limit: plan.limit }),
-      ...(plan.candidateLimit === undefined ? {} : { candidateLimit: plan.candidateLimit }),
-      ...(plan.predicate === undefined
-        ? {}
-        : { predicate: this.stringifyPredicate(plan.predicate) }),
-    };
-    const entries = await this.records.queryPlanEntries(translated);
+    const entries = await this.records.queryPlanEntries(plan);
     return entries.map((entry) => {
       if (entry.record.entityId === undefined) throw new Error("EntityRecord requires entityId.");
       const id = this.input.id.unpack(entry.record.entityId);
@@ -288,17 +257,6 @@ class CurrentStorage<I, S extends Message> implements EntityRecordStorage<I> {
         ),
       };
     });
-  }
-  private stringifyPredicate(
-    predicate: NormalizedQueryPredicate<I>,
-  ): NormalizedQueryPredicate<string> {
-    if (predicate.kind === "ids")
-      return { kind: "ids", ids: predicate.ids.map((id) => this.input.id.key(id)) };
-    if (predicate.kind === "comparison") return predicate;
-    return {
-      ...predicate,
-      predicates: predicate.predicates.map((nested) => this.stringifyPredicate(nested)),
-    };
   }
   withConnection<T>(
     connection: import("mysql2/promise").PoolConnection,

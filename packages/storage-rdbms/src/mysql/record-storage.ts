@@ -2,12 +2,13 @@ import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import { createHash } from "node:crypto";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import type {
+  ColumnMapping,
   RecordEntry,
   RecordQuery,
   RecordSpec,
   StorageContext,
 } from "@spine-event-engine/storage";
-import { RecordStorage } from "@spine-event-engine/storage";
+import { ColumnMappings, RecordStorage } from "@spine-event-engine/storage";
 
 import type { MysqlResolvedTable, MysqlTableSpec } from "./table-spec.js";
 import { resolvedMysqlTableSpec } from "./table-spec.js";
@@ -17,14 +18,19 @@ import {
   MysqlStorageSchemaError,
   mysqlError,
 } from "./errors.js";
-import { CanonicalMysqlValues } from "./value-codec.js";
-import { mysqlScopeKey } from "./scope.js";
+import { MysqlColumnMapping } from "./column-mapping.js";
+import { MysqlIdColumn } from "./id-column.js";
 
 /**
  * Describes the private connection lifecycle for a record-family handle.
  */
 export interface MysqlRecordLifecycle {
   // prettier-ignore
+
+  /**
+   * Names the selected physical MySQL database.
+   */
+  readonly databaseName: string;
 
   /**
    * Acquires one MySQL connection.
@@ -53,6 +59,8 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   override readonly atomicCompareAndSet = true;
   #ready: Promise<void> | undefined;
   #bound: import("mysql2/promise").PoolConnection | undefined;
+  readonly #idColumn: MysqlIdColumn<I>;
+  readonly #columnMapping: ColumnMapping<unknown> = new MysqlColumnMapping();
 
   /**
    * Returns the physical table name.
@@ -93,6 +101,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     tableSpec?: MysqlTableSpec<I, R>,
   ) {
     super(context, recordSpec);
+    this.#idColumn = new MysqlIdColumn(recordSpec.idType);
     this.tableSpec =
       tableSpec ??
       resolvedMysqlTableSpec({
@@ -188,7 +197,6 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * @returns Resolves after the record is written or confirmed identical.
    */
   async writeImmutable(record: R): Promise<void> {
-    this.scopeKey();
     const id = this.recordSpec.idValueIn(record);
     this.idKey(id);
     await this.using(async (connection) => {
@@ -205,7 +213,6 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * @returns Resolves when the record is absent or identical.
    */
   async assertImmutable(record: R): Promise<void> {
-    this.scopeKey();
     const id = this.recordSpec.idValueIn(record);
     this.idKey(id);
     await this.using(async (connection) => {
@@ -255,8 +262,8 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   protected async deleteRecord(id: I): Promise<boolean> {
     return this.using(async (connection) => {
       const [result] = await connection.execute<ResultSetHeader>(
-        `DELETE FROM \`${this.table.tableName}\` WHERE _scope=? AND ID=?`,
-        [this.scopeKey(), this.idKey(id)],
+        `DELETE FROM \`${this.table.tableName}\` WHERE ID=?`,
+        [this.idKey(id)] as never,
       );
       return result.affectedRows === 1;
     });
@@ -343,10 +350,9 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
         return false;
       }
       if (next === undefined)
-        await connection.execute(
-          `DELETE FROM \`${this.table.tableName}\` WHERE _scope=? AND ID=?`,
-          [this.scopeKey(), this.idKey(id)],
-        );
+        await connection.execute(`DELETE FROM \`${this.table.tableName}\` WHERE ID=?`, [
+          this.idKey(id),
+        ] as never);
       else await this.writeOn(connection, next.record);
       if (transactional) await connection.commit();
       return true;
@@ -528,8 +534,8 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     lock = false,
   ): Promise<R | undefined> {
     const [rows] = await connection.execute<PayloadRow[]>(
-      `SELECT bytes FROM \`${this.table.tableName}\` WHERE _scope=? AND ID=?${lock ? " FOR UPDATE" : ""}`,
-      [this.scopeKey(), this.idKey(id)],
+      `SELECT bytes FROM \`${this.table.tableName}\` WHERE ID=?${lock ? " FOR UPDATE" : ""}`,
+      [this.idKey(id)] as never,
     );
     if (rows[0] === undefined) return undefined;
     try {
@@ -549,9 +555,11 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   }
   private casLockKey(id: I): string {
     return createHash("sha256")
-      .update(this.scopeKey())
-      .update(this.idKey(id))
+      .update(this.lifecycle.databaseName)
+      .update("\u0000")
       .update(this.table.tableName)
+      .update("\u0000")
+      .update(String(this.idKey(id)))
       .digest("hex");
   }
   private async immutableAbsent(
@@ -570,17 +578,21 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   ): Promise<void> {
     const materialized = this.recordSpec.materialize(record);
     const columns = this.recordSpec.columns;
-    const names = ["_scope", "ID", "bytes", ...columns.map((column) => column.name)];
+    const names = ["ID", "bytes", ...columns.map((column) => column.name)];
     const values = [
-      this.scopeKey(),
       this.idKey(materialized.id),
       toBinary(this.recordSpec.recordType, record),
-      ...columns.map((column) => mysqlParameter(materialized.columns.get(column.name))),
+      ...columns.map((column) =>
+        ColumnMappings.value(
+          this.#columnMapping,
+          column.type,
+          materialized.columns.get(column.name),
+        ),
+      ),
     ];
     const update = [
       "bytes=VALUES(bytes)",
       ...columns.map((column) => `\`${column.name}\`=VALUES(\`${column.name}\`)`),
-      "_revision=_revision+1",
     ];
     const fields = names.map((name) => `\`${name}\``).join(", ");
     const placeholders = names.map(() => "?").join(", ");
@@ -596,12 +608,17 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   ): Promise<ResultSetHeader> {
     const materialized = this.recordSpec.materialize(record);
     const columns = this.recordSpec.columns;
-    const names = ["_scope", "ID", "bytes", ...columns.map((column) => column.name)];
+    const names = ["ID", "bytes", ...columns.map((column) => column.name)];
     const values = [
-      this.scopeKey(),
       this.idKey(materialized.id),
       toBinary(this.recordSpec.recordType, record),
-      ...columns.map((column) => mysqlParameter(materialized.columns.get(column.name))),
+      ...columns.map((column) =>
+        ColumnMappings.value(
+          this.#columnMapping,
+          column.type,
+          materialized.columns.get(column.name),
+        ),
+      ),
     ];
     const fields = names.map((name) => `\`${name}\``).join(", ");
     const placeholders = names.map(() => "?").join(", ");
@@ -612,8 +629,8 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     return result;
   }
   private querySql(query: RecordQuery<I>): { sql: string; values: unknown[] } {
-    const values: unknown[] = [this.scopeKey()];
-    const clauses = ["_scope=?"];
+    const values: unknown[] = [];
+    const clauses: string[] = [];
     if (query.ids !== undefined) {
       clauses.push(`ID IN (${query.ids.map(() => "?").join(", ")})`);
       values.push(...query.ids.map((id) => this.idKey(id)));
@@ -622,7 +639,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
       const name = filter.column === "id" ? "ID" : filter.column;
       this.assertColumn(name);
       clauses.push(`\`${name}\` <=> ?`);
-      values.push(name === "ID" ? this.idKey(filter.value as I) : filter.value);
+      values.push(this.queryValue(name, filter.value));
     }
     const order = query.sort ?? [];
     for (const item of order) this.assertColumn(item.field === "id" ? "ID" : item.field);
@@ -637,21 +654,30 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
           .map((previous) => `\`${previous.field === "id" ? "ID" : previous.field}\` <=> ?`);
         for (const previous of order.slice(0, index))
           values.push(
-            previous.field === "id"
-              ? this.idKey(query.after.id)
-              : query.after.values[order.indexOf(previous)]?.value,
+            this.queryValue(
+              previous.field === "id" ? "ID" : previous.field,
+              previous.field === "id"
+                ? query.after.id
+                : query.after.values[order.indexOf(previous)]?.value,
+            ),
           );
         const previous = prefix.length === 0 ? "" : `${prefix.join(" AND ")} AND `;
         const operator = item.direction === "desc" ? "<" : ">";
         terms.push(`${previous}\`${field}\` ${operator} ?`);
-        values.push(field === "ID" ? this.idKey(query.after.id) : query.after.values[index]?.value);
+        values.push(
+          this.queryValue(
+            field,
+            field === "ID" ? query.after.id : query.after.values[index]?.value,
+          ),
+        );
       }
       const prefixes = order.map((item) => `\`${item.field === "id" ? "ID" : item.field}\` <=> ?`);
       for (let index = 0; index < order.length; index += 1)
         values.push(
-          order[index]?.field === "id"
-            ? this.idKey(query.after.id)
-            : query.after.values[index]?.value,
+          this.queryValue(
+            order[index]?.field === "id" ? "ID" : (order[index]?.field ?? "ID"),
+            order[index]?.field === "id" ? query.after.id : query.after.values[index]?.value,
+          ),
         );
       terms.push(`${prefixes.length === 0 ? "" : `${prefixes.join(" AND ")} AND `}ID > ?`);
       values.push(this.idKey(query.after.id));
@@ -666,7 +692,8 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     ];
     let sql =
       `SELECT ID, bytes FROM \`${this.table.tableName}\` ` +
-      `WHERE ${clauses.join(" AND ")} ORDER BY ${orders.join(", ")}`;
+      (clauses.length === 0 ? "" : `WHERE ${clauses.join(" AND ")} `) +
+      `ORDER BY ${orders.join(", ")}`;
     if (query.limit !== undefined) {
       sql += " LIMIT ?";
       values.push(query.limit);
@@ -682,19 +709,23 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   }
   private validateQuery(query: RecordQuery<I>): void {
     try {
-      this.scopeKey();
       for (const id of query.ids ?? []) this.idKey(id);
       for (const filter of query.filters ?? []) {
         const name = filter.column === "id" ? "ID" : filter.column;
         this.assertColumn(name);
-        if (name === "ID") this.idKey(filter.value as I);
+        this.queryValue(name, filter.value);
       }
       for (const item of query.sort ?? [])
         this.assertColumn(item.field === "id" ? "ID" : item.field);
-      if (query.after !== undefined) this.idKey(query.after.id);
+      if (query.after !== undefined) {
+        this.idKey(query.after.id);
+        for (let index = 0; index < (query.sort?.length ?? 0); index += 1) {
+          const field = query.sort?.[index]?.field;
+          if (field !== undefined && field !== "id")
+            this.queryValue(field, query.after.values[index]?.value);
+        }
+      }
     } catch (error) {
-      if (error instanceof Error && /scope is too large/i.test(error.message))
-        throw new MysqlStorageOperationError("MySQL storage scope is too large.");
       if (error instanceof Error && /too large/i.test(error.message))
         throw new MysqlStorageOperationError("MySQL storage identifier is too large.");
       throw mysqlError(MysqlStorageOperationError, "MySQL storage identifier is invalid.", error);
@@ -704,45 +735,34 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     if (name !== "ID" && !this.recordSpec.columns.some((column) => column.name === name))
       throw new MysqlStorageOperationError(`MySQL query column is not declared: ${name}`);
   }
-  private scopeKey(): Uint8Array {
-    try {
-      return mysqlScopeKey(this.context);
-    } catch (error) {
-      throw mysqlError(MysqlStorageOperationError, "MySQL storage scope is too large.", error);
-    }
-  }
-  private idKey(id: I): Uint8Array {
-    const key =
-      typeof this.recordSpec.idType === "string"
-        ? CanonicalMysqlValues.encode(id)
-        : Buffer.from(toBinary(this.recordSpec.idType, id as Message));
-    if (key.length > 768)
-      throw new MysqlStorageOperationError("MySQL storage identifier is too large.");
-    return key;
+  private idKey(id: I): unknown {
+    return this.#idColumn.value(id);
   }
   private validateId(id: I): void {
     try {
-      this.scopeKey();
       this.idKey(id);
     } catch (error) {
-      if (error instanceof Error && /scope is too large/i.test(error.message))
-        throw new MysqlStorageOperationError("MySQL storage scope is too large.");
       if (error instanceof Error && /too large/i.test(error.message))
         throw new MysqlStorageOperationError("MySQL storage identifier is too large.");
       throw mysqlError(MysqlStorageOperationError, "MySQL storage identifier is invalid.", error);
     }
   }
-  private decodeId(key: Uint8Array): I {
-    return typeof this.recordSpec.idType === "string"
-      ? (CanonicalMysqlValues.decode(key) as I)
-      : (fromBinary(this.recordSpec.idType, key) as I);
+  private decodeId(key: unknown): I {
+    return this.#idColumn.read(key);
+  }
+  private queryValue(name: string, value: unknown): unknown {
+    if (name === "ID") return this.idKey(value as I);
+    const column = this.recordSpec.columns.find((candidate) => candidate.name === name);
+    if (column === undefined)
+      throw new MysqlStorageOperationError(`MySQL query column is not declared: ${name}`);
+    return ColumnMappings.value(this.#columnMapping, column.type, value);
   }
 }
 interface PayloadRow extends RowDataPacket {
   bytes: Uint8Array;
 }
 interface Row extends PayloadRow {
-  ID: Uint8Array;
+  ID: unknown;
 }
 interface ColumnRow extends RowDataPacket {
   column_name: string;
@@ -812,6 +832,7 @@ function isBinaryType(type: string): boolean {
 }
 
 function isHarmlessExtraColumn(column: ColumnRow): boolean {
+  if (["_scope", "_revision"].includes(column.column_name.toLowerCase())) return false;
   return (
     column.is_nullable === "YES" ||
     (column.column_default !== null && column.column_default !== undefined) ||
@@ -850,14 +871,4 @@ function mysqlDeadlock(error: unknown): boolean {
     error !== null &&
     (error as { code?: unknown }).code === "ER_LOCK_DEADLOCK"
   );
-}
-
-function mysqlParameter(value: unknown): unknown {
-  if (value === undefined || value === null || value instanceof Uint8Array) return value ?? null;
-  if (typeof value === "bigint") return value.toString();
-  if (typeof value === "object")
-    return JSON.stringify(value, (_, nested: unknown) =>
-      typeof nested === "bigint" ? nested.toString() : nested,
-    );
-  return value;
 }

@@ -14,6 +14,7 @@ import type { RecordSpec } from "../record/record-spec.js";
 import type { StorageGroup } from "../record/storage-group.js";
 import type { StorageContext } from "../storage/storage.js";
 import type { StorageFactory } from "../storage/storage-factory.js";
+import { TenantBoundary } from "../internal/tenancy.js";
 import {
   InMemoryEntityStorage,
   KeyedSerialQueue,
@@ -208,9 +209,8 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
 
   #requireCompatible<I, S extends Message>(input: EntityCommitInput<I, S>): void {
     if (
-      input.context.name !== this.#input.context.name ||
       input.context.multitenant !== this.#input.context.multitenant ||
-      input.context.tenantId !== this.#input.context.tenantId ||
+      TenantBoundary.of(input.context).key !== TenantBoundary.of(this.#input.context).key ||
       input.entity.sourceType.typeName !== this.#input.sourceType.typeName
     ) {
       throw new Error("Entity commit handle cannot commit another Entity storage scope.");

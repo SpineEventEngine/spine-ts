@@ -17,6 +17,7 @@ import type { EntityRecordStorage } from "./entity-record.js";
 import type { EntityStorageInput } from "../memory/in-memory-entity-history.js";
 import { RecordColumn } from "../record/record-column.js";
 import { ColumnTypes } from "../record/column-type.js";
+import { RecordSpec } from "../record/record-spec.js";
 
 /**
  * Provides the current-record and state-history handles used by adapter conformance checks.
@@ -178,24 +179,38 @@ const EntityHistoryFixture: {
   assert(condition: unknown, message: string): asserts condition;
 } = Object.freeze({
   input(): EntityStorageInput<string, StringValue> {
+    const unpack = (id: Any): string | undefined =>
+      id.typeUrl.endsWith(`/${StringValueSchema.typeName}`)
+        ? fromBinary(StringValueSchema, id.value).value
+        : undefined;
+    const columns = [
+      new RecordColumn(
+        "value",
+        ColumnTypes.scalar(ScalarType.STRING),
+        (record: EntityRecord) => EntityHistoryFixture.state(record).value,
+      ),
+    ];
     return {
       context: { name: "EntityHistoryConformance", multitenant: false },
       id: {
         clone: (id) => id,
         key: (id) => id,
         pack: (id) => EntityHistoryFixture.pack(create(StringValueSchema, { value: id })),
-        unpack: (id) =>
-          id.typeUrl.endsWith(`/${StringValueSchema.typeName}`)
-            ? fromBinary(StringValueSchema, id.value).value
-            : undefined,
+        unpack,
       },
-      columns: [
-        new RecordColumn(
-          "value",
-          ColumnTypes.scalar(ScalarType.STRING),
-          (record) => EntityHistoryFixture.state(record).value,
-        ),
-      ],
+      columns,
+      recordSpec: new RecordSpec({
+        sourceType: StringValueSchema,
+        recordType: EntityRecordSchema,
+        idKind: "string",
+        extractId: (record) => {
+          if (record.entityId === undefined) throw new Error("EntityRecord requires entityId.");
+          const id = unpack(record.entityId);
+          if (id === undefined) throw new Error("EntityRecord has an incompatible ID.");
+          return id;
+        },
+        columns,
+      }),
       sourceType: StringValueSchema,
       stateSchema: StringValueSchema,
       stateHistory: true,

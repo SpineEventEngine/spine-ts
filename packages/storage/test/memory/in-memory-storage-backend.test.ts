@@ -2,8 +2,8 @@ import { AnySchema, StringValueSchema, type StringValue } from "@bufbuild/protob
 import { describe, expect, it } from "vitest";
 
 import { InMemoryStorageBackend } from "../../src/memory/in-memory-storage-backend.js";
+import { TenantBoundary } from "../../src/internal/tenancy.js";
 import { RecordSpec } from "../../src/record/record-spec.js";
-import { StorageScopes } from "../../src/storage/canonical-scope.js";
 
 describe("InMemoryStorageBackend", () => {
   it("keeps equal record types separate when their source types differ", () => {
@@ -22,18 +22,20 @@ describe("InMemoryStorageBackend", () => {
     });
     const first = { rows: [] as string[] };
     const second = { rows: [] as string[] };
-    const context = { name: "Tasks", multitenant: false };
+    const tenant = TenantBoundary.single;
 
     const firstRows = InMemoryStorageBackend.bind(
       backend,
       "record",
-      StorageScopes.canonical(context, firstSpec.sourceType.typeName),
+      tenant,
+      firstSpec.sourceType.typeName,
       () => first,
     );
     const secondRows = InMemoryStorageBackend.bind(
       backend,
       "record",
-      StorageScopes.canonical(context, secondSpec.sourceType.typeName),
+      tenant,
+      secondSpec.sourceType.typeName,
       () => second,
     );
 

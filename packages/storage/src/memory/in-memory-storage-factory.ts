@@ -6,7 +6,7 @@ import type { RecordStorage } from "../record/record-storage.js";
 import type { StorageGroup } from "../record/storage-group.js";
 import type { StorageContext } from "../storage/storage.js";
 import { StorageFactory } from "../storage/storage-factory.js";
-import { StorageScopes } from "../storage/canonical-scope.js";
+import { TenantBoundary } from "../internal/tenancy.js";
 import { InMemoryStorageBackend } from "./in-memory-storage-backend.js";
 import { InMemoryRecordStorage } from "./in-memory-record-storage.js";
 import { TenantRecords } from "./tenant-records.js";
@@ -114,11 +114,13 @@ export class InMemoryStorageFactory extends StorageFactory {
     recordSpec: RecordSpec<I, R>,
     group?: StorageGroup,
   ): TenantRecords<I, R> {
-    const scope = StorageScopes.canonical(context, recordSpec.sourceType.typeName, group?.name);
+    const tenant = TenantBoundary.of(context);
+    const family = JSON.stringify([recordSpec.sourceType.typeName, group?.name ?? null]);
     return InMemoryStorageBackend.bind(
       this.#backend,
       "record",
-      scope,
+      tenant,
+      family,
       () => new TenantRecords<I, R>(),
     );
   }

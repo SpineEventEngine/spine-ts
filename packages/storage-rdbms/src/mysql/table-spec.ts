@@ -1,5 +1,9 @@
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { ScalarType } from "@bufbuild/protobuf";
+import type { RecordColumn, RecordColumnType } from "@spine-event-engine/storage";
+
+import { MysqlIdColumn } from "./id-column.js";
 
 /**
  * Describes the private physical identity for one record family.
@@ -16,21 +20,41 @@ export interface MysqlResolvedTable {
 /**
  * Maps a declared storage column value type to its native MySQL type.
  *
- * @param type Names the storage value type.
+ * @param type Retains the generated Protobuf value type.
  * @returns Returns the native MySQL type.
  */
-export function mysqlColumnType(type: string): string {
-  switch (type.toLowerCase()) {
-    case "boolean":
-      return "BOOLEAN";
-    case "number":
-      return "DOUBLE";
-    case "bigint":
-      return "BIGINT";
-    case "bytes":
-      return "MEDIUMBLOB";
-    default:
-      return "VARCHAR(1024)";
+export function mysqlColumnType(type: RecordColumnType): string {
+  switch (type.kind) {
+    case "enum":
+      return "INT";
+    case "message":
+      if (type.message.typeName === "google.protobuf.Timestamp") return "BIGINT";
+      if (type.message.typeName === "spine.core.Version") return "INT";
+      return "TEXT";
+    case "scalar":
+      switch (type.scalar) {
+        case ScalarType.STRING:
+          return "TEXT";
+        case ScalarType.INT32:
+        case ScalarType.SINT32:
+        case ScalarType.SFIXED32:
+        case ScalarType.UINT32:
+        case ScalarType.FIXED32:
+          return "INT";
+        case ScalarType.INT64:
+        case ScalarType.SINT64:
+        case ScalarType.SFIXED64:
+        case ScalarType.UINT64:
+        case ScalarType.FIXED64:
+          return "BIGINT";
+        case ScalarType.BOOL:
+          return "BOOLEAN";
+        case ScalarType.BYTES:
+          return "BLOB";
+        case ScalarType.FLOAT:
+        case ScalarType.DOUBLE:
+          throw new Error("Spine JVM JDBC does not support floating-point record columns.");
+      }
   }
 }
 
@@ -115,7 +139,7 @@ export function resolvedMysqlTableSpec<I, R extends Message>(input: {
   readonly recordType: GenMessage<R>;
   readonly idType: I extends Message ? GenMessage<I> : string;
   readonly groupName?: string;
-  readonly declaredColumns: readonly { readonly name: string; readonly valueType: string }[];
+  readonly declaredColumns: readonly RecordColumn<R>[];
 }): MysqlTableSpec<I, R> {
   return {
     tableName: input.tableName,
@@ -124,16 +148,14 @@ export function resolvedMysqlTableSpec<I, R extends Message>(input: {
     idType: input.idType,
     ...(input.groupName === undefined ? {} : { groupName: input.groupName }),
     columns: [
-      { name: "_scope", mysqlType: "VARBINARY(224)", nullable: false },
-      { name: "ID", mysqlType: "VARBINARY(768)", nullable: false },
-      { name: "bytes", mysqlType: "MEDIUMBLOB", nullable: false },
-      { name: "_revision", mysqlType: "BIGINT UNSIGNED", nullable: false, defaultSql: "0" },
+      { name: "ID", mysqlType: new MysqlIdColumn(input.idType).mysqlType, nullable: false },
+      { name: "bytes", mysqlType: "BLOB", nullable: false },
       ...input.declaredColumns.map((column) => ({
         name: column.name,
-        mysqlType: mysqlColumnType(column.valueType),
+        mysqlType: mysqlColumnType(column.type),
         nullable: true,
       })),
     ],
-    primaryKey: ["_scope", "ID"],
+    primaryKey: ["ID"],
   };
 }

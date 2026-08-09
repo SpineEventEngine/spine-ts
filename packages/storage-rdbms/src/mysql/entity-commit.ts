@@ -8,11 +8,6 @@ export interface MysqlEntityLockIdentity {
   // prettier-ignore
 
   /**
-   * Names the storage context.
-   */
-  readonly contextName: string;
-
-  /**
    * Names the MySQL database containing the Entity families.
    */
   readonly databaseName: string;
@@ -26,11 +21,6 @@ export interface MysqlEntityLockIdentity {
    * Names the Entity source type.
    */
   readonly sourceTypeName: string;
-
-  /**
-   * Names the tenant when the context is multitenant.
-   */
-  readonly tenantId?: string;
 }
 
 /**
@@ -41,15 +31,7 @@ export interface MysqlEntityLockIdentity {
  */
 export function mysqlEntityLockKey(identity: MysqlEntityLockIdentity): string {
   return createHash("sha256")
-    .update(
-      [
-        identity.databaseName,
-        identity.contextName,
-        identity.tenantId ?? "",
-        identity.sourceTypeName,
-        identity.entityKey,
-      ].join("\u0000"),
-    )
+    .update([identity.databaseName, identity.sourceTypeName, identity.entityKey].join("\u0000"))
     .digest("hex");
 }
 

@@ -6,7 +6,12 @@ import {
   LifecycleFlagsSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { RecordColumn, RecordSpec, type StorageContext } from "@spine-event-engine/storage";
+import {
+  ColumnTypes,
+  RecordColumn,
+  RecordSpec,
+  type StorageContext,
+} from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
 
 import { describeEntityMetadata, type DescriptorMessageSchema } from "./entity-metadata.js";
@@ -116,6 +121,7 @@ export function entityStorageDescriptor<I>(
         }
       },
     },
+    recordSpec: spec,
     sourceType: spec.sourceType,
     stateSchema: spec.sourceType,
   };
@@ -169,25 +175,21 @@ export function entityRecordSpec(
     columns: [
       new RecordColumn<EntityRecord>(
         "archived",
+        ColumnTypes.scalar(ScalarType.BOOL),
         (record) => record.lifecycleFlags?.archived ?? false,
-        "boolean",
       ),
       new RecordColumn<EntityRecord>(
         "deleted",
+        ColumnTypes.scalar(ScalarType.BOOL),
         (record) => record.lifecycleFlags?.deleted ?? false,
-        "boolean",
       ),
-      new RecordColumn<EntityRecord>(
-        "version",
-        (record) => clone(VersionSchema, record.version ?? create(VersionSchema)),
-        "protobuf",
+      new RecordColumn<EntityRecord>("version", ColumnTypes.message(VersionSchema), (record) =>
+        clone(VersionSchema, record.version ?? create(VersionSchema)),
       ),
       ...columns.map(
         (column) =>
-          new RecordColumn<EntityRecord>(
-            column.name,
-            (record) => column.valueIn(EntityRecords.unpack(schema, record).state),
-            column.valueType,
+          new RecordColumn<EntityRecord>(column.name, column.type, (record) =>
+            column.valueIn(EntityRecords.unpack(schema, record).state),
           ),
       ),
     ],
@@ -204,12 +206,26 @@ export function entityRecordSpec(
       })
     : new RecordSpec<PrimitiveId, EntityRecord>({
         ...input,
-        idKind:
-          metadata.idField.descriptor.scalar === ScalarType.STRING
-            ? "string"
-            : String(metadata.idField.descriptor.scalar),
+        idKind: primitiveIdKind(metadata.idField.descriptor.scalar),
         extractId: unpackPrimitiveId,
       });
+}
+
+function primitiveIdKind(type: ScalarType): "string" | "int32" | "int64" {
+  switch (type) {
+    case ScalarType.STRING:
+      return "string";
+    case ScalarType.INT32:
+    case ScalarType.SINT32:
+    case ScalarType.SFIXED32:
+      return "int32";
+    case ScalarType.INT64:
+    case ScalarType.SINT64:
+    case ScalarType.SFIXED64:
+      return "int64";
+    default:
+      throw new Error("Spine JVM storage does not support this primitive Entity ID type.");
+  }
 }
 
 function unpackMessageId(record: EntityRecord, schema: DescriptorMessageSchema): Message {

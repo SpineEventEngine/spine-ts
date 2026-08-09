@@ -1,7 +1,12 @@
+import { ScalarType } from "@bufbuild/protobuf";
+import { UserIdSchema, VersionSchema } from "@spine-event-engine/proto";
+import { SubscriptionRecordSchema } from "@spine-event-engine/proto/client";
+import { ColumnTypes } from "@spine-event-engine/storage";
+import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it } from "vitest";
 
 import { MysqlTableResolver } from "../src/mysql/table-resolver.js";
-import { mysqlColumnType } from "../src/mysql/table-spec.js";
+import { mysqlColumnType, resolvedMysqlTableSpec } from "../src/mysql/table-spec.js";
 
 describe("MysqlTableResolver", () => {
   it("resolves one stable table for a source and group while separating groups", () => {
@@ -71,12 +76,32 @@ describe("MysqlTableResolver", () => {
   });
 
   it("maps declared columns to their native MySQL types", () => {
-    expect(["boolean", "number", "bigint", "bytes", "string"].map(mysqlColumnType)).toEqual([
-      "BOOLEAN",
-      "DOUBLE",
-      "BIGINT",
-      "MEDIUMBLOB",
-      "VARCHAR(1024)",
-    ]);
+    expect(
+      [
+        ColumnTypes.scalar(ScalarType.BOOL),
+        ColumnTypes.scalar(ScalarType.INT32),
+        ColumnTypes.scalar(ScalarType.INT64),
+        ColumnTypes.scalar(ScalarType.BYTES),
+        ColumnTypes.scalar(ScalarType.STRING),
+        ColumnTypes.fromField(SubscriptionRecordSchema.field.status),
+        ColumnTypes.message(UserIdSchema),
+        ColumnTypes.message(TimestampSchema),
+        ColumnTypes.message(VersionSchema),
+      ].map(mysqlColumnType),
+    ).toEqual(["BOOLEAN", "INT", "BIGINT", "BLOB", "TEXT", "INT", "TEXT", "BIGINT", "INT"]);
+  });
+
+  it("contains only the JVM record columns and keys by ID", () => {
+    const table = resolvedMysqlTableSpec({
+      tableName: "records",
+      sourceType: StringValueSchema,
+      recordType: StringValueSchema,
+      idType: "string",
+      declaredColumns: [],
+    });
+
+    expect(table.columns.map(({ name }) => name)).toEqual(["ID", "bytes"]);
+    expect(table.columns[0]?.mysqlType).toBe("VARCHAR(512)");
+    expect(table.primaryKey).toEqual(["ID"]);
   });
 });

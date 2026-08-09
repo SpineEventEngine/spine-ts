@@ -14,6 +14,8 @@ import {
 } from "@spine-event-engine/storage/internal/entity-commit";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
 import { eventStoreRecordSpec } from "@spine-event-engine/storage/internal/event-store";
+import { TenantBoundary, type TenantCatalog } from "@spine-event-engine/storage/internal/tenancy";
+import type { TenantId } from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -78,6 +80,23 @@ export interface MysqlStorageOptions {
 }
 
 /**
+ * Assigns one complete generated tenant to one MySQL database.
+ */
+export interface MysqlTenantStorageOptions {
+  // prettier-ignore
+
+  /**
+   * Identifies the tenant that owns the database.
+   */
+  readonly tenantId: TenantId;
+
+  /**
+   * Configures the tenant's MySQL database and pool.
+   */
+  readonly options: MysqlStorageOptions;
+}
+
+/**
  * Describes SQL that creates one resolved record-family table.
  */
 export interface MysqlCreateOperation {
@@ -112,6 +131,14 @@ export interface MysqlStorageFactoryBuilder {
    * @returns Returns this builder.
    */
   setOptions(options: MysqlStorageOptions): this;
+
+  /**
+   * Sets the complete multitenant database registry.
+   *
+   * @param entries Assign generated tenants to distinct physical databases.
+   * @returns Returns this builder.
+   */
+  setTenantOptions(entries: readonly MysqlTenantStorageOptions[]): this;
 
   /**
    * Sets the ungrouped table name for a record-family source type.
@@ -186,15 +213,29 @@ export { MysqlStorageOperationError } from "./errors.js";
 export class MysqlStorageFactory extends StorageFactory {
   readonly #handles = new Set<{ close(): void }>();
   readonly #resolver: MysqlTableResolver;
+  readonly #databases: ReadonlyMap<string | symbol, MysqlDatabase>;
+  readonly #catalog: TenantCatalog;
   #closed: Promise<void> | undefined;
   private constructor(
-    private readonly pool: Pool,
-    private readonly databaseName: string,
+    databases: readonly MysqlDatabase[],
     resolver = new MysqlTableResolver(),
     private readonly createOperation?: CreateOperationFactory,
   ) {
     super();
     this.#resolver = resolver;
+    this.#databases = new Map(databases.map((database) => [database.boundary.key, database]));
+    this.#catalog = Object.freeze({
+      all: () => Promise.resolve(databases.map(({ boundary }) => boundary)),
+      close: () => Promise.resolve(),
+      keep: (boundary: TenantBoundary) => {
+        if (!this.#databases.has(boundary.key)) {
+          return Promise.reject(
+            new MysqlStorageConfigurationError("MySQL storage has no configured tenant."),
+          );
+        }
+        return Promise.resolve();
+      },
+    });
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
     });
@@ -206,9 +247,17 @@ export class MysqlStorageFactory extends StorageFactory {
    * @returns Returns a new builder.
    */
   static newBuilder(): MysqlStorageFactoryBuilder {
-    return new Builder((options, resolver, operation) =>
-      MysqlStorageFactory.connect(options, resolver, operation),
+    return new Builder((entries, resolver, operation) =>
+      MysqlStorageFactory.connect(entries, resolver, operation),
     );
+  }
+
+  /**
+   * Returns the provider-owned configured tenant catalog.
+   * @returns The factory-owned tenant catalog.
+   */
+  tenantCatalog(): TenantCatalog {
+    return this.#catalog;
   }
 
   /**
@@ -218,7 +267,7 @@ export class MysqlStorageFactory extends StorageFactory {
     this.#closed ??= (async () => {
       super.close();
       for (const handle of this.#handles) handle.close();
-      await this.pool.end();
+      await Promise.all([...this.#databases.values()].map(({ pool }) => pool.end()));
     })();
     void this.#closed;
   }
@@ -242,6 +291,7 @@ export class MysqlStorageFactory extends StorageFactory {
     context: StorageContext,
     spec: RecordSpec<I, R>,
     group?: StorageGroup,
+    database = this.database(context),
   ): MysqlRecordStorage<I, R> {
     const table = this.#resolver.resolve(
       spec.sourceType.typeName,
@@ -263,7 +313,7 @@ export class MysqlStorageFactory extends StorageFactory {
       context,
       spec,
       table,
-      this.connections(),
+      this.connections(database),
       () => this.#handles.delete(handle),
       create,
       tableSpec,
@@ -281,10 +331,11 @@ export class MysqlStorageFactory extends StorageFactory {
   private createEntityStorage<I, S extends Message>(
     input: EntityStorageInput<I, S>,
   ): MysqlEntityStorage<I, S> {
+    const database = this.database(input.context);
     const registration = {} as { handle: { close(): void } };
     const handle = new MysqlEntityStorage(
       input,
-      (spec, group) => this.createMysqlRecordStorage(input.context, spec, group),
+      (spec, group) => this.createMysqlRecordStorage(input.context, spec, group, database),
       () => this.#handles.delete(registration.handle),
     );
     registration.handle = handle;
@@ -301,26 +352,39 @@ export class MysqlStorageFactory extends StorageFactory {
   private createEntityCommitStorage<I, S extends Message>(
     input: EntityStorageInput<I, S>,
   ): EntityCommitStorage {
+    const database = this.database(input.context);
     const registration = {} as { handle: { close(): void } };
     const handle = new MysqlEntityCommitStorage(
       input,
       () => this.createEntityStorage(input),
-      () => this.createMysqlRecordStorage(input.context, eventStoreRecordSpec),
-      new MysqlEntityCommitCoordinator(this.connections()),
-      this.databaseName,
+      () => this.createMysqlRecordStorage(input.context, eventStoreRecordSpec, undefined, database),
+      new MysqlEntityCommitCoordinator(this.connections(database)),
+      database.databaseName,
       () => this.#handles.delete(registration.handle),
     );
     registration.handle = handle;
     this.#handles.add(handle);
     return handle;
   }
-  private connections(): MysqlRecordLifecycle {
+  private connections(database: MysqlDatabase): MysqlRecordLifecycle {
     return {
-      acquire: () => this.pool.getConnection(),
+      databaseName: database.databaseName,
+      acquire: () => database.pool.getConnection(),
       release: (connection: PoolConnection) => {
         connection.release();
       },
     };
+  }
+
+  private database(context: StorageContext): MysqlDatabase {
+    const boundary = TenantBoundary.of(context);
+    const database = this.#databases.get(boundary.key);
+    if (database !== undefined) return database;
+    throw new MysqlStorageConfigurationError(
+      boundary.single
+        ? "MySQL storage is configured for multiple tenants."
+        : "MySQL storage has no configured database for the requested tenant.",
+    );
   }
 
   /**
@@ -333,54 +397,42 @@ export class MysqlStorageFactory extends StorageFactory {
    * @returns Resolves to the initialized factory.
    */
   private static async connect(
-    options: MysqlStorageOptions,
+    entries: readonly MysqlDatabaseConfig[],
     resolver: MysqlTableResolver = new MysqlTableResolver(),
     createOperation?: CreateOperationFactory,
   ): Promise<MysqlStorageFactory> {
-    let url: URL;
+    const connected: MysqlDatabase[] = [];
     try {
-      url = new URL(options.url);
+      for (const entry of entries) {
+        const pool = createPool(entry.poolOptions);
+        try {
+          const connection = await pool.getConnection();
+          connection.release();
+          connected.push({
+            boundary: entry.boundary,
+            databaseName: entry.databaseName,
+            pool,
+          });
+        } catch {
+          await pool.end().catch(() => undefined);
+          throw new MysqlStorageConnectionError("Unable to connect to MySQL.");
+        }
+      }
+      return new MysqlStorageFactory(connected, resolver, createOperation);
     } catch {
-      throw new MysqlStorageConfigurationError("MySQL storage requires a valid URL.");
-    }
-    if (url.protocol !== "mysql:" || url.pathname.length <= 1)
-      throw new MysqlStorageConfigurationError("MySQL storage URL requires a database.");
-    const pool = createPool({
-      host: url.hostname,
-      ...(url.port === "" ? {} : { port: Number(url.port) }),
-      database: decodeURIComponent(url.pathname.slice(1)),
-      ...(url.username === "" ? {} : { user: decodeURIComponent(url.username) }),
-      ...(url.password === "" ? {} : { password: decodeURIComponent(url.password) }),
-      ...(options.connectionLimit === undefined
-        ? {}
-        : { connectionLimit: options.connectionLimit }),
-      ...(options.connectTimeoutMs === undefined
-        ? {}
-        : { connectTimeout: options.connectTimeoutMs }),
-      ...(options.tls === undefined ? {} : { ssl: options.tls }),
-    });
-    try {
-      const connection = await pool.getConnection();
-      connection.release();
-      return new MysqlStorageFactory(
-        pool,
-        decodeURIComponent(url.pathname.slice(1)),
-        resolver,
-        createOperation,
-      );
-    } catch {
-      await pool.end().catch(() => undefined);
+      await Promise.all(connected.map(({ pool }) => pool.end().catch(() => undefined)));
       throw new MysqlStorageConnectionError("Unable to connect to MySQL.");
     }
   }
 }
 class Builder implements MysqlStorageFactoryBuilder {
   #options: MysqlStorageOptions | undefined;
+  #tenantOptions: readonly MysqlTenantStorageOptions[] | undefined;
   readonly #resolver = new MysqlTableResolver();
   #operation: CreateOperationFactory | undefined;
   constructor(
     private readonly connect: (
-      options: MysqlStorageOptions,
+      entries: readonly MysqlDatabaseConfig[],
       resolver: MysqlTableResolver,
       operation: CreateOperationFactory | undefined,
     ) => Promise<MysqlStorageFactory>,
@@ -395,6 +447,16 @@ class Builder implements MysqlStorageFactoryBuilder {
    */
   setOptions(options: MysqlStorageOptions): this {
     this.#options = options;
+    return this;
+  }
+
+  /**
+   * Sets the complete multitenant database registry.
+   * @param entries Assign generated tenants to distinct physical databases.
+   * @returns Returns this builder.
+   */
+  setTenantOptions(entries: readonly MysqlTenantStorageOptions[]): this {
+    this.#tenantOptions = [...entries];
     return this;
   }
 
@@ -458,11 +520,98 @@ class Builder implements MysqlStorageFactoryBuilder {
    * @returns Resolves to the initialized factory.
    */
   async build(): Promise<MysqlStorageFactory> {
-    if (this.#options === undefined)
+    if (this.#options !== undefined && this.#tenantOptions !== undefined) {
+      throw new MysqlStorageConfigurationError(
+        "Configure either single-tenant or multitenant MySQL storage, not both.",
+      );
+    }
+    if (this.#options === undefined && this.#tenantOptions === undefined)
       throw new MysqlStorageConfigurationError("MySQL storage options are required.");
-    return this.connect(this.#options, this.#resolver, this.#operation);
+    const entries =
+      this.#options === undefined
+        ? MysqlConfigurations.multitenant(this.#tenantOptions ?? [])
+        : [MysqlConfigurations.single(this.#options)];
+    return this.connect(entries, this.#resolver, this.#operation);
   }
 }
+
+interface MysqlDatabase {
+  readonly boundary: TenantBoundary;
+  readonly databaseName: string;
+  readonly pool: Pool;
+}
+
+interface MysqlDatabaseConfig {
+  readonly boundary: TenantBoundary;
+  readonly databaseName: string;
+  readonly poolOptions: Parameters<typeof createPool>[0];
+  readonly target: string;
+}
+
+const MysqlConfigurations = Object.freeze({
+  single(options: MysqlStorageOptions): MysqlDatabaseConfig {
+    return MysqlConfigurations.parse(TenantBoundary.single, options);
+  },
+
+  multitenant(entries: readonly MysqlTenantStorageOptions[]): readonly MysqlDatabaseConfig[] {
+    if (entries.length === 0) {
+      throw new MysqlStorageConfigurationError("Multitenant MySQL storage requires tenants.");
+    }
+    const configured = entries.map(({ tenantId, options }) =>
+      MysqlConfigurations.parse(TenantBoundary.from(tenantId), options),
+    );
+    const tenants = new Set<string | symbol>();
+    const targets = new Set<string>();
+    for (const entry of configured) {
+      if (tenants.has(entry.boundary.key)) {
+        throw new MysqlStorageConfigurationError("MySQL storage has a duplicate tenant.");
+      }
+      if (targets.has(entry.target)) {
+        throw new MysqlStorageConfigurationError(
+          "MySQL tenants must use distinct physical databases.",
+        );
+      }
+      tenants.add(entry.boundary.key);
+      targets.add(entry.target);
+    }
+    return configured;
+  },
+
+  parse(boundary: TenantBoundary, options: MysqlStorageOptions): MysqlDatabaseConfig {
+    let url: URL;
+    try {
+      url = new URL(options.url);
+    } catch {
+      throw new MysqlStorageConfigurationError("MySQL storage requires a valid URL.");
+    }
+    if (url.protocol !== "mysql:" || url.pathname.length <= 1) {
+      throw new MysqlStorageConfigurationError("MySQL storage URL requires a database.");
+    }
+    const databaseName = decodeURIComponent(url.pathname.slice(1));
+    const port = url.port === "" ? 3306 : Number(url.port);
+    return {
+      boundary,
+      databaseName,
+      target: `${url.hostname.toLowerCase()}:${String(port)}/${databaseName}`,
+      poolOptions: {
+        host: url.hostname,
+        ...(url.port === "" ? {} : { port }),
+        database: databaseName,
+        supportBigNumbers: true,
+        bigNumberStrings: true,
+        ...(url.username === "" ? {} : { user: decodeURIComponent(url.username) }),
+        ...(url.password === "" ? {} : { password: decodeURIComponent(url.password) }),
+        ...(options.connectionLimit === undefined
+          ? {}
+          : { connectionLimit: options.connectionLimit }),
+        ...(options.connectTimeoutMs === undefined
+          ? {}
+          : { connectTimeout: options.connectTimeoutMs }),
+        ...(options.tls === undefined ? {} : { ssl: options.tls }),
+      },
+    };
+  },
+});
 
 class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStorage {
   #open = true;
@@ -502,12 +651,8 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
       await events.prepare();
       const lockKey = mysqlEntityLockKey({
         databaseName: this.databaseName,
-        contextName: this.entity.context.name,
         entityKey: input.entity.id.key(input.entityId),
         sourceTypeName: this.entity.sourceType.typeName,
-        ...(this.entity.context.tenantId === undefined
-          ? {}
-          : { tenantId: this.entity.context.tenantId }),
       });
       return await this.coordinator.commit(
         [...families.tableNames(), events.tableName],
@@ -515,9 +660,7 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
         (connection, transactional) =>
           families.withConnection(connection, () =>
             events.withConnection(connection, async () => {
-              const current = await families.readCurrentLockedKey(
-                input.entity.id.key(input.entityId),
-              );
+              const current = await families.readCurrentLocked(input.entityId as unknown as I);
               if (!sameEntity(current, input.expected) && !sameEntity(current, input.next))
                 return "conflict";
               if (!transactional) {
@@ -558,9 +701,8 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
     >,
   ): boolean {
     return (
-      input.context.name === this.entity.context.name &&
       input.context.multitenant === this.entity.context.multitenant &&
-      input.context.tenantId === this.entity.context.tenantId
+      TenantBoundary.of(input.context).key === TenantBoundary.of(this.entity.context).key
     );
   }
 }

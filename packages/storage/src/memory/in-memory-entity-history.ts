@@ -25,8 +25,9 @@ import type { EntityRecordStorage } from "../entity/entity-record.js";
 import type { RecordStorage } from "../record/record-storage.js";
 import type { RecordEntry } from "../record/record-storage.js";
 import type { RecordOrder, RecordQuery } from "../record/record-query.js";
+import type { RecordSpec } from "../record/record-spec.js";
 import type { StorageContext } from "../storage/storage.js";
-import { StorageScopes } from "../storage/canonical-scope.js";
+import { TenantBoundary } from "../internal/tenancy.js";
 import { CanonicalUtf8 } from "./canonical-utf8.js";
 import { InMemoryStorageBackend } from "./in-memory-storage-backend.js";
 import { RecordColumn } from "../record/record-column.js";
@@ -69,11 +70,12 @@ export class MemoryEntityStorageFactory {
    * @returns The compatible backend maps for this Entity scope.
    */
   backend<I, S extends Message>(input: EntityStorageInput<I, S>): EntityBackend {
-    const scope = StorageScopes.canonical(input.context, input.sourceType.typeName);
+    const tenant = TenantBoundary.of(input.context);
     return InMemoryStorageBackend.bind(
       this.#backend,
       "entity",
-      scope,
+      tenant,
+      input.sourceType.typeName,
       () =>
         ({
           current: new Map<string, unknown>(),
@@ -167,6 +169,11 @@ export interface EntityStorageInput<I, S extends Message> {
    * Descriptor-owned current-record columns, including lifecycle and state fields.
    */
   readonly columns: readonly RecordColumn<EntityRecord>[];
+
+  /**
+   * Declares the provider ID type and current EntityRecord layout.
+   */
+  readonly recordSpec: RecordSpec<I, EntityRecord>;
 
   /**
    * Identifies the Entity source type represented by these records.

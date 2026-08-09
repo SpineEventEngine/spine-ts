@@ -1,7 +1,7 @@
 import { create, type Message } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { createPool } from "mysql2/promise";
-import { EventSchema } from "@spine-event-engine/proto";
+import { EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
 import { RecordSpec, StorageGroup } from "@spine-event-engine/storage";
@@ -113,8 +113,87 @@ describe("MysqlStorageFactory builder contract", () => {
     factory.close();
     await Promise.resolve();
 
-    expect(createPool).toHaveBeenLastCalledWith({ host: "db.example", database: "defaults" });
+    expect(createPool).toHaveBeenLastCalledWith({
+      host: "db.example",
+      database: "defaults",
+      supportBigNumbers: true,
+      bigNumberStrings: true,
+    });
     expect(release).toHaveBeenCalledOnce();
+  });
+
+  it("builds one pool per complete configured tenant and enumerates those boundaries", async () => {
+    const firstEnd = vi.fn(() => Promise.resolve());
+    const secondEnd = vi.fn(() => Promise.resolve());
+    vi.mocked(createPool)
+      .mockReturnValueOnce({
+        getConnection: vi.fn(() => Promise.resolve({ release: vi.fn() })),
+        end: firstEnd,
+      } as never)
+      .mockReturnValueOnce({
+        getConnection: vi.fn(() => Promise.resolve({ release: vi.fn() })),
+        end: secondEnd,
+      } as never);
+    const tenantOne = create(TenantIdSchema, { kind: { case: "value", value: "one" } });
+    const tenantTwo = create(TenantIdSchema, { kind: { case: "value", value: "two" } });
+
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setTenantOptions([
+        { tenantId: tenantOne, options: { url: "mysql://db.example/tenant_one" } },
+        { tenantId: tenantTwo, options: { url: "mysql://db.example/tenant_two" } },
+      ])
+      .build();
+
+    await expect(factory.tenantCatalog().all()).resolves.toEqual([
+      expect.objectContaining({ single: false, tenantId: tenantOne }),
+      expect.objectContaining({ single: false, tenantId: tenantTwo }),
+    ]);
+    expect(() =>
+      factory.createRecordStorage(
+        {
+          name: "diagnostic-only",
+          multitenant: true,
+          tenantId: create(TenantIdSchema, { kind: { case: "value", value: "unknown" } }),
+        },
+        new RecordSpec({
+          recordType: StringValueSchema,
+          idKind: "string",
+          extractId: (record) => record.value,
+        }),
+      ),
+    ).toThrow(/no configured database/i);
+    factory.close();
+    await Promise.resolve();
+    expect(firstEnd).toHaveBeenCalledOnce();
+    expect(secondEnd).toHaveBeenCalledOnce();
+  });
+
+  it("rejects duplicate tenants, shared physical targets, and mixed tenancy modes", async () => {
+    const tenant = create(TenantIdSchema, { kind: { case: "value", value: "one" } });
+    const other = create(TenantIdSchema, { kind: { case: "value", value: "two" } });
+
+    await expect(
+      MysqlStorageFactory.newBuilder()
+        .setTenantOptions([
+          { tenantId: tenant, options: { url: "mysql://db.example/one" } },
+          { tenantId: tenant, options: { url: "mysql://db.example/two" } },
+        ])
+        .build(),
+    ).rejects.toThrow(/duplicate tenant/i);
+    await expect(
+      MysqlStorageFactory.newBuilder()
+        .setTenantOptions([
+          { tenantId: tenant, options: { url: "mysql://db.example/shared" } },
+          { tenantId: other, options: { url: "mysql://DB.EXAMPLE:3306/shared" } },
+        ])
+        .build(),
+    ).rejects.toThrow(/physical database/i);
+    await expect(
+      MysqlStorageFactory.newBuilder()
+        .setOptions({ url: "mysql://db.example/single" })
+        .setTenantOptions([{ tenantId: tenant, options: { url: "mysql://db.example/tenant" } }])
+        .build(),
+    ).rejects.toThrow(/either single-tenant or multitenant/i);
   });
 
   it("enforces MySQL Entity-commit scope, history, event-ID, and close guards before opening tables", async () => {
@@ -141,7 +220,10 @@ describe("MysqlStorageFactory builder contract", () => {
       commits.commit({ ...mutation, entity: { ...entity, sourceType: TimestampSchema } }),
     ).rejects.toThrow(/scope is incompatible/i);
     await expect(
-      commits.commit({ ...mutation, context: { name: "other", multitenant: false } }),
+      commits.commit({
+        ...mutation,
+        context: { name: "other", multitenant: true, tenantId: tenant("other") },
+      }),
     ).rejects.toThrow(/context is incompatible/i);
     commits.close();
 
@@ -244,4 +326,8 @@ function entityInput(
     stateHistory,
     eventHistory,
   };
+}
+
+function tenant(value: string) {
+  return create(TenantIdSchema, { kind: { case: "value", value } });
 }

@@ -1,5 +1,6 @@
 import { clone, toBinary } from "@bufbuild/protobuf";
 import { TenantIdSchema, type TenantId } from "@spine-event-engine/proto";
+import type { StorageContext } from "../storage/storage.js";
 
 const singleTenantKey = Symbol("single tenant");
 
@@ -28,6 +29,7 @@ export interface TenantBoundary {
 interface TenantBoundaryFactory {
   readonly single: TenantBoundary;
   from(tenantId: TenantId): TenantBoundary;
+  of(context: StorageContext): TenantBoundary;
 }
 
 const singleTenantBoundary: TenantBoundary = Object.freeze({
@@ -54,6 +56,26 @@ export const TenantBoundary: TenantBoundaryFactory = {
    */
   from(tenantId: TenantId): TenantBoundary {
     return new MultitenantBoundary(tenantId);
+  },
+
+  /**
+   * Selects the boundary declared by a storage context.
+   * @param context The diagnostic context and tenant selection.
+   * @returns The validated provider tenant boundary.
+   */
+  of(context: StorageContext): TenantBoundary {
+    if (!context.multitenant) {
+      if (context.tenantId !== undefined) {
+        throw new Error(
+          `Single-tenant storage "${context.name}" does not accept context.tenantId.`,
+        );
+      }
+      return singleTenantBoundary;
+    }
+    if (context.tenantId === undefined) {
+      throw new Error(`Multitenant storage "${context.name}" requires context.tenantId.`);
+    }
+    return new MultitenantBoundary(context.tenantId);
   },
 };
 Object.freeze(TenantBoundary);

@@ -11,8 +11,6 @@ import type { RecordSpec, StorageGroup } from "@spine-event-engine/storage";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 
 import { MysqlTableResolver } from "./table-resolver.js";
-import { CanonicalMysqlValues } from "./value-codec.js";
-import { mysqlScopeKey } from "./scope.js";
 
 /**
  * Resolves the default table name for a record-family integration test.
@@ -64,35 +62,6 @@ export function mysqlEntityTables<I, S extends Message>(
 }
 
 /**
- * Reads the current Entity row revision for provider integration tests.
- *
- * @internal
- * @param pool Queries the test database.
- * @param input Identifies the Entity family.
- * @param id Identifies the current Entity row.
- * @returns Resolves to the persisted revision.
- */
-export async function mysqlCurrentRevision<I, S extends Message>(
-  pool: Pool,
-  input: EntityStorageInput<I, S>,
-  id: I,
-): Promise<bigint> {
-  const table = new MysqlTableResolver().resolve(
-    input.sourceType.typeName,
-    undefined,
-    undefined,
-    EntityRecordSchema.typeName,
-  ).tableName;
-  const [rows] = await pool.query<(RowDataPacket & { revision: string })[]>(
-    `SELECT CAST(_revision AS CHAR) AS revision FROM \`${table}\` WHERE _scope=? AND ID=?`,
-    [mysqlScopeKey(input.context), CanonicalMysqlValues.encode(input.id.key(id))],
-  );
-  const revision = rows[0]?.revision;
-  if (revision === undefined) throw new Error("Current Entity row is missing.");
-  return BigInt(revision);
-}
-
-/**
  * Reads the current Entity record for a provider integration test.
  *
  * @internal
@@ -112,8 +81,8 @@ export async function mysqlCurrentRecord<I, S extends Message>(
   const table = mysqlEntityTables(input)[0];
   if (table === undefined) throw new Error("Current Entity table is missing.");
   const [rows] = await pool.query<(RowDataPacket & { bytes: Uint8Array })[]>(
-    `SELECT bytes FROM \`${table}\` WHERE _scope=? AND ID=?`,
-    [mysqlScopeKey(input.context), CanonicalMysqlValues.encode(input.id.key(id))],
+    `SELECT bytes FROM \`${table}\` WHERE ID=?`,
+    [input.id.key(id)],
   );
   return rows[0] === undefined ? undefined : fromBinary(EntityRecordSchema, rows[0].bytes);
 }
@@ -162,8 +131,7 @@ async function recordBytes<I, J, R extends Message, S extends Message>(
 ): Promise<readonly Uint8Array[]> {
   const table = mysqlRecordTableName(spec, group);
   const [rows] = await pool.query<(RowDataPacket & { bytes: Uint8Array })[]>(
-    `SELECT bytes FROM \`${table}\` WHERE _scope=?`,
-    [mysqlScopeKey(input.context)],
+    `SELECT bytes FROM \`${table}\``,
   );
   return rows.map((row) => row.bytes);
 }

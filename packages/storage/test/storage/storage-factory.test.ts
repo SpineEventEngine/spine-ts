@@ -3,7 +3,7 @@ import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { AnySchema, StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import type { Event } from "@spine-event-engine/proto";
-import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -21,34 +21,8 @@ import {
 } from "../../src/index.js";
 import { EntityCommitStorageFactories } from "../../src/internal/entity-commit.js";
 import type { EntityStorageInput } from "../../src/internal/entity-history.js";
-import { StorageScopes } from "../../src/storage/canonical-scope.js";
 
 describe("StorageFactory", () => {
-  it("exposes immutable storage-scope methods", () => {
-    const rejectsReassignment = () => {
-      // @ts-expect-error Frozen owner methods cannot be reassigned.
-      StorageScopes.canonical = () => "unreachable";
-    };
-    void rejectsReassignment;
-    expect(Object.isFrozen(StorageScopes)).toBe(true);
-    expect(Object.getOwnPropertyDescriptor(StorageScopes, "canonical")?.writable).toBe(false);
-  });
-
-  it("length-delimits tenant scope components without colliding", () => {
-    const first = StorageScopes.canonical({ name: "a:b", multitenant: true, tenantId: "c" }, "d");
-    const second = StorageScopes.canonical({ name: "a", multitenant: true, tenantId: "b:c" }, "d");
-
-    expect(first).not.toBe(second);
-  });
-
-  it("length-delimits grouped source scopes without colliding with ungrouped sources", () => {
-    const context = { name: "Tasks", multitenant: false };
-
-    expect(StorageScopes.canonical(context, "tasks.State", "history:one")).not.toBe(
-      StorageScopes.canonical(context, "tasks.State:history:one"),
-    );
-  });
-
   it("creates typed record storages through the JVM-like seam", () => {
     const factory: StorageFactory = new InMemoryStorageFactory();
     const spec = createEventSpec();
@@ -150,7 +124,7 @@ describe("StorageFactory", () => {
     });
   });
 
-  it("keeps records isolated by storage context name", async () => {
+  it("shares a tenant and record family across Bounded Context names", async () => {
     const factory = new InMemoryStorageFactory();
     const spec = createEventSpec();
     const tasks = factory.createRecordStorage({ name: "Tasks", multitenant: false }, spec);
@@ -158,7 +132,9 @@ describe("StorageFactory", () => {
 
     await tasks.write(createEvent("event-1", "type.spine.io/tasks.TaskCreated"));
 
-    await expect(users.read(create(EventIdSchema, { value: "event-1" }))).resolves.toBeUndefined();
+    await expect(users.read(create(EventIdSchema, { value: "event-1" }))).resolves.toMatchObject({
+      id: { value: "event-1" },
+    });
   });
 
   it("shares Unicode-delimited equivalent source scopes without collisions", async () => {
@@ -193,7 +169,7 @@ describe("StorageFactory", () => {
     });
     await expect(
       otherContext.read(create(EventIdSchema, { value: "event-1" })),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({ id: { value: "event-1" } });
     await expect(
       otherSource.read(create(EventIdSchema, { value: "event-1" })),
     ).resolves.toBeUndefined();
@@ -204,7 +180,7 @@ describe("StorageFactory", () => {
     const spec = createEventSpec();
     const singleTenant = factory.createRecordStorage({ name: "Tasks", multitenant: false }, spec);
     const multitenant = factory.createRecordStorage(
-      { name: "Tasks", multitenant: true, tenantId: "__single__" },
+      { name: "Tasks", multitenant: true, tenantId: tenant("value", "single") },
       spec,
     );
 
@@ -219,8 +195,16 @@ describe("StorageFactory", () => {
     const backend = new InMemoryStorageBackend();
     const factory = new InMemoryStorageFactory(backend);
     const spec = createEventSpec();
-    const tenantOne = { name: "TenantBound", multitenant: true, tenantId: "one" };
-    const tenantTwo = { name: "TenantBound", multitenant: true, tenantId: "two" };
+    const tenantOne = {
+      name: "TenantBound",
+      multitenant: true,
+      tenantId: tenant("value", "one"),
+    };
+    const tenantTwo = {
+      name: "TenantBound",
+      multitenant: true,
+      tenantId: tenant("value", "two"),
+    };
 
     const first = factory.createRecordStorage(tenantOne, spec);
     const otherTenant = factory.createRecordStorage(tenantTwo, spec);
@@ -320,6 +304,10 @@ function createEventSpec(sourceType: GenMessage<Message> = EventSchema) {
   });
 }
 
+function tenant(kind: "value", value: string) {
+  return create(TenantIdSchema, { kind: { case: kind, value } });
+}
+
 function sourceType(typeName: string): GenMessage<Message> {
   return { typeName } as GenMessage<Message>;
 }
@@ -332,18 +320,30 @@ function createEvent(id: string, typeUrl: string) {
 }
 
 function createEntityInput(): EntityStorageInput<string, StringValue> {
+  const unpack = (id: NonNullable<EntityRecord["entityId"]>): string | undefined =>
+    id.typeUrl.endsWith(`/${StringValueSchema.typeName}`)
+      ? fromBinary(StringValueSchema, id.value).value
+      : undefined;
   return {
     context: { name: "Tasks", multitenant: false },
     id: {
       clone: (id) => id,
       key: (id) => id,
       pack: (id) => packed(create(StringValueSchema, { value: id })),
-      unpack: (id) =>
-        id.typeUrl.endsWith(`/${StringValueSchema.typeName}`)
-          ? fromBinary(StringValueSchema, id.value).value
-          : undefined,
+      unpack,
     },
     columns: [],
+    recordSpec: new RecordSpec({
+      sourceType: StringValueSchema,
+      recordType: EntityRecordSchema,
+      idKind: "string",
+      extractId: (record) => {
+        if (record.entityId === undefined) throw new Error("EntityRecord requires entityId.");
+        const id = unpack(record.entityId);
+        if (id === undefined) throw new Error("EntityRecord has an incompatible ID.");
+        return id;
+      },
+    }),
     sourceType: StringValueSchema,
     stateSchema: StringValueSchema,
   };

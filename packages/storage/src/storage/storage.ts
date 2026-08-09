@@ -17,13 +17,16 @@ export interface Storage {
 }
 
 /**
- * Structural context used to scope storage by bounded context and tenant.
+ * Diagnostic context plus the provider tenant boundary for a storage operation.
  */
 export interface StorageContext {
   // prettier-ignore
 
   /**
-   * Bounded-context name or equivalent storage namespace.
+   * Bounded Context name used only in diagnostics.
+   *
+   * Providers must not use this value in a database, namespace, table, kind,
+   * key, query, transaction, lock, cache key, or record-family identity.
    */
   readonly name: string;
 
@@ -33,7 +36,8 @@ export interface StorageContext {
   readonly multitenant: boolean;
 
   /**
-   * Current tenant slice when the storage is multitenant.
+   * Complete generated tenant identity when storage is multitenant.
    */
-  readonly tenantId?: string;
+  readonly tenantId?: TenantId;
 }
+import type { TenantId } from "@spine-event-engine/proto";

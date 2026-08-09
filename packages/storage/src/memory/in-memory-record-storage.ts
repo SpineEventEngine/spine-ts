@@ -7,6 +7,7 @@ import { RecordStorage } from "../record/record-storage.js";
 import type { StorageContext } from "../storage/storage.js";
 import type { NormalizedQueryPlan, StorageQueryCapabilities } from "../query/query-policy.js";
 import { TenantRecords } from "./tenant-records.js";
+import { TenantBoundary } from "../internal/tenancy.js";
 
 /**
  * In-memory record storage with per-tenant slices when the context is multitenant.
@@ -32,7 +33,7 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
     tenantRecords?: () => TenantRecords<I, R>,
   ) {
     super(context, recordSpec);
-    const localTenants = new Map<string, TenantRecords<I, R>>();
+    const localTenants = new Map<string | symbol, TenantRecords<I, R>>();
     this.#records = tenantRecords ?? (() => this.localRecords(localTenants));
   }
 
@@ -132,7 +133,9 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
     return this.#records();
   }
 
-  private localRecords(tenantRecords: Map<string, TenantRecords<I, R>>): TenantRecords<I, R> {
+  private localRecords(
+    tenantRecords: Map<string | symbol, TenantRecords<I, R>>,
+  ): TenantRecords<I, R> {
     const tenantKey = this.tenantKey();
     let records = tenantRecords.get(tenantKey);
 
@@ -144,24 +147,7 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
     return records;
   }
 
-  private tenantKey(): string {
-    if (!this.context.multitenant) {
-      return JSON.stringify({
-        name: this.context.name,
-        multitenant: false,
-      });
-    }
-
-    const { tenantId } = this.context;
-
-    if (tenantId === undefined || tenantId.trim().length === 0) {
-      throw new Error(`Multitenant storage "${this.context.name}" requires context.tenantId.`);
-    }
-
-    return JSON.stringify({
-      name: this.context.name,
-      multitenant: true,
-      tenantId,
-    });
+  private tenantKey(): string | symbol {
+    return TenantBoundary.of(this.context).key;
   }
 }

@@ -13,27 +13,32 @@ export class InMemoryStorageBackend {
   readonly [Symbol.toStringTag] = "InMemoryStorageBackend";
 
   /**
-   * Binds one canonical scope to one backend-owned value.
+   * Binds one tenant and record family to one backend-owned value.
    * @param backend Selects the shared ephemeral backend.
    * @param namespace Separates Entity and generic record backend values.
-   * @param scope Identifies the canonical storage scope.
+   * @param tenant Selects the provider tenant boundary.
+   * @param family Identifies the record family inside the tenant.
    * @param create Creates the value when the scope is first bound.
    * @returns The existing or newly created backend-owned value.
    */
   static bind<T>(
     backend: InMemoryStorageBackend,
     namespace: "entity" | "record",
-    scope: string,
+    tenant: TenantBoundary,
+    family: string,
     create: () => T,
   ): T {
-    return MemoryBackendScopes.bind(backend, namespace, scope, create);
+    return MemoryBackendScopes.bind(backend, namespace, tenant, family, create);
   }
 }
 
-const scopesByBackend = new WeakMap<InMemoryStorageBackend, Map<string, unknown>>();
+const scopesByBackend = new WeakMap<
+  InMemoryStorageBackend,
+  Map<string, Map<string | symbol, Map<string, unknown>>>
+>();
 
 /**
- * Binds canonical scopes to values for each in-memory backend.
+ * Binds provider tenant and record-family identities for each backend.
  */
 const MemoryBackendScopes = {
   // prettier-ignore
@@ -44,22 +49,32 @@ const MemoryBackendScopes = {
   bind<T>(
     backend: InMemoryStorageBackend,
     namespace: "entity" | "record",
-    scope: string,
+    tenant: TenantBoundary,
+    family: string,
     create: () => T,
   ): T {
-    let scopes: Map<string, unknown> | undefined = scopesByBackend.get(backend);
+    let scopes = scopesByBackend.get(backend);
     if (scopes === undefined) {
-      scopes = new Map<string, unknown>();
+      scopes = new Map();
       scopesByBackend.set(backend, scopes);
     }
-
-    const key = `${namespace}:${scope}`;
-    const existing = scopes.get(key);
+    let tenants = scopes.get(namespace);
+    if (tenants === undefined) {
+      tenants = new Map();
+      scopes.set(namespace, tenants);
+    }
+    let families = tenants.get(tenant.key);
+    if (families === undefined) {
+      families = new Map();
+      tenants.set(tenant.key, families);
+    }
+    const existing = families.get(family);
     if (existing === undefined) {
       const value = create();
-      scopes.set(key, value);
+      families.set(family, value);
       return value;
     }
     return existing as T;
   },
 };
+import type { TenantBoundary } from "../internal/tenancy.js";

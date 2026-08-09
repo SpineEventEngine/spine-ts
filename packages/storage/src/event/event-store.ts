@@ -1,7 +1,7 @@
 import { clone, create, ScalarType } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type { Event, EventId, TenantId } from "@spine-event-engine/proto";
-import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
 
 import { RecordColumn } from "../record/record-column.js";
 import { ColumnTypes } from "../record/column-type.js";
@@ -10,6 +10,7 @@ import { RecordSpec } from "../record/record-spec.js";
 import type { RecordStorage } from "../record/record-storage.js";
 import type { StorageContext } from "../storage/storage.js";
 import type { StorageFactory } from "../storage/storage-factory.js";
+import { TenantBoundary } from "../internal/tenancy.js";
 
 /**
  * Framework event store backed by record storage.
@@ -219,7 +220,7 @@ export interface EventRollback {
 }
 
 const EventStoreLocks = Object.freeze({
-  queues: new WeakMap<StorageFactory, Map<string, Promise<void>>>(),
+  queues: new WeakMap<StorageFactory, Map<string | symbol, Promise<void>>>(),
 
   async withLock<T>(
     factory: StorageFactory,
@@ -245,7 +246,7 @@ const EventStoreLocks = Object.freeze({
     }
   },
 
-  queueMap(factory: StorageFactory): Map<string, Promise<void>> {
+  queueMap(factory: StorageFactory): Map<string | symbol, Promise<void>> {
     let queues = this.queues.get(factory);
     if (queues === undefined) {
       queues = new Map();
@@ -336,11 +337,14 @@ const EventContexts = {
    * Captures one storage context.
    */
   snapshot(context: StorageContext): StorageContext {
-    if (!context.multitenant) return Object.freeze({ name: context.name, multitenant: false });
+    const boundary = TenantBoundary.of(context);
+    if (boundary.single) return Object.freeze({ name: context.name, multitenant: false });
+    const tenantId = boundary.tenantId;
+    if (tenantId === undefined) throw new Error("Multitenant storage boundary has no tenant ID.");
     return Object.freeze({
       name: context.name,
       multitenant: true,
-      tenantId: EventContexts.requireTenantId(context.name, context.tenantId),
+      tenantId,
     });
   },
 
@@ -349,20 +353,18 @@ const EventContexts = {
    */
   snapshotForEvent(context: StorageContext, event: Event): StorageContext {
     if (!context.multitenant) return EventContexts.snapshot(context);
-    return Object.freeze({
+    const tenantId = EventContexts.readEventTenant(event) ?? context.tenantId;
+    return EventContexts.snapshot({
       name: context.name,
       multitenant: true,
-      tenantId: EventContexts.requireTenantId(
-        context.name,
-        EventContexts.readEventTenant(event) ?? context.tenantId,
-      ),
+      ...(tenantId === undefined ? {} : { tenantId }),
     });
   },
 
   /**
    * Reads an explicit tenant from an event envelope.
    */
-  readEventTenant(event: Event): string | undefined {
+  readEventTenant(event: Event): TenantId | undefined {
     switch (event.context?.origin.case) {
       case "importContext":
         return EventContexts.tenantValue(event.context.origin.value.tenantId);
@@ -376,38 +378,15 @@ const EventContexts = {
   /**
    * Converts a typed tenant ID to its storage-scope value.
    */
-  tenantValue(tenantId: TenantId | undefined): string | undefined {
-    switch (tenantId?.kind.case) {
-      case "value":
-        return tenantId.kind.value;
-      case "domain":
-        return `domain:${tenantId.kind.value.value}`;
-      case "email":
-        return `email:${tenantId.kind.value.value}`;
-      default:
-        return undefined;
-    }
-  },
-
-  /**
-   * Requires a non-blank tenant ID for a multitenant context.
-   */
-  requireTenantId(name: string, tenantId: string | undefined): string {
-    if (tenantId === undefined || tenantId.trim().length === 0) {
-      throw new Error(`Multitenant storage "${name}" requires context.tenantId.`);
-    }
-    return tenantId;
+  tenantValue(tenantId: TenantId | undefined): TenantId | undefined {
+    return tenantId === undefined ? undefined : clone(TenantIdSchema, tenantId);
   },
 
   /**
    * Creates a deterministic key for a context-scoped append lock.
    */
-  key(context: StorageContext): string {
-    return JSON.stringify({
-      name: context.name,
-      multitenant: context.multitenant,
-      tenantId: context.multitenant ? context.tenantId : "",
-    });
+  key(context: StorageContext): string | symbol {
+    return TenantBoundary.of(context).key;
   },
 };
 
