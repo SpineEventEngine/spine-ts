@@ -12,7 +12,7 @@
     "typecheck": "pnpm proto:generate && pnpm typecheck:generated",
     "typecheck:generated": "pnpm typecheck:build:generated && pnpm typecheck:tooling",
     "typecheck:build": "pnpm proto:generate && pnpm typecheck:build:generated",
-    "typecheck:build:generated": "node scripts/clean-delivery-client-dist.mjs && node examples/todo/scripts/clean-generated-dist.mjs && node examples/projects/scripts/clean-generated-dist.mjs && node examples/orders/scripts/clean-generated-dist.mjs && node examples/message-board/model/scripts/clean-generated-dist.mjs && tsc -b",
+    "typecheck:build:generated": "node scripts/clean-build-outputs.mjs && tsc -b",
     "typecheck:tooling": "tsc --noEmit -p tsconfig.eslint.json",
     "lint": "pnpm proto:generate && pnpm lint:generated",
     "lint:generated": "pnpm typecheck:build:generated && eslint . && node scripts/check-cleanup-rules.mjs && node scripts/check-tsdoc.mjs",
