@@ -4,6 +4,11 @@ import { TenantBoundary } from "@spine-event-engine/storage";
 
 /**
  * Converts complete tenant identifiers to and from Datastore namespaces.
+ *
+ * A converter must return a non-empty namespace and be injective over every
+ * admitted tenant. Converting in either direction and back must restore the
+ * exact complete tenant or namespace. Return `undefined` only for native
+ * namespaces that the converter does not own.
  */
 export interface NamespaceConverter {
   // prettier-ignore
@@ -26,7 +31,7 @@ export interface NamespaceConverter {
 }
 
 /**
- * Spine JVM-compatible `D`, `E`, and `V` Datastore namespace conversion.
+ * Safe Spine JVM-compatible `D` and `V` Datastore namespace conversion.
  */
 export class DefaultNamespaceConverter implements NamespaceConverter {
   // prettier-ignore

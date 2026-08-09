@@ -47,6 +47,10 @@ export class DatastoreTenantCatalog implements TenantCatalog {
     this.#now = options.now ?? Date.now;
     this.#earlyTenantTtlMs = options.earlyTenantTtlMs ?? earlyTenantTtlMs;
     this.#maxEarlyTenants = options.maxEarlyTenants ?? maxEarlyTenants;
+    if (!Number.isFinite(this.#earlyTenantTtlMs) || this.#earlyTenantTtlMs <= 0)
+      throw new Error("Datastore early-admission TTL must be finite and positive.");
+    if (!Number.isSafeInteger(this.#maxEarlyTenants) || this.#maxEarlyTenants <= 0)
+      throw new Error("Datastore early-admission capacity must be a positive safe integer.");
   }
 
   /**

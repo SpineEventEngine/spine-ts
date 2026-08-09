@@ -103,6 +103,25 @@ describe("DatastoreTenantCatalog", () => {
       { key: TenantBoundary.from(tenant("one")).key },
     ]);
   });
+
+  it("does not allow internal test controls to disable the cache bound", () => {
+    expect(
+      () =>
+        new DatastoreTenantCatalog(
+          new NamespaceClient([]) as never,
+          new DefaultNamespaceConverter(),
+          { earlyTenantTtlMs: Number.POSITIVE_INFINITY },
+        ),
+    ).toThrow(/TTL must be finite and positive/i);
+    expect(
+      () =>
+        new DatastoreTenantCatalog(
+          new NamespaceClient([]) as never,
+          new DefaultNamespaceConverter(),
+          { maxEarlyTenants: Number.POSITIVE_INFINITY },
+        ),
+    ).toThrow(/capacity must be a positive safe integer/i);
+  });
 });
 
 function tenant(value: string) {

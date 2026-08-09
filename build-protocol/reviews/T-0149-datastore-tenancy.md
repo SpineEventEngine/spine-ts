@@ -65,3 +65,21 @@ deterministic verification; targeted re-review pending.
   passed.
 - Changed-source coverage: 95.41% statements, 90.01% branches, 97.53%
   functions, and 96.63% lines across the corrected Datastore provider sources.
+
+## Targeted re-review
+
+- Performance/reliability: CLEAN. The reviewer reconfirmed all storage/catalog
+  entry points, safe email handling, catalog bounds, eviction, namespace
+  propagation, and CAS behavior; 3 files and 16 focused tests passed.
+- TypeScript/API documentation: accepted two P2 documentation-contract
+  residuals. The converter interface now states its non-empty, injective,
+  exact-round-trip contract and the default class names only its safe JVM
+  `D`/`V` subset.
+- Style/maintainability: accepted one P2 defensive residual. Internal
+  deterministic cache controls now reject non-finite/non-positive TTLs and
+  non-positive/non-safe-integer capacities, so tests cannot disable the bound.
+- Documentation: one internal-plan P1 phrase still named `D`/`E`/`V` as the
+  default; corrected deterministically to the safe `D`/`V` default and the
+  ownership rule for custom/email converters. Beginner-facing README,
+  REFERENCE, and USER_GUIDE content was otherwise CLEAN with its look and feel
+  preserved.

@@ -279,9 +279,11 @@ Datastore enumeration applies the same converter used for writes. It ignores
 native namespaces for which the converter returns “not a tenant,” rejects an
 invalid or non-round-tripping conversion, deduplicates equal canonical
 TenantIds, and never treats the empty/default namespace as a multitenant
-tenant. The default `D`/`E`/`V` converter requires a Datastore project dedicated
-to that Spine application; a shared project requires an application-specific
-converter that can reject namespaces owned by other applications.
+tenant. The safe default `D`/`V` converter requires a Datastore project
+dedicated to that Spine application. A shared project requires an
+application-specific converter that rejects namespaces owned by other
+applications. The same rule applies to an injective custom converter used for
+email tenants in both runtimes.
 
 An arbitrary MySQL resolver that cannot enumerate tenants is insufficient for
 delivery startup. The first implementation should therefore expose an
