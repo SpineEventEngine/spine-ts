@@ -401,6 +401,12 @@ function compare(left: unknown, right: unknown): number {
   if (typeof left === "object" && left !== null && Datastore.isInt(left)) left = BigInt(left.value);
   if (typeof right === "object" && right !== null && Datastore.isInt(right))
     right = BigInt(right.value);
+  if (left instanceof Date && right instanceof Date) {
+    const milliseconds = left.getTime() - right.getTime();
+    if (milliseconds !== 0) return milliseconds < 0 ? -1 : 1;
+    const nanos = left.getMilliseconds() - right.getMilliseconds();
+    return nanos < 0 ? -1 : nanos > 0 ? 1 : 0;
+  }
   if (
     typeof left === "object" &&
     left !== null &&

@@ -1,11 +1,11 @@
-import { create } from "@bufbuild/protobuf";
+import { create, ScalarType } from "@bufbuild/protobuf";
 import {
   BoolValueSchema,
   StringValueSchema,
   TimestampSchema,
   type StringValue,
 } from "@bufbuild/protobuf/wkt";
-import { RecordColumn, RecordSpec, StorageGroup } from "@spine-event-engine/storage";
+import { ColumnTypes, RecordColumn, RecordSpec, StorageGroup } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import { DatastoreQueryLimitError, DatastoreStorageFactory } from "../src/index.js";
@@ -61,7 +61,11 @@ describe("DatastoreStorageFactory", () => {
         idKind: "string",
         extractId: (record) => record.value,
         columns: [
-          new RecordColumn<StringValue, string>("value", (record) => record.value, "string"),
+          new RecordColumn<StringValue, string>(
+            "value",
+            ColumnTypes.scalar(ScalarType.STRING),
+            (record) => record.value,
+          ),
         ],
       }),
     );
@@ -71,7 +75,7 @@ describe("DatastoreStorageFactory", () => {
     expect(client.saved).toHaveLength(1);
     const [saved] = client.saved;
     if (saved === undefined) throw new Error("Expected a saved Datastore row.");
-    expect(Object.keys(saved.data).sort()).toEqual(["_scope", "bytes", "value"]);
+    expect(Object.keys(saved.data).sort()).toEqual(["bytes", "value"]);
     expect(saved.key.path[0]).toBe("google.protobuf.StringValue");
     expect(saved.data.value).toBe("one");
   });
@@ -92,9 +96,7 @@ describe("DatastoreStorageFactory", () => {
     );
 
     await expect(storage.query()).rejects.toEqual(new DatastoreQueryLimitError(1_000));
-    expect(client.query.filters[0]?.name).toBe("_scope");
-    expect(client.query.filters[0]?.op).toBe("=");
-    expect(typeof client.query.filters[0]?.value).toBe("string");
+    expect(client.query.filters).toEqual([]);
     expect(client.query.limitValue).toBe(1_001);
   });
 

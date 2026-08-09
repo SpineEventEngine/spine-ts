@@ -1,9 +1,12 @@
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { Datastore } from "@google-cloud/datastore";
+import { StringifierRegistry } from "@spine-event-engine/core";
 import {
   RecordStorage,
   StorageFactory,
+  type TenantCatalog,
+  type TenantCatalogProvider,
   type RecordSpec,
   type StorageContext,
   type StorageGroup,
@@ -23,6 +26,8 @@ import {
   type OpenEntityRecords,
 } from "./entity-history.js";
 import { DatastoreRecordStorage } from "./record-storage.js";
+import { DefaultNamespaceConverter, type NamespaceConverter } from "./namespace.js";
+import { DatastoreTenantCatalog } from "./tenant-catalog.js";
 
 const maxClientSideScan = 1_000;
 
@@ -120,6 +125,22 @@ export interface DatastoreStorageFactoryBuilder {
   setClient(client: Datastore): this;
 
   /**
+   * Sets the reversible converter used for multitenant native namespaces.
+   *
+   * @param converter Converts complete tenants to and from owned namespaces.
+   * @returns Returns this builder.
+   */
+  setNamespaceConverter(converter: NamespaceConverter): this;
+
+  /**
+   * Sets custom reversible message stringifiers used by IDs and columns.
+   *
+   * @param registry Supplies schema-bound message stringifiers.
+   * @returns Returns this builder.
+   */
+  setStringifierRegistry(registry: StringifierRegistry): this;
+
+  /**
    * Sets a physical kind for every use of a record type.
    *
    * @param recordType The record type that receives the layout.
@@ -191,11 +212,14 @@ export interface DatastoreStorageFactoryBuilder {
 /**
  * A Google Cloud Datastore-backed implementation of the Spine TS storage port.
  */
-export class DatastoreStorageFactory extends StorageFactory {
+export class DatastoreStorageFactory extends StorageFactory implements TenantCatalogProvider {
   readonly #client: Datastore;
   readonly #recordCreators: ReadonlyMap<string, CreateRecordStorage>;
   readonly #layouts: ReadonlyMap<string, RecordLayout>;
   readonly #entityCreators: ReadonlyMap<string, CreateEntityStorage>;
+  readonly #namespaceConverter: NamespaceConverter;
+  readonly #stringifiers: StringifierRegistry;
+  readonly #catalog: DatastoreTenantCatalog;
 
   /**
    * Starts a mutable factory configuration.
@@ -204,8 +228,15 @@ export class DatastoreStorageFactory extends StorageFactory {
    */
   static newBuilder(): DatastoreStorageFactoryBuilder {
     return new Builder(
-      (client, recordCreators, layouts, entityCreators) =>
-        new DatastoreStorageFactory(client, recordCreators, layouts, entityCreators),
+      (client, recordCreators, layouts, entityCreators, namespaceConverter, stringifiers) =>
+        new DatastoreStorageFactory(
+          client,
+          recordCreators,
+          layouts,
+          entityCreators,
+          namespaceConverter,
+          stringifiers,
+        ),
     );
   }
 
@@ -216,6 +247,8 @@ export class DatastoreStorageFactory extends StorageFactory {
    * @param recordCreators Custom record-storage providers by record family.
    * @param layouts Physical record layouts by record family.
    * @param entityCreators Custom Entity persistence providers by Entity type.
+   * @param namespaceConverter Converts complete tenants to native namespaces.
+   * @param stringifiers Converts message-valued IDs and columns.
    * @internal
    */
   private constructor(
@@ -223,12 +256,17 @@ export class DatastoreStorageFactory extends StorageFactory {
     recordCreators: ReadonlyMap<string, CreateRecordStorage>,
     layouts: ReadonlyMap<string, RecordLayout>,
     entityCreators: ReadonlyMap<string, CreateEntityStorage>,
+    namespaceConverter: NamespaceConverter,
+    stringifiers: StringifierRegistry,
   ) {
     super();
     this.#client = client;
     this.#recordCreators = recordCreators;
     this.#layouts = layouts;
     this.#entityCreators = entityCreators;
+    this.#namespaceConverter = namespaceConverter;
+    this.#stringifiers = new StringifierRegistry(stringifiers);
+    this.#catalog = new DatastoreTenantCatalog(client, namespaceConverter);
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityStorage(input).commits,
     });
@@ -252,7 +290,6 @@ export class DatastoreStorageFactory extends StorageFactory {
     const storage = new DatastoreEntityStorage(input, openRecords);
     const commits = new DatastoreEntityCommitStorage(
       input as EntityStorageInput<unknown, Message>,
-      this.#client,
       openRecords,
     );
     return new DefaultEntityHandle(storage, commits);
@@ -279,6 +316,8 @@ export class DatastoreStorageFactory extends StorageFactory {
       maxClientSideScan,
       group,
       resolved.layout?.kind,
+      this.#namespaceConverter,
+      this.#stringifiers,
     );
   }
 
@@ -295,6 +334,8 @@ export class DatastoreStorageFactory extends StorageFactory {
       maxClientSideScan,
       group,
       resolved.layout?.kind,
+      this.#namespaceConverter,
+      this.#stringifiers,
     );
   }
 
@@ -320,6 +361,23 @@ export class DatastoreStorageFactory extends StorageFactory {
       layout: this.#layouts.get(exact) ?? this.#layouts.get(fallback),
     };
   }
+
+  /**
+   * Returns the provider-owned native namespace catalog.
+   *
+   * @returns The Datastore tenant catalog.
+   */
+  tenantCatalog(): TenantCatalog {
+    return this.#catalog;
+  }
+
+  /**
+   * Closes the factory and its native tenant catalog.
+   */
+  override close(): void {
+    super.close();
+    void this.#catalog.close();
+  }
 }
 
 class Builder implements DatastoreStorageFactoryBuilder {
@@ -327,6 +385,8 @@ class Builder implements DatastoreStorageFactoryBuilder {
   #recordCreators = new Map<string, CreateRecordStorage>();
   #layouts = new Map<string, RecordLayout>();
   #entityCreators = new Map<string, CreateEntityStorage>();
+  #namespaceConverter: NamespaceConverter = new DefaultNamespaceConverter();
+  #stringifiers = new StringifierRegistry();
 
   constructor(
     private readonly create: (
@@ -334,11 +394,23 @@ class Builder implements DatastoreStorageFactoryBuilder {
       recordCreators: ReadonlyMap<string, CreateRecordStorage>,
       layouts: ReadonlyMap<string, RecordLayout>,
       entityCreators: ReadonlyMap<string, CreateEntityStorage>,
+      namespaceConverter: NamespaceConverter,
+      stringifiers: StringifierRegistry,
     ) => DatastoreStorageFactory,
   ) {}
 
   setClient(client: Datastore): this {
     this.#client = client;
+    return this;
+  }
+
+  setNamespaceConverter(converter: NamespaceConverter): this {
+    this.#namespaceConverter = converter;
+    return this;
+  }
+
+  setStringifierRegistry(registry: StringifierRegistry): this {
+    this.#stringifiers = new StringifierRegistry(registry);
     return this;
   }
 
@@ -389,6 +461,8 @@ class Builder implements DatastoreStorageFactoryBuilder {
       new Map(this.#recordCreators),
       new Map(this.#layouts),
       new Map(this.#entityCreators),
+      this.#namespaceConverter,
+      this.#stringifiers,
     );
   }
 }

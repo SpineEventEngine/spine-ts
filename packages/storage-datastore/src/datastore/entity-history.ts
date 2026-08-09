@@ -19,7 +19,7 @@ import {
   type EntityStateHistoryPort,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/internal/entity-history";
-import { RecordSpec, type RecordStorage } from "@spine-event-engine/storage";
+import { RecordSpec, TenantBoundary, type RecordStorage } from "@spine-event-engine/storage";
 import { Datastore } from "@google-cloud/datastore";
 
 import { DatastoreRecordStorage, type DatastorePageCursor } from "./record-storage.js";
@@ -75,7 +75,7 @@ export class DatastoreEntityStorage<I, S extends Message> {
    * @param openRecords The function that opens each generated record family.
    */
   constructor(input: EntityStorageInput<I, S>, openRecords: OpenEntityRecords) {
-    const current = openRecords(currentSpec(input));
+    const current = openRecords(input.recordSpec);
     const states = input.stateHistory
       ? openRecords(
           stateHistorySpec(input.stateSchema).spec,
@@ -126,12 +126,10 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
    * Creates transactional commit storage for one Entity persistence contract.
    *
    * @param input The Entity persistence contract served by this instance.
-   * @param client The Datastore client that runs commit transactions.
    * @param openRecords The function that opens generated record families.
    */
   constructor(
     private readonly input: EntityStorageInput<unknown, Message>,
-    private readonly client: Datastore,
     private readonly openRecords: OpenEntityRecords,
   ) {}
 
@@ -143,7 +141,7 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
    */
   async commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<EntityCommitResult> {
     this.validate(input);
-    const current = this.openRecords(currentSpec(input.entity)) as DatastoreRecordStorage<
+    const current = this.openRecords(input.entity.recordSpec) as DatastoreRecordStorage<
       I,
       EntityRecord
     >;
@@ -212,7 +210,7 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
     current: DatastoreRecordStorage<I, EntityRecord>,
     prepared: readonly PreparedCommitRow[],
   ): Promise<EntityCommitResult> {
-    const transaction = this.client.transaction();
+    const transaction = current.transaction();
     try {
       await transaction.run();
       const values = await this.load(transaction, prepared);
@@ -304,11 +302,9 @@ export class DatastoreEntityCommitStorage implements EntityCommitStorage {
     if (!this.#open) throw new Error("Entity commit storage is closed.");
     if (
       input.entity.sourceType.typeName !== this.input.sourceType.typeName ||
-      input.context.name !== this.input.context.name ||
-      input.context.multitenant !== this.input.context.multitenant ||
-      input.context.tenantId !== this.input.context.tenantId
+      TenantBoundary.of(input.context).key !== TenantBoundary.of(this.input.context).key
     )
-      throw new Error("Entity commit handle cannot commit another Entity storage scope.");
+      throw new Error("Entity commit handle cannot commit another Entity source or tenant.");
     validateCommitEntityId(input);
     if ((input.states?.length ?? 0) > 0 && !input.entity.stateHistory)
       throw new Error("Entity commit cannot append state history when it is disabled.");
@@ -520,22 +516,6 @@ class EventHistory<I, S extends Message> implements EntityEventHistoryPort<I> {
   }
 }
 
-function currentSpec<I, S extends Message>(
-  input: EntityStorageInput<I, S>,
-): RecordSpec<I, EntityRecord> {
-  return new RecordSpec({
-    sourceType: input.sourceType,
-    recordType: EntityRecordSchema,
-    idKind: "entity",
-    extractId: (record: EntityRecord) => {
-      const id = record.entityId === undefined ? undefined : input.id.unpack(record.entityId);
-      if (id === undefined)
-        throw new Error("Entity current record ID does not match its Entity ID schema.");
-      return id;
-    },
-    columns: input.columns,
-  } as never);
-}
 async function immutable<I, R extends Message>(
   records: RecordStorage<I, R>,
   record: R,
@@ -608,7 +588,7 @@ function entityFilter<I, S extends Message>(
   input: EntityStorageInput<I, S>,
   id: I,
 ): import("./record-storage.js").DatastoreRangeFilter {
-  return { property: "entity_id", operator: "=", value: input.id.pack(id), valueType: "message" };
+  return { property: "entity_id", operator: "=", value: input.id.pack(id) };
 }
 
 function numberFilter(
@@ -616,7 +596,7 @@ function numberFilter(
   operator: "=" | "<" | "<=" | ">" | ">=",
   value: bigint,
 ): import("./record-storage.js").DatastoreRangeFilter {
-  return { property, operator, value, valueType: "int32" };
+  return { property, operator, value };
 }
 
 function timestampFilter(
@@ -624,7 +604,7 @@ function timestampFilter(
   operator: "=" | "<" | "<=" | ">" | ">=",
   value: Timestamp,
 ): import("./record-storage.js").DatastoreRangeFilter {
-  return { property, operator, value, valueType: "timestamp" };
+  return { property, operator, value };
 }
 function first(value: unknown): Record<string, unknown> | undefined {
   return Array.isArray(value) ? (value[0] as Record<string, unknown> | undefined) : undefined;

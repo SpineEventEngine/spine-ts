@@ -1,9 +1,9 @@
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { Datastore, PropertyFilter } from "@google-cloud/datastore";
-import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import { Datastore } from "@google-cloud/datastore";
+import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { RecordColumn, RecordSpec, StorageGroup } from "@spine-event-engine/storage";
+import { ColumnTypes, RecordColumn, RecordSpec, StorageGroup } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
 import { describe, expect, it } from "vitest";
 
@@ -49,13 +49,9 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       await expect(records.delete("alpha")).resolves.toBe(true);
       await expect(records.delete("alpha")).resolves.toBe(false);
 
-      const scope = recordScope(context, StringValueSchema.typeName);
-      const [physical] = await client.runQuery(
-        client.createQuery(kind).filter(new PropertyFilter("_scope", "=", scope)),
-      );
+      const [physical] = await client.runQuery(client.createQuery(kind));
       expect(physical).toHaveLength(3);
       const row = physical[0] as Record<string, unknown> | undefined;
-      expect(row?._scope).toBe(scope);
       expect(row?.bytes).toBeInstanceOf(Uint8Array);
       expect(row?.initial).toBeTypeOf("string");
       expect(row?.value).toBeTypeOf("string");
@@ -65,35 +61,53 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       );
       await expect(records.query()).rejects.toEqual(new DatastoreQueryLimitError(1_000));
     } finally {
-      await deleteScope(client, kind, recordScope(context, StringValueSchema.typeName));
+      await deleteKind(client, kind);
     }
   }, 30_000);
 
-  it("isolates contexts, groups, and tenant namespaces", async () => {
+  it("shares context-neutral families while groups and tenant namespaces isolate", async () => {
     const client = datastore();
     const name = unique("isolation");
     const factory = DatastoreStorageFactory.newBuilder().setClient(client).build();
     const spec = stringSpec();
     const single = factory.createRecordStorage({ name, multitenant: false }, spec);
+    const otherContext = factory.createRecordStorage(
+      { name: `${name}-other`, multitenant: false },
+      spec,
+    );
     const group = factory.createRecordStorage(
       { name, multitenant: false },
       spec,
       new StorageGroup("other"),
     );
-    const tenantA = factory.createRecordStorage({ name, multitenant: true, tenantId: "a" }, spec);
-    const tenantB = factory.createRecordStorage({ name, multitenant: true, tenantId: "b" }, spec);
+    const tenantA = factory.createRecordStorage(
+      { name, multitenant: true, tenantId: tenant("a") },
+      spec,
+    );
+    const tenantB = factory.createRecordStorage(
+      { name, multitenant: true, tenantId: tenant("b") },
+      spec,
+    );
 
     try {
-      await Promise.all(
-        [single, group, tenantA, tenantB].map((storage) => storage.write(message("same"))),
-      );
+      await single.write(message("same"));
+      await otherContext.write(message("same"));
+      await Promise.all([group, tenantA, tenantB].map((storage) => storage.write(message("same"))));
       await expect(single.read("same")).resolves.toMatchObject({ value: "same" });
+      await expect(otherContext.read("same")).resolves.toMatchObject({ value: "same" });
       await expect(group.read("same")).resolves.toMatchObject({ value: "same" });
       await expect(tenantA.read("same")).resolves.toMatchObject({ value: "same" });
       await expect(tenantB.read("same")).resolves.toMatchObject({ value: "same" });
-      await Promise.all([single, group, tenantA, tenantB].map((storage) => storage.delete("same")));
+      expect(await rows(client, StringValueSchema.typeName)).toHaveLength(1);
+      expect(await rows(client, StringValueSchema.typeName, "Va")).toHaveLength(1);
+      expect(await rows(client, StringValueSchema.typeName, "Vb")).toHaveLength(1);
+      await Promise.all(
+        [single, otherContext, group, tenantA, tenantB].map((storage) => storage.delete("same")),
+      );
     } finally {
-      await Promise.all([single, group, tenantA, tenantB].map((storage) => storage.delete("same")));
+      await Promise.all(
+        [single, otherContext, group, tenantA, tenantB].map((storage) => storage.delete("same")),
+      );
     }
   });
 
@@ -145,25 +159,13 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       await expect(handle.current.read("task")).resolves.toMatchObject({ version: { number: 2 } });
 
       const kinds = await Promise.all([
-        rows(client, StringValueSchema.typeName, recordScope(context, StringValueSchema.typeName)),
-        rows(
-          client,
-          `${StringValueSchema.typeName}_EntityRecord`,
-          recordScope(context, StringValueSchema.typeName, StringValueSchema.typeName),
-        ),
-        rows(
-          client,
-          `${StringValueSchema.typeName}_Event`,
-          recordScope(context, EventSchema.typeName, StringValueSchema.typeName),
-        ),
-        rows(client, EventSchema.typeName, recordScope(context, EventSchema.typeName)),
+        rows(client, StringValueSchema.typeName),
+        rows(client, `${StringValueSchema.typeName}_EntityRecord`),
+        rows(client, `${StringValueSchema.typeName}_Event`),
+        rows(client, EventSchema.typeName),
       ]);
       expect(kinds.map((value) => value.length)).toEqual([1, 1, 1, 1]);
-      expect(
-        kinds
-          .flat()
-          .every((row) => row.bytes instanceof Uint8Array && typeof row._scope === "string"),
-      ).toBe(true);
+      expect(kinds.flat().every((row) => row.bytes instanceof Uint8Array)).toBe(true);
 
       for (let version = 2; version <= 129; version += 1)
         await handle.states.append(entityRecord(`state-${String(version)}`, version));
@@ -180,22 +182,10 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
     } finally {
       handle.close();
       await Promise.all([
-        deleteScope(
-          client,
-          StringValueSchema.typeName,
-          recordScope(context, StringValueSchema.typeName),
-        ),
-        deleteScope(
-          client,
-          `${StringValueSchema.typeName}_EntityRecord`,
-          recordScope(context, StringValueSchema.typeName, StringValueSchema.typeName),
-        ),
-        deleteScope(
-          client,
-          `${StringValueSchema.typeName}_Event`,
-          recordScope(context, EventSchema.typeName, StringValueSchema.typeName),
-        ),
-        deleteScope(client, EventSchema.typeName, recordScope(context, EventSchema.typeName)),
+        deleteKind(client, StringValueSchema.typeName),
+        deleteKind(client, `${StringValueSchema.typeName}_EntityRecord`),
+        deleteKind(client, `${StringValueSchema.typeName}_Event`),
+        deleteKind(client, EventSchema.typeName),
       ]);
     }
   }, 30_000);
@@ -209,11 +199,9 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       .organizeRecords(StringValueSchema, { kind })
       .build()
       .createRecordStorage(context, stringSpec());
-    const scope = recordScope(context, StringValueSchema.typeName);
-
     try {
       await records.write(message("bad"));
-      const [stored] = await rows(client, kind, scope);
+      const [stored] = await rows(client, kind);
       if (stored?.key === undefined) throw new Error("Expected emulator row.");
       const { key, ...data } = stored;
       await client.save({
@@ -222,7 +210,7 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       });
       await expect(records.read("bad")).rejects.toThrow("cannot be decoded");
     } finally {
-      await deleteScope(client, kind, scope);
+      await deleteKind(client, kind);
     }
   });
 });
@@ -238,8 +226,10 @@ function stringSpec(): RecordSpec<string, ReturnType<typeof message>> {
     idKind: "string",
     extractId: (record) => record.value,
     columns: [
-      new RecordColumn("value", (record) => record.value, "string"),
-      new RecordColumn("initial", (record) => record.value.slice(0, 1), "string"),
+      new RecordColumn("value", ColumnTypes.scalar(ScalarType.STRING), (record) => record.value),
+      new RecordColumn("initial", ColumnTypes.scalar(ScalarType.STRING), (record) =>
+        record.value.slice(0, 1),
+      ),
     ],
   });
 }
@@ -300,35 +290,24 @@ function unique(part: string): string {
   return `T0135${part}${String(Date.now())}${Math.random().toString(36).slice(2)}`;
 }
 
-function recordScope(
-  context: { readonly name: string; readonly multitenant: boolean; readonly tenantId?: string },
-  source: string,
-  group = "",
-): string {
-  return JSON.stringify([
-    "array",
-    ["string", context.name],
-    ["string", context.multitenant ? (context.tenantId ?? "") : ""],
-    ["string", source],
-    ["string", group],
-  ]);
+function tenant(value: string) {
+  return create(TenantIdSchema, { kind: { case: "value", value } });
 }
 
-async function rows(client: Datastore, kind: string, scope: string): Promise<PhysicalRow[]> {
-  const [result] = await client.runQuery(
-    client.createQuery(kind).filter(new PropertyFilter("_scope", "=", scope)),
-  );
+async function rows(client: Datastore, kind: string, namespace?: string): Promise<PhysicalRow[]> {
+  const query =
+    namespace === undefined ? client.createQuery(kind) : client.createQuery(namespace, kind);
+  const [result] = await client.runQuery(query);
   return result.map((value) => physicalRow(value, client.KEY));
 }
 
-async function deleteScope(client: Datastore, kind: string, scope: string): Promise<void> {
-  const found = await rows(client, kind, scope);
+async function deleteKind(client: Datastore, kind: string, namespace?: string): Promise<void> {
+  const found = await rows(client, kind, namespace);
   const keys = found.map((row) => row.key).filter((key) => key !== undefined);
   if (keys.length > 0) await client.delete(keys);
 }
 
 interface PhysicalRow {
-  _scope?: string;
   bytes?: unknown;
   key?: unknown;
   [key: string]: unknown;

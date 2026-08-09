@@ -1,8 +1,15 @@
-import { create } from "@bufbuild/protobuf";
-import { EventIdSchema } from "@spine-event-engine/proto";
+import { create, toBinary } from "@bufbuild/protobuf";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { EventIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
-import { Identifiers, StringifierRegistry, Stringifiers, type Stringifier } from "../src/index.js";
+import {
+  Identifiers,
+  StringifierRegistry,
+  Stringifiers,
+  TypeRegistry,
+  type Stringifier,
+} from "../src/index.js";
 
 describe("JVM-compatible identifier and stringifier contracts", () => {
   it("packs and unpacks a message identifier through its generated schema", () => {
@@ -69,6 +76,21 @@ describe("JVM-compatible identifier and stringifier contracts", () => {
     });
 
     expect(snapshot.forMessage(EventIdSchema).toString(createEventId("42"))).toBe("first:42");
+  });
+
+  it("uses the configured generated-type registry for compact Any JSON", () => {
+    const registry = new StringifierRegistry();
+    registry.setTypeRegistry(new TypeRegistry([UserIdSchema]));
+    const packed = create(AnySchema, {
+      typeUrl: `type.spine.io/${UserIdSchema.typeName}`,
+      value: toBinary(UserIdSchema, create(UserIdSchema, { value: "task" })),
+    });
+
+    const text = registry.forMessage(AnySchema).toString(packed);
+
+    const restored = registry.forMessage(AnySchema).fromString(text);
+    expect(restored).toEqual(packed);
+    expect(registry.forMessage(AnySchema).toString(restored)).toBe(text);
   });
 });
 

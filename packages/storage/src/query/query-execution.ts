@@ -67,6 +67,24 @@ export const StorageQueryEvaluator: Readonly<{
 });
 
 /**
+ * Shared deterministic value semantics for provider-side query adapters.
+ *
+ * @internal
+ */
+export const StorageQueryValues: Readonly<{
+  equal(left: unknown, right: unknown): boolean;
+  compare(left: unknown, right: unknown): number;
+}> = Object.freeze({
+  equal(left: unknown, right: unknown): boolean {
+    return QueryPredicateMatcher.equalValues(left, right);
+  },
+
+  compare(left: unknown, right: unknown): number {
+    return QueryOrdering.compareStable(left, right);
+  },
+});
+
+/**
  * Matches normalized predicates against materialized storage rows.
  */
 const QueryPredicateMatcher = {

@@ -1,6 +1,7 @@
 import {
   clone,
   create,
+  createRegistry,
   fromBinary,
   fromJsonString,
   getOption,
@@ -8,7 +9,13 @@ import {
   toBinary,
   toJsonString,
 } from "@bufbuild/protobuf";
-import type { DescField, Message, MessageInitShape, MessageShape } from "@bufbuild/protobuf";
+import type {
+  DescField,
+  Message,
+  MessageInitShape,
+  MessageShape,
+  Registry,
+} from "@bufbuild/protobuf";
 import type { GenExtension, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import {
   AnySchema,
@@ -763,6 +770,49 @@ export interface Stringifier<T> {
   toString(value: T): string;
 }
 
+function isProtobufRegistry(types: TypeRegistryLookup | Registry): types is Registry {
+  return "kind" in types;
+}
+
+function defaultMessageStringifier<Schema extends MessageSchema>(
+  schema: Schema,
+  registry: Registry | undefined,
+  typeUrls: ReadonlyMap<string, string>,
+): Stringifier<MessageShape<Schema>> {
+  return Object.freeze({
+    fromString(value: string): MessageShape<Schema> {
+      const message =
+        registry === undefined
+          ? fromJsonString(schema, value)
+          : fromJsonString(schema, value, { registry });
+      restoreCanonicalAnyTypeUrls(message, typeUrls);
+      return message;
+    },
+    toString(value: MessageShape<Schema>): string {
+      return registry === undefined
+        ? toJsonString(schema, value)
+        : toJsonString(schema, value, { registry });
+    },
+  });
+}
+
+function restoreCanonicalAnyTypeUrls(value: unknown, typeUrls: ReadonlyMap<string, string>): void {
+  if (typeof value !== "object" || value === null || value instanceof Uint8Array) return;
+  if (Array.isArray(value)) {
+    for (const item of value) restoreCanonicalAnyTypeUrls(item, typeUrls);
+    return;
+  }
+  const record = value as Record<string, unknown>;
+  if (record.$typeName === AnySchema.typeName) {
+    const typeUrl = record.typeUrl;
+    if (typeof typeUrl === "string") {
+      const canonical = typeUrls.get(typeUrl.slice(typeUrl.lastIndexOf("/") + 1));
+      if (canonical !== undefined) record.typeUrl = canonical;
+    }
+  }
+  for (const item of Object.values(record)) restoreCanonicalAnyTypeUrls(item, typeUrls);
+}
+
 /**
  * Supplies reversible default stringifiers for generated Protobuf messages.
  */
@@ -772,17 +822,24 @@ export const Stringifiers = {
   /**
    * Creates the default compact Proto JSON stringifier for a message schema.
    * @param schema The generated message schema.
+   * @param types The optional generated-type registry used to expand `Any` values.
    * @returns A reversible schema-bound stringifier.
    */
-  forMessage<Schema extends MessageSchema>(schema: Schema): Stringifier<MessageShape<Schema>> {
-    return Object.freeze({
-      fromString(value: string): MessageShape<Schema> {
-        return fromJsonString(schema, value);
-      },
-      toString(value: MessageShape<Schema>): string {
-        return toJsonString(schema, value);
-      },
-    });
+  forMessage<Schema extends MessageSchema>(
+    schema: Schema,
+    types?: TypeRegistryLookup | Registry,
+  ): Stringifier<MessageShape<Schema>> {
+    const registry =
+      types === undefined
+        ? undefined
+        : isProtobufRegistry(types)
+          ? types
+          : createRegistry(...types.list().map((metadata) => metadata.descriptor));
+    const typeUrls =
+      types === undefined || isProtobufRegistry(types)
+        ? new Map<string, string>()
+        : new Map(types.list().map((metadata) => [metadata.schema.typeName, metadata.typeUrl]));
+    return defaultMessageStringifier(schema, registry, typeUrls);
   },
 } as const;
 Object.freeze(Stringifiers);
@@ -792,6 +849,8 @@ Object.freeze(Stringifiers);
  */
 export class StringifierRegistry {
   readonly #registered = new Map<string, Stringifier<Message>>();
+  #types: Registry | undefined;
+  #typeUrls = new Map<string, string>();
 
   /**
    * Creates an empty registry or a snapshot of another registry.
@@ -803,6 +862,8 @@ export class StringifierRegistry {
       for (const [typeName, stringifier] of source.#registered) {
         this.#registered.set(typeName, stringifier);
       }
+      this.#types = source.#types;
+      this.#typeUrls = new Map(source.#typeUrls);
     }
   }
 
@@ -819,6 +880,17 @@ export class StringifierRegistry {
   }
 
   /**
+   * Sets the generated-type registry used by default message stringifiers.
+   *
+   * @param types Resolves message types embedded in `Any` values.
+   */
+  setTypeRegistry(types: TypeRegistryLookup): void {
+    const metadata = types.list();
+    this.#types = createRegistry(...metadata.map((item) => item.descriptor));
+    this.#typeUrls = new Map(metadata.map((item) => [item.schema.typeName, item.typeUrl]));
+  }
+
+  /**
    * Returns the custom stringifier or the default compact Proto JSON mapping.
    * @param schema The generated message schema.
    * @returns The schema-bound stringifier.
@@ -827,7 +899,7 @@ export class StringifierRegistry {
     const registered = this.#registered.get(schema.typeName);
 
     return registered === undefined
-      ? Stringifiers.forMessage(schema)
+      ? defaultMessageStringifier(schema, this.#types, this.#typeUrls)
       : (registered as Stringifier<MessageShape<Schema>>);
   }
 }

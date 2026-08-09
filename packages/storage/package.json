@@ -24,6 +24,10 @@
     "./internal/tenancy": {
       "types": "./dist/internal/tenancy.d.ts",
       "default": "./dist/internal/tenancy.js"
+    },
+    "./internal/query-values": {
+      "types": "./dist/internal/query-values.d.ts",
+      "default": "./dist/internal/query-values.js"
     }
   },
   "files": [

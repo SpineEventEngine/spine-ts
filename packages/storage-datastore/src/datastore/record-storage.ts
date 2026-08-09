@@ -1,7 +1,10 @@
 import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import { and, Datastore, or, PropertyFilter } from "@google-cloud/datastore";
+import { StringifierRegistry } from "@spine-event-engine/core";
 import {
+  ColumnMappings,
   RecordStorage,
+  TenantBoundary,
   type NormalizedQueryPlan,
   type NormalizedQueryPredicate,
   type RecordEntry,
@@ -11,10 +14,12 @@ import {
   type StorageGroup,
   type StorageQueryCapabilities,
 } from "@spine-event-engine/storage";
+import { StorageQueryValues } from "@spine-event-engine/storage/internal/query-values";
 
-import { CanonicalValue } from "./value-codec.js";
+import { DatastoreColumnMapping } from "./column-mapping.js";
+import { DatastoreIdColumn } from "./id-column.js";
+import { DefaultNamespaceConverter, type NamespaceConverter } from "./namespace.js";
 const payloadProperty = "bytes";
-const scopeProperty = "_scope";
 const maxMutationsPerBatch = 500;
 const maxCasAttempts = 3;
 const casRetryDelayMs = 100;
@@ -44,11 +49,6 @@ export interface DatastoreRangeFilter {
    * Provides the value on the right side of the comparison.
    */
   readonly value: unknown;
-
-  /**
-   * Identifies the Protobuf value type when provider conversion requires it.
-   */
-  readonly valueType?: string;
 }
 
 /**
@@ -122,13 +122,19 @@ export interface DatastorePageCursor {
  */
 class FlatEntityCodec<I, R extends Message> {
   readonly #kind: string;
+  readonly #namespace: string | undefined;
+  readonly #idColumn: DatastoreIdColumn<I>;
+  readonly #columnMapping: DatastoreColumnMapping;
 
   constructor(
-    private readonly context: StorageContext,
+    context: StorageContext,
     private readonly recordSpec: RecordSpec<I, R>,
+    client: Datastore,
     private readonly maxClientSideScan: number,
     private readonly group: StorageGroup | undefined,
     kind: string | undefined,
+    namespaceConverter: NamespaceConverter,
+    stringifiers: StringifierRegistry,
   ) {
     this.#kind =
       kind ??
@@ -137,30 +143,30 @@ class FlatEntityCodec<I, R extends Message> {
         : `${group.name}_${recordSpec.recordType.typeName.split(".").at(-1) ?? ""}`);
     if (this.#kind.trim().length === 0 || Buffer.byteLength(this.#kind, "utf8") > 1_500)
       throw new Error("Datastore record kind must be non-blank and at most 1,500 bytes.");
+    const boundary = TenantBoundary.of(context);
+    this.#namespace = boundary.single
+      ? client.namespace
+      : namespaceConverter.toNamespace(boundary.tenantId as NonNullable<typeof boundary.tenantId>);
+    this.#idColumn = new DatastoreIdColumn(recordSpec.idType, stringifiers);
+    this.#columnMapping = new DatastoreColumnMapping(stringifiers);
   }
 
   key(client: Datastore, id: I): ReturnType<Datastore["key"]> {
     return client.key({
-      path: [this.#kind, this.keyName(id)],
-      ...(this.context.multitenant ? { namespace: this.requiredTenantId() } : {}),
+      path: [this.#kind, this.#idColumn.value(id)],
+      ...(this.#namespace === undefined ? {} : { namespace: this.#namespace }),
     });
   }
 
   encode(record: R, columns: ReadonlyMap<string, unknown>): Record<string, unknown> {
     const data: Record<string, unknown> = {
-      [scopeProperty]: this.scope(),
       [payloadProperty]: Buffer.from(
         toBinary(this.recordSpec.recordType, record, { writeUnknownFields: false }),
       ),
     };
 
     for (const [name, value] of columns) {
-      if (value === undefined) continue;
-      data[name] = RecordValues.provider(
-        value,
-        `Datastore record column "${name}"`,
-        this.recordSpec.columns.find((column) => column.name === name)?.valueType,
-      );
+      data[name] = this.columnValue(name, value);
     }
 
     return data;
@@ -172,8 +178,7 @@ class FlatEntityCodec<I, R extends Message> {
     if (typeof name !== "string") {
       throw new Error("Datastore entity has no valid Spine record identifier.");
     }
-    const encoded = name.slice(name.lastIndexOf("\u0000") + 1);
-    return CanonicalValue.decode(encoded) as I;
+    return this.#idColumn.read(name);
   }
 
   columns(entity: Record<string | symbol, unknown>): ReadonlyMap<string, unknown> {
@@ -188,11 +193,9 @@ class FlatEntityCodec<I, R extends Message> {
   }
 
   createQuery(client: Datastore): ReturnType<Datastore["createQuery"]> {
-    const query = this.context.multitenant
-      ? client.createQuery(this.requiredTenantId(), this.#kind)
-      : client.createQuery(this.#kind);
-    query.filter(new PropertyFilter(scopeProperty, "=", this.scope()));
-    return query;
+    return this.#namespace === undefined
+      ? client.createQuery(this.#kind)
+      : client.createQuery(this.#namespace, this.#kind);
   }
 
   columnProperty(column: string): string {
@@ -201,6 +204,36 @@ class FlatEntityCodec<I, R extends Message> {
 
   queryLimit(): number {
     return this.maxClientSideScan + 1;
+  }
+
+  namespace(): string | undefined {
+    return this.#namespace;
+  }
+
+  columnValue(column: string, value: unknown): unknown {
+    const declared = this.recordSpec.columns.find((candidate) => candidate.name === column);
+    if (declared === undefined)
+      throw new Error(`Datastore record column "${column}" is not declared.`);
+    return ColumnMappings.value(this.#columnMapping, declared.type, value);
+  }
+
+  pageCursor(
+    entity: Record<string | symbol, unknown>,
+    order: readonly { readonly property: string; readonly direction: "asc" | "desc" }[],
+    keySymbol: unknown,
+  ): DatastorePageCursor {
+    const key = datastoreKey(entity, keySymbol);
+    const record = this.decode(entity);
+    const values = order.map((item) => {
+      if (item.property === "__key__") return key;
+      const column = this.recordSpec.columns.find((candidate) => candidate.name === item.property);
+      return column === undefined
+        ? undefined
+        : ColumnMappings.value(this.#columnMapping, column.type, column.valueIn(record));
+    });
+    if (key === undefined || values.some((value) => value === undefined))
+      throw new Error("Datastore provider page continuation is malformed.");
+    return { values, key };
   }
 
   decode(entity: Record<string | symbol, unknown>): R {
@@ -215,32 +248,6 @@ class FlatEntityCodec<I, R extends Message> {
     } catch {
       throw new Error("Datastore entity cannot be decoded.");
     }
-  }
-
-  private requiredTenantId(): string {
-    const tenantId = this.context.tenantId;
-
-    if (tenantId === undefined || tenantId.trim().length === 0) {
-      throw new Error(`Multitenant storage "${this.context.name}" requires context.tenantId.`);
-    }
-
-    return tenantId;
-  }
-
-  private scope(): string {
-    return CanonicalValue.encode([
-      this.context.name,
-      this.context.multitenant ? this.requiredTenantId() : "",
-      this.recordSpec.sourceType.typeName,
-      this.group?.name ?? "",
-    ]);
-  }
-
-  private keyName(id: I): string {
-    const name = `${this.scope()}\u0000${CanonicalValue.encode(id)}`;
-    if (Buffer.byteLength(name, "utf8") > 1_500)
-      throw new Error("Datastore record key exceeds the 1,500-byte provider limit.");
-    return name;
   }
 }
 
@@ -274,18 +281,6 @@ function keysetFilter(
   if (cursor.key === undefined || keySymbol === undefined)
     throw new Error("Datastore provider page continuation is malformed.");
   return or(alternatives);
-}
-
-function pageCursor(
-  entity: Record<string | symbol, unknown>,
-  order: readonly { readonly property: string; readonly direction: "asc" | "desc" }[],
-  keySymbol: unknown,
-): DatastorePageCursor {
-  const key = datastoreKey(entity, keySymbol);
-  const values = order.map((item) => entity[item.property]);
-  if (key === undefined || values.some((value) => value === undefined))
-    throw new Error("Datastore provider page continuation is malformed.");
-  return { values, key };
 }
 
 function sameCursor(left: DatastorePageCursor, right: DatastorePageCursor | undefined): boolean {
@@ -327,9 +322,20 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     maxClientSideScan: number,
     group?: StorageGroup,
     kind?: string,
+    namespaceConverter: NamespaceConverter = new DefaultNamespaceConverter(),
+    stringifiers: StringifierRegistry = new StringifierRegistry(),
   ) {
     super(context, recordSpec);
-    this.#codec = new FlatEntityCodec(context, recordSpec, maxClientSideScan, group, kind);
+    this.#codec = new FlatEntityCodec(
+      context,
+      recordSpec,
+      client,
+      maxClientSideScan,
+      group,
+      kind,
+      namespaceConverter,
+      stringifiers,
+    );
   }
 
   /**
@@ -373,11 +379,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
         new PropertyFilter(
           filter.property,
           filter.operator,
-          RecordValues.provider(
-            filter.value,
-            `Datastore query filter "${filter.property}"`,
-            filter.valueType,
-          ),
+          this.#codec.columnValue(filter.property, filter.value),
         ),
       );
     }
@@ -402,7 +404,8 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     const cursor = entities.at(-1);
     if (info.more && cursor === undefined)
       throw new Error("Datastore provider page continuation is malformed.");
-    const next = cursor === undefined ? undefined : pageCursor(cursor, order, this.client.KEY);
+    const next =
+      cursor === undefined ? undefined : this.#codec.pageCursor(cursor, order, this.client.KEY);
     if (info.more && request.cursor !== undefined && sameCursor(request.cursor, next))
       throw new Error("Datastore provider page continuation did not advance.");
     return {
@@ -462,6 +465,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
       _query,
       (id) => this.#codec.key(this.client, id),
       (column) => this.#codec.columnProperty(column),
+      (column, value) => this.#codec.columnValue(column, value),
     );
     query.limit(providerLimit);
     const entities = DatastoreResults.entities(
@@ -506,6 +510,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
       plan,
       (id) => this.#codec.key(this.client, id),
       (column) => this.#codec.columnProperty(column),
+      (column, value) => this.#codec.columnValue(column, value),
     );
     const providerLimit = Math.min(
       this.#codec.queryLimit(),
@@ -572,7 +577,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean> {
     const key = this.#codec.key(this.client, id);
-    const transaction = this.client.transaction();
+    const transaction = this.transaction();
     try {
       await transaction.run();
       const entity = DatastoreResults.first(await transaction.get(key, wrappedReadOptions));
@@ -646,9 +651,20 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
       throw new Error("Datastore provider operation failed.");
     }
   }
-}
 
-type QueryableValue = string | number | boolean | bigint | null;
+  /**
+   * Creates a transaction scoped to this handle's selected namespace.
+   *
+   * @returns The namespace-scoped Datastore transaction.
+   * @internal
+   */
+  transaction(): ReturnType<Datastore["transaction"]> {
+    const transaction = this.client.transaction();
+    const namespace = this.#codec.namespace();
+    if (namespace !== undefined) transaction.namespace = namespace;
+    return transaction;
+  }
+}
 
 /**
  * Converts values between Spine records and the Datastore provider representation.
@@ -658,69 +674,17 @@ const RecordValues = Object.freeze(
     // prettier-ignore
 
     /**
-     * Tests whether a value is supported by a Datastore indexed property.
-     */
-    queryable(value: unknown): value is QueryableValue {
-      if (typeof value === "bigint") return value >= -(1n << 63n) && value <= (1n << 63n) - 1n;
-      if (typeof value === "number") return Number.isFinite(value);
-      return value === null || ["string", "boolean"].includes(typeof value);
-    }
-
-    /**
-     * Encodes one queryable local value for the Datastore provider.
-     */
-    provider(value: unknown, label: string, valueType?: string): unknown {
-      if (valueType === "timestamp") return this.timestamp(value, label);
-      if (typeof value === "bigint") {
-        if (!this.queryable(value))
-          throw new Error(`${label} must be an exact signed 64-bit integer.`);
-        return Datastore.int(value.toString());
-      }
-      if (typeof value === "number") {
-        if (!Number.isFinite(value)) throw new Error(`${label} must be finite.`);
-        return Datastore.double(value);
-      }
-      if (value instanceof Uint8Array) return Buffer.from(value);
-      if (typeof value === "object" && value !== null) return CanonicalValue.encode(value);
-      if (!this.queryable(value)) throw new Error(`${label} has an unsupported value.`);
-      return value;
-    }
-
-    /**
-     * Encodes a Protobuf timestamp so string ranges retain full signed-second
-     * and nanosecond order in Datastore.
-     */
-    timestamp(value: unknown, label: string): string {
-      if (typeof value !== "object" || value === null)
-        throw new Error(`${label} must be a Protobuf timestamp.`);
-      const seconds: unknown = Reflect.get(value, "seconds");
-      const nanos: unknown = Reflect.get(value, "nanos");
-      if (
-        typeof seconds !== "bigint" ||
-        typeof nanos !== "number" ||
-        !Number.isInteger(nanos) ||
-        nanos < 0 ||
-        nanos > 999_999_999
-      )
-        throw new Error(`${label} must be a valid Protobuf timestamp.`);
-      const shifted = seconds + (1n << 63n);
-      if (shifted < 0n || shifted >= 1n << 64n)
-        throw new Error(`${label} seconds are outside the supported signed 64-bit range.`);
-      return `${shifted.toString().padStart(20, "0")}:${String(nanos).padStart(9, "0")}`;
-    }
-
-    /**
      * Compares canonical local values for equality.
      */
     equal(left: unknown, right: unknown): boolean {
-      return CanonicalValue.equal(left, right);
+      return StorageQueryValues.equal(left, right);
     }
 
     /**
      * Compares canonical local values for ordering.
      */
     compare(left: unknown, right: unknown): number {
-      return CanonicalValue.compare(left, right);
+      return StorageQueryValues.compare(left, right);
     }
 
     /**
@@ -773,6 +737,7 @@ class DatastoreQueryPushdownHelper {
       recordQuery: RecordQuery<I>,
       keyFor: (id: I) => ReturnType<Datastore["key"]>,
       columnProperty: (column: string) => string,
+      columnValue: (column: string, value: unknown) => unknown,
     ): void {
       if (recordQuery.ids !== undefined && recordQuery.ids.length > 0) {
         const keys = recordQuery.ids.map(keyFor);
@@ -792,9 +757,7 @@ class DatastoreQueryPushdownHelper {
         const providerValues =
           filter.column === "id"
             ? values.map((value) => keyFor(value as I))
-            : values.map((value) =>
-                RecordValues.provider(value, `Datastore query filter "${filter.column}"`),
-              );
+            : values.map((value) => columnValue(filter.column, value));
         query.filter(
           new PropertyFilter(
             filter.column === "id" ? "__key__" : columnProperty(filter.column),
@@ -821,10 +784,11 @@ class DatastoreQueryPushdownHelper {
     plan: NormalizedQueryPlan<I>,
     keyFor: (id: I) => ReturnType<Datastore["key"]>,
     columnProperty: (column: string) => string,
+    columnValue: (column: string, value: unknown) => unknown,
   ): void {
     const legal = this.legal(plan);
     if (legal !== undefined) {
-      this.predicate(query, legal, keyFor, columnProperty);
+      this.predicate(query, legal, keyFor, columnProperty, columnValue);
     }
     if (legal !== undefined || plan.predicate === undefined) {
       for (const order of plan.order ?? []) {
@@ -870,10 +834,11 @@ class DatastoreQueryPushdownHelper {
     predicate: NormalizedQueryPredicate<I>,
     keyFor: (id: I) => ReturnType<Datastore["key"]>,
     columnProperty: (column: string) => string,
+    columnValue: (column: string, value: unknown) => unknown,
   ): void {
     if (predicate.kind === "all") {
       predicate.predicates.forEach((child) => {
-        this.predicate(query, child, keyFor, columnProperty);
+        this.predicate(query, child, keyFor, columnProperty, columnValue);
       });
       return;
     }
@@ -902,7 +867,7 @@ class DatastoreQueryPushdownHelper {
       new PropertyFilter(
         columnProperty(predicate.column),
         operator,
-        RecordValues.provider(predicate.value, `Datastore query filter "${predicate.column}"`),
+        columnValue(predicate.column, predicate.value),
       ),
     );
   }

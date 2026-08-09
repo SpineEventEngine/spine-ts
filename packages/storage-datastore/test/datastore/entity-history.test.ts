@@ -1,8 +1,9 @@
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { create, fromBinary, ScalarType } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
+import { Identifiers, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { RecordColumn } from "@spine-event-engine/storage";
+import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
 import { describe, expect, it } from "vitest";
@@ -14,28 +15,37 @@ function input(
   histories = true,
   columns: readonly RecordColumn<ReturnType<typeof create<typeof EntityRecordSchema>>>[] = [],
 ): EntityStorageInput<string, ReturnType<typeof create<typeof StringValueSchema>>> {
+  const unpack = (id: ReturnType<typeof create<typeof AnySchema>>) =>
+    id.typeUrl.endsWith(StringValueSchema.typeName)
+      ? fromBinary(StringValueSchema, id.value).value
+      : undefined;
   return {
     context: { name: "GeneratedEntity", multitenant: false },
     id: {
       clone: (id) => id,
       key: (id) => id,
       pack: (id) => pack(id),
-      unpack: (id) =>
-        id.typeUrl.endsWith(StringValueSchema.typeName)
-          ? fromBinary(StringValueSchema, id.value).value
-          : undefined,
+      unpack,
     },
     columns,
+    recordSpec: new RecordSpec({
+      sourceType: StringValueSchema,
+      recordType: EntityRecordSchema,
+      idKind: "string",
+      extractId: (record) => {
+        const id = record.entityId === undefined ? undefined : unpack(record.entityId);
+        if (id === undefined) throw new Error("Entity record has no matching ID.");
+        return id;
+      },
+      columns,
+    }),
     sourceType: StringValueSchema,
     stateSchema: StringValueSchema,
     ...(histories ? { stateHistory: true, eventHistory: true } : {}),
   };
 }
 function pack(value: string) {
-  return create(AnySchema, {
-    typeUrl: `type.spine.io/${StringValueSchema.typeName}`,
-    value: toBinary(StringValueSchema, create(StringValueSchema, { value })),
-  });
+  return Identifiers.pack(StringValueSchema, create(StringValueSchema, { value }));
 }
 function record(value: string, version: number) {
   return create(EntityRecordSchema, {
@@ -55,8 +65,11 @@ function event(id: string, version: number) {
   });
 }
 function factory(backend: HistoryDatastoreBackend) {
+  const stringifiers = new StringifierRegistry();
+  stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
   return DatastoreStorageFactory.newBuilder()
     .setClient(backend.client() as never)
+    .setStringifierRegistry(stringifiers)
     .build();
 }
 
@@ -78,12 +91,12 @@ describe("Datastore generated Entity records", () => {
         "google.protobuf.StringValue_Event",
       ]),
     );
-    expect(
-      [...backend.entities.values()].every(
-        (row) =>
-          Object.keys(row.data).includes("bytes") && Object.keys(row.data).includes("_scope"),
-      ),
-    ).toBe(true);
+    expect([...backend.entities.values()].every((row) => Object.hasOwn(row.data, "bytes"))).toBe(
+      true,
+    );
+    expect([...backend.entities.values()].every((row) => !Object.hasOwn(row.data, "_scope"))).toBe(
+      true,
+    );
   });
 
   it("does not open or write disabled history families", async () => {
@@ -151,7 +164,11 @@ describe("Datastore generated Entity records", () => {
     const differentSource = { ...entity, sourceType: TimestampSchema };
     const differentTenancy = {
       ...entity,
-      context: { ...entity.context, multitenant: true, tenantId: "acme" },
+      context: {
+        name: entity.context.name,
+        multitenant: true as const,
+        tenantId: create(TenantIdSchema, { kind: { case: "value", value: "acme" } }),
+      },
     };
 
     await expect(
@@ -161,7 +178,7 @@ describe("Datastore generated Entity records", () => {
         entityId: "task",
         next: record("current", 1),
       } as never),
-    ).rejects.toThrow("another Entity storage scope");
+    ).rejects.toThrow("another Entity source or tenant");
     await expect(
       commits.commit({
         context: differentTenancy.context,
@@ -169,7 +186,7 @@ describe("Datastore generated Entity records", () => {
         entityId: "task",
         next: record("current", 1),
       }),
-    ).rejects.toThrow("another Entity storage scope");
+    ).rejects.toThrow("another Entity source or tenant");
   });
 
   it("rejects malformed event IDs and excludes events without the requested producer", async () => {
@@ -221,8 +238,8 @@ describe("Datastore generated Entity records", () => {
     const columns = [
       new RecordColumn(
         "state_type",
+        ColumnTypes.scalar(ScalarType.STRING),
         (record: ReturnType<typeof create<typeof EntityRecordSchema>>) => record.state?.typeUrl,
-        "string",
       ),
     ];
     const storage = factory(new HistoryDatastoreBackend()).createEntityStorage(
@@ -234,7 +251,7 @@ describe("Datastore generated Entity records", () => {
 
     expect(entries).toHaveLength(1);
     expect(entries[0]?.columns.get("state_type")).toBe(
-      `type.spine.io/${StringValueSchema.typeName}`,
+      `type.googleapis.com/${StringValueSchema.typeName}`,
     );
   });
 
@@ -384,8 +401,11 @@ describe("Datastore generated Entity records", () => {
   it("keeps provider history reads and retention work bounded to 128-row pages", async () => {
     const backend = new HistoryDatastoreBackend();
     const client = backend.client();
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
     const storage = DatastoreStorageFactory.newBuilder()
       .setClient(client as never)
+      .setStringifierRegistry(stringifiers)
       .build()
       .createEntityStorage(input());
     for (let version = 1; version <= 129; version += 1)
