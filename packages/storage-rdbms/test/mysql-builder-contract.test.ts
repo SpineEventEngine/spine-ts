@@ -329,6 +329,14 @@ describe("MysqlStorageFactory builder contract", () => {
     ).rejects.toThrow(/physical database/i);
     await expect(
       MysqlStorageFactory.newBuilder()
+        .setTenantOptions([
+          { tenantId: tenant, options: { url: "mysql://db.example/Shared" } },
+          { tenantId: other, options: { url: "mysql://db.example/shared" } },
+        ])
+        .build(),
+    ).rejects.toThrow(/physical database/i);
+    await expect(
+      MysqlStorageFactory.newBuilder()
         .setOptions({ url: "mysql://db.example/single" })
         .setTenantOptions([{ tenantId: tenant, options: { url: "mysql://db.example/tenant" } }])
         .build(),

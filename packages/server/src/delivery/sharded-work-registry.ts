@@ -10,6 +10,7 @@ import {
 } from "@spine-event-engine/proto/delivery";
 import {
   RecordSpec,
+  TenantBoundary,
   type RecordStorage,
   type StorageContext,
   type StorageFactory,
@@ -288,7 +289,7 @@ export const shardedWorkRegistryAccess: Readonly<{
       value?.storageFactory === storageFactory &&
       value.context.name === contextValue.name &&
       value.context.multitenant === contextValue.multitenant &&
-      value.context.tenantId === contextValue.tenantId
+      TenantBoundary.of(value.context).key === TenantBoundary.of(contextValue).key
     );
   },
 });

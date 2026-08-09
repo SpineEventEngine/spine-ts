@@ -25,10 +25,14 @@ export interface Storage {
 export interface StorageMode {
   // prettier-ignore
 
-  /** Bounded Context name used only in diagnostics. */
+  /**
+   * Bounded Context name used only in diagnostics.
+   */
   readonly name: string;
 
-  /** Whether each storage operation must select a complete tenant. */
+  /**
+   * Whether each storage operation must select a complete tenant.
+   */
   readonly multitenant: boolean;
 }
 

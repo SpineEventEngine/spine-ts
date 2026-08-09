@@ -24,11 +24,15 @@ uses this precedence:
 
 `setNamespaceConverter(...)` replaces complete `TenantId`/native namespace
 conversion. `setStringifierRegistry(...)` supplies reversible mappings for
-message-valued IDs and ordinary message columns. Both are snapshotted by
-`build()`. `organizeRecords(...)` changes a kind. `useRecordStorage(...)` replaces a
-record-family provider. `useEntityStorage(...)` replaces the complete coherent
-Entity handle, including its commit capability; the built-in Entity provider
-does not mix custom record creators into one transaction.
+message-valued IDs and ordinary message columns. The stringifier registry is
+snapshotted by `build()`; a custom namespace converter is retained and must
+remain behaviorally immutable for the factory lifetime. `organizeRecords(...)`
+changes a kind. `useRecordStorage(...)` replaces a record-family provider.
+`useEntityStorage(...)` replaces the complete coherent Entity handle, including
+its commit capability. Custom providers receive the storage context, record or
+Entity contract, and caller-owned client, but not the built-in converter or
+stringifier registry; they own equivalent tenant, ID, and column mapping. The
+built-in Entity provider does not mix custom record creators into one transaction.
 
 ## Physical layout
 

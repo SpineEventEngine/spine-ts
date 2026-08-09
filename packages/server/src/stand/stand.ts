@@ -236,6 +236,7 @@ export class Stand {
     string,
     { readonly current: EntityRecordStorage<unknown>; close(): void }
   >();
+  readonly #handleCloseErrors: unknown[] = [];
   readonly #inFlight = new Set<Promise<void>>();
   #closing = false;
   #closed = false;
@@ -354,12 +355,15 @@ export class Stand {
     try {
       const registration = this.#registration(schema, "read");
       const tenantId = this.#tenantId(options.tenantId);
-      {
-        const stored = await this.#openCurrent(registration, tenantId).read(id);
+      const storage = this.#leaseCurrent(registration, tenantId);
+      try {
+        const stored = await storage.current.read(id);
         if (stored === undefined || EntityRecords.unpack(registration.schema, stored).deleted) {
           return undefined;
         }
         return this.#currentResult(registration, stored);
+      } finally {
+        storage.release();
       }
     } finally {
       finish();
@@ -398,14 +402,15 @@ export class Stand {
     try {
       const registration = this.#registration(schema, "read");
       const tenantId = this.#tenantId(options.tenantId);
-      {
-        const stored = await this.#openCurrent(registration, tenantId).query(
-          Stand.#legacyPlan(query),
-        );
+      const storage = this.#leaseCurrent(registration, tenantId);
+      try {
+        const stored = await storage.current.query(Stand.#legacyPlan(query));
         const results = stored.map((entry) =>
           this.#entryResult(registration, entry.record, query.mask),
         );
         return results.filter((result): result is StandReadResult<Schema> => result !== undefined);
+      } finally {
+        storage.release();
       }
     } finally {
       finish();
@@ -429,12 +434,15 @@ export class Stand {
     try {
       const registration = this.#registration(schema, "read");
       const tenantId = this.#tenantId(options.tenantId);
-      {
-        const stored = await this.#openCurrent(registration, tenantId).query(plan);
+      const storage = this.#leaseCurrent(registration, tenantId);
+      try {
+        const stored = await storage.current.query(plan);
         const results = stored.map((entry) =>
           this.#entryResult(registration, entry.record, plan.mask?.paths),
         );
         return results.filter((result): result is StandReadResult<Schema> => result !== undefined);
+      } finally {
+        storage.release();
       }
     } finally {
       finish();
@@ -457,17 +465,17 @@ export class Stand {
     try {
       const registration = this.#registration(schema, "clear");
       const tenantId = this.#tenantId(options.tenantId);
-      {
-        const entries = await this.#openCurrent(registration, tenantId).query({
+      const storage = this.#leaseCurrent(registration, tenantId);
+      try {
+        const entries = await storage.current.query({
           candidateLimit: 10_000,
         });
         const ids = entries.map((entry) => entry.id);
-        const current = this.#openCurrent(registration, tenantId);
         for (const id of ids) {
-          const stored = await current.read(id);
+          const stored = await storage.current.read(id);
           if (stored !== undefined) {
             const value = EntityRecords.unpack(registration.schema, stored);
-            await current.write(
+            await storage.current.write(
               EntityRecords.pack(registration.schema, id, value.state, value.versionMessage, {
                 archived: value.archived,
                 deleted: true,
@@ -476,6 +484,8 @@ export class Stand {
           }
         }
         return ids.length;
+      } finally {
+        storage.release();
       }
     } finally {
       finish();
@@ -519,13 +529,16 @@ export class Stand {
     options: StandUpdateOptions,
   ): Promise<PreparedStandUpdate> {
     const finish = this.#beginOperation();
+    let storage: CurrentStorageLease | undefined;
     try {
       const registration = this.#registration(schema, "update");
       const tenantId = this.#tenantId(options.tenantId);
       const stateCopy = clone(schema, state);
       const id = Stand.#readStateId(stateCopy, registration);
+      storage = this.#leaseCurrent(registration, tenantId);
+      const currentStorage = storage;
       const previous = this.#hasTenantSubscribers(registration, tenantId)
-        ? await this.#openCurrent(registration, tenantId).read(id)
+        ? await currentStorage.current.read(id)
         : undefined;
       const previousState =
         previous === undefined
@@ -543,12 +556,13 @@ export class Stand {
       const settle = () => {
         if (!settled) {
           settled = true;
+          currentStorage.release();
           finish();
         }
       };
       return Object.freeze({
         cancel: settle,
-        write: () => this.#openCurrent(registration, tenantId).write(record),
+        write: () => currentStorage.current.write(record),
         notify: () => {
           try {
             this.#notify(
@@ -568,6 +582,7 @@ export class Stand {
         },
       });
     } catch (error) {
+      storage?.release();
       finish();
       throw error;
     }
@@ -585,16 +600,21 @@ export class Stand {
     try {
       const registration = this.#registration(schema, "read");
       const tenantId = this.#tenantId(options.tenantId);
-      const stored = await this.#openCurrent(registration, tenantId).read(id);
-      if (stored === undefined) return undefined;
-      const value = EntityRecords.unpack(registration.schema, stored);
-      return Object.freeze({
-        state: clone(schema, value.state as MessageShape<Schema>),
-        versionMessage: clone(VersionSchema, value.versionMessage),
-        version: value.version,
-        archived: value.archived,
-        deleted: value.deleted,
-      });
+      const storage = this.#leaseCurrent(registration, tenantId);
+      try {
+        const stored = await storage.current.read(id);
+        if (stored === undefined) return undefined;
+        const value = EntityRecords.unpack(registration.schema, stored);
+        return Object.freeze({
+          state: clone(schema, value.state as MessageShape<Schema>),
+          versionMessage: clone(VersionSchema, value.versionMessage),
+          version: value.version,
+          archived: value.archived,
+          deleted: value.deleted,
+        });
+      } finally {
+        storage.release();
+      }
     } finally {
       finish();
     }
@@ -654,7 +674,7 @@ export class Stand {
     for (const registration of this.#registrations.values()) {
       registration.subscribers.clear();
     }
-    const errors: unknown[] = [];
+    const errors: unknown[] = this.#handleCloseErrors.splice(0);
     for (const handle of this.#entityHandles.values()) {
       try {
         handle.close();
@@ -681,13 +701,23 @@ export class Stand {
     return registration as Registration<Schema>;
   }
 
-  #openCurrent(
-    registration: Registration,
-    tenantId: TenantId | undefined,
-  ): EntityRecordStorage<unknown> {
-    const key = `${registration.typeUrl}\u0000${this.#tenantKey(tenantId)}`;
+  #leaseCurrent(registration: Registration, tenantId: TenantId | undefined): CurrentStorageLease {
+    if (this.#context.multitenant) {
+      return this.#lease(
+        Stand.#openStorage(
+          this.#storageFactory,
+          standEntityStorageDescriptor(
+            this.#storageContext(tenantId),
+            registration.schema,
+            registration.columns,
+          ),
+        ),
+        true,
+      );
+    }
+    const key = registration.typeUrl;
     const existing = this.#entityHandles.get(key);
-    if (existing !== undefined) return existing.current;
+    if (existing !== undefined) return this.#lease(existing, false);
     const handle = Stand.#openStorage(
       this.#storageFactory,
       standEntityStorageDescriptor(
@@ -697,7 +727,28 @@ export class Stand {
       ),
     );
     this.#entityHandles.set(key, handle);
-    return handle.current;
+    return this.#lease(handle, false);
+  }
+
+  #lease(
+    handle: { readonly current: EntityRecordStorage<unknown>; close(): void },
+    releaseAfterOperation: boolean,
+  ): CurrentStorageLease {
+    let released = false;
+    return {
+      current: handle.current,
+      release: () => {
+        if (released) return;
+        released = true;
+        if (releaseAfterOperation) {
+          try {
+            handle.close();
+          } catch (error) {
+            this.#handleCloseErrors.push(error);
+          }
+        }
+      },
+    };
   }
 
   #entryResult<Schema extends MessageSchema>(
@@ -931,6 +982,11 @@ interface EntityStorageFactory {
     readonly current: EntityRecordStorage<I>;
     close(): void;
   };
+}
+
+interface CurrentStorageLease {
+  readonly current: EntityRecordStorage<unknown>;
+  release(): void;
 }
 
 interface DeferredStandUpdate {

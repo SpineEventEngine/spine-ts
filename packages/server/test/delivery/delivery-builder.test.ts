@@ -2,6 +2,7 @@
 
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { create } from "@bufbuild/protobuf";
+import { TenantIdSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { describe, expect, it } from "vitest";
 
@@ -12,6 +13,7 @@ import {
   FailedPickUp,
   FailedReception,
   ShardIndex,
+  ShardedWorkRegistry,
   UniformAcrossAllShards,
 } from "../../src/index.js";
 import { Delivery as CoreDelivery } from "../../src/delivery/delivery.js";
@@ -94,6 +96,31 @@ describe("DeliveryMonitor delivery", () => {
     expect(() => {
       (nodeId as { value: string }).value = "mutated-again";
     }).toThrow();
+  });
+
+  it("accepts a custom shard registry with an equivalent cloned tenant", () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const registryContext = {
+      name: "Tasks",
+      multitenant: true as const,
+      tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
+    };
+    const builderContext = {
+      ...registryContext,
+      tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } }),
+    };
+    const workRegistry = new ShardedWorkRegistry({
+      context: registryContext,
+      storageFactory,
+    });
+
+    expect(() =>
+      new DeliveryBuilder()
+        .withContext(builderContext)
+        .withStorageFactory(storageFactory)
+        .withWorkRegistry(workRegistry)
+        .build(),
+    ).not.toThrow();
   });
 
   it("rejects conflicting direct worker and node identities", () => {

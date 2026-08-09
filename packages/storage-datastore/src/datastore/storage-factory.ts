@@ -50,6 +50,9 @@ export interface RecordLayout {
 /**
  * Creates a customized provider for one record family.
  *
+ * A custom provider owns tenant, ID, and column mapping. Builder-configured
+ * namespace converters and stringifiers are not passed to this callback.
+ *
  * @param context The storage context.
  * @param recordSpec The record-family contract.
  * @param client The caller-owned Datastore client.
@@ -65,6 +68,9 @@ export type CreateRecordStorage<R extends Message = Message> = <I>(
 
 /**
  * Creates a coherent customized persistence provider for one Entity type.
+ *
+ * A custom provider owns tenant, ID, and column mapping. Builder-configured
+ * namespace converters and stringifiers are not passed to this callback.
  *
  * @param input The Entity storage contract.
  * @param client The caller-owned Datastore client.

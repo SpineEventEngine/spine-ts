@@ -13,7 +13,9 @@ type TenantMode = "single-tenant" | "multitenant";
 export interface TenantIndex {
   // prettier-ignore
 
-  /** Identifies whether the owning context accepts tenant IDs. */
+  /**
+   * Identifies whether the owning context accepts tenant IDs.
+   */
   readonly tenantMode: TenantMode;
 
   /**
@@ -24,14 +26,16 @@ export interface TenantIndex {
   all(): Promise<readonly TenantId[]>;
 
   /**
-   * Admits one complete tenant through provider-native catalog state.
+   * Records one complete tenant through provider-native catalog state.
    *
    * @param tenantId The complete generated tenant ID.
    * @returns Completion of provider catalog admission.
    */
   keep(tenantId: TenantId): Promise<void>;
 
-  /** Closes this context view without closing the factory-owned catalog. */
+  /**
+   * Closes this context view without closing the factory-owned catalog.
+   */
   close(): void;
 }
 

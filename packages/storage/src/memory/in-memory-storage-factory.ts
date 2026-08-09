@@ -52,7 +52,9 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     return this.#catalog;
   }
 
-  /** Closes the catalog view and this factory. */
+  /**
+   * Closes the catalog view and this factory.
+   */
   override close(): void {
     void this.#catalog.close();
     super.close();

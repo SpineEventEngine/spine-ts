@@ -657,7 +657,7 @@ const MysqlConfigurations = Object.freeze({
     return {
       boundary,
       databaseName,
-      target: `${url.hostname.toLowerCase()}:${String(port)}/${databaseName}`,
+      target: `${url.hostname.toLowerCase()}:${String(port)}/${databaseName.toLowerCase()}`,
       poolOptions: {
         host: url.hostname,
         ...(url.port === "" ? {} : { port }),

@@ -12,7 +12,7 @@ import {
 } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
-import { EventStore, InMemoryStorageFactory } from "../../src/index.js";
+import { EventStore, InMemoryStorageBackend, InMemoryStorageFactory } from "../../src/index.js";
 import { eventStoreAccess } from "../../src/internal/event-store.js";
 
 describe("EventStore", () => {
@@ -167,6 +167,27 @@ describe("EventStore", () => {
     await expect(first.read()).resolves.toHaveLength(1);
   });
 
+  it("atomically rejects concurrent duplicate IDs across factories sharing a backend", async () => {
+    const backend = new InMemoryStorageBackend();
+    const first = new EventStore(
+      { name: "First", multitenant: false },
+      new InMemoryStorageFactory(backend),
+    );
+    const second = new EventStore(
+      { name: "Second", multitenant: false },
+      new InMemoryStorageFactory(backend),
+    );
+
+    const results = await Promise.allSettled([
+      first.append(createEvent("shared-event", "type.spine.io/tasks.TaskCreated", 1n)),
+      second.append(createEvent("shared-event", "type.spine.io/tasks.TaskRenamed", 2n)),
+    ]);
+
+    expect(results.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
+    expect(results.filter(({ status }) => status === "rejected")).toHaveLength(1);
+    await expect(first.read()).resolves.toHaveLength(1);
+  });
+
   it("rejects duplicate event IDs within one append batch", async () => {
     const factory = new InMemoryStorageFactory();
     const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
@@ -178,6 +199,23 @@ describe("EventStore", () => {
       ]),
     ).rejects.toThrow(/unique event IDs/);
     await expect(store.read()).resolves.toEqual([]);
+  });
+
+  it("rolls back an inserted batch prefix when a later ID already exists", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    await store.append(createEvent("event-existing", "type.spine.io/tasks.TaskCreated", 1n));
+
+    await expect(
+      store.appendAll([
+        createEvent("event-prefix", "type.spine.io/tasks.TaskRenamed", 2n),
+        createEvent("event-existing", "type.spine.io/tasks.TaskClosed", 3n),
+      ]),
+    ).rejects.toThrow(/unique event IDs/);
+
+    await expect(store.read()).resolves.toMatchObject([
+      { id: { value: "event-existing" }, message: { typeUrl: "type.spine.io/tasks.TaskCreated" } },
+    ]);
   });
 
   it("rolls back appended events using cloned event IDs", async () => {

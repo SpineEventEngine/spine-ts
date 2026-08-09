@@ -32,7 +32,7 @@ export class InMemoryStorageBackend {
   }
 
   /**
-   * Admits one tenant to this backend without creating a record family.
+   * Records one tenant in this backend without creating a record family.
    *
    * @param backend Selects the shared backend.
    * @param tenant The complete provider tenant boundary.

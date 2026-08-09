@@ -2238,6 +2238,16 @@ class ObservingRecordStorage<I, R extends Message> extends InMemoryRecordStorage
     await super.writeAllRecords(records);
   }
 
+  protected override async compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    const applied = await super.compareAndSetRecord(id, expected, next);
+    if (applied && next !== undefined) this.#observe(next);
+    return applied;
+  }
+
   #observe(record: ReturnType<RecordSpec<I, R>["materialize"]>): void {
     const candidate = record.record as { id?: { value?: string } };
     this.observed.push(`store:${candidate.id?.value ?? "missing"}`);

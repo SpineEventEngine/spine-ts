@@ -1127,6 +1127,26 @@ describe("Stand", () => {
     expect(storageFactory.closedEntityHandles).toBe(1);
   });
 
+  it("releases entity-storage handles after high-cardinality tenant operations", async () => {
+    const storageFactory = new EntityHandleCountingFactory();
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: true },
+      storageFactory,
+    });
+    stand.register(ProjectionStateSchema);
+
+    for (let index = 0; index < 128; index++) {
+      await stand.read(ProjectionStateSchema, "missing", {
+        tenantId: tenant(`tenant-${String(index)}`),
+      });
+    }
+
+    expect(storageFactory.openedEntityHandles).toBe(128);
+    expect(storageFactory.closedEntityHandles).toBe(128);
+    await stand.close();
+    expect(storageFactory.closedEntityHandles).toBe(128);
+  });
+
   it("closes later entity handles when an earlier handle close fails", async () => {
     const storageFactory = new FailingEntityHandleFactory();
     const stand = new Stand({

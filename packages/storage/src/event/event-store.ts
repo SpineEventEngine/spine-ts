@@ -36,16 +36,16 @@ export class EventStore {
   }
 
   /**
-   * Returns whether the underlying event record storage remains open.
+   * Returns whether this Event Store still accepts operations.
    *
-   * @returns Returns true while the backing storage is open.
+   * @returns Returns true until this Event Store is closed.
    */
   isOpen(): boolean {
     return this.#open;
   }
 
   /**
-   * Closes the underlying event record storage.
+   * Closes this Event Store. Operation-selected storage handles close after use.
    */
   close(): void {
     this.#open = false;
@@ -161,8 +161,7 @@ export class EventStore {
     await eventStoreAccess.withLock(this.#factory, context, async () => {
       const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec);
       try {
-        await EventIds.rejectStored(storage, ids);
-        await storage.writeAll(records);
+        await EventIds.insertUnique(storage, records);
       } finally {
         storage.close();
       }
@@ -211,8 +210,37 @@ export class EventStore {
  * explicitly selected tenant.
  */
 export type EventStoreContext =
-  | { readonly name: string; readonly multitenant: false }
-  | { readonly name: string; readonly multitenant: true; readonly tenantId?: TenantId };
+  | {
+      // prettier-ignore
+
+      /**
+       * Diagnostic Bounded Context name.
+       */
+      readonly name: string;
+
+      /**
+       * Selects the one unpartitioned storage boundary.
+       */
+      readonly multitenant: false;
+    }
+  | {
+      // prettier-ignore
+
+      /**
+       * Diagnostic Bounded Context name.
+       */
+      readonly name: string;
+
+      /**
+       * Requires tenant selection for every storage operation.
+       */
+      readonly multitenant: true;
+
+      /**
+       * Selects a default complete tenant when an event does not carry one.
+       */
+      readonly tenantId?: TenantId;
+    };
 
 /**
  * Accepts an event after `EventStore` prechecks it and before append.
@@ -328,6 +356,43 @@ const EventIds = {
   ): Promise<void> {
     if ((await storage.index({ ids })).length > 0) {
       throw new Error("EventStore requires unique event IDs.");
+    }
+  },
+
+  /**
+   * Atomically inserts each event ID and rolls back this batch on collision.
+   */
+  async insertUnique(
+    storage: RecordStorage<EventId, Event>,
+    records: readonly Event[],
+  ): Promise<void> {
+    if (!storage.atomicCompareAndSet) {
+      throw new Error("EventStore requires atomic record compare-and-set.");
+    }
+    const inserted: { readonly id: EventId; readonly record: Event }[] = [];
+    try {
+      for (const record of records) {
+        const id = EventIds.require(record);
+        if (!(await storage.compareAndSet(id, undefined, record))) {
+          throw new Error("EventStore requires unique event IDs.");
+        }
+        inserted.push({ id, record });
+      }
+    } catch (error) {
+      const failures: unknown[] = [];
+      for (const { id, record } of inserted.reverse()) {
+        try {
+          if (!(await storage.compareAndSet(id, record, undefined))) {
+            failures.push(new Error("EventStore append rollback lost its stored event."));
+          }
+        } catch (rollbackError) {
+          failures.push(rollbackError);
+        }
+      }
+      if (failures.length > 0) {
+        throw new AggregateError([error, ...failures], "EventStore append rollback failed.");
+      }
+      throw error;
     }
   },
 
