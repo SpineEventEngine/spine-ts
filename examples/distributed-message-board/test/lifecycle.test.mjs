@@ -30,6 +30,9 @@ test(
       assert.match(clientRun(project, "second"), /full-ok/u);
       composeRun(project, ["kill", "--signal", "SIGTERM", "gateway"]);
       waitStopped(project, "gateway");
+    } catch (error) {
+      process.stderr.write(composeRun(project, ["logs", "--no-color"], true));
+      throw error;
     } finally {
       composeRun(project, ["down", "--volumes", "--remove-orphans"], true, true);
       assertNoLeaks(project);

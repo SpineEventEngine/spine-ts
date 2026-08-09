@@ -1,5 +1,6 @@
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import { SignedSessions } from "@spine-event-engine/auth";
+import { StringifierRegistry } from "@spine-event-engine/core";
 import {
   DurableSubscriptionBindings,
   EnvironmentType,
@@ -13,6 +14,7 @@ import { randomUUID } from "node:crypto";
 import { createPrivateKey } from "node:crypto";
 
 import type { BoardServerOptions } from "./index.js";
+import { typeRegistry } from "./model-registry.js";
 
 interface DeploymentConfig extends BoardServerOptions {
   readonly host: string;
@@ -93,7 +95,12 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
   },
 
   storage(client: Datastore): StorageFactory {
-    return DatastoreStorageFactory.newBuilder().setClient(client).build();
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(typeRegistry);
+    return DatastoreStorageFactory.newBuilder()
+      .setClient(client)
+      .setStringifierRegistry(stringifiers)
+      .build();
   },
 
   bindings(config: CombinedConfig, storageFactory: StorageFactory): DurableSubscriptionBindings {
