@@ -1,6 +1,6 @@
 # T-0146: Storage Tenancy Correction Plan
 
-Status: Analysis in progress.
+Status: Complete; implementation not started.
 
 ## Objective
 
@@ -28,4 +28,3 @@ must own migrations and serialized/provider compatibility explicitly.
   compare-and-set behavior.
 - Define staged implementation, compatibility, test, documentation, and review
   work without modifying production code in this planning task.
-

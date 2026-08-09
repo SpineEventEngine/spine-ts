@@ -1,0 +1,433 @@
+# Storage Tenancy Correction Plan
+
+Status: Proposed for implementation after review.
+
+## Why this correction exists
+
+Wave 8 introduced two private persistence fields that Spine JVM does not use:
+
+- `_scope`, which combines a Bounded Context name, tenant, source type, and
+  storage group into one hidden record discriminator;
+- `_revision`, which is stored and incremented by MySQL but is not consulted by
+  any compare-and-set or conflict decision.
+
+The same implementation also made the Bounded Context name part of in-memory,
+MySQL, and Datastore physical identity, and persisted a synthetic `TenantId`
+record family. These choices contradict the target model:
+
+- Bounded Contexts do not partition persisted data. Domain types and configured
+  record families provide separation.
+- Tenant isolation is provider-specific.
+- MySQL selects a tenant-specific database/data source.
+- Datastore selects a tenant-specific native namespace.
+- Atomicity uses provider transactions, locks, and exact record comparison; it
+  does not require a private revision column.
+
+This is a breaking storage-layout correction. It must not be hidden behind a
+compatibility facade.
+
+## JVM evidence
+
+### Datastore
+
+The current JVM Datastore adapter obtains the current tenant through
+`TenantFunction`, converts it to a Datastore namespace, and applies that
+namespace to keys and queries:
+
+- `core-jvm/server/src/main/java/io/spine/server/tenant/TenantFunction.java`
+- `gcloud-2x/datastore/src/main/java/io/spine/server/storage/datastore/tenant/Namespace.java`
+- `gcloud-2x/datastore/src/main/java/io/spine/server/storage/datastore/tenant/MultitenantNamespaceSupplier.java`
+- `gcloud-2x/datastore/src/main/java/io/spine/server/storage/datastore/DatastoreWrapper.java`
+- `gcloud-2x/datastore/src/main/java/io/spine/server/storage/datastore/DsReaderLookup.java`
+
+The stored Datastore entity contains an unindexed serialized `bytes` property
+and declared query columns only. Kind selection does not include the Bounded
+Context name:
+
+- `gcloud-2x/datastore/src/main/java/io/spine/server/storage/datastore/record/Entities.java`
+- `gcloud-2x/datastore/src/main/java/io/spine/server/storage/datastore/record/DsRecordStorage.java`
+- `gcloud-2x/datastore/src/main/java/io/spine/server/storage/datastore/Kind.java`
+
+Tenant discovery reads Datastore's native `__namespace__` metadata rather than
+storing a `TenantId` record family:
+
+- `gcloud-2x/datastore/src/main/java/io/spine/server/storage/datastore/tenant/NamespaceIndex.java`
+
+### MySQL/JDBC
+
+The current local JVM JDBC 2.x branch has one fixed data source per factory and
+does not yet implement tenant routing. It therefore cannot be cited as a
+working multitenant implementation. It does establish that table names derive
+from the source Protobuf type and that tables contain the ID, serialized bytes,
+and declared columns without a Bounded Context discriminator or private
+revision column:
+
+- `jdbc-2x/rdbms/src/main/java/io/spine/server/storage/jdbc/JdbcStorageFactory.java`
+- `jdbc-2x/rdbms/src/main/java/io/spine/server/storage/jdbc/TableNames.java`
+- `jdbc-2x/rdbms/src/main/java/io/spine/server/storage/jdbc/TableSpecs.java`
+- `jdbc-2x/rdbms/src/main/java/io/spine/server/storage/jdbc/query/WriteOneQuery.java`
+- `jdbc-2x/mysql/src/main/java/io/spine/server/storage/mysql/MySqlUpsertOneQuery.java`
+
+The historical JVM branch `origin/multitenancy-support` at `603a4706` contains
+the intended JDBC mechanism: `MultitenantDataSourceSupplier` selects a
+`DataSourceWrapper` from a `Map<TenantId, DataSourceWrapper>` through
+`TenantFunction`. The human direction for this correction freezes that
+provider model for Spine TS: a multitenant MySQL factory routes each tenant to
+its own configured database/data source.
+
+## Correct storage identity
+
+The physical identity of a record is:
+
+```text
+provider tenant boundary + record family + record ID
+```
+
+It is not:
+
+```text
+Bounded Context + tenant + record family + record ID + private revision
+```
+
+A record family is selected from `RecordSpec` plus its optional
+`StorageGroup`, including any explicit provider customization. The Bounded
+Context name remains useful for diagnostics and error messages, but it must not
+affect a database, namespace, table, kind, key, query predicate, transaction,
+lock, cache key, or record-sharing decision.
+
+### Tenant identity
+
+The implementation must stop flattening the generated `TenantId` variants into
+ambiguous strings such as `domain:<value>`. `StorageContext` must preserve the
+complete `TenantId` message. One internal `TenantBoundary` derives a
+collision-free key from the TenantId kind and deterministic Proto bytes; MySQL
+lookup, memory slices, EventStore/cache identity, provider catalogs, and
+Datastore conversion all consume that same value.
+
+The three generated variants remain distinct even when their significant text
+is equal:
+
+```text
+domain(example.test) != email(example.test) != value(example.test)
+```
+
+The default Datastore converter follows JVM's typed namespace convention:
+`D<domain>`, `E<email>`, and `V<value>`, including the provider's namespace
+character rules. Conversion must be tested in both directions. A custom
+converter must be injective over admitted tenants and return “not a tenant” for
+namespaces it does not own. Default/empty TenantIds are invalid in multitenant
+mode.
+
+## Required invariants
+
+1. No production schema, persisted record, key, or query contains `_scope` or
+   `_revision`.
+2. No Bounded Context name participates in physical storage identity.
+3. In MySQL multitenancy, a tenant selects exactly one configured database/data
+   source before any table operation.
+4. In Datastore multitenancy, a tenant selects exactly one native namespace for
+   every key, query, and transaction.
+5. Single-tenant MySQL uses its one configured database. Single-tenant
+   Datastore uses the caller client's configured/default namespace.
+6. Within a tenant boundary, equal family and ID values refer to the same
+   physical record even when opened by different Bounded Contexts.
+7. Different tenants may use equal family and ID values without collision.
+8. A physical record contains the provider key/ID, serialized bytes, and
+   declared columns only. Provider-native key metadata is not duplicated as a
+   hidden Proto or pseudo-column.
+9. Exact compare-and-set remains atomic without `_revision`.
+10. Tenant discovery is provider-owned; there is no generic persisted
+    `TenantId` record family.
+11. Domain, email, and value TenantIds cannot collide, including when an
+    application value begins with text such as `domain:` or `email:`.
+
+## Implementation sequence
+
+### 1. Correct the common storage contract
+
+- Delete `canonical-scope.ts` and every `StorageScopes` use.
+- Redefine `StorageContext.name` as diagnostic context only.
+- Replace the flattened optional tenant string with the complete generated
+  `TenantId`; derive one immutable `TenantBoundary` for provider selection.
+- State explicitly that the typed `tenantId` selects a provider tenant boundary
+  and that `RecordSpec` plus `StorageGroup` selects the physical family.
+- Remove Bounded Context names from memory keys, EventStore snapshots, lock
+  names, factory sharing rules, and provider customization identity.
+- Add common contract tests proving two contexts share the same tenant/family
+  record and two tenants do not.
+
+No replacement scope token, fingerprint, discriminator, or compatibility
+alias is permitted.
+
+### 2. Replace generic tenant records with a provider tenant catalog
+
+Replace `TenantIndexes.create({ contextName, storageFactory })` and the direct
+`TenantId` `RecordSpec` with a storage-provider capability that can:
+
+- note an admitted tenant when the provider requires it;
+- enumerate tenant boundaries available for delivery startup;
+- participate in the storage factory's existing lifecycle.
+
+The capability and its resources are factory-owned, not
+Bounded-Context-owned. Calling it from two contexts must not create two
+catalogs, and closing one Bounded Context must not close a catalog still used
+by another. The storage factory closes the catalog with its other resources.
+
+Provider behavior:
+
+- Datastore enumerates native namespaces and converts them to tenant IDs. A
+  short-lived in-process cache may avoid metadata lag, matching JVM behavior,
+  but it is not persistence.
+- MySQL enumerates the configured tenant-to-database/data-source registry.
+- Memory enumerates its tenant slices.
+- Single-tenant providers return the one unscoped startup boundary.
+
+The catalog represents single tenancy with one explicit internal singleton,
+not with a magic string or an empty TenantId. The server translates that
+singleton to the existing tenant-free delivery scope only at its boundary.
+
+Datastore enumeration applies the same converter used for writes. It ignores
+native namespaces for which the converter returns “not a tenant,” rejects an
+invalid or non-round-tripping conversion, deduplicates equal canonical
+TenantIds, and never treats the empty/default namespace as a multitenant
+tenant. The default `D`/`E`/`V` converter requires a Datastore project dedicated
+to that Spine application; a shared project requires an application-specific
+converter that can reject namespaces owned by other applications.
+
+An arbitrary MySQL resolver that cannot enumerate tenants is insufficient for
+delivery startup. The first implementation should therefore expose an
+immutable list of typed tenant/database entries keyed internally by
+`TenantBoundary` (or require a separate enumerable tenant directory alongside a
+resolver); it must reject ambiguous configuration. It must not use JavaScript
+object identity for generated `TenantId` map keys.
+
+### 3. Correct MySQL
+
+- Change the builder to accept either:
+  - one `MysqlStorageOptions` value for single-tenant use; or
+  - immutable typed `{ tenantId: TenantId, options: MysqlStorageOptions }`
+    entries for multitenant use.
+- Validate every URL includes a database and reject blank/duplicate tenant IDs.
+- Normalize each server/database identity and reject two tenant entries that
+  point to the same physical target, even through textually different URLs.
+- Create and own one pool per configured tenant database. Close every pool and
+  every handle exactly once, including partial-build failure paths.
+- Select the pool/database from `StorageContext` before resolving or executing
+  a record operation. Reject a missing tenant, an unexpected tenant in
+  single-tenant mode, or an unknown tenant before acquiring a connection.
+- Generate tables with primary key `ID` and columns `bytes` plus the declared
+  Proto columns. Remove `_scope`, `_revision`, their bindings, predicates,
+  schema checks, and test helpers.
+- Keep exact-payload CAS inside the existing transaction and `SELECT ... FOR
+UPDATE` path.
+- Key advisory locks by the selected physical database, record family, and ID.
+  Do not repeat the tenant or Bounded Context in the lock name.
+- Ensure table customization applies consistently in every tenant database.
+
+### 4. Correct Datastore
+
+- Add a tenant-to-namespace converter compatible with JVM namespace semantics.
+- Construct every record key from namespace, kind, and canonical record ID.
+  Remove scope-derived key names and the `_scope` property/filter.
+- Apply the namespace to every query and native transaction, including
+  reconciliation scans and entity commits.
+- Store only unindexed serialized `bytes` plus declared indexed columns.
+- Preserve exact-payload CAS inside a native Datastore transaction; do not add
+  a replacement revision property.
+- Implement provider tenant enumeration through native `__namespace__`
+  metadata plus a non-persistent admission cache.
+- Expose the same typed forward/reverse namespace converter to key creation,
+  admission caching, and namespace enumeration; never parse flattened tenant
+  strings in adapter code.
+- Revalidate custom kind registrations now that a hidden scope cannot separate
+  collisions. Reject incompatible record families mapped to the same kind.
+
+### 5. Correct in-memory storage
+
+- Organize state as tenant boundary, record family, then record ID.
+- Remove Bounded Context names from record storage, entity history, EventStore,
+  and lock/cache identity.
+- Enumerate multitenant startup scopes from the in-memory tenant slices.
+- Preserve exact-record CAS semantics.
+
+### 6. Recheck shared server families
+
+- Verify Inbox, shard session, subscription, lease, authentication, entity,
+  event, state-history, and event-history families after scope removal.
+- Prove that delivery ownership is shared where its IDs are global and tenant
+  isolated where its `StorageContext` carries a tenant.
+- Prove that the same complete worker and shard fencing behavior survives.
+- Remove all server construction and corruption handling for stored `TenantId`
+  rows.
+- Ensure no new claim, marker, receipt, dedup, scope, revision, or tenant-index
+  record is introduced.
+
+### 7. Migration boundary
+
+This correction changes physical identity and is not backward compatible with
+Wave 8's invented layout.
+
+- Do not silently read both layouts, copy on access, or retain compatibility
+  columns.
+- Require new/empty MySQL tenant databases and Datastore namespaces for the
+  initial corrected release, unless a separate explicit migration tool is
+  approved.
+- Before a MySQL factory becomes usable, preflight every configured tenant
+  database for the legacy columns and compound key. If any target is legacy or
+  unreachable, fail the whole build and close every pool opened so far.
+- Document that old Datastore scope-derived keys are not visible to the new
+  canonical keys and require an application-owned/offline migration.
+- Add mandatory pre-deployment inventory commands for MySQL and Datastore. Each
+  exits nonzero when legacy MySQL columns/keys or Datastore scope properties and
+  scope-derived keys remain. Deployment documentation must make passing this
+  gate a prerequisite to starting the corrected runtime.
+- If records from multiple old Bounded Context scopes collapse onto the same
+  corrected family/ID, stop the offline migration and report every conflicting
+  source. The runtime and migration tool must never choose a winner.
+
+## Behavior-first verification
+
+### Common matrix
+
+- Context A writes and Context B reads the same tenant/family/ID.
+- Two tenants write equal family/ID values and read different records.
+- Different groups for one source remain different families.
+- Exact CAS succeeds once and rejects a stale expected record.
+- In a synchronized two-writer CAS race, exactly one writer succeeds; the loser
+  observes conflict and all transaction/lock resources are released.
+- Query columns continue to filter declared Proto values without provider
+  metadata predicates.
+
+### MySQL matrix
+
+- Single-tenant factory uses its configured database.
+- Multitenant factory routes two tenant IDs to two distinct database URLs.
+- Two tenant entries resolving to one normalized server/database are rejected.
+- Missing, blank, unknown, and mode-conflicting tenant inputs fail before pool
+  acquisition.
+- DDL has `PRIMARY KEY (ID)` and no `_scope` or `_revision`.
+- Reads, writes, deletes, indexes, and queries contain no hidden scope clause.
+- Transaction rollback, exact CAS, entity commit, advisory fencing, connection
+  release, and multi-pool close behavior remain correct.
+- A synchronized two-connection CAS race has exactly one winner and rolls back
+  and releases the loser.
+- The same configured table layout is validated independently in each tenant
+  database.
+
+### Datastore matrix
+
+- Two tenants produce equal kind/ID keys in different native namespaces.
+- Keys and every query/transaction carry the selected namespace.
+- Entities contain only `bytes` and declared columns.
+- Exact CAS and entity commit remain transactional.
+- A synchronized two-transaction CAS race has exactly one winner and leaves no
+  transaction open.
+- Native namespace discovery supplies delivery startup tenants without a
+  `TenantId` kind.
+- Single-tenant clients preserve their configured/default namespace.
+- Custom kind collisions fail during builder validation.
+
+### Server and delivery matrix
+
+- Startup discovers tenants through the provider catalog.
+- Admission updates only provider-native/in-memory catalog state.
+- Two Bounded Contexts do not create duplicate tenant persistence.
+- Typed value, domain, and email tenants round-trip through admission and
+  startup discovery without collision; unrelated Datastore namespaces are
+  excluded.
+- Direct delivery families retain acquisition, renewal, release, takeover,
+  stale fencing, acknowledgment recovery, and restart behavior.
+
+## Documentation correction
+
+Review every active README, reference, user guide, API guide, architecture
+guide, diagram, example, task record, and release inventory. Beginner-facing
+documents should explain:
+
+- a Bounded Context does not create a database, namespace, table, or kind;
+- a MySQL tenant maps to a configured database;
+- a Datastore tenant maps to a native namespace;
+- tables/kinds follow the Proto record family and declared query columns;
+- queries filter declared Proto columns inside the already-selected tenant
+  boundary;
+- `_scope`, `_revision`, and stored tenant-index records do not exist.
+
+Preserve each README's existing look and feel. Mark superseded planning/history
+as historical rather than rewriting evidence.
+
+## Review and release gates
+
+Because this changes public configuration and persisted identity, use one
+high-risk implementation owner followed by one complete review wave:
+
+- TypeScript/API: builder shape, StorageContext semantics, provider capability,
+  declarations, and breaking-change clarity;
+- performance/reliability: pool lifecycle, namespace propagation, transactions,
+  CAS, tenant enumeration, and delivery startup;
+- style/maintainability: provider separation and removal of compatibility
+  seams;
+- documentation: JVM-accurate, beginner-readable provider examples;
+- security: tenant isolation is a trust boundary, so final security review is
+  required.
+
+Before review, run focused tests, changed-package typechecks, changed-file
+ESLint, TSDoc, documentation audience/snippet/link checks, Prettier,
+`git diff --check`, legacy-symbol scans, and changed-source coverage at or above
+90% in every metric. After one aggregated correction batch and targeted
+re-review, run one final `verify:release`.
+
+## Proposed implementation tasks
+
+One existing high-risk implementation owner owns the complete T-0147 through
+T-0150 train. Provider specialists and reviewers remain read-only until the
+normal review wave. The intermediate checkpoints are not independently
+releasable tasks and cannot be declared complete, merged to `main`, or used by
+examples before T-0150 passes the shared acceptance unit.
+
+1. **T-0147 — Tenant-boundary contract preparation**: introduce and test the
+   typed, collision-free `TenantBoundary`, factory-owned tenant-catalog
+   capability, and provider conformance harness. It excludes public/runtime
+   cutover, provider layout changes, and deletion of the old seam.
+2. **T-0148 — MySQL tenant databases and schema correction**: add enumerable
+   tenant-database configuration; route operations and catalog enumeration by
+   tenant; remove `_scope`/`_revision`; preserve transactions and locks.
+   This is a non-releasable provider checkpoint and explicitly excludes server
+   operability under the new catalog.
+3. **T-0149 — Datastore namespaces and key correction**: route keys, queries,
+   transactions, and catalog enumeration through native namespaces; remove
+   `_scope`; preserve transactional CAS. This is a non-releasable provider
+   checkpoint and explicitly excludes server operability under the new catalog.
+4. **T-0150 — Atomic shared-runtime cutover and release convergence**: change
+   memory storage, EventStore/cache identity, and server tenant discovery;
+   delete `canonical-scope.ts`, the generic `TenantId` family, and all remaining
+   context-derived physical identity in one correction batch. Then converge
+   delivery/entity/event/subscription behavior, examples, migration
+   diagnostics, active documentation, invention audit, and release verification.
+
+Per-checkpoint acceptance is narrow: T-0147 passes typed-boundary/catalog
+contract tests; T-0148 passes the complete MySQL provider and migration
+preflight matrix; T-0149 passes the complete Datastore provider, namespace
+discovery, and migration inventory matrix. Only T-0150 owns cross-provider
+compilation, server operability, deletion scans, examples, full review,
+security review, and `verify:release`.
+
+The checkpoint risk ledger is explicit:
+
+- T-0147 risks a new serialized/public tenant identity; declarations and
+  collision tests are its primary gate.
+- T-0148 risks cross-tenant database aliasing, partial pool leaks, and accepting
+  legacy schemas; normalized-target, lifecycle, and preflight tests are its
+  primary gate.
+- T-0149 risks missing namespace propagation or admitting another application's
+  namespace; key/query/transaction and converter/discovery tests are its primary
+  gate.
+- T-0150 risks a partial shared-runtime cutover; repository-wide legacy scans,
+  cross-provider tests, migration gates, and final security/reliability review
+  are its primary gate.
+
+These tasks form a stacked train. T-0147 is additive preparation only; T-0148
+and T-0149 make provider-local corrections; T-0150 is the single shared-runtime
+cutover that removes the old seam. No adapter may offer both old and new
+physical layouts. Do not merge or publish an intermediate layout from this
+train as a release, and do not merge to `main` until all providers and shared
+runtime agree on the corrected identity contract.
