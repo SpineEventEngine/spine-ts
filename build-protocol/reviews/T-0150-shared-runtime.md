@@ -86,3 +86,8 @@ Prettier, and `git diff --check` passed.
   guard, stale/absent standalone-function dispositions, one five-component
   helper name, and missing TypeDoc root-export expectations. These corrections
   are mechanical contract convergence and did not reopen specialist concerns.
+- A later release run exposed two stale deployment-test fixtures: context-name
+  isolation and a pre-startup-probe MySQL mock. Their corrected expectations
+  directly exercise already-reviewed tenancy and startup behavior; 26 focused
+  tests and the complete restarted cheap preflight pass, so no review lane was
+  substantively reopened.

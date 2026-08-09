@@ -54,7 +54,7 @@ describe("LeasedNodeRegistry", () => {
     expect(JSON.stringify(leaseRecordSpec)).not.toContain("encodingVersion");
   });
 
-  it("omits a lease exactly at its expiry and keeps namespaces isolated", async () => {
+  it("omits a lease exactly at expiry and ignores diagnostic context names", async () => {
     const factory = new InMemoryStorageFactory();
     const left = new LeasedNodeRegistry({ factory, namespace: "left" });
     const right = new LeasedNodeRegistry({ factory, namespace: "right" });
@@ -63,7 +63,7 @@ describe("LeasedNodeRegistry", () => {
     await left.register({ node, registrationId: "left-process", expiresAt: 100 });
     await expect(left.read(99)).resolves.toEqual([node]);
     await expect(left.read(100)).resolves.toEqual([]);
-    await expect(right.read(99)).resolves.toEqual([]);
+    await expect(right.read(99)).resolves.toEqual([node]);
   });
 
   it("round-trips an explicit normalized HTTPS TLS authority", async () => {

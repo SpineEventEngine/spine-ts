@@ -13,7 +13,9 @@ describe("node-discovery provider configuration", () => {
   it("opens the configured MySQL table for the node-discovery record family", async () => {
     expect(vi.isMockFunction(createPool)).toBe(true);
     vi.mocked(createPool).mockReturnValue({
-      getConnection: vi.fn(() => Promise.resolve({ release: vi.fn() })),
+      getConnection: vi.fn(() =>
+        Promise.resolve({ query: vi.fn(() => Promise.resolve([[], []])), release: vi.fn() }),
+      ),
       end: vi.fn(() => Promise.resolve()),
     } as never);
     const factory = await MysqlStorageFactory.newBuilder()
