@@ -1166,6 +1166,31 @@ describe("Stand", () => {
     expect(storageFactory.closedEntityHandles).toBe(2);
   });
 
+  it("bounds retained diagnostics when every tenant handle close fails", async () => {
+    const storageFactory = new AlwaysFailingEntityHandleFactory();
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: true },
+      storageFactory,
+    });
+    stand.register(ProjectionStateSchema);
+
+    for (let index = 0; index < 128; index++) {
+      await stand.read(ProjectionStateSchema, "missing", {
+        tenantId: tenant(`tenant-${String(index)}`),
+      });
+    }
+
+    const error = await stand.close().catch((failure: unknown) => failure as AggregateError);
+    expect(error).toBeInstanceOf(AggregateError);
+    expect(error.message).toBe("Stand close failed.");
+    const errors = Array.from(error.errors as Iterable<unknown>);
+    expect(errors).toHaveLength(17);
+    expect(errors.at(-1)).toMatchObject({
+      message: "112 additional entity handle close failures.",
+    });
+    expect(storageFactory.closedEntityHandles).toBe(128);
+  });
+
   it("does not open a legacy record-storage index for list reads", async () => {
     const storageFactory = new ClosingStorageFactory();
     const stand = new Stand({
@@ -1612,6 +1637,20 @@ class FailingEntityHandleFactory extends EntityHandleCountingFactory {
           this.#failed = true;
           throw new Error("Entity handle close failed.");
         }
+      },
+    });
+  }
+}
+
+class AlwaysFailingEntityHandleFactory extends EntityHandleCountingFactory {
+  override createEntityStorage(input: unknown): unknown {
+    const handle = super.createEntityStorage(input) as { close(): void } & Record<string, unknown>;
+    const close = handle.close.bind(handle);
+    return Object.freeze({
+      ...handle,
+      close: () => {
+        close();
+        throw new Error("Entity handle close failed.");
       },
     });
   }

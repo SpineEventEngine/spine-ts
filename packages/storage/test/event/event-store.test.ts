@@ -1,4 +1,4 @@
-import { create } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
   ActorContextSchema,
@@ -7,12 +7,21 @@ import {
   EventIdSchema,
   EventSchema,
   InternetDomainSchema,
+  OriginSchema,
   TenantIdSchema,
   type TenantId,
 } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
-import { EventStore, InMemoryStorageBackend, InMemoryStorageFactory } from "../../src/index.js";
+import {
+  EventStore,
+  InMemoryStorageBackend,
+  InMemoryStorageFactory,
+  type RecordSpec,
+  type RecordStorage,
+  type StorageContext,
+  type StorageGroup,
+} from "../../src/index.js";
 import { eventStoreAccess } from "../../src/internal/event-store.js";
 
 describe("EventStore", () => {
@@ -94,6 +103,59 @@ describe("EventStore", () => {
     await expect(
       readTenantEvents(factory, tenant({ kind: "email", value: "owner@example.com" })),
     ).resolves.toMatchObject([{ id: { value: "event-email" } }]);
+  });
+
+  it("uses a past-message actor tenant and rejects accepting an existing ID", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = new EventStore({ name: "Tasks", multitenant: true }, factory);
+    const event = createEvent("event-past", "type.spine.io/tasks.TaskCreated", 1n);
+    if (event.context === undefined) throw new Error("Expected an event context.");
+    event.context.origin = {
+      case: "pastMessage",
+      value: create(OriginSchema, {
+        actorContext: create(ActorContextSchema, { tenantId: tenant("tenant-past") }),
+      }),
+    };
+
+    await store.append(event);
+    await expect(store.accept(event)).rejects.toThrow(/unique event IDs/);
+    await expect(readTenantEvents(factory, tenant("tenant-past"))).resolves.toMatchObject([
+      { id: { value: "event-past" } },
+    ]);
+  });
+
+  it("requires an explicit tenant for multitenant reads", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: true },
+      new InMemoryStorageFactory(),
+    );
+
+    await expect(store.read()).rejects.toThrow(/reads require a complete tenant ID/);
+  });
+
+  it("requires an event tenant when no multitenant default is selected", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: true },
+      new InMemoryStorageFactory(),
+    );
+
+    await expect(
+      store.append(createEvent("event-a", "type.spine.io/tasks.TaskCreated", 1n)),
+    ).rejects.toThrow(/append requires an event tenant ID/);
+  });
+
+  it("rejects a batch that crosses tenant boundaries", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: true },
+      new InMemoryStorageFactory(),
+    );
+
+    await expect(
+      store.appendAll([
+        createEvent("event-a", "type.spine.io/tasks.TaskCreated", 1n, "tenant-a"),
+        createEvent("event-b", "type.spine.io/tasks.TaskCreated", 1n, "tenant-b"),
+      ]),
+    ).rejects.toThrow(/cannot contain events from different tenants/);
   });
 
   it("supports empty appends and closes with the delegated record storage", async () => {
@@ -218,6 +280,35 @@ describe("EventStore", () => {
     ]);
   });
 
+  it("fails closed when a provider does not promise atomic compare-and-set", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new NonAtomicEventStorageFactory(),
+    );
+
+    await expect(
+      store.append(createEvent("event-a", "type.spine.io/tasks.TaskCreated", 1n)),
+    ).rejects.toThrow(/requires atomic record compare-and-set/);
+  });
+
+  it.each(["reject", "throw"] as const)(
+    "reports append rollback failure when conditional removal must %s",
+    async (failure) => {
+      const store = new EventStore(
+        { name: "Tasks", multitenant: false },
+        new RollbackFailingEventStorageFactory(failure),
+      );
+      await store.append(createEvent("event-existing", "type.spine.io/tasks.TaskCreated", 1n));
+
+      await expect(
+        store.appendAll([
+          createEvent("event-prefix", "type.spine.io/tasks.TaskRenamed", 2n),
+          createEvent("event-existing", "type.spine.io/tasks.TaskClosed", 3n),
+        ]),
+      ).rejects.toThrow(/append rollback failed/);
+    },
+  );
+
   it("rolls back appended events using cloned event IDs", async () => {
     const factory = new InMemoryStorageFactory();
     const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
@@ -322,5 +413,40 @@ async function readTenantEvents(factory: InMemoryStorageFactory, tenantId: Tenan
     return await reader.read();
   } finally {
     reader.close();
+  }
+}
+
+class NonAtomicEventStorageFactory extends InMemoryStorageFactory {
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ): RecordStorage<I, R> {
+    const storage = super.onCreateRecordStorage(context, recordSpec, group);
+    Object.defineProperty(storage, "atomicCompareAndSet", { value: false });
+    return storage;
+  }
+}
+
+class RollbackFailingEventStorageFactory extends InMemoryStorageFactory {
+  constructor(private readonly failure: "reject" | "throw") {
+    super();
+  }
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    group?: StorageGroup,
+  ): RecordStorage<I, R> {
+    const storage = super.onCreateRecordStorage(context, recordSpec, group);
+    const compareAndSet = storage.compareAndSet.bind(storage);
+    storage.compareAndSet = async (id, expected, next) => {
+      if (next === undefined && expected !== undefined) {
+        if (this.failure === "throw") throw new Error("Rollback transport failed.");
+        return false;
+      }
+      return compareAndSet(id, expected, next);
+    };
+    return storage;
   }
 }

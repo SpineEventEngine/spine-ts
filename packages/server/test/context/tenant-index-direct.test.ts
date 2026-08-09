@@ -1,6 +1,11 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it, vi } from "vitest";
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import {
+  InMemoryStorageFactory,
+  StorageFactory,
+  TenantBoundary,
+  type TenantCatalog,
+} from "@spine-event-engine/storage";
 import { InternetDomainSchema, TenantIdSchema } from "@spine-event-engine/proto";
 
 import { TenantIndexes } from "../../src/context/tenant-index.js";
@@ -54,4 +59,51 @@ describe("provider tenant index", () => {
 
     await expect(index.keep(create(TenantIdSchema))).rejects.toThrow(/non-empty TenantId/);
   });
+
+  it("rejects multitenant index use after close", async () => {
+    const index = TenantIndexes.create({
+      contextName: "Tasks",
+      tenantMode: "multitenant",
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    index.close();
+
+    await expect(index.all()).rejects.toThrow(/TenantIndex.*closed/);
+    await expect(index.keep(tenant("tenant-a"))).rejects.toThrow(/TenantIndex.*closed/);
+  });
+
+  it("rejects a provider without a tenant catalog", () => {
+    expect(() =>
+      TenantIndexes.create({
+        contextName: "Tasks",
+        tenantMode: "multitenant",
+        storageFactory: {} as StorageFactory,
+      }),
+    ).toThrow(/provider-owned tenant catalog/);
+  });
+
+  it("rejects a single-tenant boundary returned by a multitenant catalog", async () => {
+    const factory = new CatalogFactory({
+      all: () => Promise.resolve([TenantBoundary.single]),
+      keep: () => Promise.resolve(),
+      close: () => Promise.resolve(),
+    });
+    const index = TenantIndexes.create({
+      contextName: "Tasks",
+      tenantMode: "multitenant",
+      storageFactory: factory,
+    });
+
+    await expect(index.all()).rejects.toThrow(/returned a single-tenant boundary/);
+  });
 });
+
+class CatalogFactory extends InMemoryStorageFactory {
+  constructor(private readonly catalog: TenantCatalog) {
+    super();
+  }
+
+  override tenantCatalog(): TenantCatalog {
+    return this.catalog;
+  }
+}

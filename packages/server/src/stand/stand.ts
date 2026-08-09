@@ -30,6 +30,8 @@ import { SubscriptionObservers, type StandObservedState } from "./subscription-o
 import type { EventBus, EventSubscription } from "../bus/event-bus.js";
 import type { Subscription, SubscriptionUpdate } from "@spine-event-engine/proto/client";
 
+const MAX_RETAINED_HANDLE_CLOSE_ERRORS = 16;
+
 /**
  * Options for constructing a direct read-side Stand.
  */
@@ -237,6 +239,7 @@ export class Stand {
     { readonly current: EntityRecordStorage<unknown>; close(): void }
   >();
   readonly #handleCloseErrors: unknown[] = [];
+  #omittedHandleCloseErrors = 0;
   readonly #inFlight = new Set<Promise<void>>();
   #closing = false;
   #closed = false;
@@ -675,15 +678,21 @@ export class Stand {
       registration.subscribers.clear();
     }
     const errors: unknown[] = this.#handleCloseErrors.splice(0);
+    let omittedErrors = this.#omittedHandleCloseErrors;
+    this.#omittedHandleCloseErrors = 0;
     for (const handle of this.#entityHandles.values()) {
       try {
         handle.close();
       } catch (error) {
-        errors.push(error);
+        if (errors.length < MAX_RETAINED_HANDLE_CLOSE_ERRORS) errors.push(error);
+        else omittedErrors++;
       }
     }
     this.#entityHandles.clear();
     this.#closed = true;
+    if (omittedErrors > 0) {
+      errors.push(new Error(`${String(omittedErrors)} additional entity handle close failures.`));
+    }
     if (errors.length > 0) throw new AggregateError(errors, "Stand close failed.");
   }
 
@@ -744,7 +753,11 @@ export class Stand {
           try {
             handle.close();
           } catch (error) {
-            this.#handleCloseErrors.push(error);
+            if (this.#handleCloseErrors.length < MAX_RETAINED_HANDLE_CLOSE_ERRORS) {
+              this.#handleCloseErrors.push(error);
+            } else {
+              this.#omittedHandleCloseErrors++;
+            }
           }
         }
       },

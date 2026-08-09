@@ -1,21 +1,24 @@
 # T-0150 Review Record
 
-Status: Initial review complete; aggregated correction verified; targeted
-re-review pending.
+Status: Initial review complete; aggregated correction verified; final
+style re-review pending.
 
 ## Required lanes
 
-- TypeScript/API documentation: pending; existing
+- TypeScript/API documentation: clean after targeted re-review; existing
   `typescript_api_docs_reviewer`, configured `gpt-5.6-terra` / high reasoning.
-- Performance/reliability: pending; existing
+- Performance/reliability: clean after targeted re-review; existing
   `performance_reliability_reviewer`, configured `gpt-5.6-terra` / high
   reasoning.
-- Style/maintainability: pending; existing
+- Style/maintainability: one P2 correction awaiting targeted re-review; existing
   `style_maintainability_reviewer`, configured `gpt-5.6-terra` / high reasoning.
-- Documentation: pending; existing `documentation_reviewer`, configured
+- Documentation: clean after targeted re-review; existing `documentation_reviewer`, configured
   `gpt-5.6-luna` / medium reasoning.
-- Security: pending and required because tenant isolation is a trust boundary;
-  existing `security_reviewer`, configured `gpt-5.6-terra` / high reasoning.
+- Security: primary-agent trust-boundary audit complete; the current execution
+  rule prohibited creating a missing reviewer thread. The audit covered typed
+  tenant-boundary keys, native MySQL database and Datastore namespace
+  selection, context-name exclusion, provider catalogs, and case-only MySQL
+  target aliases. No residual trust-boundary finding remains.
 
 Runtime self-introspection is not exposed by these immutable role surfaces;
 the configured role/profile is the dispatch evidence unless a visible mismatch
@@ -59,3 +62,19 @@ Correction evidence: focused 4 files / 102 tests, handoff 3 files / 107 tests,
 and full affected runtime 100 files / 1,944 tests passed; 14 live-provider tests
 were skipped without endpoints. Affected package TypeScript, scoped ESLint,
 Prettier, and `git diff --check` passed.
+
+## Targeted re-review and coverage correction
+
+- TypeScript/API documentation, performance/reliability, and documentation
+  targeted re-reviews are clean. Reliability independently passed 4 files / 88
+  tests.
+- Style/maintainability found one P2 bounded-resource issue: per-operation Stand
+  handle-close failures were retained without a limit until `Stand.close()`.
+  Stand now retains the first 16 failures and one exact omitted-count summary;
+  a 128-tenant always-failing regression proves only 17 diagnostics remain.
+- Behavior coverage added missing tenant-index provider/closed/catalog failures,
+  EventStore non-atomic-provider and rollback-failure paths, past-message tenant
+  selection, and in-memory catalog/order behavior.
+- Changed-source coverage across the corrected storage/server sources passes:
+  95.04% statements, 90.03% branches, 95.56% functions, and 95.92% lines; 47
+  files / 754 tests passed and 14 endpoint-dependent tests skipped.

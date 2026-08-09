@@ -1,7 +1,10 @@
+import { create } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import { TenantIdSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
 import { InMemoryStorageBackend } from "../../src/memory/in-memory-storage-backend.js";
+import { InMemoryStorageFactory } from "../../src/memory/in-memory-storage-factory.js";
 import { TenantBoundary } from "../../src/internal/tenancy.js";
 import { RecordSpec } from "../../src/record/record-spec.js";
 
@@ -42,5 +45,48 @@ describe("InMemoryStorageBackend", () => {
     expect(firstRows).toBe(first);
     expect(secondRows).toBe(second);
     expect(firstRows).not.toBe(secondRows);
+  });
+
+  it("lists admitted tenants in stable boundary order", () => {
+    const backend = new InMemoryStorageBackend();
+    const second = TenantBoundary.from(
+      create(TenantIdSchema, { kind: { case: "value", value: "z" } }),
+    );
+    const first = TenantBoundary.from(
+      create(TenantIdSchema, { kind: { case: "value", value: "a" } }),
+    );
+
+    InMemoryStorageBackend.admit(backend, second);
+    InMemoryStorageBackend.admit(backend, first);
+
+    expect(InMemoryStorageBackend.tenants(backend).map(({ key }) => key)).toEqual(
+      [first.key, second.key].sort(),
+    );
+
+    const reverseBackend = new InMemoryStorageBackend();
+    InMemoryStorageBackend.admit(reverseBackend, first);
+    InMemoryStorageBackend.admit(reverseBackend, second);
+    expect(InMemoryStorageBackend.tenants(reverseBackend).map(({ key }) => key)).toEqual(
+      [first.key, second.key].sort(),
+    );
+  });
+
+  it("rejects single-tenant and closed catalog admissions", async () => {
+    const factory = new InMemoryStorageFactory();
+    const catalog = factory.tenantCatalog();
+
+    await catalog.keep(
+      TenantBoundary.from(create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } })),
+    );
+    await expect(catalog.all()).resolves.toHaveLength(1);
+
+    await expect(catalog.keep(TenantBoundary.single)).rejects.toThrow(/requires a tenant boundary/);
+    await catalog.close();
+    await expect(catalog.all()).rejects.toThrow(/catalog is closed/);
+    await expect(
+      catalog.keep(
+        TenantBoundary.from(create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } })),
+      ),
+    ).rejects.toThrow(/catalog is closed/);
   });
 });
