@@ -35,6 +35,7 @@ import {
 import { InMemoryStorageFactory } from "../../src/memory/in-memory-storage-factory.js";
 import { RecordColumn } from "../../src/record/record-column.js";
 import { ColumnTypes } from "../../src/record/column-type.js";
+import { RecordSpec } from "../../src/record/record-spec.js";
 import type { StorageContext } from "../../src/storage/storage.js";
 
 describe("InMemoryEntityHistory", () => {
@@ -598,6 +599,15 @@ function input(
           : undefined,
     },
     columns: [],
+    recordSpec: new RecordSpec<string, EntityRecord>({
+      sourceType: StringValueSchema,
+      recordType: EntityRecordSchema,
+      idKind: "string",
+      extractId: (record) => {
+        if (record.entityId === undefined) throw new Error("EntityRecord.entityId is required.");
+        return fromBinary(StringValueSchema, record.entityId.value).value;
+      },
+    }),
     sourceType: StringValueSchema,
     stateSchema: StringValueSchema,
     stateHistory,

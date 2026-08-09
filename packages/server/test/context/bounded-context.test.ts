@@ -20,6 +20,7 @@ import {
   EventIdSchema,
   EventSchema,
   TenantIdSchema,
+  type TenantId,
   UserIdSchema,
   VersionSchema,
   file_spine_options,
@@ -78,12 +79,12 @@ interface InternalSystemPairing {
 
 interface InternalTenantIndex {
   readonly tenantMode: "single-tenant" | "multitenant";
-  all(): Promise<readonly string[]>;
-  keep(tenantId: string): Promise<void>;
+  all(): Promise<readonly TenantId[]>;
+  keep(tenantId: TenantId): Promise<void>;
 }
 
 interface InternalDeliveryScope {
-  readonly tenantId?: string;
+  readonly tenantId?: TenantId;
 }
 
 interface InternalDeliveryEndpoint {

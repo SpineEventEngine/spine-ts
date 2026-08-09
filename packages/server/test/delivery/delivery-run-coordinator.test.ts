@@ -17,6 +17,7 @@ import type {
 import { DeliveryWorker } from "../../src/delivery/delivery-worker.js";
 import { Delivery } from "../../src/delivery/delivery.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
+import { tenant } from "../tenant-fixture.js";
 
 describe("DeliveryRunCoordinator", () => {
   it("rejects constructing a delivery generation without a canonical scope", () => {
@@ -1121,7 +1122,7 @@ function scope(
   return Object.freeze({
     owner: Object.freeze({ key: ownerKey }),
     ready: Object.freeze({
-      tenantId: `tenant-${targetTypeUrl}`,
+      tenantId: tenant(`tenant-${targetTypeUrl}`),
       label: "UPDATE_SUBSCRIBER",
       targetTypeUrl,
       shard: new ShardIndex(index, ofTotal),

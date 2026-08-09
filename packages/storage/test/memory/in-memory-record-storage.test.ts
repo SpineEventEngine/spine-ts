@@ -1007,7 +1007,7 @@ class QueryEntriesStorage extends RecordStorage<EventId, Event> {
   readonly #records: readonly Event[];
 
   constructor(
-    context: { name: string; multitenant: boolean; tenantId?: string },
+    context: StorageContext,
     recordSpec: RecordSpec<EventId, Event>,
     records: readonly Event[],
   ) {

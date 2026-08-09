@@ -11,6 +11,7 @@ import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
 import { EventSchema, VersionSchema, file_spine_options } from "@spine-event-engine/proto";
 import {
   InMemoryStorageFactory,
+  ColumnTypes,
   EventStore,
   RecordColumn,
   RecordStorage,
@@ -428,7 +429,7 @@ describe("Stand", () => {
     vi.useFakeTimers();
     observedEventBusSubscriptions.length = 0;
     const storageFactory = new InMemoryStorageFactory();
-    const context = { name: "DurableRestart", multitenant: false };
+    const context = { name: "DurableRestart", multitenant: false } as const;
     const first = new StorageSubscriptionRegistry(context, storageFactory);
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: "restart" }),
@@ -1405,8 +1406,8 @@ async function writeStandCurrent(
       (field) =>
         new RecordColumn(
           field.localName,
+          ColumnTypes.fromField(field),
           (record) => (record as Record<string, unknown>)[field.localName],
-          "protobuf",
         ),
     ),
   );

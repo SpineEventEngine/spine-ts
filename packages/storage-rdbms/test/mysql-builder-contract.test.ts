@@ -5,7 +5,13 @@ import { StringifierRegistry } from "@spine-event-engine/core";
 import { EventSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
-import { ColumnTypes, RecordColumn, RecordSpec, StorageGroup } from "@spine-event-engine/storage";
+import {
+  ColumnTypes,
+  RecordColumn,
+  RecordSpec,
+  StorageGroup,
+  type StorageContext,
+} from "@spine-event-engine/storage";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -415,11 +421,7 @@ describe("MysqlStorageFactory builder contract", () => {
   });
 });
 
-function entityInput(
-  context: { readonly name: string; readonly multitenant: boolean },
-  stateHistory = true,
-  eventHistory = true,
-) {
+function entityInput(context: StorageContext, stateHistory = true, eventHistory = true) {
   const recordSpec = new RecordSpec({
     sourceType: StringValueSchema,
     recordType: EntityRecordSchema,

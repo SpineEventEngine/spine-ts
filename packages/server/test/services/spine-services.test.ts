@@ -4985,16 +4985,16 @@ function createFakeContext(options: {
   readonly readVersioned?: (
     schema: typeof ProjectionStateSchema,
     id: unknown,
-    options: { readonly tenantId?: string },
+    options: { readonly tenantId?: TenantId },
   ) => Promise<{ readonly state: ProjectionState; readonly version?: unknown } | undefined>;
   readonly readAllVersioned?: (
     schema: typeof ProjectionStateSchema,
-    options: { readonly tenantId?: string },
+    options: { readonly tenantId?: TenantId },
   ) => Promise<readonly { readonly state: ProjectionState; readonly version?: unknown }[]>;
   readonly queryVersioned?: (
     schema: typeof ProjectionStateSchema,
     query: unknown,
-    options: { readonly tenantId?: string },
+    options: { readonly tenantId?: TenantId },
   ) => Promise<readonly { readonly state: ProjectionState; readonly version?: unknown }[]>;
   readonly subscribe?: (
     schema: typeof ProjectionStateSchema,
@@ -5004,7 +5004,7 @@ function createFakeContext(options: {
       readonly previousState?: ProjectionState;
       readonly state: ProjectionState;
     }) => void,
-    options: { readonly tenantId?: string },
+    options: { readonly tenantId?: TenantId },
   ) => { readonly closed: boolean; unsubscribe(): void };
 }) {
   const commandTypes = options.commandTypes ?? [];
@@ -5050,11 +5050,11 @@ function createFakeQueryVersioned(options: {
   readonly readVersioned?: (
     schema: typeof ProjectionStateSchema,
     id: unknown,
-    options: { readonly tenantId?: string },
+    options: { readonly tenantId?: TenantId },
   ) => Promise<{ readonly state: ProjectionState; readonly version?: unknown } | undefined>;
   readonly readAllVersioned?: (
     schema: typeof ProjectionStateSchema,
-    options: { readonly tenantId?: string },
+    options: { readonly tenantId?: TenantId },
   ) => Promise<readonly { readonly state: ProjectionState; readonly version?: unknown }[]>;
 }) {
   if (options.readVersioned !== undefined) {
@@ -5062,7 +5062,7 @@ function createFakeQueryVersioned(options: {
     return async (
       schema: typeof ProjectionStateSchema,
       query: { readonly ids?: readonly unknown[]; readonly predicate?: unknown },
-      readOptions: { readonly tenantId?: string },
+      readOptions: { readonly tenantId?: TenantId },
     ) => {
       const results = await Promise.all(
         (query.ids ?? normalizedTestIds(query.predicate)).map((id) =>
@@ -5079,7 +5079,7 @@ function createFakeQueryVersioned(options: {
     : (
         schema: typeof ProjectionStateSchema,
         _query: unknown,
-        readOptions: { readonly tenantId?: string },
+        readOptions: { readonly tenantId?: TenantId },
       ) => options.readAllVersioned?.(schema, readOptions);
 }
 

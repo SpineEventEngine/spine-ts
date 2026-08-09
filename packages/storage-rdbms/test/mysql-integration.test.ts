@@ -12,7 +12,7 @@ import {
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
 import { eventStoreRecordSpec } from "@spine-event-engine/storage/internal/event-store";
-import { ColumnTypes, EventStore } from "@spine-event-engine/storage";
+import { ColumnTypes, EventStore, type StorageContext } from "@spine-event-engine/storage";
 import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import type { RowDataPacket } from "mysql2";
 import { createPool } from "mysql2/promise";
@@ -87,7 +87,7 @@ live("MySQL-family record layout", () => {
 
   it("rolls back or retains the exact immutable Entity prefix at each injected boundary", async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
-    const context = { name: `t0134_commit_${String(Date.now())}`, multitenant: false };
+    const context = { name: `t0134_commit_${String(Date.now())}`, multitenant: false } as const;
     const input = entityInput(context);
     const commits = EntityCommitStorageFactories.create(factory, input);
     const eventStore = new EventStore(context, factory);
@@ -164,7 +164,10 @@ live("MySQL-family record layout", () => {
   }, 15_000);
 
   it("rejects closed, cross-source, conflicting, and identifier-less Entity commits", async () => {
-    const context = { name: `t0134_commit_errors_${String(Date.now())}`, multitenant: false };
+    const context = {
+      name: `t0134_commit_errors_${String(Date.now())}`,
+      multitenant: false,
+    } as const;
     const input = entityInput(context);
     const closed = EntityCommitStorageFactories.create(factory, input);
     closed.close();
@@ -196,7 +199,7 @@ live("MySQL-family record layout", () => {
   });
 
   it("rejects immutable histories that are disabled for the Entity family", async () => {
-    const context = { name: `t0134_disabled_${String(Date.now())}`, multitenant: false };
+    const context = { name: `t0134_disabled_${String(Date.now())}`, multitenant: false } as const;
     const input = entityInput(context, false, false);
     const commits = EntityCommitStorageFactories.create(factory, input);
     try {
@@ -213,7 +216,10 @@ live("MySQL-family record layout", () => {
 
   it("serializes nontransactional commits with and without optional immutable families", async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
-    const context = { name: `t0134_nontransactional_${String(Date.now())}`, multitenant: false };
+    const context = {
+      name: `t0134_nontransactional_${String(Date.now())}`,
+      multitenant: false,
+    } as const;
     const input = entityInput(context);
     const commits = EntityCommitStorageFactories.create(factory, input);
     const eventStore = new EventStore(context, factory);
@@ -242,7 +248,7 @@ live("MySQL-family record layout", () => {
 
   it("atomically compares records from two handles on the configured engine", async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
-    const context = { name: `t0134_cas_${String(Date.now())}`, multitenant: false };
+    const context = { name: `t0134_cas_${String(Date.now())}`, multitenant: false } as const;
     const spec = new RecordSpec<string, StringValue>({
       recordType: StringValueSchema,
       idKind: "string",
@@ -299,7 +305,7 @@ live("MySQL-family record layout", () => {
 
   it("serializes conflicting InnoDB Entity commits from separate handles", async () => {
     if (url === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
-    const context = { name: `t0134_concurrent_${String(Date.now())}`, multitenant: false };
+    const context = { name: `t0134_concurrent_${String(Date.now())}`, multitenant: false } as const;
     const input = entityInput(context);
     const first = EntityCommitStorageFactories.create(factory, input);
     const second = EntityCommitStorageFactories.create(factory, input);
@@ -322,7 +328,7 @@ live("MySQL-family record layout", () => {
   });
 
   it("replays an identical Entity commit without replacing current state", async () => {
-    const context = { name: `t0134_replay_${String(Date.now())}`, multitenant: false };
+    const context = { name: `t0134_replay_${String(Date.now())}`, multitenant: false } as const;
     const input = entityInput(context);
     const commits = EntityCommitStorageFactories.create(factory, input);
     const pool = createPool(url ?? "");
@@ -339,11 +345,7 @@ live("MySQL-family record layout", () => {
   });
 });
 
-function entityInput(
-  context: { name: string; multitenant: boolean },
-  stateHistory = true,
-  eventHistory = true,
-) {
+function entityInput(context: StorageContext, stateHistory = true, eventHistory = true) {
   const recordSpec = new RecordSpec<string, EntityRecord>({
     sourceType: StringValueSchema,
     recordType: EntityRecordSchema,
@@ -387,11 +389,7 @@ function current(id: string) {
     version: create(VersionSchema, { number: 1 }),
   });
 }
-function mutation(
-  context: { name: string; multitenant: boolean },
-  input: ReturnType<typeof entityInput>,
-  id: string,
-) {
+function mutation(context: StorageContext, input: ReturnType<typeof entityInput>, id: string) {
   const diagnostic = create(EventSchema, {
     id: create(EventIdSchema, { value: `${id}-diagnostic` }),
     context: {

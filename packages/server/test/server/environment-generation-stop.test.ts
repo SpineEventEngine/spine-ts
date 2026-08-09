@@ -1454,7 +1454,7 @@ describe("environment generation stop", () => {
       "UnsafeStop",
       "type.example.dev/UnsafeStop",
       new InMemoryStorageFactory(),
-      { multitenant: true },
+      { multitenant: true, startupTenantId: "tenant-startup" },
     );
     const attachments = new EnvironmentAttachments({
       createWorker() {
@@ -1535,17 +1535,20 @@ describe("environment generation stop", () => {
     expect([oldWorker.stopCalls, oldWorker.awaitCalls, oldWorker.retireCalls]).toEqual([2, 1, 1]);
     expect(factoryCalls).toBe(2);
     expect(candidateWorker.addCalls).toBe(2);
-    expect(candidateWorker.addedTenants).toEqual([undefined, "tenant-buffered-while-stop-failed"]);
+    expect(candidateWorker.addedTenants).toEqual([
+      "tenant-startup",
+      "tenant-buffered-while-stop-failed",
+    ]);
     expect(candidateWorker.starts).toBe(3);
     expect(candidateWorker.tenants).toEqual([
-      undefined,
+      "tenant-startup",
       "tenant-buffered-while-stop-failed",
       "tenant-buffered-while-stop-failed",
     ]);
     expect([routePreparations, transfers]).toEqual([1, 2]);
     expect(handle.generation).not.toBe(oldGeneration);
 
-    target.readiness.claim(target.ready);
+    target.readiness.claim(Object.freeze({ ...target.ready, tenantId: tenant("tenant-startup") }));
     await until(() => candidateWorker.starts === 4);
     expect(target.notifications).toBe(2);
     await attachments.detach(handle);
@@ -2407,11 +2410,11 @@ function descriptor(
       contextCalls += 1;
       const failure = contextFailures.shift();
       if (failure !== undefined) throw failure;
-      return Object.freeze({
-        name,
-        multitenant,
-        ...(scope.tenantId === undefined ? {} : { tenantId: scope.tenantId }),
-      });
+      if (!multitenant) return Object.freeze({ name, multitenant: false });
+      if (scope.tenantId === undefined) {
+        throw new Error("Multitenant fixture scope requires a tenant ID.");
+      }
+      return Object.freeze({ name, multitenant: true, tenantId: scope.tenantId });
     },
     endpoints: () => {
       endpointCalls += 1;

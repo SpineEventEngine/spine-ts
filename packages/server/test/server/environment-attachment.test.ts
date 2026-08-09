@@ -3273,7 +3273,7 @@ function descriptor(
     },
     replay: (next: DeliveryEndpointMessage, tenantId?: TenantId) => {
       replayed.push(next.signalId);
-      replayTenants.push(tenantId?.kind.value?.valueOf());
+      replayTenants.push(tenantId?.kind.case === "value" ? tenantId.kind.value : undefined);
       return options.onReplay?.(next) ?? Promise.resolve();
     },
   });

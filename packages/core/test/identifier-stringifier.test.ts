@@ -35,9 +35,17 @@ describe("JVM-compatible identifier and stringifier contracts", () => {
     ["int32", 42],
     ["int64", 42n],
   ] as const)("packs and unpacks a %s identifier", (type, id) => {
-    const packed = Identifiers.pack(type, id);
-
-    expect(Identifiers.unpack(type, packed)).toBe(id);
+    switch (type) {
+      case "string":
+        expect(Identifiers.unpack(type, Identifiers.pack(type, id))).toBe(id);
+        break;
+      case "int32":
+        expect(Identifiers.unpack(type, Identifiers.pack(type, id))).toBe(id);
+        break;
+      case "int64":
+        expect(Identifiers.unpack(type, Identifiers.pack(type, id))).toBe(id);
+        break;
+    }
   });
 
   it("rejects primitive identifiers outside their declared type", () => {

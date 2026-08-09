@@ -21,6 +21,7 @@ import type { EntityStorageInput } from "../../src/internal/entity-history.js";
 import { InMemoryStorageFactory } from "../../src/memory/in-memory-storage-factory.js";
 import { InMemoryRecordStorage } from "../../src/memory/in-memory-record-storage.js";
 import { RecordStorage } from "../../src/record/record-storage.js";
+import { RecordSpec } from "../../src/record/record-spec.js";
 import { StorageFactory } from "../../src/storage/storage-factory.js";
 
 describe("MemoryEntityCommitStorage", () => {
@@ -556,6 +557,17 @@ function entityInput(
       unpack: unpackStringId,
     },
     columns: [],
+    recordSpec: new RecordSpec<string, EntityRecord>({
+      sourceType: StringValueSchema,
+      recordType: EntityRecordSchema,
+      idKind: "string",
+      extractId: (record) => {
+        if (record.entityId === undefined) throw new Error("EntityRecord.entityId is required.");
+        const id = unpackStringId(record.entityId);
+        if (id === undefined) throw new Error("EntityRecord.entityId has the wrong type.");
+        return id;
+      },
+    }),
     sourceType: StringValueSchema,
     stateSchema: StringValueSchema,
     stateHistory: histories,

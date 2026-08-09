@@ -879,7 +879,10 @@ function realDeliveryFixture(shardCount = 1): RealDeliveryFixture {
 }
 
 class RealDeliveryFixture {
-  readonly context = { name: `real-supervisor-${crypto.randomUUID()}`, multitenant: false };
+  readonly context = {
+    name: `real-supervisor-${crypto.randomUUID()}`,
+    multitenant: false,
+  } as const;
   readonly storageFactory = new InMemoryStorageFactory();
   readonly inbox: AdmissionInbox;
   readonly registry: ObservedRegistry;

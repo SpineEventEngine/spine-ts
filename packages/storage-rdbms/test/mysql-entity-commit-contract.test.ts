@@ -1,12 +1,24 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { EventIdSchema, EventSchema, UserIdSchema, VersionSchema } from "@spine-event-engine/proto";
+import {
+  AnySchema,
+  StringValueSchema,
+  TimestampSchema,
+  type StringValue,
+} from "@bufbuild/protobuf/wkt";
+import {
+  EventIdSchema,
+  EventSchema,
+  UserIdSchema,
+  VersionSchema,
+  type UserId,
+} from "@spine-event-engine/proto";
 import { StringifierRegistry } from "@spine-event-engine/core";
 import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { RecordSpec } from "@spine-event-engine/storage";
+import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
 import { describe, expect, it, vi } from "vitest";
 
 import { mysqlEntityLockKey, MysqlEntityCommitCoordinator } from "../src/mysql/entity-commit.js";
@@ -184,15 +196,7 @@ describe("MysqlEntityStorage history behavior", () => {
 
   it("queries current Entity rows with direct message ID values", async () => {
     const query = vi.fn(() => Promise.resolve([[], []]));
-    const input = {
-      ...entityInput(false, false),
-      recordSpec: new RecordSpec({
-        sourceType: StringValueSchema,
-        recordType: EntityRecordSchema,
-        idSchema: UserIdSchema,
-        extractId: () => create(UserIdSchema),
-      }),
-    };
+    const input = messageIdInput();
     const id = create(UserIdSchema, { value: "user-42" });
 
     await expect(mysqlCurrentRecord({ query } as never, input, id)).resolves.toBeUndefined();
@@ -201,15 +205,7 @@ describe("MysqlEntityStorage history behavior", () => {
 
   it("queries current Entity rows with the factory's custom message ID stringifier", async () => {
     const query = vi.fn(() => Promise.resolve([[], []]));
-    const input = {
-      ...entityInput(false, false),
-      recordSpec: new RecordSpec({
-        sourceType: StringValueSchema,
-        recordType: EntityRecordSchema,
-        idSchema: UserIdSchema,
-        extractId: () => create(UserIdSchema),
-      }),
-    };
+    const input = messageIdInput();
     const id = create(UserIdSchema, { value: "user-42" });
     const stringifiers = new StringifierRegistry();
     stringifiers.register(UserIdSchema, {
@@ -462,7 +458,10 @@ describe("MysqlEntityStorage history behavior", () => {
   });
 });
 
-function entityInput(stateHistory: boolean, eventHistory: boolean) {
+function entityInput(
+  stateHistory: boolean,
+  eventHistory: boolean,
+): EntityStorageInput<string, StringValue> {
   const recordSpec = new RecordSpec<string, EntityRecord>({
     sourceType: StringValueSchema,
     recordType: EntityRecordSchema,
@@ -489,6 +488,24 @@ function entityInput(stateHistory: boolean, eventHistory: boolean) {
     stateSchema: StringValueSchema,
     stateHistory,
     eventHistory,
+  };
+}
+
+function messageIdInput(): EntityStorageInput<UserId, StringValue> {
+  return {
+    ...entityInput(false, false),
+    id: {
+      clone: (id) => create(UserIdSchema, { value: id.value }),
+      key: (id) => id.value,
+      pack: () => create(AnySchema),
+      unpack: () => undefined,
+    },
+    recordSpec: new RecordSpec({
+      sourceType: StringValueSchema,
+      recordType: EntityRecordSchema,
+      idSchema: UserIdSchema,
+      extractId: () => create(UserIdSchema),
+    }),
   };
 }
 

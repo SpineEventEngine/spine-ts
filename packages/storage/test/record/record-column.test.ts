@@ -6,23 +6,16 @@ import { describe, expect, it } from "vitest";
 
 import * as Storage from "../../src/index.js";
 
-type RuntimeColumnType =
-  | { readonly kind: "scalar"; readonly scalar: ScalarType }
-  | { readonly kind: "enum"; readonly enum: { readonly typeName: string } }
-  | { readonly kind: "message"; readonly message: { readonly typeName: string } };
-
-interface ColumnTypesContract {
-  fromField(field: unknown): RuntimeColumnType;
-  message(schema: { readonly typeName: string }): RuntimeColumnType;
-  scalar(scalar: ScalarType): RuntimeColumnType;
-}
-
 describe("RecordColumn", () => {
   it("retains the declared scalar field type", () => {
     expect(Storage).toHaveProperty("ColumnTypes");
-    const columnTypes = Reflect.get(Storage, "ColumnTypes") as ColumnTypesContract;
+    const columnTypes = Storage.ColumnTypes;
     const type = columnTypes.fromField(EventIdSchema.field.value);
-    const column = new Storage.RecordColumn("value", type, (record) => record.value);
+    const column = new Storage.RecordColumn(
+      "value",
+      type,
+      (record: { value: string }) => record.value,
+    );
     const record = create(EventIdSchema, { value: "event-42" });
 
     expect(column.type).toEqual({
@@ -34,9 +27,13 @@ describe("RecordColumn", () => {
   });
 
   it("retains the declared enum field type", () => {
-    const columnTypes = Reflect.get(Storage, "ColumnTypes") as ColumnTypesContract;
+    const columnTypes = Storage.ColumnTypes;
     const type = columnTypes.fromField(SubscriptionRecordSchema.field.status);
-    const column = new Storage.RecordColumn("status", type, (record) => record.status);
+    const column = new Storage.RecordColumn(
+      "status",
+      type,
+      (record: { status: SubscriptionStatus }) => record.status,
+    );
     const record = create(SubscriptionRecordSchema, { status: SubscriptionStatus.ACTIVE });
 
     expect(column.type.kind).toBe("enum");
@@ -47,9 +44,9 @@ describe("RecordColumn", () => {
   });
 
   it("retains the declared message field schema", () => {
-    const columnTypes = Reflect.get(Storage, "ColumnTypes") as ColumnTypesContract;
+    const columnTypes = Storage.ColumnTypes;
     const type = columnTypes.fromField(SubscriptionRecordSchema.field.id);
-    const column = new Storage.RecordColumn("id", type, (record) => record.id);
+    const column = new Storage.RecordColumn("id", type, (record: { id?: unknown }) => record.id);
     const record = create(SubscriptionRecordSchema);
 
     expect(column.type.kind).toBe("message");
@@ -60,7 +57,7 @@ describe("RecordColumn", () => {
   });
 
   it("declares types for derived scalar and message columns", () => {
-    const columnTypes = Reflect.get(Storage, "ColumnTypes") as ColumnTypesContract;
+    const columnTypes = Storage.ColumnTypes;
 
     expect(columnTypes.scalar(ScalarType.STRING)).toEqual({
       kind: "scalar",
@@ -74,7 +71,7 @@ describe("RecordColumn", () => {
   });
 
   it("retains well-known Timestamp and Spine Version schemas", () => {
-    const columnTypes = Reflect.get(Storage, "ColumnTypes") as ColumnTypesContract;
+    const columnTypes = Storage.ColumnTypes;
 
     expect(columnTypes.message(TimestampSchema)).toMatchObject({
       kind: "message",

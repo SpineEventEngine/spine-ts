@@ -72,7 +72,7 @@ describe("MysqlStorageFactory mocked entity commits", () => {
       const factory = await MysqlStorageFactory.newBuilder()
         .setOptions({ url: "mysql://db.example/commit_mock" })
         .build();
-      const context = { name: "orders", multitenant: false };
+      const context = { name: "orders", multitenant: false } as const;
       const entity = {
         context,
         id: { key: (id: string) => id },

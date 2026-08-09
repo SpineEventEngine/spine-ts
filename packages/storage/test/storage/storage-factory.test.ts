@@ -54,7 +54,7 @@ describe("StorageFactory", () => {
   it("keeps explicitly grouped records separate from ungrouped records with the same spec", async () => {
     const factory = new InMemoryStorageFactory();
     const spec = createEventSpec();
-    const context = { name: "Tasks", multitenant: false };
+    const context = { name: "Tasks", multitenant: false } as const;
     const ungrouped = factory.createRecordStorage(context, spec);
     const grouped = factory.createRecordStorage(context, spec, new StorageGroup("task-state"));
 
@@ -199,12 +199,12 @@ describe("StorageFactory", () => {
       name: "TenantBound",
       multitenant: true,
       tenantId: tenant("value", "one"),
-    };
+    } as const;
     const tenantTwo = {
       name: "TenantBound",
       multitenant: true,
       tenantId: tenant("value", "two"),
-    };
+    } as const;
 
     const first = factory.createRecordStorage(tenantOne, spec);
     const otherTenant = factory.createRecordStorage(tenantTwo, spec);

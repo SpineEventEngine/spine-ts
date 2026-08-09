@@ -2,8 +2,17 @@ import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Datastore } from "@google-cloud/datastore";
 import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
-import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { ColumnTypes, RecordColumn, RecordSpec, StorageGroup } from "@spine-event-engine/storage";
+import {
+  EntityRecordSchema,
+  type EntityRecord,
+} from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+import {
+  ColumnTypes,
+  RecordColumn,
+  RecordSpec,
+  StorageGroup,
+  type StorageContext,
+} from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
 import { describe, expect, it } from "vitest";
 
@@ -239,7 +248,7 @@ function message(value: string) {
 }
 
 function entityInput(
-  context: { readonly name: string; readonly multitenant: boolean },
+  context: StorageContext,
   histories: boolean,
 ): EntityStorageInput<string, ReturnType<typeof message>> {
   return {
@@ -254,6 +263,15 @@ function entityInput(
           : undefined,
     },
     columns: [],
+    recordSpec: new RecordSpec<string, EntityRecord>({
+      sourceType: StringValueSchema,
+      recordType: EntityRecordSchema,
+      idKind: "string",
+      extractId: (record) => {
+        if (record.entityId === undefined) throw new Error("EntityRecord.entityId is required.");
+        return fromBinary(StringValueSchema, record.entityId.value).value;
+      },
+    }),
     sourceType: StringValueSchema,
     stateSchema: StringValueSchema,
     ...(histories ? { stateHistory: true, eventHistory: true } : {}),

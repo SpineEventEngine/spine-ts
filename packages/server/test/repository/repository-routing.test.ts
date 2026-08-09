@@ -30,6 +30,7 @@ import {
   MessageIdSchema,
   OriginSchema,
   TenantIdSchema,
+  type TenantId,
   UserIdSchema,
   VersionSchema,
   file_spine_options,
@@ -48,6 +49,7 @@ import { TaskSchema as TodoTaskSchema } from "../../../../examples/todo/generate
 import {
   EventStore,
   InMemoryStorageFactory,
+  ColumnTypes,
   RecordColumn,
   RecordStorage,
   type RecordSpec,
@@ -8971,7 +8973,7 @@ function createIdlessAggregateCommand(aggregateId: string, name = "Task", tenant
 }
 
 function requireEntityInboxTarget(repository: RepositoryView): {
-  replay(message: InboxMessage, tenantId?: string): Promise<unknown>;
+  replay(message: InboxMessage, tenantId?: TenantId): Promise<unknown>;
 } {
   const target = repositoryAccess.entityInboxTarget(repository);
   if (target === undefined) {
@@ -8982,7 +8984,7 @@ function requireEntityInboxTarget(repository: RepositoryView): {
 }
 
 function requireProjectionInboxTarget(repository: RepositoryView): {
-  replay(message: InboxMessage, tenantId?: string): Promise<void>;
+  replay(message: InboxMessage, tenantId?: TenantId): Promise<void>;
 } {
   const target = repositoryAccess.projectionInboxTarget(repository);
   if (target === undefined) {
@@ -9379,8 +9381,8 @@ class CurrentRecordTestStorage<S extends Message = Message> {
           (field) =>
             new RecordColumn(
               field.name,
+              ColumnTypes.fromField(field.descriptor),
               (state) => (state as Record<string, unknown>)[field.localName],
-              "protobuf",
             ),
         ),
       ),
