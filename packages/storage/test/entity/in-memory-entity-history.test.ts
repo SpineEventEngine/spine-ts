@@ -1,4 +1,4 @@
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
 import {
   AnySchema,
   StringValueSchema,
@@ -33,6 +33,7 @@ import {
 } from "../../src/memory/in-memory-entity-history.js";
 import { InMemoryStorageFactory } from "../../src/memory/in-memory-storage-factory.js";
 import { RecordColumn } from "../../src/record/record-column.js";
+import { ColumnTypes } from "../../src/record/column-type.js";
 
 describe("InMemoryEntityHistory", () => {
   it("passes the reusable generated current-record and state-history conformance checks", async () => {
@@ -68,8 +69,16 @@ describe("InMemoryEntityHistory", () => {
           ? fromBinary(StringValueSchema, id.value).value
           : undefined,
       columns: [
-        new RecordColumn("value", (entry) => state(entry).value, "string"),
-        new RecordColumn("archived", (entry) => entry.lifecycleFlags?.archived ?? false, "boolean"),
+        new RecordColumn(
+          "value",
+          ColumnTypes.scalar(ScalarType.STRING),
+          (entry) => state(entry).value,
+        ),
+        new RecordColumn(
+          "archived",
+          ColumnTypes.scalar(ScalarType.BOOL),
+          (entry) => entry.lifecycleFlags?.archived ?? false,
+        ),
       ],
     });
     const active = currentRecord("active", "active", 1);

@@ -1,7 +1,23 @@
-import { clone, create, fromBinary, getOption, hasOption, toBinary } from "@bufbuild/protobuf";
+import {
+  clone,
+  create,
+  fromBinary,
+  fromJsonString,
+  getOption,
+  hasOption,
+  toBinary,
+  toJsonString,
+} from "@bufbuild/protobuf";
 import type { DescField, Message, MessageInitShape, MessageShape } from "@bufbuild/protobuf";
 import type { GenExtension, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { AnySchema, type Any, type FileOptions } from "@bufbuild/protobuf/wkt";
+import {
+  AnySchema,
+  Int32ValueSchema,
+  Int64ValueSchema,
+  StringValueSchema,
+  type Any,
+  type FileOptions,
+} from "@bufbuild/protobuf/wkt";
 import { validate as validateWithSpine } from "@spine-event-engine/validation";
 import {
   ActorContextSchema,
@@ -725,6 +741,189 @@ export const AnyMessages = {
   },
 } as const;
 Object.freeze(AnyMessages);
+
+/**
+ * Converts one value to and from its stable string representation.
+ */
+export interface Stringifier<T> {
+  // prettier-ignore
+
+  /**
+   * Restores a value from its string representation.
+   * @param value The stored string.
+   * @returns The restored value.
+   */
+  fromString(value: string): T;
+
+  /**
+   * Converts a value to its string representation.
+   * @param value The value to convert.
+   * @returns The stored string.
+   */
+  toString(value: T): string;
+}
+
+/**
+ * Supplies reversible default stringifiers for generated Protobuf messages.
+ */
+export const Stringifiers = {
+  // prettier-ignore
+
+  /**
+   * Creates the default compact Proto JSON stringifier for a message schema.
+   * @param schema The generated message schema.
+   * @returns A reversible schema-bound stringifier.
+   */
+  forMessage<Schema extends MessageSchema>(schema: Schema): Stringifier<MessageShape<Schema>> {
+    return Object.freeze({
+      fromString(value: string): MessageShape<Schema> {
+        return fromJsonString(schema, value);
+      },
+      toString(value: MessageShape<Schema>): string {
+        return toJsonString(schema, value);
+      },
+    });
+  },
+} as const;
+Object.freeze(Stringifiers);
+
+/**
+ * Holds schema-bound custom stringifiers with Proto JSON defaults.
+ */
+export class StringifierRegistry {
+  readonly #registered = new Map<string, Stringifier<Message>>();
+
+  /**
+   * Registers or replaces the stringifier for one generated message type.
+   * @param schema The generated message schema.
+   * @param stringifier The reversible stringifier.
+   */
+  register<Schema extends MessageSchema>(
+    schema: Schema,
+    stringifier: Stringifier<MessageShape<Schema>>,
+  ): void {
+    this.#registered.set(schema.typeName, stringifier);
+  }
+
+  /**
+   * Returns the custom stringifier or the default compact Proto JSON mapping.
+   * @param schema The generated message schema.
+   * @returns The schema-bound stringifier.
+   */
+  forMessage<Schema extends MessageSchema>(schema: Schema): Stringifier<MessageShape<Schema>> {
+    const registered = this.#registered.get(schema.typeName);
+
+    return registered === undefined
+      ? Stringifiers.forMessage(schema)
+      : (registered as Stringifier<MessageShape<Schema>>);
+  }
+}
+
+/**
+ * Primitive identifier kinds supported by Spine JVM storage.
+ */
+export type PrimitiveIdentifierType = "string" | "int32" | "int64";
+
+interface IdentifierCodec {
+  pack<Schema extends MessageSchema>(schema: Schema, value: MessageShape<Schema>): Any;
+  pack(type: "string", value: string): Any;
+  pack(type: "int32", value: number): Any;
+  pack(type: "int64", value: bigint): Any;
+  unpack<Schema extends MessageSchema>(
+    schema: Schema,
+    value: Any,
+  ): MessageShape<Schema> | undefined;
+  unpack(type: "string", value: Any): string | undefined;
+  unpack(type: "int32", value: Any): number | undefined;
+  unpack(type: "int64", value: Any): bigint | undefined;
+}
+
+/**
+ * Packs and unpacks the identifier types supported by Spine JVM storage.
+ */
+export const Identifiers: IdentifierCodec = {
+  pack: packIdentifier,
+  unpack: unpackIdentifier,
+};
+Object.freeze(Identifiers);
+
+const IdentifierValues = Object.freeze({
+  int32(value: unknown): number {
+    if (
+      typeof value !== "number" ||
+      !Number.isInteger(value) ||
+      value < -(2 ** 31) ||
+      value >= 2 ** 31
+    ) {
+      throw new RangeError("Identifier is outside the int32 range.");
+    }
+    return value;
+  },
+
+  int64(value: unknown): bigint {
+    if (typeof value !== "bigint" || value < -(1n << 63n) || value >= 1n << 63n) {
+      throw new RangeError("Identifier is outside the int64 range.");
+    }
+    return value;
+  },
+});
+
+function packIdentifier<Schema extends MessageSchema>(
+  schema: Schema,
+  value: MessageShape<Schema>,
+): Any;
+function packIdentifier(type: "string", value: string): Any;
+function packIdentifier(type: "int32", value: number): Any;
+function packIdentifier(type: "int64", value: bigint): Any;
+function packIdentifier(
+  type: MessageSchema | PrimitiveIdentifierType,
+  value: Message | string | number | bigint,
+): Any {
+  if (typeof type !== "string") {
+    return AnyMessages.pack(type, value as Message, { validate: false });
+  }
+  switch (type) {
+    case "string":
+      if (typeof value !== "string") throw new TypeError("Identifier must be a string.");
+      return AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value }), {
+        validate: false,
+      });
+    case "int32":
+      return AnyMessages.pack(
+        Int32ValueSchema,
+        create(Int32ValueSchema, { value: IdentifierValues.int32(value) }),
+        { validate: false },
+      );
+    case "int64":
+      return AnyMessages.pack(
+        Int64ValueSchema,
+        create(Int64ValueSchema, { value: IdentifierValues.int64(value) }),
+        { validate: false },
+      );
+  }
+}
+
+function unpackIdentifier<Schema extends MessageSchema>(
+  schema: Schema,
+  value: Any,
+): MessageShape<Schema> | undefined;
+function unpackIdentifier(type: "string", value: Any): string | undefined;
+function unpackIdentifier(type: "int32", value: Any): number | undefined;
+function unpackIdentifier(type: "int64", value: Any): bigint | undefined;
+function unpackIdentifier(
+  type: MessageSchema | PrimitiveIdentifierType,
+  value: Any,
+): Message | string | number | bigint | undefined {
+  if (typeof type !== "string") return AnyMessages.unpack(value, type);
+  switch (type) {
+    case "string":
+      return AnyMessages.unpack(value, StringValueSchema)?.value;
+    case "int32":
+      return AnyMessages.unpack(value, Int32ValueSchema)?.value;
+    case "int64":
+      return AnyMessages.unpack(value, Int64ValueSchema)?.value;
+  }
+}
 
 /**
  * Creates generated Spine command and event envelopes.

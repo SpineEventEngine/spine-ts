@@ -1,0 +1,54 @@
+import type { RecordColumnType } from "./column-type.js";
+
+/**
+ * Converts one typed record-column value to its provider representation.
+ */
+export type ColumnTypeMapping<V, R> = (value: V) => R;
+
+/**
+ * Supplies provider conversion rules for generated Protobuf column types.
+ */
+export interface ColumnMapping<R> {
+  // prettier-ignore
+
+  /**
+   * Returns the conversion rule for a declared column type.
+   * @param type The generated Protobuf column type.
+   * @returns The provider conversion rule.
+   */
+  of<V>(type: RecordColumnType<V>): ColumnTypeMapping<V, R>;
+
+  /**
+   * Returns the provider conversion rule for an absent column value.
+   * @returns The provider null conversion rule.
+   */
+  ofNull(): ColumnTypeMapping<null, R>;
+}
+
+/**
+ * Applies one provider mapping to stored and queried column values.
+ */
+export const ColumnMappings = {
+  // prettier-ignore
+
+  /**
+   * Converts a value through its declared provider rule.
+   *
+   * Both record materialization and query planning must call this operation.
+   *
+   * @param mapping The provider mapping.
+   * @param type The declared column type.
+   * @param value The stored or queried value.
+   * @returns The provider value.
+   */
+  value<V, R>(
+    mapping: ColumnMapping<R>,
+    type: RecordColumnType<V>,
+    value: V | null | undefined,
+  ): R {
+    return value === null || value === undefined
+      ? mapping.ofNull()(null)
+      : mapping.of(type)(value);
+  },
+} as const;
+Object.freeze(ColumnMappings);

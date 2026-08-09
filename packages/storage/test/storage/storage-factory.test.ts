@@ -1,4 +1,4 @@
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { AnySchema, StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 import {
   InMemoryStorageFactory,
   InMemoryStorageBackend,
+  ColumnTypes,
   RecordColumn,
   RecordSpec,
   StorageGroup,
@@ -309,7 +310,13 @@ function createEventSpec(sourceType: GenMessage<Message> = EventSchema) {
 
       return event.id;
     },
-    columns: [new RecordColumn<Event>("typeUrl", (event) => event.message?.typeUrl, "string")],
+    columns: [
+      new RecordColumn<Event>(
+        "typeUrl",
+        ColumnTypes.scalar(ScalarType.STRING),
+        (event) => event.message?.typeUrl,
+      ),
+    ],
   });
 }
 

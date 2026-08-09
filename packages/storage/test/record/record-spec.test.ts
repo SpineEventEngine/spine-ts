@@ -1,4 +1,4 @@
-import { create, type Message } from "@bufbuild/protobuf";
+import { create, ScalarType, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import type { Event, EventId } from "@spine-event-engine/proto";
@@ -6,11 +6,14 @@ import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { RecordColumn } from "../../src/record/record-column.js";
+import { ColumnTypes } from "../../src/record/column-type.js";
 import { RecordSpec } from "../../src/record/record-spec.js";
 
 describe("RecordSpec", () => {
   it("exposes the JVM-style types and defaults source type to the record type", () => {
-    const columns = [new RecordColumn<Event>("kind", () => "event", "string")];
+    const columns = [
+      new RecordColumn<Event>("kind", ColumnTypes.scalar(ScalarType.STRING), () => "event"),
+    ];
     const spec = new RecordSpec({
       recordType: EventSchema,
       idSchema: EventIdSchema,
@@ -61,7 +64,13 @@ describe("RecordSpec", () => {
       recordType: EventSchema,
       idSchema: EventIdSchema,
       extractId: (event) => event.id ?? create(EventIdSchema),
-      columns: [new RecordColumn<Event>("typeUrl", (event) => event.message?.typeUrl, "string")],
+      columns: [
+        new RecordColumn<Event>(
+          "typeUrl",
+          ColumnTypes.scalar(ScalarType.STRING),
+          (event) => event.message?.typeUrl,
+        ),
+      ],
     });
     const event = create(EventSchema, {
       id: create(EventIdSchema, { value: "event-1" }),
@@ -97,7 +106,9 @@ describe("RecordSpec", () => {
       recordType: {} as GenMessage<Message>,
       idKind: "object",
       extractId: () => id,
-      columns: [new RecordColumn<Message>("copy", () => columnValue, "object")],
+      columns: [
+        new RecordColumn<Message>("copy", ColumnTypes.message(AnySchema), () => columnValue),
+      ],
     });
 
     const materialized = spec.materialize(recordClone);
@@ -138,8 +149,8 @@ describe("RecordSpec", () => {
           idKind: "string",
           extractId: (event) => event.id,
           columns: [
-            new RecordColumn("kind", () => "one", "string"),
-            new RecordColumn("kind", () => "two", "string"),
+            new RecordColumn("kind", ColumnTypes.scalar(ScalarType.STRING), () => "one"),
+            new RecordColumn("kind", ColumnTypes.scalar(ScalarType.STRING), () => "two"),
           ],
         }),
     ).toThrow('duplicate record column "kind"');

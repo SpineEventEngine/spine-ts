@@ -20,6 +20,10 @@
     "./internal/event-store": {
       "types": "./dist/internal/event-store.d.ts",
       "default": "./dist/internal/event-store.js"
+    },
+    "./internal/tenancy": {
+      "types": "./dist/internal/tenancy.d.ts",
+      "default": "./dist/internal/tenancy.js"
     }
   },
   "files": [

@@ -1,6 +1,6 @@
-import { create, type Message } from "@bufbuild/protobuf";
+import { create, ScalarType, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema, type Event, type EventId } from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
@@ -12,6 +12,7 @@ import {
 } from "@spine-event-engine/proto/generated/spine/server/entity/state_key_pb.js";
 
 import { RecordColumn } from "../record/record-column.js";
+import { ColumnTypes } from "../record/column-type.js";
 import { RecordSpec } from "../record/record-spec.js";
 import { StorageGroup } from "../record/storage-group.js";
 
@@ -40,13 +41,17 @@ export function stateHistorySpec(stateType: GenMessage<Message>): {
         });
       },
       columns: [
-        new RecordColumn("entity_id", (record) => record.entityId, "message"),
+        new RecordColumn("entity_id", ColumnTypes.message(AnySchema), (record) => record.entityId),
         new RecordColumn(
           "created",
+          ColumnTypes.message(TimestampSchema),
           (record) => record.version?.timestamp ?? create(TimestampSchema),
-          "timestamp",
         ),
-        new RecordColumn("version", (record) => record.version?.number ?? 0, "int32"),
+        new RecordColumn(
+          "version",
+          ColumnTypes.scalar(ScalarType.INT32),
+          (record) => record.version?.number ?? 0,
+        ),
       ],
     }),
   };
@@ -72,13 +77,21 @@ export function eventHistorySpec(stateType: GenMessage<Message>): {
         return event.id;
       },
       columns: [
-        new RecordColumn("entity_id", (event) => event.context?.producerId, "message"),
+        new RecordColumn(
+          "entity_id",
+          ColumnTypes.message(AnySchema),
+          (event) => event.context?.producerId,
+        ),
         new RecordColumn(
           "created",
+          ColumnTypes.message(TimestampSchema),
           (event) => event.context?.timestamp ?? create(TimestampSchema),
-          "timestamp",
         ),
-        new RecordColumn("version", (event) => event.context?.version?.number ?? 0, "int32"),
+        new RecordColumn(
+          "version",
+          ColumnTypes.scalar(ScalarType.INT32),
+          (event) => event.context?.version?.number ?? 0,
+        ),
       ],
     }),
   };

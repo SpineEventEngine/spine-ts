@@ -1,4 +1,4 @@
-import { create } from "@bufbuild/protobuf";
+import { create, ScalarType } from "@bufbuild/protobuf";
 import {
   AnySchema,
   StringValueSchema,
@@ -10,6 +10,7 @@ import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
 import { InMemoryRecordStorage } from "../../src/memory/in-memory-record-storage.js";
+import { ColumnTypes } from "../../src/record/column-type.js";
 import { RecordColumn } from "../../src/record/record-column.js";
 import { RecordSpec } from "../../src/record/record-spec.js";
 import { RecordStorage, type RecordEntry } from "../../src/record/record-storage.js";
@@ -80,8 +81,8 @@ describe("InMemoryRecordStorage", () => {
         columns: [
           new RecordColumn<StringValue, string>(
             "group",
+            ColumnTypes.scalar(ScalarType.STRING),
             (record) => record.value.slice(0, 1),
-            "string",
           ),
         ],
       }),
@@ -796,7 +797,13 @@ describe("InMemoryRecordStorage", () => {
 
           return event.id;
         },
-        columns: [new RecordColumn<Event>("typeUrl", (event) => event.message?.typeUrl, "string")],
+        columns: [
+          new RecordColumn<Event>(
+            "typeUrl",
+            ColumnTypes.scalar(ScalarType.STRING),
+            (event) => event.message?.typeUrl,
+          ),
+        ],
       }),
     );
 
@@ -953,7 +960,6 @@ function createLookupEvents(ids: readonly string[]) {
 }
 
 function createLookupStorage(values: Record<string, unknown>) {
-  const kinds = [...new Set(Object.values(values).map(valueKind))].sort().join("-");
   return new InMemoryRecordStorage(
     { name: "Tasks", multitenant: false },
     new RecordSpec({
@@ -967,17 +973,14 @@ function createLookupStorage(values: Record<string, unknown>) {
         return event.id;
       },
       columns: [
-        new RecordColumn<Event>("value", (event) => values[event.id?.value ?? "missing"], kinds),
+        new RecordColumn<Event>(
+          "value",
+          ColumnTypes.scalar(ScalarType.STRING),
+          (event) => values[event.id?.value ?? "missing"],
+        ),
       ],
     }),
   );
-}
-
-function valueKind(value: unknown): string {
-  if (value === null) return "null";
-  if (value instanceof Uint8Array) return "bytes";
-  if (Array.isArray(value)) return "array";
-  return typeof value;
 }
 
 function collisionProneObject(value: string) {
@@ -1048,13 +1051,21 @@ function createSpec() {
       return event.id;
     },
     columns: [
-      new RecordColumn<Event>("typeUrl", (event) => event.message?.typeUrl, "string"),
+      new RecordColumn<Event>(
+        "typeUrl",
+        ColumnTypes.scalar(ScalarType.STRING),
+        (event) => event.message?.typeUrl,
+      ),
       new RecordColumn<Event>(
         "timestamp",
+        ColumnTypes.scalar(ScalarType.INT64),
         (event) => event.context?.timestamp?.seconds ?? 0n,
-        "int64",
       ),
-      new RecordColumn<Event>("nanos", (event) => event.context?.timestamp?.nanos ?? 0, "number"),
+      new RecordColumn<Event>(
+        "nanos",
+        ColumnTypes.scalar(ScalarType.INT32),
+        (event) => event.context?.timestamp?.nanos ?? 0,
+      ),
     ],
   });
 }

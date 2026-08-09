@@ -19,6 +19,12 @@ export type {
   StorageQueryFeature,
 } from "./query/query-policy.js";
 export { RecordColumn } from "./record/record-column.js";
+export { ColumnTypes, type RecordColumnType } from "./record/column-type.js";
+export {
+  ColumnMappings,
+  type ColumnMapping,
+  type ColumnTypeMapping,
+} from "./record/column-mapping.js";
 export { RecordMask } from "./record/record-mask.js";
 export type {
   RecordContinuation,

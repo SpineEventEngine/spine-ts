@@ -1,9 +1,10 @@
-import { clone, create } from "@bufbuild/protobuf";
+import { clone, create, ScalarType } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type { Event, EventId, TenantId } from "@spine-event-engine/proto";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 
 import { RecordColumn } from "../record/record-column.js";
+import { ColumnTypes } from "../record/column-type.js";
 import type { RecordQuery } from "../record/record-query.js";
 import { RecordSpec } from "../record/record-spec.js";
 import type { RecordStorage } from "../record/record-storage.js";
@@ -422,9 +423,13 @@ export const eventStoreRecordSpec: RecordSpec<EventId, Event> = new RecordSpec<E
   columns: [
     new RecordColumn(
       "created",
+      ColumnTypes.message(TimestampSchema),
       (event) => event.context?.timestamp ?? create(TimestampSchema),
-      "timestamp",
     ),
-    new RecordColumn("type", (event) => event.message?.typeUrl, "string"),
+    new RecordColumn(
+      "type",
+      ColumnTypes.scalar(ScalarType.STRING),
+      (event) => event.message?.typeUrl,
+    ),
   ],
 });

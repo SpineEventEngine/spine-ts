@@ -1,4 +1,4 @@
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, fromBinary, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
 import {
   AnySchema,
   StringValueSchema,
@@ -16,6 +16,7 @@ import type { EntityEventHistoryPort, EntityStateHistoryPort } from "./entity-hi
 import type { EntityRecordStorage } from "./entity-record.js";
 import type { EntityStorageInput } from "../memory/in-memory-entity-history.js";
 import { RecordColumn } from "../record/record-column.js";
+import { ColumnTypes } from "../record/column-type.js";
 
 /**
  * Provides the current-record and state-history handles used by adapter conformance checks.
@@ -189,7 +190,11 @@ const EntityHistoryFixture: {
             : undefined,
       },
       columns: [
-        new RecordColumn("value", (record) => EntityHistoryFixture.state(record).value, "string"),
+        new RecordColumn(
+          "value",
+          ColumnTypes.scalar(ScalarType.STRING),
+          (record) => EntityHistoryFixture.state(record).value,
+        ),
       ],
       sourceType: StringValueSchema,
       stateSchema: StringValueSchema,
