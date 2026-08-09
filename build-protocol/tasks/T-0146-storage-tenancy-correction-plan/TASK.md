@@ -28,3 +28,8 @@ must own migrations and serialized/provider compatibility explicitly.
   compare-and-set behavior.
 - Define staged implementation, compatibility, test, documentation, and review
   work without modifying production code in this planning task.
+- Freeze JVM physical interoperability for IDs, declared columns, and query
+  operands, including one schema-aware write/query mapping per provider.
+- Replace TS-only binary/tagged message-ID encodings and generic message-column
+  stringification in the implementation plan with JVM-compatible mappings and
+  cross-runtime golden tests.

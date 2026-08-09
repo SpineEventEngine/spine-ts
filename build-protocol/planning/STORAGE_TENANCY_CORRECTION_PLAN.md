@@ -26,6 +26,12 @@ record family. These choices contradict the target model:
 This is a breaking storage-layout correction. It must not be hidden behind a
 compatibility facade.
 
+The correction also freezes physical interoperability with Spine JVM. A
+message-valued ID or declared query column must have the same provider value in
+Spine TS and Spine JVM. Logical equality inside one runtime is insufficient:
+JVM must be able to read and query records written by TS, and TS must be able to
+read and query records written by JVM.
+
 ## JVM evidence
 
 ### Datastore
@@ -118,6 +124,72 @@ converter must be injective over admitted tenants and return “not a tenant” 
 namespaces it does not own. Default/empty TenantIds are invalid in multitenant
 mode.
 
+## JVM-compatible ID and column mapping
+
+Spine JVM does not infer storage values from arbitrary JavaScript-like object
+shapes. Its storage specification retains the declared Proto field type, and a
+provider `ColumnMapping` converts that typed value both when a record is written
+and when a query predicate is built. `Identifier` handles the supported ID
+types and Any packing, while `Stringifiers` supplies reversible textual forms
+for messages where the provider mapping calls for text.
+
+Spine TS must adopt the same separation:
+
+1. `RecordSpec` retains the complete generated ID schema.
+2. Every `RecordColumn` retains its generated Proto field descriptor/schema,
+   not a free-form value such as `"protobuf"`.
+3. A common identifier contract validates, packs, unpacks, and classifies
+   supported primitive and message IDs.
+4. A reversible stringifier registry provides the JVM-compatible default
+   compact Proto JSON form for messages and explicit custom mappings.
+5. Each provider owns a typed column mapping. The provider applies the same
+   mapping to stored column values, equality/range query operands, ordering,
+   and keyset continuation values.
+6. Reading performs the corresponding reverse mapping wherever the provider
+   value must be reconstructed as a Proto value.
+
+The default physical mappings must match JVM, including:
+
+| Proto value                                     | MySQL/JDBC value          | Datastore value                               |
+| ----------------------------------------------- | ------------------------- | --------------------------------------------- |
+| `string`                                        | string column             | `StringValue`                                 |
+| `int32`/`uint32` and compatible integral values | integer column            | `LongValue`                                   |
+| `int64`/`uint64` and compatible integral values | long/integer column       | `LongValue`                                   |
+| `bool`                                          | boolean column            | `BooleanValue`                                |
+| `bytes`                                         | binary column             | `BlobValue`                                   |
+| enum                                            | numeric declaration order | `LongValue` declaration order                 |
+| ordinary message                                | compact Proto JSON string | `StringValue` from the registered stringifier |
+| `Timestamp`                                     | epoch nanoseconds         | native `TimestampValue`                       |
+| `Version`                                       | version number            | `LongValue` version number                    |
+| null, where admitted                            | SQL null                  | `NullValue`                                   |
+
+Message-valued record IDs use the JVM provider representation rather than TS's
+current private encodings:
+
+- MySQL stores the compact Proto JSON text used by JVM's message ID column;
+- Datastore uses the reversible stringifier text as the key name;
+- primitive IDs retain their provider-native JVM-compatible scalar forms.
+
+“Compact Proto JSON” means the Protobuf JSON mapping, not `JSON.stringify()` of
+an arbitrary JavaScript object. Its field names, enum representation, 64-bit
+integer strings, bytes encoding, well-known types, omission/default rules, and
+parser behavior must match JVM. Compatibility is accepted only through shared
+golden vectors produced and consumed by both runtimes; visually similar JSON is
+not sufficient.
+
+This requirement removes the current TS-only formats:
+
+- raw deterministic Protobuf binary for MySQL message IDs;
+- tagged `CanonicalMysqlValues` IDs;
+- tagged `CanonicalValue` Datastore key names;
+- generic `JSON.stringify()` for message columns;
+- any write path or query path that bypasses the same typed mapping.
+
+The serialized record `bytes` remain ordinary deterministic Protobuf binary;
+the compatibility change concerns physical IDs, materialized query columns,
+and query operands. Table/kind naming and grouping must also match the approved
+JVM layout or an explicitly documented cross-runtime name customization.
+
 ## Required invariants
 
 1. No production schema, persisted record, key, or query contains `_scope` or
@@ -140,6 +212,12 @@ mode.
     `TenantId` record family.
 11. Domain, email, and value TenantIds cannot collide, including when an
     application value begins with text such as `domain:` or `email:`.
+12. Every stored ID and declared column has one schema-aware provider mapping;
+    writes and queries use the identical mapping.
+13. JVM and TS golden vectors produce identical MySQL parameter values and
+    Datastore key/property values for every supported ID and column type.
+14. No private tagged JSON, generic object stringification, or raw message-ID
+    binary remains in a provider key or ID column.
 
 ## Implementation sequence
 
@@ -155,6 +233,14 @@ mode.
   names, factory sharing rules, and provider customization identity.
 - Add common contract tests proving two contexts share the same tenant/family
   record and two tenants do not.
+- Replace string-only `RecordColumn.valueType` with generated Proto field type
+  metadata sufficient to distinguish scalar, enum, message, `Timestamp`, and
+  `Version` values.
+- Add JVM-shaped identifier, stringifier, and provider-column-mapping ports.
+  Keep Proto reflection and conversion in storage contracts/adapters rather
+  than entity or query business logic.
+- Define shared cross-runtime golden fixtures for message and primitive IDs and
+  every supported column category.
 
 No replacement scope token, fingerprint, discriminator, or compatibility
 alias is permitted.
@@ -218,6 +304,11 @@ object identity for generated `TenantId` map keys.
 - Generate tables with primary key `ID` and columns `bytes` plus the declared
   Proto columns. Remove `_scope`, `_revision`, their bindings, predicates,
   schema checks, and test helpers.
+- Replace private binary/tagged ID codecs with JVM-compatible native scalar IDs
+  and compact Proto JSON message IDs.
+- Introduce a MySQL column mapping equivalent to JVM `JdbcColumnMapping`; use
+  it for DDL type selection, write parameters, query predicates, ordering, and
+  continuation values.
 - Keep exact-payload CAS inside the existing transaction and `SELECT ... FOR
 UPDATE` path.
 - Key advisory locks by the selected physical database, record family, and ID.
@@ -229,9 +320,14 @@ UPDATE` path.
 - Add a tenant-to-namespace converter compatible with JVM namespace semantics.
 - Construct every record key from namespace, kind, and canonical record ID.
   Remove scope-derived key names and the `_scope` property/filter.
+- Replace tagged key-name JSON with the JVM-compatible reversible ID
+  stringifier, using compact Proto JSON for default message IDs.
 - Apply the namespace to every query and native transaction, including
   reconciliation scans and entity commits.
 - Store only unindexed serialized `bytes` plus declared indexed columns.
+- Introduce a Datastore column mapping equivalent to JVM `DsColumnMapping`;
+  preserve native scalar, blob, timestamp, null, enum, version, and stringified
+  message property types, and use it for both writes and query operands.
 - Preserve exact-payload CAS inside a native Datastore transaction; do not add
   a replacement revision property.
 - Implement provider tenant enumeration through native `__namespace__`
@@ -297,6 +393,12 @@ Wave 8's invented layout.
   observes conflict and all transaction/lock resources are released.
 - Query columns continue to filter declared Proto values without provider
   metadata predicates.
+- Golden MessageId, BoardId, UserId, string, integer, enum, bytes, Timestamp,
+  Version, and ordinary-message values encode identically in JVM and TS.
+- Equality and range queries map their operands through the exact mapping used
+  to materialize the corresponding column.
+- A JVM-written fixture can be read and queried by TS, and a TS-written fixture
+  can be read and queried by JVM, for both providers.
 
 ### MySQL matrix
 
@@ -386,17 +488,23 @@ examples before T-0150 passes the shared acceptance unit.
 
 1. **T-0147 — Tenant-boundary contract preparation**: introduce and test the
    typed, collision-free `TenantBoundary`, factory-owned tenant-catalog
-   capability, and provider conformance harness. It excludes public/runtime
-   cutover, provider layout changes, and deletion of the old seam.
+   capability, schema-aware `RecordColumn`, identifier/stringifier contracts,
+   provider column-mapping ports, JVM golden vectors, and provider conformance
+   harness. It excludes public/runtime cutover, provider layout changes, and
+   deletion of the old seam.
 2. **T-0148 — MySQL tenant databases and schema correction**: add enumerable
    tenant-database configuration; route operations and catalog enumeration by
-   tenant; remove `_scope`/`_revision`; preserve transactions and locks.
+   tenant; adopt JVM-compatible ID and column mappings; route stored and query
+   values through one mapping; remove `_scope`/`_revision`; preserve
+   transactions and locks.
    This is a non-releasable provider checkpoint and explicitly excludes server
    operability under the new catalog.
 3. **T-0149 — Datastore namespaces and key correction**: route keys, queries,
-   transactions, and catalog enumeration through native namespaces; remove
-   `_scope`; preserve transactional CAS. This is a non-releasable provider
-   checkpoint and explicitly excludes server operability under the new catalog.
+   transactions, and catalog enumeration through native namespaces; adopt
+   JVM-compatible ID stringification and native column mappings; route stored
+   and query values through one mapping; remove `_scope`; preserve transactional
+   CAS. This is a non-releasable provider checkpoint and explicitly excludes
+   server operability under the new catalog.
 4. **T-0150 — Atomic shared-runtime cutover and release convergence**: change
    memory storage, EventStore/cache identity, and server tenant discovery;
    delete `canonical-scope.ts`, the generic `TenantId` family, and all remaining
@@ -414,7 +522,9 @@ security review, and `verify:release`.
 The checkpoint risk ledger is explicit:
 
 - T-0147 risks a new serialized/public tenant identity; declarations and
-  collision tests are its primary gate.
+  collision tests are its primary gate. It also risks an incomplete Proto type
+  model or superficially similar JSON; cross-runtime golden vectors are a
+  primary gate.
 - T-0148 risks cross-tenant database aliasing, partial pool leaks, and accepting
   legacy schemas; normalized-target, lifecycle, and preflight tests are its
   primary gate.
