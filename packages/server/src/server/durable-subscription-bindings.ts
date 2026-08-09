@@ -1,4 +1,4 @@
-import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { clone, create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { timestampFromMs, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   GatewayAuthenticatedSubscriptionSchema,
@@ -20,6 +20,7 @@ import type {
   SubscriptionGatewayLimits,
 } from "@spine-event-engine/auth";
 import {
+  ColumnTypes,
   RecordColumn,
   RecordSpec,
   type RecordStorage,
@@ -129,10 +130,8 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
           return record.id;
         },
         columns: [
-          new RecordColumn(
-            "when_expires",
-            (record) => DurableSubscriptionValues.expiryMs(record.whenExpires),
-            "int64",
+          new RecordColumn("when_expires", ColumnTypes.scalar(ScalarType.INT64), (record) =>
+            DurableSubscriptionValues.expiryMs(record.whenExpires),
           ),
         ],
       }),

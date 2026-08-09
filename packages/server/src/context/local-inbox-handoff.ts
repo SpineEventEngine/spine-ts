@@ -1,3 +1,6 @@
+import type { TenantId } from "@spine-event-engine/proto";
+import { TenantBoundary } from "@spine-event-engine/storage";
+
 import { Delivery, type DeliveryEndpointMessage } from "../delivery/delivery.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
 import type { DeliverySource } from "../delivery/delivery-supervisor.js";
@@ -40,7 +43,7 @@ export interface DeliveryReady extends DeliveryEndpoint {
   /**
    * Identifies the tenant when this route is tenant-scoped.
    */
-  readonly tenantId?: string;
+  readonly tenantId?: TenantId;
 }
 
 /**
@@ -373,7 +376,7 @@ export interface LocalInboxKeyInput {
  * Coordinates durable local inbox ownership and delivery handoffs.
  */
 export const InboxHandoff: Readonly<{
-  ready(endpoint: DeliveryEndpoint, tenantId?: string): DeliveryReady;
+  ready(endpoint: DeliveryEndpoint, tenantId?: TenantId): DeliveryReady;
   configuredScopes(
     scopes: readonly DeliveryReady[],
     allowEmpty: boolean,
@@ -388,7 +391,7 @@ export const InboxHandoff: Readonly<{
   }): Promise<InboxMessage>;
   drain(options: LocalInboxDrainOptions): Promise<void>;
   runDrain(options: LocalInboxDrainOptions): Promise<void>;
-  key(input: LocalInboxKeyInput, tenantId?: string): string;
+  key(input: LocalInboxKeyInput, tenantId?: TenantId): string;
   sameMessageId(
     left: {
       readonly value: string;
@@ -409,7 +412,7 @@ export const InboxHandoff: Readonly<{
     endpoints: readonly DeliveryEndpoint[],
   ): DeliveryEndpoint | undefined;
 }> = Object.freeze({
-  ready(endpoint: DeliveryEndpoint, tenantId?: string): DeliveryReady {
+  ready(endpoint: DeliveryEndpoint, tenantId?: TenantId): DeliveryReady {
     return Object.freeze({
       ...(tenantId === undefined ? {} : { tenantId }),
       label: endpoint.label,
@@ -434,7 +437,7 @@ export const InboxHandoff: Readonly<{
 
   readyKey(ready: DeliveryReady): string {
     return JSON.stringify([
-      ready.tenantId ?? "",
+      tenantKey(ready.tenantId),
       ready.label,
       ready.targetTypeUrl,
       ready.shard.index,
@@ -521,9 +524,9 @@ export const InboxHandoff: Readonly<{
     throw new Error(unfinishedMessage);
   },
 
-  key(input: LocalInboxKeyInput, deliveryTenantId?: string): string {
+  key(input: LocalInboxKeyInput, deliveryTenantId?: TenantId): string {
     return JSON.stringify([
-      deliveryTenantId ?? "",
+      tenantKey(deliveryTenantId),
       input.label,
       input.signalId,
       input.inboxId.targetTypeUrl,
@@ -577,3 +580,7 @@ export const InboxHandoff: Readonly<{
     );
   },
 });
+
+function tenantKey(tenantId: TenantId | undefined): string {
+  return tenantId === undefined ? "" : String(TenantBoundary.from(tenantId).key);
+}

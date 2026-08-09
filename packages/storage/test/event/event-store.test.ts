@@ -43,52 +43,33 @@ describe("EventStore", () => {
     expect(read[1]).not.toBe(later);
   });
 
-  it("uses the current tenant slice from the storage context", async () => {
-    let currentTenantId = tenant("tenant-a");
+  it("reads only from the explicitly selected tenant slice", async () => {
     const factory = new InMemoryStorageFactory();
-    const store = new EventStore(
-      {
-        name: "Tasks",
-        multitenant: true,
-        get tenantId() {
-          return currentTenantId;
-        },
-      },
-      factory,
-    );
+    const store = new EventStore({ name: "Tasks", multitenant: true }, factory);
 
-    await store.append(createEvent("event-a", "type.spine.io/tasks.TaskCreated", 1n));
-    currentTenantId = tenant("tenant-b");
-    await store.append(createEvent("event-b", "type.spine.io/tasks.TaskCreated", 1n));
-    currentTenantId = tenant("tenant-a");
+    await store.append(createEvent("event-a", "type.spine.io/tasks.TaskCreated", 1n, "tenant-a"));
+    await store.append(createEvent("event-b", "type.spine.io/tasks.TaskCreated", 1n, "tenant-b"));
 
-    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-a" } }]);
-    currentTenantId = tenant("tenant-b");
-    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-b" } }]);
+    await expect(readTenantEvents(factory, tenant("tenant-a"))).resolves.toMatchObject([
+      { id: { value: "event-a" } },
+    ]);
+    await expect(readTenantEvents(factory, tenant("tenant-b"))).resolves.toMatchObject([
+      { id: { value: "event-b" } },
+    ]);
   });
 
   it("uses event envelope tenant for single-event append and accept", async () => {
-    let currentTenantId = tenant("fallback-tenant");
     const factory = new InMemoryStorageFactory();
-    const store = new EventStore(
-      {
-        name: "Tasks",
-        multitenant: true,
-        get tenantId() {
-          return currentTenantId;
-        },
-      },
-      factory,
-    );
+    const store = new EventStore({ name: "Tasks", multitenant: true }, factory);
     const event = createEvent("event-a", "type.spine.io/tasks.TaskCreated", 1n, "tenant-a");
 
     await expect(store.accept(event)).resolves.toBeUndefined();
     await expect(store.append(event)).resolves.toBeUndefined();
 
-    currentTenantId = tenant("tenant-a");
-    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-a" } }]);
-    currentTenantId = tenant("tenant-b");
-    await expect(store.read()).resolves.toEqual([]);
+    await expect(readTenantEvents(factory, tenant("tenant-a"))).resolves.toMatchObject([
+      { id: { value: "event-a" } },
+    ]);
+    await expect(readTenantEvents(factory, tenant("tenant-b"))).resolves.toEqual([]);
 
     await expect(
       store.append(
@@ -98,8 +79,9 @@ describe("EventStore", () => {
         }),
       ),
     ).resolves.toBeUndefined();
-    currentTenantId = tenant({ kind: "domain", value: "example.com" });
-    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-domain" } }]);
+    await expect(
+      readTenantEvents(factory, tenant({ kind: "domain", value: "example.com" })),
+    ).resolves.toMatchObject([{ id: { value: "event-domain" } }]);
 
     await expect(
       store.append(
@@ -109,8 +91,9 @@ describe("EventStore", () => {
         }),
       ),
     ).resolves.toBeUndefined();
-    currentTenantId = tenant({ kind: "email", value: "owner@example.com" });
-    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-email" } }]);
+    await expect(
+      readTenantEvents(factory, tenant({ kind: "email", value: "owner@example.com" })),
+    ).resolves.toMatchObject([{ id: { value: "event-email" } }]);
   });
 
   it("supports empty appends and closes with the delegated record storage", async () => {
@@ -293,4 +276,13 @@ function tenantKind(tenantId: TenantInput): TenantId["kind"] {
 
 function tenant(value: TenantInput): TenantId {
   return create(TenantIdSchema, { kind: tenantKind(value) });
+}
+
+async function readTenantEvents(factory: InMemoryStorageFactory, tenantId: TenantId) {
+  const reader = new EventStore({ name: "Tasks", multitenant: true, tenantId }, factory);
+  try {
+    return await reader.read();
+  } finally {
+    reader.close();
+  }
 }

@@ -30,12 +30,33 @@ export class InMemoryStorageBackend {
   ): T {
     return MemoryBackendScopes.bind(backend, namespace, tenant, family, create);
   }
+
+  /**
+   * Admits one tenant to this backend without creating a record family.
+   *
+   * @param backend Selects the shared backend.
+   * @param tenant The complete provider tenant boundary.
+   */
+  static admit(backend: InMemoryStorageBackend, tenant: TenantBoundary): void {
+    MemoryBackendScopes.admit(backend, tenant);
+  }
+
+  /**
+   * Lists multitenant boundaries admitted to this backend.
+   *
+   * @param backend Selects the shared backend.
+   * @returns Immutable boundary snapshots.
+   */
+  static tenants(backend: InMemoryStorageBackend): readonly TenantBoundary[] {
+    return MemoryBackendScopes.tenants(backend);
+  }
 }
 
 const scopesByBackend = new WeakMap<
   InMemoryStorageBackend,
   Map<string, Map<string | symbol, Map<string, unknown>>>
 >();
+const tenantsByBackend = new WeakMap<InMemoryStorageBackend, Map<string, TenantBoundary>>();
 
 /**
  * Binds provider tenant and record-family identities for each backend.
@@ -53,6 +74,7 @@ const MemoryBackendScopes = {
     family: string,
     create: () => T,
   ): T {
+    this.admit(backend, tenant);
     let scopes = scopesByBackend.get(backend);
     if (scopes === undefined) {
       scopes = new Map();
@@ -75,6 +97,24 @@ const MemoryBackendScopes = {
       return value;
     }
     return existing as T;
+  },
+
+  admit(backend: InMemoryStorageBackend, tenant: TenantBoundary): void {
+    if (tenant.single) return;
+    let tenants = tenantsByBackend.get(backend);
+    if (tenants === undefined) {
+      tenants = new Map();
+      tenantsByBackend.set(backend, tenants);
+    }
+    tenants.set(String(tenant.key), tenant);
+  },
+
+  tenants(backend: InMemoryStorageBackend): readonly TenantBoundary[] {
+    return Object.freeze(
+      [...(tenantsByBackend.get(backend)?.entries() ?? [])]
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+        .map(([, boundary]) => boundary),
+    );
   },
 };
 import type { TenantBoundary } from "../internal/tenancy.js";

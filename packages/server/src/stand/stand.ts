@@ -1,12 +1,20 @@
 import { clone, create, type Message, type MessageShape } from "@bufbuild/protobuf";
 import { type MessageSchema, TypeUrls } from "@spine-event-engine/core";
-import { VersionSchema, type Version } from "@spine-event-engine/proto";
 import {
+  TenantIdSchema,
+  VersionSchema,
+  type TenantId,
+  type Version,
+} from "@spine-event-engine/proto";
+import {
+  ColumnTypes,
   RecordColumn,
   RecordMask,
   RecordQuery,
+  TenantBoundary,
   type NormalizedQueryPlan,
   type StorageContext,
+  type StorageMode,
 } from "@spine-event-engine/storage";
 import type { StorageFactory } from "@spine-event-engine/storage";
 import type {
@@ -31,7 +39,7 @@ export interface StandOptions {
   /**
    * Base storage context owned by the enclosing bounded context.
    */
-  readonly context: StorageContext;
+  readonly context: StorageMode;
 
   /**
    * Storage factory used for read-side state records.
@@ -60,7 +68,7 @@ export interface StandUpdateOptions {
   /**
    * Tenant slice for multitenant stands.
    */
-  readonly tenantId?: string;
+  readonly tenantId?: TenantId;
 
   /**
    * Version persisted with the updated state.
@@ -82,7 +90,7 @@ export interface StandReadOptions {
   /**
    * Tenant slice for multitenant stands.
    */
-  readonly tenantId?: string;
+  readonly tenantId?: TenantId;
 }
 
 /**
@@ -111,7 +119,7 @@ export interface StandSubscribeOptions {
   /**
    * Tenant slice for multitenant stands.
    */
-  readonly tenantId?: string;
+  readonly tenantId?: TenantId;
 }
 
 /**
@@ -151,7 +159,7 @@ export interface StandUpdate<Schema extends MessageSchema = MessageSchema> {
   /**
    * Tenant slice for multitenant stands.
    */
-  readonly tenantId?: string;
+  readonly tenantId?: TenantId;
 }
 
 /**
@@ -221,7 +229,7 @@ interface Registration<Schema extends MessageSchema = MessageSchema> {
  * Entity states are queried through the shared durable current-record seam.
  */
 export class Stand {
-  readonly #context: StorageContext;
+  readonly #context: StorageMode;
   readonly #storageFactory: StorageFactory;
   readonly #registrations = new Map<string, Registration>();
   readonly #entityHandles = new Map<
@@ -277,8 +285,8 @@ export class Stand {
             (field) =>
               new RecordColumn(
                 field.localName,
+                ColumnTypes.fromField(field),
                 (state) => (state as Record<string, unknown>)[field.localName],
-                "protobuf",
               ),
           ),
         subscribers: new Set<Subscriber>(),
@@ -675,9 +683,9 @@ export class Stand {
 
   #openCurrent(
     registration: Registration,
-    tenantId: string | undefined,
+    tenantId: TenantId | undefined,
   ): EntityRecordStorage<unknown> {
-    const key = `${registration.typeUrl}\u0000${tenantId ?? ""}`;
+    const key = `${registration.typeUrl}\u0000${this.#tenantKey(tenantId)}`;
     const existing = this.#entityHandles.get(key);
     if (existing !== undefined) return existing.current;
     const handle = Stand.#openStorage(
@@ -729,7 +737,7 @@ export class Stand {
       readonly id: unknown;
       readonly previousState: MessageShape<Schema> | undefined;
       readonly state: MessageShape<Schema>;
-      readonly tenantId: string | undefined;
+      readonly tenantId: TenantId | undefined;
       readonly version: Version | undefined;
     },
     captured?: readonly Subscriber<Schema>[],
@@ -754,11 +762,12 @@ export class Stand {
     }
   }
 
-  #tenantKey(tenantId: string | undefined): string {
-    return this.#tenantId(tenantId) ?? "__single__";
+  #tenantKey(tenantId: TenantId | undefined): string {
+    const selected = this.#tenantId(tenantId);
+    return selected === undefined ? "__single__" : String(TenantBoundary.from(selected).key);
   }
 
-  #hasTenantSubscribers(registration: Registration, tenantId: string | undefined): boolean {
+  #hasTenantSubscribers(registration: Registration, tenantId: TenantId | undefined): boolean {
     const tenantKey = this.#tenantKey(tenantId);
 
     for (const subscriber of registration.subscribers) {
@@ -777,7 +786,7 @@ export class Stand {
     return [...registration.subscribers].filter((subscriber) => subscriber.tenantKey === tenantKey);
   }
 
-  #tenantId(tenantId: string | undefined): string | undefined {
+  #tenantId(tenantId: TenantId | undefined): TenantId | undefined {
     if (!this.#context.multitenant) {
       if (tenantId !== undefined) {
         throw new Error(`Single-tenant Stand "${this.#context.name}" does not accept tenantId.`);
@@ -785,17 +794,25 @@ export class Stand {
       return undefined;
     }
 
-    if (tenantId === undefined || tenantId.trim().length === 0) {
+    if (tenantId === undefined) {
       throw new Error(`Multitenant Stand "${this.#context.name}" requires tenantId.`);
     }
 
-    return tenantId;
+    return TenantBoundary.from(tenantId).tenantId;
   }
 
-  #storageContext(tenantId: string | undefined): StorageContext {
+  #storageContext(tenantId: TenantId | undefined): StorageContext {
+    if (!this.#context.multitenant) {
+      this.#tenantId(tenantId);
+      return Object.freeze({ name: this.#context.name, multitenant: false });
+    }
+    if (tenantId === undefined) {
+      throw new Error(`Multitenant Stand "${this.#context.name}" requires tenantId.`);
+    }
     return Object.freeze({
-      ...this.#context,
-      ...(tenantId === undefined ? {} : { tenantId }),
+      name: this.#context.name,
+      multitenant: true,
+      tenantId: TenantBoundary.from(tenantId).tenantId,
     });
   }
 
@@ -825,7 +842,7 @@ export class Stand {
       readonly id: unknown;
       readonly previousState: MessageShape<Schema> | undefined;
       readonly state: MessageShape<Schema>;
-      readonly tenantId: string | undefined;
+      readonly tenantId: TenantId | undefined;
       readonly version: Version | undefined;
     },
   ): StandUpdate<Schema> {
@@ -838,7 +855,7 @@ export class Stand {
         : { previousState: clone(registration.schema, input.previousState) }),
       state: clone(registration.schema, input.state),
       ...(version === undefined ? {} : { version }),
-      ...(input.tenantId === undefined ? {} : { tenantId: input.tenantId }),
+      ...(input.tenantId === undefined ? {} : { tenantId: clone(TenantIdSchema, input.tenantId) }),
     });
   }
 
@@ -902,8 +919,8 @@ export class Stand {
     return candidate.createEntityStorage(input);
   }
 
-  static #cloneContext(context: StorageContext): StorageContext {
-    return Object.freeze({ ...context });
+  static #cloneContext(context: StorageMode): StorageMode {
+    return Object.freeze({ name: context.name, multitenant: context.multitenant });
   }
 }
 

@@ -5,16 +5,23 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { clone, getOption, hasOption, type Message } from "@bufbuild/protobuf";
 import { TypeUrls, type MessageSchema } from "@spine-event-engine/core";
-import { EventSchema, type Command, type Event, type TenantId } from "@spine-event-engine/proto";
+import {
+  EventSchema,
+  TenantIdSchema,
+  type Command,
+  type Event,
+  type TenantId,
+} from "@spine-event-engine/proto";
 import { SPI_type, internal_all, internal_type } from "@spine-event-engine/proto";
 import {
+  ColumnTypes,
   EventStore,
   InMemoryStorageFactory,
   RecordColumn,
-  RecordSpec,
-  type RecordStorage,
+  TenantBoundary,
   type StorageContext,
   type StorageFactory,
+  type StorageMode,
 } from "@spine-event-engine/storage";
 
 import { CommandBus, commandBusAccess } from "../bus/command-bus.js";
@@ -165,7 +172,7 @@ interface RepositoryRegistration {
   /**
    * Storage context derived from the bounded context spec.
    */
-  readonly storageContext: StorageContext;
+  readonly storageContext: StorageMode;
 
   /**
    * Context storage factory.
@@ -247,7 +254,7 @@ export interface DeliveryTenantScope {
   /**
    * Identifies the tenant, or is absent for the single-tenant scope.
    */
-  readonly tenantId?: string;
+  readonly tenantId?: TenantId;
 }
 
 /**
@@ -290,7 +297,7 @@ export interface ContextDeliveryDescriptor {
    * @param tenantId Identifies the delivery tenant when the context is multitenant.
    * @returns A promise that resolves after the message is replayed.
    */
-  replay(message: DeliveryEndpointMessage, tenantId?: string): Promise<void>;
+  replay(message: DeliveryEndpointMessage, tenantId?: TenantId): Promise<void>;
 
   /**
    * Sets the observer for newly ready delivery routes.
@@ -376,7 +383,7 @@ export interface EventEndpoint {
  * Tenant-scoped options for one framework-owned read-side catch-up run.
  *
  * Single-tenant contexts reject `tenantId`. Multitenant contexts require a
- * non-blank `tenantId` and preserve the exact non-blank string supplied.
+ * complete generated `tenantId` and preserve its typed identity.
  */
 export interface ReadCatchUpOptions {
   // prettier-ignore
@@ -384,7 +391,7 @@ export interface ReadCatchUpOptions {
   /**
    * Tenant slice to rebuild for multitenant contexts.
    */
-  readonly tenantId?: string;
+  readonly tenantId?: TenantId;
 }
 
 /**
@@ -571,7 +578,6 @@ export class BoundedContext {
   readonly #registeredRepositories: RegistrationSnapshot[] = [];
   readonly #storedEventDispatchFailures: StoredEventDispatchFailure[] = [];
   readonly #repositoryViews = new Set<RepositoryView>();
-  readonly #repositoryStorages = new Set<RecordStorage<unknown, Message>>();
   readonly #storageFactory: StorageFactory;
   readonly #stand: Stand;
   readonly #systemStand: Stand;
@@ -669,7 +675,7 @@ export class BoundedContext {
       tenantMode: this.#snapshot.tenantMode,
       storageFactory,
     });
-    const keepTenant = (tenantId: string) => tenantIndex.keep(tenantId);
+    const keepTenant = (tenantId: TenantId) => tenantIndex.keep(tenantId);
     this.#entityInbox = new LocalEntityInbox(
       this.#snapshot.name.value,
       deliveryReadiness,
@@ -737,7 +743,6 @@ export class BoundedContext {
           this.#projectionInbox.register(preparedRepository.projectionInboxTarget);
         }
         this.#repositoryViews.add(preparedRepository.repository);
-        this.#repositoryStorages.add(preparedRepository.storage);
       }
     } catch (error) {
       this.#failRegistration(error, preparedRepositories);
@@ -747,7 +752,7 @@ export class BoundedContext {
   #prepareRepositories(repositories: readonly RepositoryView[]): PreparedRepository[] {
     const registration: RepositoryRegistration = {
       name: ContextParts.cloneName(this.#snapshot.name),
-      storageContext: ContextParts.createStorageContext(this.#snapshot.spec),
+      storageContext: ContextParts.createStorageMode(this.#snapshot.spec),
       storageFactory: this.#storageFactory,
       stand: this.#stand,
       entityInbox: this.#entityInbox,
@@ -1014,11 +1019,6 @@ export class BoundedContext {
       await ContextParts.closeContextPart(() => {
         repositoryAccess.clearRuntime(repository);
         registeredRepositories.delete(repository);
-      }, errors);
-    }
-    for (const storage of this.#repositoryStorages) {
-      await ContextParts.closeContextPart(() => {
-        storage.close();
       }, errors);
     }
     ContextParts.clearContextMetadata(this);
@@ -1418,12 +1418,12 @@ export class BoundedContextBuilder {
         this.#persistSystemEvents,
       );
       systemEventStore = systemSpec.storesEvents
-        ? new EventStore(ContextParts.createStorageContext(systemSpec), storageFactory)
+        ? new EventStore(ContextParts.createStorageMode(systemSpec), storageFactory)
         : undefined;
       systemEventBus = eventBusAccess.createSystemBus(systemEventStore);
       for (const dispatcher of systemEventDispatchers) systemEventBus.register(dispatcher);
       systemStand = new Stand({
-        context: ContextParts.createStorageContext(systemSpec),
+        context: ContextParts.createStorageMode(systemSpec),
         storageFactory,
       });
       eventStore = this.createEventStore(storageFactory);
@@ -1434,7 +1434,7 @@ export class BoundedContextBuilder {
         ContextParts.repositoryProducedEventSchemas(registeredRepositories),
       );
       stand = new Stand({
-        context: ContextParts.createStorageContext(this.#specSnapshot),
+        context: ContextParts.createStorageMode(this.#specSnapshot),
         storageFactory,
       });
       registry ??= new StorageSubscriptionRegistry(
@@ -1517,7 +1517,7 @@ export class BoundedContextBuilder {
   }
 
   private createEventStore(storageFactory: StorageFactory): EventStore {
-    return new EventStore(ContextParts.createStorageContext(this.#specSnapshot), storageFactory);
+    return new EventStore(ContextParts.createStorageMode(this.#specSnapshot), storageFactory);
   }
 }
 
@@ -1598,7 +1598,6 @@ export class ContextSpec {
 interface PreparedRepository {
   readonly repository: RepositoryView;
   readonly snapshot: RegistrationSnapshot;
-  readonly storage: RecordStorage<unknown, Message>;
   readonly entityInboxTarget?: EntityInboxTarget;
   readonly projectionInboxTarget?: ProjectionInboxTarget;
   commit(): void;
@@ -1702,7 +1701,7 @@ const ContextParts = Object.freeze({
     );
   },
 
-  createStorageContext(specSnapshot: ContextSpecSnapshot): StorageContext {
+  createStorageMode(specSnapshot: ContextSpecSnapshot): StorageMode {
     return Object.freeze({
       name: specSnapshot.name.value,
       multitenant: specSnapshot.multitenant,
@@ -1743,11 +1742,11 @@ const ContextParts = Object.freeze({
           `Single-tenant read-side catch-up for "${specSnapshot.name.value}" does not accept tenantId.`,
         );
       }
-      return ContextParts.createStorageContext(specSnapshot);
+      return Object.freeze({ name: specSnapshot.name.value, multitenant: false });
     }
 
     const tenantId = options.tenantId;
-    if (tenantId === undefined || tenantId.trim().length === 0) {
+    if (tenantId === undefined) {
       throw new Error(
         `Multitenant read-side catch-up for "${specSnapshot.name.value}" requires tenantId.`,
       );
@@ -1756,7 +1755,7 @@ const ContextParts = Object.freeze({
     return Object.freeze({
       name: specSnapshot.name.value,
       multitenant: true,
-      tenantId,
+      tenantId: TenantBoundary.from(tenantId).tenantId,
     });
   },
 
@@ -2211,15 +2210,19 @@ const ContextParts = Object.freeze({
           return Object.freeze({ name: context.name.value, multitenant: false });
         }
         const tenantId = scope.tenantId;
-        if (tenantId === undefined || tenantId.trim().length === 0) {
+        if (tenantId === undefined) {
           throw new Error(`Multitenant context "${context.name.value}" requires tenantId.`);
         }
-        return Object.freeze({ name: context.name.value, multitenant: true, tenantId });
+        return Object.freeze({
+          name: context.name.value,
+          multitenant: true,
+          tenantId: TenantBoundary.from(tenantId).tenantId,
+        });
       },
       endpoints(): readonly DeliveryEndpoint[] {
         return Object.freeze([...entityInbox.endpoints(), ...projections.endpoints()]);
       },
-      replay(message: DeliveryEndpointMessage, tenantId?: string): Promise<void> {
+      replay(message: DeliveryEndpointMessage, tenantId?: TenantId): Promise<void> {
         return message.label === "UPDATE_SUBSCRIBER"
           ? projections.replay(message, tenantId)
           : entityInbox.replay(message, tenantId);
@@ -2292,16 +2295,7 @@ const ContextParts = Object.freeze({
   ): PreparedRepository {
     ContextParts.requireRepositoryInstance(repository, "BoundedContext repository registration");
     const snapshot = ContextParts.repositorySnapshot(repository);
-    const storage = registration.storageFactory.createRecordStorage(
-      registration.storageContext,
-      ContextParts.createRepositoryRecordSpec(snapshot),
-    );
-    try {
-      ContextParts.rejectRegisteredRepository(repository);
-    } catch (error) {
-      storage.close();
-      throw error;
-    }
+    ContextParts.rejectRegisteredRepository(repository);
     repositoryAccess.bindRuntime(repository, {
       context: registration.storageContext,
       storageFactory: registration.storageFactory,
@@ -2325,7 +2319,6 @@ const ContextParts = Object.freeze({
     return {
       repository,
       snapshot,
-      storage,
       ...(entityInboxTarget === undefined ? {} : { entityInboxTarget }),
       ...(projectionInboxTarget === undefined ? {} : { projectionInboxTarget }),
       commit: () => {
@@ -2333,7 +2326,6 @@ const ContextParts = Object.freeze({
       },
       close: () => {
         repositoryAccess.clearRuntime(repository);
-        storage.close();
       },
     };
   },
@@ -2364,22 +2356,11 @@ const ContextParts = Object.freeze({
     }
   },
 
-  createRepositoryRecordSpec(snapshot: RegistrationSnapshot): RecordSpec<string, Message> {
-    return new RecordSpec<string, Message>({
-      recordType: snapshot.stateSchema,
-      idKind: "string",
-      extractId: (record) => String(ContextParts.readRecordId(record, snapshot)),
-      columns: ContextParts.repositoryColumns(snapshot),
-    });
-  },
-
   repositoryColumns(snapshot: RegistrationSnapshot): readonly RecordColumn<Message>[] {
     return snapshot.metadata.columns.map(
       (field) =>
-        new RecordColumn(
-          field.name,
-          (record) => ContextParts.readRecordField(record, field.localName),
-          "protobuf",
+        new RecordColumn(field.name, ColumnTypes.fromField(field.descriptor), (record) =>
+          ContextParts.readRecordField(record, field.localName),
         ),
     );
   },
@@ -2496,17 +2477,12 @@ const ContextParts = Object.freeze({
     }
   },
 
-  catchUpStandOptions(context: StorageContext): { readonly tenantId?: string } {
+  catchUpStandOptions(context: StorageContext): { readonly tenantId?: TenantId } {
     if (!context.multitenant) {
       return {};
     }
 
-    const { tenantId } = context;
-    if (tenantId === undefined) {
-      throw new Error(`Multitenant read-side catch-up for "${context.name}" requires tenantId.`);
-    }
-
-    return Object.freeze({ tenantId });
+    return Object.freeze({ tenantId: clone(TenantIdSchema, context.tenantId) });
   },
 
   validateReplayTenant(context: StorageContext, event: Event): void {
@@ -2515,20 +2491,17 @@ const ContextParts = Object.freeze({
     }
 
     const expectedTenantId = context.tenantId;
-    if (expectedTenantId === undefined) {
-      throw new Error(`Multitenant read-side catch-up for "${context.name}" requires tenantId.`);
-    }
 
     const envelopeTenantId = ContextParts.readReplayTenant(event);
     if (envelopeTenantId === undefined) {
       throw new Error("Read-side catch-up requires stored event envelope tenant.");
     }
-    if (envelopeTenantId !== expectedTenantId) {
+    if (TenantBoundary.from(envelopeTenantId).key !== TenantBoundary.from(expectedTenantId).key) {
       throw new Error("Read-side catch-up stored event envelope tenant does not match.");
     }
   },
 
-  readReplayTenant(event: Event): string | undefined {
+  readReplayTenant(event: Event): TenantId | undefined {
     switch (event.context?.origin.case) {
       case "importContext":
         return ContextParts.tenantIdValue(event.context.origin.value.tenantId);
@@ -2539,17 +2512,8 @@ const ContextParts = Object.freeze({
     }
   },
 
-  tenantIdValue(tenantId: TenantId | undefined): string | undefined {
-    switch (tenantId?.kind.case) {
-      case "value":
-        return tenantId.kind.value;
-      case "domain":
-        return `domain:${tenantId.kind.value.value}`;
-      case "email":
-        return `email:${tenantId.kind.value.value}`;
-      default:
-        return undefined;
-    }
+  tenantIdValue(tenantId: TenantId | undefined): TenantId | undefined {
+    return tenantId === undefined ? undefined : clone(TenantIdSchema, tenantId);
   },
 
   async dispatchStoredProjectionEvent(

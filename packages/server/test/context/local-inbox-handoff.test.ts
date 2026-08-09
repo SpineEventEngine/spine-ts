@@ -4,6 +4,7 @@ import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { type DeliveryReady, DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
 import { Delivery } from "../../src/delivery/delivery.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
+import { tenant } from "../tenant-fixture.js";
 
 describe("DeliveryReadiness", () => {
   it("publishes the direct gate before a readiness callback can transition", async () => {
@@ -360,7 +361,7 @@ describe("DeliveryReadiness", () => {
 
 function ready(tenantId?: string): DeliveryReady {
   return Object.freeze({
-    ...(tenantId === undefined ? {} : { tenantId }),
+    ...(tenantId === undefined ? {} : { tenantId: tenant(tenantId) }),
     label: "HANDLE_COMMAND",
     targetTypeUrl: "type.example.dev/Tasks.ProcessManager",
     shard: ShardIndex.single(),

@@ -12,6 +12,7 @@ import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
 import { ShardIndex, type InboxMessage } from "../../src/index.js";
 import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
 import { LocalEntityInbox } from "../../src/context/entity-inbox.js";
+import { tenant } from "../tenant-fixture.js";
 
 type ReceiveInput = Parameters<LocalEntityInbox["receive"]>[1];
 const processManagerLabels = ["HANDLE_COMMAND", "REACT_UPON_EVENT"] as const;
@@ -33,7 +34,7 @@ describe("LocalEntityInbox", () => {
 
   it("keeps one multitenant descriptor tenant before batch persistence", async () => {
     const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: "tenant-dynamic" },
+      context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-dynamic") },
       storageFactory: new InMemoryStorageFactory(),
     });
     const kept = Promise.withResolvers<undefined>();
@@ -49,11 +50,11 @@ describe("LocalEntityInbox", () => {
     const receiving = inbox.receiveAll(
       delivery,
       ["first", "second"].map((targetId) => processInput(targetTypeUrl, targetId)),
-      "tenant-dynamic",
+      tenant("tenant-dynamic"),
     );
     await Promise.resolve(undefined);
 
-    expect(keep).toHaveBeenCalledExactlyOnceWith("tenant-dynamic");
+    expect(keep).toHaveBeenCalledExactlyOnceWith(tenant("tenant-dynamic"));
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toEqual([]);
@@ -136,7 +137,7 @@ describe("LocalEntityInbox", () => {
 
   it("buffers persisted rows while direct drain ownership transfers", async () => {
     const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-a") },
       storageFactory: new InMemoryStorageFactory(),
     });
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
@@ -158,12 +159,16 @@ describe("LocalEntityInbox", () => {
       },
     });
 
-    const admitted = inbox.receive(delivery, processInput(targetTypeUrl, "admitted"), "tenant-a");
+    const admitted = inbox.receive(
+      delivery,
+      processInput(targetTypeUrl, "admitted"),
+      tenant("tenant-a"),
+    );
     await replayStarted.promise;
     const transition = readiness.transition(
       [
         {
-          tenantId: "tenant-a",
+          tenantId: tenant("tenant-a"),
           label: "HANDLE_COMMAND",
           targetTypeUrl,
           shard: ShardIndex.single(),
@@ -176,7 +181,7 @@ describe("LocalEntityInbox", () => {
       inbox.receiveAll(
         delivery,
         ["buffered-a", "buffered-b"].map((targetId) => processInput(targetTypeUrl, targetId)),
-        "tenant-a",
+        tenant("tenant-a"),
       ),
     ).resolves.toHaveLength(2);
     expect(replayed).toEqual(["admitted"]);
@@ -187,7 +192,7 @@ describe("LocalEntityInbox", () => {
     expect(routed).toHaveLength(1);
 
     await expect(
-      inbox.receive(delivery, processInput(targetTypeUrl, "routed"), "tenant-a"),
+      inbox.receive(delivery, processInput(targetTypeUrl, "routed"), tenant("tenant-a")),
     ).resolves.toBeDefined();
     expect(replayed).toEqual(["admitted", "buffered-a", "buffered-b"]);
     expect(routed).toHaveLength(2);
@@ -195,7 +200,7 @@ describe("LocalEntityInbox", () => {
 
   it("emits readiness after persistence before exact drain settles", async () => {
     const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-a") },
       storageFactory: new InMemoryStorageFactory(),
     });
     const ready: unknown[] = [];
@@ -228,13 +233,13 @@ describe("LocalEntityInbox", () => {
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       },
-      "tenant-a",
+      tenant("tenant-a"),
     );
     await replayStarted;
 
     expect(ready).toEqual([
       {
-        tenantId: "tenant-a",
+        tenantId: tenant("tenant-a"),
         label: "HANDLE_COMMAND",
         targetTypeUrl,
         shard: { index: 0, ofTotal: 1 },
@@ -270,14 +275,14 @@ describe("LocalEntityInbox", () => {
       replay: () => Promise.resolve(undefined),
     });
 
-    await expect(inbox.receiveAll(delivery, inputs, "tenant-a")).rejects.toThrow(
+    await expect(inbox.receiveAll(delivery, inputs, tenant("tenant-a"))).rejects.toThrow(
       "second write rejected",
     );
 
     expect(receive).toHaveBeenCalledTimes(2);
     expect(ready).toEqual([
       {
-        tenantId: "tenant-a",
+        tenantId: tenant("tenant-a"),
         label: "REACT_UPON_EVENT",
         targetTypeUrl,
         shard: { index: 0, ofTotal: 1 },
@@ -310,19 +315,19 @@ describe("LocalEntityInbox", () => {
         status: "TO_DELIVER" as const,
         shard: ShardIndex.single(),
       })),
-      "tenant-a",
+      tenant("tenant-a"),
     );
 
     expect(endpoints).not.toHaveBeenCalled();
     expect(ready).toEqual([
       {
-        tenantId: "tenant-a",
+        tenantId: tenant("tenant-a"),
         label: "HANDLE_COMMAND",
         targetTypeUrl,
         shard: { index: 0, ofTotal: 1 },
       },
       {
-        tenantId: "tenant-a",
+        tenantId: tenant("tenant-a"),
         label: "HANDLE_COMMAND",
         targetTypeUrl,
         shard: { index: 0, ofTotal: 1 },
@@ -1479,11 +1484,11 @@ describe("LocalEntityInbox", () => {
   it("does not block a different tenant or shard behind a gated follow-up", async () => {
     const strategy = twoShardStrategy();
     const blockedDelivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-a") },
       storageFactory: new InMemoryStorageFactory(),
     });
     const freeDelivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: "tenant-b" },
+      context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-b") },
       storageFactory: new InMemoryStorageFactory(),
     });
     const inbox = new LocalEntityInbox("Tasks", undefined, undefined, strategy);
@@ -1499,9 +1504,9 @@ describe("LocalEntityInbox", () => {
       },
     });
 
-    await inbox.receive(blockedDelivery, processInput(targetTypeUrl, "even"), "tenant-a");
+    await inbox.receive(blockedDelivery, processInput(targetTypeUrl, "even"), tenant("tenant-a"));
     await expect(
-      inbox.receive(freeDelivery, processInput(targetTypeUrl, "odd"), "tenant-b"),
+      inbox.receive(freeDelivery, processInput(targetTypeUrl, "odd"), tenant("tenant-b")),
     ).resolves.toMatchObject({ shard: { index: 1, ofTotal: 2 } });
     gate.resolve(undefined);
   });

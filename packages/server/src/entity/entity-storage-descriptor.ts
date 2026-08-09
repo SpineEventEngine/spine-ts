@@ -194,21 +194,21 @@ export function entityRecordSpec(
       ),
     ],
   };
-  return metadata.idField.descriptor.fieldKind === "message"
-    ? new RecordSpec<Message, EntityRecord>({
-        ...input,
-        idSchema: metadata.idField.descriptor.message as unknown as DescriptorMessageSchema,
-        extractId: (record) =>
-          unpackMessageId(
-            record,
-            metadata.idField.descriptor.message as unknown as DescriptorMessageSchema,
-          ),
-      })
-    : new RecordSpec<PrimitiveId, EntityRecord>({
-        ...input,
-        idKind: primitiveIdKind(metadata.idField.descriptor.scalar),
-        extractId: unpackPrimitiveId,
-      });
+  const idField = metadata.idField.descriptor;
+  if (idField.fieldKind === "message")
+    return new RecordSpec<Message, EntityRecord>({
+      ...input,
+      idSchema: idField.message as unknown as DescriptorMessageSchema,
+      extractId: (record) =>
+        unpackMessageId(record, idField.message as unknown as DescriptorMessageSchema),
+    });
+  if (idField.fieldKind === "scalar")
+    return new RecordSpec<PrimitiveId, EntityRecord>({
+      ...input,
+      idKind: primitiveIdKind(idField.scalar),
+      extractId: unpackPrimitiveId,
+    });
+  throw new Error(`Entity ID field "${idField.name}" must be scalar or message-valued.`);
 }
 
 function primitiveIdKind(type: ScalarType): "string" | "int32" | "int64" {

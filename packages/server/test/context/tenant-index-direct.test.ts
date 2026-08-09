@@ -1,23 +1,33 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it, vi } from "vitest";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { TenantIdSchema } from "@spine-event-engine/proto";
+import { InternetDomainSchema, TenantIdSchema } from "@spine-event-engine/proto";
 
 import { TenantIndexes } from "../../src/context/tenant-index.js";
-import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
+import { tenant } from "../tenant-fixture.js";
 
-describe("direct TenantId index", () => {
-  it("stores direct value TenantIds and rejects invalid caller IDs", async () => {
+describe("provider tenant index", () => {
+  it("admits complete TenantIds through the factory catalog without record storage", async () => {
+    const factory = new InMemoryStorageFactory();
+    const createRecordStorage = vi.spyOn(factory, "createRecordStorage");
     const index = TenantIndexes.create({
       contextName: "Tasks",
       tenantMode: "multitenant",
-      storageFactory: new InMemoryStorageFactory(),
+      storageFactory: factory,
     });
 
-    await index.keep("tenant-a");
-    await index.keep("tenant-b");
-    await expect(index.all()).resolves.toEqual(["tenant-a", "tenant-b"]);
-    expect(() => TenantIndexes.require(" ")).toThrow("non-blank");
+    const tenantA = tenant("tenant-a");
+    const tenantB = create(TenantIdSchema, {
+      kind: { case: "domain", value: create(InternetDomainSchema, { value: "example.test" }) },
+    });
+    await index.keep(tenantA);
+    await index.keep(tenantB);
+    await index.keep(tenantA);
+
+    const admitted = await index.all();
+    expect(admitted).toHaveLength(2);
+    expect(admitted).toEqual(expect.arrayContaining([tenantA, tenantB]));
+    expect(createRecordStorage).not.toHaveBeenCalled();
     index.close();
   });
 
@@ -29,35 +39,19 @@ describe("direct TenantId index", () => {
     });
 
     await expect(index.all()).resolves.toEqual([]);
-    await expect(index.keep("tenant-a")).rejects.toThrow("does not accept");
+    await expect(index.keep(tenant("tenant-a"))).rejects.toThrow("does not accept");
     index.close();
     await expect(index.all()).rejects.toThrow("closed");
-    await expect(index.keep("tenant-a")).rejects.toThrow("closed");
+    await expect(index.keep(tenant("tenant-a"))).rejects.toThrow("closed");
   });
 
-  it("treats every non-value persisted TenantId mode as storage corruption", async () => {
-    const factory = new InMemoryStorageFactory();
-    const original = factory.createRecordStorage.bind(factory);
-    let direct: ReturnType<typeof factory.createRecordStorage> | undefined;
-    vi.spyOn(factory, "createRecordStorage").mockImplementation((context, spec) => {
-      const storage = original(context, spec);
-      direct = storage;
-      return storage;
-    });
+  it("rejects an incomplete generated tenant at the shared boundary", async () => {
     const index = TenantIndexes.create({
       contextName: "Tasks",
       tenantMode: "multitenant",
-      storageFactory: factory,
+      storageFactory: new InMemoryStorageFactory(),
     });
-    if (direct === undefined) throw new Error("Expected direct TenantId storage.");
 
-    for (const tenant of [
-      create(TenantIdSchema, { kind: { case: "domain", value: { value: "example.test" } } }),
-      create(TenantIdSchema, { kind: { case: "email", value: { value: "a@example.test" } } }),
-      create(TenantIdSchema),
-    ]) {
-      vi.spyOn(direct, "index").mockResolvedValueOnce([tenant]);
-      await expect(index.all()).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
-    }
+    await expect(index.keep(create(TenantIdSchema))).rejects.toThrow(/non-empty TenantId/);
   });
 });

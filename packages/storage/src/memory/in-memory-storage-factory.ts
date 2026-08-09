@@ -6,7 +6,11 @@ import type { RecordStorage } from "../record/record-storage.js";
 import type { StorageGroup } from "../record/storage-group.js";
 import type { StorageContext } from "../storage/storage.js";
 import { StorageFactory } from "../storage/storage-factory.js";
-import { TenantBoundary } from "../internal/tenancy.js";
+import {
+  TenantBoundary,
+  type TenantCatalog,
+  type TenantCatalogProvider,
+} from "../internal/tenancy.js";
 import { InMemoryStorageBackend } from "./in-memory-storage-backend.js";
 import { InMemoryRecordStorage } from "./in-memory-record-storage.js";
 import { TenantRecords } from "./tenant-records.js";
@@ -20,9 +24,10 @@ import {
 /**
  * In-memory factory for record storages and framework delegates such as the event store.
  */
-export class InMemoryStorageFactory extends StorageFactory {
+export class InMemoryStorageFactory extends StorageFactory implements TenantCatalogProvider {
   readonly #backend: InMemoryStorageBackend;
   readonly #entities: MemoryEntityStorageFactory;
+  readonly #catalog: MemoryTenantCatalog;
 
   /**
    * Creates a factory with a fresh backend, or deliberately shares one.
@@ -32,9 +37,25 @@ export class InMemoryStorageFactory extends StorageFactory {
     super();
     this.#backend = backend;
     this.#entities = new MemoryEntityStorageFactory(backend);
+    this.#catalog = new MemoryTenantCatalog(backend);
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
     });
+  }
+
+  /**
+   * Returns the factory-owned view of admitted in-memory tenant slices.
+   *
+   * @returns The in-memory tenant catalog.
+   */
+  tenantCatalog(): TenantCatalog {
+    return this.#catalog;
+  }
+
+  /** Closes the catalog view and this factory. */
+  override close(): void {
+    void this.#catalog.close();
+    super.close();
   }
 
   /**
@@ -123,5 +144,35 @@ export class InMemoryStorageFactory extends StorageFactory {
       family,
       () => new TenantRecords<I, R>(),
     );
+  }
+}
+
+class MemoryTenantCatalog implements TenantCatalog {
+  #open = true;
+
+  constructor(private readonly backend: InMemoryStorageBackend) {}
+
+  all(): Promise<readonly TenantBoundary[]> {
+    return Promise.resolve().then(() => {
+      this.requireOpen();
+      return InMemoryStorageBackend.tenants(this.backend);
+    });
+  }
+
+  keep(boundary: TenantBoundary): Promise<void> {
+    return Promise.resolve().then(() => {
+      this.requireOpen();
+      if (boundary.single) throw new Error("In-memory tenant catalog requires a tenant boundary.");
+      InMemoryStorageBackend.admit(this.backend, boundary);
+    });
+  }
+
+  close(): Promise<void> {
+    this.#open = false;
+    return Promise.resolve();
+  }
+
+  private requireOpen(): void {
+    if (!this.#open) throw new Error("In-memory tenant catalog is closed.");
   }
 }

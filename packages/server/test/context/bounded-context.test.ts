@@ -62,6 +62,7 @@ import { InMemorySubscriptionRegistry } from "../../src/stand/subscription-regis
 import { Stand } from "../../src/stand/stand.js";
 import * as EntityLog from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import { tenant } from "../tenant-fixture.js";
 
 interface InternalSystemPairing {
   readonly domain: {
@@ -377,17 +378,16 @@ describe("BoundedContext assembly", () => {
     expect(internalSystemPairing(context).system.storesEvents).toBe(true);
   });
 
-  it("acquires the paired System event store before domain resources", async () => {
+  it("defers event record storage until an event operation selects its tenant", async () => {
     const storageFactory = new ObservingStorageFactory([]);
     const context = BoundedContext.singleTenant("AcquisitionOrder")
       .withStorageFactory(storageFactory)
       .persistSystemEvents()
       .build();
 
-    expect(storageFactory.creations.slice(0, 2).map((creation) => creation.context.name)).toEqual([
+    expect(storageFactory.creations.map((creation) => creation.context.name)).not.toContain(
       "AcquisitionOrder_System",
-      "AcquisitionOrder",
-    ]);
+    );
     await context.close();
   });
 
@@ -397,7 +397,7 @@ describe("BoundedContext assembly", () => {
 
     expect(tenantIndex.tenantMode).toBe("single-tenant");
     await expect(tenantIndex.all()).resolves.toEqual([]);
-    await expect(tenantIndex.keep("tenant-a")).rejects.toThrow(
+    await expect(tenantIndex.keep(tenant("tenant-a"))).rejects.toThrow(
       'Single-tenant context "Tasks" does not accept tenant recording.',
     );
   });
@@ -409,7 +409,7 @@ describe("BoundedContext assembly", () => {
     await context.close();
 
     await expect(tenantIndex.all()).rejects.toThrow("TenantIndex is closed.");
-    await expect(tenantIndex.keep("tenant-a")).rejects.toThrow("TenantIndex is closed.");
+    await expect(tenantIndex.keep(tenant("tenant-a"))).rejects.toThrow("TenantIndex is closed.");
   });
 
   it("stores multitenant index entries through the configured storage factory", async () => {
@@ -421,18 +421,18 @@ describe("BoundedContext assembly", () => {
 
     expect(firstIndex.tenantMode).toBe("multitenant");
 
-    await firstIndex.keep("tenant-b");
-    await firstIndex.keep("tenant-a");
-    await firstIndex.keep("tenant-a");
+    await firstIndex.keep(tenant("tenant-b"));
+    await firstIndex.keep(tenant("tenant-a"));
+    await firstIndex.keep(tenant("tenant-a"));
 
-    await expect(firstIndex.all()).resolves.toEqual(["tenant-a", "tenant-b"]);
+    await expect(firstIndex.all()).resolves.toEqual([tenant("tenant-a"), tenant("tenant-b")]);
 
     const recovered = BoundedContext.multitenant("Customers")
       .withStorageFactory(storageFactory)
       .build();
     const recoveredIndex = internalTenantIndex(recovered);
 
-    await expect(recoveredIndex.all()).resolves.toEqual(["tenant-a", "tenant-b"]);
+    await expect(recoveredIndex.all()).resolves.toEqual([tenant("tenant-a"), tenant("tenant-b")]);
   });
 
   it("describes actual delivery storage and tenant startup scopes through internal access", async () => {
@@ -442,8 +442,8 @@ describe("BoundedContext assembly", () => {
       .withStorageFactory(storageFactory)
       .build();
 
-    await internalTenantIndex(multitenant).keep("tenant-b");
-    await internalTenantIndex(multitenant).keep("tenant-a");
+    await internalTenantIndex(multitenant).keep(tenant("tenant-b"));
+    await internalTenantIndex(multitenant).keep(tenant("tenant-a"));
 
     expect(internalDeliveryDescriptor(single).storageFactory).toBe(storageFactory);
     await expect(internalDeliveryDescriptor(single).startupScopes()).resolves.toEqual([{}]);
@@ -453,15 +453,15 @@ describe("BoundedContext assembly", () => {
     });
     expect(internalDeliveryDescriptor(multitenant).storageFactory).toBe(storageFactory);
     await expect(internalDeliveryDescriptor(multitenant).startupScopes()).resolves.toEqual([
-      { tenantId: "tenant-a" },
-      { tenantId: "tenant-b" },
+      { tenantId: tenant("tenant-a") },
+      { tenantId: tenant("tenant-b") },
     ]);
     expect(
-      internalDeliveryDescriptor(multitenant).storageContext({ tenantId: "tenant-a" }),
+      internalDeliveryDescriptor(multitenant).storageContext({ tenantId: tenant("tenant-a") }),
     ).toEqual({
       name: "Customers",
       multitenant: true,
-      tenantId: "tenant-a",
+      tenantId: tenant("tenant-a"),
     });
   });
 
@@ -837,7 +837,7 @@ describe("BoundedContext assembly", () => {
 
   it("marks a failed dynamic-tenant row delivered without fresh-runtime recovery", async () => {
     const storageFactory = new InMemoryStorageFactory();
-    const tenantId = "tenant-first-row";
+    const tenantId = tenant("tenant-first-row");
     const contextName = "FreshRecoveryTasks";
     const failingRegistry = createGeneratedRegistryFixture([
       processManagerRegistry(FailingRecoveryProcessManager),
@@ -859,7 +859,7 @@ describe("BoundedContext assembly", () => {
       await expect(
         first
           .commandBus()
-          .post(createAggregateCommand("dynamic-command", "dynamic-task", tenantId)),
+          .post(createAggregateCommand("dynamic-command", "dynamic-task", "tenant-first-row")),
       ).resolves.toBeUndefined();
       const firstDescriptor = internalDeliveryDescriptor(first);
       const durable = new Delivery({
@@ -921,34 +921,24 @@ describe("BoundedContext assembly", () => {
     const context = BoundedContext.multitenant("Customers").build();
     const tenantIndex = internalTenantIndex(context);
 
-    await expect(tenantIndex.keep(" \t ")).rejects.toThrow(
-      "Tenant index requires a non-blank tenant ID.",
-    );
+    await expect(tenantIndex.keep(tenant(" \t "))).rejects.toThrow(/non-empty/);
   });
 
-  it("keeps tenant-index storage in an internal namespace", async () => {
+  it("keeps tenant discovery in the factory catalog without a TenantId record family", async () => {
     const storageFactory = new ObservingStorageFactory([]);
     const customers = BoundedContext.multitenant("Customers")
       .withStorageFactory(storageFactory)
       .build();
     const tenantIndex = internalTenantIndex(customers);
 
-    await tenantIndex.keep("tenant-a");
+    await tenantIndex.keep(tenant("tenant-a"));
 
-    const tenantIndexCreation = storageFactory.creations.find(
-      (creation) => creation.context.name === "__spine/Customers/tenants",
-    );
-    expect(tenantIndexCreation?.context).toMatchObject({
-      name: "__spine/Customers/tenants",
-      multitenant: false,
-    });
-
-    const publicStorage = storageFactory.createRecordStorage(
-      { name: "Customers_Tenants", multitenant: false },
-      tenantIndexCreation?.recordSpec as RecordSpec<string, Message<"google.protobuf.StringValue">>,
-    );
-
-    await expect(publicStorage.index()).resolves.toEqual([]);
+    await expect(tenantIndex.all()).resolves.toEqual([tenant("tenant-a")]);
+    expect(
+      storageFactory.creations.some(
+        (creation) => creation.context.name === "__spine/Customers/tenants",
+      ),
+    ).toBe(false);
   });
 
   it("exposes stable commandBus() and eventBus() endpoints from the built context", () => {
@@ -1147,7 +1137,7 @@ describe("BoundedContext assembly", () => {
     expect(secondRepositories).toEqual(firstRepositories);
     expect(secondRepositories).not.toBe(firstRepositories);
     expect(secondRepositories[0]).not.toBe(firstRepositories[0]);
-    expect(storageFactory.creationsFor(AggregateStateSchema.typeName)).toHaveLength(1);
+    expect(storageFactory.creationsFor(AggregateStateSchema.typeName)).toHaveLength(0);
   });
 
   it("builds generated repositories from entity classes with buildAsync", async () => {
@@ -1476,7 +1466,7 @@ describe("BoundedContext assembly", () => {
     const repositories = context.registeredRepositories();
     expect(repositories).toHaveLength(1);
     expect(repositories[0]?.stateFullTypeName).toBe(AggregateStateSchema.typeName);
-    expect(storageFactory.creationsFor(AggregateStateSchema.typeName)).toHaveLength(1);
+    expect(storageFactory.creationsFor(AggregateStateSchema.typeName)).toHaveLength(0);
   });
 
   it("rejects registering one repository instance with two built contexts", () => {
@@ -1492,26 +1482,20 @@ describe("BoundedContext assembly", () => {
     );
   });
 
-  it("rejects reentrant repository registration between preflight and commit", () => {
+  it("does not open repository storage during registration", () => {
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: AggregateStateSchema,
     });
-    let attempted = false;
-    const storageFactory = new ReentrantStorageFactory([], () => {
-      if (!attempted) {
-        attempted = true;
-        BoundedContext.singleTenant("Nested").add(repository).build();
-      }
-    });
+    const storageFactory = new ObservingStorageFactory([]);
 
-    expect(() =>
-      BoundedContext.singleTenant("Tasks")
-        .withStorageFactory(storageFactory)
-        .add(repository)
-        .build(),
-    ).toThrow('already registered with Bounded Context "Nested"');
-    expect(storageFactory.storages.some((storage) => !storage.isOpen())).toBe(true);
+    const context = BoundedContext.singleTenant("Tasks")
+      .withStorageFactory(storageFactory)
+      .add(repository)
+      .build();
+
+    expect(context.registeredRepositories()).toHaveLength(1);
+    expect(storageFactory.creationsFor(AggregateStateSchema.typeName)).toEqual([]);
   });
 
   it("rejects duplicate repository entity or state identities when building", () => {
@@ -1606,10 +1590,10 @@ describe("BoundedContext assembly", () => {
     ]);
     expect(repositories[0]).not.toBe(spoofingRepository);
     expect(repositories[1]).not.toBe(projectionRepository);
-    expect(storageFactory.creationsFor(AggregateStateSchema.typeName)).toHaveLength(1);
+    expect(storageFactory.creationsFor(AggregateStateSchema.typeName)).toHaveLength(0);
   });
 
-  it("reports a later repository storage opening failure", () => {
+  it("defers repository provider failures until an operation selects storage", () => {
     const storageFactory = new FailingStorageFactory(6, ProjectionStateSchema.typeName);
     const aggregateRepository = new Repository({
       entityType: TaskAggregate,
@@ -1620,25 +1604,15 @@ describe("BoundedContext assembly", () => {
       schema: ProjectionStateSchema,
     });
 
-    expect(() =>
-      BoundedContext.singleTenant("Tasks")
-        .withStorageFactory(storageFactory)
-        .add(aggregateRepository)
-        .add(projectionRepository)
-        .build(),
-    ).toThrow(`Cannot open storage for "${ProjectionStateSchema.typeName}".`);
-
-    expect(storageFactory.creationsFor(AggregateStateSchema.typeName)).toHaveLength(1);
-    expect(storageFactory.storages.some((storage) => storage.isOpen())).toBe(true);
-
-    const recoveryFactory = new ObservingStorageFactory([]);
-    const recovered = BoundedContext.singleTenant("Recovered")
-      .withStorageFactory(recoveryFactory)
+    const context = BoundedContext.singleTenant("Tasks")
+      .withStorageFactory(storageFactory)
       .add(aggregateRepository)
+      .add(projectionRepository)
       .build();
-    const repositories = recovered.registeredRepositories();
-    expect(repositories).toHaveLength(1);
-    expect(repositories[0]?.stateFullTypeName).toBe(AggregateStateSchema.typeName);
+
+    expect(context.registeredRepositories()).toHaveLength(2);
+    expect(storageFactory.creationsFor(AggregateStateSchema.typeName)).toHaveLength(0);
+    expect(storageFactory.creationsFor(ProjectionStateSchema.typeName)).toHaveLength(0);
   });
 
   it("aborts retained domain and System buses when dispatcher registration throws", () => {
@@ -1664,7 +1638,7 @@ describe("BoundedContext assembly", () => {
     }
   });
 
-  it("keeps one primary registration failure and one System-store cleanup failure", () => {
+  it("preserves a dispatcher registration failure without opening System event storage", () => {
     const storageFactory = new ObservingStorageFactory([], [1]);
     const primary = new Error("System dispatcher registration failed.");
     let schemaReads = 0;
@@ -1687,14 +1661,11 @@ describe("BoundedContext assembly", () => {
     } catch (error) {
       failure = error;
     }
-    expect(failure).toBeInstanceOf(AggregateError);
-    expect((failure as AggregateError).errors).toEqual([
-      primary,
-      expect.objectContaining({ message: "Cannot close record storage." }),
-    ]);
+    expect(failure).toBe(primary);
+    expect(storageFactory.creationsFor(EventSchema.typeName)).toHaveLength(0);
   });
 
-  it("reports the first prepared repository storage failure", () => {
+  it("builds without preparing storage for every registered repository", () => {
     const storageFactory = new FailingStorageFactory(7, ProcessManagerStateSchema.typeName, [5]);
     const aggregateRepository = new Repository({
       entityType: TaskAggregate,
@@ -1709,24 +1680,17 @@ describe("BoundedContext assembly", () => {
       schema: ProcessManagerStateSchema,
     });
 
-    let thrown: unknown;
-    try {
-      BoundedContext.singleTenant("Tasks")
-        .withStorageFactory(storageFactory)
-        .add(aggregateRepository)
-        .add(projectionRepository)
-        .add(processManagerRepository)
-        .build();
-    } catch (error) {
-      thrown = error;
-    }
+    const context = BoundedContext.singleTenant("Tasks")
+      .withStorageFactory(storageFactory)
+      .add(aggregateRepository)
+      .add(projectionRepository)
+      .add(processManagerRepository)
+      .build();
 
-    expect(thrown).toMatchObject({
-      message: `Cannot open storage for "${ProcessManagerStateSchema.typeName}".`,
-    });
-    expect(storageFactory.creationsFor(AggregateStateSchema.typeName)).toHaveLength(1);
-    expect(storageFactory.creationsFor(ProjectionStateSchema.typeName)).toHaveLength(1);
-    expect(storageFactory.storages.some((storage) => storage.isOpen())).toBe(true);
+    expect(context.registeredRepositories()).toHaveLength(3);
+    expect(storageFactory.creationsFor(AggregateStateSchema.typeName)).toHaveLength(0);
+    expect(storageFactory.creationsFor(ProjectionStateSchema.typeName)).toHaveLength(0);
+    expect(storageFactory.creationsFor(ProcessManagerStateSchema.typeName)).toHaveLength(0);
   });
 
   it("keeps add and remove chainable while maintaining the registration list", () => {
@@ -1766,25 +1730,22 @@ describe("BoundedContext assembly", () => {
     expect(storageFactory.isOpen()).toBe(true);
   });
 
-  it("keeps tenant-index storage available if repository registration fails", () => {
+  it("keeps the provider tenant catalog independent of repository registration", async () => {
     const storageFactory = new FailingStorageFactory(6, AggregateStateSchema.typeName);
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: AggregateStateSchema,
     });
 
-    expect(() =>
-      BoundedContext.multitenant("Tasks")
-        .withStorageFactory(storageFactory)
-        .add(repository)
-        .build(),
-    ).toThrow('Cannot open storage for "AggregateState".');
+    const context = BoundedContext.multitenant("Tasks")
+      .withStorageFactory(storageFactory)
+      .add(repository)
+      .build();
+    const tenantIndex = internalTenantIndex(context);
 
-    const tenantIndexCreation = storageFactory.creations.find(
-      (creation) => creation.context.name === "__spine/Tasks/tenants",
-    );
-    expect(tenantIndexCreation?.context.name).toBe("__spine/Tasks/tenants");
-    expect(storageFactory.storages.some((storage) => storage.isOpen())).toBe(true);
+    await tenantIndex.keep(tenant("tenant-a"));
+    await expect(tenantIndex.all()).resolves.toEqual([tenant("tenant-a")]);
+    expect(storageFactory.creationsFor(AggregateStateSchema.typeName)).toHaveLength(0);
   });
 
   it("transfers and closes a custom subscription registry on a failed first build", async () => {
@@ -1898,12 +1859,11 @@ describe("BoundedContext assembly", () => {
     });
     expect(closeFailure.errors.map((error: Error) => error.message)).toEqual([
       "Cannot close record storage.",
-      "Cannot close record storage.",
     ]);
     expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
   });
 
-  it("closes Stand before the registry and still closes tenant and repository storage on failures", async () => {
+  it("closes Stand before the registry without an internal tenant-record storage", async () => {
     const order: string[] = [];
     const storageFactory = new OrderedStorageFactory(order);
     const registry = new OrderedFailingRegistry(order);
@@ -1923,10 +1883,7 @@ describe("BoundedContext assembly", () => {
         message: "BoundedContext close failed.",
       });
       expect(order.indexOf("stand")).toBeLessThan(order.indexOf("registry"));
-      expect(order.indexOf("registry")).toBeLessThan(
-        order.indexOf("storage:__spine/Tasks/tenants"),
-      );
-      expect(order).toContain("storage:Tasks");
+      expect(order).not.toContain("storage:__spine/Tasks/tenants");
     } finally {
       closeStand.mockRestore();
     }
@@ -2019,11 +1976,9 @@ describe("BoundedContext assembly", () => {
         "domain command accepted",
         "system event dispatched",
         "domain command finished",
-        "storage:Tasks",
         "domain Stand close",
         "System Stand close",
         "registry",
-        "storage:__spine/Tasks/tenants",
       ]);
       expect(failure).toBeInstanceOf(AggregateError);
       expect((failure as AggregateError).errors).toEqual([
@@ -2254,24 +2209,6 @@ class FailingStorageFactory extends ObservingStorageFactory {
       throw new Error(`Cannot open storage for "${this.failedTypeName}".`);
     }
     return super.onCreateRecordStorage(context, recordSpec);
-  }
-}
-
-class ReentrantStorageFactory extends ObservingStorageFactory {
-  constructor(
-    observed: string[],
-    private readonly onCreate: () => void,
-  ) {
-    super(observed);
-  }
-
-  protected override onCreateRecordStorage<I, R extends Message>(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-  ): RecordStorage<I, R> {
-    const storage = super.onCreateRecordStorage(context, recordSpec);
-    this.onCreate();
-    return storage;
   }
 }
 

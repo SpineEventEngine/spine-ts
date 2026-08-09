@@ -1,51 +1,42 @@
-import { create } from "@bufbuild/protobuf";
-import { TenantIdSchema, type TenantId } from "@spine-event-engine/proto";
-import { RecordSpec, type RecordStorage, type StorageFactory } from "@spine-event-engine/storage";
-import { DeliveryStorageCorruptionError } from "../delivery/delivery-storage-error.js";
+import type { TenantId } from "@spine-event-engine/proto";
+import { TenantBoundary, type StorageFactory } from "@spine-event-engine/storage";
+import type {
+  TenantCatalog,
+  TenantCatalogProvider,
+} from "@spine-event-engine/storage/internal/tenancy";
 
 type TenantMode = "single-tenant" | "multitenant";
 
 /**
- * Tracks tenants that have been admitted by one bounded context.
+ * Tracks tenants admitted through one factory-owned provider catalog.
  */
 export interface TenantIndex {
   // prettier-ignore
 
-  /**
-   * Identifies whether the owning context accepts tenant IDs.
-   */
+  /** Identifies whether the owning context accepts tenant IDs. */
   readonly tenantMode: TenantMode;
 
   /**
-   * Lists the tenant IDs recorded by this index.
+   * Lists complete tenants discovered by the provider.
    *
-   * @returns The recorded tenant IDs.
+   * @returns The provider-owned tenant IDs.
    */
-  all(): Promise<readonly string[]>;
+  all(): Promise<readonly TenantId[]>;
 
   /**
-   * Records one tenant ID when the context is multitenant.
+   * Admits one complete tenant through provider-native catalog state.
    *
-   * @param _tenantId The tenant ID to retain.
-   * @returns A promise that resolves after the tenant is recorded.
+   * @param tenantId The complete generated tenant ID.
+   * @returns Completion of provider catalog admission.
    */
-  keep(_tenantId: string): Promise<void>;
+  keep(tenantId: TenantId): Promise<void>;
 
-  /**
-   * Closes the backing storage used by this index.
-   */
+  /** Closes this context view without closing the factory-owned catalog. */
   close(): void;
 }
 
-const tenantRecordSpec = new RecordSpec<TenantId, TenantId>({
-  sourceType: TenantIdSchema,
-  recordType: TenantIdSchema,
-  idSchema: TenantIdSchema,
-  extractId: (record) => record,
-});
-
 /**
- * Creates tenant indexes for bounded-context storage.
+ * Creates context views over factory-owned tenant catalogs.
  */
 export const TenantIndexes: Readonly<{
   create(input: {
@@ -53,30 +44,19 @@ export const TenantIndexes: Readonly<{
     readonly tenantMode: TenantMode;
     readonly storageFactory: StorageFactory;
   }): TenantIndex;
-  require(tenantId: string): string;
 }> = Object.freeze({
   // prettier-ignore
 
   /**
-   * Creates an index for one context.
+   * Creates an index view for one context.
    *
-   * @param input Identifies the context, tenancy mode, and storage factory.
+   * @param input Identifies the diagnostic context, tenancy mode, and factory.
    * @returns The matching tenant index.
    */
-  create(input: {
-    readonly contextName: string;
-    readonly tenantMode: TenantMode;
-    readonly storageFactory: StorageFactory;
-  }): TenantIndex {
+  create(input): TenantIndex {
     return input.tenantMode === "single-tenant"
       ? new SingleTenantIndex(input.contextName)
-      : new StorageTenantIndex(input.contextName, input.storageFactory);
-  },
-  require(tenantId: string): string {
-    if (typeof tenantId !== "string" || tenantId.trim().length === 0) {
-      throw new Error("Tenant index requires a non-blank tenant ID.");
-    }
-    return tenantId;
+      : new StorageTenantIndex(input.contextName, tenantCatalog(input.storageFactory));
   },
 });
 
@@ -86,21 +66,16 @@ class SingleTenantIndex implements TenantIndex {
 
   constructor(private readonly contextName: string) {}
 
-  all(): Promise<readonly string[]> {
+  all(): Promise<readonly TenantId[]> {
     const closed = this.closedError();
-    if (closed !== undefined) {
-      return Promise.reject(closed);
-    }
-    return Promise.resolve(Object.freeze([]));
+    return closed === undefined ? Promise.resolve(Object.freeze([])) : Promise.reject(closed);
   }
 
   keep(): Promise<void> {
     const closed = this.closedError();
-    if (closed !== undefined) {
-      return Promise.reject(closed);
-    }
     return Promise.reject(
-      new Error(`Single-tenant context "${this.contextName}" does not accept tenant recording.`),
+      closed ??
+        new Error(`Single-tenant context "${this.contextName}" does not accept tenant recording.`),
     );
   }
 
@@ -109,46 +84,49 @@ class SingleTenantIndex implements TenantIndex {
   }
 
   private closedError(): Error | undefined {
-    if (!this.#open) {
-      return new Error("TenantIndex is closed.");
-    }
-    return undefined;
+    return this.#open ? undefined : new Error("TenantIndex is closed.");
   }
 }
 
 class StorageTenantIndex implements TenantIndex {
   readonly tenantMode = "multitenant";
-  readonly #storage: RecordStorage<TenantId, TenantId>;
+  #open = true;
 
-  constructor(contextName: string, storageFactory: StorageFactory) {
-    this.#storage = storageFactory.createRecordStorage(
-      {
-        name: `__spine/${contextName}/tenants`,
-        multitenant: false,
-      },
-      tenantRecordSpec,
-    );
-  }
+  constructor(
+    private readonly contextName: string,
+    private readonly catalog: TenantCatalog,
+  ) {}
 
-  async all(): Promise<readonly string[]> {
+  async all(): Promise<readonly TenantId[]> {
+    this.requireOpen();
     return Object.freeze(
-      (await this.#storage.index()).map((tenant) => {
-        if (tenant.kind.case !== "value" || tenant.kind.value.trim().length === 0) {
-          throw new DeliveryStorageCorruptionError(
-            "Tenant index storage contains an invalid TenantId.",
-          );
-        }
-        return tenant.kind.value;
+      (await this.catalog.all()).map((boundary) => {
+        if (boundary.single || boundary.tenantId === undefined)
+          throw new Error("Multitenant provider catalog returned a single-tenant boundary.");
+        return boundary.tenantId;
       }),
     );
   }
 
-  async keep(tenantId: string): Promise<void> {
-    const value = TenantIndexes.require(tenantId);
-    await this.#storage.write(create(TenantIdSchema, { kind: { case: "value", value } }));
+  keep(tenantId: TenantId): Promise<void> {
+    return Promise.resolve().then(() => {
+      this.requireOpen();
+      return this.catalog.keep(TenantBoundary.from(tenantId));
+    });
   }
 
   close(): void {
-    this.#storage.close();
+    this.#open = false;
   }
+
+  private requireOpen(): void {
+    if (!this.#open) throw new Error(`TenantIndex for "${this.contextName}" is closed.`);
+  }
+}
+
+function tenantCatalog(factory: StorageFactory): TenantCatalog {
+  const provider = factory as Partial<TenantCatalogProvider>;
+  if (typeof provider.tenantCatalog !== "function")
+    throw new Error("Multitenant storage requires a provider-owned tenant catalog.");
+  return provider.tenantCatalog();
 }

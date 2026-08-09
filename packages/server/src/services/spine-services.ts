@@ -32,6 +32,7 @@ import {
   type Event,
   EventSchema,
   type TenantId,
+  TenantIdSchema,
   ValidationErrorSchema,
   VersionSchema,
 } from "@spine-event-engine/proto";
@@ -77,6 +78,7 @@ import {
 } from "@spine-event-engine/proto";
 import {
   RecordMask,
+  TenantBoundary,
   type NormalizedComparisonOperator,
   type NormalizedQueryPlan,
   type NormalizedQueryPredicate,
@@ -301,7 +303,7 @@ export class SpineServices {
   async #query(
     route: StateRoute,
     plan: NormalizedQueryPlan<unknown>,
-    tenantId: string | undefined,
+    tenantId: TenantId | undefined,
   ): Promise<QueryResponse> {
     const boundedPlan: NormalizedQueryPlan<unknown> = {
       ...plan,
@@ -693,7 +695,7 @@ type SubscriptionRoute = StateRoute | EventRoute;
 interface SubscriptionRecordBase {
   readonly id: string;
   readonly subscription: Subscription;
-  readonly tenantId: string | undefined;
+  readonly tenantId: TenantId | undefined;
   readonly delivery: SubscriptionDelivery;
 }
 
@@ -1380,13 +1382,13 @@ const ServiceValues = (() => {
     readonly id: string;
     readonly subscription: Subscription;
     readonly shape: SubscriptionShape;
-    readonly tenantId: string | undefined;
+    readonly tenantId: TenantId | undefined;
     readonly queueLimit: number;
   }): SubscriptionRecord {
     return {
       id: input.id,
       subscription: clone(SubscriptionSchema, input.subscription),
-      tenantId: input.tenantId,
+      tenantId: input.tenantId === undefined ? undefined : clone(TenantIdSchema, input.tenantId),
       delivery: new SubscriptionDelivery(input.queueLimit),
       ...input.shape,
     };
@@ -1907,15 +1909,15 @@ const ServiceValues = (() => {
     });
   }
 
-  function commandTenant(command: Command): string | undefined {
+  function commandTenant(command: Command): TenantId | undefined {
     return tenantValue(command.context?.actorContext?.tenantId);
   }
 
-  function topicTenant(topic: Topic | undefined): string | undefined {
+  function topicTenant(topic: Topic | undefined): TenantId | undefined {
     return tenantValue(topic?.context?.tenantId);
   }
 
-  function eventTenant(event: Event): string | undefined {
+  function eventTenant(event: Event): TenantId | undefined {
     switch (event.context?.origin.case) {
       case "importContext":
         return tenantValue(event.context.origin.value.tenantId);
@@ -1927,19 +1929,20 @@ const ServiceValues = (() => {
   }
 
   function eventTenantMatches(record: SubscriptionRecord, event: Event): boolean {
-    return record.tenantId === undefined || eventTenant(event) === record.tenantId;
+    const tenantId = eventTenant(event);
+    return (
+      record.tenantId === undefined ||
+      (tenantId !== undefined &&
+        TenantBoundary.from(tenantId).key === TenantBoundary.from(record.tenantId).key)
+    );
   }
 
-  function tenantValue(tenantId: TenantId | undefined): string | undefined {
-    switch (tenantId?.kind.case) {
-      case "value":
-        return tenantId.kind.value;
-      case "domain":
-        return `domain:${tenantId.kind.value.value}`;
-      case "email":
-        return `email:${tenantId.kind.value.value}`;
-      default:
-        return undefined;
+  function tenantValue(tenantId: TenantId | undefined): TenantId | undefined {
+    if (tenantId === undefined) return undefined;
+    try {
+      return TenantBoundary.from(tenantId).tenantId;
+    } catch {
+      return undefined;
     }
   }
 
@@ -1965,11 +1968,11 @@ const ServiceValues = (() => {
 
   function tenantMismatch(
     multitenant: boolean,
-    tenantId: string | undefined,
+    tenantId: TenantId | undefined,
     subject: "command" | "query" | "subscription",
   ): ContractError | undefined {
     if (multitenant) {
-      return tenantId === undefined || tenantId.trim().length === 0
+      return tenantId === undefined
         ? {
             type: "TENANT_REQUIRED",
             message: `Tenant is required for this ${subject}.`,
@@ -2018,8 +2021,8 @@ const ServiceValues = (() => {
     };
   }
 
-  function tenantOptions(tenantId: string | undefined): { readonly tenantId?: string } {
-    return tenantId === undefined ? {} : { tenantId };
+  function tenantOptions(tenantId: TenantId | undefined): { readonly tenantId?: TenantId } {
+    return tenantId === undefined ? {} : { tenantId: clone(TenantIdSchema, tenantId) };
   }
 
   const VALUE_DECODERS = Object.freeze([

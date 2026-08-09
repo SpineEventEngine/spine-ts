@@ -1,4 +1,4 @@
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, TimestampSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import {
@@ -12,7 +12,7 @@ import {
   type InboxMessage as WireInboxMessage,
   type InboxMessageId as WireInboxMessageId,
 } from "@spine-event-engine/proto/delivery";
-import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
+import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 
 import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
 import {
@@ -55,17 +55,43 @@ export const inboxRecordSpec: RecordSpec<WireInboxMessageId, WireInboxMessage> =
   idSchema: InboxMessageIdSchema,
   extractId: (record) => Values.id(record),
   columns: [
-    new RecordColumn("inbox_id", (record) => record.inboxId, "message"),
-    new RecordColumn("signal_id", (record) => record.signalId, "message"),
-    new RecordColumn("shard_index", (record) => Values.shard(record).index, "number"),
-    new RecordColumn("shard_total", (record) => Values.shard(record).ofTotal, "number"),
-    new RecordColumn("status", (record) => record.status, "number"),
-    new RecordColumn("when_received", (record) => record.whenReceived, "timestamp"),
-    new RecordColumn("version", (record) => record.version, "number"),
     new RecordColumn(
-      "message_id",
-      (record) => Values.text(record.id?.uuid, "Inbox message ID"),
-      "string",
+      "inbox_id",
+      ColumnTypes.fromField(InboxMessageSchema.field.inboxId),
+      (record) => record.inboxId,
+    ),
+    new RecordColumn(
+      "signal_id",
+      ColumnTypes.fromField(InboxMessageSchema.field.signalId),
+      (record) => record.signalId,
+    ),
+    new RecordColumn(
+      "shard_index",
+      ColumnTypes.scalar(ScalarType.INT32),
+      (record) => Values.shard(record).index,
+    ),
+    new RecordColumn(
+      "shard_total",
+      ColumnTypes.scalar(ScalarType.INT32),
+      (record) => Values.shard(record).ofTotal,
+    ),
+    new RecordColumn(
+      "status",
+      ColumnTypes.fromField(InboxMessageSchema.field.status),
+      (record) => record.status,
+    ),
+    new RecordColumn(
+      "when_received",
+      ColumnTypes.fromField(InboxMessageSchema.field.whenReceived),
+      (record) => record.whenReceived,
+    ),
+    new RecordColumn(
+      "version",
+      ColumnTypes.fromField(InboxMessageSchema.field.version),
+      (record) => record.version,
+    ),
+    new RecordColumn("message_id", ColumnTypes.scalar(ScalarType.STRING), (record) =>
+      Values.text(record.id?.uuid, "Inbox message ID"),
     ),
   ],
 });

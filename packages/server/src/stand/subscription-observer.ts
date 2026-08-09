@@ -17,10 +17,12 @@ import {
   EventSchema,
   ResponseSchema,
   StatusSchema,
+  TenantIdSchema,
   VersionSchema,
   type Event,
   type TenantId,
 } from "@spine-event-engine/proto";
+import { TenantBoundary } from "@spine-event-engine/storage";
 import {
   EntityStateUpdateSchema,
   EntityUpdatesSchema,
@@ -111,7 +113,10 @@ export class SubscriptionObservers {
     const tenantId = SubscriptionObservers.#tenantValue(subscription.topic?.context?.tenantId);
     return eventBusAccess.subscribe(domainEventBus, typeUrl, {
       onEvent(event) {
-        if (tenantId !== undefined && SubscriptionObservers.#eventTenant(event) !== tenantId)
+        if (
+          tenantId !== undefined &&
+          !SubscriptionObservers.#sameTenant(SubscriptionObservers.#eventTenant(event), tenantId)
+        )
           return;
         onUpdate(SubscriptionObservers.#createEventUpdate(subscription, event));
       },
@@ -223,12 +228,16 @@ export class SubscriptionObservers {
   static #lifecycleRemoval(
     event: Event,
     state: StandObservedState,
-    tenantId: string | undefined,
+    tenantId: TenantId | undefined,
     schema: MessageSchema,
     subscription: Subscription,
     onUpdate: (update: SubscriptionUpdate) => void,
   ): void {
-    if (tenantId !== undefined && SubscriptionObservers.#eventTenant(event) !== tenantId) return;
+    if (
+      tenantId !== undefined &&
+      !SubscriptionObservers.#sameTenant(SubscriptionObservers.#eventTenant(event), tenantId)
+    )
+      return;
     const lifecycle =
       event.message === undefined
         ? undefined
@@ -260,12 +269,16 @@ export class SubscriptionObservers {
   static #lifecycleState(
     event: Event,
     state: StandObservedState,
-    tenantId: string | undefined,
+    tenantId: TenantId | undefined,
     schema: MessageSchema,
     render: (update: StandUpdate) => SubscriptionUpdate | undefined,
     onUpdate: (update: SubscriptionUpdate) => void,
   ): void {
-    if (tenantId !== undefined && SubscriptionObservers.#eventTenant(event) !== tenantId) return;
+    if (
+      tenantId !== undefined &&
+      !SubscriptionObservers.#sameTenant(SubscriptionObservers.#eventTenant(event), tenantId)
+    )
+      return;
     const lifecycle =
       event.message === undefined
         ? undefined
@@ -288,7 +301,7 @@ export class SubscriptionObservers {
         ...(lifecycle.version === undefined
           ? {}
           : { version: clone(VersionSchema, lifecycle.version) }),
-        ...(tenantId === undefined ? {} : { tenantId }),
+        ...(tenantId === undefined ? {} : { tenantId: clone(TenantIdSchema, tenantId) }),
       }),
     );
     if (rendered !== undefined) onUpdate(rendered);
@@ -368,9 +381,12 @@ export class SubscriptionObservers {
   static #stateChangeUpdate(
     event: Event,
     state: StandObservedState,
-    tenantId: string | undefined,
+    tenantId: TenantId | undefined,
   ): StandUpdate | undefined {
-    if (tenantId !== undefined && SubscriptionObservers.#eventTenant(event) !== tenantId)
+    if (
+      tenantId !== undefined &&
+      !SubscriptionObservers.#sameTenant(SubscriptionObservers.#eventTenant(event), tenantId)
+    )
       return undefined;
     const change =
       event.message === undefined
@@ -395,7 +411,7 @@ export class SubscriptionObservers {
       ...(change.newVersion === undefined
         ? {}
         : { version: clone(VersionSchema, change.newVersion) }),
-      ...(tenantId === undefined ? {} : { tenantId }),
+      ...(tenantId === undefined ? {} : { tenantId: clone(TenantIdSchema, tenantId) }),
     });
   }
 
@@ -599,7 +615,7 @@ export class SubscriptionObservers {
     return client;
   }
 
-  static #eventTenant(event: Event): string | undefined {
+  static #eventTenant(event: Event): TenantId | undefined {
     switch (event.context?.origin.case) {
       case "importContext":
         return SubscriptionObservers.#tenantValue(event.context.origin.value.tenantId);
@@ -612,17 +628,12 @@ export class SubscriptionObservers {
     }
   }
 
-  static #tenantValue(tenant: TenantId | undefined): string | undefined {
-    switch (tenant?.kind.case) {
-      case "value":
-        return tenant.kind.value;
-      case "domain":
-        return `domain:${tenant.kind.value.value}`;
-      case "email":
-        return `email:${tenant.kind.value.value}`;
-      default:
-        return undefined;
-    }
+  static #tenantValue(tenant: TenantId | undefined): TenantId | undefined {
+    return tenant === undefined ? undefined : clone(TenantIdSchema, tenant);
+  }
+
+  static #sameTenant(left: TenantId | undefined, right: TenantId): boolean {
+    return left !== undefined && TenantBoundary.from(left).key === TenantBoundary.from(right).key;
   }
 
   static #isMessage(value: unknown): value is Message {

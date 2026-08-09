@@ -1,4 +1,5 @@
-import { create } from "@bufbuild/protobuf";
+import { clone, create } from "@bufbuild/protobuf";
+import { TenantIdSchema } from "@spine-event-engine/proto";
 import {
   ShardIndexSchema,
   ShardSessionRecordSchema,
@@ -385,16 +386,18 @@ function context(value: StorageContext): StorageContext {
     ? {
         name: `${value.name}.delivery.shards`,
         multitenant: true,
-        ...(value.tenantId === undefined ? {} : { tenantId: value.tenantId }),
+        tenantId: clone(TenantIdSchema, value.tenantId),
       }
     : { name: `${value.name}.delivery.shards`, multitenant: false };
 }
 function copy(value: StorageContext): StorageContext {
-  return {
-    name: value.name,
-    multitenant: value.multitenant,
-    ...(value.tenantId === undefined ? {} : { tenantId: value.tenantId }),
-  };
+  return value.multitenant
+    ? {
+        name: value.name,
+        multitenant: true,
+        tenantId: clone(TenantIdSchema, value.tenantId),
+      }
+    : { name: value.name, multitenant: false };
 }
 function concurrent(label: string): Error {
   return new Error(`${label} could not be completed due to concurrent changes.`);

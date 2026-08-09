@@ -31,15 +31,15 @@ describe("direct InboxMessage storage", () => {
     expect(inboxRecordSpec.sourceType).toBe(InboxMessageSchema);
     expect(inboxRecordSpec.recordType).toBe(InboxMessageSchema);
     expect(inboxRecordSpec.idType).toBe(InboxMessageIdSchema);
-    expect(inboxRecordSpec.columns.map((column) => [column.name, column.valueType])).toEqual([
+    expect(inboxRecordSpec.columns.map((column) => [column.name, column.type.kind])).toEqual([
       ["inbox_id", "message"],
       ["signal_id", "message"],
-      ["shard_index", "number"],
-      ["shard_total", "number"],
-      ["status", "number"],
-      ["when_received", "timestamp"],
-      ["version", "number"],
-      ["message_id", "string"],
+      ["shard_index", "scalar"],
+      ["shard_total", "scalar"],
+      ["status", "enum"],
+      ["when_received", "message"],
+      ["version", "scalar"],
+      ["message_id", "scalar"],
     ]);
   });
 

@@ -20,9 +20,9 @@ import { TenantBoundary } from "../internal/tenancy.js";
  * captured storage context.
  */
 export class EventStore {
-  readonly #context: StorageContext;
+  readonly #context: EventStoreContext;
   readonly #factory: StorageFactory;
-  readonly #storage: RecordStorage<EventId, Event>;
+  #open = true;
 
   /**
    * Creates an event store for one storage context.
@@ -30,10 +30,9 @@ export class EventStore {
    * @param context Specifies the storage context.
    * @param factory Creates the backing record storage.
    */
-  constructor(context: StorageContext, factory: StorageFactory) {
-    this.#context = context;
+  constructor(context: EventStoreContext, factory: StorageFactory) {
+    this.#context = EventContexts.base(context);
     this.#factory = factory;
-    this.#storage = factory.createRecordStorage(context, eventStoreRecordSpec);
   }
 
   /**
@@ -42,14 +41,14 @@ export class EventStore {
    * @returns Returns true while the backing storage is open.
    */
   isOpen(): boolean {
-    return this.#storage.isOpen();
+    return this.#open;
   }
 
   /**
    * Closes the underlying event record storage.
    */
   close(): void {
-    this.#storage.close();
+    this.#open = false;
   }
 
   /**
@@ -103,10 +102,9 @@ export class EventStore {
    */
   async appendAll(events: Iterable<Event>): Promise<void> {
     const records = [...events].map((event) => clone(EventSchema, event));
-    const context = EventContexts.snapshot(this.#context);
 
     if (records.length > 0) {
-      await this.appendUnique(records, context);
+      await this.appendUnique(records, EventContexts.batch(this.#context, records));
     }
   }
 
@@ -118,10 +116,10 @@ export class EventStore {
    */
   async appendAllWithRollback(events: Iterable<Event>): Promise<EventRollback> {
     const records = [...events].map((event) => clone(EventSchema, event));
-    const context = EventContexts.snapshot(this.#context);
     const ids = records.map((record) => EventIds.require(record));
+    const context = records.length === 0 ? undefined : EventContexts.batch(this.#context, records);
 
-    if (records.length > 0) {
+    if (context !== undefined) {
       await this.appendUnique(records, context);
     }
     let used = false;
@@ -131,7 +129,7 @@ export class EventStore {
           throw new Error("Event rollback token has already been used.");
         }
         used = true;
-        await this.deleteIds(ids, context);
+        if (context !== undefined) await this.deleteIds(ids, context);
       },
     });
   }
@@ -142,8 +140,17 @@ export class EventStore {
    * @param query Specifies the record query.
    * @returns Resolves to matching events.
    */
-  read(query: RecordQuery<EventId> = {}): Promise<readonly Event[]> {
-    return this.#storage.query(query);
+  async read(query: RecordQuery<EventId> = {}): Promise<readonly Event[]> {
+    this.requireOpen();
+    const storage = this.#factory.createRecordStorage(
+      EventContexts.snapshot(this.#context),
+      eventStoreRecordSpec,
+    );
+    try {
+      return await storage.query(query);
+    } finally {
+      storage.close();
+    }
   }
 
   private async appendUnique(records: readonly Event[], context: StorageContext): Promise<void> {
@@ -192,11 +199,20 @@ export class EventStore {
   }
 
   private requireOpen(): void {
-    if (!this.#storage.isOpen()) {
-      throw new Error("RecordStorage is closed.");
-    }
+    if (!this.#open) throw new Error("EventStore is closed.");
   }
 }
+
+/**
+ * Selects Event Store tenancy before an event envelope supplies a tenant.
+ *
+ * Multitenant append operations may omit `tenantId` only because the complete
+ * tenant is then required in every stored event envelope. Reads require an
+ * explicitly selected tenant.
+ */
+export type EventStoreContext =
+  | { readonly name: string; readonly multitenant: false }
+  | { readonly name: string; readonly multitenant: true; readonly tenantId?: TenantId };
 
 /**
  * Accepts an event after `EventStore` prechecks it and before append.
@@ -336,11 +352,24 @@ const EventContexts = {
   /**
    * Captures one storage context.
    */
-  snapshot(context: StorageContext): StorageContext {
-    const boundary = TenantBoundary.of(context);
-    if (boundary.single) return Object.freeze({ name: context.name, multitenant: false });
+  base(context: EventStoreContext): EventStoreContext {
+    return context.multitenant
+      ? Object.freeze({
+          name: context.name,
+          multitenant: true,
+          ...(context.tenantId === undefined
+            ? {}
+            : { tenantId: clone(TenantIdSchema, context.tenantId) }),
+        })
+      : Object.freeze({ name: context.name, multitenant: false });
+  },
+
+  snapshot(context: EventStoreContext): StorageContext {
+    if (!context.multitenant) return Object.freeze({ name: context.name, multitenant: false });
+    if (context.tenantId === undefined)
+      throw new Error("Multitenant EventStore reads require a complete tenant ID.");
+    const boundary = TenantBoundary.from(context.tenantId);
     const tenantId = boundary.tenantId;
-    if (tenantId === undefined) throw new Error("Multitenant storage boundary has no tenant ID.");
     return Object.freeze({
       name: context.name,
       multitenant: true,
@@ -351,14 +380,28 @@ const EventContexts = {
   /**
    * Captures one context using an event envelope tenant when present.
    */
-  snapshotForEvent(context: StorageContext, event: Event): StorageContext {
+  snapshotForEvent(context: EventStoreContext, event: Event): StorageContext {
     if (!context.multitenant) return EventContexts.snapshot(context);
     const tenantId = EventContexts.readEventTenant(event) ?? context.tenantId;
+    if (tenantId === undefined)
+      throw new Error("Multitenant EventStore append requires an event tenant ID.");
     return EventContexts.snapshot({
       name: context.name,
       multitenant: true,
-      ...(tenantId === undefined ? {} : { tenantId }),
+      tenantId,
     });
+  },
+
+  batch(context: EventStoreContext, events: readonly Event[]): StorageContext {
+    const first = events[0];
+    if (first === undefined) throw new Error("EventStore batch requires at least one event.");
+    const selected = EventContexts.snapshotForEvent(context, first);
+    const key = TenantBoundary.of(selected).key;
+    for (const event of events.slice(1)) {
+      if (TenantBoundary.of(EventContexts.snapshotForEvent(context, event)).key !== key)
+        throw new Error("One EventStore batch cannot contain events from different tenants.");
+    }
+    return selected;
   },
 
   /**

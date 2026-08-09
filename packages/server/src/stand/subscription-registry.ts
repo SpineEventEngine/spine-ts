@@ -1,4 +1,4 @@
-import { clone, toBinary } from "@bufbuild/protobuf";
+import { clone, ScalarType, toBinary } from "@bufbuild/protobuf";
 import {
   SubscriptionIdSchema,
   SubscriptionSchema,
@@ -8,6 +8,7 @@ import {
   type SubscriptionRecord,
 } from "@spine-event-engine/proto/client";
 import {
+  ColumnTypes,
   RecordColumn,
   RecordSpec,
   type RecordStorage,
@@ -410,14 +411,18 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         idSchema: SubscriptionIdSchema,
         extractId: (record) => record.id ?? fail("Stand subscription record is invalid."),
         columns: [
-          new RecordColumn("status", (record) => record.status, "number"),
+          new RecordColumn(
+            "status",
+            ColumnTypes.fromField(StandSubscriptionRecords.schema.field.status),
+            (record) => record.status,
+          ),
           new RecordColumn(
             "when_activation_expires",
+            ColumnTypes.scalar(ScalarType.INT64),
             (record) =>
               record.whenActivationExpires === undefined
                 ? Number.MAX_SAFE_INTEGER
                 : time(record.whenActivationExpires),
-            "number",
           ),
         ],
       }),

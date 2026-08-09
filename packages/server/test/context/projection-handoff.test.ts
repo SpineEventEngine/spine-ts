@@ -10,11 +10,12 @@ import type { ProjectionInbox, ProjectionInboxTarget } from "../../src/repositor
 import { ShardIndex, type InboxMessage } from "../../src/index.js";
 import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
 import { LocalProjectionInbox } from "../../src/context/projection-handoff.js";
+import { tenant } from "../tenant-fixture.js";
 
 describe("LocalProjectionInbox", () => {
   it("keeps a multitenant descriptor tenant before inbox persistence", async () => {
     const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: "tenant-dynamic" },
+      context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-dynamic") },
       storageFactory: new InMemoryStorageFactory(),
     });
     const kept = Promise.withResolvers<undefined>();
@@ -26,11 +27,11 @@ describe("LocalProjectionInbox", () => {
     const receiving = inbox.receive(
       delivery,
       projectionInput(targetTypeUrl, "dynamic"),
-      "tenant-dynamic",
+      tenant("tenant-dynamic"),
     );
     await Promise.resolve();
 
-    expect(keep).toHaveBeenCalledExactlyOnceWith("tenant-dynamic");
+    expect(keep).toHaveBeenCalledExactlyOnceWith(tenant("tenant-dynamic"));
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toEqual([]);
@@ -41,7 +42,7 @@ describe("LocalProjectionInbox", () => {
 
   it("settles persisted rows after ownership transfer", async () => {
     const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-a") },
       storageFactory: new InMemoryStorageFactory(),
     });
     const targetTypeUrl = "type.example.dev/Tasks.Projection";
@@ -65,13 +66,13 @@ describe("LocalProjectionInbox", () => {
     const admitted = inbox.receive(
       delivery,
       projectionInput(targetTypeUrl, "admitted"),
-      "tenant-a",
+      tenant("tenant-a"),
     );
     await replayStarted.promise;
     const transition = readiness.transition(
       [
         {
-          tenantId: "tenant-b",
+          tenantId: tenant("tenant-b"),
           label: "UPDATE_SUBSCRIBER",
           targetTypeUrl,
           shard: ShardIndex.single(),
@@ -81,7 +82,7 @@ describe("LocalProjectionInbox", () => {
     );
 
     await expect(
-      inbox.receive(delivery, projectionInput(targetTypeUrl, "buffered"), "tenant-a"),
+      inbox.receive(delivery, projectionInput(targetTypeUrl, "buffered"), tenant("tenant-a")),
     ).resolves.toBeDefined();
     expect(replayed).toEqual(["admitted"]);
     expect(routed).toEqual([]);
@@ -101,7 +102,7 @@ describe("LocalProjectionInbox", () => {
     expect(delivered.map(({ inboxId }) => inboxId.targetId)).toContain("buffered");
 
     await expect(
-      inbox.receive(delivery, projectionInput(targetTypeUrl, "routed"), "tenant-a"),
+      inbox.receive(delivery, projectionInput(targetTypeUrl, "routed"), tenant("tenant-a")),
     ).resolves.toBeDefined();
     expect(replayed).toEqual(["admitted", "buffered"]);
     expect(routed).toEqual([]);
@@ -110,7 +111,7 @@ describe("LocalProjectionInbox", () => {
       readiness.transition(
         [
           {
-            tenantId: "tenant-a",
+            tenantId: tenant("tenant-a"),
             label: "UPDATE_SUBSCRIBER",
             targetTypeUrl,
             shard: ShardIndex.single(),
@@ -127,7 +128,7 @@ describe("LocalProjectionInbox", () => {
     const recovery = await new DeliveryLoop({
       delivery,
       shard: ShardIndex.single(),
-      onMessage: (message) => inbox.replay(message, "tenant-a"),
+      onMessage: (message) => inbox.replay(message, tenant("tenant-a")),
     }).run();
     expect(recovery.delivered).toBe(1);
     expect(replayed).toEqual(["admitted", "buffered", "routed"]);
@@ -157,13 +158,13 @@ describe("LocalProjectionInbox", () => {
         status: "TO_DELIVER",
         shard: ShardIndex.single(),
       },
-      "tenant-a",
+      tenant("tenant-a"),
     );
 
     expect(endpoints).not.toHaveBeenCalled();
     expect(ready).toEqual([
       {
-        tenantId: "tenant-a",
+        tenantId: tenant("tenant-a"),
         label: "UPDATE_SUBSCRIBER",
         targetTypeUrl,
         shard: { index: 0, ofTotal: 1 },

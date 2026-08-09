@@ -16,6 +16,7 @@ import {
   EventIdSchema,
   EventSchema,
   MessageIdSchema,
+  TenantIdSchema,
   type MessageId,
   RejectionEventContextSchema,
   type Command,
@@ -28,7 +29,12 @@ import {
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import { EntityTypeNameSchema } from "@spine-event-engine/proto/generated/spine/system/server/entity_type_pb.js";
 import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { type StorageContext, type StorageFactory } from "@spine-event-engine/storage";
+import {
+  TenantBoundary,
+  type StorageContext,
+  type StorageFactory,
+  type StorageMode,
+} from "@spine-event-engine/storage";
 import type {
   EntityEventHistoryPort,
   EntityRecordStorage,
@@ -754,7 +760,7 @@ export interface EntityInboxTarget {
    * @param deliveryTenantId Identifies the active delivery tenant.
    * @returns Resolves after replay, optionally with an async follow-up callback.
    */
-  replay(message: EntityInboxMessage, deliveryTenantId?: string): EntityInboxReplay;
+  replay(message: EntityInboxMessage, deliveryTenantId?: TenantId): EntityInboxReplay;
 }
 
 /**
@@ -779,7 +785,7 @@ export interface EntityInbox {
    * @param deliveryTenantId The tenant resolved by the delivery runtime.
    * @returns A promise that resolves after the row is replayed.
    */
-  replay(message: InboxMessage, deliveryTenantId?: string): Promise<void>;
+  replay(message: InboxMessage, deliveryTenantId?: TenantId): Promise<void>;
 
   /**
    * Writes and locally delivers one durable inbox row.
@@ -792,7 +798,7 @@ export interface EntityInbox {
   receive(
     delivery: Delivery,
     input: EntityInboxInput,
-    deliveryTenantId?: string,
+    deliveryTenantId?: TenantId,
   ): Promise<InboxMessage>;
 
   /**
@@ -806,7 +812,7 @@ export interface EntityInbox {
   receiveAll(
     delivery: Delivery,
     inputs: readonly EntityInboxInput[],
-    deliveryTenantId?: string,
+    deliveryTenantId?: TenantId,
   ): Promise<readonly InboxMessage[]>;
 }
 
@@ -844,7 +850,7 @@ export interface ProjectionInboxTarget {
    * @param deliveryTenantId The tenant resolved by the delivery runtime.
    * @returns A promise that resolves after the message is replayed.
    */
-  replay(message: ProjectionInboxMessage, deliveryTenantId?: string): Promise<void>;
+  replay(message: ProjectionInboxMessage, deliveryTenantId?: TenantId): Promise<void>;
 }
 
 /**
@@ -862,7 +868,7 @@ export interface ProjectionInbox {
    * @param deliveryTenantId The tenant resolved by the delivery runtime.
    * @returns A promise that resolves after the row is replayed.
    */
-  replay(message: InboxMessage, deliveryTenantId?: string): Promise<void>;
+  replay(message: InboxMessage, deliveryTenantId?: TenantId): Promise<void>;
 
   /**
    * Writes and locally delivers one durable inbox row.
@@ -875,7 +881,7 @@ export interface ProjectionInbox {
   receive(
     delivery: Delivery,
     input: ProjectionInboxInput,
-    deliveryTenantId?: string,
+    deliveryTenantId?: TenantId,
   ): Promise<InboxMessage>;
 }
 
@@ -1068,7 +1074,7 @@ interface RepositoryRouting<Id = unknown> {
 }
 
 interface RepositoryRuntime {
-  readonly context: StorageContext;
+  readonly context: StorageMode;
   readonly storageFactory: StorageFactory;
   readonly stand: Stand;
   readonly signalMetadata: SignalMetadata;
@@ -1943,7 +1949,7 @@ class ProjectionEventExecution {
 
   async #storeIfChanged(
     loaded: LoadedRepositoryEntity,
-    tenantOptions: { readonly tenantId?: string },
+    tenantOptions: { readonly tenantId?: TenantId },
     oldState: Message | undefined,
     mode: EntityLoadMode,
   ): Promise<void> {
@@ -2061,7 +2067,7 @@ class ProjectionEventExecution {
 
   async #loadProjection(
     entityId: unknown,
-    options: { readonly tenantId?: string },
+    options: { readonly tenantId?: TenantId },
     mode: EntityLoadMode,
   ): Promise<LoadedRepositoryEntity> {
     const stored = await standAccess.readCurrent(
@@ -2156,7 +2162,7 @@ class ProcessManagerExecutionSupport {
 
   async load(
     entityId: unknown,
-    options: { readonly tenantId?: string },
+    options: { readonly tenantId?: TenantId },
   ): Promise<LoadedRepositoryEntity> {
     const stored = await standAccess.readCurrent(
       this.#runtime.stand,
@@ -2213,7 +2219,7 @@ class ProcessManagerExecutionSupport {
 
   async commit(
     loaded: LoadedRepositoryEntity,
-    options: { readonly tenantId?: string },
+    options: { readonly tenantId?: TenantId },
     createdAt: Timestamp,
     events: readonly Event[],
   ): Promise<boolean> {
@@ -3633,11 +3639,11 @@ Object.freeze(RepositorySignals);
  */
 const RepositoryStand = {
   standUpdateOptions(
-    tenantId: string | undefined,
+    tenantId: TenantId | undefined,
     version: Version | undefined,
     lifecycle: { readonly archived: boolean; readonly deleted: boolean },
   ): {
-    readonly tenantId?: string;
+    readonly tenantId?: TenantId;
     readonly version?: Version;
     readonly lifecycle: { readonly archived: boolean; readonly deleted: boolean };
   } {
@@ -3668,12 +3674,9 @@ Object.freeze(RepositoryStand);
  * Internal repository tenants operations.
  */
 const RepositoryTenants = {
-  entityInboxDeliveryContext(
-    context: StorageContext,
-    tenantId: string | undefined,
-  ): StorageContext {
+  entityInboxDeliveryContext(context: StorageMode, tenantId: TenantId | undefined): StorageContext {
     if (!context.multitenant) {
-      return context;
+      return Object.freeze({ name: context.name, multitenant: false });
     }
 
     const tid = tenantId;
@@ -3684,13 +3687,13 @@ const RepositoryTenants = {
     return Object.freeze({
       name: context.name,
       multitenant: true,
-      tenantId: tid,
+      tenantId: RepositoryTenants.require(tid),
     });
   },
 
-  projectionDeliveryContext(context: StorageContext, tenantId: string | undefined): StorageContext {
+  projectionDeliveryContext(context: StorageMode, tenantId: TenantId | undefined): StorageContext {
     if (!context.multitenant) {
-      return context;
+      return Object.freeze({ name: context.name, multitenant: false });
     }
 
     const tid = tenantId;
@@ -3703,112 +3706,118 @@ const RepositoryTenants = {
     return Object.freeze({
       name: context.name,
       multitenant: true,
-      tenantId: tid,
+      tenantId: RepositoryTenants.require(tid),
     });
   },
 
-  requireProjectionTenant(context: StorageContext, event: Event): string | undefined {
+  requireProjectionTenant(context: StorageMode, event: Event): TenantId | undefined {
     if (!context.multitenant) {
       return undefined;
     }
 
-    const tenantId = RepositoryTenants.readEventTenant(event) ?? context.tenantId;
+    const tenantId = RepositoryTenants.readEventTenant(event);
 
-    if (tenantId === undefined || tenantId.trim() === "") {
+    if (tenantId === undefined) {
       throw new Error(
         `Multitenant projection inbox handoff for "${context.name}" requires tenantId.`,
       );
     }
 
-    return tenantId;
+    return RepositoryTenants.require(tenantId);
   },
 
-  requirePmEventTenant(context: StorageContext, event: Event): string | undefined {
+  requirePmEventTenant(context: StorageMode, event: Event): TenantId | undefined {
     if (!context.multitenant) {
       return undefined;
     }
 
-    const tenantId = RepositoryTenants.readEventTenant(event) ?? context.tenantId;
+    const tenantId = RepositoryTenants.readEventTenant(event);
 
-    if (tenantId === undefined || tenantId.trim() === "") {
+    if (tenantId === undefined) {
       throw new Error(`Multitenant Entity Inbox handoff for "${context.name}" requires tenantId.`);
     }
 
-    return tenantId;
+    return RepositoryTenants.require(tenantId);
   },
 
-  requireCommandTenant(context: StorageContext, command: Command): string | undefined {
+  requireCommandTenant(context: StorageMode, command: Command): TenantId | undefined {
     if (!context.multitenant) {
       return undefined;
     }
 
     const tenantId = RepositoryTenants.readCommandTenant(command);
 
-    if (tenantId === undefined || tenantId.trim() === "") {
+    if (tenantId === undefined) {
       throw new Error(`Multitenant Entity Inbox handoff for "${context.name}" requires tenantId.`);
     }
 
-    return tenantId;
+    return RepositoryTenants.require(tenantId);
   },
 
-  storageContextForCommand(context: StorageContext, command: Command): StorageContext {
+  storageContextForCommand(context: StorageMode, command: Command): StorageContext {
     if (!context.multitenant) {
-      return context;
+      return Object.freeze({ name: context.name, multitenant: false });
     }
 
     const tenantId = RepositoryTenants.readCommandTenant(command);
+    if (tenantId === undefined)
+      throw new Error(`Multitenant command for "${context.name}" requires tenantId.`);
     return Object.freeze({
       name: context.name,
       multitenant: true,
-      ...(tenantId === undefined ? {} : { tenantId }),
+      tenantId: RepositoryTenants.require(tenantId),
     });
   },
 
-  storageContextForEvent(context: StorageContext, event: Event): StorageContext {
+  storageContextForEvent(context: StorageMode, event: Event): StorageContext {
     if (!context.multitenant) {
-      return context;
+      return Object.freeze({ name: context.name, multitenant: false });
     }
 
-    const tenantId = RepositoryTenants.readEventTenant(event) ?? context.tenantId;
+    const tenantId = RepositoryTenants.readEventTenant(event);
+    if (tenantId === undefined)
+      throw new Error(`Multitenant event for "${context.name}" requires tenantId.`);
     return Object.freeze({
       name: context.name,
       multitenant: true,
-      ...(tenantId === undefined ? {} : { tenantId }),
+      tenantId: RepositoryTenants.require(tenantId),
     });
   },
 
-  storageContextForTenant(context: StorageContext, tenantId: string | undefined): StorageContext {
-    if (!context.multitenant) return context;
+  storageContextForTenant(context: StorageMode, tenantId: TenantId | undefined): StorageContext {
+    if (!context.multitenant) return Object.freeze({ name: context.name, multitenant: false });
+    if (tenantId === undefined)
+      throw new Error(`Multitenant storage for "${context.name}" requires tenantId.`);
     return Object.freeze({
       name: context.name,
       multitenant: true,
-      ...(tenantId === undefined ? {} : { tenantId }),
+      tenantId: RepositoryTenants.require(tenantId),
     });
   },
 
-  readCommandTenant(command: Command): string | undefined {
+  readCommandTenant(command: Command): TenantId | undefined {
     return RepositoryTenants.tenantValue(command.context?.actorContext?.tenantId);
   },
 
-  standTenantOptions(context: StorageContext, event: Event): { readonly tenantId?: string } {
+  standTenantOptions(context: StorageMode, event: Event): { readonly tenantId?: TenantId } {
     if (!context.multitenant) {
       return {};
     }
 
-    const tenantId = RepositoryTenants.readEventTenant(event) ?? context.tenantId;
+    const tenantId = RepositoryTenants.readEventTenant(event);
     return tenantId === undefined ? {} : { tenantId };
   },
 
-  commandStandOptions(context: StorageContext, command: Command): { readonly tenantId?: string } {
+  commandStandOptions(context: StorageMode, command: Command): { readonly tenantId?: TenantId } {
     if (!context.multitenant) {
       return {};
     }
 
-    const tenantId = RepositoryTenants.readCommandTenant(command) ?? context.tenantId;
+    const tenantId = RepositoryTenants.readCommandTenant(command);
     return tenantId === undefined ? {} : { tenantId };
   },
 
-  readEventTenant(event: Event): string | undefined {
+  readEventTenant(event: Event): TenantId | undefined {
     switch (event.context?.origin.case) {
       case "importContext":
         return RepositoryTenants.tenantValue(event.context.origin.value.tenantId);
@@ -3819,17 +3828,16 @@ const RepositoryTenants = {
     }
   },
 
-  tenantValue(tenantId: TenantId | undefined): string | undefined {
-    switch (tenantId?.kind.case) {
-      case "value":
-        return tenantId.kind.value;
-      case "domain":
-        return `domain:${tenantId.kind.value.value}`;
-      case "email":
-        return `email:${tenantId.kind.value.value}`;
-      default:
-        return undefined;
-    }
+  tenantValue(tenantId: TenantId | undefined): TenantId | undefined {
+    return tenantId === undefined ? undefined : clone(TenantIdSchema, tenantId);
+  },
+
+  require(tenantId: TenantId): TenantId {
+    return TenantBoundary.from(tenantId).tenantId;
+  },
+
+  equal(left: TenantId, right: TenantId): boolean {
+    return TenantBoundary.from(left).key === TenantBoundary.from(right).key;
   },
 };
 Object.freeze(RepositoryTenants);
@@ -4712,7 +4720,7 @@ const InboxReplay = {
     },
     routing: RepositoryRouting,
     message: InboxMessage,
-    deliveryTenantId?: string,
+    deliveryTenantId?: TenantId,
   ): Promise<EntityInboxFollowUp | undefined> {
     const runtime = repositoryRuntimes.get(repository);
 
@@ -4738,7 +4746,7 @@ const InboxReplay = {
     },
     routing: RepositoryRouting,
     message: InboxMessage,
-    deliveryTenantId?: string,
+    deliveryTenantId?: TenantId,
   ): Promise<undefined> {
     if (message.label === "HANDLE_COMMAND") {
       await InboxReplay.replayProcessManagerCommand(repository, routing, message, deliveryTenantId);
@@ -4758,7 +4766,7 @@ const InboxReplay = {
     },
     routing: RepositoryRouting,
     message: InboxMessage,
-    deliveryTenantId?: string,
+    deliveryTenantId?: TenantId,
   ): Promise<void> {
     const runtime = repositoryRuntimes.get(repository);
 
@@ -4781,7 +4789,7 @@ const InboxReplay = {
     },
     routing: RepositoryRouting,
     message: InboxMessage,
-    deliveryTenantId?: string,
+    deliveryTenantId?: TenantId,
   ): Promise<void> {
     const runtime = repositoryRuntimes.get(repository);
 
@@ -4809,7 +4817,7 @@ const InboxReplay = {
     },
     routing: RepositoryRouting,
     message: InboxMessage,
-    deliveryTenantId?: string,
+    deliveryTenantId?: TenantId,
   ): Promise<void> {
     const runtime = repositoryRuntimes.get(repository);
 
@@ -4871,72 +4879,72 @@ const InboxReplay = {
   },
 
   validateReplayTenant(
-    context: StorageContext,
-    deliveryTenantId: string | undefined,
+    context: StorageMode,
+    deliveryTenantId: TenantId | undefined,
     command: Command,
   ): void {
     if (!context.multitenant) {
       return;
     }
 
-    if (deliveryTenantId === undefined || deliveryTenantId.trim() === "") {
+    if (deliveryTenantId === undefined) {
       throw new Error(`Multitenant Entity Inbox replay for "${context.name}" requires tenantId.`);
     }
 
     const envelopeTenantId = RepositoryTenants.readCommandTenant(command);
 
-    if (envelopeTenantId === undefined || envelopeTenantId.trim() === "") {
+    if (envelopeTenantId === undefined) {
       throw new Error("Entity Inbox replay requires stored command tenant metadata.");
     }
-    if (envelopeTenantId !== deliveryTenantId) {
+    if (!RepositoryTenants.equal(envelopeTenantId, deliveryTenantId)) {
       throw new Error("Entity Inbox replay stored command tenant does not match.");
     }
   },
 
   validateProjectionReplayTenant(
-    context: StorageContext,
-    deliveryTenantId: string | undefined,
+    context: StorageMode,
+    deliveryTenantId: TenantId | undefined,
     event: Event,
   ): void {
     if (!context.multitenant) {
       return;
     }
 
-    if (deliveryTenantId === undefined || deliveryTenantId.trim() === "") {
+    if (deliveryTenantId === undefined) {
       throw new Error(
         `Multitenant projection inbox replay for "${context.name}" requires tenantId.`,
       );
     }
 
-    const envelopeTenantId = RepositoryTenants.readEventTenant(event) ?? context.tenantId;
+    const envelopeTenantId = RepositoryTenants.readEventTenant(event);
 
-    if (envelopeTenantId === undefined || envelopeTenantId.trim() === "") {
+    if (envelopeTenantId === undefined) {
       throw new Error("Projection inbox replay requires stored event tenant metadata.");
     }
-    if (envelopeTenantId !== deliveryTenantId) {
+    if (!RepositoryTenants.equal(envelopeTenantId, deliveryTenantId)) {
       throw new Error("Projection inbox replay stored event tenant does not match.");
     }
   },
 
   validatePmReplayTenant(
-    context: StorageContext,
-    deliveryTenantId: string | undefined,
+    context: StorageMode,
+    deliveryTenantId: TenantId | undefined,
     event: Event,
   ): void {
     if (!context.multitenant) {
       return;
     }
 
-    if (deliveryTenantId === undefined || deliveryTenantId.trim() === "") {
+    if (deliveryTenantId === undefined) {
       throw new Error(`Multitenant Entity Inbox replay for "${context.name}" requires tenantId.`);
     }
 
-    const envelopeTenantId = RepositoryTenants.readEventTenant(event) ?? context.tenantId;
+    const envelopeTenantId = RepositoryTenants.readEventTenant(event);
 
-    if (envelopeTenantId === undefined || envelopeTenantId.trim() === "") {
+    if (envelopeTenantId === undefined) {
       throw new Error("Entity Inbox replay requires stored event tenant metadata.");
     }
-    if (envelopeTenantId !== deliveryTenantId) {
+    if (!RepositoryTenants.equal(envelopeTenantId, deliveryTenantId)) {
       throw new Error("Entity Inbox replay stored event tenant does not match.");
     }
   },
@@ -5214,7 +5222,7 @@ const RepositoryDispatch = {
           ? (["REACT_UPON_EVENT"] as const)
           : []),
       ]),
-      replay: (message: InboxMessage, deliveryTenantId?: string): EntityInboxReplay =>
+      replay: (message: InboxMessage, deliveryTenantId?: TenantId): EntityInboxReplay =>
         repository.entityFamily === "aggregate"
           ? InboxReplay.replayAggregateCommand(repository, routing, message, deliveryTenantId)
           : InboxReplay.replayPmInbox(repository, routing, message, deliveryTenantId),
@@ -5233,7 +5241,7 @@ const RepositoryDispatch = {
 
     return Object.freeze({
       targetTypeUrl: TypeUrls.derive(repository.stateSchema),
-      replay: (message: ProjectionInboxMessage, deliveryTenantId?: string): Promise<void> =>
+      replay: (message: ProjectionInboxMessage, deliveryTenantId?: TenantId): Promise<void> =>
         InboxReplay.replayProjectionEvent(repository, routing, message, deliveryTenantId),
     });
   },

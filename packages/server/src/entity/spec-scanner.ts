@@ -1,6 +1,6 @@
 import { type Message } from "@bufbuild/protobuf";
 import type { EntityRecord } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { RecordColumn, type RecordSpec } from "@spine-event-engine/storage";
+import { ColumnTypes, RecordColumn, type RecordSpec } from "@spine-event-engine/storage";
 
 import {
   describeEntityMetadata,
@@ -37,8 +37,8 @@ export const SpecScanner: EntitySpecScanner = Object.freeze({
         (field) =>
           new RecordColumn<Message>(
             field.name,
+            ColumnTypes.fromField(field.descriptor),
             (state) => (state as Record<string, unknown>)[field.localName],
-            "protobuf",
           ),
       ),
     );

@@ -28,6 +28,11 @@ export interface TenantBoundary {
   readonly tenantId: TenantId | undefined;
 }
 
+interface MultitenantTenantBoundary extends TenantBoundary {
+  readonly single: false;
+  readonly tenantId: TenantId;
+}
+
 interface TenantBoundaryFactory {
   readonly single: TenantBoundary;
 
@@ -37,7 +42,7 @@ interface TenantBoundaryFactory {
    * @param tenantId The complete generated tenant identifier.
    * @returns The immutable tenant boundary.
    */
-  from(tenantId: TenantId): TenantBoundary;
+  from(tenantId: TenantId): MultitenantTenantBoundary;
 
   /**
    * Selects the boundary declared by a storage context.
@@ -73,7 +78,7 @@ export const TenantBoundary: TenantBoundaryFactory = {
    * @param tenantId The generated tenant ID.
    * @returns An immutable tenant boundary.
    */
-  from(tenantId: TenantId): TenantBoundary {
+  from(tenantId: TenantId): MultitenantTenantBoundary {
     return new MultitenantBoundary(tenantId);
   },
 
@@ -101,7 +106,7 @@ export const TenantBoundary: TenantBoundaryFactory = {
 };
 Object.freeze(TenantBoundary);
 
-class MultitenantBoundary implements TenantBoundary {
+class MultitenantBoundary implements MultitenantTenantBoundary {
   readonly #tenantId: TenantId;
   readonly key: string;
   readonly single = false;

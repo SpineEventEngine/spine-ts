@@ -17,6 +17,22 @@ export interface Storage {
 }
 
 /**
+ * Diagnostic context name and tenancy mode before one operation selects a tenant.
+ *
+ * This is configuration only. It cannot select a physical provider boundary;
+ * multitenant storage operations require a complete `StorageContext`.
+ */
+export interface StorageMode {
+  // prettier-ignore
+
+  /** Bounded Context name used only in diagnostics. */
+  readonly name: string;
+
+  /** Whether each storage operation must select a complete tenant. */
+  readonly multitenant: boolean;
+}
+
+/**
  * Diagnostic context plus the provider tenant boundary for a storage operation.
  */
 export type StorageContext = {

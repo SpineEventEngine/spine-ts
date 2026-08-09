@@ -76,7 +76,7 @@ describe("SpecScanner", () => {
       "name",
       "priority",
     ]);
-    expect(spec.columns.find((column) => column.name === "version")?.valueType).toBe("protobuf");
+    expect(spec.columns.find((column) => column.name === "version")?.type.kind).toBe("message");
     expect(
       spec.columns
         .find((column) => column.name === "version")

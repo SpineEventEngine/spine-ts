@@ -1,3 +1,5 @@
+import type { TenantId } from "@spine-event-engine/proto";
+
 import { Delivery } from "../delivery/delivery.js";
 import type { InboxMessage } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
@@ -19,7 +21,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
   readonly #targets = new Map<string, ProjectionInboxTarget>();
   readonly #endpoints = new Map<string, readonly DeliveryEndpoint[]>();
   readonly #readiness: DeliveryReadiness;
-  readonly #keepTenant: (tenantId: string) => Promise<void>;
+  readonly #keepTenant: (tenantId: TenantId) => Promise<void>;
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
   #nextVersion = 0n;
 
@@ -32,7 +34,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
   constructor(
     contextName: string,
     readiness: DeliveryReadiness | OnDeliveryReady = new DeliveryReadiness(),
-    keepTenant: (tenantId: string) => Promise<void> = () => Promise.resolve(),
+    keepTenant: (tenantId: TenantId) => Promise<void> = () => Promise.resolve(),
   ) {
     this.#contextName = contextName;
     this.#readiness =
@@ -72,7 +74,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
    * @param deliveryTenantId Identifies the tenant that owns the row when present.
    * @returns A promise that resolves after the inbox row is replayed.
    */
-  replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
+  replay(message: InboxMessage, deliveryTenantId?: TenantId): Promise<void> {
     return this.#replay(message, deliveryTenantId);
   }
 
@@ -86,7 +88,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
   async receive(
     delivery: Delivery,
     input: ProjectionInput,
-    deliveryTenantId?: string,
+    deliveryTenantId?: TenantId,
   ): Promise<InboxMessage> {
     const routed = this.#readiness.route(delivery);
     return await InboxHandoff.coordinate({
@@ -99,7 +101,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
   async #receiveAndDrain(
     delivery: Delivery,
     input: ProjectionInput,
-    deliveryTenantId?: string,
+    deliveryTenantId?: TenantId,
   ): Promise<InboxMessage> {
     if (deliveryTenantId !== undefined) {
       await this.#keepTenant(deliveryTenantId);
@@ -147,7 +149,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
     return this.#nextVersion;
   }
 
-  async #replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
+  async #replay(message: InboxMessage, deliveryTenantId?: TenantId): Promise<void> {
     LocalProjectionInbox.#assert(message);
 
     const target = this.#targets.get(message.inboxId.targetTypeUrl);

@@ -1,4 +1,9 @@
-export { EventStore, type EventRollback, type OnEventAccepted } from "./event/event-store.js";
+export {
+  EventStore,
+  type EventRollback,
+  type EventStoreContext,
+  type OnEventAccepted,
+} from "./event/event-store.js";
 export type {
   EntityEventStorage,
   EntityStateHistoryStorage,
@@ -38,7 +43,7 @@ export { RecordSpec, type RecordSpecOptions } from "./record/record-spec.js";
 export { RecordStorage } from "./record/record-storage.js";
 export { StorageGroup } from "./record/storage-group.js";
 export type { RecordEntry } from "./record/record-storage.js";
-export type { Storage, StorageContext } from "./storage/storage.js";
+export type { Storage, StorageContext, StorageMode } from "./storage/storage.js";
 export { StorageFactory } from "./storage/storage-factory.js";
 export {
   TenantBoundary,

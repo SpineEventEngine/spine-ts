@@ -1,4 +1,10 @@
-import type { StorageContext, StorageFactory } from "@spine-event-engine/storage";
+import { clone } from "@bufbuild/protobuf";
+import { TenantIdSchema } from "@spine-event-engine/proto";
+import {
+  TenantBoundary,
+  type StorageContext,
+  type StorageFactory,
+} from "@spine-event-engine/storage";
 
 import type { ContextDeliveryDescriptor, DeliveryTenantScope } from "../context/bounded-context.js";
 import type { DeliveryEndpoint, DeliveryReady } from "../context/local-inbox-handoff.js";
@@ -2054,7 +2060,7 @@ class DeliveryGeneration {
     if (existing !== undefined) {
       return existing;
     }
-    const tenantKey = tenant.tenantId ?? "\u0000";
+    const tenantKey = EnvironmentAttachmentValues.tenantKey(tenant);
     this.#nextOwner += 1;
     const owner = Object.freeze({ key: `environment-owner-${this.#nextOwner.toString()}` });
     const runtime = Object.freeze({
@@ -2086,7 +2092,7 @@ class DeliveryGeneration {
     descriptor: ContextDeliveryDescriptor,
     tenant: DeliveryTenantScope,
   ): EnvironmentDeliveryRuntime | undefined {
-    return this.#runtimes.get(descriptor)?.get(tenant.tenantId ?? "\u0000");
+    return this.#runtimes.get(descriptor)?.get(EnvironmentAttachmentValues.tenantKey(tenant));
   }
 
   #stableDomain(factory: StorageFactory, context: StorageContext, ready: DeliveryReady): string {
@@ -2414,16 +2420,20 @@ const EnvironmentAttachmentAssembly = Object.freeze({
     );
     const startup = tenants.map((tenant) => {
       const capturedTenant: DeliveryTenantScope = Object.freeze({
-        ...(tenant.tenantId === undefined ? {} : { tenantId: tenant.tenantId }),
+        ...(tenant.tenantId === undefined
+          ? {}
+          : { tenantId: clone(TenantIdSchema, tenant.tenantId) }),
       });
       const context = descriptor.storageContext(capturedTenant);
       return Object.freeze({
         tenant: capturedTenant,
-        context: Object.freeze({
-          name: context.name,
-          multitenant: context.multitenant,
-          ...(context.tenantId === undefined ? {} : { tenantId: context.tenantId }),
-        }),
+        context: context.multitenant
+          ? Object.freeze({
+              name: context.name,
+              multitenant: true,
+              tenantId: clone(TenantIdSchema, context.tenantId),
+            })
+          : Object.freeze({ name: context.name, multitenant: false }),
       });
     });
     return Object.freeze({
@@ -2610,6 +2620,12 @@ interface CurrentAggregationFailure {
  * @internal Groups private attachment-state, scope, and failure operations.
  */
 const EnvironmentAttachmentValues = Object.freeze({
+  tenantKey(tenant: DeliveryTenantScope): string {
+    return tenant.tenantId === undefined
+      ? "\u0000"
+      : String(TenantBoundary.from(tenant.tenantId).key);
+  },
+
   explicitRetryError(): Error {
     return new Error("Environment generation rollback requires an explicit retry.");
   },
