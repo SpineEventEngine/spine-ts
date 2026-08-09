@@ -1,7 +1,7 @@
 # T-0149 Review Record
 
-Status: One specialist wave completed; aggregated correction batch passed
-deterministic verification; targeted re-review pending.
+Status: Complete. One specialist wave, one aggregated correction batch, and
+targeted affected-lane re-reviews converged.
 
 ## Dispatch Configuration
 
@@ -83,3 +83,23 @@ deterministic verification; targeted re-review pending.
   ownership rule for custom/email converters. Beginner-facing README,
   REFERENCE, and USER_GUIDE content was otherwise CLEAN with its look and feel
   preserved.
+
+All four affected lanes are CLEAN after correction. Security remains assigned
+to T-0150's complete cross-runtime tenant-boundary review as recorded above.
+
+## Final task-profile boundary
+
+The one final `verify:task` invocation passed Node and generated-Proto gates,
+then stopped in `typecheck:build:generated` on the frozen T-0150 integration
+boundary. It reproduced 54 shared-server errors in these classes:
+
+- scalar/string tenant callers versus complete generated `TenantId` and the
+  discriminated single/multitenant `StorageContext`;
+- retired function-only `RecordColumn` constructors versus declared typed
+  columns;
+- Stand/repository/delivery/environment snapshots that have not yet adopted
+  the complete tenant boundary.
+
+No T-0149 Datastore provider error was reported. No compatibility overload,
+scope, revision, string tenant facade, or dual layout was added to conceal the
+handoff. T-0150 owns these callers and the final release profile.

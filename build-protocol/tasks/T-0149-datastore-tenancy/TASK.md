@@ -1,6 +1,6 @@
 # T-0149: JVM-Compatible Datastore Tenancy and Layout
 
-Status: In progress; non-releasable stacked checkpoint.
+Status: Complete and reviewed; non-releasable stacked checkpoint for T-0150.
 
 ## Objective
 
