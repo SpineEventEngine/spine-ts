@@ -785,7 +785,7 @@ function defaultMessageStringifier<Schema extends MessageSchema>(
         registry === undefined
           ? fromJsonString(schema, value)
           : fromJsonString(schema, value, { registry });
-      restoreCanonicalAnyTypeUrls(message, typeUrls);
+      restoreAnyTypeUrls(message, typeUrls);
       return message;
     },
     toString(value: MessageShape<Schema>): string {
@@ -796,10 +796,10 @@ function defaultMessageStringifier<Schema extends MessageSchema>(
   });
 }
 
-function restoreCanonicalAnyTypeUrls(value: unknown, typeUrls: ReadonlyMap<string, string>): void {
+function restoreAnyTypeUrls(value: unknown, typeUrls: ReadonlyMap<string, string>): void {
   if (typeof value !== "object" || value === null || value instanceof Uint8Array) return;
   if (Array.isArray(value)) {
-    for (const item of value) restoreCanonicalAnyTypeUrls(item, typeUrls);
+    for (const item of value) restoreAnyTypeUrls(item, typeUrls);
     return;
   }
   const record = value as Record<string, unknown>;
@@ -810,7 +810,7 @@ function restoreCanonicalAnyTypeUrls(value: unknown, typeUrls: ReadonlyMap<strin
       if (canonical !== undefined) record.typeUrl = canonical;
     }
   }
-  for (const item of Object.values(record)) restoreCanonicalAnyTypeUrls(item, typeUrls);
+  for (const item of Object.values(record)) restoreAnyTypeUrls(item, typeUrls);
 }
 
 /**

@@ -1303,5 +1303,32 @@
     "name": "sameEntry",
     "disposition": "necessity",
     "reason": "TypeScript subscription-runtime identity boundary: sameEntry remains standalone because admission, replacement, and cancellation compare entries with the exact same entry rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/context/local-inbox-handoff.ts",
+    "kind": "function-declaration",
+    "identity": "tenantKey()#1",
+    "name": "tenantKey",
+    "disposition": "necessity",
+    "reason": "TypeScript delivery tenancy boundary: tenantKey gives local handoff routing one structural complete-tenant comparison key."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/context/tenant-index.ts",
+    "kind": "function-declaration",
+    "identity": "tenantCatalog()#1",
+    "name": "tenantCatalog",
+    "disposition": "necessity",
+    "reason": "TypeScript provider-catalog boundary: tenantCatalog fails multitenant startup closed unless the configured factory supplies its native catalog."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/entity/entity-storage-descriptor.ts",
+    "kind": "function-declaration",
+    "identity": "primitiveIdKind()#1",
+    "name": "primitiveIdKind",
+    "disposition": "necessity",
+    "reason": "TypeScript Entity descriptor boundary: primitiveIdKind maps generated scalar ID fields into the shared typed RecordSpec contract."
   }
 ]

@@ -306,8 +306,6 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   }
 
   /**
-   * Creates a record-storage handle.
-   *
    * @inheritdoc
    */
   protected onCreateRecordStorage<I, R extends Message>(

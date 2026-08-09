@@ -34,5 +34,122 @@
     "name": "disabledStateHistoryPort",
     "disposition": "necessity",
     "reason": "TypeScript provider-SPI boundary: disabledStateHistoryPort remains standalone because disabled history capabilities share this immutable state-history port across factories."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/core/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "isProtobufRegistry()#1",
+    "name": "isProtobufRegistry",
+    "disposition": "necessity",
+    "reason": "TypeScript registry interop boundary: isProtobufRegistry validates optional registry-shaped constructor input before Stringifier composition."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/core/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "defaultMessageStringifier()#1",
+    "name": "defaultMessageStringifier",
+    "disposition": "necessity",
+    "reason": "TypeScript Stringifier boundary: defaultMessageStringifier constructs the shared compact Proto JSON mapping without owning registry state."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/core/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "restoreAnyTypeUrls()#1",
+    "name": "restoreAnyTypeUrls",
+    "disposition": "necessity",
+    "reason": "TypeScript Proto JSON boundary: restoreAnyTypeUrls recursively restores canonical packed type URLs after registry-aware parsing."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/core/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "packIdentifier()#1",
+    "name": "packIdentifier",
+    "disposition": "necessity",
+    "reason": "TypeScript identifier boundary: packIdentifier exposes one shared typed overload family for primitive and generated message IDs."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/core/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "packIdentifier()#2",
+    "name": "packIdentifier",
+    "disposition": "necessity",
+    "reason": "TypeScript identifier boundary: packIdentifier exposes one shared typed overload family for primitive and generated message IDs."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/core/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "packIdentifier()#3",
+    "name": "packIdentifier",
+    "disposition": "necessity",
+    "reason": "TypeScript identifier boundary: packIdentifier exposes one shared typed overload family for primitive and generated message IDs."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/core/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "packIdentifier()#4",
+    "name": "packIdentifier",
+    "disposition": "necessity",
+    "reason": "TypeScript identifier boundary: packIdentifier exposes one shared typed overload family for primitive and generated message IDs."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/core/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "packIdentifier()#5",
+    "name": "packIdentifier",
+    "disposition": "necessity",
+    "reason": "TypeScript identifier boundary: packIdentifier exposes one shared typed overload family for primitive and generated message IDs."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/core/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "unpackIdentifier()#1",
+    "name": "unpackIdentifier",
+    "disposition": "necessity",
+    "reason": "TypeScript identifier boundary: unpackIdentifier exposes the inverse shared overload family for primitive and generated message IDs."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/core/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "unpackIdentifier()#2",
+    "name": "unpackIdentifier",
+    "disposition": "necessity",
+    "reason": "TypeScript identifier boundary: unpackIdentifier exposes the inverse shared overload family for primitive and generated message IDs."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/core/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "unpackIdentifier()#3",
+    "name": "unpackIdentifier",
+    "disposition": "necessity",
+    "reason": "TypeScript identifier boundary: unpackIdentifier exposes the inverse shared overload family for primitive and generated message IDs."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/core/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "unpackIdentifier()#4",
+    "name": "unpackIdentifier",
+    "disposition": "necessity",
+    "reason": "TypeScript identifier boundary: unpackIdentifier exposes the inverse shared overload family for primitive and generated message IDs."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/core/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "unpackIdentifier()#5",
+    "name": "unpackIdentifier",
+    "disposition": "necessity",
+    "reason": "TypeScript identifier boundary: unpackIdentifier exposes the inverse shared overload family for primitive and generated message IDs."
   }
 ]

@@ -1180,8 +1180,9 @@ describe("Stand", () => {
       });
     }
 
-    const error = await stand.close().catch((failure: unknown) => failure as AggregateError);
+    const error: unknown = await stand.close().catch((failure: unknown) => failure);
     expect(error).toBeInstanceOf(AggregateError);
+    if (!(error instanceof AggregateError)) throw new Error("Expected Stand close to fail.");
     expect(error.message).toBe("Stand close failed.");
     const errors = Array.from(error.errors as Iterable<unknown>);
     expect(errors).toHaveLength(17);

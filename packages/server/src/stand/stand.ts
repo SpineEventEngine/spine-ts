@@ -30,7 +30,7 @@ import { SubscriptionObservers, type StandObservedState } from "./subscription-o
 import type { EventBus, EventSubscription } from "../bus/event-bus.js";
 import type { Subscription, SubscriptionUpdate } from "@spine-event-engine/proto/client";
 
-const MAX_RETAINED_HANDLE_CLOSE_ERRORS = 16;
+const HANDLE_CLOSE_ERROR_LIMIT = 16;
 
 /**
  * Options for constructing a direct read-side Stand.
@@ -684,7 +684,7 @@ export class Stand {
       try {
         handle.close();
       } catch (error) {
-        if (errors.length < MAX_RETAINED_HANDLE_CLOSE_ERRORS) errors.push(error);
+        if (errors.length < HANDLE_CLOSE_ERROR_LIMIT) errors.push(error);
         else omittedErrors++;
       }
     }
@@ -753,7 +753,7 @@ export class Stand {
           try {
             handle.close();
           } catch (error) {
-            if (this.#handleCloseErrors.length < MAX_RETAINED_HANDLE_CLOSE_ERRORS) {
+            if (this.#handleCloseErrors.length < HANDLE_CLOSE_ERROR_LIMIT) {
               this.#handleCloseErrors.push(error);
             } else {
               this.#omittedHandleCloseErrors++;

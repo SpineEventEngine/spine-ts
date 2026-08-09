@@ -21,15 +21,6 @@
     "rule": "standalone-function",
     "file": "packages/storage-datastore/src/datastore/entity-history.ts",
     "kind": "function-declaration",
-    "identity": "currentSpec()#1",
-    "name": "currentSpec",
-    "disposition": "necessity",
-    "reason": "TypeScript Datastore transaction boundary: currentSpec remains standalone because current and immutable history paths share the exact current spec transformation."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/storage-datastore/src/datastore/entity-history.ts",
-    "kind": "function-declaration",
     "identity": "entityFilter()#1",
     "name": "entityFilter",
     "disposition": "necessity",
@@ -228,15 +219,6 @@
     "rule": "standalone-function",
     "file": "packages/storage-datastore/src/datastore/record-storage.ts",
     "kind": "function-declaration",
-    "identity": "pageCursor()#1",
-    "name": "pageCursor",
-    "disposition": "necessity",
-    "reason": "TypeScript Datastore pagination boundary: pageCursor remains standalone because read, query, and continuation paths share the exact page cursor encoding rule."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/storage-datastore/src/datastore/record-storage.ts",
-    "kind": "function-declaration",
     "identity": "sameCursor()#1",
     "name": "sameCursor",
     "disposition": "necessity",
@@ -354,15 +336,6 @@
     "rule": "standalone-function",
     "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
     "kind": "function-declaration",
-    "identity": "isHarmlessExtraColumn()#1",
-    "name": "isHarmlessExtraColumn",
-    "disposition": "necessity",
-    "reason": "TypeScript MySQL schema boundary: isHarmlessExtraColumn remains standalone because table inspection, query, and mutation paths share the exact is harmless extra column rule."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
-    "kind": "function-declaration",
     "identity": "mysqlColumnDefinition()#1",
     "name": "mysqlColumnDefinition",
     "disposition": "necessity",
@@ -381,15 +354,6 @@
     "rule": "standalone-function",
     "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
     "kind": "function-declaration",
-    "identity": "mysqlParameter()#1",
-    "name": "mysqlParameter",
-    "disposition": "necessity",
-    "reason": "TypeScript MySQL schema boundary: mysqlParameter remains standalone because table inspection, query, and mutation paths share the exact mysql parameter rule."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
-    "kind": "function-declaration",
     "identity": "same()#1",
     "name": "same",
     "disposition": "necessity",
@@ -403,15 +367,6 @@
     "name": "sameDefault",
     "disposition": "necessity",
     "reason": "TypeScript MySQL schema boundary: sameDefault remains standalone because table inspection, query, and mutation paths share the exact same default rule."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/scope.ts",
-    "kind": "function-declaration",
-    "identity": "mysqlScopeKey()#1",
-    "name": "mysqlScopeKey",
-    "disposition": "necessity",
-    "reason": "TypeScript MySQL scope boundary: mysqlScopeKey remains standalone because record and Entity families require the same canonical binary scope encoding."
   },
   {
     "rule": "standalone-function",
@@ -448,15 +403,6 @@
     "name": "mysqlCurrentRecord",
     "disposition": "necessity",
     "reason": "TypeScript provider-test SPI: mysqlCurrentRecord remains standalone because integration tests import this exact read-only mysql current record observation without exposing adapter internals."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/storage-rdbms/src/mysql/testing.ts",
-    "kind": "function-declaration",
-    "identity": "mysqlCurrentRevision()#1",
-    "name": "mysqlCurrentRevision",
-    "disposition": "necessity",
-    "reason": "TypeScript provider-test SPI: mysqlCurrentRevision remains standalone because integration tests import this exact read-only mysql current revision observation without exposing adapter internals."
   },
   {
     "rule": "standalone-function",
@@ -502,5 +448,23 @@
     "name": "sameAny",
     "disposition": "necessity",
     "reason": "TypeScript MySQL test-observation boundary: sameAny remains standalone because private state and event count paths share one exact packed-identity comparison."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-datastore/src/datastore/tenant-catalog.ts",
+    "kind": "function-declaration",
+    "identity": "namespaceName()#1",
+    "name": "namespaceName",
+    "disposition": "necessity",
+    "reason": "TypeScript Datastore tenancy boundary: namespaceName validates native namespace metadata shared by discovery and collision checks."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/storage-factory.ts",
+    "kind": "function-declaration",
+    "identity": "assertNoRetiredLayout()#1",
+    "name": "assertNoRetiredLayout",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL migration boundary: assertNoRetiredLayout fails factory startup closed when any retired physical layout is detected."
   }
 ]

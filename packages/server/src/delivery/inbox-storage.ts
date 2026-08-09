@@ -324,7 +324,7 @@ const Values = Object.freeze({
       ? {
           name: `${context.name}.delivery.inbox`,
           multitenant: true,
-          ...(context.tenantId === undefined ? {} : { tenantId: context.tenantId }),
+          tenantId: context.tenantId,
         }
       : { name: `${context.name}.delivery.inbox`, multitenant: false };
   },
