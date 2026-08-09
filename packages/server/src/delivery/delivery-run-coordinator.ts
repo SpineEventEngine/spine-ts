@@ -46,9 +46,9 @@ export class DeliveryRunCoordinator {
   }
 
   /**
-   * Updates this live generation with later registered canonical scopes.
+   * Updates this live generation with later registered delivery scopes.
    *
-   * @param scopes The canonical scopes to configure.
+   * @param scopes The delivery scopes to configure.
    */
   configure(scopes: readonly DeliveryRunScope[]): void {
     if (!this.#accepting) {
@@ -76,7 +76,7 @@ export class DeliveryRunCoordinator {
   }
 
   /**
-   * Returns the current generation-local canonical scope count.
+   * Returns the current generation-local delivery scope count.
    *
    * @returns The configured scope count.
    */
@@ -479,13 +479,13 @@ export interface DeliveryRunScope {
 }
 
 /**
- * Describes a finite worker obligation for one canonical scope union.
+ * Describes a finite worker obligation for one delivery-scope union.
  */
 export interface DeliveryRunObligation extends DeliveryWorkerObligation {
   // prettier-ignore
 
   /**
-   * Lists the admitted canonical scopes.
+   * Lists the admitted delivery scopes.
    */
   readonly scopes: readonly DeliveryRunScope[];
 }
@@ -530,7 +530,7 @@ export interface DeliveryRunWorker {
 }
 
 /**
- * Describes the latest bounded disposition for one configured canonical scope.
+ * Describes the latest bounded disposition for one configured delivery scope.
  */
 export interface DeliveryScopeSettlement {
   // prettier-ignore

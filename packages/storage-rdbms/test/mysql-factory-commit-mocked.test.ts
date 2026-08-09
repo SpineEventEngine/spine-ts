@@ -15,7 +15,11 @@ const seam = vi.hoisted(() => ({
 
 vi.mock("mysql2/promise", () => ({
   createPool: vi.fn(() => ({
-    getConnection: () => Promise.resolve({ release: () => undefined }),
+    getConnection: () =>
+      Promise.resolve({
+        query: () => Promise.resolve([[], []]),
+        release: () => undefined,
+      }),
     end: () => Promise.resolve(),
   })),
 }));

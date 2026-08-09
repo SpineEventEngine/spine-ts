@@ -63,7 +63,7 @@ describe("MysqlStorageFactory builder contract", () => {
     const release = vi.fn();
     const end = vi.fn(() => Promise.resolve());
     vi.mocked(createPool).mockReturnValue({
-      getConnection: vi.fn(() => Promise.resolve({ release })),
+      getConnection: vi.fn(() => Promise.resolve({ query: vi.fn(mysqlQuery), release })),
       end,
     } as never);
 
@@ -110,7 +110,7 @@ describe("MysqlStorageFactory builder contract", () => {
   it("connects with only required URL fields without inventing optional pool settings", async () => {
     const release = vi.fn();
     vi.mocked(createPool).mockReturnValue({
-      getConnection: vi.fn(() => Promise.resolve({ release })),
+      getConnection: vi.fn(() => Promise.resolve({ query: vi.fn(mysqlQuery), release })),
       end: vi.fn(() => Promise.resolve()),
     } as never);
 
@@ -133,6 +133,9 @@ describe("MysqlStorageFactory builder contract", () => {
     const calls: { readonly sql: string; readonly values?: readonly unknown[] }[] = [];
     const query = vi.fn((sql: string, values?: readonly unknown[]) => {
       calls.push(values === undefined ? { sql } : { sql, values });
+      if (sql.includes("LOWER(column_name) IN ('_scope', '_revision')")) {
+        return Promise.resolve([[], []]);
+      }
       if (sql.includes("information_schema.columns")) {
         return Promise.resolve([
           [
@@ -262,7 +265,7 @@ describe("MysqlStorageFactory builder contract", () => {
     const secondEnd = vi.fn(() => Promise.resolve());
     vi.mocked(createPool)
       .mockReturnValueOnce({
-        getConnection: vi.fn(() => Promise.resolve({ release: vi.fn() })),
+        getConnection: vi.fn(() => Promise.resolve({ query: vi.fn(mysqlQuery), release: vi.fn() })),
         end: firstEnd,
       } as never)
       .mockReturnValueOnce({
@@ -280,6 +283,28 @@ describe("MysqlStorageFactory builder contract", () => {
     ).rejects.toThrow("Unable to connect to MySQL.");
     expect(firstEnd).toHaveBeenCalledOnce();
     expect(secondEnd).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a configured database that still contains the retired physical layout", async () => {
+    const release = vi.fn();
+    const end = vi.fn(() => Promise.resolve());
+    const query = vi.fn((sql: string) => {
+      if (sql.includes("information_schema.columns")) {
+        return Promise.resolve([[{ table_name: "messages", column_name: "_scope" }], []]);
+      }
+      return Promise.resolve([[], []]);
+    });
+    vi.mocked(createPool).mockReturnValueOnce({
+      getConnection: vi.fn(() => Promise.resolve({ query, release })),
+      end,
+    } as never);
+
+    await expect(
+      MysqlStorageFactory.newBuilder().setOptions({ url: "mysql://db.example/legacy" }).build(),
+    ).rejects.toThrow(/retired MySQL storage layout/i);
+
+    expect(release).toHaveBeenCalledOnce();
+    expect(end).toHaveBeenCalledOnce();
   });
 
   it("rejects duplicate tenants, shared physical targets, and mixed tenancy modes", async () => {
@@ -312,7 +337,7 @@ describe("MysqlStorageFactory builder contract", () => {
 
   it("enforces MySQL Entity-commit source, history, event-ID, and close guards before opening tables", async () => {
     vi.mocked(createPool).mockReturnValue({
-      getConnection: vi.fn(() => Promise.resolve({ release: vi.fn() })),
+      getConnection: vi.fn(() => Promise.resolve({ query: vi.fn(mysqlQuery), release: vi.fn() })),
       end: vi.fn(() => Promise.resolve()),
     } as never);
     const factory = await MysqlStorageFactory.newBuilder()
@@ -415,7 +440,7 @@ describe("MysqlStorageFactory builder contract", () => {
     expect(operationCalls).toBe(1);
     expect(table?.groupName).toBe("history");
     expect(table?.tableName).toContain("history");
-    expect(query.mock.calls[0]?.[0]).toContain("CREATE TABLE");
+    expect(query.mock.calls.some(([sql]) => sql.includes("CREATE TABLE"))).toBe(true);
     records.close();
     factory.close();
   });
@@ -461,6 +486,12 @@ function mysqlConnection(query: ReturnType<typeof vi.fn>) {
 }
 
 function mysqlQuery(sql: string) {
+  if (sql.includes("LOWER(column_name) IN ('_scope', '_revision')")) {
+    return Promise.resolve([[], []]);
+  }
+  if (sql.includes("ORDER BY table_name, seq_in_index")) {
+    return Promise.resolve([[], []]);
+  }
   if (sql.includes("information_schema.columns")) {
     return Promise.resolve([
       [

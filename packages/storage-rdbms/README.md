@@ -127,7 +127,8 @@ pnpm --dir packages/storage-rdbms inventory:legacy -- \
 
 The command exits nonzero if a database is unreachable or contains the old
 `_scope`, `_revision`, or compound scope key. Do not start the corrected
-runtime until it passes. The runtime does not read both layouts or choose
+runtime until it passes. The factory repeats this check for every configured
+database before it becomes usable. The runtime does not read both layouts or choose
 between rows that old Bounded Context partitions would collapse onto the same
 new `ID`; migrate those rows offline and stop on every conflict.
 

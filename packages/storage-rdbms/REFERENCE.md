@@ -36,7 +36,8 @@ Before deployment, run `pnpm --dir packages/storage-rdbms inventory:legacy --
 --url <database-url>` once for every configured tenant database. The command
 fails closed on connection errors, `_scope`, `_revision`, or an old primary key
 containing `_scope`. Passing this inventory is a startup prerequisite for an
-upgraded application; the runtime has no dual-layout reader or automatic
+upgraded application. Factory build repeats the inspection for every configured
+database; the runtime has no dual-layout reader or automatic
 conflict winner.
 
 ## Lifecycle and tenancy

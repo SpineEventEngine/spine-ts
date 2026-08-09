@@ -20,7 +20,7 @@ import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { tenant } from "../tenant-fixture.js";
 
 describe("DeliveryRunCoordinator", () => {
-  it("rejects constructing a delivery generation without a canonical scope", () => {
+  it("rejects constructing a delivery generation without a delivery scope", () => {
     const worker = new FakeRunWorker([]);
 
     expect(() => new DeliveryRunCoordinator({ scopes: [], worker })).toThrow(
@@ -587,7 +587,7 @@ describe("DeliveryRunCoordinator", () => {
     await later;
   });
 
-  it("bounds retained settlement by the configured canonical scope domain", async () => {
+  it("bounds retained settlement by the configured delivery-scope domain", async () => {
     const configured = scope("first", 0, 1);
     const worker = new FakeRunWorker(
       Array.from(

@@ -1816,7 +1816,8 @@ The command exits unsuccessfully if a database cannot be inspected or it finds
 an old `_scope` column, `_revision` column, or scope-based primary key. Migrate
 those rows offline into the direct ID/bytes/declared-column tables, resolve
 conflicts explicitly, and run the inventory again. Do not start old and new
-binaries against the same data.
+binaries against the same data. Factory construction repeats the inspection for
+every configured database and closes all opened pools if any one target fails.
 
 ### Shared entity storage foundation
 

@@ -1,4 +1,4 @@
-import { createPool, type Pool, type PoolConnection } from "mysql2/promise";
+import { createPool, type Pool, type PoolConnection, type RowDataPacket } from "mysql2/promise";
 import { toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { StringifierRegistry } from "@spine-event-engine/core";
@@ -421,20 +421,26 @@ export class MysqlStorageFactory extends StorageFactory {
         const pool = createPool(entry.poolOptions);
         try {
           const connection = await pool.getConnection();
-          connection.release();
+          try {
+            await assertNoRetiredLayout(connection);
+          } finally {
+            connection.release();
+          }
           connected.push({
             boundary: entry.boundary,
             databaseName: entry.databaseName,
             pool,
           });
-        } catch {
+        } catch (error) {
           await pool.end().catch(() => undefined);
+          if (error instanceof MysqlStorageConfigurationError) throw error;
           throw new MysqlStorageConnectionError("Unable to connect to MySQL.");
         }
       }
       return new MysqlStorageFactory(connected, resolver, createOperation, stringifiers);
-    } catch {
+    } catch (error) {
       await Promise.all(connected.map(({ pool }) => pool.end().catch(() => undefined)));
+      if (error instanceof MysqlStorageConfigurationError) throw error;
       throw new MysqlStorageConnectionError("Unable to connect to MySQL.");
     }
   }
@@ -559,6 +565,38 @@ class Builder implements MysqlStorageFactoryBuilder {
         ? MysqlConfigurations.multitenant(this.#tenantOptions ?? [])
         : [MysqlConfigurations.single(this.#options)];
     return this.connect(entries, this.#resolver, this.#operation, this.#stringifiers);
+  }
+}
+
+interface LegacyColumnRow extends RowDataPacket {
+  readonly table_name: string;
+  readonly column_name: string;
+}
+
+interface LegacyPrimaryRow extends RowDataPacket {
+  readonly table_name: string;
+  readonly column_name: string;
+  readonly seq_in_index: number;
+}
+
+async function assertNoRetiredLayout(connection: PoolConnection): Promise<void> {
+  const [columns] = await connection.query<LegacyColumnRow[]>(
+    "SELECT table_name AS table_name, column_name AS column_name " +
+      "FROM information_schema.columns WHERE table_schema=DATABASE() " +
+      "AND LOWER(column_name) IN ('_scope', '_revision')",
+  );
+  const [primary] = await connection.query<LegacyPrimaryRow[]>(
+    "SELECT table_name AS table_name, column_name AS column_name, seq_in_index AS seq_in_index " +
+      "FROM information_schema.statistics WHERE table_schema=DATABASE() " +
+      "AND index_name='PRIMARY' ORDER BY table_name, seq_in_index",
+  );
+  if (
+    columns.length > 0 ||
+    primary.some((column) => column.column_name.toLowerCase() === "_scope")
+  ) {
+    throw new MysqlStorageConfigurationError(
+      "The configured database contains the retired MySQL storage layout.",
+    );
   }
 }
 
