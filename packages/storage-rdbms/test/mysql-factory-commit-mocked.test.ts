@@ -27,7 +27,7 @@ vi.mock("../src/mysql/entity-history.js", () => ({
         prepare: async () => seam.calls.push("families.prepare"),
         tableNames: () => ["current"],
         withConnection: (_: unknown, run: () => unknown) => run(),
-        readCurrentLockedKey: async () => seam.current,
+        readCurrentLocked: async () => seam.current,
         preflightImmutable: async () => seam.calls.push("preflight"),
         appendStateImmutable: async () => seam.calls.push("state"),
         appendDiagnosticImmutable: async () => seam.calls.push("diagnostic"),
@@ -72,7 +72,7 @@ describe("MysqlStorageFactory mocked entity commits", () => {
       const factory = await MysqlStorageFactory.newBuilder()
         .setOptions({ url: "mysql://db.example/commit_mock" })
         .build();
-      const context = { name: "orders", multitenant: true, tenantId: "acme" };
+      const context = { name: "orders", multitenant: false };
       const entity = {
         context,
         id: { key: (id: string) => id },

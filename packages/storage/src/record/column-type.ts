@@ -7,19 +7,57 @@ declare const columnValueType: unique symbol;
  */
 export type RecordColumnType<V = unknown> = (
   | {
+      // prettier-ignore
+
+      /**
+       * Identifies a Protobuf scalar column.
+       */
       readonly kind: "scalar";
+
+      /**
+       * Protobuf scalar kind retained by the column.
+       */
       readonly scalar: ScalarType;
+
+      /**
+       * Whether generated code represents a 64-bit value as a string.
+       */
       readonly longAsString: boolean;
     }
   | {
+      // prettier-ignore
+
+      /**
+       * Identifies a Protobuf enum column.
+       */
       readonly kind: "enum";
+
+      /**
+       * Generated enum descriptor retained by the column.
+       */
       readonly enum: DescEnum;
     }
   | {
+      // prettier-ignore
+
+      /**
+       * Identifies a Protobuf message column.
+       */
       readonly kind: "message";
+
+      /**
+       * Generated message descriptor retained by the column.
+       */
       readonly message: DescMessage;
     }
-) & { readonly [columnValueType]?: V };
+) & {
+  // prettier-ignore
+
+  /**
+   * Compile-time value type carried by the column declaration.
+   */
+  readonly [columnValueType]?: V;
+};
 
 /**
  * Creates record-column types from generated Protobuf descriptors.

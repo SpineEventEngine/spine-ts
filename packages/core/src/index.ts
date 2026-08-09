@@ -825,16 +825,81 @@ export class StringifierRegistry {
 export type PrimitiveIdentifierType = "string" | "int32" | "int64";
 
 interface IdentifierCodec {
+  // prettier-ignore
+
+  /**
+   * Packs a message-valued identifier.
+   *
+   * @param schema The generated identifier schema.
+   * @param value The identifier value.
+   * @returns The packed identifier.
+   */
   pack<Schema extends MessageSchema>(schema: Schema, value: MessageShape<Schema>): Any;
+
+  /**
+   * Packs a string identifier.
+   *
+   * @param type The string identifier kind.
+   * @param value The identifier value.
+   * @returns The packed identifier.
+   */
   pack(type: "string", value: string): Any;
+
+  /**
+   * Packs an `int32` identifier.
+   *
+   * @param type The `int32` identifier kind.
+   * @param value The identifier value.
+   * @returns The packed identifier.
+   */
   pack(type: "int32", value: number): Any;
+
+  /**
+   * Packs an `int64` identifier.
+   *
+   * @param type The `int64` identifier kind.
+   * @param value The identifier value.
+   * @returns The packed identifier.
+   */
   pack(type: "int64", value: bigint): Any;
+
+  /**
+   * Unpacks a message-valued identifier.
+   *
+   * @param schema The generated identifier schema.
+   * @param value The packed identifier.
+   * @returns The decoded identifier, or `undefined` for another type.
+   */
   unpack<Schema extends MessageSchema>(
     schema: Schema,
     value: Any,
   ): MessageShape<Schema> | undefined;
+
+  /**
+   * Unpacks a string identifier.
+   *
+   * @param type The string identifier kind.
+   * @param value The packed identifier.
+   * @returns The decoded identifier, or `undefined` for another type.
+   */
   unpack(type: "string", value: Any): string | undefined;
+
+  /**
+   * Unpacks an `int32` identifier.
+   *
+   * @param type The `int32` identifier kind.
+   * @param value The packed identifier.
+   * @returns The decoded identifier, or `undefined` for another type.
+   */
   unpack(type: "int32", value: Any): number | undefined;
+
+  /**
+   * Unpacks an `int64` identifier.
+   *
+   * @param type The `int64` identifier kind.
+   * @param value The packed identifier.
+   * @returns The decoded identifier, or `undefined` for another type.
+   */
   unpack(type: "int64", value: Any): bigint | undefined;
 }
 
@@ -842,7 +907,16 @@ interface IdentifierCodec {
  * Packs and unpacks the identifier types supported by Spine JVM storage.
  */
 export const Identifiers: IdentifierCodec = {
+  // prettier-ignore
+
+  /**
+   * Packs a supported typed identifier.
+   */
   pack: packIdentifier,
+
+  /**
+   * Unpacks a supported typed identifier.
+   */
   unpack: unpackIdentifier,
 };
 Object.freeze(Identifiers);
@@ -868,6 +942,13 @@ const IdentifierValues = Object.freeze({
   },
 });
 
+/**
+ * Packs a supported typed identifier.
+ *
+ * @param schema The generated schema or supported primitive kind.
+ * @param value The identifier value.
+ * @returns The packed identifier.
+ */
 function packIdentifier<Schema extends MessageSchema>(
   schema: Schema,
   value: MessageShape<Schema>,
@@ -903,6 +984,13 @@ function packIdentifier(
   }
 }
 
+/**
+ * Unpacks a supported typed identifier.
+ *
+ * @param schema The generated schema or supported primitive kind.
+ * @param value The packed identifier.
+ * @returns The decoded identifier, or `undefined` for another type.
+ */
 function unpackIdentifier<Schema extends MessageSchema>(
   schema: Schema,
   value: Any,

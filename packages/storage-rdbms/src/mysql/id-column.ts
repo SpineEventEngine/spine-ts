@@ -7,6 +7,8 @@ type MysqlIdType<I> = I extends Message ? GenMessage<I> : string;
  * Converts one declared record ID to and from Spine JVM JDBC values.
  */
 export class MysqlIdColumn<I> {
+  // prettier-ignore
+
   /**
    * The canonical MySQL ID column type.
    */
@@ -14,6 +16,7 @@ export class MysqlIdColumn<I> {
 
   /**
    * Creates an ID conversion from the declared record ID type.
+   *
    * @param type The message schema or supported primitive kind.
    */
   constructor(private readonly type: MysqlIdType<I>) {
@@ -26,9 +29,10 @@ export class MysqlIdColumn<I> {
    * @returns The JVM-compatible MySQL value.
    */
   value(id: I): unknown {
-    if (typeof this.type !== "string") return toJsonString(this.type, id as never);
+    if (typeof this.type !== "string")
+      return MysqlIdTypes.text(toJsonString(this.type, id as never));
     MysqlIdTypes.validate(this.type, id);
-    return id;
+    return this.type === "string" ? MysqlIdTypes.text(id as string) : id;
   }
 
   /**
@@ -62,6 +66,11 @@ export class MysqlIdColumn<I> {
 }
 
 const MysqlIdTypes = Object.freeze({
+  text(value: string): string {
+    if (value.length > 512) throw new Error("MySQL storage identifier is too large.");
+    return value;
+  },
+
   mysqlType<I>(type: MysqlIdType<I>): string {
     if (typeof type !== "string") return "VARCHAR(512)";
     switch (type) {

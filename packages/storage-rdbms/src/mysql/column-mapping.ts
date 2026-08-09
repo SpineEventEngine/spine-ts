@@ -12,8 +12,11 @@ const versionType = "spine.core.Version";
  * Converts typed Protobuf column values to Spine JVM JDBC values.
  */
 export class MysqlColumnMapping implements ColumnMapping<unknown> {
+  // prettier-ignore
+
   /**
    * Returns the conversion for one generated column type.
+   *
    * @param type The generated Protobuf column type.
    * @returns The JVM-compatible MySQL parameter conversion.
    */

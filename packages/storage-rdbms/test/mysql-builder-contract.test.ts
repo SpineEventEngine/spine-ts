@@ -312,6 +312,12 @@ function entityInput(
   stateHistory = true,
   eventHistory = true,
 ) {
+  const recordSpec = new RecordSpec({
+    sourceType: StringValueSchema,
+    recordType: EntityRecordSchema,
+    idKind: "string",
+    extractId: () => "entity",
+  });
   return {
     context,
     id: {
@@ -321,6 +327,7 @@ function entityInput(
       unpack: () => undefined,
     },
     columns: [],
+    recordSpec,
     sourceType: StringValueSchema,
     stateSchema: StringValueSchema,
     stateHistory,

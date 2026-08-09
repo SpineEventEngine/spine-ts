@@ -2,6 +2,9 @@ import type { RecordColumnType } from "./column-type.js";
 
 /**
  * Converts one typed record-column value to its provider representation.
+ *
+ * @param value The typed Protobuf value.
+ * @returns The provider representation.
  */
 export type ColumnTypeMapping<V, R> = (value: V) => R;
 

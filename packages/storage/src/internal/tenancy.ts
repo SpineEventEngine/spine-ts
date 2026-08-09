@@ -10,6 +10,8 @@ const singleTenantKey = Symbol("single tenant");
  * @internal
  */
 export interface TenantBoundary {
+  // prettier-ignore
+
   /**
    * Stable in-process map key. Single tenancy uses one private symbol.
    */
@@ -28,7 +30,21 @@ export interface TenantBoundary {
 
 interface TenantBoundaryFactory {
   readonly single: TenantBoundary;
+
+  /**
+   * Creates a boundary for the supplied tenant.
+   *
+   * @param tenantId The complete generated tenant identifier.
+   * @returns The immutable tenant boundary.
+   */
   from(tenantId: TenantId): TenantBoundary;
+
+  /**
+   * Selects the boundary declared by a storage context.
+   *
+   * @param context The storage context.
+   * @returns The validated tenant boundary.
+   */
   of(context: StorageContext): TenantBoundary;
 }
 
@@ -44,6 +60,8 @@ const singleTenantBoundary: TenantBoundary = Object.freeze({
  * @internal
  */
 export const TenantBoundary: TenantBoundaryFactory = {
+  // prettier-ignore
+
   /**
    * The explicit singleton used by single-tenant providers.
    */
@@ -51,6 +69,7 @@ export const TenantBoundary: TenantBoundaryFactory = {
 
   /**
    * Creates a boundary from a complete generated tenant ID.
+   *
    * @param tenantId The generated tenant ID.
    * @returns An immutable tenant boundary.
    */
@@ -59,7 +78,8 @@ export const TenantBoundary: TenantBoundaryFactory = {
   },
 
   /**
-   * Selects the boundary declared by a storage context.
+   * Returns the boundary declared by a storage context.
+   *
    * @param context The diagnostic context and tenant selection.
    * @returns The validated provider tenant boundary.
    */
@@ -125,19 +145,27 @@ const TenantIds = Object.freeze({
  * @internal
  */
 export interface TenantCatalog {
+  // prettier-ignore
+
   /**
-   * Returns the boundaries available for storage-backed startup work.
+   * Lists the boundaries available for storage-backed startup work.
+   *
+   * @returns The available tenant boundaries.
    */
   all(): Promise<readonly TenantBoundary[]>;
 
   /**
-   * Releases resources owned by this catalog.
+   * Closes resources owned by this catalog.
+   *
+   * @returns Completion of resource release.
    */
   close(): Promise<void>;
 
   /**
-   * Notes an admitted tenant when the provider requires an early cache.
+   * Records an admitted tenant when the provider requires an early cache.
+   *
    * @param boundary The admitted boundary.
+   * @returns Completion of the catalog update.
    */
   keep(boundary: TenantBoundary): Promise<void>;
 }
@@ -148,8 +176,12 @@ export interface TenantCatalog {
  * @internal
  */
 export interface TenantCatalogProvider {
+  // prettier-ignore
+
   /**
    * Returns the catalog owned by this storage factory.
+   *
+   * @returns The provider-owned tenant catalog.
    */
   tenantCatalog(): TenantCatalog;
 }

@@ -458,7 +458,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
       this.assertCompatibleColumn(column, actual);
     }
     for (const column of columns)
-      if (!expected.has(column.column_name.toLowerCase()) && !isHarmlessExtraColumn(column))
+      if (!expected.has(column.column_name.toLowerCase()))
         throw new Error(
           `MySQL table ${this.table.tableName} has incompatible extra column ${column.column_name}.`,
         );
@@ -814,8 +814,8 @@ function compatibleMysqlType(expected: string, actual: string | undefined): bool
       actualCapacity[1] === expectedCapacity[1] &&
       Number(actualCapacity[2]) >= Number(expectedCapacity[2])
     );
-  if (normalizedExpected === "mediumblob")
-    return ["mediumblob", "longblob"].includes(normalizedActual);
+  if (normalizedExpected === "blob")
+    return ["blob", "mediumblob", "longblob"].includes(normalizedActual);
   return normalizedExpected === normalizedActual;
 }
 
@@ -829,15 +829,6 @@ function sameDefault(expected: string | undefined, actual: string | null | undef
 
 function isBinaryType(type: string): boolean {
   return /binary|blob/i.test(type);
-}
-
-function isHarmlessExtraColumn(column: ColumnRow): boolean {
-  if (["_scope", "_revision"].includes(column.column_name.toLowerCase())) return false;
-  return (
-    column.is_nullable === "YES" ||
-    (column.column_default !== null && column.column_default !== undefined) ||
-    /generated/i.test(column.extra ?? "")
-  );
 }
 
 function groupedIndexes(

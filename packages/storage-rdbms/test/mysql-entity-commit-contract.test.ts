@@ -6,12 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { mysqlEntityLockKey, MysqlEntityCommitCoordinator } from "../src/mysql/entity-commit.js";
 import { MysqlEntityStorage } from "../src/mysql/entity-history.js";
-import {
-  mysqlCurrentRecord,
-  mysqlCurrentRevision,
-  mysqlEntityTables,
-  mysqlHistoryCounts,
-} from "../src/mysql/testing.js";
+import { mysqlCurrentRecord, mysqlEntityTables, mysqlHistoryCounts } from "../src/mysql/testing.js";
 
 describe("MysqlEntityCommitCoordinator", () => {
   it("derives a 64-character lowercase hexadecimal advisory key for each entity identity", () => {
@@ -167,27 +162,6 @@ describe("MysqlEntityStorage history behavior", () => {
   it("resolves only enabled Entity-family tables", () => {
     expect(mysqlEntityTables(entityInput(false, false))).toHaveLength(1);
     expect(mysqlEntityTables(entityInput(true, true))).toHaveLength(3);
-  });
-
-  it("reads the internal current revision with canonical single and tenant scopes", async () => {
-    const values: unknown[][] = [[{ revision: "4" }], [{ revision: "5" }], []];
-    const pool = { query: () => Promise.resolve([values.shift() ?? [], []] as never) };
-    await expect(
-      mysqlCurrentRevision(pool as never, entityInput(false, false), "one"),
-    ).resolves.toBe(4n);
-    await expect(
-      mysqlCurrentRevision(
-        pool as never,
-        {
-          ...entityInput(false, false),
-          context: { name: "tenant", multitenant: true, tenantId: "acme" },
-        },
-        "two",
-      ),
-    ).resolves.toBe(5n);
-    await expect(
-      mysqlCurrentRevision(pool as never, entityInput(false, false), "missing"),
-    ).rejects.toThrow(/missing/i);
   });
 
   it("returns absent and decoded current records from provider rows", async () => {

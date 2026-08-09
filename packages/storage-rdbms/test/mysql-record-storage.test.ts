@@ -1,51 +1,38 @@
-import { create, toBinary } from "@bufbuild/protobuf";
+import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
-import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
+import { VersionSchema } from "@spine-event-engine/proto";
+import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import { MysqlRecordStorage } from "../src/mysql/record-storage.js";
 import { MysqlTableResolver } from "../src/mysql/table-resolver.js";
 import { MysqlStorageSchemaError } from "../src/mysql/errors.js";
-import { CanonicalMysqlValues } from "../src/mysql/value-codec.js";
 
 describe("MysqlRecordStorage", () => {
   it.each([
     ["missing primary key", { primary: [], columns: canonicalColumns() }, /primary key/i],
     [
-      "reordered primary key",
-      { primary: primaryKey(["ID", "_scope"]), columns: canonicalColumns() },
+      "wrong primary key",
+      { primary: primaryKey(["bytes"]), columns: canonicalColumns() },
       /primary key/i,
     ],
     [
       "narrow required capacity",
       {
         primary: primaryKey(),
-        columns: canonicalColumns({ _scope: { column_type: "varbinary(223)" } }),
+        columns: canonicalColumns({ ID: { column_type: "varchar(511)" } }),
       },
-      /_scope type/i,
+      /ID type/i,
     ],
     [
       "wrong required type",
-      { primary: primaryKey(), columns: canonicalColumns({ bytes: { column_type: "blob" } }) },
+      { primary: primaryKey(), columns: canonicalColumns({ bytes: { column_type: "text" } }) },
       /bytes type/i,
-    ],
-    [
-      "nonbinary required collation",
-      {
-        primary: primaryKey(),
-        columns: canonicalColumns({ _scope: { collation_name: "utf8mb4_general_ci" } }),
-      },
-      /_scope collation/i,
     ],
     [
       "nullable required column",
       { primary: primaryKey(), columns: canonicalColumns({ ID: { is_nullable: "YES" } }) },
       /nullable ID/i,
-    ],
-    [
-      "missing revision default",
-      { primary: primaryKey(), columns: canonicalColumns({ _revision: { column_default: null } }) },
-      /_revision default/i,
     ],
     [
       "wrong declared native type",
@@ -56,7 +43,7 @@ describe("MysqlRecordStorage", () => {
       /value type/i,
     ],
     [
-      "harmful required extra column",
+      "extra column",
       {
         primary: primaryKey(),
         columns: [
@@ -101,57 +88,9 @@ describe("MysqlRecordStorage", () => {
       {
         primary: primaryKey(),
         columns: canonicalColumns({
-          _scope: { column_type: "varbinary(300)" },
-          ID: { column_type: "varbinary(900)" },
+          ID: { column_type: "varchar(768)" },
+          bytes: { column_type: "mediumblob" },
         }),
-      },
-    ],
-    [
-      "nullable extra column",
-      {
-        primary: primaryKey(),
-        columns: [
-          ...canonicalColumns(),
-          {
-            column_name: "extra",
-            column_type: "int",
-            is_nullable: "YES",
-            column_default: null,
-            extra: "",
-          },
-        ],
-      },
-    ],
-    [
-      "defaulted extra column",
-      {
-        primary: primaryKey(),
-        columns: [
-          ...canonicalColumns(),
-          {
-            column_name: "extra",
-            column_type: "int",
-            is_nullable: "NO",
-            column_default: "0",
-            extra: "",
-          },
-        ],
-      },
-    ],
-    [
-      "generated extra column",
-      {
-        primary: primaryKey(),
-        columns: [
-          ...canonicalColumns(),
-          {
-            column_name: "extra",
-            column_type: "int",
-            is_nullable: "NO",
-            column_default: null,
-            extra: "VIRTUAL GENERATED",
-          },
-        ],
       },
     ],
     [
@@ -167,10 +106,7 @@ describe("MysqlRecordStorage", () => {
       {
         primary: primaryKey(),
         columns: canonicalColumns(),
-        indexes: [
-          { index_name: "unique_scope_id", non_unique: 0, column_name: "_scope", seq_in_index: 1 },
-          { index_name: "unique_scope_id", non_unique: 0, column_name: "ID", seq_in_index: 2 },
-        ],
+        indexes: [{ index_name: "unique_id", non_unique: 0, column_name: "ID", seq_in_index: 1 }],
       },
     ],
   ])("accepts compatible %s", async (_name, layout) => {
@@ -189,15 +125,13 @@ describe("MysqlRecordStorage", () => {
         if (sql.includes("columns"))
           return Promise.resolve([
             [
-              { column_name: "_scope", column_type: "varbinary(224)" },
-              { column_name: "ID", column_type: "varbinary(768)" },
-              { column_name: "bytes", column_type: "mediumblob" },
-              { column_name: "_revision", column_type: "bigint unsigned" },
+              { column_name: "ID", column_type: "varchar(512)" },
+              { column_name: "bytes", column_type: "blob" },
             ],
             [],
           ] as never);
         if (sql.includes("statistics"))
-          return Promise.resolve([[{ column_name: "ID", seq_in_index: 1 }], []] as never);
+          return Promise.resolve([[{ column_name: "bytes", seq_in_index: 1 }], []] as never);
         return Promise.resolve([[{ engine: "InnoDB" }], []] as never);
       },
       execute: () => Promise.resolve([{ affectedRows: 1 }, []] as never),
@@ -211,7 +145,7 @@ describe("MysqlRecordStorage", () => {
       { name: "records", multitenant: false },
       spec,
       new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
-      { acquire: () => Promise.resolve(connection as never), release: () => undefined },
+      lifecycle(connection),
       () => undefined,
     );
     await expect(storage.read("one")).rejects.toBeInstanceOf(MysqlStorageSchemaError);
@@ -223,15 +157,7 @@ describe("MysqlRecordStorage", () => {
       query: (sql: string) => {
         calls.push(sql);
         if (sql.includes("information_schema.columns"))
-          return Promise.resolve([
-            [
-              { column_name: "_scope" },
-              { column_name: "ID" },
-              { column_name: "bytes" },
-              { column_name: "_revision" },
-            ],
-            [],
-          ] as never);
+          return Promise.resolve([[{ column_name: "ID" }, { column_name: "bytes" }], []] as never);
         if (sql.includes("information_schema.statistics"))
           return Promise.resolve([[], []] as never);
         if (sql.includes("information_schema.tables"))
@@ -257,7 +183,7 @@ describe("MysqlRecordStorage", () => {
       { name: "records", multitenant: false },
       spec,
       new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
-      { acquire: () => Promise.resolve(connection as never), release: () => undefined },
+      lifecycle(connection),
       () => undefined,
     );
 
@@ -274,15 +200,7 @@ describe("MysqlRecordStorage", () => {
     const connection = {
       query: (sql: string) =>
         sql.includes("columns")
-          ? Promise.resolve([
-              [
-                { column_name: "_scope" },
-                { column_name: "ID" },
-                { column_name: "bytes" },
-                { column_name: "_revision" },
-              ],
-              [],
-            ] as never)
+          ? Promise.resolve([[{ column_name: "ID" }, { column_name: "bytes" }], []] as never)
           : Promise.resolve([[], []] as never),
       execute: (sql: string) => {
         calls.push(sql);
@@ -314,7 +232,7 @@ describe("MysqlRecordStorage", () => {
       { name: "records", multitenant: false },
       spec,
       new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
-      { acquire: () => Promise.resolve(connection as never), release: () => undefined },
+      lifecycle(connection),
       () => undefined,
     );
     await expect(
@@ -329,15 +247,7 @@ describe("MysqlRecordStorage", () => {
     const connection = {
       query: (sql: string) =>
         sql.includes("columns")
-          ? Promise.resolve([
-              [
-                { column_name: "_scope" },
-                { column_name: "ID" },
-                { column_name: "bytes" },
-                { column_name: "_revision" },
-              ],
-              [],
-            ] as never)
+          ? Promise.resolve([[{ column_name: "ID" }, { column_name: "bytes" }], []] as never)
           : Promise.resolve([[], []] as never),
       execute: (sql: string) => {
         if (sql.startsWith("SELECT bytes"))
@@ -359,7 +269,7 @@ describe("MysqlRecordStorage", () => {
       { name: "records", multitenant: false },
       spec,
       new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
-      { acquire: () => Promise.resolve(connection as never), release: () => undefined },
+      lifecycle(connection),
       () => undefined,
     );
     await expect(storage.writeImmutable(record)).resolves.toBeUndefined();
@@ -370,15 +280,7 @@ describe("MysqlRecordStorage", () => {
     const connection = {
       query: (sql: string) => {
         calls.push({ sql });
-        return Promise.resolve([
-          [
-            { column_name: "_scope" },
-            { column_name: "ID" },
-            { column_name: "bytes" },
-            { column_name: "_revision" },
-          ],
-          [],
-        ] as never);
+        return Promise.resolve([[{ column_name: "ID" }, { column_name: "bytes" }], []] as never);
       },
       execute: (sql: string) => {
         calls.push({ sql });
@@ -397,7 +299,7 @@ describe("MysqlRecordStorage", () => {
       { name: "records", multitenant: false },
       spec,
       new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
-      { acquire: () => Promise.resolve(connection as never), release: () => undefined },
+      lifecycle(connection),
       () => undefined,
     );
 
@@ -407,20 +309,12 @@ describe("MysqlRecordStorage", () => {
     expect(calls.at(-1)?.sql).toMatch(/INSERT INTO `google_protobuf_StringValue`/);
   });
 
-  it("encodes single and multitenant scopes injectively without aliases", async () => {
+  it("does not persist the bounded context name in family rows", async () => {
     const calls: { sql: string; values?: readonly unknown[] }[] = [];
     const connection = {
       query: (sql: string) => {
         calls.push({ sql });
-        return Promise.resolve([
-          [
-            { column_name: "_scope" },
-            { column_name: "ID" },
-            { column_name: "bytes" },
-            { column_name: "_revision" },
-          ],
-          [],
-        ] as never);
+        return Promise.resolve([[{ column_name: "ID" }, { column_name: "bytes" }], []] as never);
       },
       execute: (sql: string, values?: readonly unknown[]) => {
         calls.push(values === undefined ? { sql } : { sql, values });
@@ -439,23 +333,23 @@ describe("MysqlRecordStorage", () => {
       { name: "a", multitenant: false },
       spec,
       new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
-      { acquire: () => Promise.resolve(connection as never), release: () => undefined },
+      lifecycle(connection),
       () => undefined,
     );
     const two = new MysqlRecordStorage(
-      { name: "a", multitenant: true, tenantId: "" },
+      { name: "b", multitenant: false },
       spec,
       new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
-      { acquire: () => Promise.resolve(connection as never), release: () => undefined },
+      lifecycle(connection),
       () => undefined,
     );
     await one.write(create(StringValueSchema, { value: "id" }));
     await two.write(create(StringValueSchema, { value: "id" }));
-    const scopes = calls
+    const ids = calls
       .filter((call) => call.sql.startsWith("INSERT"))
       .map((call) => call.values?.[0]);
-    expect(scopes[0]).not.toEqual(scopes[1]);
-    expect(calls[0]?.sql).toContain("`_scope` VARBINARY(224)");
+    expect(ids).toEqual(["id", "id"]);
+    expect(calls[0]?.sql).toContain("`ID` VARCHAR(512)");
   });
 
   it("creates declared columns and pushes an equality filter into the family SQL", async () => {
@@ -465,13 +359,7 @@ describe("MysqlRecordStorage", () => {
         calls.push(sql);
         if (sql.startsWith("SELECT ID, bytes")) return Promise.resolve([[], []] as never);
         return Promise.resolve([
-          [
-            { column_name: "_scope" },
-            { column_name: "ID" },
-            { column_name: "bytes" },
-            { column_name: "_revision" },
-            { column_name: "value" },
-          ],
+          [{ column_name: "ID" }, { column_name: "bytes" }, { column_name: "value" }],
           [],
         ] as never);
       },
@@ -487,20 +375,26 @@ describe("MysqlRecordStorage", () => {
       recordType: StringValueSchema,
       idKind: "string",
       extractId: (record): string => record.value,
-      columns: [new RecordColumn("value", (record): string => record.value, "string")],
+      columns: [
+        new RecordColumn(
+          "value",
+          ColumnTypes.scalar(ScalarType.STRING),
+          (record): string => record.value,
+        ),
+      ],
     });
     const storage = new MysqlRecordStorage(
       { name: "records", multitenant: false },
       spec,
       new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
-      { acquire: () => Promise.resolve(connection as never), release: () => undefined },
+      lifecycle(connection),
       () => undefined,
     );
 
     await storage.queryEntries({ filters: [{ column: "value", value: "one" }], limit: 1 });
 
-    expect(calls[0]).toMatch(/`value` VARCHAR\(1024\) NULL/);
-    expect(calls.at(-1)).toMatch(/WHERE _scope=\? AND `value` <=> \?/);
+    expect(calls[0]).toMatch(/`value` TEXT NULL/);
+    expect(calls.at(-1)).toMatch(/WHERE `value` <=> \?/);
   });
 
   it("executes a caller supplied create operation instead of the default DDL", async () => {
@@ -508,15 +402,7 @@ describe("MysqlRecordStorage", () => {
     const connection = {
       query: (sql: string) => {
         calls.push(sql);
-        return Promise.resolve([
-          [
-            { column_name: "_scope" },
-            { column_name: "ID" },
-            { column_name: "bytes" },
-            { column_name: "_revision" },
-          ],
-          [],
-        ] as never);
+        return Promise.resolve([[{ column_name: "ID" }, { column_name: "bytes" }], []] as never);
       },
       execute: (sql: string) => {
         calls.push(sql);
@@ -535,7 +421,7 @@ describe("MysqlRecordStorage", () => {
       { name: "records", multitenant: false },
       spec,
       new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
-      { acquire: () => Promise.resolve(connection as never), release: () => undefined },
+      lifecycle(connection),
       () => undefined,
       () => "CREATE TABLE `provided_table` (ID INT)",
     );
@@ -551,15 +437,13 @@ describe("MysqlRecordStorage", () => {
         if (sql.includes("information_schema.columns"))
           return Promise.resolve([
             [
-              { column_name: "_scope", column_type: "varbinary(224)", is_nullable: "NO" },
-              { column_name: "ID", column_type: "varbinary(768)", is_nullable: "NO" },
-              { column_name: "bytes", column_type: "mediumblob", is_nullable: "NO" },
-              { column_name: "_revision", column_type: "bigint unsigned", is_nullable: "NO" },
+              { column_name: "ID", column_type: "varchar(512)", is_nullable: "NO" },
+              { column_name: "bytes", column_type: "blob", is_nullable: "NO" },
             ],
             [],
           ] as never);
         if (sql.includes("information_schema.statistics"))
-          return Promise.resolve([[{ column_name: "ID", seq_in_index: 1 }], []] as never);
+          return Promise.resolve([[{ column_name: "bytes", seq_in_index: 1 }], []] as never);
         if (sql.includes("information_schema.tables"))
           return Promise.resolve([[{ engine: "InnoDB" }], []] as never);
         return Promise.resolve([[], []] as never);
@@ -578,7 +462,7 @@ describe("MysqlRecordStorage", () => {
       { name: "records", multitenant: false },
       spec,
       new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
-      { acquire: () => Promise.resolve(connection as never), release: () => undefined },
+      lifecycle(connection),
       () => undefined,
     );
 
@@ -595,28 +479,11 @@ describe("MysqlRecordStorage", () => {
       query: (sql: string) => {
         calls.push(sql);
         if (sql.startsWith("SELECT ID, bytes"))
-          return Promise.resolve([
-            [{ ID: Buffer.from(CanonicalMysqlValues.encode("stored")), bytes: encoded }],
-            [],
-          ] as never);
+          return Promise.resolve([[{ ID: "stored", bytes: encoded }], []] as never);
         if (sql.includes("information_schema.columns"))
-          return Promise.resolve([
-            [
-              { column_name: "_scope" },
-              { column_name: "ID" },
-              { column_name: "bytes" },
-              { column_name: "_revision" },
-            ],
-            [],
-          ] as never);
+          return Promise.resolve([[{ column_name: "ID" }, { column_name: "bytes" }], []] as never);
         if (sql.includes("information_schema.statistics"))
-          return Promise.resolve([
-            [
-              { column_name: "_scope", seq_in_index: 1 },
-              { column_name: "ID", seq_in_index: 2 },
-            ],
-            [],
-          ] as never);
+          return Promise.resolve([[{ column_name: "ID", seq_in_index: 1 }], []] as never);
         if (sql.includes("information_schema.tables"))
           return Promise.resolve([[{ engine: "InnoDB" }], []] as never);
         return Promise.resolve([[], []] as never);
@@ -640,7 +507,7 @@ describe("MysqlRecordStorage", () => {
       { name: "records", multitenant: false },
       spec,
       new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
-      { acquire: () => Promise.resolve(connection as never), release: () => undefined },
+      lifecycle(connection),
       () => undefined,
     );
 
@@ -673,9 +540,9 @@ describe("MysqlRecordStorage", () => {
         calls.push({ sql });
         if (sql.includes("information_schema.columns"))
           return Promise.resolve([
-            ["_scope", "ID", "bytes", "_revision", "flag", "number", "count", "raw", "object"].map(
-              (column_name) => ({ column_name }),
-            ),
+            ["ID", "bytes", "flag", "number", "count", "raw", "object"].map((column_name) => ({
+              column_name,
+            })),
             [],
           ] as never);
         return Promise.resolve([[], []] as never);
@@ -694,29 +561,32 @@ describe("MysqlRecordStorage", () => {
       idKind: "string",
       extractId: (record) => record.value,
       columns: [
-        new RecordColumn("flag", () => true, "boolean"),
-        new RecordColumn("number", () => 1, "number"),
-        new RecordColumn("count", () => 1n, "bigint"),
-        new RecordColumn("raw", () => raw, "bytes"),
-        new RecordColumn("object", () => ({ nested: 1n }), "string"),
+        new RecordColumn("flag", ColumnTypes.scalar(ScalarType.BOOL), () => true),
+        new RecordColumn("number", ColumnTypes.scalar(ScalarType.INT32), () => 1),
+        new RecordColumn("count", ColumnTypes.scalar(ScalarType.INT64), () => 1n),
+        new RecordColumn("raw", ColumnTypes.scalar(ScalarType.BYTES), () => raw),
+        new RecordColumn("object", ColumnTypes.message(VersionSchema), () =>
+          create(VersionSchema, { number: 7 }),
+        ),
       ],
     });
     const storage = new MysqlRecordStorage(
       { name: "records", multitenant: false },
       spec,
       new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
-      { acquire: () => Promise.resolve(connection as never), release: () => undefined },
+      lifecycle(connection),
       () => undefined,
     );
 
     await storage.write(create(StringValueSchema, { value: "one" }));
 
     expect(calls[0]?.sql).toContain("`flag` BOOLEAN NULL");
-    expect(calls[0]?.sql).toContain("`number` DOUBLE NULL");
+    expect(calls[0]?.sql).toContain("`number` INT NULL");
     expect(calls[0]?.sql).toContain("`count` BIGINT NULL");
-    expect(calls[0]?.sql).toContain("`raw` MEDIUMBLOB NULL");
+    expect(calls[0]?.sql).toContain("`raw` BLOB NULL");
+    expect(calls[0]?.sql).toContain("`object` INT NULL");
     const insert = calls.find((call) => call.sql.startsWith("INSERT"));
-    expect(insert?.values).toEqual(expect.arrayContaining(["1", raw, '{"nested":"1"}']));
+    expect(insert?.values).toEqual(expect.arrayContaining([true, 1, 1n, raw, 7]));
   });
 
   it("uses the bound connection for nested work and rolls back a stale compare-and-set", async () => {
@@ -764,7 +634,7 @@ describe("MysqlRecordStorage", () => {
     expect(query?.values?.at(-1)).toBe(3);
   });
 
-  it("rejects undeclared query columns and oversized scope or record keys before acquisition", async () => {
+  it("rejects undeclared query columns and oversized record keys before acquisition", async () => {
     const calls: { sql: string; values?: readonly unknown[] }[] = [];
     const connection = readyConnection(calls);
     let acquired = 0;
@@ -773,32 +643,17 @@ describe("MysqlRecordStorage", () => {
     await expect(
       storage.queryEntries({ filters: [{ column: "missing", value: "x" }] }),
     ).rejects.toThrow(/not declared/i);
-    const oversizedScope = new MysqlRecordStorage(
-      { name: "x".repeat(220), multitenant: false },
-      new RecordSpec({
-        recordType: StringValueSchema,
-        idKind: "string",
-        extractId: (record) => record.value,
-      }),
-      new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
-      { acquire: () => Promise.resolve(connection as never), release: () => undefined },
-      () => undefined,
-    );
-
-    await expect(oversizedScope.write(create(StringValueSchema, { value: "one" }))).rejects.toThrow(
-      /scope is too large/i,
-    );
     await expect(
-      storage.write(create(StringValueSchema, { value: "x".repeat(769) })),
+      storage.write(create(StringValueSchema, { value: "x".repeat(513) })),
     ).rejects.toThrow(/identifier is too large/i);
-    await expect(storage.read("x".repeat(769))).rejects.toThrow(/identifier is too large/i);
-    await expect(storage.delete("x".repeat(769))).rejects.toThrow(/identifier is too large/i);
-    await expect(storage.queryEntries({ ids: ["x".repeat(769)] })).rejects.toThrow(
+    await expect(storage.read("x".repeat(513))).rejects.toThrow(/identifier is too large/i);
+    await expect(storage.delete("x".repeat(513))).rejects.toThrow(/identifier is too large/i);
+    await expect(storage.queryEntries({ ids: ["x".repeat(513)] })).rejects.toThrow(
       /identifier is too large/i,
     );
     await expect(
       storage.compareAndSet(
-        "x".repeat(769),
+        "x".repeat(513),
         undefined,
         create(StringValueSchema, { value: "next" }),
       ),
@@ -813,15 +668,7 @@ describe("MysqlRecordStorage", () => {
         calls.push(sql);
         return Promise.resolve(
           sql.includes("information_schema.columns")
-            ? ([
-                [
-                  { column_name: "_scope" },
-                  { column_name: "ID" },
-                  { column_name: "bytes" },
-                  { column_name: "_revision" },
-                ],
-                [],
-              ] as never)
+            ? ([[{ column_name: "ID" }, { column_name: "bytes" }], []] as never)
             : ([[], []] as never),
         );
       },
@@ -840,7 +687,7 @@ describe("MysqlRecordStorage", () => {
       { name: "records", multitenant: false },
       spec,
       new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
-      { acquire: () => Promise.resolve(connection as never), release: () => undefined },
+      lifecycle(connection),
       () => undefined,
     );
 
@@ -859,15 +706,7 @@ describe("MysqlRecordStorage", () => {
       query: (sql: string) =>
         Promise.resolve(
           sql.includes("information_schema.columns")
-            ? ([
-                [
-                  { column_name: "_scope" },
-                  { column_name: "ID" },
-                  { column_name: "bytes" },
-                  { column_name: "_revision" },
-                ],
-                [],
-              ] as never)
+            ? ([[{ column_name: "ID" }, { column_name: "bytes" }], []] as never)
             : sql.includes("information_schema.tables")
               ? ([[{ engine: "MyISAM" }], []] as never)
               : ([[], []] as never),
@@ -893,7 +732,7 @@ describe("MysqlRecordStorage", () => {
       { name: "records", multitenant: false },
       spec,
       new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
-      { acquire: () => Promise.resolve(connection as never), release: () => undefined },
+      lifecycle(connection),
       () => undefined,
     );
     await storage.compareAndSet("one", undefined, create(StringValueSchema, { value: "one" }));
@@ -907,6 +746,14 @@ describe("MysqlRecordStorage", () => {
   });
 });
 
+function lifecycle(connection: unknown) {
+  return {
+    databaseName: "test",
+    acquire: () => Promise.resolve(connection as never),
+    release: () => undefined,
+  };
+}
+
 function stringStorage(
   connection: ReturnType<typeof readyConnection>,
   acquired: () => unknown = () => undefined,
@@ -919,7 +766,11 @@ function stringStorage(
       extractId: (record) => record.value,
     }),
     new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
-    { acquire: () => Promise.resolve((acquired(), connection) as never), release: () => undefined },
+    {
+      databaseName: "test",
+      acquire: () => Promise.resolve((acquired(), connection) as never),
+      release: () => undefined,
+    },
     () => undefined,
   );
 }
@@ -937,17 +788,11 @@ function readyConnection(
       if (sql.startsWith("SELECT ID, bytes")) return Promise.resolve([[], []] as never);
       if (sql.includes("information_schema.columns"))
         return Promise.resolve([
-          ["_scope", "ID", "bytes", "_revision"].map((column_name) => ({ column_name })),
+          ["ID", "bytes"].map((column_name) => ({ column_name })),
           [],
         ] as never);
       if (sql.includes("information_schema.statistics"))
-        return Promise.resolve([
-          [
-            { column_name: "_scope", seq_in_index: 1 },
-            { column_name: "ID", seq_in_index: 2 },
-          ],
-          [],
-        ] as never);
+        return Promise.resolve([[{ column_name: "ID", seq_in_index: 1 }], []] as never);
       if (sql.includes("information_schema.tables"))
         return Promise.resolve([[{ engine: "InnoDB" }], []] as never);
       return Promise.resolve([[], []] as never);
@@ -996,36 +841,22 @@ interface SchemaLayout {
 function canonicalColumns(overrides: Record<string, Partial<SchemaColumn>> = {}): SchemaColumn[] {
   return [
     {
-      column_name: "_scope",
-      column_type: "varbinary(224)",
-      is_nullable: "NO",
-      column_default: null,
-      extra: "",
-    },
-    {
       column_name: "ID",
-      column_type: "varbinary(768)",
+      column_type: "varchar(512)",
       is_nullable: "NO",
       column_default: null,
       extra: "",
     },
     {
       column_name: "bytes",
-      column_type: "mediumblob",
+      column_type: "blob",
       is_nullable: "NO",
       column_default: null,
       extra: "",
     },
     {
-      column_name: "_revision",
-      column_type: "bigint unsigned",
-      is_nullable: "NO",
-      column_default: "0",
-      extra: "",
-    },
-    {
       column_name: "value",
-      column_type: "varchar(1024)",
+      column_type: "text",
       is_nullable: "YES",
       column_default: null,
       extra: "",
@@ -1033,7 +864,7 @@ function canonicalColumns(overrides: Record<string, Partial<SchemaColumn>> = {})
   ].map((column) => ({ ...column, ...overrides[column.column_name] }));
 }
 
-function primaryKey(names: readonly string[] = ["_scope", "ID"]) {
+function primaryKey(names: readonly string[] = ["ID"]) {
   return names.map((column_name, index) => ({ column_name, seq_in_index: index + 1 }));
 }
 
@@ -1063,13 +894,23 @@ function schemaStorage(connection: ReturnType<typeof schemaConnection>) {
     recordType: StringValueSchema,
     idKind: "string",
     extractId: (record) => record.value,
-    columns: [new RecordColumn("value", (record): string => record.value, "string")],
+    columns: [
+      new RecordColumn(
+        "value",
+        ColumnTypes.scalar(ScalarType.STRING),
+        (record): string => record.value,
+      ),
+    ],
   });
   return new MysqlRecordStorage(
     { name: "records", multitenant: false },
     spec,
     new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
-    { acquire: () => Promise.resolve(connection as never), release: () => undefined },
+    {
+      databaseName: "test",
+      acquire: () => Promise.resolve(connection as never),
+      release: () => undefined,
+    },
     () => undefined,
   );
 }

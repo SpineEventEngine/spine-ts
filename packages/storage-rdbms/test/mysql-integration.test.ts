@@ -1,4 +1,4 @@
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
 import {
   AnySchema,
   StringValueSchema,
@@ -6,10 +6,13 @@ import {
   type StringValue,
 } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema, VersionSchema } from "@spine-event-engine/proto";
-import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+import {
+  EntityRecordSchema,
+  type EntityRecord,
+} from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
 import { eventStoreRecordSpec } from "@spine-event-engine/storage/internal/event-store";
-import { EventStore } from "@spine-event-engine/storage";
+import { ColumnTypes, EventStore } from "@spine-event-engine/storage";
 import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import type { RowDataPacket } from "mysql2";
 import { createPool } from "mysql2/promise";
@@ -18,7 +21,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { MysqlStorageFactory } from "../src/index.js";
 import {
   mysqlCurrentRecord,
-  mysqlCurrentRevision,
   mysqlHistoryCounts,
   mysqlEntityTables,
   mysqlRecordTableName,
@@ -44,7 +46,13 @@ live("MySQL-family record layout", () => {
       recordType: StringValueSchema,
       idKind: "string",
       extractId: (record): string => record.value,
-      columns: [new RecordColumn("value", (record): string => record.value, "string")],
+      columns: [
+        new RecordColumn(
+          "value",
+          ColumnTypes.scalar(ScalarType.STRING),
+          (record): string => record.value,
+        ),
+      ],
     });
     const storage = factory.createRecordStorage(
       { name: `t0134_records_${String(Date.now())}`, multitenant: false },
@@ -239,7 +247,13 @@ live("MySQL-family record layout", () => {
       recordType: StringValueSchema,
       idKind: "string",
       extractId: (record): string => record.value.split(":", 1)[0] ?? "",
-      columns: [new RecordColumn("value", (record): string => record.value, "string")],
+      columns: [
+        new RecordColumn(
+          "value",
+          ColumnTypes.scalar(ScalarType.STRING),
+          (record): string => record.value,
+        ),
+      ],
     });
     const first = factory.createRecordStorage(context, spec);
     const second = factory.createRecordStorage(context, spec);
@@ -315,9 +329,9 @@ live("MySQL-family record layout", () => {
     try {
       const same = mutation(context, input, "same");
       await expect(commits.commit(same)).resolves.toBe("committed");
-      const before = await mysqlCurrentRevision(pool, input, "same");
+      const before = await mysqlCurrentRecord(pool, input, "same");
       await expect(commits.commit(same)).resolves.toBe("committed");
-      await expect(mysqlCurrentRevision(pool, input, "same")).resolves.toBe(before);
+      await expect(mysqlCurrentRecord(pool, input, "same")).resolves.toEqual(before);
     } finally {
       commits.close();
       await pool.end();
@@ -330,6 +344,15 @@ function entityInput(
   stateHistory = true,
   eventHistory = true,
 ) {
+  const recordSpec = new RecordSpec<string, EntityRecord>({
+    sourceType: StringValueSchema,
+    recordType: EntityRecordSchema,
+    idKind: "string",
+    extractId: (record) => {
+      if (record.entityId === undefined) throw new Error("EntityRecord.entityId is required.");
+      return fromBinary(StringValueSchema, record.entityId.value).value;
+    },
+  });
   return {
     context,
     id: {
@@ -342,6 +365,7 @@ function entityInput(
           : undefined,
     },
     columns: [],
+    recordSpec,
     sourceType: StringValueSchema,
     stateSchema: StringValueSchema,
     stateHistory,
