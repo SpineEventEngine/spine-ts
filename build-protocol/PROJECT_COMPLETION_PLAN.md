@@ -185,7 +185,11 @@ the human.
 Wave 8's T-0129 through T-0144 sequence is complete: the storage correction,
 delivery-policy cutover, validation upgrade, example and documentation
 convergence, invention audit, release verification, and post-merge proof are
-clean. T-0144 owns the final remote-synchronization contract.
+clean. The subsequent T-0145 through T-0150 correction train is also complete,
+reviewed, and release-verified. It removes the invented physical scope and
+revision fields, adopts native provider tenancy and JVM-compatible typed value
+mapping, and closes the shared-runtime cutover. The stacked train is pushed but
+is not yet merged to `main`.
 
 ## Authored API And Example Quality Correction
 

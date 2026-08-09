@@ -96,3 +96,12 @@ Prettier, and `git diff --check` passed.
   existing public mapping/validation boundaries only; LCOV union confirms 22
   newly covered branches. No production or reviewed contract changed, so this
   deterministic coverage correction does not reopen specialist lanes.
+
+## Final verification
+
+The final `pnpm verify:release` passed: 232 test files and 3,716 tests ran
+successfully, with 3 files and 14 endpoint-dependent tests skipped. Repository
+coverage is 93.95% statements, 90.03% branches, 93.91% functions, and 94.97%
+lines. All generated, build, typecheck, lint, cleanup, TSDoc, formatting, API,
+documentation, invention-audit, link, and diff gates passed. Review status
+remains clean.

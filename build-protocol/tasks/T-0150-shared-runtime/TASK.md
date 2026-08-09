@@ -1,6 +1,6 @@
 # T-0150: Atomic Shared-Runtime Storage Cutover
 
-Status: In progress.
+Status: Complete.
 
 ## Objective
 

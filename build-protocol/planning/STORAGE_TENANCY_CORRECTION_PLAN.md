@@ -1,7 +1,8 @@
 # Storage Tenancy Correction Plan
 
-Status: Implementation started under the non-releasable T-0147 through T-0150
-stacked train.
+Status: Complete, reviewed, and release-verified under the T-0147 through
+T-0150 stacked train. The train remains unmerged pending the explicit stacked
+integration step.
 
 ## Why this correction exists
 
