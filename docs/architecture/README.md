@@ -646,6 +646,16 @@ Bounded Context names never enter physical provider identity. MySQL selects a
 configured database per tenant; Datastore selects a native namespace per
 tenant.
 
+Provider values follow the declared Proto types in both directions. Generated
+message IDs and ordinary message columns use a reversible `Stringifier`
+(compact Proto JSON by default); primitive values use their provider-native
+form. The same mapping converts stored values, Query operands, and continuation
+values. When compact Proto JSON expands an `Any`, the application supplies its
+generated `TypeRegistry` through the provider's `StringifierRegistry`. MySQL
+materializes these values in `ID` and declared columns; Datastore materializes
+them in the key name and declared properties. Authoritative Protobuf `bytes`
+remain the source of the returned state.
+
 `EventStore` is a higher-level framework delegate over
 `RecordStorage<EventId, Event>`. It is intentionally created directly by
 framework code rather than by `StorageFactory`, so the foundational storage
@@ -691,16 +701,19 @@ process-manager state type URL, and the routed process-manager ID target, then
 replays that exact row. Process-manager replay validates the row label, pending
 `TO_DELIVER` status, tenant context, payload/schema, target type URL, and routed
 target ID before handler code.
-Bounded contexts create internal system-pairing metadata and a
-tenant index. Single-tenant indexes are constant and reject tenant recording;
-multitenant indexes persist tenant IDs through the configured storage factory.
-Raw system contexts and tenant indexes remain internal framework details.
+Bounded contexts create internal system-pairing metadata and a tenant index.
+Single-tenant indexes are constant and reject tenant recording. Multitenant
+indexes are catalog views: MySQL enumerates configured tenant/database entries,
+Datastore enumerates native namespaces, and memory enumerates tenant slices. No
+generic `TenantId` row is persisted. Raw system contexts and tenant indexes
+remain internal framework details.
 Datastore and MySQL RDBMS packages provide durable storage adapters. They do
 not by themselves establish production deployment or supervision guarantees.
-Durable projection catch-up through inbox storage, transport-backed worker
-supervision, production delivery policy, retry-monitor hierarchies,
-diagnostics, repository storage policy, and read-side projection stores remain
-open production gaps.
+The distributed Message Board example demonstrates transport-backed delivery
+workers and a standalone Gateway. Applications still own deployment topology,
+provider indexes, operational monitoring, backups, and idempotent downstream
+effects. The framework deliberately provides no scheduler, timed retry policy,
+attempt history, quarantine, or exactly-once side-effect guarantee.
 
 ## Transport Boundary
 

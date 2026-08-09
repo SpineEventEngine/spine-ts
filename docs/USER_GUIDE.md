@@ -1229,9 +1229,10 @@ events, `onDeliveryStarted`, `onDeliveryCompleted(statistics)`, and one failed
 reception at a time. Statistics contain immutable `processed`, `delivered`, and
 `failed` counts. To stop a finite drain, override
 `shouldContinueAfter("DELIVERY")` or `shouldContinueAfter("PAGE")` and return
-`false`. Monitor failures are contained so the shard can be released. This is
-deliberately not a scheduler, supervisor, retry policy, catch-up facility, or
-remote topology.
+`false`. Monitor failures are contained so the shard can be released. The
+monitor itself is not a scheduler, retry policy, catch-up facility, or remote
+topology. A `DeliverySupervisor` can run repeated finite drains, but it does not
+add persistent retry attempts, delayed jobs, or exactly-once effects.
 
 ### Standalone in-memory delivery server and two-machine topology
 
@@ -1588,12 +1589,15 @@ application's generated schemas; this guide does not invent a package import
 that cannot compile in the repository.
 
 Each stored entity contains the deterministic Protobuf `bytes` and the record's
-declared indexed columns. Its Datastore key contains only the resolved kind and
-mapped record ID. Message-valued IDs use compact Proto JSON by default; string,
-int32, and int64 IDs use their direct text form. IDs are not copied into another
-property, and the adapter stores no `_scope`, revision, schema fingerprint, or
-layout metadata. Use a clean namespace or perform an application-owned offline
-migration from an older experimental layout.
+declared indexed columns. Current Entity rows also materialize the generated
+`EntityRecord` lifecycle/version columns: `archived`, `deleted`, and `version`.
+These are domain Entity facts, not a provider revision. Its Datastore key
+contains only the resolved kind and mapped record ID. Message-valued IDs use
+compact Proto JSON by default; string, int32, and int64 IDs use their direct
+text form. IDs are not copied into another property, and the adapter stores no
+`_scope`, storage revision, schema fingerprint, or layout metadata. Use a clean
+namespace or perform an application-owned offline migration from an older
+experimental layout.
 
 Before the upgraded application can use an existing Datastore project, stop
 its writers and inspect every namespace for the retired layout:
@@ -1614,6 +1618,12 @@ Version uses its number; ordinary message values use compact Proto JSON; and
 null stays null. A registered custom message `Stringifier` replaces compact
 Proto JSON symmetrically for writes and queries. Configure the application type
 registry when default Proto JSON must expand `Any` values.
+
+For a production application, create a `StringifierRegistry`, call
+`setTypeRegistry()` with the generated application `TypeRegistry`, and pass it
+to `DatastoreStorageFactoryBuilder.setStringifierRegistry()`. This is required
+when framework record columns contain an `Any` carrying an application ID. See
+the runnable [Message Board deployment](../examples/message-board/app/src/deployment-config.ts).
 
 For example, a `BoardId board = 2 [(column) = true]` field holding
 `{"value":"board-7"}` is stored as the `board` property text
@@ -1769,9 +1779,12 @@ does not roll back earlier rows. IDs are declared as `string`, `int32`, `int64`,
 or a generated message type. Primitive IDs use native MySQL values; message IDs
 use compact Proto JSON unless the application supplies a reversible
 stringifier. Each lazy family table has `ID`, serialized `bytes`, and the
-columns declared by the Proto model, with primary key `(ID)`. There is no
-context, tenant, or storage-revision column. Existing layouts are inspected,
-never migrated; the adapter creates no foreign keys or user-column indexes.
+columns declared by the framework record and Proto model, with primary key
+`(ID)`. Current Entity tables include `archived`, `deleted`, and `version` from
+the generated `EntityRecord`; that `version` is the Entity version, not a
+provider revision. There is no context, tenant, or storage-revision column.
+Existing layouts are inspected, never migrated; the adapter creates no foreign
+keys or user-column indexes.
 Provider errors are sanitized; `factory.close()` returns `void` and starts pool
 draining. Accounts need table creation, metadata reads, and ordinary DML
 permissions.
@@ -1779,6 +1792,29 @@ permissions.
 One query accepts at most 256 `ids`, 32 filters, 64 values per filter, eight
 sort fields, and 2,048 total bound values. The adapter rejects these fixed,
 non-configurable structure limits before it acquires a pool connection.
+
+For example, this state declaration:
+
+```proto
+package spine.examples.messageboard;
+
+message MessageView {
+  MessageId id = 1 [(required) = true, (set_once) = true];
+  BoardId board = 2 [(column) = true];
+  UserId author = 3 [(column) = true];
+  string text = 4;
+}
+```
+
+produces a current table named like
+`spine_examples_messageboard_MessageView`. It has an `ID VARCHAR(512)` primary
+key, authoritative `bytes BLOB`, Entity `archived`/`deleted`/`version` columns,
+and `board`/`author` text columns. It has no `text` column because that field is
+not marked `(column)`. A Query for `board == BoardId("board-7")` stringifies the
+generated `BoardId` exactly as the write did and binds
+`{"value":"board-7"}` to parameterized `WHERE board = ?` SQL. MySQL selects
+matching rows; Spine then decodes the complete state from `bytes`. The adapter
+does not invent an index for `board`, so the application owns that index.
 
 ### Composition, tenancy, schema, and privileges
 

@@ -76,6 +76,11 @@ separately owned. Production browser processes also require the shared
 `MESSAGE_BOARD_SESSION_KEY_ID`, and `MESSAGE_BOARD_SESSION_PRIVATE_KEY` values.
 Each entrypoint constructs one caller-owned Datastore client from
 `DATASTORE_PROJECT_ID` and hands that exact client to the storage factory.
+It also gives the storage factory the application's generated Protobuf type
+registry. This lets message-valued IDs and `(column)` values inside `Any`
+metadata use the same compact JSON representation when they are written and
+queried. See the small setup in
+[`deployment-config.ts`](src/deployment-config.ts).
 Changing signing values per browser-capable replica breaks session validation;
 changing the registry namespace splits subscription ownership.
 The [container image guide](../deploy/container/README.md) lists the production

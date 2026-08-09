@@ -35,8 +35,11 @@ does not mix custom record creators into one transaction.
 Every record family uses the source Proto full name as its default kind. A
 grouped family uses `<group>_<record-simple-name>`. A layout registration can
 replace only the kind. Rows contain unindexed Protobuf `bytes` and the declared
-indexed columns; no scope, ID copy, revision, schema fingerprint, marker, or
-compatibility entity is stored. The Bounded Context name is diagnostic only.
+indexed columns. Current Entity rows declare `archived`, `deleted`, and Entity
+`version` in addition to model `(column)` fields; Entity `version` is not a
+provider revision. No scope, ID copy, storage revision, schema fingerprint,
+marker, or compatibility entity is stored. The Bounded Context name is
+diagnostic only.
 
 Single tenancy preserves the caller client's configured/default namespace.
 Multitenancy converts the complete generated `TenantId` to a native namespace.

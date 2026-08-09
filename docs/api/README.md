@@ -109,8 +109,11 @@ Core exports include deterministic type URL derivation, registry and metadata
 types, the default registry for the curated Spine schema set, single-message
 validation result/check helpers, `ValidationException`, structured
 `ValidationError` creation, the transition-validation seam,
-`RejectionThrowable`, `RejectionThrowable.create()`, and
-`RejectionThrowable.is()`. Generated rejection companions create validated
+`RejectionThrowable`, `RejectionThrowable.create()`, `RejectionThrowable.is()`,
+`Identifiers`, `Stringifiers`, and `StringifierRegistry`. The storage helpers
+pack supported typed IDs and map generated messages reversibly, using compact
+Proto JSON by default and an application `TypeRegistry` when `Any` values must
+be expanded. Generated rejection companions create validated
 throwables through this factory contract. Repository command execution
 recognizes them only through the guard after rollback and schedules a regular
 rejection event for independent EventBus posting. Build-time analysis
@@ -182,9 +185,12 @@ repositories with the built context after opening state record storage through
 the context `StorageFactory`; registered repositories also make their entity
 state schemas known to the context `Stand`. Built contexts also create the
 internal system-pairing metadata and a framework-owned tenant index:
-single-tenant contexts use a constant index, and multitenant contexts persist
-tenant IDs through the configured storage factory. These internals are not part
-of the end-user `BoundedContext` API. The full system-context runtime,
+single-tenant contexts use a constant index, and multitenant contexts use the
+configured provider's tenant catalog. MySQL enumerates configured
+tenant/database entries, Datastore enumerates native namespaces, and memory
+enumerates tenant slices; no generic `TenantId` record is persisted. These
+internals are not part of the end-user `BoundedContext` API. The full
+system-context runtime,
 command-log repositories, system event taxonomy, tracing/monitors/debug UI, and
 broader JVM production runtime remain outside this public surface.
 Repositories with authentic
@@ -441,7 +447,7 @@ catch-up, read-side indexing, subscriptions, system events, or aggregate
 repository caching.
 Durable-delivery exports include the builder-owned `Delivery` interface,
 `DeliveryBuilder`, `DeliveryEndpointMessage`, `DeliveryMonitor`,
-`DeliveryResult`, `DeliveryRunOptions`, `DeliveryStrategy`,
+`DeliveryResult`, `DeliveryRunOptions`, `DeliveryStrategy`, `DeliverySupervisor`,
 `UniformAcrossAllShards`, `DeliveryStorageCorruptionError`, `Inbox`, `InboxId`,
 `InboxMessage`, `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
 `InboxReadContinuation`, `InboxReadOptions`, `InboxWriteResult`, `InboxStorage`,
@@ -488,10 +494,11 @@ rows, or caller snapshots that do not match the stored message;
 already-delivered matching rows are returned idempotently. Built contexts use
 this storage boundary internally for process-manager command rows,
 process-manager event reaction rows, and live projection subscriber rows. This
-implementation does not run process-wide transport-backed scheduler workers, retry
-monitors, conveyor/stations, generic repository delivery, projection catch-up
-through inbox storage, broad production lifecycle, transport retries, example
-app work, or production read-side catch-up workers.
+implementation does not add retry schedulers, persistent attempt history,
+conveyor/station abstractions, generic repository delivery, projection catch-up
+through Inbox storage, or production read-side catch-up workers. A
+`DeliverySupervisor` repeatedly invokes finite drains, including over a remote
+delivery topology, without turning delivery failures into persisted retry jobs.
 Event import and aggregate importers are removed from the active plan by
 upstream ADR 0001 D1. Aggregate
 `@React` handlers are ordinary generated reactor handlers with
@@ -770,9 +777,10 @@ factories deliberately share compatible tenant and record-family slices only
 when supplied the same backend token.
 `StorageGroup` is an optional named identity that separates record families
 with the same source type. Calls in one logical backend share backing records
-only when their context, source type, and group identity match; two omitted
-groups identify the same ungrouped family. Each call still returns an
-independently closeable storage handle.
+only when their tenant boundary, source type, and group identity match; two
+omitted groups identify the same ungrouped family. Bounded Context names are
+diagnostic and never enter physical storage identity. Each call still returns
+an independently closeable storage handle.
 `RecordStorage.delete(id)`, `read(id)`, and
 `compareAndSet(id, expected, next)` address actual storage slot IDs.
 `RecordStorage.query()` and `RecordStorage.queryEntries()` also filter
@@ -784,7 +792,7 @@ returns logical record IDs derived from each record body through the
 `RecordSpec` rejects duplicate declared `RecordColumn` names in its constructor,
 before a factory or adapter receives the specification. It requires exactly one
 ID descriptor: either Protobuf `idSchema` or a nonblank primitive `idKind`.
-Every `RecordColumn` requires a nonblank `valueType` descriptor.
+Every `RecordColumn` requires a typed `type` mapping.
 `RecordStorage.compareAndSet(id, expected, next)` must be atomic across those
 handles for one logical backing store; `next: undefined` is a conditional
 delete, and `false` means the expected value did not match so no mutation was

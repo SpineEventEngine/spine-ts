@@ -93,8 +93,61 @@ short name. Tables include native declared columns, but the adapter never adds
 user-column indexes automatically.
 
 The table contains only `ID`, the serialized `bytes`, and the columns declared
-by the Proto model. `ID` is the primary key. A Bounded Context name is useful
-in diagnostics, but it is never stored in a row and never changes a table name.
+by the framework record and Proto model. `ID` is the primary key. A Bounded
+Context name is useful in diagnostics, but it is never stored in a row and
+never changes a table name.
+
+## 🧭 See a Proto model become a table
+
+Suppose an application declares this Projection state:
+
+```proto
+package spine.examples.messageboard;
+
+message MessageView {
+  MessageId id = 1 [(required) = true, (set_once) = true];
+  BoardId board = 2 [(column) = true];
+  UserId author = 3 [(column) = true];
+  string text = 4;
+}
+```
+
+The default current-state table is conceptually:
+
+```sql
+CREATE TABLE spine_examples_messageboard_MessageView (
+  ID VARCHAR(512) NOT NULL,
+  bytes BLOB NOT NULL,
+  archived BOOLEAN NULL,
+  deleted BOOLEAN NULL,
+  version INT NULL,
+  board TEXT NULL,
+  author TEXT NULL,
+  PRIMARY KEY (ID)
+);
+```
+
+`ID` stores `MessageId` as compact Proto JSON, such as
+`{"value":"message-42"}`. `bytes` contains the authoritative generated
+`EntityRecord`, including the complete `MessageView` state. `archived`,
+`deleted`, and `version` are Entity lifecycle/version facts, not a provider
+revision. The `board` and `author` columns exist only because those Proto fields
+use `(column)`; `text` stays inside `bytes` because it is not a query column.
+
+For `board == BoardId("board-7")`, Spine uses the same reversible stringifier
+as the write and sends parameterized SQL equivalent to:
+
+```sql
+SELECT ID, bytes
+FROM spine_examples_messageboard_MessageView
+WHERE board = ?
+ORDER BY ID ASC;
+-- bound value: {"value":"board-7"}
+```
+
+MySQL compares the materialized column, then Spine decodes each matching
+authoritative `bytes` payload. The adapter does not create an index for
+`board`; add application-owned indexes for production query patterns.
 
 ## 🧪 Verify with a disposable database
 

@@ -33,10 +33,16 @@ controls Google authentication and client lifetime.
 
 ```ts
 import { Datastore } from "@google-cloud/datastore";
+import { StringifierRegistry } from "@spine-event-engine/core";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+import { typeRegistry } from "./model-registry.js";
+
+const stringifiers = new StringifierRegistry();
+stringifiers.setTypeRegistry(typeRegistry);
 
 const factory = DatastoreStorageFactory.newBuilder()
   .setClient(new Datastore({ projectId: "my-project" }))
+  .setStringifierRegistry(stringifiers)
   .build();
 ```
 
@@ -59,6 +65,8 @@ a namespace, kind, or key.
 Suppose a projection state is declared like this:
 
 ```proto
+package spine.examples.messageboard;
+
 message MessageView {
   MessageId id = 1 [(required) = true, (set_once) = true];
   BoardId board = 2 [(column) = true];
@@ -76,15 +84,27 @@ this:
 | namespace      | `Vtenant-a`                               |
 | kind           | `spine.examples.messageboard.MessageView` |
 | key name       | `{"value":"message-42"}`                  |
-| `bytes`        | unindexed serialized `MessageView`        |
+| `bytes`        | unindexed `EntityRecord` with the state   |
+| `archived`     | native boolean                            |
+| `deleted`      | native boolean                            |
+| `version`      | native integer                            |
 | `board`        | `{"value":"board-7"}`                     |
 | `author`       | `{"value":"user-3"}`                      |
 
-Message-valued IDs and columns use compact Proto JSON by default. Applications
-can register one reversible custom `Stringifier`; the same mapping is then used
-for writes, key lookups, filters, ordering continuations, and reads. Primitive
-values use their native Datastore representation. There is no `_scope`, copied
-ID, storage revision, fingerprint, marker, or compatibility entity.
+`archived`, `deleted`, and `version` come from Spine's generated `EntityRecord`;
+they are Entity lifecycle/version facts, not a provider revision. `board` and
+`author` exist because the Proto fields use `(column)`. The unindexed `bytes`
+payload remains authoritative.
+
+Message-valued IDs and columns use compact Proto JSON by default. Supply the
+application `TypeRegistry` as shown above when a stored framework value contains
+an `Any`; it tells Proto JSON how to expand the packed application type.
+Applications can also register one reversible custom `Stringifier`. The same
+mapping is used for writes, key lookups, filters, ordering continuations, and
+reads. Primitive values use their native Datastore representation. There is no
+`_scope`, copied ID, storage revision, fingerprint, marker, or compatibility
+entity. The runnable configuration is in the
+[Message Board deployment](../../examples/message-board/app/src/deployment-config.ts).
 
 When a user queries `board == BoardId("board-7")`, Spine converts that generated
 `BoardId` with the same stringifier and sends a Datastore property filter for

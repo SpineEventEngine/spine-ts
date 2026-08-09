@@ -80,6 +80,32 @@ console.log(user.typeUrl);
 `@spine-event-engine/proto`. Use `TypeRegistry.spineCore()` if registrations
 must be added.
 
+## 🔤 Turn message IDs into storage values
+
+Storage providers cannot put a JavaScript message object directly into a
+database key or query parameter. `Identifiers` packs supported primitive and
+generated-message IDs into Spine's typed `Any` form. `Stringifiers` then gives
+a generated message one reversible text representation. The default is compact
+Proto JSON:
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { Stringifiers } from "@spine-event-engine/core";
+import { UserIdSchema } from "@spine-event-engine/proto";
+
+const id = create(UserIdSchema, { value: "ava" });
+const mapping = Stringifiers.forMessage(UserIdSchema);
+const stored = mapping.toString(id); // {"value":"ava"}
+const restored = mapping.fromString(stored);
+```
+
+MySQL and Datastore use the same mapping when they write an ID or `(column)`
+value and when they later build a Query operand. This symmetry is what makes
+`board == BoardId("general")` find a row whose `board` column was written from
+that generated `BoardId`. An application can register another reversible
+mapping in `StringifierRegistry`. If compact Proto JSON encounters an `Any`,
+also call `setTypeRegistry()` with the application's generated `TypeRegistry`.
+
 ## 🚫 Throw a generated domain rejection
 
 The model generator creates typed rejection factories for top-level messages in

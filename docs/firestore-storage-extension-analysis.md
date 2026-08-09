@@ -9,11 +9,11 @@
 The requested compatibility target is the JVM Datastore/Firestore module in
 [`SpineEventEngine/gcloud-jvm/datastore`](https://github.com/SpineEventEngine/gcloud-jvm/tree/master/datastore).
 The latest available default-branch source was pinned at
-`f4ade19d8bf7666447f068607426475cda485afe` on 2026-07-18. This document is
-the decision-complete implementation contract derived from that source and the
-current TS storage port.
+`f4ade19d8bf7666447f068607426475cda485afe` on 2026-07-18. The proposal below is
+archived design history. Current behavior is summarized here so readers do not
+mistake rejected ideas for the supported layout.
 
-## Proposed module
+## Implemented outcome
 
 Create `@spine-event-engine/storage-datastore`, depending on `@spine-event-engine/storage` and the
 official Google Cloud Datastore Node client. It implements `StorageFactory` and
@@ -21,17 +21,18 @@ official Google Cloud Datastore Node client. It implements `StorageFactory` and
 targets Firestore in Datastore mode through the Datastore client API; it does
 not support Firestore Native APIs.
 
-Mapping proposal:
+Current mapping:
 
-- bounded-context name becomes a validated Datastore kind prefix; each
-  `RecordSpec` contributes a stable record-type suffix;
-- a multitenant `StorageContext.tenantId` becomes the Datastore namespace;
-  a single-tenant context uses the configured default namespace;
-- each record occupies one Datastore entity whose key name is a canonical,
-  reversible encoding of the storage slot identifier;
+- a Bounded Context name is diagnostic and never changes physical storage;
+- the source Proto type selects the default kind, while an optional
+  `StorageGroup` selects a separate family;
+- a complete multitenant `StorageContext.tenantId` selects a native Datastore
+  namespace; a single-tenant context uses the client namespace;
+- each record occupies one Datastore entity whose key name uses the declared
+  primitive ID or reversible message stringifier;
 - the Protobuf binary payload is canonical; declared `RecordColumn` values are
-  stored as indexed Datastore properties, with reserved metadata property names
-  isolated from user columns;
+  stored as indexed Datastore properties through the same typed mapping used by
+  Query operands;
 - `RecordQuery` supports exact ID filters, equality / small-set column filters,
   deterministic declared-column or ID ordering, limits, offsets, and keyset
   continuations. Unsupported value types or query combinations fail before RPC;
@@ -46,15 +47,15 @@ Mapping proposal:
 
 ## Compatibility matrix
 
-| JVM pattern                                                    | TS decision                                                                                                                                                                                                                                  |
-| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DatastoreStorageFactory` is an injected `StorageFactory`      | Applications pass it to `withStorageFactory()` or configure it through `ServerEnvironment.when(EnvironmentType.Production).use(...)`; core packages never import it.                                                                         |
-| Caller supplies `Datastore`; builder exposes provider settings | Primary constructor accepts an injected Node `Datastore` client. `DatastoreStorageFactory.create(options)` creates a client from explicit Google client options, including project, credentials, key file, endpoint, and namespace settings. |
-| Namespace conversion isolates tenants                          | `StorageContext.tenantId` selects namespace only for multitenant storage; missing/blank tenant IDs fail before RPC. A configured namespace is a prefix/default, never concatenated into document keys.                                       |
-| Record type has a kind/layout and indexed columns              | One flat entity per record in the first release. Kind naming and metadata are private adapter details. `RecordSpec` columns map to indexed properties; no entity-group/custom-layout API is added until a TS port requires it.               |
-| Optional transaction setting per record                        | Every TS `compareAndSet` is transactional because the existing port promises cross-handle atomic CAS. Normal reads/writes use direct API calls; no generic transaction API leaks into storage.                                               |
-| Docker/Testcontainers emulator tests                           | The opt-in integration suite requires an already-running Datastore-mode emulator through `DATASTORE_EMULATOR_HOST`; unit tests use a narrow client fake. Current CI integration is not claimed.                                              |
-| Explicit service-account remote client                         | Production uses explicit client options or an injected client; ADC remains a documented client-library option, never an implicit module policy.                                                                                              |
+| JVM pattern                                                    | TS decision                                                                                                                                                                                            |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DatastoreStorageFactory` is an injected `StorageFactory`      | Applications pass it to `withStorageFactory()` or configure it through `ServerEnvironment.when(EnvironmentType.Production).use(...)`; core packages never import it.                                   |
+| Caller supplies `Datastore`; builder exposes provider settings | `DatastoreStorageFactory.newBuilder().setClient(client).build()` accepts a caller-owned client. Authentication, endpoint, project, and client lifecycle stay with the application.                     |
+| Namespace conversion isolates tenants                          | `StorageContext.tenantId` selects namespace only for multitenant storage; missing/blank tenant IDs fail before RPC. A configured namespace is a prefix/default, never concatenated into document keys. |
+| Record type has a kind/layout and indexed columns              | One flat entity stores authoritative `bytes` and declared properties. Source type and optional `StorageGroup` select the family; `organizeRecords()` may replace the kind.                             |
+| Optional transaction setting per record                        | Every TS `compareAndSet` is transactional because the existing port promises cross-handle atomic CAS. Normal reads/writes use direct API calls; no generic transaction API leaks into storage.         |
+| Docker/Testcontainers emulator tests                           | The opt-in integration suite requires an already-running Datastore-mode emulator through `DATASTORE_EMULATOR_HOST`; unit tests use a narrow client fake. Current CI integration is not claimed.        |
+| Explicit service-account remote client                         | Production uses explicit client options or an injected client; ADC remains a documented client-library option, never an implicit module policy.                                                        |
 
 ## Adapter design
 
@@ -145,14 +146,15 @@ Docker-backed emulator. Its remote test helper accepts explicit service-account
 credentials. TS deliberately starts with the smaller flat-entity adapter while
 preserving the same port and configuration principles.
 
-## Deferred decisions
+## Resolved outcome
 
-This is behaviorally compatible, not wire-compatible with JVM storage entities:
-the two runtimes may share Datastore only after a separately approved migration
-contract. Index manifests remain application/deployment assets; generation from
-`RecordSpec` is deferred. Cross-record transaction APIs, retry policy, and
-automatic cloud cleanup are intentionally absent. Payloads, credential values,
-and full entity paths are redacted from thrown adapter errors.
+The corrected adapter targets JVM-compatible physical values: native tenant
+namespaces, source/group kinds, direct primitive IDs, reversible compact Proto
+JSON message IDs, native scalar properties, and the same typed mapping for
+writes and queries. Existing experimental layouts still require an offline
+migration; the runtime has no dual reader. Index manifests remain
+application/deployment assets. Cross-record public transaction APIs, generic
+retry policy, and automatic cloud cleanup remain intentionally absent.
 
 ## Acceptance criteria for the implementation task
 

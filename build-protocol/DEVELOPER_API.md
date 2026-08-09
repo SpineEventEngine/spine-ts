@@ -249,17 +249,12 @@ storage. The storage delegate remains a storage-only seam.
 
 ## Delivery and Inbox API
 
-The current root-public delivery surface is the durable inbox handoff point and
-storage coordination primitives, including the callback-visible
-`DeliveryEndpointMessage` snapshot type used by framework replay results.
-Framework-owned replay uses package-internal direct drains behind validated
-bounded-context endpoints; the root package does not expose raw callback
-delivery APIs such as `Delivery`, `DeliveryLoop`, `OnDeliveryMessage`, direct
-`onMessage` examples, or their direct-drain option/result types as stable
-application API.
-
-The public slice excludes scheduler, retry-timing, and retry-monitor policy;
-those policies are outside the initial release and no future stack is committed:
+The root-public delivery surface includes `DeliveryBuilder`, immutable
+`Delivery`, `DeliveryMonitor`, `DeliverySupervisor`, durable Inbox/work ports,
+and the callback-visible `DeliveryEndpointMessage` snapshot. The builder
+creates one finite shard drain; the supervisor observes bounded remote shard
+work. The public slice deliberately excludes scheduled/timed retries and
+persistent retry state:
 
 - `Inbox` is the low-level durable delivery storage primitive in this slice. It
   accepts `InboxMessageInput` with `receive()` and lets framework delivery code
@@ -276,9 +271,12 @@ those policies are outside the initial release and no future stack is committed:
   application-facing read-side/query facade;
 - `ShardIndex` identifies one delivery shard, `ShardSession` is the durable
   lease snapshot for that shard, and `ShardedWorkRegistry` persists shard
-  pickup/renew/release across processes. `renew(session)` is framework-owned
-  lease fencing for active drains, not an application retry or supervision
-  policy; and
+  pickup/renew/release across processes with a complete generated `WorkerId`.
+  `renew(session)` is lease fencing for active drains, not retry policy;
+- `DeliveryBuilder` snapshots the context, storage, worker, shard strategy,
+  page size, ports, and monitor. `DeliveryMonitor` selects the failed-reception
+  action; `DeliverySupervisor` connects a built delivery to a bounded
+  `DeliverySource`; and
 - `DeliveryLabel`, `DeliveryStatus`, `InboxId`, `InboxMessage`,
   `DeliveryEndpointMessage`, `DeliveryStorageCorruptionError`,
   `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
@@ -306,8 +304,8 @@ backoff, dead-letter storage, scheduler persistence, or delivery policy.
 Public error contract for this slice is intentionally small: callers should
 expect `InboxMessageError` for invalid inbox message input and
 `DeliveryStorageCorruptionError` when durable delivery storage is corrupt or
-out of contract. `ShardedWorkRegistry.pickUp()` caller validation for blank or
-oversized `node` values, or invalid clock values supplied through `now`,
+out of contract. `ShardedWorkRegistry.pickUp()` caller validation for an
+incomplete/blank `WorkerId`, or invalid clock values supplied through `now`,
 currently throws plain `Error` before any storage read/write begins.
 `ShardedWorkRegistryOptions.leaseMs` must be a safe integer from `1000` through
 `2147483647` milliseconds. `InboxReadOptions.limit` must be positive and at
@@ -320,41 +318,31 @@ opens; legacy stored/wire `IMPORT_EVENT` rows remain recognizable only as
 deprecated compatibility data and fail closed as storage corruption if read or
 drained.
 
-Current storage usage is deliberately narrow:
+One finite public delivery run looks like this:
 
 ```typescript
-const inboxStorage = new InboxStorage({
-  context,
-  storageFactory,
-});
-const inbox = new Inbox(inboxStorage);
+import { create } from "@bufbuild/protobuf";
+import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
+import { DeliveryBuilder, ShardIndex } from "@spine-event-engine/server";
 
-await inbox.receive({
-  inboxId,
-  signalId,
-  label: "UPDATE_SUBSCRIBER",
-  status: "TO_DELIVER",
+const delivery = new DeliveryBuilder()
+  .withContext(context)
+  .withStorageFactory(storageFactory)
+  .withWorker(
+    create(WorkerIdSchema, {
+      nodeId: { value: "node-a" },
+      value: "process-start-42",
+    }),
+  )
+  .build();
+
+await delivery.run({
   shard: ShardIndex.single(),
-  whenReceived: new Date(),
-  version: 1n,
+  onMessage: (message) => {
+    console.log(message.label, message.inboxId);
+    return Promise.resolve();
+  },
 });
-
-const shards = new ShardedWorkRegistry({
-  context,
-  storageFactory,
-  leaseMs: 30_000,
-});
-const session = await shards.pickUp(ShardIndex.single(), "node-a");
-if (session !== undefined) {
-  const pending = await inbox.read(session.shard, {
-    statuses: ["TO_DELIVER"],
-    limit: 100,
-  });
-  for (const message of pending) {
-    console.log(message.inboxId, message.label, message.status);
-  }
-  await shards.release(session);
-}
 ```
 
 Keep the write/read split intact at the application/service/domain level. These
@@ -377,12 +365,12 @@ absent. Built-context repository handoffs deliberately set `keepUntil` to 30
 seconds after `whenReceived`; this is their retention choice, not a separate
 dedup authority or a universal Inbox rule.
 
-The package does not expose a raw worker callback API. Built contexts replay
-through validated framework endpoints. The current API does not provide a
-process-wide or production scheduler/supervisor, expose a generic repository
-delivery engine, run projection catch-up through inbox storage, run retry
-monitors, open transport topology, supervise worker processes, or retain raw
-attempt/error history.
+Built contexts replay through validated framework endpoints. A public delivery
+callback is an integration boundary; it does not bypass row validation or
+ownership fencing. `DeliverySupervisor` and remote delivery ports can supervise
+bounded shard work, as demonstrated by the distributed Message Board example.
+The current API does not provide a timed retry scheduler, attempt/exhaustion
+history, quarantine, dead-letter storage, or exactly-once downstream effects.
 Event import and aggregate importers are removed from the active plan by
 upstream ADR 0001 D1; ordinary aggregate `@React` handlers are generated
 reactor handlers with current transaction semantics, not event-sourcing

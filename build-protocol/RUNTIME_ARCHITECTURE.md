@@ -196,20 +196,20 @@ delivery workers, or retry infrastructure. The first TS `EventBus` now owns
 append-before-dispatch by delegating to `EventStore`; events with no registered
 dispatcher still remain stored and resolve.
 
-Later repository, delivery, and read-side storage layers must delegate to this
-record-storage seam instead of widening the adapter interface prematurely.
-
-Initial implementation may include in-memory storage, but production storage is
-pluggable. The bus transport is not storage.
-
-Storage is the first corrected implementation layer. The common `Storage`
-contract must not contain in-memory-specific behavior; in-memory storage is one
-adapter behind the same contract.
+Repository current state, optional histories, Event Store, Stand, inbox rows,
+shard sessions, leases, and subscription records now delegate to this seam.
+The common contract remains provider-neutral: memory, MySQL, and Datastore are
+adapters behind it, while bus transport is not storage. Physical identity is
+tenant boundary plus record family; Bounded Context names are diagnostic only.
+MySQL selects a configured database per complete tenant and Datastore selects a
+native namespace. Typed ID/column mappings are identical for writes and Query
+operands; applications provide generated type metadata when compact Proto JSON
+must expand `Any`.
 
 ## Delivery and Reliability
 
-The current TS runtime preserves the first durable inbox slice and a small local
-delivery worker boundary:
+The current TS runtime provides direct durable inbox rows, finite local drains,
+and transport-backed worker supervision:
 
 - standalone delivery writes can be recorded before the asynchronous worker
   handoff point where durability is configured, and package-internal
@@ -278,13 +278,12 @@ delivery worker boundary:
   `IMPORT_EVENT` rows are one such corruption path and abort read/drain with
   `DeliveryStorageCorruptionError` before any `DeliveryRun` is returned.
 
-This slice stops at durable storage, ordered readback, narrow built-context
-process-manager command, process-manager event, and live projection subscriber
-handoffs, one direct drain call, and a closeable loop owner. It adds no generic
-repository delivery engine, projection catch-up through inbox storage, retry
-monitor, attempt/exhaustion counter, raw delivery-error history, production
-worker supervision, or transport-backed topology. These exclusions make no
-future policy commitment. Event import and aggregate importers are
+This slice stops short of scheduled or timed retries, attempt/exhaustion
+counters, raw delivery-error history, quarantine/dead-letter storage, and an
+exactly-once side-effect guarantee. `DeliveryMonitor` is the customizable
+per-reception policy seam, and `DeliverySupervisor` plus remote delivery ports
+provide the bounded transport-backed worker topology used by the distributed
+Message Board example. Event import and aggregate importers are
 removed from the active plan by upstream ADR 0001 D1. Aggregate `@React`
 handlers, when present, use ordinary generated-reactor transaction semantics
 rather than event-sourcing applier/import delivery. `IMPORT_EVENT` is no longer

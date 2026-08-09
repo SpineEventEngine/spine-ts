@@ -65,10 +65,12 @@ primitive `string`, `int32`, and `int64` kinds. Primitive IDs use native MySQL
 values; message IDs use their reversible stringifier, compact Proto JSON by
 default.
 
-Every family table has `ID`, serialized `bytes`, and only the declared Proto
-columns, with primary key `(ID)`. Existing layouts are inspected and never
-altered. A mismatched type, nullability, primary key, unique constraint, or
-extra column is rejected. Ordinary message columns use the same configured
+Every family table has `ID`, serialized `bytes`, and only the columns declared
+by its framework record and Proto model, with primary key `(ID)`. Current Entity
+tables declare `archived`, `deleted`, and Entity `version` in addition to model
+`(column)` fields; Entity `version` is not a provider revision. Existing layouts
+are inspected and never altered. A mismatched type, nullability, primary key,
+unique constraint, or extra column is rejected. Ordinary message columns use the same configured
 reversible stringifier for writes and query operands. `Timestamp` uses epoch
 nanoseconds and `Version` uses its number. Floating-point record columns are
 not supported by Spine JVM JDBC and are rejected here.

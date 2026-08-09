@@ -171,13 +171,13 @@ flowchart LR
 
 ## Assets, attackers, and entry points
 
-| Asset                    | Evidence                                                                                  |
-| ------------------------ | ----------------------------------------------------------------------------------------- |
-| Command/event integrity  | Exact `Any` packing/unpacking: `packages/core/src/index.ts:303-327`.                      |
-| Tenant state/delivery    | Tenant records and service paths: `tenant-records.ts:12-71`; `spine-services.ts:198-327`. |
-| Availability/lifecycle   | `runtime.ts:47-58`; `server.ts:84-113`.                                                   |
-| Registry/build integrity | `generated-registry-discovery.ts:122-171`; `package.json:36-48`.                          |
-| IPC and diagnostics      | `signal-transport.ts:723-897`; `signal-intake.ts:58-115`.                                 |
+| Asset                    | Evidence                                                                                                                                               |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Command/event integrity  | Exact `Any` packing/unpacking: `packages/core/src/index.ts:303-327`.                                                                                   |
+| Tenant state/delivery    | Provider tenant catalogs: `packages/server/src/context/tenant-index.ts`; tenant-aware service paths: `packages/server/src/services/spine-services.ts`. |
+| Availability/lifecycle   | `runtime.ts:47-58`; `server.ts:84-113`.                                                                                                                |
+| Registry/build integrity | `generated-registry-discovery.ts:122-171`; `package.json:36-48`.                                                                                       |
+| IPC and diagnostics      | `signal-transport.ts:723-897`; `signal-intake.ts:58-115`.                                                                                              |
 
 Entry points: listener creation, public service methods, `Any` decoding,
 storage replay, generated-registry load/register, ZeroMQ operations, and

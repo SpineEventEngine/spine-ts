@@ -1,5 +1,11 @@
 # Wave 2 JVM Parity Plan
 
+> **Historical plan.** Wave 8 removed the scope/fingerprint storage design
+> recorded below. The current contract uses native provider tenant boundaries,
+> source plus optional group for record-family identity, and typed
+> `Identifiers`/`Stringifiers` mappings. See
+> [Storage Tenancy Correction Plan](STORAGE_TENANCY_CORRECTION_PLAN.md).
+
 Status: Approved for autonomous implementation
 
 Task: `T-0068`

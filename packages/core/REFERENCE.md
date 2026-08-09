@@ -18,6 +18,10 @@ generated message reversibly to compact Proto JSON by default.
 `StringifierRegistry` lets an application register another reversible mapping
 for a particular message schema. Providers snapshot the registry they accept;
 use the same mapping for stored IDs or columns and their query operands.
+Call `setTypeRegistry(applicationTypes)` before provider construction when
+default Proto JSON may encounter `Any`. The generated type registry supplies
+the descriptor needed to expand and restore the packed application message;
+without it, an `Any` cannot be converted to interoperable Proto JSON.
 
 ## Validation
 

@@ -1,5 +1,11 @@
 # Datastore adapter design and verification
 
+> **Historical and superseded.** This document preserves an earlier correction
+> record. Its generic canonical-ID proposal was replaced by the Spine JVM
+> `Identifiers`/`Stringifiers` mapping and native Datastore tenant namespaces.
+> Use the [current Datastore guide](USER_GUIDE.md#12-develop-with-google-cloud-datastore)
+> for supported behavior.
+
 ## Purpose
 
 This guide records the supported behavior of
@@ -31,40 +37,27 @@ the same cancellation and cleanup rules as other local examples.
 
 ## Non-negotiable corrections
 
-### A. Canonical storage-slot identity
+### A. Typed storage-slot identity
 
-Replace `JSON.stringify()` as the Datastore key/name and `$spine.id` codec.
-Adopt one canonical, reversible identifier normalization aligned with the
-existing in-memory `RecordStorage` behavior. It must:
+The final correction follows Spine JVM. A `RecordSpec` declares the ID type.
+Primitive IDs use their supported native representation; generated message IDs
+use a reversible `Stringifier`, compact Proto JSON by default. The same mapping
+is used for Datastore keys, direct lookups, query ID filters, continuations, and
+returned `RecordEntry.id` values. Unsupported arbitrary JavaScript values such
+as `undefined`, arrays, and untyped objects are rejected.
 
-- preserve primitive values, `bigint`, `undefined`, arrays, objects, and
-  copied storage slots without collisions;
-- be independent of object insertion order where the generic port treats IDs
-  as equal;
-- use the caller-provided storage slot, never an identifier extracted from the
-  record payload;
-- encode the same value for Datastore keys, persisted metadata, ID lookups,
-  query ID filters, continuations, and returned `RecordEntry.id` values.
-
-Tests: bigint and undefined-bearing IDs, object-order/collision cases,
-copied-slot CAS write/read/query behavior, and cross-handle retrieval.
-
-JVM reference: `DsEntitySpec.keyOf()` delegates identity to record layout;
-`RecordId.ofEntityId()` uses Spine `Stringifiers`, not JSON serialization.
+Tests cover primitive and generated-message IDs, custom stringifiers,
+write/query symmetry, copied storage slots, and cross-handle retrieval.
 
 ### B. Correct query translation and value semantics
 
-Translate `RecordQuery.ids` and `filters: [{ column: "id", ... }]` using the
-same Datastore key codec. Never send a raw logical ID to `__key__`.
+Translate `RecordQuery.ids` with the declared ID mapping and `(column)` filters
+with each column's declared mapping. Never compare a generated message value by
+JavaScript object identity or by ad hoc `JSON.stringify()`. Equality, ordering,
+and continuation values use the same provider representation that was written.
 
-Replace string coercion in equality, ordering, continuation comparison, and
-filter matching with a type-preserving comparison strategy. Numeric values
-must sort numerically; `bigint` must either be supported consistently through
-the Datastore mapping or rejected before RPC everywhere.
-
-Tests: scalar/list ID filters, structured IDs, numeric `2` versus `10`,
-boolean/null behavior, bigint behavior, ascending/descending ties, and
-continuations.
+Tests cover scalar/list ID filters, generated-message columns, numeric order,
+ascending/descending ties, and continuations.
 
 JVM reference: ID lookups build Datastore `Key` objects in `DsLookupByIds`;
 `DsEntityComparator` compares native typed Datastore values.
@@ -97,7 +90,7 @@ storage close behavior remains local and does not close an injected client.
 
 Expand the Datastore-mode emulator suite to cover:
 
-- CRUD, canonical IDs, copied slots, and tenant namespaces;
+- CRUD, typed IDs, copied slots, and tenant namespaces;
 - scalar/list ID filters, typed column filters, typed order, limits, offsets,
   and continuations;
 - scan-budget enforcement and provider-side page bounds;
