@@ -4,7 +4,7 @@ This reference is for agents configuring the supported MySQL storage adapter.
 
 ## Public entry point
 
-Import `MysqlStorageFactory`, `MysqlStorageOptions`,
+Import `MysqlStorageFactory`, `MysqlStorageOptions`, `MysqlTenantStorageOptions`,
 `MysqlEntityStorageHandle`, `MysqlStorageFactoryBuilder`,
 `MysqlCreateOperation`, `CreateOperationFactory`, `MysqlTableSpec`,
 `MysqlColumnSpec`, `MysqlStorageConfigurationError`,
@@ -14,8 +14,10 @@ Import `MysqlStorageFactory`, `MysqlStorageOptions`,
 
 ## Connection and schema
 
-`MysqlStorageFactory.newBuilder().setOptions(options).build()` validates a full MySQL URL with a
-database name, creates an owned mysql2 pool, and returns a ready factory.
+`MysqlStorageFactory.newBuilder().setOptions(options).build()` configures one
+single-tenant database. `setTenantOptions(entries)` configures one distinct
+database and owned pool per complete generated `TenantId`. The factory selects
+the matching pool before table, query, transaction, or lock work.
 Per-family tables are created and verified lazily on first use. Options support
 `connectionLimit`, `connectTimeoutMs`, and TLS material. Failure to validate
 configuration throws `MysqlStorageConfigurationError`; inaccessible connections
@@ -27,12 +29,14 @@ It creates and verifies a family table lazily. An account therefore needs DDL
 permission, metadata reads, and DML. Existing tables are inspected and never
 altered.
 
-## Lifecycle and scope
+## Lifecycle and tenancy
 
 `close(): void` marks the factory and its live handles closed and starts pool
-draining. Callers do not await it. A record handle closes independently. A single-tenant context uses one
-scope; a multitenant operation requires a non-blank tenant ID and isolates that
-tenant's rows.
+draining. Callers do not await it. A record handle closes independently. A
+single-tenant factory has one database. A multitenant factory requires a
+complete generated `TenantId` on each operation and routes it to its configured
+database. Bounded Context names are diagnostic only and never partition rows,
+tables, locks, or queries.
 
 Each Entity source and history family has an independent table. Errors do not
 include connection URLs, credentials, or provider details.
@@ -45,16 +49,18 @@ InnoDB transaction or a keyed `GET_LOCK` on MyISAM and Aria. On InnoDB,
 all rows or none. On MyISAM and Aria, `writeAll` has deterministic input-order
 semantics but is not transactional; a failed Entity prefix requires an
 identical retry. Repeated storage slots in a batch leave the last entry as the
-stored value. The adapter accepts canonical IDs including `undefined`, `null`,
-booleans, finite numbers, bigints, strings, byte arrays, arrays, and plain
-objects, subject to documented byte limits.
+stored value. IDs are declared as generated message IDs or the supported
+primitive `string`, `int32`, and `int64` kinds. Primitive IDs use native MySQL
+values; message IDs use their reversible stringifier, compact Proto JSON by
+default.
 
-Every family table has `_scope VARBINARY(224) NOT NULL`, `ID VARBINARY(768)
-NOT NULL`, `bytes MEDIUMBLOB NOT NULL`, and `_revision BIGINT UNSIGNED NOT NULL
-DEFAULT 0`, with primary key `(_scope, ID)`. Existing layouts are inspected and
-never altered; required columns, primary-key order, types, nullability,
-defaults, binary collation, and harmful extra unique constraints must be
-compatible.
+Every family table has `ID`, serialized `bytes`, and only the declared Proto
+columns, with primary key `(ID)`. Existing layouts are inspected and never
+altered. A mismatched type, nullability, primary key, unique constraint, or
+extra column is rejected. Ordinary message columns use the same configured
+reversible stringifier for writes and query operands. `Timestamp` uses epoch
+nanoseconds and `Version` uses its number. Floating-point record columns are
+not supported by Spine JVM JDBC and are rejected here.
 
 Queries execute ID filters, ANDed column filters, materialized-column sorts,
 keyset continuations, offsets, and limits in MySQL. They accept at most 256

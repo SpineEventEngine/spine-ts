@@ -1726,24 +1726,28 @@ try {
 ```
 
 It is composed through the provider-neutral factory/`ServerEnvironment` seam,
-not mysql2. Single-tenant contexts share one scope; multitenant operations need
-a non-blank current `tenantId` and are isolated. Each record family lazily
-creates and verifies its own private table on first use. No shared table or
-compatibility fingerprint is stored.
+not mysql2. A single-tenant factory uses one database. For multitenancy, call
+`setTenantOptions()` with one complete generated `TenantId` and one different
+database URL per tenant. Spine selects that tenant's pool before it opens a
+table, runs a query, starts a transaction, or takes a lock. The Bounded Context
+name helps diagnostics, but it never partitions stored data. Each record family
+lazily creates and verifies its own private table on first use. No shared table
+or compatibility fingerprint is stored.
 The account therefore always needs that DDL permission plus normal DML
 privileges. Use a dedicated database/account.
 
 InnoDB makes `writeAll` and payload CAS transactional. MyISAM and Aria use
 deterministic ordered writes and keyed serialization instead; a failed batch
-does not roll back earlier rows. Canonical IDs support nullish values, booleans,
-finite numbers, bigint, strings, bytes, arrays, and plain objects. Scope
-(context plus tenant encoding) is at most 224 bytes and IDs at most 768 bytes.
-Each family table is lazy and has `_scope VARBINARY(224)`, `ID VARBINARY(768)`,
-`bytes MEDIUMBLOB`, `_revision BIGINT UNSIGNED DEFAULT 0`, and primary key
-`(_scope, ID)`. Existing layouts are inspected, never migrated; the adapter
-creates no foreign keys or user-column indexes. Provider errors are sanitized;
-`factory.close()` returns `void` and starts pool draining. Accounts need table
-creation, metadata reads, and ordinary DML permissions.
+does not roll back earlier rows. IDs are declared as `string`, `int32`, `int64`,
+or a generated message type. Primitive IDs use native MySQL values; message IDs
+use compact Proto JSON unless the application supplies a reversible
+stringifier. Each lazy family table has `ID`, serialized `bytes`, and the
+columns declared by the Proto model, with primary key `(ID)`. There is no
+context, tenant, or storage-revision column. Existing layouts are inspected,
+never migrated; the adapter creates no foreign keys or user-column indexes.
+Provider errors are sanitized; `factory.close()` returns `void` and starts pool
+draining. Accounts need table creation, metadata reads, and ordinary DML
+permissions.
 
 One query accepts at most 256 `ids`, 32 filters, 64 values per filter, eight
 sort fields, and 2,048 total bound values. The adapter rejects these fixed,

@@ -6,7 +6,7 @@ import {
   type StringValue,
 } from "@bufbuild/protobuf/wkt";
 import type { Event, EventId } from "@spine-event-engine/proto";
-import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
 import { InMemoryRecordStorage } from "../../src/memory/in-memory-record-storage.js";
@@ -17,6 +17,7 @@ import { RecordStorage, type RecordEntry } from "../../src/record/record-storage
 import type { NormalizedQueryPlan } from "../../src/query/query-policy.js";
 import { TenantRecords } from "../../src/memory/tenant-records.js";
 import { assertQueryProviderConformance } from "../query/query-provider-conformance.js";
+import type { StorageContext } from "../../src/storage/storage.js";
 
 describe("InMemoryRecordStorage", () => {
   it("keeps a tenant slice's compare-and-set and continued ordering atomic", () => {
@@ -389,7 +390,7 @@ describe("InMemoryRecordStorage", () => {
   });
 
   it("keeps keyset continuation scoped to the active tenant slice", async () => {
-    let currentTenantId = "tenant-a";
+    let currentTenantId = tenant("tenant-a");
     const storage = createStorage({
       name: "Tasks",
       multitenant: true,
@@ -402,7 +403,7 @@ describe("InMemoryRecordStorage", () => {
       createEvent("event-1", "type.spine.io/tasks.TaskClosed", 1n),
       createEvent("event-a", "type.spine.io/tasks.TaskClosed", 2n),
     ]);
-    currentTenantId = "tenant-b";
+    currentTenantId = tenant("tenant-b");
     await storage.writeAll([
       createEvent("event-1", "type.spine.io/tasks.TaskClosed", 1n),
       createEvent("event-b", "type.spine.io/tasks.TaskClosed", 2n),
@@ -417,7 +418,7 @@ describe("InMemoryRecordStorage", () => {
     } as Parameters<typeof storage.query>[0];
 
     await expect(storage.query(query)).resolves.toMatchObject([{ id: { value: "event-b" } }]);
-    currentTenantId = "tenant-a";
+    currentTenantId = tenant("tenant-a");
     await expect(storage.query(query)).resolves.toMatchObject([{ id: { value: "event-a" } }]);
   });
 
@@ -710,7 +711,7 @@ describe("InMemoryRecordStorage", () => {
   });
 
   it("keeps multitenant slices separate inside one storage", async () => {
-    let currentTenantId = "tenant-a";
+    let currentTenantId = tenant("tenant-a");
     const storage = createStorage({
       name: "Tasks",
       multitenant: true,
@@ -720,12 +721,12 @@ describe("InMemoryRecordStorage", () => {
     });
 
     await storage.write(createEvent("event-a", "type.spine.io/tasks.TaskCreated", 1n));
-    currentTenantId = "tenant-b";
+    currentTenantId = tenant("tenant-b");
     await storage.write(createEvent("event-b", "type.spine.io/tasks.TaskCreated", 1n));
-    currentTenantId = "tenant-a";
+    currentTenantId = tenant("tenant-a");
 
     await expect(storage.query()).resolves.toMatchObject([{ id: { value: "event-a" } }]);
-    currentTenantId = "tenant-b";
+    currentTenantId = tenant("tenant-b");
     await expect(storage.query()).resolves.toMatchObject([{ id: { value: "event-b" } }]);
   });
 
@@ -743,7 +744,7 @@ describe("InMemoryRecordStorage", () => {
     );
     await expect(storage.query({ offset: 1.5 })).rejects.toThrow(/non-negative/);
 
-    const multitenant = createStorage({ name: "Tasks", multitenant: true });
+    const multitenant = createStorage({ name: "Tasks", multitenant: true } as never);
     await expect(multitenant.query()).rejects.toThrow(
       'Multitenant storage "Tasks" requires context.tenantId.',
     );
@@ -767,16 +768,17 @@ describe("InMemoryRecordStorage", () => {
       id: { value: "event-1" },
     });
 
-    for (const tenantId of [undefined, ""]) {
+    for (const [tenantId, error] of [
+      [undefined, 'Multitenant storage "Local" requires context.tenantId.'],
+      [tenant(""), "Multitenant storage requires a non-empty TenantId."],
+    ] as const) {
       const context = {
         name: "Local",
         multitenant: true,
         ...(tenantId === undefined ? {} : { tenantId }),
       };
-      const storage = new InMemoryRecordStorage(context, createSpec());
-      await expect(storage.query()).rejects.toThrow(
-        'Multitenant storage "Local" requires context.tenantId.',
-      );
+      const storage = new InMemoryRecordStorage(context as never, createSpec());
+      await expect(storage.query()).rejects.toThrow(error);
     }
   });
 
@@ -947,12 +949,16 @@ class ObservedInMemoryStorage extends InMemoryRecordStorage<string, StringValue>
 }
 
 function createStorage(
-  context: { name: string; multitenant: boolean; tenantId?: string } = {
+  context: StorageContext = {
     name: "Tasks",
     multitenant: false,
   },
 ) {
   return new InMemoryRecordStorage(context, createSpec());
+}
+
+function tenant(value: string) {
+  return create(TenantIdSchema, { kind: { case: "value", value } });
 }
 
 function createLookupEvents(ids: readonly string[]) {

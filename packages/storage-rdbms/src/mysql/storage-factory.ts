@@ -1,8 +1,11 @@
 import { createPool, type Pool, type PoolConnection } from "mysql2/promise";
 import { toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { StringifierRegistry } from "@spine-event-engine/core";
 import {
   StorageFactory,
+  TenantBoundary,
+  type TenantCatalog,
   type RecordStorage,
   type RecordSpec,
   type StorageContext,
@@ -14,7 +17,6 @@ import {
 } from "@spine-event-engine/storage/internal/entity-commit";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
 import { eventStoreRecordSpec } from "@spine-event-engine/storage/internal/event-store";
-import { TenantBoundary, type TenantCatalog } from "@spine-event-engine/storage/internal/tenancy";
 import type { TenantId } from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
@@ -141,6 +143,14 @@ export interface MysqlStorageFactoryBuilder {
   setTenantOptions(entries: readonly MysqlTenantStorageOptions[]): this;
 
   /**
+   * Sets custom reversible message stringifiers used by IDs and columns.
+   *
+   * @param registry The schema-bound stringifier registry.
+   * @returns Returns this builder.
+   */
+  setStringifierRegistry(registry: StringifierRegistry): this;
+
+  /**
    * Sets the ungrouped table name for a record-family source type.
    *
    * For Entity current storage, this is the Entity state type, not the stored
@@ -220,6 +230,7 @@ export class MysqlStorageFactory extends StorageFactory {
     databases: readonly MysqlDatabase[],
     resolver = new MysqlTableResolver(),
     private readonly createOperation?: CreateOperationFactory,
+    private readonly stringifiers = new StringifierRegistry(),
   ) {
     super();
     this.#resolver = resolver;
@@ -247,8 +258,8 @@ export class MysqlStorageFactory extends StorageFactory {
    * @returns Returns a new builder.
    */
   static newBuilder(): MysqlStorageFactoryBuilder {
-    return new Builder((entries, resolver, operation) =>
-      MysqlStorageFactory.connect(entries, resolver, operation),
+    return new Builder((entries, resolver, operation, stringifiers) =>
+      MysqlStorageFactory.connect(entries, resolver, operation, stringifiers),
     );
   }
 
@@ -317,6 +328,7 @@ export class MysqlStorageFactory extends StorageFactory {
       () => this.#handles.delete(handle),
       create,
       tableSpec,
+      this.stringifiers,
     );
     this.#handles.add(handle);
     return handle;
@@ -393,6 +405,7 @@ export class MysqlStorageFactory extends StorageFactory {
    * @param options Specifies the MySQL connection options.
    * @param resolver Resolves configured record-family table names.
    * @param createOperation Creates optional table-creation SQL.
+   * @param stringifiers Converts message-valued IDs and columns.
    * @internal
    * @returns Resolves to the initialized factory.
    */
@@ -400,6 +413,7 @@ export class MysqlStorageFactory extends StorageFactory {
     entries: readonly MysqlDatabaseConfig[],
     resolver: MysqlTableResolver = new MysqlTableResolver(),
     createOperation?: CreateOperationFactory,
+    stringifiers = new StringifierRegistry(),
   ): Promise<MysqlStorageFactory> {
     const connected: MysqlDatabase[] = [];
     try {
@@ -418,7 +432,7 @@ export class MysqlStorageFactory extends StorageFactory {
           throw new MysqlStorageConnectionError("Unable to connect to MySQL.");
         }
       }
-      return new MysqlStorageFactory(connected, resolver, createOperation);
+      return new MysqlStorageFactory(connected, resolver, createOperation, stringifiers);
     } catch {
       await Promise.all(connected.map(({ pool }) => pool.end().catch(() => undefined)));
       throw new MysqlStorageConnectionError("Unable to connect to MySQL.");
@@ -430,11 +444,13 @@ class Builder implements MysqlStorageFactoryBuilder {
   #tenantOptions: readonly MysqlTenantStorageOptions[] | undefined;
   readonly #resolver = new MysqlTableResolver();
   #operation: CreateOperationFactory | undefined;
+  #stringifiers = new StringifierRegistry();
   constructor(
     private readonly connect: (
       entries: readonly MysqlDatabaseConfig[],
       resolver: MysqlTableResolver,
       operation: CreateOperationFactory | undefined,
+      stringifiers: StringifierRegistry,
     ) => Promise<MysqlStorageFactory>,
   ) {}
   // prettier-ignore
@@ -457,6 +473,17 @@ class Builder implements MysqlStorageFactoryBuilder {
    */
   setTenantOptions(entries: readonly MysqlTenantStorageOptions[]): this {
     this.#tenantOptions = [...entries];
+    return this;
+  }
+
+  /**
+   * Sets custom reversible message stringifiers used by IDs and columns.
+   *
+   * @param registry The schema-bound stringifier registry.
+   * @returns Returns this builder.
+   */
+  setStringifierRegistry(registry: StringifierRegistry): this {
+    this.#stringifiers = new StringifierRegistry(registry);
     return this;
   }
 
@@ -531,7 +558,7 @@ class Builder implements MysqlStorageFactoryBuilder {
       this.#options === undefined
         ? MysqlConfigurations.multitenant(this.#tenantOptions ?? [])
         : [MysqlConfigurations.single(this.#options)];
-    return this.connect(entries, this.#resolver, this.#operation);
+    return this.connect(entries, this.#resolver, this.#operation, this.#stringifiers);
   }
 }
 
@@ -634,7 +661,7 @@ class MysqlEntityCommitStorage<I, S extends Message> implements EntityCommitStor
   ): Promise<import("@spine-event-engine/storage/internal/entity-commit").EntityCommitResult> {
     if (!this.#open) throw new MysqlStorageOperationError("Entity commit storage is closed.");
     if (input.entity.sourceType.typeName !== this.entity.sourceType.typeName)
-      throw new MysqlStorageOperationError("Entity commit scope is incompatible.");
+      throw new MysqlStorageOperationError("Entity commit source type is incompatible.");
     if (!this.accepts(input))
       throw new MysqlStorageOperationError("Entity commit context is incompatible.");
     if (!this.entity.stateHistory && (input.states?.length ?? 0) > 0)

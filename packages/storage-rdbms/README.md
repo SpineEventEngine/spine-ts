@@ -50,6 +50,26 @@ try {
 }
 ```
 
+For a multitenant application, assign each complete generated `TenantId` to a
+different database. The factory creates one pool per configured tenant and
+selects that pool before it opens a table or starts a transaction:
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { TenantIdSchema } from "@spine-event-engine/proto";
+import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
+
+const acme = create(TenantIdSchema, { kind: { case: "value", value: "acme" } });
+const globex = create(TenantIdSchema, { kind: { case: "value", value: "globex" } });
+
+const factory = await MysqlStorageFactory.newBuilder()
+  .setTenantOptions([
+    { tenantId: acme, options: { url: "mysql://user:password@db/acme" } },
+    { tenantId: globex, options: { url: "mysql://user:password@db/globex" } },
+  ])
+  .build();
+```
+
 Use a dedicated database account. The account must be able to create and
 inspect the adapter tables and perform normal reads and writes. Do not commit
 connection URLs or credentials.
@@ -61,14 +81,20 @@ queries, sort order, offsets, limits, and keyset continuations. InnoDB makes
 `writeAll` and Entity commits transactional. MyISAM and Aria instead use
 deterministic ordered writes with immutable-prefix retry semantics; a failed
 write may require an identical retry. It supports primitive and structured
-storage IDs, but indexed column values are limited to `null`, booleans, finite
-numbers, strings, and signed 64-bit `bigint` values.
+storage IDs. Declared columns support strings, booleans, integral Protobuf
+numbers, enums, bytes, messages, `Timestamp`, and `Version`. Spine JVM JDBC
+does not support `float` or `double` record columns, so this adapter rejects
+them too.
 
 Each record source uses its own private table. An ungrouped family defaults to
 its Proto full name with dots replaced by underscores. A grouped family uses
 the group name with dots replaced by underscores, followed by the record type's
 short name. Tables include native declared columns, but the adapter never adds
 user-column indexes automatically.
+
+The table contains only `ID`, the serialized `bytes`, and the columns declared
+by the Proto model. `ID` is the primary key. A Bounded Context name is useful
+in diagnostics, but it is never stored in a row and never changes a table name.
 
 ## 🧪 Verify with a disposable database
 

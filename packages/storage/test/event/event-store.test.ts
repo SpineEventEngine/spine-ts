@@ -44,7 +44,7 @@ describe("EventStore", () => {
   });
 
   it("uses the current tenant slice from the storage context", async () => {
-    let currentTenantId = "tenant-a";
+    let currentTenantId = tenant("tenant-a");
     const factory = new InMemoryStorageFactory();
     const store = new EventStore(
       {
@@ -58,17 +58,17 @@ describe("EventStore", () => {
     );
 
     await store.append(createEvent("event-a", "type.spine.io/tasks.TaskCreated", 1n));
-    currentTenantId = "tenant-b";
+    currentTenantId = tenant("tenant-b");
     await store.append(createEvent("event-b", "type.spine.io/tasks.TaskCreated", 1n));
-    currentTenantId = "tenant-a";
+    currentTenantId = tenant("tenant-a");
 
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-a" } }]);
-    currentTenantId = "tenant-b";
+    currentTenantId = tenant("tenant-b");
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-b" } }]);
   });
 
   it("uses event envelope tenant for single-event append and accept", async () => {
-    let currentTenantId = "fallback-tenant";
+    let currentTenantId = tenant("fallback-tenant");
     const factory = new InMemoryStorageFactory();
     const store = new EventStore(
       {
@@ -85,9 +85,9 @@ describe("EventStore", () => {
     await expect(store.accept(event)).resolves.toBeUndefined();
     await expect(store.append(event)).resolves.toBeUndefined();
 
-    currentTenantId = "tenant-a";
+    currentTenantId = tenant("tenant-a");
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-a" } }]);
-    currentTenantId = "tenant-b";
+    currentTenantId = tenant("tenant-b");
     await expect(store.read()).resolves.toEqual([]);
 
     await expect(
@@ -98,7 +98,7 @@ describe("EventStore", () => {
         }),
       ),
     ).resolves.toBeUndefined();
-    currentTenantId = "domain:example.com";
+    currentTenantId = tenant({ kind: "domain", value: "example.com" });
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-domain" } }]);
 
     await expect(
@@ -109,7 +109,7 @@ describe("EventStore", () => {
         }),
       ),
     ).resolves.toBeUndefined();
-    currentTenantId = "email:owner@example.com";
+    currentTenantId = tenant({ kind: "email", value: "owner@example.com" });
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-email" } }]);
   });
 
@@ -289,4 +289,8 @@ function tenantKind(tenantId: TenantInput): TenantId["kind"] {
     return { case: "domain", value: create(InternetDomainSchema, { value: tenantId.value }) };
   }
   return { case: "email", value: create(EmailAddressSchema, { value: tenantId.value }) };
+}
+
+function tenant(value: TenantInput): TenantId {
+  return create(TenantIdSchema, { kind: tenantKind(value) });
 }

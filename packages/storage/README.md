@@ -32,9 +32,14 @@ columns. Its source type defaults to the record type. Pass it to an
 `InMemoryStorageFactory` with the storage context.
 
 ```ts
-import { create } from "@bufbuild/protobuf";
+import { create, ScalarType } from "@bufbuild/protobuf";
 import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
-import { InMemoryStorageFactory, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
+import {
+  ColumnTypes,
+  InMemoryStorageFactory,
+  RecordColumn,
+  RecordSpec,
+} from "@spine-event-engine/storage";
 
 const records = new InMemoryStorageFactory().createRecordStorage(
   { name: "Users", multitenant: false },
@@ -42,7 +47,9 @@ const records = new InMemoryStorageFactory().createRecordStorage(
     recordType: StringValueSchema,
     idKind: "string",
     extractId: (user) => user.value,
-    columns: [new RecordColumn<StringValue, string>("value", (user) => user.value, "string")],
+    columns: [
+      new RecordColumn("value", ColumnTypes.scalar(ScalarType.STRING), (user) => user.value),
+    ],
   }),
 );
 

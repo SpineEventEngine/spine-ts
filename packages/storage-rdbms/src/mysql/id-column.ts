@@ -1,5 +1,6 @@
-import { fromJsonString, toJsonString, type Message } from "@bufbuild/protobuf";
+import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { StringifierRegistry } from "@spine-event-engine/core";
 
 type MysqlIdType<I> = I extends Message ? GenMessage<I> : string;
 
@@ -7,6 +8,7 @@ type MysqlIdType<I> = I extends Message ? GenMessage<I> : string;
  * Converts one declared record ID to and from Spine JVM JDBC values.
  */
 export class MysqlIdColumn<I> {
+  readonly #stringifiers: StringifierRegistry;
   // prettier-ignore
 
   /**
@@ -18,8 +20,13 @@ export class MysqlIdColumn<I> {
    * Creates an ID conversion from the declared record ID type.
    *
    * @param type The message schema or supported primitive kind.
+   * @param stringifiers The schema-bound message stringifiers.
    */
-  constructor(private readonly type: MysqlIdType<I>) {
+  constructor(
+    private readonly type: MysqlIdType<I>,
+    stringifiers: StringifierRegistry = new StringifierRegistry(),
+  ) {
+    this.#stringifiers = new StringifierRegistry(stringifiers);
     this.mysqlType = MysqlIdTypes.mysqlType(type);
   }
 
@@ -30,7 +37,7 @@ export class MysqlIdColumn<I> {
    */
   value(id: I): unknown {
     if (typeof this.type !== "string")
-      return MysqlIdTypes.text(toJsonString(this.type, id as never));
+      return MysqlIdTypes.text(this.#stringifiers.forMessage(this.type).toString(id as never));
     MysqlIdTypes.validate(this.type, id);
     return this.type === "string" ? MysqlIdTypes.text(id as string) : id;
   }
@@ -43,7 +50,7 @@ export class MysqlIdColumn<I> {
   read(value: unknown): I {
     if (typeof this.type !== "string") {
       if (typeof value !== "string") throw new Error("MySQL message ID is not text.");
-      return fromJsonString(this.type, value) as I;
+      return this.#stringifiers.forMessage(this.type).fromString(value) as I;
     }
     switch (this.type) {
       case "string":

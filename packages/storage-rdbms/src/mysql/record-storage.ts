@@ -1,6 +1,7 @@
 import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import { createHash } from "node:crypto";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import { StringifierRegistry } from "@spine-event-engine/core";
 import type {
   ColumnMapping,
   RecordEntry,
@@ -60,7 +61,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
   #ready: Promise<void> | undefined;
   #bound: import("mysql2/promise").PoolConnection | undefined;
   readonly #idColumn: MysqlIdColumn<I>;
-  readonly #columnMapping: ColumnMapping<unknown> = new MysqlColumnMapping();
+  readonly #columnMapping: ColumnMapping<unknown>;
 
   /**
    * Returns the physical table name.
@@ -90,6 +91,7 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
    * @param onClose Removes this handle from its provider.
    * @param createOperation Creates optional table-creation SQL.
    * @param tableSpec Supplies the canonical table layout.
+   * @param stringifiers The schema-bound message stringifiers.
    */
   constructor(
     context: StorageContext,
@@ -99,9 +101,11 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     private readonly onClose: () => void,
     private readonly createOperation?: () => string,
     tableSpec?: MysqlTableSpec<I, R>,
+    stringifiers: StringifierRegistry = new StringifierRegistry(),
   ) {
     super(context, recordSpec);
-    this.#idColumn = new MysqlIdColumn(recordSpec.idType);
+    this.#idColumn = new MysqlIdColumn(recordSpec.idType, stringifiers);
+    this.#columnMapping = new MysqlColumnMapping(stringifiers);
     this.tableSpec =
       tableSpec ??
       resolvedMysqlTableSpec({

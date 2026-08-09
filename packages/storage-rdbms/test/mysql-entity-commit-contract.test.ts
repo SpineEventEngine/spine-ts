@@ -1,7 +1,11 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { EventIdSchema, EventSchema, VersionSchema } from "@spine-event-engine/proto";
-import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+import { EventIdSchema, EventSchema, UserIdSchema, VersionSchema } from "@spine-event-engine/proto";
+import {
+  EntityRecordSchema,
+  type EntityRecord,
+} from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+import { RecordSpec } from "@spine-event-engine/storage";
 import { describe, expect, it, vi } from "vitest";
 
 import { mysqlEntityLockKey, MysqlEntityCommitCoordinator } from "../src/mysql/entity-commit.js";
@@ -12,13 +16,11 @@ describe("MysqlEntityCommitCoordinator", () => {
   it("derives a 64-character lowercase hexadecimal advisory key for each entity identity", () => {
     const first = mysqlEntityLockKey({
       databaseName: "first",
-      contextName: "orders",
       entityKey: "42",
       sourceTypeName: "example.Order",
     });
     const second = mysqlEntityLockKey({
       databaseName: "first",
-      contextName: "orders",
       entityKey: "43",
       sourceTypeName: "example.Order",
     });
@@ -28,7 +30,6 @@ describe("MysqlEntityCommitCoordinator", () => {
     expect(
       mysqlEntityLockKey({
         databaseName: "second",
-        contextName: "orders",
         entityKey: "42",
         sourceTypeName: "example.Order",
       }),
@@ -176,6 +177,25 @@ describe("MysqlEntityStorage history behavior", () => {
 
     await expect(mysqlCurrentRecord(pool as never, input, "missing")).resolves.toBeUndefined();
     await expect(mysqlCurrentRecord(pool as never, input, "present")).resolves.toEqual(value);
+    expect(pool.query).toHaveBeenNthCalledWith(1, expect.any(String), ["missing"]);
+    expect(pool.query).toHaveBeenNthCalledWith(2, expect.any(String), ["present"]);
+  });
+
+  it("queries current Entity rows with direct message ID values", async () => {
+    const query = vi.fn(() => Promise.resolve([[], []]));
+    const input = {
+      ...entityInput(false, false),
+      recordSpec: new RecordSpec({
+        sourceType: StringValueSchema,
+        recordType: EntityRecordSchema,
+        idSchema: UserIdSchema,
+        extractId: () => create(UserIdSchema),
+      }),
+    };
+    const id = create(UserIdSchema, { value: "user-42" });
+
+    await expect(mysqlCurrentRecord({ query } as never, input, id)).resolves.toBeUndefined();
+    expect(query).toHaveBeenCalledWith(expect.any(String), ['{"value":"user-42"}']);
   });
 
   it("counts only matching enabled state and event histories", async () => {
@@ -418,6 +438,15 @@ describe("MysqlEntityStorage history behavior", () => {
 });
 
 function entityInput(stateHistory: boolean, eventHistory: boolean) {
+  const recordSpec = new RecordSpec<string, EntityRecord>({
+    sourceType: StringValueSchema,
+    recordType: EntityRecordSchema,
+    idKind: "string",
+    extractId: (record) => {
+      if (record.entityId === undefined) throw new Error("EntityRecord.entityId is required.");
+      return fromBinary(StringValueSchema, record.entityId.value).value;
+    },
+  });
   return {
     context: { name: "history", multitenant: false },
     id: {
@@ -430,6 +459,7 @@ function entityInput(stateHistory: boolean, eventHistory: boolean) {
           : undefined,
     },
     columns: [],
+    recordSpec,
     sourceType: StringValueSchema,
     stateSchema: StringValueSchema,
     stateHistory,

@@ -13,6 +13,7 @@ import {
   EnrichmentSchema,
   EventIdSchema,
   EventSchema,
+  TenantIdSchema,
   type Event,
 } from "@spine-event-engine/proto";
 import { describe, expect, it, vi } from "vitest";
@@ -34,6 +35,7 @@ import {
 import { InMemoryStorageFactory } from "../../src/memory/in-memory-storage-factory.js";
 import { RecordColumn } from "../../src/record/record-column.js";
 import { ColumnTypes } from "../../src/record/column-type.js";
+import type { StorageContext } from "../../src/storage/storage.js";
 
 describe("InMemoryEntityHistory", () => {
   it("passes the reusable generated current-record and state-history conformance checks", async () => {
@@ -225,8 +227,8 @@ describe("InMemoryEntityHistory", () => {
 
   it("isolates state histories by tenant and supports close behavior", async () => {
     const factory = new InMemoryStorageFactory();
-    const tenant = input(true, { name: "Tasks", multitenant: true, tenantId: "tenant-a" } as never);
-    const other = input(true, { name: "Tasks", multitenant: true, tenantId: "tenant-b" } as never);
+    const tenant = input(true, multitenant("tenant-a"));
+    const other = input(true, multitenant("tenant-b"));
     const first = factory.createEntityStorage(tenant) as EntityStorageConformance<
       string,
       StringValue
@@ -559,12 +561,8 @@ describe("InMemoryEntityHistory", () => {
 
   it("isolates event history by tenant and retains large histories in declared order", async () => {
     const factory = new InMemoryStorageFactory();
-    const tenant = input(false, {
-      name: "Tasks",
-      multitenant: true,
-      tenantId: "tenant-a",
-    } as never);
-    const other = input(false, { name: "Tasks", multitenant: true, tenantId: "tenant-b" } as never);
+    const tenant = input(false, multitenant("tenant-a"));
+    const other = input(false, multitenant("tenant-b"));
     const first = factory.createEntityStorage({ ...tenant, eventHistory: true }) as {
       readonly events: MemoryEntityEventHistory<string>;
     };
@@ -586,7 +584,7 @@ describe("InMemoryEntityHistory", () => {
 
 function input(
   stateHistory: boolean,
-  context = { name: "Tasks", multitenant: false as const },
+  context: StorageContext = { name: "Tasks", multitenant: false },
 ): EntityStorageInput<string, StringValue> {
   return {
     context,
@@ -603,6 +601,14 @@ function input(
     sourceType: StringValueSchema,
     stateSchema: StringValueSchema,
     stateHistory,
+  };
+}
+
+function multitenant(value: string): StorageContext {
+  return {
+    name: "Tasks",
+    multitenant: true,
+    tenantId: create(TenantIdSchema, { kind: { case: "value", value } }),
   };
 }
 

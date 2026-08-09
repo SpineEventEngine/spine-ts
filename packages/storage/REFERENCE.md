@@ -18,8 +18,9 @@ framework/provider seams, not application-facing remote APIs.
 ## Record storage
 
 `StorageFactory.createRecordStorage(context, spec, group?)` returns an
-independently closeable `RecordStorage`. A context contains a bounded-context
-name, multitenancy flag, and optional tenant ID. A `RecordSpec` fixes the
+independently closeable `RecordStorage`. A single-tenant context forbids a
+tenant ID. A multitenant context requires a complete generated `TenantId`.
+The Bounded Context name is diagnostic only. A `RecordSpec` fixes the
 source type, stored record type, identity extractor, ID schema or primitive ID
 kind, and materialized columns. `sourceType` defaults to `recordType`; Entity
 record specifications use the entity state type as their source type.
@@ -28,8 +29,8 @@ record specifications use the entity state type as their source type.
 `StorageGroup` is an optional external physical-family identity. It is not part
 of `RecordSpec`: use it only when records with an otherwise compatible layout
 must remain distinct. The in-memory provider keys physical identity by backend,
-context name, tenancy mode, tenant slice, source type, and either the named
-group or the explicit ungrouped value. It keeps different source types and
+tenant boundary, source type, and either the named group or the explicit
+ungrouped value. It keeps different source types and
 different groups separate even when they use the same stored record type.
 `idType`, `recordType`, `sourceType`, and `columns` are read-only accessors.
 

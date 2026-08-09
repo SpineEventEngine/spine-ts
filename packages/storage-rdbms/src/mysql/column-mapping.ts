@@ -1,4 +1,6 @@
-import { ScalarType, toJsonString } from "@bufbuild/protobuf";
+import { ScalarType, type Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { StringifierRegistry } from "@spine-event-engine/core";
 import type {
   ColumnMapping,
   ColumnTypeMapping,
@@ -12,6 +14,17 @@ const versionType = "spine.core.Version";
  * Converts typed Protobuf column values to Spine JVM JDBC values.
  */
 export class MysqlColumnMapping implements ColumnMapping<unknown> {
+  readonly #stringifiers: StringifierRegistry;
+
+  /**
+   * Creates a JVM-compatible MySQL column mapping.
+   *
+   * @param stringifiers The schema-bound message stringifiers.
+   */
+  constructor(stringifiers: StringifierRegistry = new StringifierRegistry()) {
+    this.#stringifiers = new StringifierRegistry(stringifiers);
+  }
+
   // prettier-ignore
 
   /**
@@ -33,7 +46,10 @@ export class MysqlColumnMapping implements ColumnMapping<unknown> {
         if (type.message.typeName === versionType) {
           return (value) => MysqlMappings.version(value);
         }
-        return (value) => toJsonString(type.message, value as never);
+        return (value) =>
+          this.#stringifiers
+            .forMessage(type.message as GenMessage<Message>)
+            .toString(value as Message);
     }
   }
 

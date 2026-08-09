@@ -794,6 +794,19 @@ export class StringifierRegistry {
   readonly #registered = new Map<string, Stringifier<Message>>();
 
   /**
+   * Creates an empty registry or a snapshot of another registry.
+   *
+   * @param source The optional registry to copy.
+   */
+  constructor(source?: StringifierRegistry) {
+    if (source !== undefined) {
+      for (const [typeName, stringifier] of source.#registered) {
+        this.#registered.set(typeName, stringifier);
+      }
+    }
+  }
+
+  /**
    * Registers or replaces the stringifier for one generated message type.
    * @param schema The generated message schema.
    * @param stringifier The reversible stringifier.

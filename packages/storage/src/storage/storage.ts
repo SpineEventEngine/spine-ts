@@ -19,7 +19,7 @@ export interface Storage {
 /**
  * Diagnostic context plus the provider tenant boundary for a storage operation.
  */
-export interface StorageContext {
+export type StorageContext = {
   // prettier-ignore
 
   /**
@@ -29,15 +29,32 @@ export interface StorageContext {
    * key, query, transaction, lock, cache key, or record-family identity.
    */
   readonly name: string;
+} & (
+  | {
+      // prettier-ignore
 
-  /**
-   * Whether records are split into per-tenant slices.
-   */
-  readonly multitenant: boolean;
+      /**
+       * Declares one unpartitioned single-tenant storage boundary.
+       */
+      readonly multitenant: false;
 
-  /**
-   * Complete generated tenant identity when storage is multitenant.
-   */
-  readonly tenantId?: TenantId;
-}
+      /**
+       * Single-tenant storage does not accept a tenant identifier.
+       */
+      readonly tenantId?: never;
+    }
+  | {
+      // prettier-ignore
+
+      /**
+       * Declares storage partitioned by complete tenant identities.
+       */
+      readonly multitenant: true;
+
+      /**
+       * Complete generated tenant identity required for provider selection.
+       */
+      readonly tenantId: TenantId;
+    }
+);
 import type { TenantId } from "@spine-event-engine/proto";

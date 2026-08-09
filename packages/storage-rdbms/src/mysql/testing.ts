@@ -11,6 +11,7 @@ import type { RecordSpec, StorageGroup } from "@spine-event-engine/storage";
 import type { Pool, RowDataPacket } from "mysql2/promise";
 
 import { MysqlTableResolver } from "./table-resolver.js";
+import { MysqlIdColumn } from "./id-column.js";
 
 /**
  * Resolves the default table name for a record-family integration test.
@@ -82,7 +83,7 @@ export async function mysqlCurrentRecord<I, S extends Message>(
   if (table === undefined) throw new Error("Current Entity table is missing.");
   const [rows] = await pool.query<(RowDataPacket & { bytes: Uint8Array })[]>(
     `SELECT bytes FROM \`${table}\` WHERE ID=?`,
-    [input.id.key(id)],
+    [new MysqlIdColumn(input.recordSpec.idType).value(id)],
   );
   return rows[0] === undefined ? undefined : fromBinary(EntityRecordSchema, rows[0].bytes);
 }

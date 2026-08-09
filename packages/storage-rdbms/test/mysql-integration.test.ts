@@ -177,7 +177,7 @@ live("MySQL-family record layout", () => {
           ...mutation(context, input, "wrong-source"),
           entity: { ...input, sourceType: TimestampSchema },
         }),
-      ).rejects.toThrow(/scope is incompatible/i);
+      ).rejects.toThrow(/source type is incompatible/i);
       await expect(
         commits.commit({
           ...mutation(context, input, "conflict"),

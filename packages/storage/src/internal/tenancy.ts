@@ -84,18 +84,19 @@ export const TenantBoundary: TenantBoundaryFactory = {
    * @returns The validated provider tenant boundary.
    */
   of(context: StorageContext): TenantBoundary {
+    const tenantId = (context as { readonly tenantId?: TenantId }).tenantId;
     if (!context.multitenant) {
-      if (context.tenantId !== undefined) {
+      if (tenantId !== undefined) {
         throw new Error(
           `Single-tenant storage "${context.name}" does not accept context.tenantId.`,
         );
       }
       return singleTenantBoundary;
     }
-    if (context.tenantId === undefined) {
+    if (tenantId === undefined) {
       throw new Error(`Multitenant storage "${context.name}" requires context.tenantId.`);
     }
-    return new MultitenantBoundary(context.tenantId);
+    return new MultitenantBoundary(tenantId);
   },
 };
 Object.freeze(TenantBoundary);

@@ -1,6 +1,7 @@
 import { create, ScalarType } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { UserIdSchema, VersionSchema } from "@spine-event-engine/proto";
+import { StringifierRegistry } from "@spine-event-engine/core";
 import { SubscriptionRecordSchema, SubscriptionStatus } from "@spine-event-engine/proto/client";
 import { ColumnMappings, ColumnTypes } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
@@ -36,6 +37,23 @@ describe("MysqlColumnMapping", () => {
     expect(ColumnMappings.value(mapping, ColumnTypes.message(UserIdSchema), user)).toBe(
       '{"value":"user-42"}',
     );
+  });
+
+  it("uses a registered message stringifier symmetrically", () => {
+    const registry = new StringifierRegistry();
+    registry.register(UserIdSchema, {
+      toString: (value) => `user:${value.value}`,
+      fromString: (value) => create(UserIdSchema, { value: value.slice(5) }),
+    });
+    const custom = new MysqlColumnMapping(registry);
+
+    expect(
+      ColumnMappings.value(
+        custom,
+        ColumnTypes.message(UserIdSchema),
+        create(UserIdSchema, { value: "42" }),
+      ),
+    ).toBe("user:42");
   });
 
   it("maps Timestamp to epoch nanoseconds and Version to its number", () => {

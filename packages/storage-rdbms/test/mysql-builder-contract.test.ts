@@ -1,10 +1,11 @@
 import { create, type Message } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { createPool } from "mysql2/promise";
-import { EventSchema, TenantIdSchema } from "@spine-event-engine/proto";
+import { StringifierRegistry } from "@spine-event-engine/core";
+import { EventSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
-import { RecordSpec, StorageGroup } from "@spine-event-engine/storage";
+import { ColumnTypes, RecordColumn, RecordSpec, StorageGroup } from "@spine-event-engine/storage";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -122,16 +123,67 @@ describe("MysqlStorageFactory builder contract", () => {
     expect(release).toHaveBeenCalledOnce();
   });
 
+  it("snapshots custom message stringifiers for record IDs and query columns", async () => {
+    const calls: { readonly sql: string; readonly values?: readonly unknown[] }[] = [];
+    const query = vi.fn((sql: string, values?: readonly unknown[]) => {
+      calls.push(values === undefined ? { sql } : { sql, values });
+      if (sql.includes("information_schema.columns")) {
+        return Promise.resolve([
+          [
+            { column_name: "ID", column_type: "varchar(512)", is_nullable: "NO" },
+            { column_name: "bytes", column_type: "blob", is_nullable: "NO" },
+            { column_name: "owner", column_type: "text", is_nullable: "YES" },
+          ],
+          [],
+        ]);
+      }
+      return mysqlQuery(sql);
+    });
+    const execute = vi.fn((sql: string, values?: readonly unknown[]) => {
+      calls.push(values === undefined ? { sql } : { sql, values });
+      return Promise.resolve([{ affectedRows: 1 }, []]);
+    });
+    vi.mocked(createPool).mockReturnValue({
+      getConnection: vi.fn(() => Promise.resolve({ ...mysqlConnection(query), query, execute })),
+      end: vi.fn(() => Promise.resolve()),
+    } as never);
+    const registry = new StringifierRegistry();
+    registry.register(UserIdSchema, userStringifier("user:"));
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: "mysql://db.example/stringifiers" })
+      .setStringifierRegistry(registry)
+      .build();
+    registry.register(UserIdSchema, userStringifier("changed:"));
+    const spec = new RecordSpec({
+      recordType: UserIdSchema,
+      idSchema: UserIdSchema,
+      extractId: (record) => record,
+      columns: [new RecordColumn("owner", ColumnTypes.message(UserIdSchema), (record) => record)],
+    });
+    const records = factory.createRecordStorage({ name: "users", multitenant: false }, spec);
+    const id = create(UserIdSchema, { value: "42" });
+
+    await records.write(id);
+    await records.query({ filters: [{ column: "owner", value: id }] });
+
+    expect(calls.flatMap((call) => call.values ?? [])).toContain("user:42");
+    expect(calls.flatMap((call) => call.values ?? [])).not.toContain("changed:42");
+    records.close();
+    factory.close();
+  });
+
   it("builds one pool per complete configured tenant and enumerates those boundaries", async () => {
     const firstEnd = vi.fn(() => Promise.resolve());
     const secondEnd = vi.fn(() => Promise.resolve());
+    const firstQuery = vi.fn(mysqlQuery);
+    const secondQuery = vi.fn(mysqlQuery);
     vi.mocked(createPool)
       .mockReturnValueOnce({
-        getConnection: vi.fn(() => Promise.resolve({ release: vi.fn() })),
+        getConnection: vi.fn(() => Promise.resolve(mysqlConnection(firstQuery))),
         end: firstEnd,
       } as never)
       .mockReturnValueOnce({
-        getConnection: vi.fn(() => Promise.resolve({ release: vi.fn() })),
+        getConnection: vi.fn(() => Promise.resolve(mysqlConnection(secondQuery))),
         end: secondEnd,
       } as never);
     const tenantOne = create(TenantIdSchema, { kind: { case: "value", value: "one" } });
@@ -148,6 +200,28 @@ describe("MysqlStorageFactory builder contract", () => {
       expect.objectContaining({ single: false, tenantId: tenantOne }),
       expect.objectContaining({ single: false, tenantId: tenantTwo }),
     ]);
+    firstQuery.mockClear();
+    secondQuery.mockClear();
+    const spec = new RecordSpec({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+    });
+    const first = factory.createRecordStorage(
+      { name: "first", multitenant: true, tenantId: tenantOne },
+      spec,
+    );
+    const second = factory.createRecordStorage(
+      { name: "second", multitenant: true, tenantId: tenantTwo },
+      spec,
+    );
+    await first.write(create(StringValueSchema, { value: "one" }));
+    expect(firstQuery).toHaveBeenCalled();
+    expect(secondQuery).not.toHaveBeenCalled();
+    firstQuery.mockClear();
+    await second.write(create(StringValueSchema, { value: "two" }));
+    expect(secondQuery).toHaveBeenCalled();
+    expect(firstQuery).not.toHaveBeenCalled();
     expect(() =>
       factory.createRecordStorage(
         {
@@ -162,8 +236,35 @@ describe("MysqlStorageFactory builder contract", () => {
         }),
       ),
     ).toThrow(/no configured database/i);
+    first.close();
+    second.close();
     factory.close();
     await Promise.resolve();
+    expect(firstEnd).toHaveBeenCalledOnce();
+    expect(secondEnd).toHaveBeenCalledOnce();
+  });
+
+  it("closes successful and failed tenant pools once after a partial build failure", async () => {
+    const firstEnd = vi.fn(() => Promise.resolve());
+    const secondEnd = vi.fn(() => Promise.resolve());
+    vi.mocked(createPool)
+      .mockReturnValueOnce({
+        getConnection: vi.fn(() => Promise.resolve({ release: vi.fn() })),
+        end: firstEnd,
+      } as never)
+      .mockReturnValueOnce({
+        getConnection: vi.fn(() => Promise.reject(new Error("credential leak"))),
+        end: secondEnd,
+      } as never);
+
+    await expect(
+      MysqlStorageFactory.newBuilder()
+        .setTenantOptions([
+          { tenantId: tenant("one"), options: { url: "mysql://db.example/one" } },
+          { tenantId: tenant("two"), options: { url: "mysql://db.example/two" } },
+        ])
+        .build(),
+    ).rejects.toThrow("Unable to connect to MySQL.");
     expect(firstEnd).toHaveBeenCalledOnce();
     expect(secondEnd).toHaveBeenCalledOnce();
   });
@@ -196,7 +297,7 @@ describe("MysqlStorageFactory builder contract", () => {
     ).rejects.toThrow(/either single-tenant or multitenant/i);
   });
 
-  it("enforces MySQL Entity-commit scope, history, event-ID, and close guards before opening tables", async () => {
+  it("enforces MySQL Entity-commit source, history, event-ID, and close guards before opening tables", async () => {
     vi.mocked(createPool).mockReturnValue({
       getConnection: vi.fn(() => Promise.resolve({ release: vi.fn() })),
       end: vi.fn(() => Promise.resolve()),
@@ -218,7 +319,7 @@ describe("MysqlStorageFactory builder contract", () => {
     const commits = EntityCommitStorageFactories.create(factory, entity);
     await expect(
       commits.commit({ ...mutation, entity: { ...entity, sourceType: TimestampSchema } }),
-    ).rejects.toThrow(/scope is incompatible/i);
+    ).rejects.toThrow(/source type is incompatible/i);
     await expect(
       commits.commit({
         ...mutation,
@@ -337,4 +438,41 @@ function entityInput(
 
 function tenant(value: string) {
   return create(TenantIdSchema, { kind: { case: "value", value } });
+}
+
+function mysqlConnection(query: ReturnType<typeof vi.fn>) {
+  return {
+    query,
+    execute: () => Promise.resolve([{ affectedRows: 1 }, []]),
+    beginTransaction: () => Promise.resolve(),
+    commit: () => Promise.resolve(),
+    rollback: () => Promise.resolve(),
+    release: vi.fn(),
+  };
+}
+
+function mysqlQuery(sql: string) {
+  if (sql.includes("information_schema.columns")) {
+    return Promise.resolve([
+      [
+        { column_name: "ID", column_type: "varchar(512)", is_nullable: "NO" },
+        { column_name: "bytes", column_type: "blob", is_nullable: "NO" },
+      ],
+      [],
+    ]);
+  }
+  if (sql.includes("information_schema.statistics") && sql.includes("index_name='PRIMARY'")) {
+    return Promise.resolve([[{ column_name: "ID", seq_in_index: 1 }], []]);
+  }
+  if (sql.includes("information_schema.statistics")) return Promise.resolve([[], []]);
+  if (sql.includes("information_schema.tables"))
+    return Promise.resolve([[{ engine: "InnoDB" }], []]);
+  return Promise.resolve([[], []]);
+}
+
+function userStringifier(prefix: string) {
+  return {
+    toString: (value: import("@spine-event-engine/proto").UserId) => `${prefix}${value.value}`,
+    fromString: (value: string) => create(UserIdSchema, { value: value.slice(prefix.length) }),
+  };
 }
