@@ -73,11 +73,11 @@
     "markdownAllowlist": [
       {
         "path": "docs/USER_GUIDE.md",
-        "line": "second property, and the adapter stores no schema fingerprint or layout"
+        "line": "`_scope`, storage revision, schema fingerprint, or layout metadata. Use a clean"
       },
       {
         "path": "packages/storage-datastore/REFERENCE.md",
-        "line": "`bytes`, and native declared columns; no ID copy, schema fingerprint, marker,"
+        "line": "provider revision. No scope, ID copy, storage revision, schema fingerprint,"
       }
     ]
   }
