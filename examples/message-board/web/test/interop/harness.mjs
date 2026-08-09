@@ -27,6 +27,8 @@ import {
 } from "../../../../../packages/proto/dist/src/client/index.js";
 import {
   createNativeGatewayServices,
+  DynamicSubscriptionCreator,
+  DynamicUnaryForwarder,
   InMemorySubscriptionBindings,
   NativeSubscriptionCreator,
   OpaqueSessionCookies,
@@ -35,6 +37,7 @@ import {
   TransportFacts,
   UnaryGateway,
 } from "../../../../../packages/auth/dist/index.js";
+import { ApplicationNode } from "../../../../../packages/deployment/dist/index.js";
 import {
   BoardAccessPolicy,
   BoardContextResolver,
@@ -73,7 +76,23 @@ export async function startTopology({ lifecycle = {} } = {}) {
     const backend = await startBackend();
     cleanup.add("message board backend", 10, () => backend.close());
     const transport = createGrpcTransport({ baseUrl: backend.baseUrl });
-    const creator = new NativeSubscriptionCreator(transport);
+    const nativeCreator = new NativeSubscriptionCreator(transport);
+    const owner = new DynamicUnaryForwarder({
+      create: () =>
+        Promise.resolve({
+          forward: (request) => nativeCreator.forward(request),
+          subscribe: (request, signal) => nativeCreator.subscribe(request, signal),
+          activate: (request, signal) => nativeCreator.activate(request, signal),
+          cancel: (request, signal) => nativeCreator.cancel(request, signal),
+          dispose: (envelope, signal) => nativeCreator.dispose(envelope, signal),
+          close: () => Promise.resolve(),
+        }),
+    });
+    await owner.reconcile([
+      new ApplicationNode({ id: "message-board", endpoint: backend.baseUrl }),
+    ]);
+    cleanup.add("native membership", 70, () => owner.close());
+    const creator = new DynamicSubscriptionCreator(owner);
     const counters = {
       forward: 0,
       subscribe: 0,
@@ -85,10 +104,10 @@ export async function startTopology({ lifecycle = {} } = {}) {
     };
     const forwardedContexts = [];
     const observedCreator = {
-      async subscribe(request, signal) {
+      async subscribe(request, signal, maxBackendEnvelopeBytes) {
         counters.subscribe += 1;
         forwardedContexts.push(contextSummary(fromBinary(TopicSchema, request.bytes).context));
-        return creator.subscribe(request, signal);
+        return creator.subscribe(request, signal, maxBackendEnvelopeBytes);
       },
       async activate(request, signal) {
         counters.activate += 1;
@@ -111,10 +130,6 @@ export async function startTopology({ lifecycle = {} } = {}) {
       async cancel(request, signal) {
         counters.cancel += 1;
         return creator.cancel(request, signal);
-      },
-      async dispose(envelope, signal) {
-        counters.dispose += 1;
-        return creator.dispose(envelope, signal);
       },
     };
     const policy = new BoardAccessPolicy();
@@ -171,12 +186,15 @@ export async function startTopology({ lifecycle = {} } = {}) {
             ? fromBinary(CommandSchema, request.value).context?.actorContext
             : fromBinary(QuerySchema, request.value).context;
         forwardedContexts.push(contextSummary(context));
-        return creator.forward(request);
+        return nativeCreator.forward(request);
       },
     });
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => globalThis.crypto.randomUUID(),
-      dispose: creator.dispose.bind(creator),
+      dispose: (definition, signal) => {
+        counters.dispose += 1;
+        return creator.cancel({ wire: definition }, signal);
+      },
     });
     cleanup.add("subscription bindings", 80, () => bindings.close());
     const subscriptions = new SubscriptionGateway({
