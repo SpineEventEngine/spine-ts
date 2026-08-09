@@ -2929,12 +2929,12 @@ describe("repository signal routing", () => {
       .withStorageFactory(factory)
       .build();
     const tenantAStorage = new CurrentRecordTestStorage({
-      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      context: { name: "Tasks", multitenant: true, tenantId: createTenantId("tenant-a") },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
     });
     const tenantBStorage = new CurrentRecordTestStorage({
-      context: { name: "Tasks", multitenant: true, tenantId: "tenant-b" },
+      context: { name: "Tasks", multitenant: true, tenantId: createTenantId("tenant-b") },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
     });
@@ -3673,7 +3673,9 @@ describe("repository signal routing", () => {
       .post(createAggregateCommand("command-pm-tenant", "pm-tenant", "Tenant PM", "tenant-a"));
 
     await expect(
-      context.stand().read(ProcessManagerStateSchema, "pm-tenant", { tenantId: "tenant-a" }),
+      context
+        .stand()
+        .read(ProcessManagerStateSchema, "pm-tenant", { tenantId: createTenantId("tenant-a") }),
     ).resolves.toEqual(
       create(ProcessManagerStateSchema, {
         id: "pm-tenant",
@@ -3681,7 +3683,9 @@ describe("repository signal routing", () => {
       }),
     );
     await expect(
-      context.stand().read(ProcessManagerStateSchema, "pm-tenant", { tenantId: "tenant-b" }),
+      context
+        .stand()
+        .read(ProcessManagerStateSchema, "pm-tenant", { tenantId: createTenantId("tenant-b") }),
     ).resolves.toBeUndefined();
   });
 
@@ -3794,7 +3798,7 @@ describe("repository signal routing", () => {
     const repository = createProcessManagerAssignRepository();
     BoundedContext.multitenant("Tasks").add(repository).withStorageFactory(factory).build();
     const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      context: { name: "Tasks", multitenant: true, tenantId: createTenantId("tenant-a") },
       storageFactory: factory,
     });
     const target = requireEntityInboxTarget(repository);
@@ -3810,7 +3814,7 @@ describe("repository signal routing", () => {
       1n,
     );
 
-    await expect(target.replay(received, "tenant-a")).rejects.toThrow(/tenant/i);
+    await expect(target.replay(received, createTenantId("tenant-a"))).rejects.toThrow(/tenant/i);
 
     expect(RoutingProcessManager.commandCalls).toBe(0);
   });
@@ -3942,7 +3946,7 @@ describe("repository signal routing", () => {
     const repository = createProcessManagerAssignRepository();
     BoundedContext.multitenant("Tasks").add(repository).withStorageFactory(factory).build();
     const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      context: { name: "Tasks", multitenant: true, tenantId: createTenantId("tenant-a") },
       storageFactory: factory,
     });
     const target = requireEntityInboxTarget(repository);
@@ -3969,7 +3973,7 @@ describe("repository signal routing", () => {
     const repository = createProcessManagerAssignRepository();
     BoundedContext.multitenant("Tasks").add(repository).withStorageFactory(factory).build();
     const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      context: { name: "Tasks", multitenant: true, tenantId: createTenantId("tenant-a") },
       storageFactory: factory,
     });
     const target = requireEntityInboxTarget(repository);
@@ -3984,7 +3988,7 @@ describe("repository signal routing", () => {
       1n,
     );
 
-    await expect(target.replay(received, "tenant-a")).rejects.toThrow(
+    await expect(target.replay(received, createTenantId("tenant-a"))).rejects.toThrow(
       /stored command tenant metadata/,
     );
 
@@ -4887,7 +4891,9 @@ describe("repository signal routing", () => {
         whenDispatched: reactor?.context?.timestamp,
       });
       await expect(
-        context.stand().read(ProcessManagerStateSchema, "pm-diagnostic", { tenantId: "a" }),
+        context
+          .stand()
+          .read(ProcessManagerStateSchema, "pm-diagnostic", { tenantId: createTenantId("a") }),
       ).resolves.toMatchObject({
         queue: "Task reacted",
       });
@@ -5378,7 +5384,9 @@ describe("repository signal routing", () => {
 
       diagnostics.splice(0);
       ExecutingTaskProjection.reset();
-      await expect(context.catchUpReadSide({ tenantId: "tenant-a" })).resolves.toMatchObject({
+      await expect(
+        context.catchUpReadSide({ tenantId: createTenantId("tenant-a") }),
+      ).resolves.toMatchObject({
         replayedEventCount: 1,
       });
       await waitForCondition(() => diagnostics.length === 1);
@@ -6291,18 +6299,20 @@ describe("repository signal routing", () => {
         name: "Wrong tenant-a",
         priority: 99,
       }),
-      { tenantId: "tenant-a" },
+      { tenantId: createTenantId("tenant-a") },
     );
     ExecutingTaskProjection.reset();
 
-    await expect(context.catchUpReadSide({ tenantId: "tenant-a" })).resolves.toEqual({
+    await expect(
+      context.catchUpReadSide({ tenantId: createTenantId("tenant-a") }),
+    ).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 1,
       clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
     });
     await expect(
       context.stand().read(ProjectionStateSchema, "task-catch-up-tenant", {
-        tenantId: "tenant-a",
+        tenantId: createTenantId("tenant-a"),
       }),
     ).resolves.toEqual(
       create(ProjectionStateSchema, {
@@ -6313,7 +6323,7 @@ describe("repository signal routing", () => {
     );
     await expect(
       context.stand().read(ProjectionStateSchema, "task-catch-up-tenant", {
-        tenantId: "tenant-b",
+        tenantId: createTenantId("tenant-b"),
       }),
     ).resolves.toEqual(tenantBBefore);
     expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
@@ -6327,14 +6337,14 @@ describe("repository signal routing", () => {
       .add(createExecutingProjectionRepository())
       .build();
 
-    await expect(singleTenant.catchUpReadSide({ tenantId: "tenant-a" })).rejects.toThrow(
-      'Single-tenant read-side catch-up for "Tasks" does not accept tenantId.',
-    );
+    await expect(
+      singleTenant.catchUpReadSide({ tenantId: createTenantId("tenant-a") }),
+    ).rejects.toThrow('Single-tenant read-side catch-up for "Tasks" does not accept tenantId.');
     await expect(multitenant.catchUpReadSide()).rejects.toThrow(
       'Multitenant read-side catch-up for "Tasks" requires tenantId.',
     );
-    await expect(multitenant.catchUpReadSide({ tenantId: " \t " })).rejects.toThrow(
-      'Multitenant read-side catch-up for "Tasks" requires tenantId.',
+    await expect(multitenant.catchUpReadSide({ tenantId: createTenantId(" \t ") })).rejects.toThrow(
+      /non-empty TenantId/,
     );
   });
 
@@ -6463,18 +6473,20 @@ describe("repository signal routing", () => {
         name: "Wrong raw tenant",
         priority: 99,
       }),
-      { tenantId: rawTenantId },
+      { tenantId: createTenantId(rawTenantId) },
     );
     ExecutingTaskProjection.reset();
 
-    await expect(context.catchUpReadSide({ tenantId: rawTenantId })).resolves.toEqual({
+    await expect(
+      context.catchUpReadSide({ tenantId: createTenantId(rawTenantId) }),
+    ).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 1,
       clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
     });
     await expect(
       context.stand().read(ProjectionStateSchema, "task-space-tenant", {
-        tenantId: rawTenantId,
+        tenantId: createTenantId(rawTenantId),
       }),
     ).resolves.toEqual(
       create(ProjectionStateSchema, {
@@ -6485,7 +6497,7 @@ describe("repository signal routing", () => {
     );
     await expect(
       context.stand().read(ProjectionStateSchema, "task-space-tenant", {
-        tenantId: trimmedTenantId,
+        tenantId: createTenantId(trimmedTenantId),
       }),
     ).resolves.toEqual(trimmedBefore);
     expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
@@ -6499,7 +6511,7 @@ describe("repository signal routing", () => {
       .add(createExecutingProjectionRepository())
       .build();
     const eventStore = new EventStore(
-      { name: "Tasks", multitenant: true, tenantId: "domain:example.com" },
+      { name: "Tasks", multitenant: true, tenantId: createTenantId("example.com", "domain") },
       storageFactory,
     );
 
@@ -6510,14 +6522,16 @@ describe("repository signal routing", () => {
       }),
     );
 
-    await expect(context.catchUpReadSide({ tenantId: "domain:example.com" })).resolves.toEqual({
+    await expect(
+      context.catchUpReadSide({ tenantId: createTenantId("example.com", "domain") }),
+    ).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 0,
       clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
     });
     await expect(
       context.stand().read(ProjectionStateSchema, "task-domain-tenant", {
-        tenantId: "domain:example.com",
+        tenantId: createTenantId("example.com", "domain"),
       }),
     ).resolves.toEqual(
       create(ProjectionStateSchema, {
@@ -6536,7 +6550,11 @@ describe("repository signal routing", () => {
       .add(createExecutingProjectionRepository())
       .build();
     const eventStore = new EventStore(
-      { name: "Tasks", multitenant: true, tenantId: "email:owner@example.com" },
+      {
+        name: "Tasks",
+        multitenant: true,
+        tenantId: createTenantId("owner@example.com", "email"),
+      },
       storageFactory,
     );
 
@@ -6547,16 +6565,16 @@ describe("repository signal routing", () => {
       }),
     );
 
-    await expect(context.catchUpReadSide({ tenantId: "email:owner@example.com" })).resolves.toEqual(
-      {
-        replayedEventCount: 1,
-        clearedEntityCount: 0,
-        clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
-      },
-    );
+    await expect(
+      context.catchUpReadSide({ tenantId: createTenantId("owner@example.com", "email") }),
+    ).resolves.toEqual({
+      replayedEventCount: 1,
+      clearedEntityCount: 0,
+      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
+    });
     await expect(
       context.stand().read(ProjectionStateSchema, "task-email-tenant", {
-        tenantId: "email:owner@example.com",
+        tenantId: createTenantId("owner@example.com", "email"),
       }),
     ).resolves.toEqual(
       create(ProjectionStateSchema, {
@@ -6567,7 +6585,7 @@ describe("repository signal routing", () => {
     );
   });
 
-  it("rejects multitenant catch-up events whose envelope tenant mismatches storage", async () => {
+  it("stores multitenant events in the tenant selected by their envelope", async () => {
     ExecutingTaskProjection.reset();
     const storageFactory = new InMemoryStorageFactory();
     const context = BoundedContext.multitenant("Tasks")
@@ -6580,7 +6598,7 @@ describe("repository signal routing", () => {
       priority: 7,
     });
     const eventStore = new EventStore(
-      { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      { name: "Tasks", multitenant: true, tenantId: createTenantId("tenant-a") },
       storageFactory,
     );
 
@@ -6589,29 +6607,27 @@ describe("repository signal routing", () => {
         pastMessageTenantId: "tenant-b",
       }),
     ]);
-    await context.stand().update(ProjectionStateSchema, tenantBState, { tenantId: "tenant-b" });
-
-    await expect(context.catchUpReadSide({ tenantId: "tenant-a" })).rejects.toMatchObject({
-      name: "ReadCatchUpReplayError",
-      code: "READ_SIDE_CATCH_UP_REPLAY_FAILED",
-      eventId: "event-corrupt-tenant",
-      detail: {
-        name: "Error",
-        message: "Read-side catch-up stored event envelope tenant does not match.",
-      },
+    await context.stand().update(ProjectionStateSchema, tenantBState, {
+      tenantId: createTenantId("tenant-b"),
     });
-    await context.catchUpReadSide({ tenantId: "tenant-a" }).catch((error: unknown) => {
-      const detail = (error as { readonly detail?: { readonly message?: string } }).detail;
 
-      expect(detail?.message).not.toContain("tenant-a");
-      expect(detail?.message).not.toContain("tenant-b");
+    await expect(
+      context.catchUpReadSide({ tenantId: createTenantId("tenant-a") }),
+    ).resolves.toMatchObject({
+      replayedEventCount: 0,
+    });
+    await expect(
+      context.catchUpReadSide({ tenantId: createTenantId("tenant-b") }),
+    ).resolves.toMatchObject({
+      replayedEventCount: 1,
+      clearedEntityCount: 1,
     });
     await expect(
       context.stand().read(ProjectionStateSchema, "task-corrupt-tenant", {
-        tenantId: "tenant-b",
+        tenantId: createTenantId("tenant-b"),
       }),
-    ).resolves.toEqual(tenantBState);
-    expect(ExecutingTaskProjection.subscriberCalls).toBe(0);
+    ).resolves.toMatchObject({ name: "Task (projected)", priority: 2 });
+    expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
   });
 
   it("rejects multitenant catch-up events without an envelope tenant", async () => {
@@ -6622,13 +6638,15 @@ describe("repository signal routing", () => {
       .add(createExecutingProjectionRepository())
       .build();
     const eventStore = new EventStore(
-      { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      { name: "Tasks", multitenant: true, tenantId: createTenantId("tenant-a") },
       storageFactory,
     );
 
     await eventStore.append(createProjectionEvent("event-missing-tenant", "task-missing-tenant"));
 
-    await expect(context.catchUpReadSide({ tenantId: "tenant-a" })).rejects.toMatchObject({
+    await expect(
+      context.catchUpReadSide({ tenantId: createTenantId("tenant-a") }),
+    ).rejects.toMatchObject({
       name: "ReadCatchUpReplayError",
       code: "READ_SIDE_CATCH_UP_REPLAY_FAILED",
       eventId: "event-missing-tenant",
@@ -6639,7 +6657,7 @@ describe("repository signal routing", () => {
     });
     await expect(
       context.stand().read(ProjectionStateSchema, "task-missing-tenant", {
-        tenantId: "tenant-a",
+        tenantId: createTenantId("tenant-a"),
       }),
     ).resolves.toBeUndefined();
     expect(ExecutingTaskProjection.subscriberCalls).toBe(0);
@@ -7014,7 +7032,7 @@ describe("repository signal routing", () => {
       .withStorageFactory(factory)
       .build();
     const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      context: { name: "Tasks", multitenant: true, tenantId: createTenantId("tenant-a") },
       storageFactory: factory,
     });
     const target = requireProjectionInboxTarget(repository);
@@ -7118,25 +7136,29 @@ describe("repository signal routing", () => {
       await expect(target.replay({ ...valid, label: "REACT_UPON_EVENT" } as never)).rejects.toThrow(
         'Projection inbox replay does not handle "REACT_UPON_EVENT" messages.',
       );
-      await expect(target.replay(missingSignal as never, "tenant-a")).rejects.toThrow(
-        "Projection inbox replay requires a readable stored event.",
-      );
-      await expect(target.replay(invalidPayload as never, "tenant-a")).rejects.toThrow(
-        "Projection inbox replay requires a readable event payload.",
-      );
-      await expect(target.replay(missingTenant as never, "tenant-a")).rejects.toThrow(
-        "Projection inbox replay requires stored event tenant metadata.",
-      );
-      await expect(target.replay(mismatchedTenant as never, "tenant-a")).rejects.toThrow(
-        "Projection inbox replay stored event tenant does not match.",
-      );
-      await expect(target.replay(mismatchedTarget as never, "tenant-a")).rejects.toThrow(
+      await expect(
+        target.replay(missingSignal as never, createTenantId("tenant-a")),
+      ).rejects.toThrow("Projection inbox replay requires a readable stored event.");
+      await expect(
+        target.replay(invalidPayload as never, createTenantId("tenant-a")),
+      ).rejects.toThrow("Projection inbox replay requires a readable event payload.");
+      await expect(
+        target.replay(missingTenant as never, createTenantId("tenant-a")),
+      ).rejects.toThrow("Projection inbox replay requires stored event tenant metadata.");
+      await expect(
+        target.replay(mismatchedTenant as never, createTenantId("tenant-a")),
+      ).rejects.toThrow("Projection inbox replay stored event tenant does not match.");
+      await expect(
+        target.replay(mismatchedTarget as never, createTenantId("tenant-a")),
+      ).rejects.toThrow(
         "Projection inbox replay stored target ID does not match the routed event.",
       );
 
       expect(ExecutingTaskProjection.subscriberCalls).toBe(0);
       await expect(
-        context.stand().read(ProjectionStateSchema, "projection-replay", { tenantId: "tenant-a" }),
+        context.stand().read(ProjectionStateSchema, "projection-replay", {
+          tenantId: createTenantId("tenant-a"),
+        }),
       ).resolves.toBeUndefined();
     } finally {
       await context.close();
@@ -7406,7 +7428,9 @@ describe("repository signal routing", () => {
       priority: 2,
     });
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-tenant", { tenantId: "tenant-b" }),
+      context
+        .stand()
+        .read(ProjectionStateSchema, "task-tenant", { tenantId: createTenantId("tenant-b") }),
     ).resolves.toBeUndefined();
   });
 
@@ -7435,7 +7459,7 @@ describe("repository signal routing", () => {
     });
     await expect(
       context.stand().read(ProjectionStateSchema, "task-past-message-tenant", {
-        tenantId: "tenant-b",
+        tenantId: createTenantId("tenant-b"),
       }),
     ).resolves.toBeUndefined();
   });
@@ -7453,12 +7477,12 @@ describe("repository signal routing", () => {
     ).rejects.toThrow(/requires command\.id/);
     await expect(
       context.stand().read(ProjectionStateSchema, "task-no-id-tenant", {
-        tenantId: "tenant-a",
+        tenantId: createTenantId("tenant-a"),
       }),
     ).resolves.toBeUndefined();
     await expect(
       context.stand().read(ProjectionStateSchema, "task-no-id-tenant", {
-        tenantId: "tenant-b",
+        tenantId: createTenantId("tenant-b"),
       }),
     ).resolves.toBeUndefined();
   });
@@ -7476,12 +7500,12 @@ describe("repository signal routing", () => {
     ).rejects.toThrow(/command\.id/i);
     await expect(
       context.stand().read(ProjectionStateSchema, "task-blank-id-tenant", {
-        tenantId: "tenant-a",
+        tenantId: createTenantId("tenant-a"),
       }),
     ).resolves.toBeUndefined();
     await expect(
       context.stand().read(ProjectionStateSchema, "task-blank-id-tenant", {
-        tenantId: "tenant-b",
+        tenantId: createTenantId("tenant-b"),
       }),
     ).resolves.toBeUndefined();
   });
@@ -7497,7 +7521,7 @@ describe("repository signal routing", () => {
       (update) => {
         updates.push(update.state);
       },
-      { tenantId: "tenant-a" },
+      { tenantId: createTenantId("tenant-a") },
     );
 
     await context
@@ -7525,7 +7549,9 @@ describe("repository signal routing", () => {
       }),
     ]);
     await expect(
-      context.stand().read(ProjectionStateSchema, "task-command-tenant", { tenantId: "tenant-b" }),
+      context.stand().read(ProjectionStateSchema, "task-command-tenant", {
+        tenantId: createTenantId("tenant-b"),
+      }),
     ).resolves.toBeUndefined();
   });
 
@@ -9267,7 +9293,11 @@ async function waitForProjectionState(
   while (Date.now() < deadline) {
     const state = await context
       .stand()
-      .read(ProjectionStateSchema, id, tenantId === undefined ? {} : { tenantId });
+      .read(
+        ProjectionStateSchema,
+        id,
+        tenantId === undefined ? {} : { tenantId: createTenantId(tenantId) },
+      );
     if (state !== undefined) {
       return state;
     }

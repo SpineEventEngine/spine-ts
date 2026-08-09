@@ -579,10 +579,10 @@ describe("SpineServices", () => {
     });
     const context = BoundedContext.multitenant("Tasks").add(repository).build();
     await context.stand().update(ProjectionStateSchema, createState("task-1", "Tenant A"), {
-      tenantId: "tenant-a",
+      tenantId: tenantValue("tenant-a"),
     });
     await context.stand().update(ProjectionStateSchema, createState("task-1", "Tenant B"), {
-      tenantId: "tenant-b",
+      tenantId: tenantValue("tenant-b"),
     });
     const server = await startServices(context);
 
@@ -636,15 +636,15 @@ describe("SpineServices", () => {
     });
     const context = BoundedContext.multitenant("Tasks").add(repository).build();
     await context.stand().update(ProjectionStateSchema, createState("task-1", "Tenant A"), {
-      tenantId: "tenant-a",
+      tenantId: tenantValue("tenant-a"),
       version: create(VersionSchema, { number: 1 }),
     });
     await context.stand().update(ProjectionStateSchema, createState("task-2", "Tenant B"), {
-      tenantId: "tenant-b",
+      tenantId: tenantValue("tenant-b"),
       version: create(VersionSchema, { number: 2 }),
     });
     await context.stand().update(ProjectionStateSchema, createState("task-3", "Tenant B Again"), {
-      tenantId: "tenant-b",
+      tenantId: tenantValue("tenant-b"),
       version: create(VersionSchema, { number: 3 }),
     });
     const handlers = registeredQueryHandlers(context);
@@ -972,14 +972,14 @@ describe("SpineServices", () => {
     });
     const context = BoundedContext.multitenant("Tasks").add(repository).build();
     await context.stand().update(ProjectionStateSchema, createState("task-1", "Tenant A", 1), {
-      tenantId: "tenant-a",
+      tenantId: tenantValue("tenant-a"),
     });
     await context.stand().update(ProjectionStateSchema, createState("task-2", "Bravo", 2), {
-      tenantId: "tenant-b",
+      tenantId: tenantValue("tenant-b"),
       version: create(VersionSchema, { number: 2 }),
     });
     await context.stand().update(ProjectionStateSchema, createState("task-3", "Alpha", 2), {
-      tenantId: "tenant-b",
+      tenantId: tenantValue("tenant-b"),
       version: create(VersionSchema, { number: 3 }),
     });
     const handlers = registeredQueryHandlers(context);
@@ -1095,15 +1095,15 @@ describe("SpineServices", () => {
         .update(
           ProjectionStateSchema,
           createState(`tenant-a-${String(index)}`, `Tenant A ${String(index)}`),
-          { tenantId: "tenant-a" },
+          { tenantId: tenantValue("tenant-a") },
         ),
     );
     await Promise.all(tenantAUpdates);
     await context.stand().update(ProjectionStateSchema, createState("tenant-b-1", "Tenant B 1"), {
-      tenantId: "tenant-b",
+      tenantId: tenantValue("tenant-b"),
     });
     await context.stand().update(ProjectionStateSchema, createState("tenant-b-2", "Tenant B 2"), {
-      tenantId: "tenant-b",
+      tenantId: tenantValue("tenant-b"),
     });
     const handlers = registeredQueryHandlers(context);
 
@@ -1956,7 +1956,7 @@ describe("SpineServices", () => {
   });
 
   it("treats subscription tenant domain and email variants as present", async () => {
-    const capturedTenantKeys: (string | undefined)[] = [];
+    const capturedTenantKeys: (TenantId | undefined)[] = [];
     let deliverUpdate:
       | ((update: {
           readonly typeUrl: string;
@@ -2006,7 +2006,7 @@ describe("SpineServices", () => {
     await withTimeout(pending, "subscription tenant activation update");
     await iterator.return?.();
 
-    expect(capturedTenantKeys).toEqual(["email:tenant@example.test"]);
+    expect(capturedTenantKeys).toEqual([tenantEmail("tenant@example.test")]);
   });
 
   it("returns QueryResponse errors for query tenant mismatches", async () => {
@@ -2047,7 +2047,7 @@ describe("SpineServices", () => {
   });
 
   it("treats query tenant domain and email variants as present", async () => {
-    const capturedTenantKeys: (string | undefined)[] = [];
+    const capturedTenantKeys: (TenantId | undefined)[] = [];
     const singleTenant = createFakeContext({
       stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       isMultitenant: false,
@@ -2076,11 +2076,11 @@ describe("SpineServices", () => {
     expect(inapplicable.response?.status?.status.case).toBe("error");
     expect(responseErrorMessage(inapplicable)).toBe("Tenant is not applicable for this query.");
     expect(accepted.response?.status?.status.case).toBe("ok");
-    expect(capturedTenantKeys).toEqual(["domain:tenant.example"]);
+    expect(capturedTenantKeys).toEqual([tenantDomain("tenant.example")]);
   });
 
   it("treats include-all query tenant domain and email variants as present", async () => {
-    const capturedTenantKeys: (string | undefined)[] = [];
+    const capturedTenantKeys: (TenantId | undefined)[] = [];
     const singleTenant = createFakeContext({
       stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       isMultitenant: false,
@@ -2111,7 +2111,7 @@ describe("SpineServices", () => {
     expect(inapplicable.response?.status?.status.case).toBe("error");
     expect(responseErrorMessage(inapplicable)).toBe("Tenant is not applicable for this query.");
     expect(accepted.response?.status?.status.case).toBe("ok");
-    expect(capturedTenantKeys).toEqual(["domain:tenant.example"]);
+    expect(capturedTenantKeys).toEqual([tenantDomain("tenant.example")]);
   });
 
   it("activates and cancels explicit subscriptions over a real gRPC transport", async () => {
@@ -2929,7 +2929,7 @@ describe("SpineServices", () => {
   });
 
   it("keeps returned subscription mutation from changing activation tenant or topic", async () => {
-    const capturedTenantKeys: (string | undefined)[] = [];
+    const capturedTenantKeys: (TenantId | undefined)[] = [];
     let deliverUpdate:
       | ((update: {
           readonly typeUrl: string;
@@ -2966,7 +2966,7 @@ describe("SpineServices", () => {
     });
     const delivered = await withTimeout(next, "clone-isolated subscription update");
 
-    expect(capturedTenantKeys).toEqual(["tenant-a"]);
+    expect(capturedTenantKeys).toEqual([tenantValue("tenant-a")]);
     expect(unpackEntityState(delivered.value as SubscriptionUpdate | undefined)).toEqual(
       createState("task-cloned", "Delivered"),
     );
