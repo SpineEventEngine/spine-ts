@@ -1,6 +1,6 @@
 # T-0148: JVM-Compatible MySQL Tenancy and Layout
 
-Status: In progress; non-releasable stacked checkpoint.
+Status: Complete and reviewed; non-releasable stacked checkpoint.
 
 ## Objective
 
