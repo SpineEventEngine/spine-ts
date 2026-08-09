@@ -1,5 +1,5 @@
-import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { create, createRegistry, toBinary } from "@bufbuild/protobuf";
+import { AnySchema, FieldMaskSchema } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
@@ -30,6 +30,28 @@ describe("JVM-compatible identifier and stringifier contracts", () => {
     expect(stringifier.fromString(stored)).toEqual(id);
   });
 
+  it("accepts a native Protobuf registry for compact JSON", () => {
+    const id = create(EventIdSchema, { value: "event-42" });
+    const stringifier = Stringifiers.forMessage(EventIdSchema, createRegistry(EventIdSchema));
+
+    expect(stringifier.fromString(stringifier.toString(id))).toEqual(id);
+  });
+
+  it("restores repeated Proto JSON fields and native-registry Any values", () => {
+    const mask = create(FieldMaskSchema, { paths: ["state.name"] });
+    const maskStringifier = Stringifiers.forMessage(FieldMaskSchema);
+    expect(maskStringifier.fromString(maskStringifier.toString(mask))).toEqual(mask);
+
+    const packed = create(AnySchema, {
+      typeUrl: `type.spine.io/${UserIdSchema.typeName}`,
+      value: toBinary(UserIdSchema, create(UserIdSchema, { value: "user-42" })),
+    });
+    const anyStringifier = Stringifiers.forMessage(AnySchema, createRegistry(UserIdSchema));
+    const restored = anyStringifier.fromString(anyStringifier.toString(packed));
+    expect(restored.typeUrl).toBe(`type.googleapis.com/${UserIdSchema.typeName}`);
+    expect(restored.value).toEqual(packed.value);
+  });
+
   it.each([
     ["string", "message-42"],
     ["int32", 42],
@@ -49,6 +71,7 @@ describe("JVM-compatible identifier and stringifier contracts", () => {
   });
 
   it("rejects primitive identifiers outside their declared type", () => {
+    expect(() => Identifiers.pack("string", 42 as never)).toThrow("Identifier must be a string.");
     expect(() => Identifiers.pack("int32", 2 ** 31)).toThrow(
       "Identifier is outside the int32 range.",
     );

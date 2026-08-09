@@ -61,6 +61,25 @@ describe("DatastoreTenantCatalog", () => {
     ).rejects.toThrow("namespace discovery failed");
   });
 
+  it("accepts path-shaped namespace keys and ignores malformed key entries", async () => {
+    const client = new NamespaceClient([]);
+    client.response = [
+      [
+        null,
+        42,
+        { [client.KEY]: null },
+        { [client.KEY]: {} },
+        { [client.KEY]: { name: 42 } },
+        { [client.KEY]: { path: ["Vpath-tenant"] } },
+      ],
+    ];
+    const catalog = new DatastoreTenantCatalog(client as never, new DefaultNamespaceConverter());
+
+    await expect(catalog.all()).resolves.toMatchObject([
+      { tenantId: { kind: { case: "value", value: "path-tenant" } } },
+    ]);
+  });
+
   it("rejects namespace collisions from a custom converter", async () => {
     const client = new NamespaceClient(["one", "two"]);
     const catalog = new DatastoreTenantCatalog(client as never, {

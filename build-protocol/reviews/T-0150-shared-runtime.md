@@ -91,3 +91,8 @@ Prettier, and `git diff --check` passed.
   directly exercise already-reviewed tenancy and startup behavior; 26 focused
   tests and the complete restarted cheap preflight pass, so no review lane was
   substantively reopened.
+- The converged release suite then passed every runnable test but missed the
+  unconditional global branch threshold by 18 slots. Added tests exercise
+  existing public mapping/validation boundaries only; LCOV union confirms 22
+  newly covered branches. No production or reviewed contract changed, so this
+  deterministic coverage correction does not reopen specialist lanes.

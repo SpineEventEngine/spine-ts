@@ -37,6 +37,7 @@ describe("DefaultNamespaceConverter", () => {
 
     expect(assignments.toNamespace(value("first"))).toBe("custom-first");
     expect(assignments.fromNamespace("custom-first")).toEqual(value("first"));
+    expect(assignments.fromNamespace("")).toBeUndefined();
   });
 
   it("rejects empty, non-reversible, and colliding custom mappings", () => {

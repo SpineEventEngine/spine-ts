@@ -800,6 +800,33 @@ describe("@spine-event-engine/core validation facade", () => {
     }
   });
 
+  it("preserves a minimal transition violation without optional details", () => {
+    const state = create(RequiredNameSchema, { name: "ready" });
+    const result = Validate.transition(
+      { schema: RequiredNameSchema, previous: undefined, next: state },
+      [
+        {
+          validateTransition() {
+            return [
+              create(ConstraintViolationSchema, { typeName: "example.Minimal" }),
+              create(ConstraintViolationSchema, {
+                typeName: "example.MessageOnly",
+                message: create(TemplateStringSchema, { withPlaceholders: "Message only." }),
+              }),
+            ];
+          },
+        },
+      ],
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.violations).toHaveLength(2);
+    expect(result.violations[0]?.typeName).toBe("example.Minimal");
+    expect(result.violations[0]?.message).toBeUndefined();
+    expect(result.violations[0]?.fieldPath).toBeUndefined();
+    expect(result.violations[1]?.message?.placeholderValue).toEqual({});
+  });
+
   it("isolates throwing transition rules and preserves deterministic rule order", () => {
     const previous = create(RequiredNameSchema, { name: "first" });
     const next = create(RequiredNameSchema, { name: "second" });

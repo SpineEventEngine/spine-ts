@@ -1,5 +1,5 @@
 import { create, ScalarType } from "@bufbuild/protobuf";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { FieldMaskSchema, StructSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, VersionSchema } from "@spine-event-engine/proto";
 import { SubscriptionRecordSchema, SubscriptionStatus } from "@spine-event-engine/proto/client";
 import { describe, expect, it } from "vitest";
@@ -81,5 +81,14 @@ describe("RecordColumn", () => {
       kind: "message",
       message: { typeName: "spine.core.Version" },
     });
+  });
+
+  it("rejects repeated and map fields as physical columns", () => {
+    expect(() => Storage.ColumnTypes.fromField(FieldMaskSchema.field.paths)).toThrow(
+      /must have one singular value/,
+    );
+    expect(() => Storage.ColumnTypes.fromField(StructSchema.field.fields)).toThrow(
+      /must have one singular value/,
+    );
   });
 });

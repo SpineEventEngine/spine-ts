@@ -29,6 +29,17 @@ describe("TenantBoundary", () => {
     });
   });
 
+  it("rejects contradictory and incomplete storage boundaries", () => {
+    expect(() =>
+      TenantBoundary.of({
+        name: "Tasks",
+        multitenant: false,
+        tenantId: tenant("value", "unexpected"),
+      } as never),
+    ).toThrow(/does not accept context\.tenantId/);
+    expect(() => TenantBoundary.from(create(TenantIdSchema))).toThrow(/non-empty TenantId/);
+  });
+
   it("keeps tenant identity stable across source and result mutation", () => {
     const source = tenant("value", "tenant-one");
     const boundary = TenantBoundary.from(source);

@@ -43,4 +43,35 @@ describe("MysqlIdColumn", () => {
   it("rejects an invented primitive ID kind", () => {
     expect(() => new MysqlIdColumn("object")).toThrow(/does not support/i);
   });
+
+  it("rejects provider values that do not match the declared ID type", () => {
+    expect(() => new MysqlIdColumn(UserIdSchema).read(42)).toThrow(/message ID is not text/);
+    expect(() => new MysqlIdColumn("string").read(42)).toThrow(/string ID is invalid/);
+    expect(() => new MysqlIdColumn<unknown>("int32").value("42")).toThrow(/int32 ID is invalid/);
+    expect(() => new MysqlIdColumn<unknown>("int32").value(42.5)).toThrow(/int32 ID is invalid/);
+    expect(() => new MysqlIdColumn<unknown>("int32").value(2 ** 31)).toThrow(/int32 ID is invalid/);
+    expect(() => new MysqlIdColumn<unknown>("int64").value(42)).toThrow(/int64 ID is invalid/);
+    expect(() => new MysqlIdColumn<unknown>("int64").value(1n << 63n)).toThrow(
+      /int64 ID is invalid/,
+    );
+  });
+
+  it("accepts driver-native and textual integer results", () => {
+    expect(new MysqlIdColumn("int32").read("42")).toBe(42);
+    expect(new MysqlIdColumn("int64").read(42n)).toBe(42n);
+  });
+
+  it("rejects identifiers beyond the shared textual key bound", () => {
+    expect(() => new MysqlIdColumn("string").value("x".repeat(513))).toThrow(
+      /identifier is too large/,
+    );
+    const registry = new StringifierRegistry();
+    registry.register(UserIdSchema, {
+      toString: () => "x".repeat(513),
+      fromString: () => create(UserIdSchema),
+    });
+    expect(() => new MysqlIdColumn(UserIdSchema, registry).value(create(UserIdSchema))).toThrow(
+      /identifier is too large/,
+    );
+  });
 });
