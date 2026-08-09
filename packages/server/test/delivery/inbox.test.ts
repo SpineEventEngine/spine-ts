@@ -24,14 +24,16 @@ describe("Inbox", () => {
     });
   });
 
-  it("shares durable rows through the selected context and isolates another context", async () => {
+  it("shares one record family across diagnostic Bounded Context names", async () => {
     const factory = new InMemoryStorageFactory();
     const first = open("Tasks", factory);
     const second = open("Tasks", factory);
-    const isolated = open("Other", factory);
+    const differentlyNamed = open("Other", factory);
     await first.receive(input(createMessage("ignored", "shared", 1n)));
     expect((await second.read(ShardIndex.single())).map((row) => row.signalId)).toEqual(["shared"]);
-    expect(await isolated.read(ShardIndex.single())).toEqual([]);
+    expect((await differentlyNamed.read(ShardIndex.single())).map((row) => row.signalId)).toEqual([
+      "shared",
+    ]);
   });
 
   it("rejects invalid public read limits before storage access", async () => {

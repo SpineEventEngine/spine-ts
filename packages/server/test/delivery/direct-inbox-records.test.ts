@@ -16,6 +16,7 @@ import { InboxRecords, inboxRecordSpec } from "../../src/delivery/inbox-records.
 import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { createMessage } from "./inbox-message-fixture.js";
+import { tenant } from "../tenant-fixture.js";
 
 describe("direct InboxMessage storage", () => {
   it("has no per-message exclusion or separate duplicate persistence", async () => {
@@ -400,7 +401,7 @@ describe("direct InboxMessage storage", () => {
 
   it("validates direct read bounds, clock output, and multitenant storage context", async () => {
     const storage = new InboxStorage({
-      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      context: { name: "Tasks", multitenant: true, tenantId: tenant("tenant-a") },
       storageFactory: new InMemoryStorageFactory(),
       now: () => new Date(Number.NaN),
     });

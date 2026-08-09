@@ -95,18 +95,15 @@ describe("StorageSubscriptionRegistry provider configuration", () => {
         await Promise.resolve();
         queries.push(sql);
         if (sql.startsWith("SELECT bytes")) {
-          const value = records.get(Buffer.from(values[1] as Uint8Array).toString("base64"));
+          const value = records.get(String(values[0]));
           return [value === undefined ? [] : [{ bytes: value }]];
         }
         if (sql.startsWith("INSERT INTO")) {
-          records.set(
-            Buffer.from(values[1] as Uint8Array).toString("base64"),
-            values[2] as Uint8Array,
-          );
+          records.set(String(values[0]), values[1] as Uint8Array);
           return [{ affectedRows: 1 }];
         }
         if (sql.startsWith("DELETE FROM")) {
-          const key = Buffer.from(values[1] as Uint8Array).toString("base64");
+          const key = String(values[0]);
           const deleted = records.delete(key);
           return [{ affectedRows: deleted ? 1 : 0 }];
         }

@@ -45,6 +45,7 @@ import {
 } from "../../src/bus/event-bus.js";
 import * as EntityLog from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import { tenant } from "../tenant-fixture.js";
 
 const observedEventBusSubscriptions = vi.hoisted(
   () => [] as { readonly closed: boolean; unsubscribe(): void }[],
@@ -675,20 +676,20 @@ describe("Stand", () => {
       storageFactory,
     });
     stand.register(ProjectionStateSchema);
-    stand.subscribe(ProjectionStateSchema, () => undefined, { tenantId: "tenant-b" });
+    stand.subscribe(ProjectionStateSchema, () => undefined, { tenantId: tenant("tenant-b") });
 
     await stand.update(ProjectionStateSchema, createState("task-1", "Tenant A first"), {
-      tenantId: "tenant-a",
+      tenantId: tenant("tenant-a"),
     });
     await stand.update(ProjectionStateSchema, createState("task-1", "Tenant A second"), {
-      tenantId: "tenant-a",
+      tenantId: tenant("tenant-a"),
     });
 
     expect(storageFactory.readCount).toBe(0);
 
-    stand.subscribe(ProjectionStateSchema, () => undefined, { tenantId: "tenant-a" });
+    stand.subscribe(ProjectionStateSchema, () => undefined, { tenantId: tenant("tenant-a") });
     await stand.update(ProjectionStateSchema, createState("task-1", "Tenant A third"), {
-      tenantId: "tenant-a",
+      tenantId: tenant("tenant-a"),
     });
 
     expect(storageFactory.readCount).toBe(0);
@@ -1133,8 +1134,12 @@ describe("Stand", () => {
     });
     stand.register(ProjectionStateSchema);
 
-    await stand.update(ProjectionStateSchema, createState("first", "First"), { tenantId: "one" });
-    await stand.update(ProjectionStateSchema, createState("second", "Second"), { tenantId: "two" });
+    await stand.update(ProjectionStateSchema, createState("first", "First"), {
+      tenantId: tenant("one"),
+    });
+    await stand.update(ProjectionStateSchema, createState("second", "Second"), {
+      tenantId: tenant("two"),
+    });
 
     await expect(stand.close()).rejects.toThrow("Stand close failed.");
     expect(storageFactory.closedEntityHandles).toBe(2);
@@ -1179,31 +1184,31 @@ describe("Stand", () => {
       (update) => {
         tenantAUpdates.push(update.state.name);
       },
-      { tenantId: "tenant-a" },
+      { tenantId: tenant("tenant-a") },
     );
     stand.subscribe(
       ProjectionStateSchema,
       (update) => {
         tenantBUpdates.push(update.state.name);
       },
-      { tenantId: "tenant-b" },
+      { tenantId: tenant("tenant-b") },
     );
 
     await expect(
       stand.update(ProjectionStateSchema, createState("task-1", "No Tenant")),
     ).rejects.toThrow(/tenantId/);
     await stand.update(ProjectionStateSchema, createState("task-1", "Tenant A"), {
-      tenantId: "tenant-a",
+      tenantId: tenant("tenant-a"),
     });
     await stand.update(ProjectionStateSchema, createState("task-1", "Tenant B"), {
-      tenantId: "tenant-b",
+      tenantId: tenant("tenant-b"),
     });
 
     await expect(
-      stand.read(ProjectionStateSchema, "task-1", { tenantId: "tenant-a" }),
+      stand.read(ProjectionStateSchema, "task-1", { tenantId: tenant("tenant-a") }),
     ).resolves.toMatchObject({ name: "Tenant A" });
     await expect(
-      stand.read(ProjectionStateSchema, "task-1", { tenantId: "tenant-b" }),
+      stand.read(ProjectionStateSchema, "task-1", { tenantId: tenant("tenant-b") }),
     ).resolves.toMatchObject({ name: "Tenant B" });
     expect(tenantAUpdates).toEqual(["Tenant A"]);
     expect(tenantBUpdates).toEqual(["Tenant B"]);
@@ -1218,14 +1223,14 @@ describe("Stand", () => {
 
     await expect(
       stand.update(ProjectionStateSchema, createState("task-1", "Tenant"), {
-        tenantId: "tenant-a",
+        tenantId: tenant("tenant-a"),
       }),
     ).rejects.toThrow(/single-tenant/i);
     await expect(
-      stand.read(ProjectionStateSchema, "task-1", { tenantId: "tenant-a" }),
+      stand.read(ProjectionStateSchema, "task-1", { tenantId: tenant("tenant-a") }),
     ).rejects.toThrow(/single-tenant/i);
     expect(() =>
-      stand.subscribe(ProjectionStateSchema, () => undefined, { tenantId: "tenant-a" }),
+      stand.subscribe(ProjectionStateSchema, () => undefined, { tenantId: tenant("tenant-a") }),
     ).toThrow(/single-tenant/i);
   });
 

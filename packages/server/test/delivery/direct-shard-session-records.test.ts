@@ -14,6 +14,7 @@ import {
   shardedWorkRegistryAccess,
 } from "../../src/delivery/sharded-work-registry.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
+import { tenant } from "../tenant-fixture.js";
 
 describe("direct ShardSessionRecord storage", () => {
   it("uses the generated session record and shard index directly", () => {
@@ -320,7 +321,7 @@ describe("direct ShardSessionRecord storage", () => {
     await expect(first.release(session)).resolves.toBe(false);
 
     const defaultLease = new ShardedWorkRegistry({
-      context: { name: "Tenanted", multitenant: true, tenantId: "tenant-a" },
+      context: { name: "Tenanted", multitenant: true, tenantId: tenant("tenant-a") },
       storageFactory: storage,
       now: () => new Date(0),
     });
