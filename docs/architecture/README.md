@@ -638,10 +638,13 @@ queries by exact IDs, exact column filters, deterministic sort order on `id`,
 stored columns, or dotted record paths, stable continuations after sorted row
 keys, non-negative offsets applied after sorting and before positive limits,
 and simple masks on cloned results.
-`StorageContext` carries the bounded-context storage namespace plus optional
-tenant scoping for multitenant storages. Providers resolve direct record
+`StorageContext` carries a diagnostic Bounded Context name plus the optional
+complete tenant selection for multitenant storage. Providers resolve direct record
 families from source type, record type, and optional external `StorageGroup`;
 their layouts are structurally validated and never migrated automatically.
+Bounded Context names never enter physical provider identity. MySQL selects a
+configured database per tenant; Datastore selects a native namespace per
+tenant.
 
 `EventStore` is a higher-level framework delegate over
 `RecordStorage<EventId, Event>`. It is intentionally created directly by
@@ -656,7 +659,7 @@ attempts, fan out to subscribers, or implement retry/bus behavior.
 
 `InMemoryStorageFactory` and `InMemoryRecordStorage` are
 test/development adapter. They are process-local, share backing records by
-factory, physical context, source type, and optional `StorageGroup`; compatible
+factory backend, tenant boundary, source type, and optional `StorageGroup`; compatible
 distinct `RecordSpec` instances therefore share backing records,
 return independently closeable handles, and clone stored values so later caller
 mutation cannot affect stored records. Payloads must remain cloneable, which

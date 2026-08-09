@@ -168,7 +168,7 @@ Core contract:
 
 - `StorageFactory.createRecordStorage(ContextSpec, RecordSpec<I, R>)` is the one method an adapter must implement.
 - Default methods build higher-level storage types over record storage: aggregate state, aggregate event records, event store, entity record storage, inbox storage, catch-up storage, and mirror migration storage.
-- Context-scoped storages receive `ContextSpec` so implementations can separate bounded contexts and multitenancy. `InboxStorage` and `CatchUpStorage` are environment-wide delivery storages, not per bounded context. Tenant storage is also shared through a special tenants context.
+- Context-local storages receive `ContextSpec` for tenancy and repository policy. The current JVM MySQL and Datastore layouts do not partition by Bounded Context name: MySQL uses a tenant-selected database and Datastore uses a tenant-selected native namespace. `InboxStorage` and `CatchUpStorage` are environment-wide delivery storages, not per bounded context. Tenant storage is also shared through a special tenants context.
 - `StorageFactory` extends server `Closeable`.
 
 Source:

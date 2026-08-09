@@ -5,8 +5,10 @@ This reference is for agents configuring the Google Cloud Datastore adapter.
 ## Public entry point
 
 Import `DatastoreStorageFactory`, `DatastoreStorageFactoryBuilder`,
-`RecordLayout`, `CreateRecordStorage`, `CreateEntityStorage`, and
-`DatastoreQueryLimitError` from `@spine-event-engine/storage-datastore`.
+`RecordLayout`, `CreateRecordStorage`, `CreateEntityStorage`,
+`NamespaceConverter`, `DefaultNamespaceConverter`, `DatastoreIdColumn`,
+`DatastoreColumnMapping`, and `DatastoreQueryLimitError` from
+`@spine-event-engine/storage-datastore`.
 Create a factory with `DatastoreStorageFactory.newBuilder().setClient(client)`.
 The adapter never owns or closes that client.
 
@@ -20,7 +22,10 @@ uses this precedence:
 4. a record-only layout; and
 5. the default kind.
 
-`organizeRecords(...)` changes a kind. `useRecordStorage(...)` replaces a
+`setNamespaceConverter(...)` replaces complete `TenantId`/native namespace
+conversion. `setStringifierRegistry(...)` supplies reversible mappings for
+message-valued IDs and ordinary message columns. Both are snapshotted by
+`build()`. `organizeRecords(...)` changes a kind. `useRecordStorage(...)` replaces a
 record-family provider. `useEntityStorage(...)` replaces the complete coherent
 Entity handle, including its commit capability; the built-in Entity provider
 does not mix custom record creators into one transaction.
@@ -29,16 +34,27 @@ does not mix custom record creators into one transaction.
 
 Every record family uses the source Proto full name as its default kind. A
 grouped family uses `<group>_<record-simple-name>`. A layout registration can
-replace only the kind. Rows contain indexed `_scope`, unindexed Protobuf
-`bytes`, and native declared columns; no ID copy, schema fingerprint, marker,
-or compatibility entity is stored. Tenant contexts use the tenant namespace.
+replace only the kind. Rows contain unindexed Protobuf `bytes` and the declared
+indexed columns; no scope, ID copy, revision, schema fingerprint, marker, or
+compatibility entity is stored. The Bounded Context name is diagnostic only.
 
-The canonical key contains context, tenant mode, source type, external
-`StorageGroup`, and record ID without truncation or hashing. `_scope`, `bytes`,
-and `__key__` are reserved. Blank kinds, kinds or key names over 1,500 UTF-8
-bytes, unsupported indexed values, non-finite numbers, and integers outside
-their supported exact range fail before an RPC. Stored `bytes` remain the
-authoritative record; declared properties are rematerialized after decoding.
+Single tenancy preserves the caller client's configured/default namespace.
+Multitenancy converts the complete generated `TenantId` to a native namespace
+with the JVM-compatible `D`, `E`, or `V` prefix. The key contains only the
+resolved kind and mapped record ID. Message IDs use compact Proto JSON or their
+registered custom stringifier; `string`, `int32`, and `int64` IDs use their
+direct text form as the key name. `bytes` and `__key__` are reserved. Blank
+kinds, kinds or key names over 1,500 UTF-8 bytes, unsupported values, non-finite
+numbers, and integers outside their declared/provider range fail before an
+RPC. Stored `bytes` remain authoritative; declared properties are rematerialized
+after decoding.
+
+Declared string and boolean columns use native values. Integer columns use
+Datastore int values, float/double columns use Datastore double values, bytes
+use blobs, enums use their numeric value, Timestamp uses the native timestamp,
+Version uses its number, and ordinary messages use the same compact Proto JSON
+or custom stringifier as query operands. Null is stored as native null. The
+application type registry is required when default Proto JSON expands `Any`.
 
 Entity current records use `EntityRecord`; enabled state history uses grouped
 `EntityStateKey`/`EntityRecord`; diagnostic history uses grouped
@@ -47,8 +63,9 @@ histories allocate no record handle or Datastore row.
 
 ## Queries and commits
 
-Queries always constrain `_scope`. Provider-illegal plans reconcile a maximum
-of 1,000 rows; the 1,001st row throws `DatastoreQueryLimitError`.
+Queries run inside the selected native namespace. Provider-illegal plans
+reconcile a maximum of 1,000 rows; the 1,001st row throws
+`DatastoreQueryLimitError`.
 `writeAll()` uses batches of at most 500 mutations and is not atomic across
 batches.
 
@@ -70,6 +87,12 @@ state-at-time, trim, and truncate behavior; event history provides backward and
 truncate behavior. Timestamp comparisons include seconds and nanoseconds.
 Long maintenance can commit several bounded chunks, so a later failure leaves
 earlier chunks durable and the caller retries the same idempotent operation.
+
+The factory owns one tenant catalog. It reads native `__namespace__` metadata,
+converts only namespaces owned by its `NamespaceConverter`, and keeps an early
+in-memory cache for newly admitted tenants. `keep()` stores no `TenantId` row or
+other discovery record; Datastore exposes native metadata after an application
+entity is written in that namespace.
 
 ## Operations and errors
 

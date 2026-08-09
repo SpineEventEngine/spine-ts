@@ -280,7 +280,7 @@ It also creates environment/shared delivery storage:
 - inbox storage
 - catch-up storage
 
-Most storage construction receives `ContextSpec` so adapters can partition data by context name, tenancy, and event-storage policy. Delivery storage is shared across bounded contexts and receives a `multitenant` flag instead of a context spec. Tenant storage is also special: it uses a storage factory but belongs to a shared tenants area rather than one domain context.
+Most storage construction receives `ContextSpec` for tenancy and repository policy. The current JVM MySQL and Datastore adapters do not put the Bounded Context name into physical identity: DDD state types distinguish record families, MySQL selects a database per tenant, and Datastore selects a native namespace per tenant. Delivery storage is shared across bounded contexts and receives a `multitenant` flag instead of a context spec. Tenant storage is also special: it uses a storage factory but belongs to a shared tenants area rather than one domain context.
 
 TypeScript implication: prefer an explicit `ServerRuntime` or `ServerEnvironment` object that can be passed into builders, with a default singleton only as a convenience. Storage adapters must take `ContextSpec` on context-local stores and a multitenancy flag on shared delivery stores.
 

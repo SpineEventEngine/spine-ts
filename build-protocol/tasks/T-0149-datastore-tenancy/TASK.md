@@ -20,8 +20,9 @@ records without aliases or a dual layout.
 
 ## Acceptance
 
-- The default converter maps complete generated TenantIds reversibly to JVM
-  namespaces `D<domain>`, `E<email>`, and `V<value>` without collisions.
+- The default converter matches JVM namespaces `D<domain>`, `E<escaped-email>`,
+  and `V<value>`. Native discovery applies the JVM reverse mapping, and catalog
+  admission fails closed if distinct complete tenants map to one namespace.
 - Every multitenant key, query, and transaction carries the selected native
   namespace. Single-tenant operations preserve the client default.
 - Kinds derive from the approved record-family type/group mapping without a

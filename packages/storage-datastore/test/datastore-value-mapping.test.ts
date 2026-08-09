@@ -3,6 +3,7 @@ import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Datastore } from "@google-cloud/datastore";
 import { StringifierRegistry } from "@spine-event-engine/core";
 import { UserIdSchema, VersionSchema } from "@spine-event-engine/proto";
+import { OrderBy_DirectionSchema } from "@spine-event-engine/proto/generated/spine/client/query_pb.js";
 import { ColumnMappings, ColumnTypes } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
@@ -69,5 +70,77 @@ describe("Spine JVM Datastore value mappings", () => {
     expect(timestamp.getMilliseconds() * 1_000_000).toBe(7);
     expect(version.value).toBe("7");
     expect(ColumnMappings.value(mapping, ColumnTypes.scalar(ScalarType.STRING), null)).toBeNull();
+    expect(
+      (
+        ColumnMappings.value(mapping, ColumnTypes.enum(OrderBy_DirectionSchema), 2) as {
+          value: string;
+        }
+      ).value,
+    ).toBe("2");
+  });
+
+  it.each([
+    [ScalarType.STRING, "text", "text"],
+    [ScalarType.BOOL, true, true],
+    [ScalarType.INT32, -42, "-42"],
+    [ScalarType.SINT32, -42, "-42"],
+    [ScalarType.SFIXED32, -42, "-42"],
+    [ScalarType.UINT32, 42, "42"],
+    [ScalarType.FIXED32, 42, "42"],
+    [ScalarType.INT64, -42n, "-42"],
+    [ScalarType.SINT64, -42n, "-42"],
+    [ScalarType.SFIXED64, -42n, "-42"],
+    [ScalarType.UINT64, 42n, "42"],
+    [ScalarType.FIXED64, 42n, "42"],
+    [ScalarType.FLOAT, 1.5, 1.5],
+    [ScalarType.DOUBLE, 1.5, 1.5],
+  ] as const)("maps scalar type %s to its native value", (type, input, expected) => {
+    const result = ColumnMappings.value(
+      new DatastoreColumnMapping(),
+      ColumnTypes.scalar(type),
+      input,
+    );
+    const actual =
+      typeof result === "object" && result !== null && "value" in result ? result.value : result;
+    expect(actual).toBe(expected);
+  });
+
+  it("rejects invalid integer and timestamp values before provider work", () => {
+    const mapping = new DatastoreColumnMapping();
+    const value = (type: ScalarType, input: unknown) =>
+      ColumnMappings.value(mapping, ColumnTypes.scalar(type), input);
+
+    expect(() => value(ScalarType.INT32, 2 ** 31)).toThrow("outside its range");
+    expect(() => value(ScalarType.INT32, -(2 ** 31) - 1)).toThrow("outside its range");
+    expect(() => value(ScalarType.UINT32, -1)).toThrow("outside its range");
+    expect(() => value(ScalarType.UINT32, 2 ** 32)).toThrow("outside its range");
+    expect(() => value(ScalarType.UINT64, 1n << 63n)).toThrow("signed 64-bit provider range");
+    expect(() => value(ScalarType.INT64, 1.5)).toThrow("integer column is invalid");
+    expect(() => value(ScalarType.INT64, "01")).toThrow("integer column is invalid");
+    expect((value(ScalarType.INT64, "42") as ReturnType<typeof Datastore.int>).value).toBe("42");
+
+    const timestamp = (seconds: unknown, nanos: unknown) =>
+      ColumnMappings.value(mapping, ColumnTypes.message(TimestampSchema), {
+        seconds,
+        nanos,
+      });
+    expect(() => timestamp(1, 0)).toThrow("timestamp column is invalid");
+    expect(() => timestamp(1n, 0.5)).toThrow("timestamp column is invalid");
+    expect(() => timestamp(1n, -1)).toThrow("timestamp column is invalid");
+    expect(() => timestamp(1n, 1_000_000_000)).toThrow("timestamp column is invalid");
+    expect(() => timestamp(10n ** 400n, 0)).toThrow("outside the supported range");
+  });
+
+  it("rejects unsupported and malformed IDs", () => {
+    expect(new DatastoreIdColumn("int32").read("42")).toBe(42);
+    expect(new DatastoreIdColumn("int64").read("42")).toBe(42n);
+    expect(() => new DatastoreIdColumn("float")).toThrow("does not support");
+    expect(() => new DatastoreIdColumn("string").value(42)).toThrow("identifier is invalid");
+    expect(() => new DatastoreIdColumn("int32").read("not-an-integer")).toThrow(
+      "identifier is invalid",
+    );
+    expect(() => new DatastoreIdColumn("int64").read("not-an-integer")).toThrow();
+    expect(() => new DatastoreIdColumn("string").value("")).toThrow("must be non-empty");
+    expect(() => new DatastoreIdColumn("string").value("x".repeat(1_501))).toThrow("1,500-byte");
   });
 });

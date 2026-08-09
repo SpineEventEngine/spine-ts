@@ -34,6 +34,8 @@ export interface NamespaceConverter {
  * Spine JVM-compatible `D`, `E`, and `V` Datastore namespace conversion.
  */
 export class DefaultNamespaceConverter implements NamespaceConverter {
+  // prettier-ignore
+
   /**
    * Restores a tenant from an owned prefixed namespace.
    *

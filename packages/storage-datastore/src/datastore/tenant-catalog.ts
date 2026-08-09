@@ -66,12 +66,13 @@ export class DatastoreTenantCatalog implements TenantCatalog {
   }
 
   /**
-   * Remembers an admitted tenant until native metadata becomes visible.
+   * Records an admitted tenant until native metadata becomes visible.
    *
    * No record is written. Datastore creates namespace metadata when the first
    * application entity is persisted in that namespace.
    *
    * @param boundary The admitted multitenant boundary.
+   * @returns Completion of the in-memory catalog update.
    */
   keep(boundary: TenantBoundaryValue): Promise<void> {
     this.requireOpen();
@@ -89,6 +90,8 @@ export class DatastoreTenantCatalog implements TenantCatalog {
 
   /**
    * Closes this catalog without closing the caller-owned Datastore client.
+   *
+   * @returns Completion of catalog closure.
    */
   close(): Promise<void> {
     this.#open = false;

@@ -3,11 +3,8 @@ import { TenantIdSchema } from "@spine-event-engine/proto";
 import { TenantBoundary } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
-import {
-  DatastoreStorageFactory,
-  DatastoreTenantCatalog,
-  DefaultNamespaceConverter,
-} from "../src/index.js";
+import { DatastoreStorageFactory, DefaultNamespaceConverter } from "../src/index.js";
+import { DatastoreTenantCatalog } from "../src/datastore/tenant-catalog.js";
 
 describe("DatastoreTenantCatalog", () => {
   it("discovers only owned native namespaces without writing tenant records", async () => {
@@ -61,6 +58,25 @@ describe("DatastoreTenantCatalog", () => {
     await expect(
       new DatastoreTenantCatalog(failed as never, new DefaultNamespaceConverter()).all(),
     ).rejects.toThrow("namespace discovery failed");
+  });
+
+  it("rejects namespace collisions from a custom converter", async () => {
+    const client = new NamespaceClient(["one", "two"]);
+    const catalog = new DatastoreTenantCatalog(client as never, {
+      toNamespace: () => "same",
+      fromNamespace: () => tenant("same-tenant"),
+    });
+
+    await expect(catalog.all()).rejects.toThrow("same tenant boundary");
+
+    const kept = new DatastoreTenantCatalog(new NamespaceClient([]) as never, {
+      toNamespace: () => "same",
+      fromNamespace: () => undefined,
+    });
+    await kept.keep(TenantBoundary.from(tenant("first")));
+    await expect(kept.keep(TenantBoundary.from(tenant("second")))).rejects.toThrow(
+      "already assigned",
+    );
   });
 });
 

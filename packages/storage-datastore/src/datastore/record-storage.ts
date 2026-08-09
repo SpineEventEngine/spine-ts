@@ -314,6 +314,8 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
    * @param maxClientSideScan Maximum candidate records to materialize locally.
    * @param group The optional generated storage group.
    * @param kind The optional physical Datastore kind override.
+   * @param namespaceConverter Converts complete tenants to native namespaces.
+   * @param stringifiers Converts message-valued IDs and declared columns.
    */
   constructor(
     context: StorageContext,

@@ -44,6 +44,51 @@ The builder always uses a caller-owned client. Its fixed finite reconciliation
 bound is 1,000 records. Pass the factory to the server or create record storage
 through the normal storage API.
 
+## 🧭 Understand tenants and kinds
+
+Datastore uses its native namespace as the tenant boundary. Spine converts a
+complete generated `TenantId` to the same namespace form as Spine JVM:
+`Dexample.org` for a domain, `Eada-at-example.org` for an email, or `Vtenant-a`
+for a plain value. Single-tenant storage keeps the namespace already configured
+on the caller-owned client. A Bounded Context name helps diagnostics; it never
+changes a namespace, kind, or key.
+
+Suppose a projection state is declared like this:
+
+```proto
+message MessageView {
+  MessageId id = 1 [(required) = true, (set_once) = true];
+  BoardId board = 2 [(column) = true];
+  UserId author = 3 [(column) = true];
+  string text = 4;
+}
+```
+
+With the default layout, its kind is the full Proto type name, for example
+`spine.examples.messageboard.MessageView`. One entity looks conceptually like
+this:
+
+| Datastore part | Stored value                              |
+| -------------- | ----------------------------------------- |
+| namespace      | `Vtenant-a`                               |
+| kind           | `spine.examples.messageboard.MessageView` |
+| key name       | `{"value":"message-42"}`                  |
+| `bytes`        | unindexed serialized `MessageView`        |
+| `board`        | `{"value":"board-7"}`                     |
+| `author`       | `{"value":"user-3"}`                      |
+
+Message-valued IDs and columns use compact Proto JSON by default. Applications
+can register one reversible custom `Stringifier`; the same mapping is then used
+for writes, key lookups, filters, ordering continuations, and reads. Primitive
+values use their native Datastore representation. There is no `_scope`, copied
+ID, storage revision, fingerprint, marker, or compatibility entity.
+
+When a user queries `board == BoardId("board-7")`, Spine converts that generated
+`BoardId` with the same stringifier and sends a Datastore property filter for
+`board == '{"value":"board-7"}'`. Datastore uses the declared property and its
+indexes to find matching keys; Spine decodes the authoritative `bytes` payload
+for each result.
+
 ## 🔐 Configure credentials and indexes
 
 Credential selection belongs to the official Google client. For example, an
@@ -61,7 +106,6 @@ example:
 indexes:
   - kind: spine.examples.orders.OrderView
     properties:
-      - name: _scope
       - name: status
       - name: when_created
         direction: desc
@@ -82,7 +126,6 @@ ordering differ from current state. For a state type named
 indexes:
   - kind: spine.examples.board.Message_EntityRecord
     properties:
-      - name: _scope
       - name: entity_id
       - name: version
         direction: desc

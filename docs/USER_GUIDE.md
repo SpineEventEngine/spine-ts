@@ -1561,11 +1561,13 @@ storage-provider APIs from a domain handler.
 
 ### Tenant slices, IDs, records, and indexes
 
-For a multitenant `StorageContext`, a non-blank `tenantId` becomes the Datastore
-namespace. A missing or blank tenant ID fails before provider work. Single-
-tenant contexts add no per-tenant namespace; any default namespace configured
-on the Google client remains provider behavior. Treat tenant identity as part
-of the application's context construction and test isolation boundary.
+For a multitenant `StorageContext`, a complete generated `TenantId` selects the
+Datastore native namespace. The default conversion matches Spine JVM:
+`Dexample.org` for a domain, `Eada-at-example.org` for an email, and `Vtenant-a`
+for a plain value. An incomplete tenant fails before provider work. A
+single-tenant context preserves any default namespace configured on the Google
+client. The Bounded Context name is diagnostic only; it never changes a
+namespace, kind, key, transaction, or query.
 
 Each record family has its own Datastore kind. By default, an ungrouped family
 uses the source Proto type name. A grouped family, such as retained Entity
@@ -1582,19 +1584,29 @@ one coherent `useEntityStorage(...)` implementation instead. Use the
 application's generated schemas; this guide does not invent a package import
 that cannot compile in the repository.
 
-Each stored entity contains `_scope`, the deterministic Protobuf `bytes`, and
-the record's declared indexed columns. Its Datastore key contains the resolved
-kind and a collision-free canonical record identity. IDs are not copied into a
-second property, and the adapter stores no schema fingerprint or layout
-metadata. This is a migration-free replacement: use a clean namespace or
-perform an application-owned migration from an older experimental layout.
+Each stored entity contains the deterministic Protobuf `bytes` and the record's
+declared indexed columns. Its Datastore key contains only the resolved kind and
+mapped record ID. Message-valued IDs use compact Proto JSON by default; string,
+int32, and int64 IDs use their direct text form. IDs are not copied into another
+property, and the adapter stores no `_scope`, revision, schema fingerprint, or
+layout metadata. This is a migration-free replacement: use a clean namespace
+or perform an application-owned migration from an older experimental layout.
 
-Indexed record-column values support strings, finite Datastore-compatible
-numbers, booleans, `null`, and exact signed 64-bit `bigint`. Other column value
-types, non-finite numbers, and out-of-range `bigint` values fail before a
-provider RPC. Define only the columns your queries need, and deploy Datastore
-composite indexes for each production combination of equality filters and sort
-orders. The adapter does not create or deploy those indexes.
+Declared columns follow Spine JVM mapping. Strings and booleans stay native;
+integer types use Datastore integers; float/double use Datastore doubles; bytes
+use blobs; enums use their numeric value; Timestamp uses a native timestamp;
+Version uses its number; ordinary message values use compact Proto JSON; and
+null stays null. A registered custom message `Stringifier` replaces compact
+Proto JSON symmetrically for writes and queries. Configure the application type
+registry when default Proto JSON must expand `Any` values.
+
+For example, a `BoardId board = 2 [(column) = true]` field holding
+`{"value":"board-7"}` is stored as the `board` property text
+`{"value":"board-7"}`. A later Query for that generated `BoardId` is converted
+with the same stringifier and pushed down as equality on the `board` property.
+Datastore uses its property index to find matching keys, and Spine decodes the
+authoritative `bytes` payloads. Define only the columns your queries need and
+deploy composite indexes for each production filter-and-sort combination.
 
 ### Queries have pushdown and a finite reconciliation bound
 
