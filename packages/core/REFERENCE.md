@@ -6,8 +6,18 @@ This reference is for agents integrating the public core package.
 
 Import from `@spine-event-engine/core`. The package exports `Validate`,
 `ValidationException`, `RejectionThrowable`, `AnyMessages`, `SignalEnvelopes`,
-`TypeUrls`, `TypeRegistry`, `spineCoreRegistry`, and their exported input,
+`TypeUrls`, `TypeRegistry`, `spineCoreRegistry`, `Identifiers`, `Stringifiers`,
+`StringifierRegistry`, the `Stringifier` contract, and their exported input,
 result, and metadata types.
+
+## Storage value helpers
+
+`Identifiers` packs and unpacks the generated-message and supported primitive
+identifier kinds used by storage contracts. `Stringifiers.forMessage()` maps a
+generated message reversibly to compact Proto JSON by default.
+`StringifierRegistry` lets an application register another reversible mapping
+for a particular message schema. Providers snapshot the registry they accept;
+use the same mapping for stored IDs or columns and their query operands.
 
 ## Validation
 

@@ -18,6 +18,9 @@ Import `MysqlStorageFactory`, `MysqlStorageOptions`, `MysqlTenantStorageOptions`
 single-tenant database. `setTenantOptions(entries)` configures one distinct
 database and owned pool per complete generated `TenantId`. The factory selects
 the matching pool before table, query, transaction, or lock work.
+`setStringifierRegistry(registry)` configures reversible mappings for
+message-valued IDs and ordinary message columns; the builder snapshots the
+registry so later caller changes do not alter stored or queried values.
 Per-family tables are created and verified lazily on first use. Options support
 `connectionLimit`, `connectTimeoutMs`, and TLS material. Failure to validate
 configuration throws `MysqlStorageConfigurationError`; inaccessible connections

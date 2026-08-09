@@ -1,6 +1,7 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema, UserIdSchema, VersionSchema } from "@spine-event-engine/proto";
+import { StringifierRegistry } from "@spine-event-engine/core";
 import {
   EntityRecordSchema,
   type EntityRecord,
@@ -196,6 +197,30 @@ describe("MysqlEntityStorage history behavior", () => {
 
     await expect(mysqlCurrentRecord({ query } as never, input, id)).resolves.toBeUndefined();
     expect(query).toHaveBeenCalledWith(expect.any(String), ['{"value":"user-42"}']);
+  });
+
+  it("queries current Entity rows with the factory's custom message ID stringifier", async () => {
+    const query = vi.fn(() => Promise.resolve([[], []]));
+    const input = {
+      ...entityInput(false, false),
+      recordSpec: new RecordSpec({
+        sourceType: StringValueSchema,
+        recordType: EntityRecordSchema,
+        idSchema: UserIdSchema,
+        extractId: () => create(UserIdSchema),
+      }),
+    };
+    const id = create(UserIdSchema, { value: "user-42" });
+    const stringifiers = new StringifierRegistry();
+    stringifiers.register(UserIdSchema, {
+      toString: (value) => `user:${value.value}`,
+      fromString: (value) => create(UserIdSchema, { value: value.slice("user:".length) }),
+    });
+
+    await expect(
+      mysqlCurrentRecord({ query } as never, input, id, stringifiers),
+    ).resolves.toBeUndefined();
+    expect(query).toHaveBeenCalledWith(expect.any(String), ["user:user-42"]);
   });
 
   it("counts only matching enabled state and event histories", async () => {

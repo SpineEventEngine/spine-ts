@@ -6,7 +6,9 @@ This reference is for agents working with the Spine TS storage contract.
 
 Import public types from `@spine-event-engine/storage`. The entry point exports
 `StorageFactory`, `RecordStorage`, `RecordSpec`, `RecordSpecOptions`, `RecordColumn`, `RecordQuery`,
-`RecordMask`, `StorageGroup`, `InMemoryStorageFactory`,
+`RecordMask`, `StorageGroup`, `ColumnTypes`, `ColumnMappings`, the exported
+column-mapping contracts, `TenantBoundary`, `TenantCatalog`,
+`TenantCatalogProvider`, `InMemoryStorageFactory`,
 `InMemoryStorageBackend`, event-store types, normalized query policy/evaluator
 types, and entity history interfaces.
 The `./internal/entity-history` subpath supplies Entity records, source-type

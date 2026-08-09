@@ -1767,11 +1767,12 @@ function orders(storage: StorageFactory) {
 }
 ```
 
-`ServerEnvironment` can supply this factory to server/context assembly. Scope
-encodes context name and tenant mode/current tenant; single tenant uses the
-canonical null tenant key, while multitenant requires a nonblank current
-`tenantId`. Startup creates/verifies
-each record family table lazily and fails closed on incompatible metadata; it
+`ServerEnvironment` can supply this factory to server/context assembly. A
+single-tenant factory uses its one configured database. A multitenant factory
+requires a complete generated `TenantId` and selects the database configured
+for that exact tenant. The Bounded Context name is diagnostic only; it never
+changes the database, table, row key, lock, or query. Startup creates or verifies
+each record-family table lazily and fails closed on incompatible metadata; it
 has no migrations or automatic foreign keys/indexes. A dedicated account needs
 CREATE TABLE, information-schema reads, and ordinary DML.
 
@@ -1779,10 +1780,11 @@ CREATE TABLE, information-schema reads, and ordinary DML.
 
 The storage package defines adapter-facing current-record and history
 contracts. `EntityRecord` carries the canonical entity ID, state, version, and
-lifecycle flags for Aggregates, Projections, and Process Managers. The physical
-scope uses the bounded-context name, tenant mode/current tenant, the source
-Proto type, and an optional external `StorageGroup`. The provider then resolves
-one current record family before rows are read or written.
+lifecycle flags for Aggregates, Projections, and Process Managers. A provider
+resolves a record family from the source Proto type and an optional external
+`StorageGroup`, inside the already selected tenant boundary. Bounded Context
+names do not participate in this physical identity. The provider resolves one
+current record family before rows are read or written.
 
 In-memory factories are isolated by default. To deliberately share compatible
 record or adapter entity scopes across independently constructed factories,

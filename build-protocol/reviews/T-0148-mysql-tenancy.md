@@ -1,6 +1,6 @@
 # T-0148 Review Record
 
-Status: One aggregated correction batch accepted.
+Status: Targeted re-review residuals corrected; final lane confirmation pending.
 
 ## Required lanes
 
@@ -55,3 +55,23 @@ style, and documentation because every lane is substantively affected.
   errors remain in Datastore and server consumers that still use the old
   tenant/column contracts. T-0149 owns Datastore; T-0150 owns server/runtime.
   No T-0148 MySQL source or public-document error remains in that output.
+
+## Targeted re-review
+
+- TypeScript/API found the code contract clean and requested removal of two
+  remaining physical-scope guide paragraphs plus public reference inventory
+  for stringifiers, identifiers, column mappings, and tenant catalogs.
+- Reliability found the provider helper still defaulted its message-ID
+  stringifier instead of accepting the factory snapshot.
+- Style found the factory regression's flattened-value assertion could be
+  satisfied by the write alone and did not isolate filter/continuation values.
+- Documentation confirmed the same guide contradiction and otherwise accepted
+  the beginner-facing MySQL and shared references.
+
+The residual batch is accepted. The helper now accepts the same registry used
+by the factory and has custom message-ID coverage. The factory regression
+asserts the exact `SELECT` filter operand and keyset continuation values. The
+guide and public package references now state the corrected API and physical
+identity. Focused execution passes 2 files / 32 tests. Reliability, style, and
+documentation require narrow final confirmation; the code/API lane is closed
+apart from deterministic documentation inventory checks.

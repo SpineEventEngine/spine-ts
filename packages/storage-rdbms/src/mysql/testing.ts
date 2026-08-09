@@ -1,6 +1,7 @@
 import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { EventSchema } from "@spine-event-engine/proto";
+import { StringifierRegistry } from "@spine-event-engine/core";
 import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import {
   eventHistorySpec,
@@ -69,12 +70,14 @@ export function mysqlEntityTables<I, S extends Message>(
  * @param pool Queries the test database.
  * @param input Identifies the Entity family.
  * @param id Identifies the current Entity row.
+ * @param stringifiers Converts message-valued identifiers using the factory's mapping.
  * @returns Resolves to the current record, or `undefined` when it is absent.
  */
 export async function mysqlCurrentRecord<I, S extends Message>(
   pool: Pool,
   input: EntityStorageInput<I, S>,
   id: I,
+  stringifiers: StringifierRegistry = new StringifierRegistry(),
 ): Promise<
   | import("@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js").EntityRecord
   | undefined
@@ -83,7 +86,7 @@ export async function mysqlCurrentRecord<I, S extends Message>(
   if (table === undefined) throw new Error("Current Entity table is missing.");
   const [rows] = await pool.query<(RowDataPacket & { bytes: Uint8Array })[]>(
     `SELECT bytes FROM \`${table}\` WHERE ID=?`,
-    [new MysqlIdColumn(input.recordSpec.idType).value(id)],
+    [new MysqlIdColumn(input.recordSpec.idType, stringifiers).value(id)],
   );
   return rows[0] === undefined ? undefined : fromBinary(EntityRecordSchema, rows[0].bytes);
 }

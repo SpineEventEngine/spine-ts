@@ -165,8 +165,15 @@ describe("MysqlStorageFactory builder contract", () => {
 
     await records.write(id);
     await records.query({ filters: [{ column: "owner", value: id }] });
+    await records.query({
+      sort: [{ field: "owner" }],
+      after: { values: [{ field: "owner", value: id }], id },
+    });
 
-    expect(calls.flatMap((call) => call.values ?? [])).toContain("user:42");
+    const selects = calls.filter((call) => call.sql.startsWith("SELECT ID, bytes"));
+    expect(selects[0]?.values).toContain("user:42");
+    expect(selects[1]?.sql).toContain("`owner` > ?");
+    expect(selects[1]?.values).toEqual(["user:42", "user:42", "user:42"]);
     expect(calls.flatMap((call) => call.values ?? [])).not.toContain("changed:42");
     records.close();
     factory.close();
