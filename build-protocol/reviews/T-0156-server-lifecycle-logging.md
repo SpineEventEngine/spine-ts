@@ -2,6 +2,8 @@
 
 Status: Pending implementation
 
+Current correction evidence: timer retained-cycle warning is exactly-once; `keeps a failed signal close retryable` proves immediate SIGTERM/SIGINT coalesce to one first attempt/error and a later signal retries; the corrected signal-aware recovery close test proves zero records; normal delivery watch, subscription runtime close, and successful process shutdown all capture zero records. Reliability and style re-review remain pending until the cheap gate is repeated.
+
 ## Aggregated correction batch
 
 - Style/maintainability finding accepted: add the Human-Imposed Requirements Ledger in TASK.md. Resolved.

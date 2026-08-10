@@ -89,6 +89,48 @@ describe("DeliverySupervisor", () => {
     await supervisor.close();
   });
 
+  it("does not warn when close aborts an entered signal-aware recovery", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const warn = vi.fn();
+    const error = vi.fn();
+    const supervisor = new DeliverySupervisor({
+      source: {
+        releaseExpired: (_staleMs, options) =>
+          new Promise<readonly unknown[]>((_, reject) => {
+            const fail = () => {
+              reject(new Error("aborted"));
+            };
+            if (options?.signal?.aborted) fail();
+            else options?.signal?.addEventListener("abort", fail, { once: true });
+            entered.resolve(undefined);
+          }),
+        shardSnapshot: () => Promise.resolve([]),
+        observeShardUpdates: () => emptyUpdates(),
+      },
+      delivery: new DeliveryBuilder()
+        .withStorageFactory(new InMemoryStorageFactory())
+        .withNode("node")
+        .build(),
+      onMessage: () => Promise.resolve(),
+    });
+    deliverySupervisorAccess.installLogger(
+      supervisor,
+      { withMetadata: vi.fn(() => ({ warn, error })) } as never,
+    );
+    const starting = supervisor.start();
+    await entered.promise;
+    await expect(supervisor.close({ graceMs: 0 })).rejects.toThrow(
+      "Delivery supervisor shutdown timed out.",
+    );
+    await starting;
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+  });
+
+
+
+
+
   it.each([
     [
       "throws",

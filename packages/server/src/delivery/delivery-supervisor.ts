@@ -335,7 +335,7 @@ export class DeliverySupervisor {
       // spine-log-boundary: server.delivery_recovery_failure
     } catch {
       // A later bounded recovery retries; no unknown mutation outcome is assumed successful.
-      if (!this.#closing && !this.#closed) this.#warnRecoveryFailure();
+      if (!this.#isClosing()) this.#warnRecoveryFailure();
       return false;
     }
   }
@@ -347,6 +347,10 @@ export class DeliverySupervisor {
       operation: "delivery.recovery",
       reasonCode: "failed",
     });
+  }
+
+  #isClosing(): boolean {
+    return this.#closing || this.#closed;
   }
 
   #scheduleRecovery(): void {
