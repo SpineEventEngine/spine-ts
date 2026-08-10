@@ -6,6 +6,8 @@ Final review convergence: performance/reliability CLEAN (227 focused tests cover
 
 Final-verify disposition: one mechanical ESLint no-floating-promises finding at `subscription-runtime.ts:90` was corrected with `void this.#reconcileTimer();`; source lint and focused evidence are green. It does not reopen style or reliability review. Final verification rerun is pending.
 
+Second final-verify disposition: the pass reached format and found only `packages/server/test/stand/stand.test.ts`; exact-file Prettier correction and focused Stand test are green. It does not reopen review or coverage; final verification rerun remains pending.
+
 Current correction evidence: timer retained-cycle warning is exactly-once; `keeps a failed signal close retryable` proves immediate SIGTERM/SIGINT coalesce to one first attempt/error and a later signal retries; the corrected signal-aware recovery close test proves zero records; normal delivery watch, subscription runtime close, and successful process shutdown all capture zero records. Reliability and style re-review remain pending until the cheap gate is repeated.
 
 Fresh changed-range coverage gate is clean: statements/lines 81/84 (96.43%), branches 45/49 (91.84%), and functions 20/21 (95.24%), from `/tmp/t0156-no-logger-coverage/lcov.info` (69 files / 1,647 tests). The no-logger consumer test covers `subscription-runtime.ts:353`; the task is correction-complete and re-review-ready.

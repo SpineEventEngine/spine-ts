@@ -310,7 +310,11 @@ describe("Stand", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(warn).toHaveBeenCalledTimes(2);
-    await postStateChange(bus, ProjectionStateSchema, createState("fanout-without-logger", "Fanout"));
+    await postStateChange(
+      bus,
+      ProjectionStateSchema,
+      createState("fanout-without-logger", "Fanout"),
+    );
     await Promise.resolve();
     await Promise.resolve();
     expect(peer).toBe(2);
