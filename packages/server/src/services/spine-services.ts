@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { ILogLayer } from "loglayer";
 
 import { Code, ConnectError, type ConnectRouter } from "@connectrpc/connect";
 import {
@@ -89,10 +90,19 @@ import { CommandValidationError } from "../bus/command-errors.js";
 import type { EntityFamily } from "../entity/entity.js";
 import { TransitionValidationError } from "../repository/command-errors.js";
 import { type StandReadResult, type StandUpdate } from "../stand/stand.js";
+import { emitServerWarning } from "../server/server-log.js";
 import {
   InMemorySubscriptionRegistry,
   type StandSubscriptionRegistry,
 } from "../stand/subscription-registry.js";
+
+const serviceLoggers = new WeakMap<SpineServices, ILogLayer>();
+const serviceInstances = new WeakSet<SpineServices>();
+
+interface SpineServicesAccess {
+  installLogger(services: SpineServices, logger: ILogLayer): void;
+  clearLogger(services: SpineServices): void;
+}
 
 /**
  * Small route registrar for the first public Spine gRPC service slice.
@@ -146,6 +156,7 @@ export class SpineServices {
    * @param options Configures contexts and subscription bounds.
    */
   constructor(options: SpineServicesOptions) {
+    serviceInstances.add(this);
     this.#contexts = Object.freeze([...options.contexts]);
     this.#queueLimit = ServiceValues.positiveInteger(
       options.queueLimit ?? ServiceValues.defaultQueueLimit,
@@ -407,7 +418,9 @@ export class SpineServices {
         yield update;
       }
     } finally {
-      await this.#removeSubscription(id);
+      if (!record.delivery.closed) {
+        await this.#removeSubscription(id);
+      }
     }
   }
 
@@ -465,7 +478,7 @@ export class SpineServices {
         (update) => {
           record.delivery.push(update);
           if (record.delivery.closed) {
-            void this.#removeSubscription(record.id).catch(() => undefined);
+            this.#removeDetachedSubscription(record.id);
           }
         },
       );
@@ -494,7 +507,7 @@ export class SpineServices {
             }
             record.delivery.push(ServiceValues.createEventUpdate(record, event));
             if (record.delivery.closed) {
-              void this.#removeSubscription(record.id).catch(() => undefined);
+              this.#removeDetachedSubscription(record.id);
             }
           },
         },
@@ -512,7 +525,7 @@ export class SpineServices {
           stateRecord.delivery.push(subscriptionUpdate);
         }
         if (stateRecord.delivery.closed) {
-          void this.#removeSubscription(stateRecord.id).catch(() => undefined);
+          this.#removeDetachedSubscription(stateRecord.id);
         }
       },
       ServiceValues.tenantOptions(stateRecord.tenantId),
@@ -548,6 +561,20 @@ export class SpineServices {
     this.#removals.set(id, removal);
     void this.#runRemoval(id, removal, record, unknown);
     return removal.settled;
+  }
+
+  #removeDetachedSubscription(id: string): void {
+    // spine-log-boundary: server.subscription_cleanup_failure
+    void this.#removeSubscription(id).catch(() => {
+      const logger = serviceLoggers.get(this);
+      if (logger !== undefined) {
+        emitServerWarning(logger, "Subscription cleanup failed.", {
+          subscriptionId: id,
+          operation: "service.subscription_cleanup",
+          reasonCode: "cleanup_failed",
+        });
+      }
+    });
   }
 
   async #runRemoval(
@@ -632,6 +659,26 @@ export class SpineServices {
     }
   }
 }
+
+/**
+ * Provides package-private service configuration seams.
+ *
+ * @internal
+ */
+export const spineServicesAccess: SpineServicesAccess = Object.freeze({
+  clearLogger(services: SpineServices): void {
+    if (!serviceInstances.has(services)) {
+      throw new TypeError("SpineServices logger requires a SpineServices instance.");
+    }
+    serviceLoggers.delete(services);
+  },
+  installLogger(services: SpineServices, logger: ILogLayer): void {
+    if (!serviceInstances.has(services)) {
+      throw new TypeError("SpineServices logger requires a SpineServices instance.");
+    }
+    serviceLoggers.set(services, logger);
+  },
+});
 
 /**
  * Options for registering Spine service adapters over built bounded contexts.

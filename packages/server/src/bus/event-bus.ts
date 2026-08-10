@@ -2,6 +2,7 @@ import { clone } from "@bufbuild/protobuf";
 import { AnyMessages, Validate, type MessageSchema } from "@spine-event-engine/core";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
 import type { EventStore } from "@spine-event-engine/storage";
+import type { ILogLayer } from "loglayer";
 
 import {
   runtimeAccess,
@@ -10,6 +11,7 @@ import {
 } from "../runtime/runtime.js";
 import { EventDispatcherRegistry } from "./event-dispatcher-registry.js";
 import type { EventDispatcher } from "./event-dispatcher.js";
+import { emitServerError } from "../server/server-log.js";
 
 const storedDispatchers = new WeakMap<EventBus, (event: Event) => Promise<void>>();
 const storedFollowUpDispatchers = new WeakMap<EventBus, (event: Event) => Promise<void>>();
@@ -32,6 +34,7 @@ const eventBusWorkCounters = new WeakMap<EventBus, () => number>();
 const forgettingBus: unique symbol = Symbol("forgetting-bus");
 const forgettingBuses = new WeakSet<EventBus>();
 const eventBusRoles = new WeakMap<EventBus, EventBusRole>();
+const eventBusLoggers = new WeakMap<EventBus, ILogLayer>();
 
 type EventBusRole = "domain" | "system";
 
@@ -61,6 +64,8 @@ interface EventBusAccess {
   finishClose(eventBus: EventBus): Promise<void>;
   abortClose(eventBus: EventBus): void;
   acceptedWorkCount(eventBus: EventBus): number;
+  installLogger(eventBus: EventBus, logger: ILogLayer): void;
+  clearLogger(eventBus: EventBus): void;
 }
 
 type EventBusIntakeState = "open" | "closing" | "closed";
@@ -188,6 +193,7 @@ export class EventBus {
     try {
       this.#eventStore?.close();
     } finally {
+      // spine-log-boundary: server.event_bus_close_runtime
       void this.#started.then(() => this.#runtime.close()).catch(() => undefined);
       this.#intakeState = "closed";
       this.#clearSubscribers();
@@ -369,6 +375,7 @@ export class EventBus {
       }
     }
     this.#subscribers.clear();
+    eventBusLoggers.delete(this);
   }
 
   #notify(event: Event): void {
@@ -382,11 +389,31 @@ export class EventBus {
       .filter((subscriber) => subscriber !== undefined);
 
     for (const subscriber of subscribers) {
+      const logger = eventBusLoggers.get(this);
       try {
-        subscriber.onEvent(clone(EventSchema, event));
+        const onEvent: (event: Event) => unknown = subscriber.onEvent.bind(subscriber);
+        const result = onEvent(clone(EventSchema, event));
+        if (EventBus.#isPromiseLike(result)) {
+          // spine-log-boundary: server.event_subscriber_async_failure
+          void Promise.resolve(result).catch(() => {
+            this.#recordSubscriberFailure(typeUrl, logger);
+          });
+        }
       } catch {
         // Service-delivery subscribers must not poison event intake or later subscribers.
+        // spine-log-boundary: server.event_subscriber_sync_failure
+        this.#recordSubscriberFailure(typeUrl, logger);
       }
+    }
+  }
+
+  #recordSubscriberFailure(typeUrl: string, logger: ILogLayer | undefined): void {
+    if (logger !== undefined) {
+      emitServerError(logger, "Event subscriber failed.", {
+        eventType: typeUrl,
+        operation: "event.subscriber",
+        reasonCode: "subscriber_failed",
+      });
     }
   }
 
@@ -419,6 +446,15 @@ export class EventBus {
     }
 
     return eventStore as EventStore | typeof forgettingBus;
+  }
+
+  static #isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+    return (
+      (typeof value === "object" || typeof value === "function") &&
+      value !== null &&
+      "then" in value &&
+      typeof (value as { then?: unknown }).then === "function"
+    );
   }
 }
 
@@ -493,6 +529,18 @@ interface EventSubscriberRecord {
  * @internal
  */
 export const eventBusAccess: EventBusAccess = Object.freeze({
+  clearLogger(eventBus: EventBus): void {
+    if (!storedDispatchers.has(eventBus)) {
+      throw new TypeError("EventBus logger requires an EventBus instance.");
+    }
+    eventBusLoggers.delete(eventBus);
+  },
+  installLogger(eventBus: EventBus, logger: ILogLayer): void {
+    if (!storedDispatchers.has(eventBus)) {
+      throw new TypeError("EventBus logger requires an EventBus instance.");
+    }
+    eventBusLoggers.set(eventBus, logger);
+  },
   createForgettingBus(dispatchers: Iterable<EventDispatcher> = []): EventBus {
     const eventBus = new EventBus(forgettingBus as never, dispatchers);
     forgettingBuses.add(eventBus);

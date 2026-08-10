@@ -318,6 +318,14 @@ function internalDeliveryDescriptor(context: BoundedContext): InternalDeliveryDe
 }
 
 describe("BoundedContext assembly", () => {
+  it("does not expose a logger before package-private installation", () => {
+    const context = BoundedContext.singleTenant("Logger").build();
+
+    expect(() => boundedContextAccess.loggerFor(context)).toThrow(
+      "Context logger requires a built BoundedContext instance.",
+    );
+  });
+
   it("rejects private delivery transition validation through its promise", async () => {
     const context = BoundedContext.singleTenant("Tasks").build();
     let transition: Promise<void> | undefined;
@@ -2012,6 +2020,19 @@ describe("BoundedContext assembly", () => {
       expect(() => boundedContextAccess.subscriptionRegistry(context)).toThrow(
         "Subscription registry access requires a built BoundedContext instance.",
       );
+      expect(() => {
+        boundedContextAccess.installLogger(context, {} as never);
+      }).toThrow("Context logger requires a built BoundedContext instance.");
+      expect(() => boundedContextAccess.loggerFor(context)).toThrow(
+        "Context logger requires a built BoundedContext instance.",
+      );
+      expect(() => {
+        boundedContextAccess.recordDispatchFailure(
+          context,
+          create(EventSchema),
+          new Error("ignored"),
+        );
+      }).toThrow("Dispatch failure recording requires a built BoundedContext instance.");
     } finally {
       closeStand.mockRestore();
     }

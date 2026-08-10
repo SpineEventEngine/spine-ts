@@ -22,6 +22,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EventBus, type EventDispatcher } from "../../src/index.js";
+import type { ILogLayer } from "loglayer";
 import { eventBusAccess } from "../../src/bus/event-bus.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
@@ -766,6 +767,13 @@ describe("EventBus", () => {
       }),
     ]);
     const typeUrl = TypeUrls.derive(ProjectionStateSchema);
+    const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
+    const logger = {
+      withMetadata: (facts: Record<string, unknown>) => ({
+        error: (message: string) => errors.push({ message, facts }),
+      }),
+    };
+    eventBusAccess.installLogger(bus, logger as unknown as ILogLayer);
     const secondSubscription: { current?: { unsubscribe(): void } } = {};
 
     eventBusAccess.subscribe(bus, typeUrl, {
@@ -793,6 +801,91 @@ describe("EventBus", () => {
       "first:event-snapshot",
       "second:event-snapshot",
     ]);
+    expect(errors).toEqual([
+      {
+        message: "Event subscriber failed.",
+        facts: {
+          eventType: "type.googleapis.com/ProjectionState",
+          operation: "event.subscriber",
+          reasonCode: "subscriber_failed",
+        },
+      },
+    ]);
+  });
+
+  it("contains subscriber failure without a logger and rejects foreign logger installation", async () => {
+    const bus = new EventBus(
+      new EventStore({ name: "Tasks", multitenant: false }, new InMemoryStorageFactory()),
+      [createEventDispatcher([ProjectionStateSchema], () => undefined)],
+    );
+    eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
+      onEvent() {
+        throw new Error("contained without logging");
+      },
+    });
+
+    await expect(bus.post(createProjectionEvent("event-no-logger"))).resolves.toBeUndefined();
+    expect(() => {
+      eventBusAccess.installLogger({} as EventBus, {} as ILogLayer);
+    }).toThrow("EventBus logger requires an EventBus instance.");
+  });
+
+  it("contains asynchronous subscriber rejection without delaying later subscribers", async () => {
+    const bus = new EventBus(
+      new EventStore({ name: "Tasks", multitenant: false }, new InMemoryStorageFactory()),
+      [createEventDispatcher([ProjectionStateSchema], () => undefined)],
+    );
+    const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
+    eventBusAccess.installLogger(bus, {
+      withMetadata: (facts: Record<string, unknown>) => ({
+        error: (message: string) => errors.push({ message, facts }),
+      }),
+    } as unknown as ILogLayer);
+    const later = vi.fn();
+    eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
+      onEvent: () => Promise.reject(new Error("async subscriber failure")),
+    });
+    eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), { onEvent: later });
+
+    await bus.post(createProjectionEvent("event-async"));
+    expect(later).toHaveBeenCalledTimes(1);
+    await delay(0);
+    expect(errors).toEqual([
+      {
+        message: "Event subscriber failed.",
+        facts: {
+          eventType: TypeUrls.derive(ProjectionStateSchema),
+          operation: "event.subscriber",
+          reasonCode: "subscriber_failed",
+        },
+      },
+    ]);
+  });
+
+  it("reports deferred subscriber rejection after the bus closes", async () => {
+    const bus = new EventBus(
+      new EventStore({ name: "Tasks", multitenant: false }, new InMemoryStorageFactory()),
+      [createEventDispatcher([ProjectionStateSchema], () => undefined)],
+    );
+    const errors: string[] = [];
+    eventBusAccess.installLogger(bus, {
+      withMetadata: () => ({ error: (message: string) => errors.push(message) }),
+    } as unknown as ILogLayer);
+    let reject!: (reason: unknown) => void;
+    eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
+      onEvent: () =>
+        new Promise<void>((_resolve, rejected) => {
+          reject = rejected;
+        }),
+    });
+
+    await bus.post(createProjectionEvent("event-deferred"));
+    await bus.close();
+    reject(new Error("late failure"));
+    await delay(0);
+    expect(errors).toEqual(["Event subscriber failed."]);
   });
 
   it("closes direct event subscribers when the bus closes", async () => {

@@ -1,6 +1,83 @@
 {
   "boundaries": [
     {
+      "id": "server.repository_history_prefetch",
+      "source": "../../packages/server/src/repository/repository.ts",
+      "operation": "repository.history",
+      "disposition": "no-log",
+      "test": "packages/server/test/repository/repository-routing.test.ts"
+    },
+    {
+      "id": "server.repository_dispatch_guard",
+      "source": "../../packages/server/src/repository/repository.ts",
+      "operation": "repository.dispatch_guard",
+      "disposition": "no-log",
+      "test": "packages/server/test/repository/repository-routing.test.ts"
+    },
+    {
+      "id": "server.repository_event_follow_up",
+      "source": "../../packages/server/src/repository/repository.ts",
+      "operation": "repository.event_follow_up",
+      "disposition": "error",
+      "test": "packages/server/test/repository/repository-routing.test.ts"
+    },
+    {
+      "id": "server.process_manager_event_follow_up",
+      "source": "../../packages/server/src/repository/repository.ts",
+      "operation": "repository.event_follow_up",
+      "disposition": "error",
+      "test": "packages/server/test/repository/repository-routing.test.ts"
+    },
+    {
+      "id": "server.repository_rejection_follow_up",
+      "source": "../../packages/server/src/repository/repository.ts",
+      "operation": "repository.event_follow_up",
+      "disposition": "error",
+      "test": "packages/server/test/repository/repository-routing.test.ts"
+    },
+    {
+      "id": "server.repository_system_follow_up",
+      "source": "../../packages/server/src/repository/repository.ts",
+      "operation": "repository.system_follow_up",
+      "disposition": "error",
+      "test": "packages/server/test/repository/repository-routing.test.ts"
+    },
+    {
+      "id": "server.repository_system_dispatch_follow_up",
+      "source": "../../packages/server/src/repository/repository.ts",
+      "operation": "repository.system_follow_up",
+      "disposition": "error",
+      "test": "packages/server/test/repository/repository-routing.test.ts"
+    },
+    {
+      "id": "server.subscription_cleanup_failure",
+      "source": "../../packages/server/src/services/spine-services.ts",
+      "operation": "service.subscription_cleanup",
+      "disposition": "warn",
+      "test": "packages/server/test/services/spine-services.test.ts"
+    },
+    {
+      "id": "server.event_bus_close_runtime",
+      "source": "../../packages/server/src/bus/event-bus.ts",
+      "operation": "event.close",
+      "disposition": "no-log",
+      "test": "packages/server/test/bus/event-bus.test.ts"
+    },
+    {
+      "id": "server.event_subscriber_sync_failure",
+      "source": "../../packages/server/src/bus/event-bus.ts",
+      "operation": "event.subscriber",
+      "disposition": "error",
+      "test": "packages/server/test/bus/event-bus.test.ts"
+    },
+    {
+      "id": "server.event_subscriber_async_failure",
+      "source": "../../packages/server/src/bus/event-bus.ts",
+      "operation": "event.subscriber",
+      "disposition": "error",
+      "test": "packages/server/test/bus/event-bus.test.ts"
+    },
+    {
       "id": "server.volatile_subscription_registry",
       "source": "../../packages/server/src/server/server-environment.ts",
       "operation": "stand.registry",

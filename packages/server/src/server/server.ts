@@ -19,7 +19,11 @@ import {
   BoundedContextBuilder,
   boundedContextAccess,
 } from "../context/bounded-context.js";
-import { SpineServices, type SpineServicesOptions } from "../services/spine-services.js";
+import {
+  SpineServices,
+  spineServicesAccess,
+  type SpineServicesOptions,
+} from "../services/spine-services.js";
 import { ContextTransportGroup } from "./context-transport-group.js";
 import { BrowserServer } from "./browser-server.js";
 import type {
@@ -291,7 +295,9 @@ export class Server {
       this.#contexts,
       this.#environment.storageFactory,
     );
+    const logger = serverEnvironmentAccess.loggerFor(this.#environment);
     for (const context of contexts) {
+      boundedContextAccess.installLogger(context, logger);
       serverEnvironmentAccess.warnVolatileRegistry(this.#environment, context);
     }
     let attachment: EnvironmentAttachmentHandle;
@@ -342,6 +348,7 @@ export class Server {
       contexts,
       ...this.#services,
     });
+    spineServicesAccess.installLogger(services, logger);
     const sessions = new Set<http2.ServerHttp2Session>();
     const httpServer = ServerValues.createHttpServer(
       services,
@@ -377,6 +384,7 @@ export class Server {
       environment: this.#environment,
       attachment,
       contextTransports,
+      services,
       host,
       port: address.port,
       closeables,
@@ -843,6 +851,7 @@ class RunningHttp2Server implements RunningServer {
   readonly #environment: ServerEnvironment;
   readonly #attachment: EnvironmentAttachmentHandle;
   readonly #contextTransports: ContextTransportGroup;
+  readonly #services: SpineServices;
   readonly host: string;
   readonly port: number;
   readonly baseUrl: string;
@@ -859,6 +868,7 @@ class RunningHttp2Server implements RunningServer {
     this.#environment = options.environment;
     this.#attachment = options.attachment;
     this.#contextTransports = options.contextTransports;
+    this.#services = options.services;
     this.host = options.host;
     this.port = options.port;
     this.baseUrl = `http://${ServerValues.formatHostForUrl(options.host)}:${options.port.toString()}`;
@@ -960,6 +970,7 @@ class RunningHttp2Server implements RunningServer {
     if (detachRejected) {
       ServerValues.throwRunningDetachErrors(detachErrors);
     }
+    spineServicesAccess.clearLogger(this.#services);
   }
 }
 
@@ -971,6 +982,7 @@ interface RunningHttp2ServerOptions {
   readonly environment: ServerEnvironment;
   readonly attachment: EnvironmentAttachmentHandle;
   readonly contextTransports: ContextTransportGroup;
+  readonly services: SpineServices;
   readonly host: string;
   readonly port: number;
 }

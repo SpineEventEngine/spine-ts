@@ -2,6 +2,7 @@ import { constants as fsConstants } from "node:fs";
 import { access, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import type { ILogLayer } from "loglayer";
 
 import { clone, getOption, hasOption, type Message } from "@bufbuild/protobuf";
 import { TypeUrls, type MessageSchema } from "@spine-event-engine/core";
@@ -79,6 +80,7 @@ import {
 import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
 import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
 import { ShardIndex } from "../delivery/shard-index.js";
+import { emitServerError } from "../server/server-log.js";
 
 /**
  * Tenant isolation mode declared by a bounded context specification.
@@ -511,6 +513,12 @@ const contextTenantIndexes = new WeakMap<BoundedContext, TenantIndex>();
 const contextStorageFactories = new WeakMap<BoundedContext, StorageFactory>();
 const contextDeliveryDescriptors = new WeakMap<BoundedContext, ContextDeliveryDescriptor>();
 const contextSubscriptionRuntimes = new WeakMap<BoundedContext, SubscriptionRuntime>();
+const contextLoggers = new WeakMap<BoundedContext, ILogLayer>();
+const contextEventBuses = new WeakMap<BoundedContext, readonly [EventBus, EventBus]>();
+const contextDispatchFailureRecorders = new WeakMap<
+  BoundedContext,
+  (event: Event, error: unknown) => void
+>();
 const systemEventPosters = new WeakMap<BoundedContext, (event: Event) => Promise<void>>();
 const builderBuilds = new WeakMap<
   BoundedContextBuilder,
@@ -538,6 +546,9 @@ interface BoundedContextAccess {
     id: string,
     onUpdate: (update: import("@spine-event-engine/proto/client").SubscriptionUpdate) => void,
   ): Promise<import("../stand/stand.js").StandSubscription>;
+  installLogger(context: BoundedContext, logger: ILogLayer): void;
+  loggerFor(context: BoundedContext): ILogLayer;
+  recordDispatchFailure(context: BoundedContext, event: Event, error: unknown): void;
   delivery(context: BoundedContext): ContextDeliveryDescriptor;
 }
 let constructBoundedContext:
@@ -656,6 +667,7 @@ export class BoundedContext {
     this.#commandBus = commandBus;
     this.#eventBus = eventBus;
     this.#systemEventBus = systemEventBus;
+    contextEventBuses.set(this, [eventBus, systemEventBus]);
     this.#stand = stand;
     this.#systemStand = systemStand;
     this.#subscriptionRuntime = subscriptionRuntime;
@@ -668,6 +680,9 @@ export class BoundedContext {
     this.#eventEndpoint = Object.freeze({
       acceptedEventTypes: () => ContextParts.exposedEventTypeUrls(this.#eventBus),
       post: (event: Event) => this.#eventBus.post(event),
+    });
+    contextDispatchFailureRecorders.set(this, (event, error) => {
+      this.#recordDispatchFailure(event, error);
     });
     const deliveryReadiness = new DeliveryReadiness();
     const tenantIndex = TenantIndexes.create({
@@ -1041,6 +1056,15 @@ export class BoundedContext {
         this.#storedEventDispatchFailures.length - dispatchFailureLimit,
       );
     }
+    const logger = contextLoggers.get(this);
+    const eventType = event.message?.typeUrl;
+    if (logger !== undefined && eventType !== undefined && eventType.length > 0) {
+      emitServerError(logger, "Repository follow-up dispatch failed.", {
+        eventType,
+        operation: "repository.follow_up",
+        reasonCode: "dispatch_failed",
+      });
+    }
   }
 }
 
@@ -1048,6 +1072,35 @@ export class BoundedContext {
  * Exposes framework-only operations for built contexts and their builders.
  */
 export const boundedContextAccess: BoundedContextAccess = Object.freeze({
+  installLogger(context: BoundedContext, logger: ILogLayer): void {
+    if (!contextStorageFactories.has(context)) {
+      throw new TypeError("Context logger requires a built BoundedContext instance.");
+    }
+    contextLoggers.set(context, logger);
+    const buses = contextEventBuses.get(context);
+    if (buses === undefined) {
+      throw new TypeError("Context logger requires a built BoundedContext instance.");
+    }
+    eventBusAccess.installLogger(buses[0], logger);
+    eventBusAccess.installLogger(buses[1], logger);
+  },
+
+  loggerFor(context: BoundedContext): ILogLayer {
+    const logger = contextLoggers.get(context);
+    if (logger === undefined) {
+      throw new TypeError("Context logger requires a built BoundedContext instance.");
+    }
+    return logger;
+  },
+
+  recordDispatchFailure(context: BoundedContext, event: Event, error: unknown): void {
+    const record = contextDispatchFailureRecorders.get(context);
+    if (record === undefined) {
+      throw new TypeError("Dispatch failure recording requires a built BoundedContext instance.");
+    }
+    record(event, error);
+  },
+
   isBuilder(value: unknown): value is BoundedContextBuilder {
     return (
       typeof value === "object" &&
@@ -2172,6 +2225,14 @@ const ContextParts = Object.freeze({
   },
 
   clearContextMetadata(context: BoundedContext): void {
+    const buses = contextEventBuses.get(context);
+    if (buses !== undefined) {
+      eventBusAccess.clearLogger(buses[0]);
+      eventBusAccess.clearLogger(buses[1]);
+    }
+    contextDispatchFailureRecorders.delete(context);
+    contextEventBuses.delete(context);
+    contextLoggers.delete(context);
     contextSystemPairings.delete(context);
     contextTenantIndexes.delete(context);
     contextStorageFactories.delete(context);
