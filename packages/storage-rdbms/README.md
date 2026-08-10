@@ -1,7 +1,7 @@
 # MySQL storage for Spine TS
 
 `@spine-event-engine/storage-rdbms` stores Spine TS records in MySQL. It is a
-durable implementation of `@spine-event-engine/storage` and owns the mysql2
+durable implementation of `@spine-event-engine/storage` and manages the mysql2
 connection pool and its private tables. PostgreSQL is not supported by this
 package.
 
@@ -11,7 +11,7 @@ For database requirements, query limits, lifecycle, and error details, see
 ## 💡 Why use it?
 
 - ✅ Stores Spine records durably in a MySQL database.
-- ✅ Owns a bounded `mysql2` connection pool; InnoDB writes are transactional.
+- ✅ Manages a bounded `mysql2` connection pool; InnoDB writes are transactional.
 - ✅ Supports declared-column filters, sorting, offsets, limits, and
   continuations.
 - ✅ Keeps adapter tables private behind the common `RecordStorage` API.
@@ -86,7 +86,7 @@ numbers, enums, bytes, messages, `Timestamp`, and `Version`. Spine JVM JDBC
 does not support `float` or `double` record columns, so this adapter rejects
 them too.
 
-Each record source uses its own private table. An ungrouped family defaults to
+Each record source uses a separate private table. An ungrouped family defaults to
 its Proto full name with dots replaced by underscores. A grouped family uses
 the group name with dots replaced by underscores, followed by the record type's
 short name. Tables include native declared columns, but the adapter never adds
@@ -148,7 +148,7 @@ ORDER BY ID ASC;
 
 MySQL compares the materialized column, then Spine decodes each matching
 authoritative `bytes` payload. The adapter does not create an index for
-`board`; add application-owned indexes for production query patterns.
+`board`; add application indexes for production query patterns.
 
 ## 🧪 Verify with a disposable database
 
@@ -159,7 +159,7 @@ SPINE_TS_MYSQL_URL='mysql://user:password@127.0.0.1:3306/spine_test' \
   pnpm --filter @spine-event-engine/storage-rdbms test:mysql
 ```
 
-The test creates adapter-owned tables and removes them afterward. It is not a
+The test creates temporary adapter tables and removes them afterward. It is not a
 substitute for an application's backup, monitoring, permissions, or database
 operations plan.
 

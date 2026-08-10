@@ -28,12 +28,12 @@ the JVM meaning.
 
 ## Source And Test Layout
 
-Each package defines its own semantic folder layout. The general shape is
+Each package defines a semantic folder layout. The general shape is
 onion-like:
 
 - package-root `src/` contains only a handful of top-level entry files;
 - first-level folders group the main package semantics;
-- second-level folders exist only when a semantic detail needs its own layer;
+- second-level folders exist only when a semantic detail needs a separate layer;
 - tests live under `packages/<package>/test/`;
 - test folders mirror the corresponding `src/` folder structure;
 - production test files must not be co-located under `src/`.

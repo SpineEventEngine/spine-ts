@@ -4,7 +4,7 @@
 TS itself uses: command and event envelopes, query, subscription, and context
 schemas, validation messages, options, and schemas needed by the supported
 client and delivery packages. Most applications use it as a dependency of their
-own model package rather than calling it directly.
+model package rather than calling it directly.
 
 For the complete export map and model-package contract, see
 [REFERENCE documentation for agents](REFERENCE.md).
@@ -53,7 +53,7 @@ named subpath when one exports the schema you need.
 
 ## 📦 Depend on it from an application model
 
-An application-owned model package declares this package both as an npm
+An application model package declares this package both as an npm
 dependency and as a model-generation dependency. The generator then resolves
 Spine imports such as `spine/options.proto` and includes the Spine schema graph
 in the model module.
@@ -77,7 +77,7 @@ configured Protobuf workflow.
 ## ⚠️ Generated contracts, not an application API
 
 Most applications use these schemas through generated models, clients, and the
-server. Keep domain messages in the application’s own model package. The copied
+server. Keep domain messages in the application model package. The copied
 Spine definitions preserve their original versioned Proto packages.
 
 ## 🔗 Learn more

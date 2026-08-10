@@ -45,7 +45,7 @@ flowchart LR
   List --> Client[Smoke client query]
 ```
 
-The command handler owns one task's write-side state and returns the domain
+The command handler manages one task's write-side state and returns the domain
 event that describes a successful creation. This is the `createTask()` handler
 excerpt from [`TaskAggregate`](src/index.ts); imports and the class declaration
 are omitted to focus on the handler:

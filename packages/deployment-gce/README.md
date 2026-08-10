@@ -14,7 +14,7 @@ For detailed contracts intended for coding agents, read the
 
 You need an existing Google Cloud project, VPC network, regional subnetwork,
 and a service account with only the permissions required by your images and
-their application-owned configuration. Install [Google Cloud CLI](https://cloud.google.com/sdk/docs/install)
+their application configuration. Install [Google Cloud CLI](https://cloud.google.com/sdk/docs/install)
 and Terraform 1.6 or newer. Authenticate Terraform through Application Default
 Credentials:
 
@@ -32,14 +32,14 @@ configure an identity provider.
 
 The application managed instance group (MIG) is regional and distributes
 identical application nodes across your selected zones. A ready node registers
-its private listener in a durable, application-owned registry. The single
+its private listener in a durable application registry. The single
 Gateway reads the same registry every 10 seconds and routes commands, queries,
 and subscriptions to the live nodes.
 
 ```mermaid
 flowchart LR
   Edge["Your TLS and authentication edge"] --> Gateway["One private Gateway"]
-  Gateway --> Registry["Durable application-owned node registry"]
+  Gateway --> Registry["Durable application node registry"]
   Registry --> Gateway
   Gateway --> AppA["Application node A"]
   Gateway --> AppB["Application node B"]
@@ -73,12 +73,12 @@ Set the project, region, two or more application zones, VPC/subnetwork,
 least-privilege service-account email, and the three image digests. Set
 `registry_namespace` and `registry_storage_reference` identically for
 application and Gateway images. Each entrypoint passes that reference to its
-application-owned `registryStorage.storageFactoryFor(reference)` resolver. The
+application-supplied `registryStorage.storageFactoryFor(reference)` resolver. The
 resolver chooses the shared durable `StorageFactory`; Terraform only transports
 the reference and never chooses a storage engine.
 
 `application_secret_reference` and `gateway_secret_reference` are identifiers
-your images resolve through your own configuration mechanism. They are passed
+your images resolve through the selected configuration mechanism. They are passed
 as environment values only. Terraform neither reads secret values nor writes
 them into state.
 
@@ -89,7 +89,7 @@ role, not the scope alone, authorizes image pulls.
 
 Every image must use an Artifact Registry host such as
 `us-docker.pkg.dev`. Each COS startup script extracts that exact host from its
-own immutable image name, creates a writable Docker configuration under
+configured immutable image name, creates a writable Docker configuration under
 `/var/lib/spine-docker`, and runs `docker-credential-gcr configure-docker` for
 that host before it pulls the image. The helper uses the attached VM service
 account; no registry credential or key is placed in Terraform, metadata, or the
@@ -138,7 +138,7 @@ export const GceApplicationEntrypoint = Object.freeze({
 ```
 
 The Gateway resolves the same storage reference and namespace through its
-environment. It owns a GCE discovery lifecycle that refreshes the complete
+environment. It manages a GCE discovery lifecycle that refreshes the complete
 live-node registry snapshot every 10 seconds, stops that schedule when the
 browser server stops, and then closes its registry. Supply your durable
 subscription bindings, authentication, and browser collaborators in
@@ -228,12 +228,12 @@ fresh application node becomes ready.
 
 Each application process obtains a unique registration identity, renews its
 lease every 20 seconds, and leases it for 60 seconds. A graceful shutdown
-removes only its own lease. A crash may leave a row behind temporarily, but it
+removes only the lease it created. A crash may leave a row behind temporarily, but it
 is ignored after expiry; healthy registrars perform finite cleanup.
 
 ## Scale application nodes
 
-With the default `autoscaling_enabled = false`, Terraform owns manual capacity:
+With the default `autoscaling_enabled = false`, Terraform controls manual capacity:
 
 ```bash
 terraform apply -var='application_replicas=4'
@@ -292,8 +292,8 @@ terraform apply -var='autoscaling_enabled=false' -var='application_replicas=2'
 
 The Gateway normally stays in place during an application replacement. A
 Gateway interruption disconnects browser clients. Its durable subscription
-definitions survive only when your Gateway bindings use the same application-
-owned persistent storage. Clients reconnect and issue an authoritative query.
+definitions survive only when your Gateway bindings use the same persistent
+application storage. Clients reconnect and issue an authoritative query.
 Replacing `gateway_image` performs its explicit one-unavailable, zero-surge
 singleton update and therefore causes that interruption. Replacing
 `delivery_image` performs the same singleton update; the supplied in-memory
@@ -323,7 +323,7 @@ terraform apply -var='autoscaling_enabled=false' -var='application_replicas=2'
 | Gateway has no backend               | Confirm the application group has healthy instances, registry references and namespace match, then allow a 10-second refresh.                                     |
 | A node remains listed after a crash  | Wait up to 60 seconds for lease expiry; cleanup is finite and does not make expired nodes routable.                                                               |
 | An application VM keeps restarting   | Check the image starts its listener on `HOST=0.0.0.0` and `PORT`, and increase the startup delay only when its real startup needs it.                             |
-| A client cannot reach the Gateway    | Reach the private output from the VPC or configure your own TLS/authentication edge; this module creates no public path.                                          |
+| A client cannot reach the Gateway    | Reach the private output from the VPC or configure a separate TLS/authentication edge; this module creates no public path.                                        |
 | Autoscaling does not wake zero nodes | CPU and per-instance metrics cannot observe an empty group; use a whole-group metric with `autoscaling_min_replicas = 0` or set a manual/scheduled minimum.       |
 | Delivery state disappeared           | The supplied delivery server is in-memory and loses state whenever it is replaced or restarted. Do not describe it as durable or highly available.                |
 | A container fails during startup     | Read `journalctl -u google-startup-scripts.service` or serial-console output; `docker run --rm` removes an exited container and health checks trigger MIG repair. |
@@ -338,6 +338,6 @@ terraform apply -var='autoscaling_enabled=false' -var='application_replicas=0'
 terraform destroy
 ```
 
-`terraform destroy` removes only resources owned by this template. It does not
-delete the application-owned registry, application storage, externally managed
+`terraform destroy` removes only resources created by this template. It does not
+delete the application registry, application storage, externally managed
 secrets, images, VPC, or an operator-managed public edge.

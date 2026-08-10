@@ -57,7 +57,7 @@ Handler discovery and decorated metadata materialization are framework
 responsibilities. End-user applications must not define, import, or call helper
 adapters such as `materializeDecoratedEntityHandlers()`.
 
-Generated registry tooling owns the ordinary decorated-handler path. The
+Generated registry tooling handles the ordinary decorated-handler path. The
 logical generated registry contains one entry per entity class with the entity
 type, state schema, and handler records for bare `@Assign`, `@Command`,
 `@Subscribe`, and `@React` declarations. Each handler record names the method,
@@ -92,7 +92,7 @@ query/hash aliases deterministically before import. It does not scan package
 trees or perform global automatic loading. Discovery validates the loaded
 module shape, reports stable import/export and ingestion failure codes, and
 registers the discovered metadata through `HandlerRegistryIngestor` into a
-caller-owned `HandlerMetadataRegistry`.
+`HandlerMetadataRegistry` supplied by the caller.
 
 Application packages that use bare decorators need a build step that runs after
 their Protobuf-ES files are generated and before TypeScript compilation. The
@@ -100,7 +100,7 @@ step analyzes the package source, writes
 `generated/handler/generated-handler-registry.ts`, and lets `tsc` compile that
 ignored source artifact into the package output. Runtime assembly adds entity
 classes to `BoundedContextBuilder` and calls `buildAsync()`, which loads the
-compiled registry through framework-owned discovery before constructing default
+compiled registry through framework discovery before constructing default
 repositories.
 If the registry is missing, stale, malformed, or rejected during ingestion,
 context creation should fail deterministically before any handler is invoked.
@@ -186,8 +186,8 @@ by that custom route unless the route explicitly does so.
 
 Entities mutate state only inside framework-controlled handling transactions:
 
-- aggregate state changes during framework-owned command or reaction handling,
-  through transaction/update helpers rather than app-owned event appliers;
+- aggregate state changes during framework command or reaction handling,
+  through transaction/update helpers rather than application event appliers;
 - projection state changes only by event subscription handling;
 - process manager state changes by command/event handling where allowed;
 - state validation runs before commit;
@@ -239,11 +239,11 @@ const tasks = BoundedContext.singleTenant("Tasks")
 
 The current storage API is intentionally smaller than those future repository
 seams. Adapters implement `StorageFactory.createRecordStorage(context, spec, group?)`,
-and framework-owned delegates such as `EventStore` build on `RecordStorage`
+and framework delegates such as `EventStore` build on `RecordStorage`
 plus `RecordSpec` instead of depending on a broad storage adapter surface.
 `EventStore` currently stops at persistence and query behavior; it does not
 implement bus dispatch, subscriber delivery, fan-out, retries, or inbox-style
-delivery records on its own. The first `EventBus` appends to `EventStore`
+delivery records automatically. The first `EventBus` appends to `EventStore`
 before dispatch. Events with no registered dispatcher still resolve after
 storage. The storage delegate remains a storage-only seam.
 
@@ -259,7 +259,7 @@ persistent retry state:
 - `Inbox` is the low-level durable delivery storage primitive in this slice. It
   accepts `InboxMessageInput` with `receive()` and lets framework delivery code
   read durable inbox rows by `ShardIndex`. `markDelivered()` is the narrow
-  framework-owned exact-message status update used by internal replay: missing
+  framework exact-message status update used by internal replay: missing
   rows, non-pending rows, and mismatched caller snapshots return `undefined`;
   already-delivered matching rows are returned idempotently. Its `storage`
   property is an
@@ -401,7 +401,7 @@ event routes through `SignalTransport.subscribe()`. It validates incoming Spine
 command/event envelopes and the enclosed message type URL before calling
 `SingleProcessServerRuntime.enqueue()`. The returned handle closes registered
 transport handles before closing the runtime and can be closed repeatedly. It
-does not expose ZeroMQ, own endpoint naming, supervise processes, retry work,
+does not expose ZeroMQ, define endpoint naming, supervise processes, retry work,
 or create a public server/environment owner.
 
 ## Public Services
@@ -461,7 +461,7 @@ The facade wraps `@spine-event-engine/validation` `2.0.0-snapshot.7` and adds fr
 for state-transition validation, command/event envelope validation, and domain
 runtime rules.
 
-The first server-owned transition validation API is:
+The first server transition validation API is:
 
 ```typescript
 const result = validateEntityStateTransition({

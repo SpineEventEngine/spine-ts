@@ -55,7 +55,7 @@ Queryable columns are state fields marked with `(column) = true`. Spine stores c
 
 Sources: `Entity.java`; `WithLifecycle.java`.
 
-`AbstractEntity` owns common runtime state: ID, current state, version, lifecycle flags, cached string ID, default state initialization, state validation, and lifecycle checks. State is lazily initialized to the model default if accessed before storage injection. Updating state validates Protobuf constraints before applying it. Sources: `AbstractEntity.java`.
+`AbstractEntity` maintains common runtime state: ID, current state, version, lifecycle flags, cached string ID, default state initialization, state validation, and lifecycle checks. State is lazily initialized to the model default if accessed before storage injection. Updating state validates Protobuf constraints before applying it. Sources: `AbstractEntity.java`.
 
 `entity.proto` defines the storage-level entity envelope:
 
@@ -125,7 +125,7 @@ Different entity families restrict where the builder is legal:
 - Model a transaction as an async-safe unit with a mutable draft and commit/rollback semantics.
 - Do not expose state setters publicly. Entity handlers should receive access to a scoped draft/builder.
 - In Node.js, isolate transactions per dispatched message/entity ID, preferably using explicit parameters rather than global async-local mutable state except where tenant/context propagation needs it.
-- Version increments should be owned by transaction phases, not handler code.
+- Transaction phases, not handler code, should increment versions.
 
 ## Repository Base Model
 
@@ -192,7 +192,7 @@ Sources: `RepositoryCache.java`; usage in `AggregateRepository`, `ProjectionRepo
 
 ### TypeScript Implications
 
-- Separate repository APIs from storage adapters. Repositories own domain dispatch, routing, lifecycle, caching, and conversion; storage owns persistence and query execution.
+- Separate repository APIs from storage adapters. Repositories handle domain dispatch, routing, lifecycle, caching, and conversion; storage handles persistence and query execution.
 - Implement default active filtering at the storage/query layer so all repository read models behave consistently.
 - Keep direct ID reads able to load inactive records, because command/event handlers and migrations may need to inspect or restore them.
 - For Node.js, make the repository cache explicit around delivery batches, keyed by tenant + entity ID. Avoid a general unbounded identity map.

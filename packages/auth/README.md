@@ -21,7 +21,7 @@ explains how an application composes these extension points.
 
 ## 🚀 Build a unary gateway
 
-Supply application-owned session, authorization, context, and forwarding
+Supply application session, authorization, context, and forwarding
 collaborators. The gateway replaces a matching caller context with a freshly
 resolved trusted `ActorContext`; it never forwards the credential.
 
@@ -98,7 +98,7 @@ void github;
 
 It does not create sign-in pages, application users, permissions, HTTP routes,
 TLS, or a production session database. Applications select those pieces and
-deploy the gateway at their own trust boundary.
+deploy the gateway at the appropriate trust boundary.
 
 ## 🔗 Learn more
 

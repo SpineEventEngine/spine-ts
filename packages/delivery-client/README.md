@@ -15,7 +15,7 @@ For detailed contracts intended for coding agents, see the
 
 ## 🚀 Connect and read
 
-Connect to an absolute HTTP(S) origin whose path is `/`. The client owns this
+Connect to an absolute HTTP(S) origin whose path is `/`. The client manages this
 connection and `close()` ends its active reads and streams.
 
 ```ts

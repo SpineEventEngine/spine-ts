@@ -46,10 +46,10 @@ then defaults.
 
 ## 🧩 Embed the handlers
 
-Use `InMemoryDelivery.create()` when an application owns the Connect router and
+Use `InMemoryDelivery.create()` when an application provides the Connect router and
 listener itself. `DeliveryCore.inbox` and `.shards` are the public Connect
 handler implementations; register both before creating the transport. The
-application still owns the network listener and its lifecycle.
+application still manages the network listener and its lifecycle.
 
 An embedded consumer must declare and install direct dependencies on
 `@spine-event-engine/delivery-server`, `@connectrpc/connect`, and

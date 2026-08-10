@@ -5,11 +5,11 @@ This reference describes the public Node Delivery client API for coding agents.
 ## Construction and lifecycle
 
 `DeliveryClient.connectTo(origin, options?)` accepts an absolute HTTP(S) origin
-with pathname `/`, validates options before opening an owned Connect HTTP/2
+with pathname `/`, validates options before opening a Connect HTTP/2
 session, and returns a client. `usingTransport(transport, options?)` is the
-advanced form for a caller-owned Connect transport; closing that client does not
+advanced form for a Connect transport supplied by the caller; closing that client does not
 close the supplied transport. `close()` is synchronous and idempotent. It
-aborts active reads and observation streams and closes an owned session once.
+aborts active reads and observation streams and closes its session once.
 
 Options default to page size 100, no read retry, no retry backoff, no observation
 reconnect, no reconnect backoff, observation buffer 100, and operation timeout
@@ -57,7 +57,7 @@ redeliver after restart, so downstream handling must be idempotent. This
 package does not add authentication, authorization, durability, exactly-once
 effects, or a production topology.
 
-## Environment-owned remote delivery
+## Remote delivery in an environment
 
 `RemoteDelivery.connectTo({ endpoint, clientOptions? })` creates one lazy
 `ServerEnvironmentDelivery`. Its `open()` creates one client plus one remote
@@ -80,7 +80,7 @@ immediate pre-commit ownership probe fences a detected stale owner, but cannot
 make remote ownership and Entity storage one linearizable distributed
 transaction.
 
-Environment shutdown closes the client-owned HTTP/2 session. Concurrent/repeated
+Environment shutdown closes the client's HTTP/2 session. Concurrent/repeated
 close calls share work; a failed phase is the only phase retried. This adds no
 health route, provider selector, worker, or
 delivery-server mode.

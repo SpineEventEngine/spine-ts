@@ -81,7 +81,7 @@ Most applications only need a `RecordSpec`. Sometimes two record families use
 the same source type and record type but must remain separate: for example,
 two independently retained views of the same Task state records.
 Pass a `StorageGroup` as the optional third argument to give that family its
-own physical storage group. The group is deliberately separate from the
+separate physical storage group. The group is deliberately separate from the
 `RecordSpec`, because the record layout has not changed.
 
 ```ts

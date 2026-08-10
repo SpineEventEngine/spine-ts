@@ -89,5 +89,5 @@ The separate `./internal/entity-commit` port combines one current record with
 the nonempty enabled history families and delivery events. For the in-memory
 provider only, that operation stages and atomically publishes its touched
 families. Its outcomes are `"committed"` and `"conflict"`; it has no receipt or
-`"replayed"` outcome. Other providers define and document their own atomicity
+`"replayed"` outcome. Other providers define and document their atomicity
 guarantees.

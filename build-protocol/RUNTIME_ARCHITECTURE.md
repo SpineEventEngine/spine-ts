@@ -29,10 +29,10 @@ The first TS `Server` slice was intentionally narrower than Spine JVM's
 complete server/runtime environment. It introduced a Node HTTP/2 listener over
 `SpineServices`, defaulted to `127.0.0.1`, and returned a `RunningServer` with
 `host`, `port`, `baseUrl`, and idempotent `close()`; it did not yet include
-`ServerEnvironment` or environment-owned delivery. That is historical. The
+`ServerEnvironment` or delivery managed by the environment. That is historical. The
 current runtime exposes one process-wide `Environment`/`ServerEnvironment`
 singleton graph for storage, transport, optional delivery/tracing facilities,
-and their explicit process-close ownership. Server startup completes finite
+and their explicit process-close responsibility. Server startup completes finite
 environment recovery and opens command/event transport intake before listener
 intake. Server close stops network intake and sessions, drains accepted
 transport work, detaches and quiesces delivery, then closes its contexts and
@@ -43,7 +43,7 @@ production transport-topology policy.
 
 ## Read-Side and Write-Side Segregation
 
-The write side owns:
+The write side contains:
 
 - command intake;
 - command dispatch;
@@ -52,7 +52,7 @@ The write side owns:
 - event persistence;
 - event delivery to subscribers/reactors/projections.
 
-The read side owns:
+The read side contains:
 
 - projection state records;
 - query execution;
@@ -98,19 +98,19 @@ interface SignalTransport {
 ```
 
 The implemented abstraction hides socket types and ZeroMQ-specific envelopes,
-supports adapter-neutral command/event request and publication flows, and owns
+supports adapter-neutral command/event request and publication flows, and manages
 graceful handle closure. The same interface is used by the in-process adapter
 and the same-host ZeroMQ adapter.
 
 T-0016f adds the first executable server-side bridge over this abstraction.
 `RuntimeTransportBinding.open()` consumes a `ServerRuntimeRoutingPlan`, a
 supplied `SignalTransport`, a supplied `SingleProcessServerRuntime`, and
-framework-owned `onCommand` / `onEvent` callbacks. It registers command routes
+framework `onCommand` / `onEvent` callbacks. It registers command routes
 with request/respond semantics, registers event routes with publish/subscribe
 semantics, validates incoming generated Spine command/event envelope shape plus
 the enclosed message type URL before runtime intake, and enqueues accepted
 callbacks through the runtime. Its handle is idempotent and closes transport
-registrations before the runtime. It deliberately does not own the transport
+registrations before the runtime. It deliberately does not manage the transport
 instance, choose IPC endpoint names, expose ZeroMQ, supervise processes, retain
 delivery attempts, retry work, or create a JVM-style server environment.
 
@@ -152,7 +152,7 @@ Requirements:
   default route before handler invocation;
 - end-user handlers must not perform default target-ID extraction or validation;
 - support explicit custom command routes in repositories; custom routes replace
-  the default first-field route and define their own route-validity behavior;
+  the default first-field route and define route-validity behavior;
 - preserve immediate `Ack` semantics separately from later command result subscriptions;
 - isolate command handler failure from broker failure.
 
@@ -179,7 +179,7 @@ Requirements:
 - subscription creation, activation, update streaming, and cancellation follow `SubscriptionService`;
 - unknown-target subscription fallback may fan out internally to multiple
   bounded contexts, while the client sees one opaque `Subscription`;
-- read-side workers own filtering, ordering, lifecycle filtering, and response formatting.
+- read-side workers perform filtering, ordering, lifecycle filtering, and response formatting.
 
 ## Storage Boundaries
 
@@ -191,8 +191,8 @@ The framework starts storage with one adapter seam:
 - `EventStore` as a delegate over `RecordStorage<EventId, Event>`.
 
 For now `EventStore` is storage-only. It persists and queries `Event` records,
-but it does not dispatch those events on its own to buses, subscribers,
-delivery workers, or retry infrastructure. The first TS `EventBus` now owns
+but it does not dispatch those events automatically to buses, subscribers,
+delivery workers, or retry infrastructure. The first TS `EventBus` now manages
 append-before-dispatch by delegating to `EventStore`; events with no registered
 dispatcher still remain stored and resolve.
 
@@ -213,7 +213,7 @@ and transport-backed worker supervision:
 
 - standalone delivery writes can be recorded before the asynchronous worker
   handoff point where durability is configured, and package-internal
-  framework-owned replay can drain one shard through validated endpoints. Built
+  framework replay can drain one shard through validated endpoints. Built
   bounded
   contexts integrate `CommandBus` intake for process-manager command assignees
   and live `EventBus` intake for process-manager event reactions and projection
@@ -293,7 +293,7 @@ before delivery.
 
 ## Environment Delivery Lifecycle Sequence
 
-The process-wide `ServerEnvironment` owns the delivery lifecycle for attached
+The process-wide `ServerEnvironment` manages the delivery lifecycle for attached
 contexts.
 `Server.start()` builds its contexts and completes finite environment recovery
 before opening listener intake. If recovery rejects, startup rejects and the
@@ -307,7 +307,7 @@ facilities. After all sibling servers detach, explicit
 `ServerEnvironment.instance().close()` closes the singleton. Retriable close
 failures retain unfinished work and do not duplicate completed phases.
 `ServerEnvironment.close()` is permanent only after it is no longer in use; an
-in-use close rejects without tearing down its owned facilities.
+in-use close rejects without tearing down its configured facilities.
 
 The lifecycle exposes no public delivery scheduler, monitor, action,
 dead-letter, retry-timing, topology, adapter, supervision, or catch-up policy.

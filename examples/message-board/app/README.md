@@ -1,7 +1,7 @@
 # Message Board server application
 
 This package turns the Message Board model into a runnable Spine bounded context.
-The framework owns the network and process plumbing; the example contains only
+The framework handles the network and process plumbing; the example contains only
 Message Board domain code, local session policy, and concise server configuration.
 
 ## 💡 What is here?
@@ -34,7 +34,7 @@ const server = await new MessageBoardApplication().run({ port: 8090 });
 console.log(`MessageBoard local server ready at ${server.baseUrl}`);
 ```
 
-Use `start()` instead of `run()` when another host owns process signals:
+Use `start()` instead of `run()` when another host handles process signals:
 
 ```ts
 const server = await new MessageBoardApplication().start({ port: 0 });
@@ -70,11 +70,11 @@ standalone gateway uses `BACKEND_DISCOVERY_SERVICE` and `BACKEND_DISCOVERY_PORT`
 in Kubernetes; local Compose alone uses comma-separated `BACKEND_URLS` as an
 explicit static fixture and accepts legacy `BACKEND_URL`. A missing registry namespace stops a
 browser-mode process before it opens a listener. Application data uses
-application-owned Datastore storage; gateway subscription registry storage is
-separately owned. Production browser processes also require the shared
+application Datastore storage; gateway subscription registry storage is
+separate. Production browser processes also require the shared
 `MESSAGE_BOARD_SESSION_ISSUER`, `MESSAGE_BOARD_SESSION_AUDIENCE`,
 `MESSAGE_BOARD_SESSION_KEY_ID`, and `MESSAGE_BOARD_SESSION_PRIVATE_KEY` values.
-Each entrypoint constructs one caller-owned Datastore client from
+Each entrypoint constructs one Datastore client from
 `DATASTORE_PROJECT_ID` and hands that exact client to the storage factory.
 It also gives the storage factory the application's generated Protobuf type
 registry. This lets message-valued IDs and `(column)` values inside `Any`
@@ -82,7 +82,7 @@ metadata use the same compact JSON representation when they are written and
 queried. See the small setup in
 [`deployment-config.ts`](src/deployment-config.ts).
 Changing signing values per browser-capable replica breaks session validation;
-changing the registry namespace splits subscription ownership.
+changing the registry namespace splits subscription state.
 The [container image guide](../deploy/container/README.md) lists the production
 commands, fixed image tags, and runtime values.
 

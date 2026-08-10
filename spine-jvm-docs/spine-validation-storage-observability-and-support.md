@@ -279,7 +279,7 @@ Sources:
 
 - Singleton shared by all bounded contexts in the same process.
 - Holds environment-specific settings for delivery, storage factory, tracer factory, and transport factory.
-- Also owns node ID, command scheduler supplier, and deployment detector.
+- Also provides node ID, command scheduler supplier, and deployment detector.
 - Test environment defaults storage to `SystemAwareStorageFactory.wrap(InMemoryStorageFactory.newInstance())`.
 - Test environment defaults transport to `InMemoryTransportFactory`.
 - Other environments throw if required storage/transport factory is not configured.
@@ -407,7 +407,7 @@ Sources:
 OpenTelemetry adapter:
 
 - `server-otel` is experimental.
-- `OtelTracerFactory` accepts an externally owned `OpenTelemetry` instance and an instrumentation scope name, defaulting to `io.spine.server.trace.otel`.
+- `OtelTracerFactory` accepts an externally supplied `OpenTelemetry` instance and an instrumentation scope name, defaulting to `io.spine.server.trace.otel`.
 - The factory lazily obtains an OpenTelemetry tracer and does not shut down the supplied `OpenTelemetry` instance on close.
 - `OtelTracer.processedBy` records a `SignalSpan` per signal handling.
 - Each span starts at the signal timestamp and ends at `Time.currentTime()`.
@@ -425,7 +425,7 @@ Sources:
 - `/private/tmp/spine-research/core-jvm/server-otel/src/main/kotlin/io/spine/server/trace/otel/TraceIds.kt`.
 - `/private/tmp/spine-research/core-jvm/server-otel/src/main/kotlin/io/spine/server/trace/otel/ExperimentalOtelTracing.kt`.
 
-TypeScript implication: define tracing as a pluggable SPI and provide an OpenTelemetry implementation over `@opentelemetry/api`/SDK. Keep OpenTelemetry SDK ownership outside the Spine runtime. Generate deterministic trace IDs from root signal IDs if cross-process causal trace stitching is required.
+TypeScript implication: define tracing as a pluggable SPI and provide an OpenTelemetry implementation over `@opentelemetry/api`/SDK. Keep the OpenTelemetry SDK lifecycle outside the Spine runtime. Generate deterministic trace IDs from root signal IDs if cross-process causal trace stitching is required.
 
 ## Versioned support repos
 
@@ -463,7 +463,7 @@ Notes:
 - Use one injectable clock for all current-time reads and preserve sub-millisecond ordering semantics.
 - Model logging context with async-local scoped metadata.
 - Publish diagnostic events as system events, separately from logs.
-- Keep tracing optional and environment-configured; make OpenTelemetry SDK ownership caller-controlled.
+- Keep tracing optional and environment-configured; let the caller manage the OpenTelemetry SDK lifecycle.
 
 ## Open questions and uncertainties
 

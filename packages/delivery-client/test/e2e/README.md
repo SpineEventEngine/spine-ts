@@ -24,7 +24,7 @@ pnpm --config.verify-deps-before-run=false exec vitest run \
 The suite starts one standalone in-memory `simple-server` on trusted loopback,
 then starts two independent Node applications. Each application imports only
 package-root delivery APIs and generated descriptors; parent observation uses
-the generated Admin and health descriptors over its own HTTP/2 session.
+the generated Admin and health descriptors over a separate HTTP/2 session.
 
 The success scenario asserts exclusive pickup and release, exact ordinary and
 stale-takeover Admin sequences, exactly 20 post-ACK updates, final shard state,

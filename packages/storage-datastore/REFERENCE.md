@@ -10,7 +10,7 @@ Import `DatastoreStorageFactory`, `DatastoreStorageFactoryBuilder`,
 `DatastoreColumnMapping`, and `DatastoreQueryLimitError` from
 `@spine-event-engine/storage-datastore`.
 Create a factory with `DatastoreStorageFactory.newBuilder().setClient(client)`.
-The adapter never owns or closes that client.
+The adapter never closes that client.
 
 The builder is mutable until `build()` and the built factory receives a
 snapshot. The last registration for the same identity wins. Record resolution
@@ -30,8 +30,8 @@ remain behaviorally immutable for the factory lifetime. `organizeRecords(...)`
 changes a kind. `useRecordStorage(...)` replaces a record-family provider.
 `useEntityStorage(...)` replaces the complete coherent Entity handle, including
 its commit capability. Custom providers receive the storage context, record or
-Entity contract, and caller-owned client, but not the built-in converter or
-stringifier registry; they own equivalent tenant, ID, and column mapping. The
+Entity contract, and caller-supplied client, but not the built-in converter or
+stringifier registry; they must provide equivalent tenant, ID, and column mapping. The
 built-in Entity provider does not mix custom record creators into one transaction.
 
 ## Physical layout
@@ -90,7 +90,7 @@ batches.
 Provider-legal ID predicates, declared-property comparisons, and ordering are
 pushed only when Datastore can execute the whole selected conjunction. Local
 reconciliation preserves shared query semantics and never becomes an unlimited
-scan. A smaller caller-supplied reconciliation bound retains its own sentinel and
+scan. A smaller caller-supplied reconciliation bound retains a sentinel and
 `QueryCandidateLimitError` behavior. There is no public Datastore cursor API.
 
 The internal Entity commit reads current and immutable keys then applies current,
@@ -106,8 +106,8 @@ truncate behavior. Timestamp comparisons include seconds and nanoseconds.
 Long maintenance can commit several bounded chunks, so a later failure leaves
 earlier chunks durable and the caller retries the same idempotent operation.
 
-The factory owns one tenant catalog. It reads native `__namespace__` metadata,
-converts only namespaces owned by its `NamespaceConverter`, and keeps an early
+The factory has one tenant catalog. It reads native `__namespace__` metadata,
+converts only namespaces recognized by its `NamespaceConverter`, and keeps an early
 in-memory cache for newly admitted tenants. `keep()` stores no `TenantId` row or
 other discovery record; Datastore exposes native metadata after an application
 entity is written in that namespace.
@@ -116,7 +116,7 @@ Before deployment to an existing project, run `pnpm --dir
 packages/storage-datastore inventory:legacy -- --project <project-id>`. It
 enumerates native namespaces and kinds and fails closed on discovery errors,
 an old `_scope` property, or a scope-derived key name. Passing the inventory is
-a startup prerequisite; migration is application-owned and offline, with no
+a startup prerequisite; the application performs migration offline, with no
 dual-layout reads or automatic conflict winner.
 
 ## Operations and errors
@@ -127,5 +127,5 @@ provider acceptance; cloud smoke remains credential-gated.
 
 `build()` and storage-handle creation issue no request. Closing the factory is
 idempotent and prevents creation of another handle without closing the
-caller-owned client or already-created handles. Each record, Entity, and commit
-handle has its own idempotent lifecycle and rejects work after it is closed.
+caller-supplied client or already-created handles. Each record, Entity, and commit
+handle has an independent idempotent lifecycle and rejects work after it is closed.

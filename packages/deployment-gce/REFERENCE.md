@@ -37,7 +37,7 @@ pull.
 ID, and `network-interfaces/0/ip` from the GCE metadata service. Every request
 uses `Metadata-Flavor: Google`; unsuccessful, empty, or malformed responses
 reject, as does cancellation. `GceMetadataProvider` is injectable for tests or
-an operator-owned metadata integration.
+an operator-managed metadata integration.
 
 `GceApplicationNode.create(metadata, options)` returns the stable ID
 `gce/<project>/<zone>/<numeric-instance-id>`. `port` must be a safe TCP port.
@@ -70,7 +70,7 @@ registrar waits for the admitted promise to settle before deletion.
 ## Discovery
 
 `GceRegistryReader.read(signal)` reads the full live registry snapshot at its
-injected clock time, which defaults to `Date.now`. `GceNodeDiscovery` owns one
+injected clock time, which defaults to `Date.now`. `GceNodeDiscovery` manages one
 `LeasedNodeRegistry`, wraps that reader in `ScheduledNodeDiscovery`, and is the
 Gateway-facing `NodeDiscovery`. Its production scheduler is optional and
 unref'ed; expired rows are filtered immediately, so scale-to-zero produces an
@@ -80,7 +80,7 @@ retain the Gateway's previous valid membership until a later refresh succeeds.
 
 `watch(onSnapshot)` returns a stop operation. Calling that operation or
 `close()` permanently stops future refresh scheduling, waits for any admitted
-read, and then closes the owned registry. `close()` is idempotent: callers
+read, and then closes the registry it created. `close()` is idempotent: callers
 share the same promise and the registry closes once. The owner still attempts
 registry closure if stopping discovery fails. It rethrows one close failure;
 when both operations fail, it rejects with an `AggregateError` containing both

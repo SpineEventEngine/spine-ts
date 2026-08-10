@@ -9,14 +9,14 @@ the [API index](api/README.md).
 The packages are not published to npm yet. This repository's workspace is the
 supported source for the commands and examples below.
 
-## What owns what
+## Responsibilities
 
-| Part                                    | Responsibility                                                                                                     | Must not own                                                          |
+| Part                                    | Responsibility                                                                                                     | Outside its scope                                                     |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
 | `@spine-event-engine/client-web`        | Browser-safe `Client`, explicit gRPC-Web/Connect selection, bounded reconnect and session helper                   | Identity-provider protocol, authorization, durable cache              |
 | `@spine-event-engine/client-node`       | Native Node transport and Node-only entity query/codegen helpers                                                   | Browser transport or React                                            |
-| `@spine-event-engine/client-react`      | Effect-owned React observations of an application `ClientRequest`                                                  | RPC construction, SSR, Suspense, cache, service worker, state manager |
-| `@spine-event-engine/auth`              | Gateway contracts, sessions, OIDC flow, authorization/context rewrite, subscription ownership                      | An HTTP listener, application policy, identity provisioning           |
+| `@spine-event-engine/client-react`      | Effect-scoped React observations of an application `ClientRequest`                                                 | RPC construction, SSR, Suspense, cache, service worker, state manager |
+| `@spine-event-engine/auth`              | Gateway contracts, sessions, OIDC flow, authorization/context rewrite, subscription access checks                  | An HTTP listener, application policy, identity provisioning           |
 | Application gateway / HTTP adapter      | Listener lifecycle, credential extraction, cookies, callback/exchange endpoints, composition of auth collaborators | A direct browser-to-backend route by accident                         |
 | Envoy template                          | TLS, CORS, limits, public method routing, gRPC-Web and explicit binary Connect pass-through                        | Authentication or authorization                                       |
 | Spine TS or JVM backend                 | Domain services receiving a trusted rewritten `ActorContext`                                                       | Authentication routines                                               |
@@ -26,7 +26,7 @@ supported source for the commands and examples below.
 flowchart LR
   Browser["Browser: client-web / client-react"] -->|"gRPC-Web or explicit Connect"| Envoy
   Envoy["Envoy: TLS, CORS, routing"] --> Gateway
-  Gateway["Application-owned standalone gateway\nauthenticate · authorize · resolve context"] -->|"native gRPC with trusted ActorContext"| Backend["Spine TS or JVM backend"]
+  Gateway["Application standalone gateway\nauthenticate · authorize · resolve context"] -->|"native gRPC with trusted ActorContext"| Backend["Spine TS or JVM backend"]
   Gateway <--> IdP["OIDC / Google / GitHub / custom provider"]
   Gateway <--> Stores["application session, policy, identity, revocation stores"]
 ```
@@ -34,7 +34,7 @@ flowchart LR
 The arrows are trust boundaries. Envoy and the gateway are customizable
 guidance, not framework-enforced deployment policy. A backend route exposed
 around the gateway is **not** protected by gateway authentication; its operator
-owns that risk.
+accepts that risk.
 
 ## Browser client: explicit protocol and lifecycle
 
@@ -69,7 +69,7 @@ are credentials.
 
 | Setting                       |                      Default | Failure or invariant                                                                                          |
 | ----------------------------- | ---------------------------: | ------------------------------------------------------------------------------------------------------------- |
-| `BrowserSession.maxRequestMs` |                    10,000 ms | Positive safe integer, at most 60,000 ms; expiry aborts session-owned Fetch/refresh work.                     |
+| `BrowserSession.maxRequestMs` |                    10,000 ms | Positive safe integer, at most 60,000 ms; expiry aborts Fetch/refresh work started by the session.            |
 | Update queue                  | 64 updates / 1,048,576 bytes | Overflow is terminal; updates are never silently dropped.                                                     |
 | Lifecycle queue               |                   32 notices | Overflow is terminal.                                                                                         |
 | Reconnect                     |        5 retries / 30,000 ms | Retry starts after the initial attempt; default delay is 250 ms exponential, ±20% jitter, capped at 5,000 ms. |
@@ -154,13 +154,13 @@ sequenceDiagram
 React support excludes SSR, Suspense, normalized caching, service workers, and
 external state managers. A late result or update from a retired generation is
 ignored. Cancellation is cooperative: a factory that ignores its signal can
-keep its own underlying work alive.
+keep the underlying work alive.
 
 ## Gateway contracts and request facts
 
 One standalone Gateway dynamically discovers application nodes on GKE or GCE.
 GKE supplies ready nodes through headless-Service DNS; GCE supplies them through
-leased discovery backed by application-owned storage. Commands and queries are
+leased discovery backed by application storage. Commands and queries are
 sent to one current backend with bounded round-robin selection and no automatic
 retry. Subscription creation and activation reconcile across every discovered
 node; merged notices are best-effort and can duplicate, gap, or be lost. Query
@@ -214,7 +214,7 @@ unlisted headers. `IncomingRequests.decode()` decodes gateway input for policy;
 a `TypeRegistryLookup` can decode a command payload; unknown
 or malformed `Any` remains a safe type-URL-only fact.
 
-| Gateway operation | Required gate                                     | Context rule                                                 | Ownership rule                                     |
+| Gateway operation | Required gate                                     | Context rule                                                 | Forwarding rule                                    |
 | ----------------- | ------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------- |
 | `resolve-context` | Valid session; no authorization-policy invocation | `resolveContext()` returns informational actor/tenant/expiry | No backend forward                                 |
 | `command`         | Authorize every Post                              | Replace matching actor/tenant hint with resolver output      | Forward once, without credential                   |
@@ -381,7 +381,7 @@ sequenceDiagram
 ```
 
 Use `createOidcProvider()` for explicit verified OIDC endpoints or
-`discoverOidcProvider()` for exact issuer discovery. The adapter owns discovery,
+`discoverOidcProvider()` for exact issuer discovery. The adapter performs discovery,
 JWKS cache, signature/claim validation, and code exchange. `createGoogleProvider()`
 uses Google OIDC; use stable `sub` as identity, not email. `createGitHubProvider()`
 uses OAuth plus authenticated `/user`; use stable numeric `id`, not login/email.
@@ -395,10 +395,10 @@ start. `OidcFlow` creates state, nonce, and provider verifier; callback state
 is consumed before success/error handling, and both callback/exchange are
 one-time. Require exact HTTPS callback and allowed post-login URLs, POST for
 the application grant exchange, and `Cache-Control: no-store` for callback and
-exchange responses. Refresh/re-login is application-owned: an expired session
+exchange responses. The application handles refresh and re-login: an expired session
 must lead to a fresh application/provider flow without reusing a grant.
 
-Identity mapping owns provisioning, tenant selection/provisioning, disabled
+Identity mapping handles provisioning, tenant selection, disabled
 users, and principal attributes. Keep provider identity separate from local
 actor and optional tenant:
 
@@ -417,7 +417,7 @@ contextResolver.resolve = async (principal, request, clock) => ({
 
 ## Gateway listener, Envoy, and testing
 
-The application owns the listener that composes `UnaryGateway`,
+The application provides the listener that composes `UnaryGateway`,
 `SubscriptionGateway`, `createNativeGatewayServices()`, a credential extractor,
 transport-fact extractor, session resolver, policy, context resolver, native
 backend transport, and application registry. The [Envoy reference](../interop/envoy/README.md)

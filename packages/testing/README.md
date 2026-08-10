@@ -63,7 +63,7 @@ const value = await box.eventually(
 
 `BlackBox.from()` accepts fixed `tenant`, `zoneId`, `timeoutMs`, and
 `intervalMs` options. Time values must be positive integers. `close()` cancels
-subscriptions owned by the box, closes its client, and then closes the local
+subscriptions created by the box, closes its client, and then closes the local
 server.
 
 ## ⚠️ Test boundary

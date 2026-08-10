@@ -17,8 +17,8 @@ edit them. `pnpm typecheck:build:generated` consumes the generated graph.
 ## Application entry points
 
 `@spine-event-engine/server` is the Node application entry point.
-`Server.start()` is embedding mode: the caller owns signals and must close the
-returned `RunningServer`. `Server.run()` is process-owning mode and coordinates
+`Server.start()` is embedding mode: the caller handles signals and must close the
+returned `RunningServer`. `Server.run()` is standalone-process mode and coordinates
 `SIGINT`/`SIGTERM` shutdown across running servers.
 
 Browser applications configure `ServerOptions.browser` with exact origins,
@@ -26,8 +26,8 @@ session resolution, authorization, actor/tenant context resolution, clock,
 optional schema registry, and optional strict opaque cookies. The server keeps
 its native HTTP/2 backend on an ephemeral loopback
 port and returns only the authenticated Connect/gRPC-Web URL. Framework code
-owns listener creation, CORS, routing, readiness, rollback, subscription
-bindings, and shutdown. Application code owns identity-provider flows, durable
+manages listener creation, CORS, routing, readiness, rollback, subscription
+bindings, and shutdown. Application code supplies identity-provider flows, durable
 sessions, policy, TLS, and deployment.
 
 ## Package responsibilities
@@ -51,8 +51,8 @@ or `undefined`; it never exposes an in-flight reservation. `cleanup()` removes
 at most 25 expired pending definitions and returns its scanned/deleted counts
 plus `more` when another expired page remains. `close()` is idempotent, waits
 for admitted operations, and makes every later registry operation reject as
-closed. A built-in durable registry owns three storage handles: definition,
-control, and fixed staging. The context owns and closes a supplied custom
+closed. A built-in durable registry uses three storage handles: definition,
+control, and fixed staging. The context closes a supplied custom
 registry implementation.
 
 ## Verification

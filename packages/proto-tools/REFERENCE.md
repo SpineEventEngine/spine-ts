@@ -29,14 +29,14 @@ compiled generated output, canonical `proto` sources, `spine-proto.json`, and
 `spine-proto-manifest.json` with matching exports.
 
 `generate` produces a deterministic manifest containing package identity and
-version, sorted owned Proto files, generated exports, direct dependencies, and
-the module export. A model that owns a top-level `*rejections.proto` also gets a
+version, sorted Proto files in the package, generated exports, direct dependencies, and
+the module export. A model with a top-level `*rejections.proto` also gets a
 typed same-directory rejection companion. When such a companion is produced,
 the model must directly depend on `@spine-event-engine/core`.
 
 For a cross-model Proto import, declare the other model in both `package.json`
 and `spine-proto.json`; import the other model's canonical package path. The
-tool keeps ownership explicit and does not duplicate the dependency's source or
+tool keeps package boundaries explicit and does not duplicate the dependency's source or
 generated output.
 
 ## Application configuration

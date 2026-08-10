@@ -64,7 +64,7 @@ validated.
 
 ## 🗂️ Build a schema registry
 
-Applications normally give model modules to the server, which creates its own
+Applications normally give model modules to the server, which creates a
 registry. A standalone integration can create a registry directly.
 
 ```ts

@@ -1,6 +1,6 @@
 # Deployment reference
 
-`ApplicationNode` validates stable opaque IDs, canonical HTTP(S) origins, and optional HTTPS DNS TLS authorities; IDNs normalize to ASCII lowercase and IP literals are rejected as TLS authorities. `StaticNodeDiscovery` emits initial and replacement complete snapshots, including empty snapshots. `ScheduledNodeDiscovery` owns its injected schedule and aborts its current reader on close. Consumers retain only the latest complete snapshot and reconcile in bounded batches; closing the consumer stops later work. The expected 32 nodes is an operational expectation, not a cap.
+`ApplicationNode` validates stable opaque IDs, canonical HTTP(S) origins, and optional HTTPS DNS TLS authorities; IDNs normalize to ASCII lowercase and IP literals are rejected as TLS authorities. `StaticNodeDiscovery` emits initial and replacement complete snapshots, including empty snapshots. `ScheduledNodeDiscovery` manages its injected schedule and aborts its current reader on close. Consumers retain only the latest complete snapshot and reconcile in bounded batches; closing the consumer stops later work. The expected 32 nodes is an operational expectation, not a cap.
 
 A consumer treats conflicting descriptors for one stable ID in one snapshot as an invalid snapshot. The dynamic unary consumer contains that invalid input, keeps its last valid membership, and waits for a later complete snapshot; it does not emit operational logging in this package.
 
@@ -9,7 +9,7 @@ A consumer treats conflicting descriptors for one stable ID in one snapshot as a
 ## Leased node registry
 
 `LeasedNodeRegistry` persists application-node discovery leases through an
-explicit caller-owned `StorageFactory` and a non-empty operator-owned namespace.
+explicit caller-supplied `StorageFactory` and a non-empty operator-configured namespace.
 It requires atomic compare-and-set storage at construction. It stores the
 approved `spine.deployment.ApplicationNodeLease` record, using its
 `spine.server.NodeId` message as the storage ID and its `NodeRegistrationId`
@@ -51,5 +51,5 @@ MysqlStorageFactory.newBuilder().setTableName(
 ```
 
 For Datastore, use the same record family with `organizeRecords()` to select a
-kind, or `useRecordStorage()` to supply an application-owned storage adapter.
+kind, or `useRecordStorage()` to supply an application storage adapter.
 Both APIs take `ApplicationNodeLeaseSchema` as their record-only selector.

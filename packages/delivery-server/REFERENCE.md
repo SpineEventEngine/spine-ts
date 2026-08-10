@@ -7,7 +7,7 @@ coding agents.
 
 `InMemoryDelivery.create(options)` returns `DeliveryCore` with Connect handler
 implementations `inbox` and `shards`. It does not open a listener or install
-Admin/health handlers. The caller registers these handlers and owns its own
+Admin/health handlers. The caller registers these handlers and provides the
 network lifecycle.
 
 `DeliveryServer` is the standalone lifecycle owner. Its constructor validates
@@ -18,7 +18,7 @@ rejects unadmitted work, completes Admin streams, and closes listener sessions.
 Neither a failed start nor a closed instance can be restarted.
 
 The CLI `spine-delivery-server` starts that same server and closes it once on
-`SIGINT` or `SIGTERM`. Embedded callers own signal handling and call `close()`.
+`SIGINT` or `SIGTERM`. Embedded callers handle signals and call `close()`.
 
 ## Configuration and limits
 

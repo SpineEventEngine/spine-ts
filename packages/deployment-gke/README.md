@@ -3,8 +3,8 @@
 `@spine-event-engine/deployment-gke` helps one standalone Gateway find ready
 Spine TS application nodes through a Kubernetes headless Service. This guide
 adds an editable Terraform starting point for a private, one-Gateway GKE
-deployment. It is deliberately storage-neutral: your application chooses its
-own storage and supplies its own configuration.
+deployment. It is deliberately storage-neutral: your application chooses the
+storage and supplies its configuration.
 
 This is a guide for people deploying an application. For exact discovery API
 and lifecycle behavior, see the [reference for agents](REFERENCE.md).
@@ -31,7 +31,7 @@ Create the two Secrets through your normal secret-management process before
 running Terraform. Terraform receives only their names; it never receives or
 creates their values. The application Secret holds application-selected
 settings, including storage settings when the application needs them. The
-Gateway Secret holds its own identity and session settings.
+Gateway Secret holds separate identity and session settings.
 
 ## What this deployment creates
 
@@ -121,7 +121,7 @@ actor-context resolution, allowed origins, a clock, type registry, and named
 durable subscription bindings. The complete
 [server browser guide](../server/README.md#serve-browser-clients) and
 [browser authentication guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
-explain those application-owned integration points.
+explain those application integration points.
 
 ```ts
 // docs-snippet-path: packages/deployment-gke/examples/gateway.ts
@@ -160,7 +160,7 @@ browser collaborators as `GatewayOptions`. Supply sessions, authorization,
 trusted actor-context resolution, allowed origins, a clock, type registry, and
 named durable subscription bindings there.
 
-The application entrypoint uses the same configuration owner for its own
+The application entrypoint uses the same configuration source for its
 listener:
 
 ```ts
@@ -192,7 +192,7 @@ typed bounded-context, service, and resource configuration as
 `ApplicationOptions`.
 
 The ConfigMap in the template exposes matching service and port values as a
-simple convention. Adapt the names or use your own configuration loader; Spine
+simple convention. Adapt the names or use another configuration loader; Spine
 TS does not require a particular environment-variable format. Production
 startup rejects missing or volatile bindings before opening its browser
 listener. `DurableSubscriptionBindings` is the supplied durable option; give
@@ -233,7 +233,7 @@ kubectl logs --namespace spine-app deployment/gateway
 A ready application Pod appears in the EndpointSlice and therefore becomes an
 available Gateway backend. An unready Pod is not published because the Service
 sets `publishNotReadyAddresses` to `false`. The Gateway refreshes the DNS
-answer and reconciles its backend connections. A Gateway log or your own
+answer and reconciles its backend connections. A Gateway log or an application
 metrics should show the expected ready backend count.
 
 ## Scale application nodes
@@ -282,7 +282,7 @@ terraform apply -var-file=terraform.tfvars \
 During overlap, old and new nodes can process work. Pending Inbox work may run
 under the new business logic, so operators—not Spine TS—must decide whether the
 two versions are compatible. For an incompatible replacement, first disable
-the module HPA if it owns capacity, stop every application node, apply the new
+the module HPA if it controls capacity, stop every application node, apply the new
 image, then restore one chosen capacity policy:
 
 ```bash
@@ -335,5 +335,5 @@ terraform destroy -var-file=terraform.tfvars
 ```
 
 The existing namespace, image registry, public edge, and Secrets are
-operator-owned and remain. Delete them separately only after verifying that no
+managed by the operator and remain. Delete them separately only after verifying that no
 other workload needs them.

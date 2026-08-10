@@ -16,7 +16,7 @@ Import `MysqlStorageFactory`, `MysqlStorageOptions`, `MysqlTenantStorageOptions`
 
 `MysqlStorageFactory.newBuilder().setOptions(options).build()` configures one
 single-tenant database. `setTenantOptions(entries)` configures one distinct
-database and owned pool per complete generated `TenantId`. The factory selects
+database and pool per complete generated `TenantId`. The factory selects
 the matching pool before table, query, transaction, or lock work.
 `setStringifierRegistry(registry)` configures reversible mappings for
 message-valued IDs and ordinary message columns; the builder snapshots the

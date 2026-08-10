@@ -20,7 +20,7 @@ pnpm --filter @spine-event-engine/example-todo start
 It creates a local `http://127.0.0.1:8080` server over one in-memory bounded
 context. For programmatic local tests, the public package exports
 `startTodoServer({ host: "127.0.0.1", port: 0 })`; always call the returned
-server's `close()` method. The command-line process owns its listener until
+server's `close()` method. The command-line process keeps its listener until
 `Ctrl-C` stops it. Each start has fresh in-memory state.
 
 `createTodoContext()` adds `TaskAggregate` and `TaskListProjection`, then loads
@@ -34,7 +34,7 @@ For application behavior tests, prefer `await BlackBox.from(await createTodoCont
 from `@spine-event-engine/testing`. Use `asGuest()` or `onBehalfOf()` for a fixed actor,
 post generated command messages, query `TaskListSchema`, and use
 `blackBox.eventually()` for projection visibility. Close the BlackBox in
-`finally`; it owns its local listener, client session, and uncancelled typed
+`finally`; it closes its local listener, client session, and uncancelled typed
 state/event subscriptions. This runner-neutral boundary works in Node and
 Vitest without raw Connect or private server types.
 
@@ -42,7 +42,7 @@ Vitest without raw Connect or private server types.
 
 Use generated schemas and public clients. The checked-in `pnpm --filter
 @spine-event-engine/example-todo smoke` program is the executable CreateTask example: it
-owns an `Http2SessionManager`, bounds the command and eventual query, checks an
+uses an `Http2SessionManager`, bounds the command and eventual query, checks an
 OK acknowledgement, and aborts its session in `finally`.
 
 `CreateTask` needs a task ID and non-empty title. `RenameTask` changes the title;
@@ -504,7 +504,7 @@ validation/rejections, generated-registry recovery, and listener/session cleanup
 
 The local multi-process test starts a separate child process and same-host
 ZeroMQ IPC fixture, sends one generated command from the parent, and reads the
-child-owned projected row. Its cleanup stops the child, closes the parent
+row projected by the child. Its cleanup stops the child, closes the parent
 listener and transport, and removes the temporary IPC directory on success and
 failure paths. It is a focused test fixture—not a public multi-process
 supervisor or CLI. Sandboxes that deny loopback/IPC binds can report `EPERM`;

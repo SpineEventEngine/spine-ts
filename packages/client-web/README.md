@@ -8,7 +8,7 @@ For detailed protocol, browser-session, reconnect, and security limits, read
 the [reference for agents](REFERENCE.md).
 
 The [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
-explains application-owned sign-in and gateway composition.
+explains application sign-in and gateway composition.
 
 ## 💡 Why use it?
 
@@ -37,7 +37,7 @@ await client.close();
 await session.close();
 ```
 
-The endpoint should be an application gateway. Applications own sign-in,
+The endpoint should be an application gateway. Applications provide sign-in,
 identity-provider redirects, session exchange, and authorization policy.
 
 ## 📬 Post commands and send queries

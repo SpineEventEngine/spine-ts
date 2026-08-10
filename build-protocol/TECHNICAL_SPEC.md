@@ -113,7 +113,7 @@ blocking requirements for all framework and example work.
 ## Generated Handler Registry Contract
 
 Bare handler decorators are source declarations, not complete runtime metadata.
-The generated registry is the framework-owned bridge from decorated TypeScript
+The generated registry is the framework bridge from decorated TypeScript
 classes to canonical handler metadata. T-0015a defined the contract, and
 T-0015c implements the build-time analyzer that produces structured analysis
 records. T-0015d adds the internal package-level registry writer that renders
@@ -138,8 +138,8 @@ from TypeScript signatures:
 - `@React` must have an explicit generated domain event return type or explicit
   `void`; it may emit generated event schemas or nothing;
 - `@Subscribe` must have an explicit `void` return type and no emitted schemas;
-- framework `Command`/`Event` envelopes, schema-bearing decorators, app-owned
-  materialization helpers, and `@Apply` are invalid in ordinary app code.
+- framework `Command`/`Event` envelopes, schema-bearing decorators,
+  application-defined materialization helpers, and `@Apply` are invalid in ordinary app code.
 
 T-0015c verifies imported generated message names and companion schema runtime
 value exports by inspecting generated module source. Command/event role
@@ -182,7 +182,7 @@ event schemas or is empty for `@React`, and is empty for `@Subscribe`. The
 generated registry must preserve source declaration order and `parameterCount`
 within each entity. Ingested records become canonical handler metadata with the
 same public arity; explicit/schema-bearing registrations default to
-`parameterCount: 1` unless framework-owned generated ingestion supplies a
+`parameterCount: 1` unless framework-generated ingestion supplies a
 different value. It must not include `event-application` records for new
 aggregate behavior.
 
@@ -209,7 +209,7 @@ perform broad automatic runtime discovery; those behaviors remain out of scope
 for this slice. Non-`file:` URL schemes and `file:` URLs with query or hash
 aliases fail deterministically before import. Discovery validates the top-level
 module shape, reports deterministic import/export/module errors, and ingests
-the loaded registries through `HandlerRegistryIngestor` into a caller-owned
+the loaded registries through `HandlerRegistryIngestor` into a caller-supplied
 `HandlerMetadataRegistry`.
 
 For an application package, registry generation runs after generated protobuf
@@ -233,7 +233,7 @@ Default command routing follows the Spine JVM first-field convention.
   blank, or not assignable to the repository ID type before invoking handler
   code.
 - End-user handlers must not contain defensive target-ID extraction such as
-  `requireTaskId(command.id)` for the default route. The default route owns
+  `requireTaskId(command.id)` for the default route. The default route performs
   this validation and passes only route-valid commands to handlers.
 - Custom command routing may override the default route in the corresponding
   entity repository. When custom routing is used, the default first-field
@@ -278,7 +278,7 @@ The generated Protobuf-ES output for each package belongs in that package's
 
 ## Runtime Roles
 
-- Main service process: owns gRPC endpoints, server assembly, process supervision, and public API routing.
+- Main service process: provides gRPC endpoints, server assembly, process supervision, and public API routing.
 - Command worker: subscribes to command types and executes command assignees/receptors.
 - Event worker: subscribes to event types, executes supported subscribers and
   reactors, and delivers supported event inbox rows. Event import/importer work

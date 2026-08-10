@@ -4,7 +4,7 @@ This reference is for agents and other automated tools that need the exact publi
 
 ## Client construction
 
-`Client.connectTo(baseUrl, options)` creates a shared `client-web` `Client` with a Node-owned Connect HTTP/2 session. `client.close()` closes subscriptions and then aborts that owned session. `Client.usingTransport(transport, options)` uses a caller-owned Connect transport; closing the returned client does not close the supplied transport. Both factories use Node `randomUUID()` for command request identifiers.
+`Client.connectTo(baseUrl, options)` creates a shared `client-web` `Client` with a Node Connect HTTP/2 session. `client.close()` closes subscriptions and then aborts that session. `Client.usingTransport(transport, options)` uses a Connect transport supplied by the caller; closing the returned client does not close the supplied transport. Both factories use Node `randomUUID()` for command request identifiers.
 
 The returned kernel supports `asGuest()` and `onBehalfOf(user)` request scopes. A scope has `post(schema, value, options)`, `send(query, options)`, and `createSubscription(topic, options)`. See the [client-web reference](../client-web/REFERENCE.md) for command outcomes, cancellation, subscription lifecycle, recovery, and terminal behavior shared by both clients.
 

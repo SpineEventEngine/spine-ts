@@ -38,7 +38,7 @@ ResolveContext validates the current session and returns informational actor, te
 
 `SignedSessions` provides signed application session tokens. Local signature validation can delay revocation; shared revocation requires an explicit `SignedTokenRevocation` implementation. `OpaqueSessionCookies` supplies strict cookie parsing and serialization helpers. Neither strategy provisions users nor grants permissions.
 
-`OidcFlow` is a bounded authorization-code and PKCE transaction manager. It works with `createGoogleProvider`, `createGitHubProvider`, or a discovered or configured OIDC provider. Applications expose start/callback/exchange endpoints, perform their own HTTP routing, map verified external identity through `IdentityMapping`, and issue their own application session through `ApplicationSessionIssuer`. Provider access, refresh, and ID tokens remain sensitive server-side material; do not return them to browser application code.
+`OidcFlow` is a bounded authorization-code and PKCE transaction manager. It works with `createGoogleProvider`, `createGitHubProvider`, or a discovered or configured OIDC provider. Applications expose start/callback/exchange endpoints, perform HTTP routing, map verified external identity through `IdentityMapping`, and issue an application session through `ApplicationSessionIssuer`. Provider access, refresh, and ID tokens remain sensitive server-side material; do not return them to browser application code.
 
 ## Subscription and native adapters
 
@@ -50,9 +50,9 @@ includes the trusted Actor and Tenant, so Activate and Cancel compare that pair
 with the newly resolved request context. It is single-Gateway persistence, not
 cross-process quota, reservation, lease, fence, or fingerprint coordination.
 
-## Errors, ownership, and extension
+## Errors, lifecycle, and extension
 
-Public callbacks may reject; applications decide how their native listener maps those failures. Values handed to request collaborators are defensive gateway facts, while applications remain responsible for their own mutable state and cleanup. Always give gateway operations a finite request limit and make credential, provider, session, and forwarding adapters cancellation-aware.
+Public callbacks may reject; applications decide how their native listener maps those failures. Values handed to request collaborators are defensive gateway facts, while applications remain responsible for mutable state and cleanup. Always give gateway operations a finite request limit and make credential, provider, session, and forwarding adapters cancellation-aware.
 
 Read the [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md) for composition examples and deployment guidance.
 
@@ -66,4 +66,4 @@ ephemeral per-node work. Nodes may be added, removed, or re-added without
 changing a durable definition. Notifications are best effort, may duplicate,
 and browser clients reconnect and re-query authoritative state after loss.
 
-Closing the forwarder aborts in-flight client creation, waits for that work to settle, and owns cleanup of current clients. Failed cleanup remains retryable on a later close.
+Closing the forwarder aborts in-flight client creation, waits for that work to settle, and cleans up current clients. Failed cleanup remains retryable on a later close.

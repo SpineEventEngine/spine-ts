@@ -42,7 +42,7 @@ flowchart LR
 ```
 
 The load scenario sends `CreateProject`, then queries and subscribes through
-the local server. The Aggregate writes only its own state and returns the
+the local server. The Aggregate writes only its state and returns the
 event; generated handlers deliver that event to the registered read models.
 
 This is the `createProject()` handler excerpt from

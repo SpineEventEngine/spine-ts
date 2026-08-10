@@ -12,7 +12,7 @@ These notes help implementation and reviewer agents apply the autonomous build p
    skill gate. Micro tasks use the combined template; standard and high-risk
    task logs use `build-protocol/tasks/<task-slug>/TASK.md`.
 3. Read the task brief, `BUILD_PROTOCOL.md`, `CODE_QUALITY.md`, relevant specification docs, and the current task log before editing.
-4. Confirm baseline commit, branch, worktree, and ownership boundaries.
+4. Confirm baseline commit, branch, worktree, and file responsibilities.
 5. Use the orchestrator's recorded canonical skill applicability check. Fully
    read each selected skill that governs this role; do not repeat stable
    inventory or manifest discovery.
@@ -20,7 +20,7 @@ These notes help implementation and reviewer agents apply the autonomous build p
 
 ## While Working
 
-- Keep edits within the task ownership boundary.
+- Keep edits within the task's assigned files.
 - Do not revert or overwrite unrelated edits made by other agents.
 - Update durable records at the meaningful resumability boundaries defined in
   `BUILD_PROTOCOL.md`, not for every isolated correction.

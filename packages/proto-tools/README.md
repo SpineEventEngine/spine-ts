@@ -1,6 +1,6 @@
 # Protobuf tooling for Spine applications
 
-This package generates TypeScript from application-owned Proto models and
+This package generates TypeScript from application Proto models and
 assembles those models into an application registry. Those models can define
 commands, events, and state used by Aggregates or Projections. It runs at build
 time, not inside a server process.
@@ -10,14 +10,14 @@ For detailed contracts intended for coding agents, see the
 
 ## 💡 Why use it?
 
-- ✅ Generates Protobuf-ES code for application-owned models.
+- ✅ Generates Protobuf-ES code for application models.
 - ✅ Creates one importable `ProtoModule` per model package.
 - ✅ Follows dependencies between model packages deterministically.
 - ✅ Generates typed rejection helpers and handler registries.
 
 ## 🚀 Create a model package
 
-A model package owns canonical `.proto` files, generated code, and one exported
+A model package contains canonical `.proto` files, generated code, and one exported
 `ProtoModule`. Use separate model packages for independently developed bounded
 contexts; a small application may use one combined model package.
 
@@ -41,7 +41,7 @@ spine-proto generate
 ```
 
 Generation creates the generated Protobuf-ES sources, a `proto-module.ts`,
-typed rejection companions for owned rejection Proto files, and a deterministic
+typed rejection companions for rejection Proto files in the package, and a deterministic
 `spine-proto-manifest.json`. Do not edit generated output by hand.
 
 ## 🧩 Compose an application

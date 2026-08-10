@@ -10,18 +10,18 @@ Create a context with `BoundedContext.singleTenant(name)` or
 `withGeneratedRegistryRoot(root)` enables framework discovery of the generated
 handler registry for classes registered with `add(EntityClass)`;
 `buildAsync()` performs that discovery and assembly. `build()` remains for
-explicit `Repository` registration. A built context owns `CommandBus`,
+explicit `Repository` registration. A built context contains `CommandBus`,
 `EventBus`, `Stand`, repositories, and its storage lifecycle.
 
 ### Stand subscription registry
 
-Each built context also owns one `StandSubscriptionRegistry`. By default the
+Each built context also has one `StandSubscriptionRegistry`. By default the
 builder creates a storage-backed registry from the resolved context
 `StorageFactory` (including the `ServerEnvironment` factory used for a builder
 added to a server). It stores one `spine.client.SubscriptionRecord` under each
 explicit `SubscriptionId`. A complete custom implementation can instead be
-supplied with `withSubscriptionRegistry(registry)`; builder ownership transfers
-on the first build attempt.
+supplied with `withSubscriptionRegistry(registry)`; responsibility transfers to
+the builder on the first build attempt.
 
 Create records begin `pending` and expire after 30 seconds unless activated.
 Active records have no framework TTL. Cancellation physically deletes the
@@ -61,8 +61,8 @@ views but are cloned so they never alias caller storage. Snapshots are ordered
 by identifier. A durable provider must implement atomic compare-and-set for
 `SubscriptionRecord`; construction rejects a provider that cannot. MySQL table
 configuration and Datastore custom record storage registered for
-`SubscriptionRecord` are used by the registry. The registry owns its one
-record-storage handle, while the context owns and closes the registry.
+`SubscriptionRecord` are used by the registry. The registry uses one
+record-storage handle, while the context closes the registry.
 
 `Entity` is the state base class. `Aggregate`, `Projection`, and
 `ProcessManager` identify the three entity families. Handler decorators are
@@ -152,7 +152,7 @@ fragment, or trailing slash. Requests without an allowed exact `Origin` receive
 CORS, `Vary: Origin`, protocol request headers, and exposed gRPC status headers.
 
 Supplying `browser.backend.baseUrl` selects standalone mode. It is one canonical
-HTTP(S) origin for a Spine TS or JVM backend; the gateway never owns or closes
+HTTP(S) origin for a Spine TS or JVM backend; the gateway never closes
 that backend. Every standalone mode, including local development and tests,
 requires explicit subscription bindings; production additionally requires an
 application type registry and named durable bindings. `ResolveContext` stays in the gateway;
@@ -192,12 +192,12 @@ bindings so active streams settle, awaits listener closure, then closes the
 native backend. Concurrent calls share an attempt; a failed unfinished phase
 can be retried without repeating completed native cleanup.
 
-Browser subscription bindings are separate from service-owned subscription
+Browser subscription bindings are separate from service subscription
 records. `BrowserServerOptions.bindings` accepts the `SubscriptionBindings`
 contract from `@spine-event-engine/auth`. Production browser assembly requires
 the Server package's `DurableSubscriptionBindings`; it rejects a missing or
 in-memory binding store before listener open. The durable registry receives an explicit
-application namespace, storage factory, identifier source, and cleanup callback. It owns and closes only
+application namespace, storage factory, identifier source, and cleanup callback. It closes only
 its independently opened record-storage handle, not the application storage
 factory or a Spine JVM/TS backend. It stores canonical public Subscription
 definitions, never backend envelopes or membership topology, and never returns
@@ -255,7 +255,7 @@ and delivery workers replay it through the same path. Projection rows remain
 separate.
 
 `DeliveryBuilder` constructs a controlled `Delivery`; `DeliverySupervisor`
-receives `{ source, delivery, onMessage }`, owns bounded shard notifications
+receives `{ source, delivery, onMessage }`, manages bounded shard notifications
 from that structural source, and must start after endpoints are ready and close
 before source client/storage. `DeliverySource` is not configured on
 `DeliveryBuilder`. The supervisor does not promise
@@ -290,10 +290,10 @@ environment close runs delivery, transport, tracer, then storage and preserves
 retry checkpoints for failed phases.
 
 `ServerEnvironmentDelivery.source` is optional. When present, its Admin source
-is used by the facility-owned environment supervisor for remote snapshots and
+is used by the environment supervisor for remote snapshots and
 shard-update hints; when absent, the existing local source remains the fallback.
 Applications configure and close only the delivery facility through the
-environment: attachment supervisors and their source reads are facility-owned.
+environment: attachment supervisors and their source reads belong to that facility.
 
 # Dynamic unary discovery
 

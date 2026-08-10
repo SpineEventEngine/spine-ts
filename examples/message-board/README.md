@@ -77,7 +77,7 @@ context, then forwards approved traffic; the bounded context does not read
 credentials. The React client may use either gRPC-Web or Connect at that public
 boundary.
 
-`BoardMessageAggregate` owns one message ID and refuses a duplicate before it
+`BoardMessageAggregate` represents one message ID and refuses a duplicate before it
 changes state. This is the `postMessage()` handler excerpt from
 [`BoardMessageAggregate`](app/src/index.ts); imports and unrelated class members
 are omitted to focus on the handler. Its return value feeds the read model:
@@ -159,7 +159,7 @@ replica-oriented standalone application modes.
 ## Deployment
 
 The same Message Board application image runs in two production alternatives.
-In **combined** mode one process owns both the application and browser gateway.
+In **combined** mode one process runs both the application and browser gateway.
 In **standalone** mode that image runs application-only private native gRPC
 processes, while the separate gateway image accepts browser traffic behind
 Envoy.
@@ -193,10 +193,10 @@ request selects one private application node. The
 registry and delivery connections represent shared topology and subscription
 fan-in, not additional unary request routes.
 
-Application code selects and owns its storage. The example has no persisted
-session-revocation facility. Gateway code owns the separate durable subscription
+Application code selects and manages its storage. The example has no persisted
+session-revocation facility. Gateway code manages the separate durable subscription
 registry in one namespace, and browser-capable processes share session signing
-values. Operators own TLS, identity-provider setup, secrets,
+values. Operators configure TLS, identity-provider setup, secrets,
 image distribution, network policy, and production delivery infrastructure.
 The reference simple delivery server is in-memory and not highly available;
 delivery remains best effort, so clients still re-query after gaps.

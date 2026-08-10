@@ -3,13 +3,13 @@
 This reference is for coding agents and maintainers. Beginners should start
 with the [Message Board README](README.md).
 
-## Package ownership
+## Package responsibilities
 
-- `model` owns authored Message Board Proto sources, the single `UserId` definition,
+- `model` contains authored Message Board Proto sources, the single `UserId` definition,
   generated Protobuf-ES code, typed rejections, and its `ProtoModule`.
-- `app` owns the bounded context, Aggregate, Projection, generated application
+- `app` contains the bounded context, Aggregate, Projection, generated application
   registry and handler registry, local session policy, and executable server.
-- `web` owns the React view, browser session selection, request scope, query,
+- `web` contains the React view, browser session selection, request scope, query,
   subscription, and visible retry behavior.
 
 Nothing in the family is published. Generated Proto, handler output, and
@@ -19,14 +19,14 @@ Nothing in the family is published. Generated Proto, handler output, and
 
 `Server` starts a private native HTTP/2 backend on ephemeral loopback, then an
 authenticated public Connect/gRPC-Web listener on `127.0.0.1:8090`. The
-framework owns routing, exact-origin CORS, credential extraction, subscription
+framework manages routing, exact-origin CORS, credential extraction, subscription
 bindings, readiness, rollback, signals, and shutdown. The application supplies
 `BoardAccessPolicy`, `BoardContextResolver`, its model registry, and the
 local development session resolver. The browser never receives the private
 backend URL.
 
 The local browser origin is exactly `http://127.0.0.1:5173`. Its bearer is a
-non-secret fixture. Production hosts must provide their own sign-in, durable
+non-secret fixture. Production hosts must provide sign-in, durable
 session resolution, authorization data, TLS, and network policy.
 
 ## Domain and client behavior

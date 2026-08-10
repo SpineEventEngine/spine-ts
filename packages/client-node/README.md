@@ -14,13 +14,13 @@ explains the gateway boundary shared by Node and browser clients.
 
 - ✅ Posts commands and reads entities through typed Spine services.
 - ✅ Creates, activates, and cancels subscriptions.
-- ✅ Owns the Node HTTP/2 connection and closes it predictably.
+- ✅ Manages the Node HTTP/2 connection and closes it predictably.
 - ✅ Builds safe entity queries from generated `(column)` declarations.
 
 ## 🚀 Connect to an application server
 
-Create one client for the process or application component that owns the
-connection. A client created with `connectTo()` owns and closes its HTTP/2
+Create one client for the process or application component that manages the
+connection. A client created with `connectTo()` creates and closes its HTTP/2
 session.
 
 ```ts

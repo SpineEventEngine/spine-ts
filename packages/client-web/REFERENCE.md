@@ -6,7 +6,7 @@ This reference is for agents and other automated tools that need the exact publi
 
 `Client.forGrpcWeb(baseUrl, options)` always uses gRPC-Web. `Client.forConnect` always uses binary Connect (`application/proto`). Connect is optional only when the selected gateway already supports it; neither factory probes or falls back to the other protocol. `Client.usingTransport(source, options)` accepts an application or platform `ClientTransport`, including a request-ID factory and optional close hook.
 
-`ClientOptions` select tenant, zone, bounded subscription settings, and an optional `onReauthenticateBeforeReconnect` callback. `BrowserClientOptions` also accept per-call synchronous metadata and Fetch credential mode. Metadata is application-owned; the client does not log it. `asGuest()` and `onBehalfOf(user)` return immutable request scopes. An empty actor is rejected.
+`ClientOptions` select tenant, zone, bounded subscription settings, and an optional `onReauthenticateBeforeReconnect` callback. `BrowserClientOptions` also accept per-call synchronous metadata and Fetch credential mode. The application supplies metadata; the client does not log it. `asGuest()` and `onBehalfOf(user)` return immutable request scopes. An empty actor is rejected.
 
 `post(schema, value, options)` returns `ClientOutcome`: `ok`, `error` with an application error message, or `rejection` with a rejection message. Command-envelope packing deliberately skips client-side Proto validation so the authoritative server can return its configured validation details. Commands are never retried. `send(query, options)` returns the raw validated `QueryResponse`. Caller cancellation and `client.close()` abort admitted work; transport, deadline, and wire-contract failures remain errors.
 
@@ -14,11 +14,11 @@ This reference is for agents and other automated tools that need the exact publi
 
 `BrowserSession.cookie(options)` uses browser-managed cookies with Fetch credentials `include`; cookie values never enter JavaScript metadata. `BrowserSession.bearer({ token, ...options })` holds one bearer value only in memory with Fetch credentials `omit`. `replaceBearer` and `clearBearer` alter that memory value. Neither mode uses browser storage.
 
-`session.fetch()` applies credentials and a finite deadline. Its default is ten seconds and the maximum is one minute. `reauthenticate()` asks an application-supplied callback for informational actor, tenant, and expiry facts; they are not credentials. `close()` aborts owned session work and clears bearer and informational context. Provider redirect, token exchange, storage policy, and authorization are application responsibilities.
+`session.fetch()` applies credentials and a finite deadline. Its default is ten seconds and the maximum is one minute. `reauthenticate()` asks an application-supplied callback for informational actor, tenant, and expiry facts; they are not credentials. `close()` aborts session work and clears bearer and informational context. Provider redirect, token exchange, storage policy, and authorization are application responsibilities.
 
 ## Subscriptions
 
-`createSubscription(topic, options)` returns an inactive handle. `activate()` performs Subscribe; `cancel()` is terminal, ends local iteration, and performs at most one bounded remote Cancel per accepted wire. `updates` and `lifecycle` are independent single-consumer async streams with no cross-stream ordering guarantee. `client.close()` terminally closes every owned subscription.
+`createSubscription(topic, options)` returns an inactive handle. `activate()` performs Subscribe; `cancel()` is terminal, ends local iteration, and performs at most one bounded remote Cancel per accepted wire. `updates` and `lifecycle` are independent single-consumer async streams with no cross-stream ordering guarantee. `client.close()` terminally closes every subscription it created.
 
 For Entity subscriptions, `authoritativeQuery` is evaluated only after reconnect. Its target must be byte-equivalent to the Topic target. The returned query response is delivered as `resynchronization` before held updates. For event subscriptions, reconnection reports `gapPossible`; events can be missing, duplicated, or differently ordered, and no replay, completeness, or cluster-complete guarantee is made.
 

@@ -3,7 +3,7 @@
 This directory contains the `.proto` files used by Spine TS. Most are exact
 copies of Spine JVM contracts, so TypeScript and JVM applications can exchange
 the same commands, events, queries, subscriptions, and context messages. A
-small number are Spine TS-owned internal contracts.
+small number are internal Spine TS contracts.
 
 ## 📌 Two kinds of source
 
@@ -27,7 +27,7 @@ small number are Spine TS-owned internal contracts.
 - ✅ Descriptor checks catch changes to fields, options, type URLs, and imports.
 - ✅ Generated TypeScript always comes from a known contract set.
 
-The current inventory has 41 frozen source files and two Spine TS-owned
+The current inventory has 41 frozen source files and two internal Spine TS
 internal schemas. Buf adds standard imported descriptors while compiling them,
 producing the 52-file descriptor set checked by this repository.
 
@@ -42,7 +42,7 @@ pnpm proto:generate
 pnpm proto:check-generated
 ```
 
-`proto:verify` checks that every frozen copy and every owned schema matches its
+`proto:verify` checks that every frozen copy and every maintained schema matches its
 manifest checksum. `proto:lint` checks the contracts with the narrow
 compatibility exceptions required by frozen original Spine files.
 `proto:generate` rebuilds `packages/proto/generated`; the generated directory

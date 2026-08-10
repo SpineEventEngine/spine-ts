@@ -66,7 +66,7 @@ local-only static fixture, not production discovery. Stop either topology with t
 command plus `down --volumes --remove-orphans`.
 
 The Kubernetes YAML files are storage-neutral references. Image distribution is
-operator-owned and out of scope: for Kind, load local images instead of
+managed by the operator and out of scope: for Kind, load local images instead of
 publishing them; for Minikube, load the same local tags:
 
 ```bash
@@ -74,7 +74,7 @@ kind load docker-image spine-ts/message-board:local spine-ts/standalone-gateway:
 minikube image load spine-ts/message-board:local spine-ts/standalone-gateway:local spine-ts/simple-delivery-server:local
 ```
 
-Create the operator-owned prerequisites in the target namespace before applying
+Create the operator-managed prerequisites in the target namespace before applying
 the references:
 
 ```bash
@@ -88,8 +88,8 @@ Every browser-capable combined process and standalone gateway uses the same
 issuer, audience, key ID, private key, and registry namespace; separate values
 break authenticated failover. Application-only standalone processes do not
 configure browser sessions or the subscription registry. The example does not
-persist session revocations; the gateway-owned registry is the durable browser
-subscription state. Each process creates its caller-owned Datastore client and
+persist session revocations; the gateway registry is the durable browser
+subscription state. Each process creates its Datastore client and
 passes that exact client to its storage factory.
 
 ```bash
@@ -98,7 +98,7 @@ kubectl apply --filename examples/message-board/deploy/kubernetes/combined.yaml
 
 For replicated applications, apply `standalone.yaml`. Its public LoadBalancer
 service exposes Envoy only; the one Gateway uses `GkeNodeDiscovery` against the
-application headless Service. GKE owns application scaling and the Gateway
+application headless Service. GKE manages application scaling and the Gateway
 follows ready-node DNS membership rather than a fixed backend list.
 The registry is durable and cancellation-fenced, but update delivery remains
 best effort: reconnecting clients must re-query authoritative state; gaps,

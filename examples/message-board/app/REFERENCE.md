@@ -7,7 +7,7 @@ with the [Message Board app README](README.md).
 
 `MessageBoardApplication.createContext()` builds a single-tenant context with
 `InMemoryStorageFactory` by default, generated registry lookup, one Aggregate,
-and one Projection. `start()` embeds the server and leaves close ownership to
+and one Projection. `start()` embeds the server and leaves closing to
 the caller. `run()` delegates `SIGINT` and `SIGTERM` shutdown to `Server`.
 
 Browser configuration supplies the Message Board type registry, `LocalBoardSession`

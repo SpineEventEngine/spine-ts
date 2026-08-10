@@ -3,7 +3,7 @@
 This reference is for coding agents and maintainers. Beginners should start
 with the [Message Board model README](README.md).
 
-The package owns every Message Board Proto type, including `UserId`. Do not create a
+The package contains every Message Board Proto type, including `UserId`. Do not create a
 second users-model package. Proto packages use `spine.examples.messageboard`, and type
 URLs use `type.spine.examples.messageboard`.
 

@@ -296,7 +296,7 @@ Source: `server/src/main/java/io/spine/server/projection/ProjectionRepository.ja
 
 ### Stateful Reactors
 
-`AbstractStatefulReactor` owns an inbox with `REACT_UPON_EVENT`. It routes event envelopes to reactor IDs and serializes endpoint access with a lock in local multithreaded mode.
+`AbstractStatefulReactor` has an inbox with `REACT_UPON_EVENT`. It routes event envelopes to reactor IDs and serializes endpoint access with a lock in local multithreaded mode.
 
 Source: `server/src/main/java/io/spine/server/event/AbstractStatefulReactor.java`.
 
@@ -343,7 +343,7 @@ TypeScript implication: the inbox table/collection needs indexes on shard, statu
 
 ## Delivery
 
-`Delivery` owns inbox storage, catch-up storage, sharded work registry, shard observers, delivery strategy, and deduplication settings.
+`Delivery` contains inbox storage, catch-up storage, a sharded work registry, shard observers, a delivery strategy, and deduplication settings.
 
 Source: `server/src/main/java/io/spine/server/delivery/Delivery.java`.
 

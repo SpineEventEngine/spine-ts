@@ -4,7 +4,7 @@ This reference is for agents and other automated tools that need the exact publi
 
 ## Provider and hooks
 
-`SpineClientProvider` accepts an application-owned `ClientRequest` from `@spine-event-engine/client-web`. `useSpineClient()` reads that scope and throws when no provider exists. Create the client and scope outside render, keep them stable, and close the client in application lifecycle code.
+`SpineClientProvider` accepts a `ClientRequest` supplied by the application from `@spine-event-engine/client-web`. `useSpineClient()` reads that scope and throws when no provider exists. Create the client and scope outside render, keep them stable, and close the client in application lifecycle code.
 
 `useRequest(factory, dependencies)` starts an asynchronous operation after commit and returns `idle`, `loading`, `success`, or `error`. Its factory receives an `AbortSignal`; forward it to the cancellable work. Cancellation is cooperative: ignored signals can leave external work running, but a retired generation never publishes its late result.
 
@@ -12,7 +12,7 @@ This reference is for agents and other automated tools that need the exact publi
 
 ## Subscription lifecycle
 
-Each hook generation owns one subscription and cancels it when retired. A late factory result, activation, update, lifecycle notice, callback, iterator failure, or query result from a retired generation is not published. Strict Mode can mount, unmount, and remount components; each still-live generation activates at most once. Cleanup invokes bounded idempotent `cancel()` and does not turn cleanup failure into a rendered error.
+Each hook generation creates one subscription and cancels it when retired. A late factory result, activation, update, lifecycle notice, callback, iterator failure, or query result from a retired generation is not published. Strict Mode can mount, unmount, and remount components; each still-live generation activates at most once. Cleanup invokes bounded idempotent `cancel()` and does not turn cleanup failure into a rendered error.
 
 Entity recovery uses the supplied authoritative query and can publish a `resynchronization` delivery. Event recovery may publish `gapPossible`; it does not mean history was replayed or complete. Updates and lifecycle notices have no cross-stream ordering guarantee. The adapter provides no cache, normalized state, SSR support, Suspense integration, service-worker support, or external state-manager integration.
 

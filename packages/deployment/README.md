@@ -26,7 +26,7 @@ registrar or selecting a MySQL or Datastore layout.
 import { ApplicationNode, LeasedNodeRegistry } from "@spine-event-engine/deployment";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 
-const factory = new InMemoryStorageFactory(); // The application owns this factory.
+const factory = new InMemoryStorageFactory(); // The application creates this factory.
 const registry = new LeasedNodeRegistry({ factory, namespace: "gateway-nodes" });
 
 try {
@@ -38,6 +38,6 @@ try {
   const liveNodes = await registry.read(Date.now());
   await registry.cleanup(Date.now()); // Expiry filtering works even without cleanup.
 } finally {
-  await registry.close(); // Closes this registry handle; the caller still owns factory.close().
+  await registry.close(); // Closes this registry handle; the caller must still call factory.close().
 }
 ```

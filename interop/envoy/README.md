@@ -1,13 +1,13 @@
 # Envoy template for a Spine browser gateway
 
 `renderEnvoy()` creates a narrow browser-facing Envoy template. It is a
-starting point, not a managed deployment product: applications own the gateway
+starting point, not a managed deployment product: applications manage the gateway
 listener, TLS material, identity-provider flow, network policy, and any
 template changes.
 
 Read the [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 before adapting this template: it documents the gateway trust boundary,
-session/provider ownership, delivery limits, and verification matrix.
+session/provider responsibilities, delivery limits, and verification matrix.
 
 ## 💡 What does the template provide?
 
@@ -45,7 +45,7 @@ gRPC-Web, and passes explicitly selected binary Connect requests through to the
 gateway. Each route is an exact POST path with a finite 1 MiB request bound and
 30-second timeout, except the live `Activate` stream which has a zero route
 timeout. Supplied application auth routes are exact GET/POST paths with their
-own finite limits and timeouts; the template has no prefix or catch-all
+finite limits and timeouts; the template has no prefix or catch-all
 upstream. The upstream connection uses HTTP/2.
 
 The limits use Envoy's supported HTTP buffer filter and route-specific

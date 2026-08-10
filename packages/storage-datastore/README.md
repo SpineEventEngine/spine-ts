@@ -46,7 +46,7 @@ const factory = DatastoreStorageFactory.newBuilder()
   .build();
 ```
 
-The builder always uses a caller-owned client. Its fixed finite reconciliation
+The builder always uses a client supplied by the caller. Its fixed finite reconciliation
 bound is 1,000 records. Pass the factory to the server or create record storage
 through the normal storage API.
 
@@ -59,7 +59,7 @@ form replaces `@` with `-at-`; two different emails can therefore become the
 same namespace. Spine TS rejects that unsafe default. To use email tenant IDs,
 install the same reversible custom namespace converter in both runtimes.
 Single-tenant storage keeps the namespace already configured on the
-caller-owned client. A Bounded Context name helps diagnostics; it never changes
+caller-supplied client. A Bounded Context name helps diagnostics; it never changes
 a namespace, kind, or key.
 
 Suppose a projection state is declared like this:
@@ -141,7 +141,7 @@ gcloud datastore indexes list
 
 Wait until each required index is ready before serving its query combinations.
 
-Retained Entity histories need their own indexes because their kinds and
+Retained Entity histories need separate indexes because their kinds and
 ordering differ from current state. For a state type named
 `spine.examples.board.Message`, the usual backward-history index is:
 

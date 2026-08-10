@@ -38,7 +38,7 @@ Supporting examples/tests:
 
 A server runtime is assembled from one or more bounded contexts. A bounded context is both a domain boundary and a container for the infrastructure needed by the model inside that boundary: command bus, event bus, import bus, integration broker, read-side stand, tenant index, aggregate-root directory, repositories, and a paired system context.
 
-`BoundedContext` is intentionally not an application extension point. The Java constructor permits only the framework-owned `DomainContext` and `SystemContext` subclasses. Application code assembles contexts through `BoundedContext.singleTenant(name)` or `BoundedContext.multitenant(name)`, receiving a `BoundedContextBuilder`.
+`BoundedContext` is intentionally not an application extension point. The Java constructor permits only the internal `DomainContext` and `SystemContext` subclasses. Application code assembles contexts through `BoundedContext.singleTenant(name)` or `BoundedContext.multitenant(name)`, receiving a `BoundedContextBuilder`.
 
 TypeScript implication: expose `BoundedContext` as a final runtime object, not a subclassing API. Domain customization should happen through repositories, dispatchers, filters, listeners, enrichers, routing, storage/transport factories, and context modules that return builders or built contexts.
 
@@ -93,7 +93,7 @@ TypeScript implication: the builder should be reusable only with care. Java buil
 
 ## Runtime parts inside a context
 
-A built context owns:
+A built context contains:
 
 - `CommandBus`: receives commands and routes them to command dispatchers.
 - `EventBus`: receives domestic events and dispatches to event dispatchers, listeners, read side, and integration publishing.
@@ -213,7 +213,7 @@ TypeScript implication: make tenant mode a required constructor parameter for bu
 
 ## Context integration
 
-Each bounded context owns an `IntegrationBroker`. The broker uses `ServerEnvironment.transportFactory()` to create subscriber and publisher hubs. Contexts communicate only when their brokers share transport.
+Each bounded context has an `IntegrationBroker`. The broker uses `ServerEnvironment.transportFactory()` to create subscriber and publisher hubs. Contexts communicate only when their brokers share transport.
 
 Broker responsibilities:
 
@@ -305,7 +305,7 @@ TypeScript implication: prefer an explicit `ServerRuntime` or `ServerEnvironment
 
 `ServerEnvironment.close()` closes configured tracer, transport, and storage factories and marks the singleton closed.
 
-TypeScript implication: all runtime parts should implement an idempotent async-capable `close()` contract. Server shutdown should close network listeners first, then contexts, then optionally environment-owned factories if the server owns the environment. Decide ownership explicitly so embedding applications are not surprised by shared factory closure.
+TypeScript implication: all runtime parts should implement an idempotent async-capable `close()` contract. Server shutdown should close network listeners first, then contexts, then optionally the configured factories if the server created the environment. State the closing responsibility explicitly so embedding applications are not surprised by shared factory closure.
 
 ## Suggested TypeScript assembly API
 
@@ -341,5 +341,5 @@ Design constraints:
 
 - Duplicate type ownership: Java's `TypeDictionary.Builder` overwrites duplicate type-url mappings. Should TypeScript preserve this permissive behavior or fail fast during server build?
 - Builder reuse: Java builders are mutable and build runtime objects lazily. Should the TypeScript API make builders one-shot to avoid accidental shared state?
-- Environment ownership: Should `Server.shutdown()` close only contexts and listeners, or also close the environment factories when the server created the environment?
+- Environment lifecycle: Should `Server.shutdown()` close only contexts and listeners, or also close the environment factories when the server created the environment?
 - Subscription unknown-target fallback is preserved for compatibility: subscribe, activate, and cancel fan out across known contexts behind one opaque client-visible subscription id when target ownership is unknown.

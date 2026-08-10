@@ -27,7 +27,7 @@ Node.js with less code.
 
 - Bounded Contexts, Aggregates, Process Managers, Projections, generated
   handlers, validation, and rejections.
-- A `Server` that owns startup, readiness, shutdown, and optional authenticated
+- A `Server` that manages startup, readiness, shutdown, and optional authenticated
   browser access.
 - In-memory delivery coordination for one process or a trusted local network.
 
@@ -79,7 +79,7 @@ For the two-node, one-Gateway development topology, see the
 [Distributed Message Board](examples/distributed-message-board/README.md).
 For production-style deployment guidance, use one standalone Gateway with
 [GKE](packages/deployment-gke/README.md) headless-Service discovery or
-[GCE](packages/deployment-gce/README.md) leased discovery. Operators own
+[GCE](packages/deployment-gce/README.md) leased discovery. Operators configure
 scaling and storage selection; Cloud Run and multiple Gateways are not included.
 
 ## 📦 Workspace map

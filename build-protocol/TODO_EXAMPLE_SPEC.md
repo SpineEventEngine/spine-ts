@@ -77,7 +77,7 @@ make the example pass.
 - `@Subscribe` handlers declare explicit `void` return types.
 - The example must not define or use aggregate `@Apply` handlers.
 - The example must not call transaction-control methods such as
-  `startTransaction()` or `commitTransaction()`. The framework owns entity
+  `startTransaction()` or `commitTransaction()`. The framework manages entity
   transactions.
 - Ordinary example handlers must not return `Event`, `Command`, or other
   framework envelopes, and must not call `packEvent()` or `packCommand()` to
@@ -94,11 +94,11 @@ make the example pass.
   framework/generated-registry concern.
 - The build workflow must regenerate the ignored handler registry artifact
   before TypeScript compilation, and runtime context assembly must load the
-  compiled registry through framework-owned discovery.
+  compiled registry through framework discovery.
 
 ## Documentation
 
-The example must have its own `USER_GUIDE.md`. The guide should explain:
+The example must include a `USER_GUIDE.md`. The guide should explain:
 
 - how to generate Protobuf-ES code;
 - how to start the server;

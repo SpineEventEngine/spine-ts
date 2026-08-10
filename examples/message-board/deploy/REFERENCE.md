@@ -27,6 +27,6 @@ and P-256 private key. Cross-node update delivery is best effort: clients
 reconnect and re-query authoritative Projection state after interruption.
 
 `message-board-storage`, `message-board-runtime`, and `message-board-envoy-tls`
-are external operator-owned Secrets; the reference YAML deliberately does not
+are external Secrets managed by the operator; the reference YAML deliberately does not
 create or overwrite them. Local cluster image loading is supported, while image
 publishing and registry configuration remain out of scope.

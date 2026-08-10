@@ -99,7 +99,7 @@ existing role or orchestrator-dispatched function, bounded scope, expected
 model, and expected reasoning. Before accepting the result, the orchestrator
 must confirm that model and reasoning were explicit dispatch fields. Record
 actual runtime metadata when the execution surface exposes it. When a child
-cannot introspect its own metadata, record that limitation and use the
+cannot introspect its runtime metadata, record that limitation and use the
 surface's immutable configured role/profile as evidence. Unavailable
 self-introspection alone does not invalidate the work. Redispatch only when a
 field was omitted, the wrong role ran, a mismatch is visible, or the surface
@@ -134,7 +134,7 @@ The project has no separate verifier role. Mechanical validation is an
 orchestrator-dispatched function using Luna Low/Medium; this does not create or
 rename an agent role.
 
-### Concurrency And Ownership
+### Concurrency And Responsibilities
 
 - Configure one subagent depth. Do not set a project-level numerical limit on
   concurrent agent threads; use the selected execution surface's available
@@ -167,9 +167,9 @@ rename an agent role.
    outline and does not invoke the splitter.
 3. The orchestrator reviews any split, asks only blocking human questions, and
    records answers.
-4. Each write-heavy task/sub-task receives its own implementation branch and
+4. Each write-heavy task/sub-task receives a dedicated implementation branch and
    worktree when isolation is useful.
-5. One Terra Medium implementation sub-agent owns that task/sub-task branch and
+5. One Terra Medium implementation sub-agent is responsible for that task/sub-task branch and
    its behavior-focused tests.
 6. Luna Low/Medium mechanical validation runs the narrowest useful tests,
    typechecks, lint, format, builds, examples, and log classification before
@@ -309,7 +309,7 @@ one complete wave of relevant reviewers, and one aggregated correction batch.
 ### High-Risk
 
 A high-risk task changes persistence or transactions, concurrency or
-idempotency, lifecycle ownership, public or serialized contracts, security or
+idempotency, lifecycle responsibility, public or serialized contracts, security or
 authentication, destructive behavior or migrations, or architecture spanning
 multiple subsystems. Preserve selective Sol High planning, Terra High review
 for the affected risk, regression evidence, and full verification. High-risk
@@ -328,10 +328,10 @@ avoid a gate.
   `origin/main`. After pushing `main`, synchronize the primary checkout when
   it is safe. If unexpected dirtiness prevents that synchronization, do not
   silently route around it: immediately create and push a rescue snapshot,
-  open a recovery task, and never stage protected human-owned files.
+  open a recovery task, and never stage protected files supplied by a human.
 - Use one feature branch per sub-agent coding session.
 - Use worktrees to avoid sub-agents stepping on each other.
-- Do not share write ownership of files unless the orchestrator explicitly serializes the edits.
+- Do not assign the same files to concurrent writers unless the orchestrator explicitly serializes the edits.
 - Keep branch names traceable to task IDs.
 - Do not merge a branch until review rounds are complete and logs are updated.
 - After post-merge verification, remove the task worktree when Git reports the
@@ -391,7 +391,7 @@ one concrete reason the concern cannot be affected. Use the lanes as follows:
 - TypeScript/API docs for exports, declarations, public types, Protobuf
   contracts, or snippets demonstrating public APIs; and
 - performance/reliability for runtime, persistence, concurrency, lifecycle,
-  resource ownership, cancellation, retry, or performance behavior, including
+  resource lifecycle, cancellation, retry, or performance behavior, including
   technical documentation that asserts those semantics.
 
 Formatting, line length, links, generated cleanliness, stale status markers,
@@ -596,8 +596,8 @@ Update durable records at meaningful resumability boundaries:
 Do not add a new record section, review wave, or commit for each isolated
 formatting, documentation, status, or test-style correction. Committed feature
 and fix commits should be named in durable logs when another meaningful record
-update exists. Never create a follow-up commit solely to make a record name its
-own predecessor or another record-only commit; identify such commits by the
+update exists. Never create a follow-up commit solely to add the predecessor
+or another record-only commit to a record; identify such commits by the
 recorded branch/ref and external Git history.
 
 ## Quality Gates
@@ -659,13 +659,13 @@ Additional end-user API gates:
 - end-user handlers must not perform default command target-ID extraction such
   as `requireTaskId(command.id)`;
 - end-user application code must not contain handler discovery/materialization
-  adapters; framework/generated-registry code owns decorated handler metadata
+  adapters; framework/generated-registry code manages decorated handler metadata
   materialization;
 - commands handled through the default command route must be rejected by that
   route before handler invocation when the first-field target ID is missing or
   invalid;
 - explicit custom command routes replace the default first-field route and must
-  define their own route-validity behavior.
+  define route-validity behavior.
 
 Before marking any task complete, the orchestrator must run an end-user API
 audit over changed example and documentation code. Where practical, add or run

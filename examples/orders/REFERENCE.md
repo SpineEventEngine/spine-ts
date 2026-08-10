@@ -3,13 +3,13 @@
 This reference is for coding agents and maintainers. Beginners should start
 with the [Orders README](README.md).
 
-## Structure and ownership
+## Structure and responsibilities
 
 The fixed topology contains two Aggregates (`Order` and `Sku`), ten
 Projections, and two Process Managers: fourteen repositories in total.
 `createDatastoreOrdersContext` and `startDatastoreOrdersServer` accept a
 `StorageFactory` and remain provider-neutral. `startOrdersDatastoreServer` is
-the Datastore-specific composition entry point: its caller owns the `Datastore`
+the Datastore-specific composition entry point: its caller supplies the `Datastore`
 client and the function hands that same client to `DatastoreStorageFactory`.
 Domain handlers must not import provider types.
 
@@ -18,7 +18,7 @@ the workspace scripts; never edit them directly.
 
 ## Load-runner behavior
 
-The runner accepts exactly 10, 100, or 1,000 users. Each user owns a unique
+The runner accepts exactly 10, 100, or 1,000 users. Each user has a unique
 command/query/subscription identity and iterator. At most 16 HTTP/2 client
 sessions are shared, and users run in waves of at most 10.
 

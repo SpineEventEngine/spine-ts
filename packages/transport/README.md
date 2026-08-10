@@ -13,7 +13,7 @@ For the full routing and shutdown contract, see
 - ✅ Gives signal publishers and subscribers one transport-neutral contract.
 - ✅ Creates deterministic routing topics from signal and message types.
 - ✅ Includes a ZeroMQ IPC adapter for separate processes on one machine.
-- ✅ Makes subscription ownership and shutdown explicit.
+- ✅ Makes subscription lifecycle and shutdown explicit.
 
 ## 🚀 Build it in this workspace
 

@@ -24,9 +24,9 @@ a possible gap, or an unusable payload.
 Spine TS is ESM-first and targets Node 24 LTS or newer. A Spine application has
 two kinds of package:
 
-- A **model package** owns `.proto` sources, generated Protobuf-ES code, and one
+- A **model package** contains `.proto` sources, generated Protobuf-ES code, and one
   exported `ProtoModule`.
-- An **application package** owns decorated handlers and composes one or more
+- An **application package** contains decorated handlers and composes one or more
   installed model packages into its generated `TypeRegistry` source.
 
 For a small application, one combined `app-model` package is fine. For bounded
@@ -36,7 +36,7 @@ canonical Proto source from another installed model package; it must not copy
 that dependency's Proto source or generated output.
 
 The repository Message Board example uses one `@spine-event-engine/example-message-board-model`
-package that owns `UserId` directly with the rest of its Message Board messages.
+package that defines `UserId` alongside the rest of its Message Board messages.
 
 The packages in this source repository are currently private and use the root
 package version. They are not published to npm. Tarball tests pack and extract local artifacts
@@ -49,7 +49,7 @@ pnpm proto:generate
 pnpm typecheck:build
 ```
 
-An installed application follows the same sequence with its own package manager
+An installed application follows the same sequence with its package manager
 scripts. Run every generation step from a clean checkout in CI. Generated source
 is intentionally ignored; do not hand-edit it.
 
@@ -69,8 +69,8 @@ users-model/
   tsconfig.json
 ```
 
-`spine-proto.json` selects model mode. Its fields are exact: `protoRoot` owns
-the package's canonical Proto files; `generatedRoot` is the local generation
+`spine-proto.json` selects model mode. Its fields are exact: `protoRoot` points
+to the package's canonical Proto files; `generatedRoot` is the local generation
 directory; `exportRoot` is the package subpath prefix for generated schemas;
 `dependencies` names direct model dependencies; and `moduleExport` is the
 package-root `ProtoModule` export.
@@ -268,7 +268,7 @@ at typed boundaries. `AnyMessages.unpackUsing` is for a value whose schema is se
 at runtime; it returns `undefined` for a type URL absent from the registry.
 The generated Message Board application is the runnable in-repository example of this
 layout: it composes the single `@spine-event-engine/example-message-board-model`, which
-owns `UserId` directly, and runs an in-memory Message Board server.
+defines `UserId` directly, and runs an in-memory Message Board server.
 
 ## 2. Model domain messages
 
@@ -528,7 +528,7 @@ export class TaskListProjection extends Projection<TaskId, typeof TaskListSchema
 }
 ```
 
-The repository invokes each handler inside a framework-owned transaction.
+The repository invokes each handler inside a transaction managed by the framework.
 `update()` synchronously mutates the live active draft and returns its resulting
 state; use it when the handler has already decided the transition is valid. A
 throw after a partial `update()` mutation propagates and does not roll that
@@ -624,7 +624,7 @@ The server gives the singleton storage factory to added builders unless a
 builder explicitly selected a storage factory. Closing a caller-managed
 `start()` server never closes process facilities; call
 `await ServerEnvironment.instance().close()` during explicit process shutdown.
-The environment owns its configured delivery, transport, tracing, and storage
+The environment manages its configured delivery, transport, tracing, and storage
 facilities and closes them after server intake and attachments have retired.
 
 ## 6. Start and close the server
@@ -641,7 +641,7 @@ const running = await server.run();
 console.log(`Spine server ready at ${running.baseUrl}`);
 ```
 
-Use `start()` when a test runner, desktop host, or another framework owns
+Use `start()` when a test runner, desktop host, or another framework handles
 process signals. It never closes the shared environment. Caller-managed siblings
 share one generation, while mixed active `start()`/`run()` admission rejects
 before listener open. `start()` builds contexts, completes finite startup recovery, opens context
@@ -735,7 +735,7 @@ void result;
 ```
 
 `onRequestMetadata` runs synchronously for every outbound call and returns
-fresh application-owned headers. It can add a credential header, but it is not
+fresh application-supplied headers. It can add a credential header, but it is not
 a session, cookie, or identity-provider implementation; compose those pieces
 at the application gateway.
 The client never logs these header values or uses them in request IDs. Request
@@ -752,8 +752,8 @@ lifecycle notice. Retries begin only after the initial attempt. The default
 policy permits five retry attempts within 30,000 ms, using a 250 ms exponential
 base, ±20% jitter, and a 5,000 ms cap (minimum 1 ms); supplied retry counts,
 elapsed time, and returned delays must be positive safe integers. `connecting`
-carries a monotonic reconnect generation and retry attempt. A caller owns
-signal composition and, when it needs deterministic timing, the injected
+carries a monotonic reconnect generation and retry attempt. The caller composes
+signals and, when it needs deterministic timing, supplies the injected
 scheduler; neither provides a cursor, cache, replay log, or cross-stream
 ordering guarantee. Browser factories select/create their transport, while
 `Client.close()` closes subscription work; an injected source closes a platform
@@ -763,8 +763,8 @@ transport only when it supplies `close()`.
 
 Use `EntityQuery` to compile descriptor-backed columns to the frozen
 `spine.client.Query`, then pass that message to an immutable `Client` request
-scope. `Client.connectTo()` owns its Node HTTP/2 session; use
-`Client.usingTransport()` when the caller owns the Connect transport.
+scope. `Client.connectTo()` creates and closes its Node HTTP/2 session; use
+`Client.usingTransport()` when the caller supplies the Connect transport.
 
 ### Browser gateway / Envoy reference
 
@@ -817,8 +817,8 @@ provides a customizable Envoy reference that accepts only `ResolveContext`,
 over HTTP/2, and supports gRPC-Web plus explicitly selected binary Connect.
 It is a template, not a deployment policy or managed service.
 
-The gateway owns its listener lifecycle, credential resolution, and trusted
-context. The application deployment owns TLS files and network controls. Do
+The gateway manages its listener lifecycle, credential resolution, and trusted
+context. The application deployment supplies TLS files and network controls. Do
 not add a browser-to-backend bypass. See
 [the Envoy reference](../interop/envoy/README.md) for its required render inputs,
 TLS mount, exact pinned-image validation command, and customization boundaries.
@@ -875,7 +875,7 @@ function firstState(response: QueryResponse): Any | undefined {
 Here `TaskListSchema` comes from the consumer's generated Protobuf-ES module,
 and `TaskListColumns` comes from its generated `*_columns.ts` companion. The
 `@example/*` paths used elsewhere in this guide are placeholders for those
-consumer-owned modules, not Spine TS packages.
+modules supplied by the consuming application, not Spine TS packages.
 
 Repeated ordering preserves caller order and uses entity ID as the final stable
 tie-breaker. Missing values are first ascending and last descending. A positive
@@ -1061,7 +1061,7 @@ errors remain non-OK acknowledgements with their existing error contracts.
 `@spine-event-engine/testing` provides `BlackBox`, a runner-neutral local test boundary.
 `await BlackBox.from(contextOrBuilder, options)` starts an ephemeral server and
 uses the public client API, so the same test works under Node's test runner or
-Vitest. It owns the client, server, and any subscriptions created by its scopes;
+Vitest. It creates and closes the client, server, and subscriptions used by its scopes;
 always close it in `finally`. Tenant and zone are fixed for its whole lifetime:
 a multitenant context requires `tenant`, a single-tenant context rejects it,
 and `zoneId` is fixed once. Scopes are immutable: use `asGuest()` or
@@ -1146,7 +1146,7 @@ replace, deployment ingress and rate limits.
 ## 11. Delivery, IPC, and release limits
 
 Process-manager reactions and projection `@Subscribe` handler delivery use
-framework-owned durable handoff. This server-side entity-handler delivery is
+the framework's durable handoff. This server-side entity-handler delivery is
 separate from the client-facing `SubscriptionService` streams in section 8;
 those active client streams and their queues are process-local. A handler can
 be invoked more than once when ownership changes or a prior invocation cannot
@@ -1174,7 +1174,7 @@ const delivery = new DeliveryBuilder().build();
 
 const result = await delivery.run({
   onMessage(message) {
-    // Dispatch through framework-owned endpoint wiring.
+    // Dispatch through the framework's endpoint wiring.
   },
 });
 ```
@@ -1216,7 +1216,7 @@ const delivery = new DeliveryBuilder()
 await delivery.run({
   shard: strategy.shardFor("task-42", "type.example.dev/Task"),
   onMessage(message) {
-    // Dispatch through framework-owned endpoint wiring.
+    // Dispatch through the framework's endpoint wiring.
   },
 });
 ```
@@ -1237,8 +1237,8 @@ add persistent retry attempts, delayed jobs, or exactly-once effects.
 ### Standalone in-memory delivery server and two-machine topology
 
 Run one standalone `DeliveryServer` where both application machines can reach
-it on a trusted private network. It owns the in-memory Inbox, Shard, Admin, and
-health services; each application machine owns its own `DeliveryClient`,
+it on a trusted private network. It provides the in-memory Inbox, Shard, Admin,
+and health services; each application machine runs a `DeliveryClient`,
 `DeliveryBuilder`, and `DeliverySupervisor`. This is coordination for
 at-least-once local endpoint delivery, not shared application-state storage.
 The [Distributed Message Board](../examples/distributed-message-board/README.md)
@@ -1285,7 +1285,7 @@ the 4 MiB RPC ceiling; worker and node IDs together are limited to 128 UTF-8
 bytes so expiration responses stay within it too. `DeliveryClient` applies the
 same identity limit before pickup or release RPCs. `spine-delivery-server` starts the same listener from
 those environment variables and handles `SIGINT`/`SIGTERM`; embedded use calls
-`close()` under its own process lifecycle. Shutdown becomes non-serving,
+`close()` as part of its process lifecycle. Shutdown becomes non-serving,
 rejects not-yet-admitted mutations, completes Admin streams, then closes the
 listener. The server is terminal and loses all state when it stops.
 
@@ -1317,7 +1317,7 @@ const supervisor = new DeliverySupervisor({
   source,
   delivery,
   onMessage(message) {
-    // Route to this machine's framework-owned endpoint wiring.
+    // Route to this machine's framework endpoint wiring.
     void message;
     return Promise.resolve();
   },
@@ -1340,9 +1340,10 @@ server.
 
 ### Production delivery supervision
 
-`DeliverySupervisor` owns bounded process-local admission for a
-`DeliveryBuilder`-created `Delivery`. Pair one supervisor with one lifecycle
-owner, start it after its local delivery endpoints are ready, and close it
+`DeliverySupervisor` provides bounded process-local admission for a
+`DeliveryBuilder`-created `Delivery`. Pair one supervisor with one component
+that manages its lifecycle. Start it after its local delivery endpoints are
+ready, and close it
 before closing the source client or storage it uses. Any forged delivery
 lookalike is rejected, even if it copies an internal method shape, because only
 builder-created identities carry the private controlled capability.
@@ -1374,7 +1375,7 @@ const supervisor = new DeliverySupervisor({
   source: client,
   delivery,
   onMessage(message) {
-    // Dispatch through framework-owned endpoint wiring.
+    // Dispatch through the framework's endpoint wiring.
     void message;
     return Promise.resolve();
   },
@@ -1403,8 +1404,8 @@ The supervisor cancels its Admin watch and recovery activity during close. It
 first gives active delivery up to `graceMs` to settle, then fences late delivery
 outcomes. It separately gives stale-session release cleanup up to `graceMs`;
 these are two bounded phases, not one combined deadline. A cleanup rejection
-takes precedence over an active-work timeout, while unfinished cleanup remains
-owned for a later `close()` retry. Therefore
+takes precedence over an active-work timeout, while unfinished cleanup is
+retained for a later `close()` retry. Therefore
 `DeliveryShutdownTimeoutError` identifies a bounded shutdown-step timeout only when no
 cleanup failure takes precedence. The supervisor does not make endpoint effects
 exactly once: an endpoint may have run before a lease or shutdown fence takes
@@ -1428,11 +1429,11 @@ The ZeroMQ adapter is available only at `@spine-event-engine/transport/zeromq` f
 IPC on one host. Treat its IPC directory and every frame as trusted runtime
 data: share it only with same-host peers that already trust each other, and
 keep the canonical directory beneath a non-attacker-writable parent. POSIX
-directories must be owned by the effective user with exact mode `0700`; final
+directories must belong to the effective user and have exact mode `0700`; final
 links are rejected, while immutable root-owned macOS `/tmp` and `/var` aliases
 are canonicalized. The adapter rechecks the directory immediately before
 native bind/connect, but pathname ZeroMQ cannot eliminate substitution after
-that check. The adapter has no transport-owned retry loops and
+that check. The transport adapter has no internal retry loops and
 provides no retry or restart guarantee. It also does not provide remote
 transport, durable redelivery, exactly-once delivery, process supervision,
 broad health checks, or production topology.
@@ -1532,11 +1533,11 @@ pnpm typecheck:build
 
 ### Configure the factory and credentials
 
-Inject a configured Google client when the application owns its creation and
-lifecycle. This is appropriate when you need explicit project, emulator,
+Inject a configured Google client when the application creates and manages it.
+This is appropriate when you need explicit project, emulator,
 credential, or transport configuration. The factory and storage handles never
 invoke teardown or close on an injected client; the caller retains any
-applicable client/resource lifecycle in its own shutdown path.
+applicable client or resource lifecycle during shutdown.
 
 ```ts
 import { Datastore } from "@google-cloud/datastore";
@@ -1546,7 +1547,7 @@ const client = new Datastore({ projectId: "orders-development" });
 const storageFactory = DatastoreStorageFactory.newBuilder().setClient(client).build();
 ```
 
-The builder requires a caller-owned client and makes no network request.
+The builder requires a client supplied by the caller and makes no network request.
 Application Default Credentials are supported only to the extent supported by
 the Google client. Pass `credentials` or `keyFilename` to the `Datastore`
 constructor when that is the selected deployment configuration. Never log
@@ -1573,7 +1574,7 @@ single-tenant context preserves any default namespace configured on the Google
 client. The Bounded Context name is diagnostic only; it never changes a
 namespace, kind, key, transaction, or query.
 
-Each record family has its own Datastore kind. By default, an ungrouped family
+Each record family has a separate Datastore kind. By default, an ungrouped family
 uses the source Proto type name. A grouped family, such as retained Entity
 history, uses the storage-group name followed by the short stored-record type.
 Applications can select another kind with `organizeRecords(...)` before
@@ -1596,7 +1597,7 @@ contains only the resolved kind and mapped record ID. Message-valued IDs use
 compact Proto JSON by default; string, int32, and int64 IDs use their direct
 text form. IDs are not copied into another property, and the adapter stores no
 `_scope`, storage revision, schema fingerprint, or layout metadata. Use a clean
-namespace or perform an application-owned offline migration from an older
+namespace or let the application perform an offline migration from an older
 experimental layout.
 
 Before the upgraded application can use an existing Datastore project, stop
@@ -1670,7 +1671,7 @@ Closing a `StorageFactory` prevents new storage creation; it does not close
 existing storage handles. Closing a storage handle prevents future operations
 on that handle, while independently opened handles remain separately closeable.
 Neither operation invokes teardown or close on the injected Google client.
-Arrange application shutdown so servers and contexts finish their own closure
+Arrange application shutdown so servers and contexts finish closing
 before the caller tears down any shared client resource.
 
 ### Entity-history provider seam
@@ -1712,7 +1713,7 @@ DATASTORE_EMULATOR_HOST=127.0.0.1:8081 \
   pnpm --filter @spine-event-engine/storage-datastore test:emulator
 ```
 
-The adapter's emulator suite uses unique kinds and removes only its own data;
+The adapter's emulator suite uses unique kinds and removes only the data it created;
 it does not reset a shared emulator. The package's ordinary tests use an
 injected narrow client fake, so emulator tests are opt-in. For a deliberately
 credential-gated cloud smoke check, select a disposable configured project:
@@ -1740,7 +1741,7 @@ is not supported.
 
 The URL names a MySQL database and rejects unsupported URL options. The public
 options are `url`, `connectionLimit`, `connectTimeoutMs`, and TLS `ca`, `cert`,
-`key`, and `rejectUnauthorized`. Create and always close its owned pool:
+`key`, and `rejectUnauthorized`. Create the pool through the factory and always close it:
 
 ```ts
 import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
@@ -1768,7 +1769,7 @@ not mysql2. A single-tenant factory uses one database. For multitenancy, call
 database URL per tenant. Spine selects that tenant's pool before it opens a
 table, runs a query, starts a transaction, or takes a lock. The Bounded Context
 name helps diagnostics, but it never partitions stored data. Each record family
-lazily creates and verifies its own private table on first use. No shared table
+lazily creates and verifies a private table on first use. No shared table
 or compatibility fingerprint is stored.
 The account therefore always needs that DDL permission plus normal DML
 privileges. Use a dedicated database/account.
@@ -1816,7 +1817,7 @@ is not marked `(column)`: ordinary Proto fields stay only in the authoritative
 generated `BoardId` exactly as the write did and binds
 `{"value":"board-7"}` to parameterized `WHERE board = ?` SQL. MySQL selects
 matching rows; Spine then decodes the complete state from `bytes`. The adapter
-does not invent an index for `board`, so the application owns that index.
+does not create an index for `board`; the application must add one when needed.
 
 ### Composition, tenancy, schema, and privileges
 

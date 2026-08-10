@@ -5,7 +5,7 @@ with the [Message Board web README](README.md).
 
 ## Composition
 
-`MessageBoardApp` receives an application-owned browser session and
+`MessageBoardApp` receives a browser session supplied by the application and
 `ClientRequest`. Production hosts may supply gRPC-Web or Connect through
 `client-web`; the visible local entry uses the real Connect gateway. Blank
 username and message values are submitted to the server so its Proto validation
@@ -49,5 +49,5 @@ pnpm exec node examples/message-board/web/test/interop/browser/run.mjs
 The last command is the separate HTTPS/gRPC-Web interoperability topology. It
 uses Envoy, local TLS, and the application gateway; the browser never reaches
 the native backend. Deployment users copy and customize the
-[Envoy reference](../../../interop/envoy/README.md) for their own certificates,
+[Envoy reference](../../../interop/envoy/README.md) for their certificates,
 gateway address, and network policy.

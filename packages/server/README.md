@@ -13,7 +13,7 @@ generations are exclusive, while matching `start()` or `run()` siblings share.
 Add the
 `browser` option with exact allowed origins and your session, authorization,
 and trusted-context collaborators to serve Connect and gRPC-Web without
-application-owned listener or CORS code.
+application listener or CORS code.
 
 For detailed contracts intended for coding agents, see the
 [REFERENCE.md documentation for agents](REFERENCE.md).
@@ -25,7 +25,7 @@ For detailed contracts intended for coding agents, see the
 - ✅ Validates commands before application handlers run.
 - ✅ Exposes Command, Query, and Subscription services over native gRPC.
 - ✅ Optionally exposes authenticated Connect and gRPC-Web browser access.
-- ✅ Owns readiness, rollback, process signals, and ordered shutdown.
+- ✅ Manages readiness, rollback, process signals, and ordered shutdown.
 
 ## 🧭 Understand the two event paths
 
@@ -86,7 +86,7 @@ ordered by `when_activation_expires` and then ID. It deletes at most 25 expired
 records and reports more work only when the observed 26th record is expired.
 
 For an application-specific registry, provide one complete implementation.
-The built context owns and closes it.
+The built context closes it.
 
 ```ts
 import { BoundedContext, type StandSubscriptionRegistry } from "@spine-event-engine/server";
@@ -184,9 +184,9 @@ const running = await server.run();
 console.log(running.baseUrl);
 ```
 
-Use `run()` for a standalone process. It installs framework-owned `SIGINT` and
+Use `run()` for a standalone process. It installs framework `SIGINT` and
 `SIGTERM` shutdown; siblings share its generation, and a failed final close is
-retryable by a later signal or `close()`. Use `start()` when another host owns
+retryable by a later signal or `close()`. Use `start()` when another host handles
 the process lifecycle; it shares only caller-managed siblings and never closes
 the environment.
 
@@ -231,7 +231,7 @@ the five application RPCs only after the same authentication, authorization,
 and trusted-context rewrite. Every standalone mode requires explicit
 subscription bindings: local development and tests may explicitly supply an
 in-memory binding, while production also needs a type registry and named
-`DurableSubscriptionBindings`. The external backend remains caller-owned.
+`DurableSubscriptionBindings`. The external backend remains under caller control.
 
 Use `browser.backend.baseUrls` for non-empty unique origins. Unary calls use
 round-robin without retry; native streams fan out best-effort, so clients
@@ -286,7 +286,7 @@ void running;
 
 In production, browser access requires `DurableSubscriptionBindings`. Startup
 rejects missing or in-memory bindings before opening a listener. The registry
-uses the storage factory that your application supplies and closes only its own
+uses the storage factory that your application supplies and closes only the
 handle, so you can use a separate factory from application-data storage or
 intentionally share one. Its namespace separates applications sharing a
 provider. Combined browser mode may omit bindings to use an in-memory registry;

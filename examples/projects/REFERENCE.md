@@ -11,7 +11,7 @@ and handler registries are generated artifacts and must not be edited.
 
 ## Load-runner behavior
 
-Each simulated user owns one HTTP/2 session and a subscription filtered to its
+Each simulated user uses one HTTP/2 session and a subscription filtered to its
 project ID. The user activates the subscription, posts `CreateProject`, requires
 an OK acknowledgement, polls until that exact `ProjectSummary` appears, and
 then consumes its correlated update.

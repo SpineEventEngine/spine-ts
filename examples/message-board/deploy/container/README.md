@@ -45,7 +45,7 @@ The images set `NODE_ENV=production`. Supply these values when starting them:
 Every browser process additionally requires one shared
 `MESSAGE_BOARD_SESSION_ISSUER`, `MESSAGE_BOARD_SESSION_AUDIENCE`,
 `MESSAGE_BOARD_SESSION_KEY_ID`, and `MESSAGE_BOARD_SESSION_PRIVATE_KEY`.
-Each process constructs a caller-owned Datastore client from
+Each process constructs a Datastore client from
 `DATASTORE_PROJECT_ID` and passes that same client into its storage factory.
 Browser-capable replicas must share both the signing values and the registry
 namespace.
@@ -96,7 +96,7 @@ docker rm --force message-board-datastore
 docker network rm message-board-local
 ```
 
-Node runs as PID 1. `SIGINT` and `SIGTERM` stop intake, close the server-owned
+Node runs as PID 1. `SIGINT` and `SIGTERM` stop intake, close the server
 environment facilities, and must finish within ten seconds. The images do not
 add application health endpoints. Readiness is the process listener becoming
 available.

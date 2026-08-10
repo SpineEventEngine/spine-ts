@@ -1,7 +1,7 @@
 # Message Board web UI
 
 This React application posts Message Board commands and reads the board’s
-query-side Projection through the real Spine browser client. It uses owned
+query-side Projection through the real Spine browser client. It uses project
 Shadcn components and Tailwind CSS. It contains no fallback data: if the server
 is down, the UI reports the failure.
 
@@ -85,8 +85,8 @@ Proto messages without changing a client-side validation table.
 
 ## 🎨 Shadcn components
 
-The component source lives under `src/components/ui`, so the application owns
-and may adapt it. `components.json`, `src/index.css`, and `vite.config.ts`
+The component source lives under `src/components/ui`, so the application can
+adapt it. `components.json`, `src/index.css`, and `vite.config.ts`
 provide the normal Shadcn/Tailwind setup. Only the Button, Card, Input, Label,
 Textarea, Alert, and Avatar components used by this page are included.
 
