@@ -813,6 +813,23 @@ describe("EventBus", () => {
     ]);
   });
 
+  it("contains subscriber failure without a logger and rejects foreign logger installation", async () => {
+    const bus = new EventBus(
+      new EventStore({ name: "Tasks", multitenant: false }, new InMemoryStorageFactory()),
+      [createEventDispatcher([ProjectionStateSchema], () => undefined)],
+    );
+    eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
+      onEvent() {
+        throw new Error("contained without logging");
+      },
+    });
+
+    await expect(bus.post(createProjectionEvent("event-no-logger"))).resolves.toBeUndefined();
+    expect(() => eventBusAccess.installLogger({} as EventBus, {} as ILogLayer)).toThrow(
+      "EventBus logger requires an EventBus instance.",
+    );
+  });
+
   it("closes direct event subscribers when the bus closes", async () => {
     const store = new EventStore(
       { name: "Tasks", multitenant: false },

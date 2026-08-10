@@ -2295,8 +2295,8 @@ describe("SpineServices", () => {
         return this;
       },
     } as never);
-    const subscription = await handlers?.subscribe(createEventTopic());
-    if (subscription === undefined) throw new Error("SubscriptionService was not registered.");
+    if (handlers === undefined) throw new Error("SubscriptionService was not registered.");
+    const subscription = await handlers.subscribe(createEventTopic());
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
     const first = iterator.next();
     await delay(25);
@@ -3831,8 +3831,8 @@ describe("SpineServices", () => {
         return this;
       },
     } as never);
-    const subscription = await handlers?.subscribe(createTopic());
-    if (subscription === undefined) throw new Error("SubscriptionService was not registered.");
+    if (handlers === undefined) throw new Error("SubscriptionService was not registered.");
+    const subscription = await handlers.subscribe(createTopic());
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
     const first = iterator.next();
     await delay(25);

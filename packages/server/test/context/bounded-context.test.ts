@@ -318,6 +318,14 @@ function internalDeliveryDescriptor(context: BoundedContext): InternalDeliveryDe
 }
 
 describe("BoundedContext assembly", () => {
+  it("does not expose a logger before package-private installation", () => {
+    const context = BoundedContext.singleTenant("Logger").build();
+
+    expect(() => boundedContextAccess.loggerFor(context)).toThrow(
+      "Context logger requires a built BoundedContext instance.",
+    );
+  });
+
   it("rejects private delivery transition validation through its promise", async () => {
     const context = BoundedContext.singleTenant("Tasks").build();
     let transition: Promise<void> | undefined;
