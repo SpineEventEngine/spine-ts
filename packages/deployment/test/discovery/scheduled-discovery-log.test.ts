@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { scheduledDiscoveryLog } from "../src/discovery/scheduled-discovery-log.js";
+import { scheduledDiscoveryLog } from "../../src/discovery/scheduled-discovery-log.js";
 
 describe("scheduled discovery logging", () => {
   it("contains logger failures and emits only fixed safe output", async () => {
