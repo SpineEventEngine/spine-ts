@@ -28,13 +28,30 @@ function configured(
 }
 
 describe("ServerEnvironment delivery lifecycle", () => {
+  it("snapshots one caller-owned logger child when the environment resolves", async () => {
+    const child = Object.freeze({});
+    const logger = { child: vi.fn(() => child) };
+    ServerEnvironment.when(EnvironmentType.Local).use({ ...{ logger } });
+
+    const environment = ServerEnvironment.instance();
+
+    expect(logger.child).toHaveBeenCalledTimes(1);
+    expect(logger.child).toHaveBeenCalledWith();
+    expect(environment.logger).toBe(child);
+  });
+
   it("warns once for a volatile registry in production and never in local", async () => {
     const warnings: string[] = [];
+    const logger = {
+      child: vi.fn(),
+      warn: (message: string) => warnings.push(message),
+    };
+    logger.child.mockReturnValue(logger);
     EnvironmentTests.use(EnvironmentType.Production);
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
-      warn: (message) => warnings.push(message),
+      ...{ logger },
     });
     const production = ServerEnvironment.instance();
     const context = BoundedContext.singleTenant("Tasks")
@@ -55,8 +72,13 @@ describe("ServerEnvironment delivery lifecycle", () => {
 
   it("does not warn for a volatile registry in a local environment", async () => {
     const warnings: string[] = [];
+    const logger = {
+      child: vi.fn(),
+      warn: (message: string) => warnings.push(message),
+    };
+    logger.child.mockReturnValue(logger);
     ServerEnvironment.when(EnvironmentType.Local).use({
-      warn: (message) => warnings.push(message),
+      ...{ logger },
     });
     const environment = ServerEnvironment.instance();
     const context = BoundedContext.singleTenant("Tasks")
@@ -74,11 +96,16 @@ describe("ServerEnvironment delivery lifecycle", () => {
 
   it("warns before Server.start attaches a production context", async () => {
     const warnings: string[] = [];
+    const logger = {
+      child: vi.fn(),
+      warn: (message: string) => warnings.push(message),
+    };
+    logger.child.mockReturnValue(logger);
     EnvironmentTests.use(EnvironmentType.Production);
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
-      warn: (message) => warnings.push(message),
+      ...{ logger },
     });
     const context = BoundedContext.singleTenant("Tasks")
       .withSubscriptionRegistry(new InMemorySubscriptionRegistry())

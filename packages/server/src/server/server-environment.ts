@@ -1,4 +1,5 @@
 import { InMemoryStorageFactory, type StorageFactory } from "@spine-event-engine/storage";
+import { LogLayer, StructuredTransport, type ILogLayer } from "loglayer";
 import type {
   PublishTransportHandler,
   PublishTransportOperation,
@@ -94,11 +95,10 @@ export interface ServerEnvironmentSettings {
   readonly tracerFactory?: ServerEnvironmentCloseable;
 
   /**
-   * Notifies an application logger about one non-sensitive environment warning.
-   *
-   * @param message Describes the warning.
+   * Application-owned logger used by this environment and its attached runtime parts.
+   * The caller retains transport flush and close ownership.
    */
-  readonly warn?: (message: string) => void;
+  readonly logger?: ILogLayer;
 }
 
 /**
@@ -148,6 +148,11 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
    */
   readonly tracerFactory: ServerEnvironmentCloseable | undefined;
 
+  /**
+   * Logger child snapshot used only by this environment's runtime parts.
+   */
+  readonly logger: ILogLayer;
+
   readonly #ownedCloseables: readonly unknown[];
   readonly #closeGroup: RetryableCloseGroup;
   #close: Promise<void> | undefined;
@@ -161,8 +166,8 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     this.transport = settings.transport;
     this.delivery = settings.delivery;
     this.tracerFactory = settings.tracerFactory;
+    this.logger = settings.logger;
     this.#ownedCloseables = ServerEnvironmentValues.facilitiesToClose(settings);
-    environmentWarnings.set(this, settings.warn);
     warnedVolatileRegistries.set(this, new WeakSet());
     this.#closeGroup = new RetryableCloseGroup(
       this.#ownedCloseables,
@@ -281,7 +286,7 @@ interface RequiredFacilities {
   readonly transport: SignalTransport;
   readonly delivery: ServerEnvironmentCloseable | undefined;
   readonly tracerFactory: ServerEnvironmentCloseable | undefined;
-  readonly warn: (message: string) => void;
+  readonly logger: ILogLayer;
 }
 
 /**
@@ -347,7 +352,6 @@ interface ServerEnvironmentAccess {
 const environmentAttachments = new WeakMap<ServerEnvironment, EnvironmentAttachments>();
 const deliveryOpeners = new WeakMap<ServerEnvironment, () => Promise<void>>();
 const testAttachmentsInstallable = new WeakSet<ServerEnvironment>();
-const environmentWarnings = new WeakMap<ServerEnvironment, (message: string) => void>();
 const warnedVolatileRegistries = new WeakMap<ServerEnvironment, WeakSet<BoundedContext>>();
 
 /**
@@ -454,13 +458,14 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     if (environment.environment.type !== EnvironmentType.Production) return;
     if (boundedContextAccess.subscriptionRegistry(context).persistent) return;
     const warned = warnedVolatileRegistries.get(environment);
-    const warn = environmentWarnings.get(environment);
-    if (warned === undefined || warn === undefined) {
+    if (warned === undefined) {
       throw new TypeError("Registry warning requires a ServerEnvironment instance.");
     }
     if (warned.has(context)) return;
     warned.add(context);
-    warn(`Stand subscription registry for context "${context.name.value}" is not persistent.`);
+    environment.logger.warn(
+      `Stand subscription registry for context "${context.name.value}" is not persistent.`,
+    );
   },
 });
 
@@ -501,6 +506,22 @@ const ServerEnvironmentValues = Object.freeze({
       options.storageFactory,
     ]);
   },
+  logger(logger: ILogLayer | undefined): ILogLayer {
+    return (
+      logger ??
+      new LogLayer({
+        transport: new StructuredTransport({
+          logger: console,
+          level: "warn",
+          stringify: true,
+          messageField: "message",
+          dateField: "timestamp",
+          levelField: "severity",
+          levelFn: (level) => level.toUpperCase(),
+        }),
+      })
+    ).child();
+  },
   resolveFacilities(
     type: EnvironmentType,
     settings: ServerEnvironmentSettings,
@@ -517,7 +538,7 @@ const ServerEnvironmentValues = Object.freeze({
         transport: settings.transport,
         delivery: settings.delivery,
         tracerFactory: settings.tracerFactory,
-        warn: settings.warn ?? console.warn,
+        logger: ServerEnvironmentValues.logger(settings.logger),
       };
     }
     return {
@@ -525,7 +546,7 @@ const ServerEnvironmentValues = Object.freeze({
       transport: settings.transport ?? new LocalSignalTransport(),
       delivery: settings.delivery,
       tracerFactory: settings.tracerFactory,
-      warn: settings.warn ?? console.warn,
+      logger: ServerEnvironmentValues.logger(settings.logger),
     };
   },
 });
