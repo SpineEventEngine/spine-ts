@@ -139,6 +139,34 @@
       "operation": "delivery.watch",
       "disposition": "warn",
       "test": "packages/server/test/delivery/delivery-supervisor.test.ts"
+    },
+    {
+      "id": "server.subscription_initial_reconcile",
+      "source": "../../packages/server/src/stand/subscription-runtime.ts",
+      "operation": "subscription.reconcile",
+      "disposition": "warn",
+      "test": "packages/server/test/stand/subscription-runtime.test.ts"
+    },
+    {
+      "id": "server.subscription_timer_reconcile",
+      "source": "../../packages/server/src/stand/subscription-runtime.ts",
+      "operation": "subscription.reconcile",
+      "disposition": "warn",
+      "test": "packages/server/test/stand/subscription-runtime.test.ts"
+    },
+    {
+      "id": "server.subscription_reconcile_tail",
+      "source": "../../packages/server/src/stand/subscription-runtime.ts",
+      "operation": "subscription.reconcile",
+      "disposition": "no-log",
+      "test": "packages/server/test/stand/subscription-runtime.test.ts"
+    },
+    {
+      "id": "server.subscription_consumer_delivery",
+      "source": "../../packages/server/src/stand/subscription-runtime.ts",
+      "operation": "subscription.consumer_delivery",
+      "disposition": "no-log",
+      "test": "packages/server/test/stand/subscription-runtime.test.ts"
     }
   ]
 }

@@ -2,10 +2,37 @@ import { create } from "@bufbuild/protobuf";
 import { SubscriptionIdSchema } from "@spine-event-engine/proto/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { SubscriptionRuntime } from "../../src/stand/subscription-runtime.js";
+import {
+  SubscriptionRuntime,
+  subscriptionRuntimeAccess,
+} from "../../src/stand/subscription-runtime.js";
 import { InMemorySubscriptionRegistry } from "../../src/stand/subscription-registry.js";
 
 describe("SubscriptionRuntime", () => {
+  it("warns once when detached initial reconciliation fails", async () => {
+    const warn = vi.fn();
+    const logger = { withMetadata: vi.fn(() => ({ warn })) };
+    const runtime = new SubscriptionRuntime(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      new FailingSnapshotRegistry(),
+    );
+    subscriptionRuntimeAccess.installLogger(runtime, logger as never);
+
+    runtime.start();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(logger.withMetadata).toHaveBeenCalledWith({
+      operation: "subscription.reconcile",
+      reasonCode: "failed",
+    });
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith("Subscription reconciliation failed.");
+    await runtime.close();
+  });
+
   it("owns one explicit reconciliation lifecycle", () => {
     expect(SubscriptionRuntime).toBeTypeOf("function");
   });

@@ -72,7 +72,7 @@ import {
 } from "../handler/handler-metadata.js";
 import { SignalMetadata } from "../runtime/signal-metadata.js";
 import { Stand } from "../stand/stand.js";
-import { SubscriptionRuntime } from "../stand/subscription-runtime.js";
+import { SubscriptionRuntime, subscriptionRuntimeAccess } from "../stand/subscription-runtime.js";
 import {
   StorageSubscriptionRegistry,
   type StandSubscriptionRegistry,
@@ -1083,6 +1083,11 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     }
     eventBusAccess.installLogger(buses[0], logger);
     eventBusAccess.installLogger(buses[1], logger);
+    const runtime = contextSubscriptionRuntimes.get(context);
+    if (runtime === undefined) {
+      throw new TypeError("Context logger requires a built BoundedContext instance.");
+    }
+    subscriptionRuntimeAccess.installLogger(runtime, logger);
   },
 
   loggerFor(context: BoundedContext): ILogLayer {
@@ -2230,6 +2235,8 @@ const ContextParts = Object.freeze({
       eventBusAccess.clearLogger(buses[0]);
       eventBusAccess.clearLogger(buses[1]);
     }
+    const runtime = contextSubscriptionRuntimes.get(context);
+    if (runtime !== undefined) subscriptionRuntimeAccess.clearLogger(runtime);
     contextDispatchFailureRecorders.delete(context);
     contextEventBuses.delete(context);
     contextLoggers.delete(context);

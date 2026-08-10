@@ -1,4 +1,5 @@
 import { create, toBinary } from "@bufbuild/protobuf";
+import type { ILogLayer } from "loglayer";
 import {
   SubscriptionIdSchema,
   SubscriptionSchema,
@@ -6,6 +7,7 @@ import {
 } from "@spine-event-engine/proto/client";
 
 import type { EventBus } from "../bus/event-bus.js";
+import { emitServerWarning } from "../server/server-log.js";
 import { SubscriptionObservers } from "./subscription-observer.js";
 import { standAccess, type Stand, type StandSubscription } from "./stand.js";
 import type { StandSubscriptionEntry, StandSubscriptionRegistry } from "./subscription-registry.js";
@@ -13,6 +15,14 @@ import type { StandSubscriptionEntry, StandSubscriptionRegistry } from "./subscr
 interface LocalSubscriptionAttachment {
   readonly identity: Uint8Array;
   readonly subscription: StandSubscription;
+}
+
+const subscriptionRuntimeLoggers = new WeakMap<SubscriptionRuntime, ILogLayer>();
+const subscriptionRuntimes = new WeakSet<SubscriptionRuntime>();
+
+interface SubscriptionRuntimeAccess {
+  installLogger(runtime: SubscriptionRuntime, logger: ILogLayer): void;
+  clearLogger(runtime: SubscriptionRuntime): void;
 }
 
 /**
@@ -58,6 +68,7 @@ export class SubscriptionRuntime {
     systemEventBus: EventBus,
     registry: StandSubscriptionRegistry,
   ) {
+    subscriptionRuntimes.add(this);
     this.#domainStand = domainStand;
     this.#systemStand = systemStand;
     this.#domainEventBus = domainEventBus;
@@ -70,8 +81,12 @@ export class SubscriptionRuntime {
    */
   start(): void {
     if (this.#timer !== undefined || this.#closing) return;
-    void this.reconcile().catch(() => undefined);
-    this.#timer = setInterval(() => void this.#reconcileTimer().catch(() => undefined), 10_000);
+    // spine-log-boundary: server.subscription_initial_reconcile
+    void this.reconcile().catch(() => this.#warnReconciliationFailure());
+    this.#timer = setInterval(() => {
+      // spine-log-boundary: server.subscription_timer_reconcile
+      void this.#reconcileTimer().catch(() => this.#warnReconciliationFailure());
+    }, 10_000);
     this.#timer.unref();
   }
 
@@ -118,6 +133,7 @@ export class SubscriptionRuntime {
       }
       for (const id of this.#attachments.keys()) if (!seen.has(id)) this.remove(id);
     });
+    // spine-log-boundary: server.subscription_reconcile_tail
     this.#tail = cycle.catch(() => undefined);
     return cycle;
   }
@@ -128,6 +144,15 @@ export class SubscriptionRuntime {
       this.#timerReconciliation = undefined;
     });
     return this.#timerReconciliation;
+  }
+
+  #warnReconciliationFailure(): void {
+    const logger = subscriptionRuntimeLoggers.get(this);
+    if (logger === undefined) return;
+    emitServerWarning(logger, "Subscription reconciliation failed.", {
+      operation: "subscription.reconcile",
+      reasonCode: "failed",
+    });
   }
 
   /**
@@ -301,12 +326,33 @@ export class SubscriptionRuntime {
     for (const consumer of [...(this.#consumers.get(id) ?? [])]) {
       try {
         consumer(update);
+        // spine-log-boundary: server.subscription_consumer_delivery
       } catch {
         // Individual best-effort stream consumers cannot suppress peers.
       }
     }
   }
 }
+
+/**
+ * Exposes framework-only subscription-runtime logging metadata installation.
+ *
+ * @internal
+ */
+export const subscriptionRuntimeAccess: SubscriptionRuntimeAccess = Object.freeze({
+  installLogger(runtime: SubscriptionRuntime, logger: ILogLayer): void {
+    if (!subscriptionRuntimes.has(runtime)) {
+      throw new TypeError("Subscription runtime logger requires a SubscriptionRuntime instance.");
+    }
+    subscriptionRuntimeLoggers.set(runtime, logger);
+  },
+  clearLogger(runtime: SubscriptionRuntime): void {
+    if (!subscriptionRuntimes.has(runtime)) {
+      throw new TypeError("Subscription runtime logger requires a SubscriptionRuntime instance.");
+    }
+    subscriptionRuntimeLoggers.delete(runtime);
+  },
+});
 
 function entryIdentity(entry: StandSubscriptionEntry): Uint8Array {
   const subscription = toBinary(SubscriptionSchema, entry.subscription);
