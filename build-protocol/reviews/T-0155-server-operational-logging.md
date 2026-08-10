@@ -21,6 +21,10 @@ Status: Pending implementation
 - Both fields must be explicit in dispatch. Runtime metadata will be recorded
   when exposed; otherwise the immutable configured profile and limitation will
   be recorded. The implementer must not spawn subagents.
+- The initial implementation owner completed and pushed the EventBus slice as
+  `8cab4aa5`, then exhausted its execution turn without leaving partial
+  repository/context/service edits. A fresh owner continues the remaining
+  scope under the same explicit role and profile.
 
 ## Review Assignments
 
