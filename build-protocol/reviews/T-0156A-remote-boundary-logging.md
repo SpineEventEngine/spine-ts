@@ -1,0 +1,84 @@
+# T-0156A Review Record
+
+Status: Complete
+
+## 2026-08-10 - Aggregated Review Correction
+
+- Reviewed by `t0156a_style_review` (configured `gpt-5.6-terra` / high) and
+  `t0156a_reliability_review` (configured `gpt-5.6-terra` / high). Runtime
+  metadata is unavailable; configured profiles are the durable evidence.
+- Accepted: cancellation and close containment regressions, fixed deployment
+  emitter API, package-owned test placement, deterministic lifecycle gates, and
+  record accuracy. Rejected: a shared cross-package logging helper, because the
+  frozen Wave 9 boundary rules require package-local private emitters and forbid
+  a logging facade/package coupling expansion.
+- Corrections are complete and the branch is re-review-ready. No reviewer rerun
+  or `verify:task` has run.
+
+Mechanical evidence includes 159 focused passing tests, direct emitter
+fault/secret coverage, generated/tooling typechecks, changed ESLint, TSDoc,
+containment, formatting, and diff checks. Exact LCOV changed-range measurement
+uses points on production lines added against `origin/main`, across all 11
+changed production sources: statements 39/39 (100%), lines 39/39 (100%),
+functions 14/14 (100%), branches 43/44 (97.73%). The focused runner's global
+repository threshold output is irrelevant to this changed-range result.
+
+Final evidence supersedes the preceding provisional coverage text: fresh final
+LCOV `/tmp/t0156a-cov-final` reports 38/38 statements, 38/38 lines, 42/42
+branches, and 14/14 functions (100% all metrics) over changed production lines
+against `origin/main`. The final focused run passed 12 files / 166 tests; build
+and tooling typechecks, changed ESLint, Prettier, TSDoc, containment, and diff
+checks pass. Status remains correction-complete / re-review-ready.
+
+Disposition: correction accepted for re-review. Implementation was performed by
+`t0156a_implementation`, configured `gpt-5.6-terra` / medium; runtime metadata
+is unavailable. The work log contains the exact executable test, ESLint, gate,
+and LCOV commands and paths.
+
+## 2026-08-11 - Final Review Convergence
+
+- Reliability: CLEAN. Reviewer `t0156a_reliability_review`, configured
+  `gpt-5.6-terra` / high, verified close-aborted GKE refresh emits no WARN;
+  close-fenced GCE renewal rejection emits no WARN and joins removal; and a
+  failed DeliveryServer start records exactly one ERROR with no close duplicate.
+- Style/maintainability: CLEAN after `f2e9517d`. Reviewer
+  `t0156a_style_review`, configured `gpt-5.6-terra` / high, verified
+  package-local fixed emitters, no cross-package test import, exact safe fields,
+  deterministic tests, and the reproducible coverage command.
+- Runtime metadata is unavailable on this surface; configured reviewer profiles
+  are the durable runtime evidence. Final verification remains pending.
+
+## Assignments
+
+- Implementation: existing implementer, explicit `gpt-5.6-terra` / medium,
+  no subagents.
+- Style/maintainability: required, configured `gpt-5.6-terra` / high.
+- Performance/reliability: required, configured `gpt-5.6-terra` / high.
+- TypeScript/API documentation: N/A unless a public contract changes.
+- Documentation: N/A; product Markdown is excluded.
+- Security: deferred to T-0167; secret-negative behavior remains an acceptance
+  gate in this task.
+
+Runtime metadata is unavailable unless the execution surface exposes it; the
+explicit immutable configured role/profile is then the durable assignment
+evidence.
+
+## Verifier TSDoc Correction
+
+Parent-run `verify:task` found only `tsdoc-block-opener` at
+`scheduled-discovery-log.ts` block 3. The multiline TSDoc repair is
+verifier-rerun-ready; no behavior or review concern reopened.
+
+## Final Verification
+
+- The final style re-review is CLEAN after the deployment logger test moved to
+  the directory mirroring `src/discovery`. The reviewer used the configured
+  `gpt-5.6-terra` / high profile; runtime self-introspection was unavailable.
+- The complete `verify:task -- --no-coverage` profile passed all generated
+  Proto, build, tooling, cleanup, TSDoc, containment, format, documentation,
+  API, generated-output, and release-readiness gates.
+- The verifier's exact focused selection passed 12 files and 166 tests. The
+  final post-structural changed-source measurement remains 100% in every
+  metric: 43/43 statements, 43/43 lines, 38/38 branches, and 14/14 functions.
+
+Disposition: accepted for merge.

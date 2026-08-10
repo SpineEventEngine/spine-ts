@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition, @typescript-eslint/require-await */
 
 import { ApplicationNode } from "./discovery/application-node.js";
+import { scheduledDiscoveryLog } from "./discovery/scheduled-discovery-log.js";
 import type { ILogLayer } from "loglayer";
 
 export { ApplicationNode } from "./discovery/application-node.js";
@@ -104,6 +105,7 @@ export class ScheduledNodeDiscovery implements NodeDiscovery {
   readonly #reader: NodeSnapshotReader;
   readonly #scheduler: NodeScheduler;
   readonly #intervalMs: number;
+  readonly #logger: ILogLayer | undefined;
   #cancel: (() => void) | undefined;
   #controller: AbortController | undefined;
   #watcher: ((nodes: readonly ApplicationNode[]) => void) | undefined;
@@ -124,6 +126,7 @@ export class ScheduledNodeDiscovery implements NodeDiscovery {
     this.#reader = options.reader;
     this.#scheduler = options.scheduler ?? systemNodeScheduler;
     this.#intervalMs = options.intervalMs ?? 10_000;
+    this.#logger = options.logger;
   }
 
   /**
@@ -161,6 +164,7 @@ export class ScheduledNodeDiscovery implements NodeDiscovery {
 
   #schedule(delayMs: number): void {
     this.#cancel = this.#scheduler.schedule(delayMs, () => {
+      // spine-log-boundary: deployment.scheduled_discovery_refresh_tail
       this.#refreshing = this.#refresh().catch(() => undefined);
     });
   }
@@ -173,6 +177,9 @@ export class ScheduledNodeDiscovery implements NodeDiscovery {
       const nodes = await this.#reader.read(controller.signal);
       if (!this.#closed) this.#watcher?.([...nodes]);
     } catch {
+      if (this.#closed || controller.signal.aborted) return;
+      // spine-log-boundary: deployment.scheduled_discovery_refresh
+      scheduledDiscoveryLog.warn(this.#logger);
       // Retain the last successful snapshot and retry at the configured interval.
     } finally {
       this.#controller = undefined;

@@ -6,6 +6,7 @@ import {
 import type { ILogLayer } from "loglayer";
 
 import { NodeDnsResolver } from "./node-dns-resolver.js";
+import { gkeDiscoveryLog } from "./gke-log.js";
 
 /**
  * Represents one DNS address with its optional answer TTL in seconds.
@@ -122,6 +123,7 @@ export class GkeNodeDiscovery implements NodeDiscovery {
   readonly #resolver: GkeDnsResolver;
   readonly #scheduler: NodeScheduler;
   readonly #now: () => number;
+  readonly #logger: ILogLayer | undefined;
   #cancel: (() => void) | undefined;
   #expiryCancel: (() => void) | undefined;
   readonly #controllers = new Set<AbortController>();
@@ -155,6 +157,7 @@ export class GkeNodeDiscovery implements NodeDiscovery {
     this.#resolver = options.resolver ?? new NodeDnsResolver();
     this.#scheduler = options.scheduler ?? systemScheduler;
     this.#now = options.now ?? Date.now;
+    this.#logger = options.logger;
   }
 
   /**
@@ -200,6 +203,7 @@ export class GkeNodeDiscovery implements NodeDiscovery {
       if (this.#controllers.size >= maximumRefreshes) return;
       const refresh = this.#refresh(++this.#epoch);
       this.#refreshes.add(refresh);
+      // spine-log-boundary: deployment_gke.discovery_refresh_tail
       void refresh.catch(() => undefined).finally(() => this.#refreshes.delete(refresh));
     });
   }
@@ -242,6 +246,8 @@ export class GkeNodeDiscovery implements NodeDiscovery {
       if (nodes.length > 0) this.#scheduleExpiry(ttlMs);
     } catch {
       if (controller.signal.aborted || epoch !== this.#epoch) return;
+      // spine-log-boundary: deployment_gke.discovery_refresh
+      gkeDiscoveryLog.warn(this.#logger);
       if (
         this.#validUntilMs !== undefined &&
         this.#now() >= this.#validUntilMs &&

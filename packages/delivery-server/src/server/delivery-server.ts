@@ -14,6 +14,7 @@ import { HealthHandlers } from "../health/health-service.js";
 import { DeliveryAssembly } from "./assembly.js";
 import { DeliveryConfig, type DeliveryConfiguration } from "./config.js";
 import { DeliveryShutdown } from "./shutdown.js";
+import { deliveryServerLog } from "./delivery-server-log.js";
 
 /**
  * Construction-time configuration for {@link DeliveryServer}.
@@ -87,6 +88,7 @@ export class DeliveryServer {
   readonly host: string;
   #port: number;
   readonly #configuration: DeliveryConfiguration;
+  readonly #logger: ILogLayer | undefined;
   #server: http2.Http2Server | undefined;
   #start: Promise<this> | undefined;
   #close: Promise<void> | undefined;
@@ -107,6 +109,7 @@ export class DeliveryServer {
     this.#configuration = DeliveryConfig.resolve(options);
     this.host = this.#configuration.host;
     this.#port = this.#configuration.port;
+    this.#logger = options.logger;
   }
 
   /**
@@ -168,6 +171,7 @@ export class DeliveryServer {
       closeNetwork: async () => {
         try {
           await this.#start;
+          // spine-log-boundary: delivery_server.listener_start_close
         } catch {
           // A failed listener has already reached its terminal state.
         }
@@ -210,6 +214,8 @@ export class DeliveryServer {
       this.#started = true;
       return this;
     } catch (error) {
+      // spine-log-boundary: delivery_server.listener_start
+      deliveryServerLog.error(this.#logger);
       await this.#closeListener(server);
       throw error;
     }

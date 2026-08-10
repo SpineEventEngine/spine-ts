@@ -2,7 +2,7 @@
  * asynchronous contract methods without awaiting. */
 
 import { ApplicationNode } from "@spine-event-engine/deployment";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { GceRegistrar } from "../../src/index.js";
 
@@ -264,6 +264,40 @@ describe("GceRegistrar lifecycle", () => {
     resolveRenew?.();
     await closing;
     expect(calls).toEqual(["cancel", "renew", "cleanup", "remove"]);
+  });
+
+  it("does not warn when close fences an entered renewal that later rejects", async () => {
+    let tick: (() => void) | undefined;
+    let rejectRenew: ((error: Error) => void) | undefined;
+    let entered: (() => void) | undefined;
+    const enteredRenewal = new Promise<void>((resolve) => (entered = resolve));
+    const warn = vi.fn();
+    const calls: string[] = [];
+    const registrar = new GceRegistrar({
+      registry: {
+        register: async () => true,
+        renew: () =>
+          new Promise((_, reject) => {
+            entered?.();
+            rejectRenew = reject;
+          }),
+        cleanup: async () => (calls.push("cleanup"), 0),
+        remove: async () => (calls.push("remove"), true),
+      } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry,
+      node: new ApplicationNode({ id: "node", endpoint: "http://10.0.0.1" }),
+      logger: { withMetadata: vi.fn(() => ({ warn })) } as never,
+      scheduler: {
+        schedule: (_delay, scheduled) => ((tick = scheduled), () => calls.push("cancel")),
+      },
+    });
+    await registrar.start();
+    tick?.();
+    await enteredRenewal;
+    const closing = registrar.close();
+    rejectRenew?.(new Error("token password cookie authorization signing session CSRF OIDC"));
+    await closing;
+    expect(warn).not.toHaveBeenCalled();
+    expect(calls).toEqual(["cancel", "remove"]);
   });
 
   it("aborts metadata at its deadline and closes the deadline handle", async () => {

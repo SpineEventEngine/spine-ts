@@ -4,7 +4,7 @@ import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { Code, createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   AdminService,
@@ -55,9 +55,21 @@ describe("DeliveryServer listener", () => {
   it("rejects a port collision and leaves a failed instance terminal", async () => {
     const owner = tracked(new DeliveryServer({ port: 0 }));
     await owner.start();
-    const failed = tracked(new DeliveryServer({ host: owner.host, port: owner.port }));
+    const error = vi.fn();
+    const logger = { withMetadata: vi.fn(() => ({ error })) };
+    const failed = tracked(
+      new DeliveryServer({ host: owner.host, port: owner.port, logger: logger as never }),
+    );
     await expect(failed.start()).rejects.toBeInstanceOf(Error);
     await expect(failed.start()).rejects.toBeInstanceOf(Error);
+    expect(logger.withMetadata).toHaveBeenCalledWith({
+      operation: "delivery.listener.start",
+      reasonCode: "failed",
+    });
+    expect(error).toHaveBeenCalledOnce();
+    expect(error).toHaveBeenCalledWith("delivery.listener.start_failed");
+    await failed.close();
+    expect(error).toHaveBeenCalledOnce();
   });
 
   it("closes an idle owned HTTP/2 session", async () => {

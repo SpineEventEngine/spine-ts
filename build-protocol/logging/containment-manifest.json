@@ -286,6 +286,160 @@
       "operation": "delivery.coordinator_retirement",
       "disposition": "no-log",
       "test": "packages/server/test/delivery/delivery-run-coordinator.test.ts"
+    },
+    {
+      "id": "deployment.scheduled_discovery_refresh",
+      "source": "../../packages/deployment/src/index.ts",
+      "operation": "deployment.discovery.refresh",
+      "disposition": "warn",
+      "test": "packages/deployment/test/discovery.test.ts"
+    },
+    {
+      "id": "deployment_gke.discovery_refresh",
+      "source": "../../packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+      "operation": "deployment.gke.discovery.refresh",
+      "disposition": "warn",
+      "test": "packages/deployment-gke/test/discovery/gke-node-discovery.test.ts"
+    },
+    {
+      "id": "deployment_gce.registrar_renew",
+      "source": "../../packages/deployment-gce/src/registrar/gce-registrar.ts",
+      "operation": "deployment.gce.registrar.renew",
+      "disposition": "warn",
+      "test": "packages/deployment-gce/test/registrar/recovery.test.ts"
+    },
+    {
+      "id": "delivery_server.listener_start",
+      "source": "../../packages/delivery-server/src/server/delivery-server.ts",
+      "operation": "delivery.listener.start",
+      "disposition": "error",
+      "test": "packages/delivery-server/test/server/delivery-server-listener.test.ts"
+    },
+    {
+      "id": "delivery_client.remote_open_reset",
+      "source": "../../packages/delivery-client/src/remote/remote-delivery.ts",
+      "operation": "delivery.remote.open",
+      "disposition": "no-log",
+      "test": "packages/delivery-client/test/remote-delivery-direct.test.ts"
+    },
+    {
+      "id": "delivery_client.remote_close_reset",
+      "source": "../../packages/delivery-client/src/remote/remote-delivery.ts",
+      "operation": "delivery.remote.close",
+      "disposition": "no-log",
+      "test": "packages/delivery-client/test/remote-delivery-direct.test.ts"
+    },
+    {
+      "id": "deployment.scheduled_discovery_refresh_tail",
+      "source": "../../packages/deployment/src/index.ts",
+      "operation": "deployment.discovery.refresh",
+      "disposition": "no-log",
+      "test": "packages/deployment/test/discovery.test.ts"
+    },
+    {
+      "id": "deployment_gke.discovery_refresh_tail",
+      "source": "../../packages/deployment-gke/src/discovery/gke-node-discovery.ts",
+      "operation": "deployment.gke.discovery.refresh",
+      "disposition": "no-log",
+      "test": "packages/deployment-gke/test/discovery/gke-node-discovery.test.ts"
+    },
+    {
+      "id": "deployment_gce.registrar_work_tail",
+      "source": "../../packages/deployment-gce/src/registrar/gce-registrar.ts",
+      "operation": "deployment.gce.registrar.work",
+      "disposition": "no-log",
+      "test": "packages/deployment-gce/test/registrar/recovery.test.ts"
+    },
+    {
+      "id": "delivery_server.listener_start_close",
+      "source": "../../packages/delivery-server/src/server/delivery-server.ts",
+      "operation": "delivery.listener.close",
+      "disposition": "no-log",
+      "test": "packages/delivery-server/test/server/delivery-server-listener.test.ts"
+    },
+    {
+      "id": "delivery_client.remote_close_opening",
+      "source": "../../packages/delivery-client/src/remote/remote-delivery.ts",
+      "operation": "delivery.remote.close",
+      "disposition": "no-log",
+      "test": "packages/delivery-client/test/remote-delivery-direct.test.ts"
+    },
+    {
+      "id": "deployment_gce.registrar_initial_result",
+      "source": "../../packages/deployment-gce/src/registrar/gce-registrar.ts",
+      "operation": "deployment.gce.registrar.initial",
+      "disposition": "no-log",
+      "test": "packages/deployment-gce/test/registrar/recovery.test.ts"
+    },
+    {
+      "id": "auth.dynamic_subscription_activation",
+      "source": "../../packages/auth/src/gateway/dynamic-unary-forwarder.ts",
+      "operation": "auth.subscription.activate",
+      "disposition": "no-log",
+      "test": "packages/auth/test/dynamic-unary-forwarder.test.ts"
+    },
+    {
+      "id": "auth.dynamic_subscription_cleanup",
+      "source": "../../packages/auth/src/gateway/dynamic-unary-forwarder.ts",
+      "operation": "auth.subscription.cleanup",
+      "disposition": "no-log",
+      "test": "packages/auth/test/dynamic-unary-forwarder.test.ts"
+    },
+    {
+      "id": "auth.dynamic_reconciliation",
+      "source": "../../packages/auth/src/gateway/dynamic-unary-forwarder.ts",
+      "operation": "auth.subscription.reconcile",
+      "disposition": "no-log",
+      "test": "packages/auth/test/dynamic-unary-forwarder.test.ts"
+    },
+    {
+      "id": "auth.dynamic_cleanup_retry",
+      "source": "../../packages/auth/src/gateway/dynamic-unary-forwarder.ts",
+      "operation": "auth.subscription.cleanup",
+      "disposition": "no-log",
+      "test": "packages/auth/test/dynamic-unary-forwarder.test.ts"
+    },
+    {
+      "id": "auth.subscription_expiry_cleanup",
+      "source": "../../packages/auth/src/subscriptions/index.ts",
+      "operation": "auth.subscription.expiry",
+      "disposition": "no-log",
+      "test": "packages/auth/test/subscriptions/index.test.ts"
+    },
+    {
+      "id": "auth.subscription_effect_settlement",
+      "source": "../../packages/auth/src/subscriptions/index.ts",
+      "operation": "auth.subscription.effect",
+      "disposition": "no-log",
+      "test": "packages/auth/test/subscriptions/index.test.ts"
+    },
+    {
+      "id": "auth.subscription_cleanup_tail",
+      "source": "../../packages/auth/src/subscriptions/index.ts",
+      "operation": "auth.subscription.cleanup",
+      "disposition": "no-log",
+      "test": "packages/auth/test/subscriptions/index.test.ts"
+    },
+    {
+      "id": "auth.subscription_cleanup_observer",
+      "source": "../../packages/auth/src/subscriptions/index.ts",
+      "operation": "auth.subscription.cleanup",
+      "disposition": "no-log",
+      "test": "packages/auth/test/subscriptions/index.test.ts"
+    },
+    {
+      "id": "auth.subscription_timer_purge",
+      "source": "../../packages/auth/src/subscriptions/index.ts",
+      "operation": "auth.subscription.purge",
+      "disposition": "no-log",
+      "test": "packages/auth/test/subscriptions/index.test.ts"
+    },
+    {
+      "id": "auth.subscription_recovered_cleanup",
+      "source": "../../packages/auth/src/subscriptions/index.ts",
+      "operation": "auth.subscription.cleanup",
+      "disposition": "no-log",
+      "test": "packages/auth/test/subscriptions/index.test.ts"
     }
   ]
 }
