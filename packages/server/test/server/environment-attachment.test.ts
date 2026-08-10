@@ -182,6 +182,20 @@ describe("startup obligations", () => {
 });
 
 describe("EnvironmentDeliveryWorker", () => {
+  it("rejects starts and notifications for an owner that was never configured", async () => {
+    const target = descriptor(
+      "MissingOwner",
+      "type.example.dev/MissingOwner",
+      new InMemoryStorageFactory(),
+    );
+    const scope = runScope("missing-owner", target.ready);
+    const worker = new EnvironmentDeliveryWorker();
+
+    await expect(worker.start({ scopes: [scope] }, [scope.ready.shard])).rejects.toThrow(
+      "Environment delivery owner is not configured.",
+    );
+    expect(() => worker.notify(scope)).toThrow("Environment delivery owner is not configured.");
+  });
   it("uses the process node identity for remote worker ownership", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const target = descriptor("ProcessNode", "type.example.dev/ProcessNode", storageFactory);
@@ -213,6 +227,7 @@ describe("EnvironmentDeliveryWorker", () => {
     });
 
     expect(node).toBe("process-node-42");
+    worker.stop();
     worker.stop();
     await worker.awaitSettled();
     await worker.retire();

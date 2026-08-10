@@ -33,6 +33,48 @@ function configured(
 }
 
 describe("ServerEnvironment delivery lifecycle", () => {
+  it("rejects package lifecycle access for an object outside the environment registry", async () => {
+    const outside = {} as ServerEnvironment;
+    const attachment = {} as EnvironmentAttachmentHandle;
+
+    await expect(
+      serverEnvironmentAccess.attach(outside, { ownership: "caller", descriptors: [] }),
+    ).rejects.toThrow("Attachment requires a ServerEnvironment instance.");
+    expect(() => serverEnvironmentAccess.failedStartPending(outside)).toThrow(
+      "Failed-start observation requires a ServerEnvironment instance.",
+    );
+    expect(() =>
+      serverEnvironmentAccess.failedStartRetryPending(outside, new Error("failed")),
+    ).toThrow("Failed-start retry observation requires a ServerEnvironment instance.");
+    await expect(serverEnvironmentAccess.retryFailedStart(outside)).rejects.toThrow(
+      "Rollback retry requires a ServerEnvironment instance.",
+    );
+    await expect(serverEnvironmentAccess.detach(outside, attachment)).rejects.toThrow(
+      "Detach requires a ServerEnvironment instance.",
+    );
+    await expect(serverEnvironmentAccess.retryDetach(outside, attachment)).rejects.toThrow(
+      "Detach retry requires a ServerEnvironment instance.",
+    );
+    expect(() => serverEnvironmentAccess.detachRetryPending(outside, attachment)).toThrow(
+      "Detach-retry observation requires a ServerEnvironment instance.",
+    );
+    expect(() => serverEnvironmentAccess.endpointSafe(outside, attachment)).toThrow(
+      "Endpoint-safety observation requires a ServerEnvironment instance.",
+    );
+    await expect(serverEnvironmentAccess.stopDelivery(outside)).rejects.toThrow(
+      "Delivery stop requires a ServerEnvironment instance.",
+    );
+    await expect(serverEnvironmentAccess.retryDeliveryStop(outside)).rejects.toThrow(
+      "Delivery stop retry requires a ServerEnvironment instance.",
+    );
+    expect(() =>
+      serverEnvironmentAccess.installTestAttachments(
+        outside,
+        () => ({}) as EnvironmentGenerationWorker,
+      ),
+    ).toThrow("Test attachments require a ServerEnvironment instance.");
+  });
+
   it("passes its exact logger child to an attached delivery runtime", async () => {
     const child = Object.freeze({ name: "environment-child" });
     const logger = { child: vi.fn(() => child) };

@@ -28,6 +28,20 @@ describe("server logging containment", () => {
     expect(warn).toHaveBeenCalledWith("retry_failed");
   });
 
+  it("omits invalid bounded counters and invalid framework codes", () => {
+    const warn = vi.fn();
+    const logger = { withMetadata: vi.fn(() => ({ warn })) };
+
+    emitServerWarning(logger as never, "retry_failed", {
+      count: -1,
+      operation: "not valid",
+      reasonCode: "X".repeat(65),
+    });
+
+    expect(logger.withMetadata).toHaveBeenCalledWith({});
+    expect(warn).toHaveBeenCalledWith("retry_failed");
+  });
+
   it("contains synchronous and promise-like logging failures", async () => {
     const sync = {
       withMetadata: () => ({
