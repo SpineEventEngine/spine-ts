@@ -289,7 +289,7 @@ describe("Stand", () => {
     subscriptionRuntimeAccess.installLogger(runtime, logger as never);
     runtime.start();
     await runtime.reconcile();
-    const deferred = Promise.withResolvers<void>();
+    const deferred = Promise.withResolvers<undefined>();
     let peer = 0;
     await runtime.consume(id, () => {
       throw new Error("consumer secret");
@@ -309,6 +309,11 @@ describe("Stand", () => {
     deferred.reject(new Error("late secret"));
     await Promise.resolve();
     await Promise.resolve();
+    expect(warn).toHaveBeenCalledTimes(2);
+    await postStateChange(bus, ProjectionStateSchema, createState("fanout-without-logger", "Fanout"));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(peer).toBe(2);
     expect(warn).toHaveBeenCalledTimes(2);
     await Promise.all([runtime.close(), stand.close(), bus.close()]);
   });

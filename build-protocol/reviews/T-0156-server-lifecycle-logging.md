@@ -6,6 +6,8 @@ Current correction evidence: timer retained-cycle warning is exactly-once; `keep
 
 Fresh changed-range coverage blocks re-review: statements/lines 81/84 (96.43%), functions 20/21 (95.24%), branches 44/49 (89.80%). Exact uncovered changed branches are `bounded-context.ts:1087`, `bounded-context.ts:2239`, `process-server-coordinator.ts:87`, `server.ts:250`, and `subscription-runtime.ts:353`.
 
+Coverage correction evidence: the existing real stream-consumer fan-out test now posts a second state change after clearing runtime logger metadata; peer delivery reaches two while WARN remains at two, covering the no-fallback-logger branch.
+
 Review chronology: initial style and reliability reviews identified the requirements ledger and lifecycle race/evidence gaps. Residual re-review rejected the first correction batch for missing behavior proof. Phase-1 diagnosis found the abort fixture used the first `releaseExpired` argument (stale milliseconds) as options; the corrected second-argument fixture is green. Residual style and reliability re-reviews remain pending; API/docs remain N/A because no public contract changed.
 
 ## Aggregated correction batch
