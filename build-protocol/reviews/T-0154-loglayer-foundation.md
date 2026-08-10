@@ -24,6 +24,13 @@ Status: Awaiting implementation
   will be recorded.
 - The agent must not spawn subagents.
 
+The first implementation context produced the pushed foundation through
+`b5e6f49a` but did not finish the checker/coverage batch. A fresh completion
+assignment uses the same existing role and explicit `gpt-5.6-terra` / medium
+profile. It owns only the remaining downstream regression, checker fixtures,
+coverage, preflight, and record convergence; it must preserve the existing
+commits and may not spawn subagents.
+
 ## Review Assignments
 
 Reviewer assignments will be recorded with explicit role, scope, model, and
