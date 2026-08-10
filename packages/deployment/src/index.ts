@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition, @typescript-eslint/require-await */
 
 import { ApplicationNode } from "./discovery/application-node.js";
+import type { ILogLayer } from "loglayer";
 
 export { ApplicationNode } from "./discovery/application-node.js";
 
@@ -58,6 +59,15 @@ export interface NodeSnapshotReader {
   read(signal: AbortSignal): Promise<readonly ApplicationNode[]>;
 }
 
+/** Configures scheduled application-node discovery. */
+export interface ScheduledNodeDiscoveryOptions {
+  readonly reader: NodeSnapshotReader;
+  readonly scheduler?: NodeScheduler;
+  readonly intervalMs?: number;
+  /** Application-owned logger for this independently running component. */
+  readonly logger?: ILogLayer;
+}
+
 const systemNodeScheduler: NodeScheduler = {
   schedule(delayMs, onTick) {
     const timer = setTimeout(onTick, delayMs);
@@ -86,11 +96,7 @@ export class ScheduledNodeDiscovery implements NodeDiscovery {
    *
    * @param options Supplies the snapshot reader, optional scheduler, and interval.
    */
-  constructor(options: {
-    readonly reader: NodeSnapshotReader;
-    readonly scheduler?: NodeScheduler;
-    readonly intervalMs?: number;
-  }) {
+  constructor(options: ScheduledNodeDiscoveryOptions) {
     if (
       options.intervalMs !== undefined &&
       (!Number.isSafeInteger(options.intervalMs) || options.intervalMs < 1)

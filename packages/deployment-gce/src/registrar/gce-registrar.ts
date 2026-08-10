@@ -1,5 +1,6 @@
 import { type ApplicationNode, type LeasedNodeRegistry } from "@spine-event-engine/deployment";
 import { randomUUID } from "node:crypto";
+import type { ILogLayer } from "loglayer";
 
 import { GceMetadataService, type GceMetadataProvider } from "../metadata/gce-metadata-service.js";
 import { GceApplicationNode } from "../node/application-node.js";
@@ -37,7 +38,9 @@ interface MetadataRegistrarOptions extends GceRegistrarBaseOptions {
  *
  * Supply either an explicit node or a metadata-derived node with its port.
  */
-export type GceRegistrarOptions = ExplicitRegistrarOptions | MetadataRegistrarOptions;
+export type GceRegistrarOptions =
+  | (ExplicitRegistrarOptions & { readonly logger?: ILogLayer })
+  | (MetadataRegistrarOptions & { readonly logger?: ILogLayer });
 
 /**
  * Couples registrar lifecycle work to an application listener lifecycle.

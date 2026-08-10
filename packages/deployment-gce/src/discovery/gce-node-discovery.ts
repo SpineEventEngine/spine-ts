@@ -5,6 +5,7 @@ import {
   type NodeDiscovery,
   type NodeScheduler,
 } from "@spine-event-engine/deployment";
+import type { ILogLayer } from "loglayer";
 
 import { GceRegistryReader } from "../registry/gce-registry-reader.js";
 
@@ -103,4 +104,7 @@ export interface GceNodeDiscoveryOptions {
    * Supplies the refresh interval in milliseconds.
    */
   readonly intervalMs?: number;
+
+  /** Application-owned logger for this independently running component. */
+  readonly logger?: ILogLayer;
 }

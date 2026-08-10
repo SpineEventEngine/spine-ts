@@ -1,6 +1,7 @@
 import { fromBinary } from "@bufbuild/protobuf";
 import { SubscriptionSchema } from "@spine-event-engine/proto/client";
 import type { ApplicationNode } from "@spine-event-engine/deployment";
+import type { ILogLayer } from "loglayer";
 
 import type { UnaryForwarder } from "./index.js";
 import type {
@@ -87,6 +88,9 @@ export interface DynamicUnaryOptions {
    * Defaults to one mebibyte.
    */
   readonly maxBackendEnvelopeBytes?: number;
+
+  /** Application-owned logger for this independently running component. */
+  readonly logger?: ILogLayer;
 }
 
 /**
