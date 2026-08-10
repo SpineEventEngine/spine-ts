@@ -1,6 +1,7 @@
 # Storage Tenancy Correction Plan
 
-Status: Complete, reviewed, and release-verified under the T-0147 through
+Status: Complete, reviewed, and release-verified, including the
+post-verification MySQL Entity-column correction, under the T-0147 through
 T-0150 stacked train. The train remains unmerged pending the explicit stacked
 integration step.
 

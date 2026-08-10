@@ -354,6 +354,15 @@
     "rule": "standalone-function",
     "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
     "kind": "function-declaration",
+    "identity": "normalizedDefault()#1",
+    "name": "normalizedDefault",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL schema boundary: normalizedDefault remains standalone because fail-closed table inspection needs one exact normalization for equivalent MySQL boolean default spellings."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/record-storage.ts",
+    "kind": "function-declaration",
     "identity": "same()#1",
     "name": "same",
     "disposition": "necessity",
@@ -376,6 +385,24 @@
     "name": "sameEntity",
     "disposition": "necessity",
     "reason": "TypeScript MySQL factory boundary: sameEntity remains standalone because reopened Entity families share this exact identity comparison."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/table-spec.ts",
+    "kind": "function-declaration",
+    "identity": "entityAttributeDefault()#1",
+    "name": "entityAttributeDefault",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL table-contract boundary: entityAttributeDefault remains standalone because the resolved layout must isolate the JVM current-Entity attribute defaults from ordinary and grouped record columns."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/storage-rdbms/src/mysql/table-spec.ts",
+    "kind": "function-declaration",
+    "identity": "mysqlColumnSpec()#1",
+    "name": "mysqlColumnSpec",
+    "disposition": "necessity",
+    "reason": "TypeScript MySQL table-contract boundary: mysqlColumnSpec remains standalone because every declared RecordSpec column uses the same native type, nullability, and current-Entity default derivation."
   },
   {
     "rule": "standalone-function",

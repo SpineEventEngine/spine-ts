@@ -150,12 +150,46 @@ export function resolvedMysqlTableSpec<I, R extends Message>(input: {
     columns: [
       { name: "ID", mysqlType: new MysqlIdColumn(input.idType).mysqlType, nullable: false },
       { name: "bytes", mysqlType: "BLOB", nullable: false },
-      ...input.declaredColumns.map((column) => ({
-        name: column.name,
-        mysqlType: mysqlColumnType(column.type),
-        nullable: true,
-      })),
+      ...input.declaredColumns.map((column) =>
+        mysqlColumnSpec(input.recordType, input.groupName, column),
+      ),
     ],
     primaryKey: ["ID"],
   };
+}
+
+function mysqlColumnSpec<R extends Message>(
+  recordType: GenMessage<R>,
+  groupName: string | undefined,
+  column: RecordColumn<R>,
+): MysqlColumnSpec {
+  const entityDefault = entityAttributeDefault(recordType, groupName, column);
+  return {
+    name: column.name,
+    mysqlType: mysqlColumnType(column.type),
+    nullable: entityDefault === undefined,
+    ...(entityDefault === undefined ? {} : { defaultSql: entityDefault }),
+  };
+}
+
+function entityAttributeDefault<R extends Message>(
+  recordType: GenMessage<R>,
+  groupName: string | undefined,
+  column: RecordColumn<R>,
+): string | undefined {
+  if (recordType.typeName !== "spine.server.entity.EntityRecord" || groupName !== undefined)
+    return undefined;
+  switch (column.name) {
+    case "archived":
+    case "deleted":
+      return column.type.kind === "scalar" && column.type.scalar === ScalarType.BOOL
+        ? "false"
+        : undefined;
+    case "version":
+      return column.type.kind === "message" && column.type.message.typeName === "spine.core.Version"
+        ? "0"
+        : undefined;
+    default:
+      return undefined;
+  }
 }

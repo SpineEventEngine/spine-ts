@@ -92,10 +92,11 @@ the group name with dots replaced by underscores, followed by the record type's
 short name. Tables include native declared columns, but the adapter never adds
 user-column indexes automatically.
 
-The table contains only `ID`, the serialized `bytes`, and the columns declared
-by the framework record and Proto model. `ID` is the primary key. A Bounded
-Context name is useful in diagnostics, but it is never stored in a row and
-never changes a table name.
+The table contains exactly `ID`, the serialized `bytes`, the framework columns
+for that record family, and fields explicitly marked `(column)` in the Proto
+model. It does not get a separate SQL column for every Proto field. `ID` is the
+primary key. A Bounded Context name is useful in diagnostics, but it is never
+stored in a row and never changes a table name.
 
 ## 🧭 See a Proto model become a table
 
@@ -118,9 +119,9 @@ The default current-state table is conceptually:
 CREATE TABLE spine_examples_messageboard_MessageView (
   ID VARCHAR(512) NOT NULL,
   bytes BLOB NOT NULL,
-  archived BOOLEAN NULL,
-  deleted BOOLEAN NULL,
-  version INT NULL,
+  archived BOOLEAN NOT NULL DEFAULT false,
+  deleted BOOLEAN NOT NULL DEFAULT false,
+  version INT NOT NULL DEFAULT 0,
   board TEXT NULL,
   author TEXT NULL,
   PRIMARY KEY (ID)

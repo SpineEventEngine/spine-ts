@@ -1778,9 +1778,9 @@ deterministic ordered writes and keyed serialization instead; a failed batch
 does not roll back earlier rows. IDs are declared as `string`, `int32`, `int64`,
 or a generated message type. Primitive IDs use native MySQL values; message IDs
 use compact Proto JSON unless the application supplies a reversible
-stringifier. Each lazy family table has `ID`, serialized `bytes`, and the
-columns declared by the framework record and Proto model, with primary key
-`(ID)`. Current Entity tables include `archived`, `deleted`, and `version` from
+stringifier. Each lazy family table has `ID`, serialized `bytes`, framework
+record columns, and only the Proto fields explicitly marked `(column)`, with
+primary key `(ID)`. Current Entity tables include `archived`, `deleted`, and `version` from
 the generated `EntityRecord`; that `version` is the Entity version, not a
 provider revision. There is no context, tenant, or storage-revision column.
 Existing layouts are inspected, never migrated; the adapter creates no foreign
@@ -1809,8 +1809,10 @@ message MessageView {
 produces a current table named like
 `spine_examples_messageboard_MessageView`. It has an `ID VARCHAR(512)` primary
 key, authoritative `bytes BLOB`, Entity `archived`/`deleted`/`version` columns,
-and `board`/`author` text columns. It has no `text` column because that field is
-not marked `(column)`. A Query for `board == BoardId("board-7")` stringifies the
+and `board`/`author` text columns. The three Entity columns are non-null and
+default to `false`, `false`, and `0`. It has no `text` column because that field
+is not marked `(column)`: ordinary Proto fields stay only in the authoritative
+`bytes` record. A Query for `board == BoardId("board-7")` stringifies the
 generated `BoardId` exactly as the write did and binds
 `{"value":"board-7"}` to parameterized `WHERE board = ?` SQL. MySQL selects
 matching rows; Spine then decodes the complete state from `bytes`. The adapter

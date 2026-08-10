@@ -105,3 +105,36 @@ coverage is 93.95% statements, 90.03% branches, 93.91% functions, and 94.97%
 lines. All generated, build, typecheck, lint, cleanup, TSDoc, formatting, API,
 documentation, invention-audit, link, and diff gates passed. Review status
 remains clean.
+
+## Post-verification MySQL correction review
+
+- Initial targeted review found two P1 runtime concerns and one beginner-doc
+  ambiguity: name-only Entity defaults affected ordinary same-named columns;
+  MySQL-normalized boolean metadata could be rejected; and an early User Guide
+  sentence did not say `(column)` explicitly.
+- The aggregated correction scopes defaults to the ungrouped current
+  `EntityRecord` family with exact framework types, preserves ordinary columns,
+  accepts only equivalent MySQL boolean type/default metadata, and makes the
+  guide explicit.
+- Deterministic correction evidence is 5 files / 86 tests plus storage-RDBMS
+  TypeScript, scoped ESLint, Prettier, documentation audience/readiness, and
+  diff checks. Targeted API, reliability, and documentation re-review is in
+  progress; style follows after those lanes converge.
+
+### Correction re-review and release proof
+
+- TypeScript/API documentation and beginner documentation re-reviews are
+  clean. Defaults are current-Entity/type/group qualified, ordinary and grouped
+  same-named columns remain nullable, and active guides state the exact
+  physical set without implying one column per Proto field.
+- Reliability re-review is clean after boolean inspection was restricted to
+  `BOOLEAN`, `TINYINT`, and `TINYINT(1)` while rejecting `TINYINT(2)`; it
+  independently passed 39 tests.
+- Style/maintainability found only a P2 missing grouped-Entity regression. That
+  deterministic coverage now exists and passes; no production correction was
+  required and the concern is resolved.
+- Final unrestricted `pnpm verify:release` passed 232 files / 3,721 tests with
+  3 files / 14 endpoint-dependent tests skipped. Coverage is 93.96% statements,
+  90.08% branches, 93.92% functions, and 94.99% lines. All deterministic
+  release gates passed. The earlier managed-sandbox run is excluded because
+  its loopback and IPC binds were denied with `EPERM`.

@@ -68,9 +68,12 @@ default.
 Every family table has `ID`, serialized `bytes`, and only the columns declared
 by its framework record and Proto model, with primary key `(ID)`. Current Entity
 tables declare `archived`, `deleted`, and Entity `version` in addition to model
-`(column)` fields; Entity `version` is not a provider revision. Existing layouts
-are inspected and never altered. A mismatched type, nullability, primary key,
-unique constraint, or extra column is rejected. Ordinary message columns use the same configured
+`(column)` fields. Those three framework columns are non-null and default to
+`false`, `false`, and `0`, respectively; Entity `version` is not a provider
+revision. Proto fields without `(column)` exist only inside the authoritative
+`bytes` record and never become SQL columns. Existing layouts are inspected and
+never altered. A mismatched type, nullability, primary key, unique constraint,
+or extra column is rejected. Ordinary message columns use the same configured
 reversible stringifier for writes and query operands. `Timestamp` uses epoch
 nanoseconds and `Version` uses its number. Floating-point record columns are
 not supported by Spine JVM JDBC and are rejected here.

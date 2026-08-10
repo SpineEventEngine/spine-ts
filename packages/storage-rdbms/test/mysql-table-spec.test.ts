@@ -1,7 +1,8 @@
-import { ScalarType } from "@bufbuild/protobuf";
+import { create, ScalarType } from "@bufbuild/protobuf";
 import { UserIdSchema, VersionSchema } from "@spine-event-engine/proto";
 import { SubscriptionRecordSchema } from "@spine-event-engine/proto/client";
-import { ColumnTypes } from "@spine-event-engine/storage";
+import { EntityRecordSchema } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
+import { ColumnTypes, RecordColumn } from "@spine-event-engine/storage";
 import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it } from "vitest";
 
@@ -103,5 +104,76 @@ describe("MysqlTableResolver", () => {
     expect(table.columns.map(({ name }) => name)).toEqual(["ID", "bytes"]);
     expect(table.columns[0]?.mysqlType).toBe("VARCHAR(512)");
     expect(table.primaryKey).toEqual(["ID"]);
+  });
+
+  it("gives only Entity attributes their JVM defaults", () => {
+    const table = resolvedMysqlTableSpec({
+      tableName: "message_view",
+      sourceType: StringValueSchema,
+      recordType: EntityRecordSchema,
+      idType: "string",
+      declaredColumns: [
+        new RecordColumn("archived", ColumnTypes.scalar(ScalarType.BOOL), () => false),
+        new RecordColumn("deleted", ColumnTypes.scalar(ScalarType.BOOL), () => false),
+        new RecordColumn("version", ColumnTypes.message(VersionSchema), () =>
+          create(VersionSchema),
+        ),
+        new RecordColumn("board", ColumnTypes.message(StringValueSchema), (record) => record),
+        new RecordColumn("author", ColumnTypes.message(StringValueSchema), (record) => record),
+      ],
+    });
+
+    expect(table.columns).toEqual([
+      { name: "ID", mysqlType: "VARCHAR(512)", nullable: false },
+      { name: "bytes", mysqlType: "BLOB", nullable: false },
+      { name: "archived", mysqlType: "BOOLEAN", nullable: false, defaultSql: "false" },
+      { name: "deleted", mysqlType: "BOOLEAN", nullable: false, defaultSql: "false" },
+      { name: "version", mysqlType: "INT", nullable: false, defaultSql: "0" },
+      { name: "board", mysqlType: "TEXT", nullable: true },
+      { name: "author", mysqlType: "TEXT", nullable: true },
+    ]);
+  });
+
+  it("leaves same-named ordinary record columns nullable", () => {
+    const table = resolvedMysqlTableSpec({
+      tableName: "ordinary_record",
+      sourceType: StringValueSchema,
+      recordType: StringValueSchema,
+      idType: "string",
+      declaredColumns: [
+        new RecordColumn("archived", ColumnTypes.scalar(ScalarType.BOOL), () => false),
+        new RecordColumn("deleted", ColumnTypes.scalar(ScalarType.STRING), () => "value"),
+        new RecordColumn("version", ColumnTypes.scalar(ScalarType.INT32), () => 1),
+      ],
+    });
+
+    expect(table.columns.slice(2)).toEqual([
+      { name: "archived", mysqlType: "BOOLEAN", nullable: true },
+      { name: "deleted", mysqlType: "TEXT", nullable: true },
+      { name: "version", mysqlType: "INT", nullable: true },
+    ]);
+  });
+
+  it("leaves grouped EntityRecord columns nullable", () => {
+    const table = resolvedMysqlTableSpec({
+      tableName: "entity_history",
+      sourceType: StringValueSchema,
+      recordType: EntityRecordSchema,
+      idType: "string",
+      groupName: "history",
+      declaredColumns: [
+        new RecordColumn("archived", ColumnTypes.scalar(ScalarType.BOOL), () => false),
+        new RecordColumn("deleted", ColumnTypes.scalar(ScalarType.BOOL), () => false),
+        new RecordColumn("version", ColumnTypes.message(VersionSchema), () =>
+          create(VersionSchema),
+        ),
+      ],
+    });
+
+    expect(table.columns.slice(2)).toEqual([
+      { name: "archived", mysqlType: "BOOLEAN", nullable: true },
+      { name: "deleted", mysqlType: "BOOLEAN", nullable: true },
+      { name: "version", mysqlType: "INT", nullable: true },
+    ]);
   });
 });

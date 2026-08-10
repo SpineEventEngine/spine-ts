@@ -1,6 +1,10 @@
 import { create, ScalarType, toBinary } from "@bufbuild/protobuf";
 import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import { VersionSchema } from "@spine-event-engine/proto";
+import {
+  EntityRecordSchema,
+  type EntityRecord,
+} from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
@@ -115,6 +119,18 @@ describe("MysqlRecordStorage", () => {
     await expect(
       storage.write(create(StringValueSchema, { value: "one" })),
     ).resolves.toBeUndefined();
+  });
+
+  it("accepts MySQL-normalized Entity attribute defaults", async () => {
+    const storage = entitySchemaStorage("tinyint(1)");
+
+    await expect(storage.prepare()).resolves.toBeUndefined();
+  });
+
+  it("rejects a non-boolean MySQL integer width for an Entity attribute", async () => {
+    const storage = entitySchemaStorage("tinyint(2)");
+
+    await expect(storage.prepare()).rejects.toBeInstanceOf(MysqlStorageSchemaError);
   });
 
   it("rejects an incompatible primary key instead of altering the table", async () => {
@@ -900,6 +916,56 @@ function schemaStorage(connection: ReturnType<typeof schemaConnection>) {
         ColumnTypes.scalar(ScalarType.STRING),
         (record): string => record.value,
       ),
+    ],
+  });
+  return new MysqlRecordStorage(
+    { name: "records", multitenant: false },
+    spec,
+    new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
+    {
+      databaseName: "test",
+      acquire: () => Promise.resolve(connection as never),
+      release: () => undefined,
+    },
+    () => undefined,
+  );
+}
+
+function entitySchemaStorage(booleanType: string) {
+  const columns: SchemaColumn[] = [
+    ...canonicalColumns().slice(0, 2),
+    {
+      column_name: "archived",
+      column_type: booleanType,
+      is_nullable: "NO",
+      column_default: "0",
+      extra: "",
+    },
+    {
+      column_name: "deleted",
+      column_type: booleanType,
+      is_nullable: "NO",
+      column_default: "0",
+      extra: "",
+    },
+    {
+      column_name: "version",
+      column_type: "int",
+      is_nullable: "NO",
+      column_default: "0",
+      extra: "",
+    },
+  ];
+  const connection = schemaConnection([], { columns, primary: primaryKey() });
+  const spec = new RecordSpec<string, EntityRecord>({
+    sourceType: StringValueSchema,
+    recordType: EntityRecordSchema,
+    idKind: "string",
+    extractId: () => "entity",
+    columns: [
+      new RecordColumn("archived", ColumnTypes.scalar(ScalarType.BOOL), () => false),
+      new RecordColumn("deleted", ColumnTypes.scalar(ScalarType.BOOL), () => false),
+      new RecordColumn("version", ColumnTypes.message(VersionSchema), () => create(VersionSchema)),
     ],
   });
   return new MysqlRecordStorage(

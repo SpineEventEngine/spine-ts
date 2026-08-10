@@ -807,9 +807,10 @@ function compatibleMysqlType(expected: string, actual: string | undefined): bool
       // MariaDB reports legacy integer display widths while MySQL 8 does not.
       .replace(/\b(tinyint|smallint|mediumint|int|bigint)\(\d+\)/g, "$1");
   const normalizedExpected = normalize(expected);
-  const normalizedActual = normalize(actual);
+  const actualSpelling = actual.toLowerCase().replaceAll(/\s+/g, " ");
   if (normalizedExpected === "boolean")
-    return normalizedActual === "boolean" || normalizedActual === "tinyint(1)";
+    return ["boolean", "tinyint", "tinyint(1)"].includes(actualSpelling);
+  const normalizedActual = normalize(actual);
   const expectedCapacity = /^(varbinary|varchar)\((\d+)\)$/.exec(normalizedExpected);
   const actualCapacity = /^(varbinary|varchar)\((\d+)\)$/.exec(normalizedActual);
   if (expectedCapacity !== null)
@@ -828,7 +829,14 @@ function sameDefault(expected: string | undefined, actual: string | null | undef
     return actual === undefined || actual === null || actual.toUpperCase() === "NULL";
   if (actual === undefined) return true;
   if (actual === null) return false;
-  return actual.replaceAll(/[()'\s]/g, "") === expected.replaceAll(/[()'\s]/g, "");
+  return normalizedDefault(actual) === normalizedDefault(expected);
+}
+
+function normalizedDefault(value: string): string {
+  const normalized = value.replaceAll(/[()'\s]/g, "").toLowerCase();
+  if (normalized === "false") return "0";
+  if (normalized === "true") return "1";
+  return normalized;
 }
 
 function isBinaryType(type: string): boolean {
