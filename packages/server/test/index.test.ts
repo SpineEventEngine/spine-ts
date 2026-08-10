@@ -630,4 +630,15 @@ describe("@spine-event-engine/server", () => {
       /semantic tag option "InvalidTagState" must declare a non-empty java_type/,
     );
   });
+
+  it("rejects malformed descriptor semantic values without indexing the schema", () => {
+    const registry = new TypeRegistry();
+
+    expect(() => registry.register(InvalidTagStateSchema)).toThrow(
+      /semantic tag option "InvalidTagState" must declare a non-empty java_type/,
+    );
+    expect(registry.findByIs("example.tags.InvalidTag")).toEqual([]);
+    expect(registry.findByEveryIs("example.tags.SharedTag")).toEqual([]);
+    expect(registry.findByFullName(InvalidTagStateSchema.typeName)).toBeUndefined();
+  });
 });
