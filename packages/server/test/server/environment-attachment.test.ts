@@ -103,6 +103,20 @@ describe("EnvironmentRegistrations", () => {
 });
 
 describe("RegistrationReadiness", () => {
+  it("rejects transition preparation before readiness is open", () => {
+    const target = descriptor("Phase", "type.example.dev/Phase", new InMemoryStorageFactory());
+    const scope = runScope("phase-owner", target.ready);
+    const readiness = new RegistrationReadiness(
+      [{ descriptor: target.value, scopes: [scope] }],
+      () => scope,
+      () => undefined,
+    );
+
+    expect(() => readiness.prepareTransition(() => undefined)).toThrow(
+      "Registration readiness is not open.",
+    );
+  });
+
   it("fails closed for thousands of distinct unknown scopes without coordinator work", () => {
     const target = descriptor("Bounded", "type.example.dev/Bounded", new InMemoryStorageFactory());
     const configured = runScope("owner-bounded", target.ready);
@@ -151,6 +165,41 @@ describe("RegistrationReadiness", () => {
 });
 
 describe("startup obligations", () => {
+  it("records rejected, fulfilled, and unknown startup scope outcomes independently", () => {
+    const rejected = runScope("owner-rejected", {
+      label: "UPDATE_SUBSCRIBER",
+      targetTypeUrl: "type.example.dev/Rejected",
+      shard: ShardIndex.single(),
+    });
+    const fulfilled = runScope("owner-fulfilled", {
+      label: "UPDATE_SUBSCRIBER",
+      targetTypeUrl: "type.example.dev/Fulfilled",
+      shard: ShardIndex.single(),
+    });
+    const unknown = runScope("owner-unknown", {
+      label: "UPDATE_SUBSCRIBER",
+      targetTypeUrl: "type.example.dev/Unknown",
+      shard: ShardIndex.single(),
+    });
+    const failure = new Error("startup failed");
+
+    const records = EnvironmentAttachmentAccess.startupObligations(
+      "registration-outcomes",
+      [rejected, fulfilled],
+      {
+        scopes: [
+          { scope: rejected, disposition: "REJECTED", cause: failure },
+          { scope: fulfilled, disposition: "FULFILLED" },
+          { scope: unknown, disposition: "PARKED" },
+        ],
+        pending: [],
+      },
+    ).records();
+
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ cause: failure, hasCause: true });
+  });
+
   it("keeps fulfilled PAUSED and SKIPPED outcomes parked without causes", () => {
     const paused = runScope("owner-paused", {
       label: "UPDATE_SUBSCRIBER",
