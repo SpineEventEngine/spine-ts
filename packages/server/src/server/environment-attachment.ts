@@ -88,8 +88,6 @@ export interface EnvironmentAttachOptions {
    */
   readonly descriptors: readonly ContextDeliveryDescriptor[];
 
-  /** Immutable environment logger child propagated to runtime construction. */
-  readonly logger: ILogLayer;
 }
 
 class AttachedEnvironmentRegistration implements EnvironmentRegistrationClaim {
@@ -141,6 +139,9 @@ export interface EnvironmentAttachmentsOptions {
    * @returns The worker for the new generation.
    */
   readonly createWorker?: () => EnvironmentGenerationWorker;
+
+  /** Immutable environment logger child propagated to each delivery runtime. */
+  readonly logger?: ILogLayer;
 
   /**
    * Resolves the environment-owned delivery ports after its facility opens.
@@ -276,6 +277,7 @@ export class EnvironmentAttachments {
   readonly #registrations = new EnvironmentRegistrations();
   readonly #generations = new Map<EnvironmentGeneration, DeliveryGeneration>();
   readonly #createWorker: () => EnvironmentGenerationWorker;
+  readonly #logger: ILogLayer | undefined;
   readonly #deliveryPorts: () => EnvironmentDeliveryPorts | undefined;
   readonly #report: (causes: readonly unknown[]) => Promise<void>;
   readonly #transitionFaults: EnvironmentAttachmentsOptions["transitionFaults"];
@@ -295,6 +297,7 @@ export class EnvironmentAttachments {
    */
   constructor(options: EnvironmentAttachmentsOptions = {}) {
     this.#createWorker = options.createWorker ?? (() => new EnvironmentDeliveryWorker());
+    this.#logger = options.logger;
     this.#deliveryPorts = options.deliveryPorts ?? (() => undefined);
     this.#report = options.report ?? (() => Promise.resolve());
     this.#transitionFaults = options.transitionFaults;
@@ -427,7 +430,6 @@ export class EnvironmentAttachments {
     const waiter: AttachmentWaiter = {
       options: Object.freeze({
         ownership: options.ownership,
-        logger: options.logger,
         descriptors: snapshotDescriptors
           ? Object.freeze([...options.descriptors])
           : options.descriptors,
@@ -452,7 +454,6 @@ export class EnvironmentAttachments {
       }
       const admittedOptions: EnvironmentAttachOptions = Object.freeze({
         ownership: waiter.options.ownership,
-        logger: waiter.options.logger,
         descriptors: waiter.snapshotDescriptors
           ? waiter.options.descriptors
           : Object.freeze([...waiter.options.descriptors]),
@@ -504,7 +505,7 @@ export class EnvironmentAttachments {
           this.#createWorker(),
           this.#report,
           this.#deliveryPorts(),
-          options.logger,
+          this.#logger,
         );
       } catch (error) {
         if (this.#registrations.remove(claim.token) === 0) {
@@ -1478,7 +1479,7 @@ class RegistrationOwnership {
 class DeliveryGeneration {
   readonly #worker: EnvironmentGenerationWorker;
   /** Environment logger child retained for later runtime containment owners. */
-  readonly logger: ILogLayer;
+  readonly logger: ILogLayer | undefined;
   readonly #ports: EnvironmentDeliveryPorts | undefined;
   readonly #report: (causes: readonly unknown[]) => Promise<void>;
   readonly #descriptors = new WeakSet<ContextDeliveryDescriptor>();
@@ -1506,7 +1507,6 @@ class DeliveryGeneration {
     this.#worker = worker;
     this.#report = report;
     this.#ports = ports;
-    if (logger === undefined) throw new TypeError("Delivery generation requires an environment logger.");
     this.logger = logger;
   }
 
@@ -2081,6 +2081,7 @@ class DeliveryGeneration {
       storageFactory,
       tenant,
       context,
+      logger: this.logger,
       scopes: Object.freeze(
         endpoints.map((endpoint) =>
           EnvironmentAttachmentValues.readyScope(owner, endpoint, tenant),

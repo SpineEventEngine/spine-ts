@@ -10,6 +10,10 @@ import type { ContextDeliveryDescriptor } from "../../src/context/bounded-contex
 import { DeliveryBuilder } from "../../src/delivery/delivery-builder.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import type { EnvironmentAttachmentHandle } from "../../src/server/environment-attachment.js";
+import type {
+  EnvironmentDeliveryRuntime,
+  EnvironmentGenerationWorker,
+} from "../../src/server/environment-delivery-worker.js";
 import { EnvironmentTests, EnvironmentType } from "../../src/server/environment.js";
 import { BoundedContext } from "../../src/context/bounded-context.js";
 import { InMemorySubscriptionRegistry } from "../../src/stand/subscription-registry.js";
@@ -28,6 +32,70 @@ function configured(
 }
 
 describe("ServerEnvironment delivery lifecycle", () => {
+  it("passes its exact logger child to an attached delivery runtime", async () => {
+    const child = Object.freeze({ name: "environment-child" });
+    const logger = { child: vi.fn(() => child) };
+    ServerEnvironment.when(EnvironmentType.Local).use({ ...{ logger } });
+    const environment = ServerEnvironment.instance();
+    let runtime: EnvironmentDeliveryRuntime | undefined;
+    const worker: EnvironmentGenerationWorker = {
+      add(candidate) {
+        runtime = candidate;
+      },
+      start(obligation, shards) {
+        return Promise.resolve({
+          obligation,
+          shards: shards.map((shard) => ({
+            status: "fulfilled" as const,
+            shard,
+            obligation,
+            run: {
+              status: "IDLE" as const,
+              runs: 1,
+              processed: 0,
+              accepted: 0,
+              delivered: 0,
+              failed: 0,
+              failures: Object.freeze([]),
+            },
+            progress: {
+              runs: 1,
+              processed: 0,
+              accepted: 0,
+              delivered: 0,
+              failed: 0,
+              failures: Object.freeze([]),
+            },
+          })),
+        });
+      },
+      stop() {},
+      awaitSettled() {
+        return Promise.resolve();
+      },
+      retire() {
+        return Promise.resolve();
+      },
+      stopOwners() {},
+      awaitOwnersSettled() {
+        return Promise.resolve();
+      },
+      retireOwners() {
+        return Promise.resolve();
+      },
+    } as EnvironmentGenerationWorker;
+    serverEnvironmentAccess.installTestAttachments(environment, () => worker);
+
+    const attachment = await serverEnvironmentAccess.attach(environment, {
+      ownership: "caller",
+      descriptors: [environmentDescriptor(environment)],
+    });
+
+    expect(logger.child).toHaveBeenCalledTimes(1);
+    expect(runtime?.logger).toBe(child);
+    await serverEnvironmentAccess.detach(environment, attachment);
+  });
+
   it("snapshots one caller-owned logger child when the environment resolves", async () => {
     const child = Object.freeze({});
     const logger = { child: vi.fn(() => child) };

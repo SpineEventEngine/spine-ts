@@ -177,6 +177,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     environmentAttachments.set(
       this,
       new EnvironmentAttachments({
+        logger: this.logger,
         createWorker: () => {
           const ports = ServerEnvironmentValues.ports(this.delivery);
           return new EnvironmentDeliveryWorker({
@@ -453,7 +454,10 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     if (!testAttachmentsInstallable.delete(environment)) {
       throw new Error("Test attachments may only be installed before environment lifecycle use.");
     }
-    environmentAttachments.set(environment, new EnvironmentAttachments({ createWorker }));
+    environmentAttachments.set(
+      environment,
+      new EnvironmentAttachments({ logger: environment.logger, createWorker }),
+    );
   },
   warnVolatileRegistry(environment: ServerEnvironment, context: BoundedContext) {
     if (environment.environment.type !== EnvironmentType.Production) return;

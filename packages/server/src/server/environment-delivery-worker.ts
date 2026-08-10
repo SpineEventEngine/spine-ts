@@ -1,4 +1,5 @@
 import type { StorageContext, StorageFactory } from "@spine-event-engine/storage";
+import type { ILogLayer } from "loglayer";
 
 import type { ContextDeliveryDescriptor, DeliveryTenantScope } from "../context/bounded-context.js";
 import type { EnvironmentDeliveryPorts } from "../context/local-inbox-handoff.js";
@@ -58,6 +59,9 @@ export interface EnvironmentDeliveryRuntime {
    * Lists scopes assigned to the runtime.
    */
   readonly scopes: readonly DeliveryRunScope[];
+
+  /** Environment child available to downstream delivery containment owners. */
+  readonly logger?: ILogLayer;
 }
 
 /**
