@@ -1,6 +1,8 @@
 # T-0156 Review Record
 
-Status: Correction-complete; re-review-ready (not final complete)
+Status: Reviewed/converged; pending final verify
+
+Final review convergence: performance/reliability CLEAN (227 focused tests covering timer, abort, signal coalescing, normal close, and no-logger paths). Style/maintainability CLEAN after `d478fe3c` stabilized the active watch fixture. This is not final task completion: final verification remains pending.
 
 Current correction evidence: timer retained-cycle warning is exactly-once; `keeps a failed signal close retryable` proves immediate SIGTERM/SIGINT coalesce to one first attempt/error and a later signal retries; the corrected signal-aware recovery close test proves zero records; normal delivery watch, subscription runtime close, and successful process shutdown all capture zero records. Reliability and style re-review remain pending until the cheap gate is repeated.
 
