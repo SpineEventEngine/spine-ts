@@ -80,6 +80,7 @@ import {
 import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
 import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
 import { ShardIndex } from "../delivery/shard-index.js";
+import { emitServerError } from "../server/server-log.js";
 
 /**
  * Tenant isolation mode declared by a bounded context specification.
@@ -514,6 +515,10 @@ const contextDeliveryDescriptors = new WeakMap<BoundedContext, ContextDeliveryDe
 const contextSubscriptionRuntimes = new WeakMap<BoundedContext, SubscriptionRuntime>();
 const contextLoggers = new WeakMap<BoundedContext, ILogLayer>();
 const contextEventBuses = new WeakMap<BoundedContext, readonly [EventBus, EventBus]>();
+const contextDispatchFailureRecorders = new WeakMap<
+  BoundedContext,
+  (event: Event, error: unknown) => void
+>();
 const systemEventPosters = new WeakMap<BoundedContext, (event: Event) => Promise<void>>();
 const builderBuilds = new WeakMap<
   BoundedContextBuilder,
@@ -543,6 +548,7 @@ interface BoundedContextAccess {
   ): Promise<import("../stand/stand.js").StandSubscription>;
   installLogger(context: BoundedContext, logger: ILogLayer): void;
   loggerFor(context: BoundedContext): ILogLayer;
+  recordDispatchFailure(context: BoundedContext, event: Event, error: unknown): void;
   delivery(context: BoundedContext): ContextDeliveryDescriptor;
 }
 let constructBoundedContext:
@@ -674,6 +680,9 @@ export class BoundedContext {
     this.#eventEndpoint = Object.freeze({
       acceptedEventTypes: () => ContextParts.exposedEventTypeUrls(this.#eventBus),
       post: (event: Event) => this.#eventBus.post(event),
+    });
+    contextDispatchFailureRecorders.set(this, (event, error) => {
+      this.#recordDispatchFailure(event, error);
     });
     const deliveryReadiness = new DeliveryReadiness();
     const tenantIndex = TenantIndexes.create({
@@ -1047,6 +1056,15 @@ export class BoundedContext {
         this.#storedEventDispatchFailures.length - dispatchFailureLimit,
       );
     }
+    const logger = contextLoggers.get(this);
+    const eventType = event.message?.typeUrl;
+    if (logger !== undefined && eventType !== undefined && eventType.length > 0) {
+      emitServerError(logger, "Repository follow-up dispatch failed.", {
+        eventType,
+        operation: "repository.follow_up",
+        reasonCode: "dispatch_failed",
+      });
+    }
   }
 }
 
@@ -1073,6 +1091,14 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
       throw new TypeError("Context logger requires a built BoundedContext instance.");
     }
     return logger;
+  },
+
+  recordDispatchFailure(context: BoundedContext, event: Event, error: unknown): void {
+    const record = contextDispatchFailureRecorders.get(context);
+    if (record === undefined) {
+      throw new TypeError("Dispatch failure recording requires a built BoundedContext instance.");
+    }
+    record(event, error);
   },
 
   isBuilder(value: unknown): value is BoundedContextBuilder {

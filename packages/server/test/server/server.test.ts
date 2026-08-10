@@ -16,6 +16,7 @@ import type { RequestCredential } from "@spine-event-engine/auth";
 import { TypeRegistry } from "@spine-event-engine/core";
 import { ApplicationNode } from "@spine-event-engine/deployment";
 import { AuthenticationService, ResolveContextRequestSchema } from "@spine-event-engine/proto/auth";
+import { EventSchema } from "@spine-event-engine/proto";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -86,6 +87,22 @@ describe("Server", () => {
       ),
     ).toBe(child);
     expect(errors).toEqual([]);
+
+    boundedContextAccess.recordDispatchFailure(
+      context,
+      create(EventSchema, { message: { typeUrl: "type.googleapis.com/example.Event" } }),
+      new Error("must never reach the logger"),
+    );
+    expect(errors).toEqual([
+      {
+        message: "Repository follow-up dispatch failed.",
+        facts: {
+          eventType: "type.googleapis.com/example.Event",
+          operation: "repository.follow_up",
+          reasonCode: "dispatch_failed",
+        },
+      },
+    ]);
     await server.close();
   });
 
