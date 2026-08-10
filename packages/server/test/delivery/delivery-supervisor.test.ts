@@ -35,6 +35,31 @@ import type {
 } from "../../src/delivery/inbox.js";
 
 describe("DeliverySupervisor", () => {
+  it("does not log returned failed delivery evidence as a terminal detached run", async () => {
+    const error = vi.fn();
+    const logger = { withMetadata: vi.fn(() => ({ error })) };
+    const supervisor = new DeliverySupervisor({
+      source: {
+        releaseExpired: () => Promise.resolve([]),
+        shardSnapshot: () => Promise.resolve([]),
+        observeShardUpdates: (options) => updatesUntilAborted(options?.signal),
+      },
+      delivery: qualifiedDelivery({
+        run: () => Promise.reject(new Error("delivery secret")),
+      }),
+      onMessage: () => Promise.resolve(),
+    });
+    deliverySupervisorAccess.installLogger(supervisor, logger as never);
+
+    await supervisor.start();
+    supervisor.notify(newShard(0));
+    await supervisor.whenIdle();
+
+    expect(logger.withMetadata).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    await supervisor.close();
+  });
+
   it("warns once when initial recovery is retained for a later retry", async () => {
     const warn = vi.fn();
     const logger = { withMetadata: vi.fn(() => ({ warn })) };

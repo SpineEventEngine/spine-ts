@@ -116,7 +116,7 @@
       "id": "server.delivery_run_terminal",
       "source": "../../packages/server/src/delivery/delivery-supervisor.ts",
       "operation": "delivery.run",
-      "disposition": "error",
+      "disposition": "no-log",
       "test": "packages/server/test/delivery/delivery-supervisor.test.ts"
     },
     {
