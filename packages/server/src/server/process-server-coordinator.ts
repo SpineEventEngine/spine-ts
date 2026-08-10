@@ -13,6 +13,7 @@ interface RunRecord {
 
 const running: RunRecord[] = [];
 let signalsInstalled = false;
+let closingRunning: Promise<void> | undefined;
 
 /**
  * Coordinates process-owned server shutdown without exposing lifecycle seams.
@@ -61,6 +62,20 @@ export const ProcessServerCoordinator: Readonly<{
     void ProcessServerCoordinator.closeRunning();
   },
 
+  closeRunning(): Promise<void> {
+    closingRunning ??= ProcessServerCoordinatorValues.closeRunning().finally(() => {
+      closingRunning = undefined;
+    });
+    return closingRunning;
+  },
+});
+
+/**
+ * Groups private process-owned run retirement operations.
+ *
+ * @internal
+ */
+const ProcessServerCoordinatorValues = Object.freeze({
   async closeRunning(): Promise<void> {
     for (const record of [...running].reverse()) {
       try {
@@ -78,14 +93,6 @@ export const ProcessServerCoordinator: Readonly<{
       }
     }
   },
-});
-
-/**
- * Groups private process-owned run retirement operations.
- *
- * @internal
- */
-const ProcessServerCoordinatorValues = Object.freeze({
   remove(record: RunRecord): void {
     const index = running.indexOf(record);
     if (index >= 0) running.splice(index, 1);

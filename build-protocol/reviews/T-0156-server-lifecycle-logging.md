@@ -2,6 +2,11 @@
 
 Status: Pending implementation
 
+## Aggregated correction batch
+
+- Style/maintainability finding accepted: add the Human-Imposed Requirements Ledger in TASK.md. Resolved.
+- Performance/reliability findings accepted: coalesce retained timer failure observation; suppress close-induced recovery WARN; serialize concurrent process signals. Implemented; affected style and reliability lanes require re-review.
+
 - Style/maintainability: required, configured `gpt-5.6-terra` / high.
 - Performance/reliability: required, configured `gpt-5.6-terra` / high.
 - TypeScript/API documentation: N/A; no public exports may change.

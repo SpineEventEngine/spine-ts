@@ -87,10 +87,7 @@ export class SubscriptionRuntime {
       this.#warnReconciliationFailure();
     });
     this.#timer = setInterval(() => {
-      // spine-log-boundary: server.subscription_timer_reconcile
-      void this.#reconcileTimer().catch(() => {
-        this.#warnReconciliationFailure();
-      });
+      this.#reconcileTimer();
     }, 10_000);
     this.#timer.unref();
   }
@@ -145,10 +142,15 @@ export class SubscriptionRuntime {
 
   #reconcileTimer(): Promise<void> {
     if (this.#timerReconciliation !== undefined) return this.#timerReconciliation;
-    this.#timerReconciliation = this.reconcile().finally(() => {
+    const reconciliation = this.reconcile().finally(() => {
       this.#timerReconciliation = undefined;
     });
-    return this.#timerReconciliation;
+    this.#timerReconciliation = reconciliation;
+    // spine-log-boundary: server.subscription_timer_reconcile
+    void reconciliation.catch(() => {
+      this.#warnReconciliationFailure();
+    });
+    return reconciliation;
   }
 
   #warnReconciliationFailure(): void {
