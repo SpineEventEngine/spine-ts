@@ -1,6 +1,6 @@
 # T-0154: LogLayer Foundation
 
-Status: Review-ready
+Status: Correction-complete; re-review-ready
 
 ## Objective
 
@@ -64,6 +64,20 @@ slices.
    coverage.
 10. Update public TSDoc and API declarations only. Product Markdown and README
     changes remain deferred to Wave 10.
+
+## Correction Completion Evidence
+
+- Review Wave One items 1-10 are corrected in `9bd4cfff` and `c1f2cdbb`.
+- The environment logger child remains package-private, is forwarded to a
+  replacement delivery generation by exact identity, and is never lifecycle-owned
+  by the framework.
+- The containment checker rejects every detectable unannotated suppression while
+  accepting exactly one adjacent manifest binding; `verify:task` invokes it.
+- Default structured-console WARN and ERROR records are behavior-tested for
+  JSON fields, uppercase severity, and their console streams.
+- Fresh scoped server coverage: 1,628 tests; statements 95.87% (1396/1456),
+  branches 90.00% (612/680), functions 98.18% (325/331), and lines 96.10%
+  (1356/1411).
 
 ## Exclusions
 

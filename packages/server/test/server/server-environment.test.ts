@@ -178,20 +178,22 @@ describe("ServerEnvironment delivery lifecycle", () => {
     });
     await Promise.resolve();
 
-    expect(JSON.parse(String(warning.mock.calls[0]?.[0]))).toMatchObject({
+    const warningRecord = JSON.parse(String(warning.mock.calls[0]?.[0])) as Record<string, unknown>;
+    const errorRecord = JSON.parse(String(error.mock.calls[0]?.[0])) as Record<string, unknown>;
+    expect(warningRecord).toMatchObject({
       severity: "WARN",
       message: "Warning message",
       contextName: "Tasks",
       operation: "stand.registry",
       reasonCode: "volatile",
     });
-    expect(JSON.parse(String(error.mock.calls[0]?.[0]))).toMatchObject({
+    expect(errorRecord).toMatchObject({
       severity: "ERROR",
       message: "Error message",
       operation: "delivery.stop",
       reasonCode: "failed",
     });
-    expect(JSON.parse(String(warning.mock.calls[0]?.[0])).timestamp).toEqual(expect.any(String));
+    expect(warningRecord.timestamp).toEqual(expect.any(String));
   });
 
   it("warns once for a volatile registry in production and never in local", async () => {

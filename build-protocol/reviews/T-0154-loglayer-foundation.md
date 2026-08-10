@@ -1,6 +1,6 @@
 # T-0154 Review Log
 
-Status: Corrections in progress
+Status: Correction-complete; re-review-ready
 
 ## Required Concerns
 
@@ -100,3 +100,29 @@ correctly deferred to Wave 10. The one final security review remains T-0167.
 Targeted re-review after correction: all four lanes because items 1-10 affect
 runtime reliability, checker maintainability, public API/TSDoc, and
 documentation claims. Security remains deferred.
+
+## Correction Completion
+
+All accepted Review Wave One items are addressed by `9bd4cfff` and `c1f2cdbb`:
+
+1. `ServerEnvironment` no longer publishes the logger child.
+2. Replacement delivery generations receive the exact retained logger child.
+3. The checker reports every detectable unannotated suppression and fixture
+   coverage exercises empty, detached/voided, sentinel, and rejection forms.
+4. Default structured WARN/ERROR output is verified by console-stream JSON
+   behavior tests.
+5. Every newly added logger option now accurately states application ownership
+   and no component close/retention before future operational use.
+6. GCE/GKE package-root TypeDoc inventories are checked.
+7. The volatile message is fixed; dynamic oversized secret-like context text is
+   excluded from facts.
+8. `verify:task` invokes the containment checker.
+9. Manifest operation/test-path grammar has negative fixture coverage.
+10. The task-local Human-Imposed Requirements Ledger is present in the task.
+
+Deterministic evidence before re-review: 72 focused server tests, 5 checker
+fixtures, fresh scoped coverage at 95.87% statements / 90.00% branches /
+98.18% functions / 96.10% lines (1,628 server tests), changed-file ESLint,
+TSDoc, Prettier, API docs, and diff checking pass. The final parameterized
+`verify:task` execution includes the required containment checker. Security
+remains deferred to T-0167.
