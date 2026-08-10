@@ -13,3 +13,5 @@ Implementation assignment is existing implementer, explicit `gpt-5.6-terra` / me
 Independent inventory cross-check assignment: existing explorer function, explicit `gpt-5.6-terra` / medium, explicit dispatch, no subagents, read-only suppression/test-path inventory scope. Runtime metadata is unavailable on this surface; this configured profile is recorded as the acceptance evidence.
 
 Cross-check disposition: P0 terminal detached delivery-start/run paths require outer ERROR; P0 recovery/watch/rescan and subscription initial/timer reconciliation require WARN. Inner control-flow suppressions that rethrow, surface, or only reset bookkeeping remain no-log and will be enumerated in the containment partition rather than upgraded blindly.
+
+Implementation disposition: the inspected `EnvironmentDeliveryWorker.add()` detached start has no ordinary terminal rejection because supervisor recovery converts remote source failure into a retryable result. Its observable boundary is recovery WARN; any ERROR classification requires a separately reproduced uncaught background termination.
