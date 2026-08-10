@@ -862,6 +862,30 @@ describe("EventBus", () => {
     ]);
   });
 
+  it("reports deferred subscriber rejection after the bus closes", async () => {
+    const bus = new EventBus(
+      new EventStore({ name: "Tasks", multitenant: false }, new InMemoryStorageFactory()),
+      [createEventDispatcher([ProjectionStateSchema], () => undefined)],
+    );
+    const errors: string[] = [];
+    eventBusAccess.installLogger(bus, {
+      withMetadata: () => ({ error: (message: string) => errors.push(message) }),
+    } as ILogLayer);
+    let reject!: (reason: unknown) => void;
+    eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
+      onEvent: () =>
+        new Promise<void>((_resolve, rejected) => {
+          reject = rejected;
+        }),
+    });
+
+    await bus.post(createProjectionEvent("event-deferred"));
+    await bus.close();
+    reject(new Error("late failure"));
+    await delay(0);
+    expect(errors).toEqual(["Event subscriber failed."]);
+  });
+
   it("closes direct event subscribers when the bus closes", async () => {
     const store = new EventStore(
       { name: "Tasks", multitenant: false },

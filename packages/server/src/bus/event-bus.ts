@@ -389,22 +389,22 @@ export class EventBus {
       .filter((subscriber) => subscriber !== undefined);
 
     for (const subscriber of subscribers) {
+      const logger = eventBusLoggers.get(this);
       try {
         const result = subscriber.onEvent(clone(EventSchema, event));
         if (isPromiseLike(result)) {
           // spine-log-boundary: server.event_subscriber_async_failure
-          void Promise.resolve(result).catch(() => this.#recordSubscriberFailure(typeUrl));
+          void Promise.resolve(result).catch(() => this.#recordSubscriberFailure(typeUrl, logger));
         }
       } catch {
         // Service-delivery subscribers must not poison event intake or later subscribers.
         // spine-log-boundary: server.event_subscriber_sync_failure
-        this.#recordSubscriberFailure(typeUrl);
+        this.#recordSubscriberFailure(typeUrl, logger);
       }
     }
   }
 
-  #recordSubscriberFailure(typeUrl: string): void {
-    const logger = eventBusLoggers.get(this);
+  #recordSubscriberFailure(typeUrl: string, logger: ILogLayer | undefined): void {
     if (logger !== undefined) {
       emitServerError(logger, "Event subscriber failed.", {
         eventType: typeUrl,
