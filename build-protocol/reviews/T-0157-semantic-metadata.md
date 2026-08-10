@@ -1,6 +1,6 @@
 # T-0157 Review Record
 
-Status: Pending implementation
+Status: Mechanically pre-review-ready
 
 ## Assignments
 
@@ -16,3 +16,12 @@ Status: Pending implementation
 
 Runtime metadata is unavailable unless the execution surface exposes it; the
 explicit immutable configured role/profile is then the durable evidence.
+
+## Mechanical Evidence
+
+Focused core/server coverage passed 2 files / 65 tests. Exact changed-range
+LCOV against `origin/main` is statements 19/20 (95%), lines 19/20 (95%),
+branches 9/10 (90%), and functions 7/7 (100%). Build/tooling typechecks,
+changed ESLint, TSDoc, API documentation, formatting, diff, and compatibility
+impersonation scans pass. Specialist review and final verification remain
+pending.
