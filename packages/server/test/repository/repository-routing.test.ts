@@ -74,6 +74,7 @@ import {
   EventDispatchedToReactorSchema,
 } from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import type { ILogLayer } from "loglayer";
 
 import {
   Aggregate,
@@ -90,6 +91,7 @@ import {
   type InboxMessage,
   SpecScanner,
 } from "../../src/index.js";
+import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { Delivery } from "../../src/delivery/delivery.js";
 import { describeEntityMetadata } from "../../src/entity/entity-metadata.js";
@@ -5160,6 +5162,12 @@ describe("repository signal routing", () => {
       .withStorageFactory(factory)
       .build();
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
+    boundedContextAccess.installLogger(context, {
+      withMetadata: (facts: Record<string, unknown>) => ({
+        error: (message: string) => errors.push({ message, facts }),
+      }),
+    } as unknown as ILogLayer);
 
     await expect(
       context.eventBus().post(createProjectionEvent("event-pm-produce", "pm-event-produce")),
@@ -5187,6 +5195,16 @@ describe("repository signal routing", () => {
       event: { id: { value: "event-pm-produce-1" } },
       error: { name: "Error", message: "process-manager event dispatch failed" },
     });
+    expect(errors).toEqual([
+      {
+        message: "Repository follow-up dispatch failed.",
+        facts: {
+          eventType: TypeUrls.derive(AggregateStateSchema),
+          operation: "repository.follow_up",
+          reasonCode: "dispatch_failed",
+        },
+      },
+    ]);
   });
 
   it("rejects blank source event ids before process-manager event reactions mutate state", async () => {

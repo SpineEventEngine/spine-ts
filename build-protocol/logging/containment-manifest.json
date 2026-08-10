@@ -5,49 +5,49 @@
       "source": "../../packages/server/src/repository/repository.ts",
       "operation": "repository.history",
       "disposition": "no-log",
-      "test": "packages/server/test/repository/repository.test.ts"
+      "test": "packages/server/test/repository/repository-routing.test.ts"
     },
     {
       "id": "server.repository_dispatch_guard",
       "source": "../../packages/server/src/repository/repository.ts",
       "operation": "repository.dispatch_guard",
       "disposition": "no-log",
-      "test": "packages/server/test/repository/repository.test.ts"
+      "test": "packages/server/test/repository/repository-routing.test.ts"
     },
     {
       "id": "server.repository_event_follow_up",
       "source": "../../packages/server/src/repository/repository.ts",
       "operation": "repository.event_follow_up",
       "disposition": "error",
-      "test": "packages/server/test/repository/repository.test.ts"
+      "test": "packages/server/test/repository/repository-routing.test.ts"
     },
     {
       "id": "server.process_manager_event_follow_up",
       "source": "../../packages/server/src/repository/repository.ts",
       "operation": "repository.event_follow_up",
       "disposition": "error",
-      "test": "packages/server/test/repository/repository.test.ts"
+      "test": "packages/server/test/repository/repository-routing.test.ts"
     },
     {
       "id": "server.repository_rejection_follow_up",
       "source": "../../packages/server/src/repository/repository.ts",
       "operation": "repository.event_follow_up",
       "disposition": "error",
-      "test": "packages/server/test/repository/repository.test.ts"
+      "test": "packages/server/test/repository/repository-routing.test.ts"
     },
     {
       "id": "server.repository_system_follow_up",
       "source": "../../packages/server/src/repository/repository.ts",
       "operation": "repository.system_follow_up",
       "disposition": "error",
-      "test": "packages/server/test/repository/repository.test.ts"
+      "test": "packages/server/test/repository/repository-routing.test.ts"
     },
     {
       "id": "server.repository_system_dispatch_follow_up",
       "source": "../../packages/server/src/repository/repository.ts",
       "operation": "repository.system_follow_up",
       "disposition": "error",
-      "test": "packages/server/test/repository/repository.test.ts"
+      "test": "packages/server/test/repository/repository-routing.test.ts"
     },
     {
       "id": "server.subscription_cleanup_failure",
