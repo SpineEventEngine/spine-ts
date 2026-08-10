@@ -298,6 +298,7 @@ export class Server {
     try {
       attachment = await serverEnvironmentAccess.attach(this.#environment, {
         ownership,
+        logger: this.#environment.logger,
         descriptors: contexts.map((context) => boundedContextAccess.delivery(context)),
       });
     } catch (error) {

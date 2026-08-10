@@ -26,6 +26,7 @@ import {
   type EnvironmentGenerationWorker,
 } from "./environment-delivery-worker.js";
 import { EnvironmentDeliveryRecords } from "./environment-delivery-records.js";
+import type { ILogLayer } from "loglayer";
 
 export type { EnvironmentGenerationWorker } from "./environment-delivery-worker.js";
 
@@ -86,6 +87,9 @@ export interface EnvironmentAttachOptions {
    * Lists context delivery descriptors to attach.
    */
   readonly descriptors: readonly ContextDeliveryDescriptor[];
+
+  /** Immutable environment logger child propagated to runtime construction. */
+  readonly logger: ILogLayer;
 }
 
 class AttachedEnvironmentRegistration implements EnvironmentRegistrationClaim {
@@ -423,6 +427,7 @@ export class EnvironmentAttachments {
     const waiter: AttachmentWaiter = {
       options: Object.freeze({
         ownership: options.ownership,
+        logger: options.logger,
         descriptors: snapshotDescriptors
           ? Object.freeze([...options.descriptors])
           : options.descriptors,
@@ -447,6 +452,7 @@ export class EnvironmentAttachments {
       }
       const admittedOptions: EnvironmentAttachOptions = Object.freeze({
         ownership: waiter.options.ownership,
+        logger: waiter.options.logger,
         descriptors: waiter.snapshotDescriptors
           ? waiter.options.descriptors
           : Object.freeze([...waiter.options.descriptors]),
