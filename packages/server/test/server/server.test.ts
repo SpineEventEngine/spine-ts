@@ -1693,15 +1693,18 @@ describe("Server", () => {
       .run();
     try {
       process.emit("SIGTERM");
+      process.emit("SIGINT");
       await waitFor(() => process.exitCode === 1);
       expect(process.exitCode).toBe(1);
+      expect(attempts).toBe(1);
       expect(errors).toEqual([
         {
           message: "Process-owned server shutdown failed.",
           facts: { operation: "server.process_shutdown", reasonCode: "close_failed" },
         },
       ]);
-      await server.close();
+      process.emit("SIGTERM");
+      await waitFor(() => attempts === 2);
       expect(attempts).toBe(2);
       expect(errors).toHaveLength(1);
     } finally {
