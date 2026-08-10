@@ -26,6 +26,7 @@ import {
   type EnvironmentGenerationWorker,
 } from "./environment-delivery-worker.js";
 import { EnvironmentDeliveryRecords } from "./environment-delivery-records.js";
+import type { ILogLayer } from "loglayer";
 
 export type { EnvironmentGenerationWorker } from "./environment-delivery-worker.js";
 
@@ -137,6 +138,11 @@ export interface EnvironmentAttachmentsOptions {
    * @returns The worker for the new generation.
    */
   readonly createWorker?: () => EnvironmentGenerationWorker;
+
+  /**
+   * Immutable environment logger child propagated to each delivery runtime.
+   */
+  readonly logger?: ILogLayer;
 
   /**
    * Resolves the environment-owned delivery ports after its facility opens.
@@ -272,6 +278,7 @@ export class EnvironmentAttachments {
   readonly #registrations = new EnvironmentRegistrations();
   readonly #generations = new Map<EnvironmentGeneration, DeliveryGeneration>();
   readonly #createWorker: () => EnvironmentGenerationWorker;
+  readonly #logger: ILogLayer | undefined;
   readonly #deliveryPorts: () => EnvironmentDeliveryPorts | undefined;
   readonly #report: (causes: readonly unknown[]) => Promise<void>;
   readonly #transitionFaults: EnvironmentAttachmentsOptions["transitionFaults"];
@@ -291,6 +298,7 @@ export class EnvironmentAttachments {
    */
   constructor(options: EnvironmentAttachmentsOptions = {}) {
     this.#createWorker = options.createWorker ?? (() => new EnvironmentDeliveryWorker());
+    this.#logger = options.logger;
     this.#deliveryPorts = options.deliveryPorts ?? (() => undefined);
     this.#report = options.report ?? (() => Promise.resolve());
     this.#transitionFaults = options.transitionFaults;
@@ -498,6 +506,7 @@ export class EnvironmentAttachments {
           this.#createWorker(),
           this.#report,
           this.#deliveryPorts(),
+          this.#logger,
         );
       } catch (error) {
         if (this.#registrations.remove(claim.token) === 0) {
@@ -724,7 +733,12 @@ export class EnvironmentAttachments {
         stop.routeSnapshots = Object.freeze(snapshots);
       }
       if (stop.candidate === undefined) {
-        const candidate = new DeliveryGeneration(this.#createWorker(), this.#report);
+        const candidate = new DeliveryGeneration(
+          this.#createWorker(),
+          this.#report,
+          this.#deliveryPorts(),
+          this.#logger,
+        );
         stop.candidateGeneration = Object.freeze({ generation: true });
         stop.candidate = candidate;
       }
@@ -1470,6 +1484,11 @@ class RegistrationOwnership {
 
 class DeliveryGeneration {
   readonly #worker: EnvironmentGenerationWorker;
+
+  /**
+   * Environment logger child retained for later runtime containment owners.
+   */
+  readonly logger: ILogLayer | undefined;
   readonly #ports: EnvironmentDeliveryPorts | undefined;
   readonly #report: (causes: readonly unknown[]) => Promise<void>;
   readonly #descriptors = new WeakSet<ContextDeliveryDescriptor>();
@@ -1492,10 +1511,12 @@ class DeliveryGeneration {
     worker: EnvironmentGenerationWorker,
     report: (causes: readonly unknown[]) => Promise<void>,
     ports?: EnvironmentDeliveryPorts,
+    logger?: ILogLayer,
   ) {
     this.#worker = worker;
     this.#report = report;
     this.#ports = ports;
+    this.logger = logger;
   }
 
   get replacementSafe(): boolean {
@@ -2069,6 +2090,7 @@ class DeliveryGeneration {
       storageFactory,
       tenant,
       context,
+      ...(this.logger === undefined ? {} : { logger: this.logger }),
       scopes: Object.freeze(
         endpoints.map((endpoint) =>
           EnvironmentAttachmentValues.readyScope(owner, endpoint, tenant),

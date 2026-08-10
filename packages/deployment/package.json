@@ -18,7 +18,8 @@
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",
     "@spine-event-engine/proto": "workspace:*",
-    "@spine-event-engine/storage": "workspace:*"
+    "@spine-event-engine/storage": "workspace:*",
+    "loglayer": "9.4.0"
   },
   "devDependencies": {
     "@spine-event-engine/storage-datastore": "workspace:*",

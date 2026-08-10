@@ -331,6 +331,9 @@ importers:
       jose:
         specifier: 6.2.4
         version: 6.2.4
+      loglayer:
+        specifier: 9.4.0
+        version: 9.4.0
 
   packages/client-node:
     dependencies:
@@ -431,6 +434,9 @@ importers:
       '@spine-event-engine/proto':
         specifier: 2.0.0-snapshot.1
         version: link:../proto
+      loglayer:
+        specifier: 9.4.0
+        version: 9.4.0
 
   packages/deployment:
     dependencies:
@@ -443,6 +449,9 @@ importers:
       '@spine-event-engine/storage':
         specifier: workspace:*
         version: link:../storage
+      loglayer:
+        specifier: 9.4.0
+        version: 9.4.0
     devDependencies:
       '@spine-event-engine/storage-datastore':
         specifier: workspace:*
@@ -459,6 +468,9 @@ importers:
       '@spine-event-engine/deployment':
         specifier: workspace:*
         version: link:../deployment
+      loglayer:
+        specifier: 9.4.0
+        version: 9.4.0
     devDependencies:
       '@bufbuild/protobuf':
         specifier: 2.12.1
@@ -481,6 +493,9 @@ importers:
       '@spine-event-engine/deployment':
         specifier: workspace:*
         version: link:../deployment
+      loglayer:
+        specifier: 9.4.0
+        version: 9.4.0
     devDependencies:
       '@bufbuild/protobuf':
         specifier: 2.12.1
@@ -555,6 +570,9 @@ importers:
       '@spine-event-engine/transport':
         specifier: 2.0.0-snapshot.1
         version: link:../transport
+      loglayer:
+        specifier: 9.4.0
+        version: 9.4.0
       typescript:
         specifier: 6.0.3
         version: 6.0.3
@@ -922,6 +940,26 @@ packages:
 
   '@js-sdsl/ordered-map@4.4.2':
     resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==}
+
+  '@loglayer/context-manager@2.3.0':
+    resolution: {integrity: sha512-bStCSDKUk88ZHTloOR+eE+Jfnfcs+jfI2hNSrcchorwi2UHS8AYHWMm9o2Ov3tSQ4v64je9JDeTVLgoeL+JHvw==}
+    engines: {node: '>=18'}
+
+  '@loglayer/log-level-manager@2.3.0':
+    resolution: {integrity: sha512-tkiKKa5yBnWqCLUWFZraNAotaHxGlb8yqTUpYS1o5Qv3XeTPoNkI87oDwI8V8m63yvKLPrXsZtNas2pIiFldCQ==}
+    engines: {node: '>=18'}
+
+  '@loglayer/plugin@3.3.0':
+    resolution: {integrity: sha512-qSEgukxOXrQsUPPUbcrOBGymowBfobTK+vC3+eDRx1dEqlhCl1YxTn8zIJjQKV+nZJyCRTzgPTvEfvceFO+QnQ==}
+    engines: {node: '>=18'}
+
+  '@loglayer/shared@4.4.0':
+    resolution: {integrity: sha512-9C6zpO9RXjfjddR+Bbk+h5NiLDL2wNlno5jLplzhw+Jaj2gO2Dv53rxrgdRmBP5/DgSHNCZu6FdOq8ankSYdGA==}
+    engines: {node: '>=18'}
+
+  '@loglayer/transport@3.3.0':
+    resolution: {integrity: sha512-fFh4XaX24FiyZtpzOjBP2PScA3sQk1rfka287FsYXkGMm2/n74BOVj6/D/oLaiI+cJMy7fv3dtyy5sUtNil5UQ==}
+    engines: {node: '>=18'}
 
   '@napi-rs/wasm-runtime@1.1.6':
     resolution: {integrity: sha512-ZLv/JdUfkvOy9eCnnBaGfiO+XimbjebAeO+MRQqD/B+FR1tnRN0tpKSJHRbE8sFfS6aqsXZ67TQjfwfsxULVbg==}
@@ -1961,6 +1999,10 @@ packages:
   lodash.merge@4.6.2:
     resolution: {integrity: sha512-0KpjqXRVvrYyCsX1swR/XTK0va6VQkQM6MNo7PqW77ByjAhoARA8EfrP1N4+KlKj8YS0ZUCtRT/YUuhyYDujIQ==}
 
+  loglayer@9.4.0:
+    resolution: {integrity: sha512-abAZY0TkGw1LOA8n0yGJbRi9R0upRWymYBZItWfiktXMTHqdgCpHukONoX/Byfbt1RfRdw/GjT/PwrztePYOcw==}
+    engines: {node: '>=18'}
+
   long@5.3.2:
     resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
 
@@ -2838,6 +2880,24 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   '@js-sdsl/ordered-map@4.4.2': {}
+
+  '@loglayer/context-manager@2.3.0':
+    dependencies:
+      '@loglayer/shared': 4.4.0
+
+  '@loglayer/log-level-manager@2.3.0':
+    dependencies:
+      '@loglayer/shared': 4.4.0
+
+  '@loglayer/plugin@3.3.0':
+    dependencies:
+      '@loglayer/shared': 4.4.0
+
+  '@loglayer/shared@4.4.0': {}
+
+  '@loglayer/transport@3.3.0':
+    dependencies:
+      '@loglayer/shared': 4.4.0
 
   '@napi-rs/wasm-runtime@1.1.6(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)':
     dependencies:
@@ -3844,6 +3904,14 @@ snapshots:
   lodash.camelcase@4.3.0: {}
 
   lodash.merge@4.6.2: {}
+
+  loglayer@9.4.0:
+    dependencies:
+      '@loglayer/context-manager': 2.3.0
+      '@loglayer/log-level-manager': 2.3.0
+      '@loglayer/plugin': 3.3.0
+      '@loglayer/shared': 4.4.0
+      '@loglayer/transport': 3.3.0
 
   long@5.3.2: {}
 

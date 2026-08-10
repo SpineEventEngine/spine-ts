@@ -2,6 +2,7 @@ import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
 
 import { connectNodeAdapter } from "@connectrpc/connect-node";
+import type { ILogLayer } from "loglayer";
 
 import {
   AdminService,
@@ -66,6 +67,12 @@ export interface DeliveryServerOptions {
    * Accepts integers from 1 through `1_000`.
    */
   readonly maxTrackedShards?: number;
+
+  /**
+   * Application-owned logger reserved for component-local records. The component
+   * does not retain or close the supplied logger.
+   */
+  readonly logger?: ILogLayer;
 }
 
 /**

@@ -53,6 +53,14 @@ function serverEnvironment(settings: ServerEnvironmentSettings = {}): ServerEnvi
 }
 
 describe("EnvironmentRegistrations", () => {
+  it("constructs attachment coordination with its local default seams", () => {
+    const attachments = new EnvironmentAttachments();
+
+    expect(attachments.activeRegistrationCount).toBe(0);
+    expect(attachments.configuredOwnerCount).toBe(0);
+    expect(attachments.configuredScopeCount).toBe(0);
+  });
+
   it("shares ownership generations and rejects mixed ownership before mutation", () => {
     const registrations = new EnvironmentRegistrations();
 
@@ -99,10 +107,54 @@ describe("EnvironmentRegistrations", () => {
 
     expect(fresh.generation).not.toBe(first.generation);
     expect(registrations.count).toBe(1);
+    expect(registrations.remove(fresh.token)).toBe(0);
+    expect(() => {
+      registrations.clear(first.generation);
+    }).toThrow("Environment generation is not current.");
+  });
+
+  it("rejects replacing an absent generation", () => {
+    const registrations = new EnvironmentRegistrations();
+
+    expect(() => registrations.replace(Object.freeze({ generation: true }))).toThrow(
+      "Environment generation is not current.",
+    );
+  });
+
+  it("replaces an active generation during a handoff", () => {
+    const registrations = new EnvironmentRegistrations();
+    const active = registrations.claim("caller").generation;
+    const replacement = Object.freeze({ generation: true });
+
+    expect(registrations.replace(replacement)).toBe(active);
+    expect(registrations.generation).toBe(replacement);
   });
 });
 
 describe("RegistrationReadiness", () => {
+  it("rejects transition preparation before readiness is open", () => {
+    const target = descriptor("Phase", "type.example.dev/Phase", new InMemoryStorageFactory());
+    const scope = runScope("phase-owner", target.ready);
+    const prepared = vi.fn();
+    const readiness = new RegistrationReadiness(
+      [{ descriptor: target.value, scopes: [scope] }],
+      () => scope,
+      () => {
+        prepared();
+      },
+    );
+
+    expect(() => {
+      readiness.prepareTransition(() => {
+        prepared();
+      });
+    }).toThrow("Registration readiness is not open.");
+    readiness.fail();
+    readiness.notify(target.value, target.ready);
+    expect(prepared).not.toHaveBeenCalled();
+    expect(() => readiness.open([])).toThrow("Registration readiness can only open once.");
+  });
+
   it("fails closed for thousands of distinct unknown scopes without coordinator work", () => {
     const target = descriptor("Bounded", "type.example.dev/Bounded", new InMemoryStorageFactory());
     const configured = runScope("owner-bounded", target.ready);
@@ -151,6 +203,41 @@ describe("RegistrationReadiness", () => {
 });
 
 describe("startup obligations", () => {
+  it("records rejected, fulfilled, and unknown startup scope outcomes independently", () => {
+    const rejected = runScope("owner-rejected", {
+      label: "UPDATE_SUBSCRIBER",
+      targetTypeUrl: "type.example.dev/Rejected",
+      shard: ShardIndex.single(),
+    });
+    const fulfilled = runScope("owner-fulfilled", {
+      label: "UPDATE_SUBSCRIBER",
+      targetTypeUrl: "type.example.dev/Fulfilled",
+      shard: ShardIndex.single(),
+    });
+    const unknown = runScope("owner-unknown", {
+      label: "UPDATE_SUBSCRIBER",
+      targetTypeUrl: "type.example.dev/Unknown",
+      shard: ShardIndex.single(),
+    });
+    const failure = new Error("startup failed");
+
+    const records = EnvironmentAttachmentAccess.startupObligations(
+      "registration-outcomes",
+      [rejected, fulfilled],
+      {
+        scopes: [
+          { scope: rejected, disposition: "REJECTED", cause: failure },
+          { scope: fulfilled, disposition: "IDLE" },
+          { scope: unknown, disposition: "PARKED" },
+        ],
+        pending: [],
+      },
+    ).records();
+
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ cause: failure, hasCause: true });
+  });
+
   it("keeps fulfilled PAUSED and SKIPPED outcomes parked without causes", () => {
     const paused = runScope("owner-paused", {
       label: "UPDATE_SUBSCRIBER",
@@ -182,6 +269,22 @@ describe("startup obligations", () => {
 });
 
 describe("EnvironmentDeliveryWorker", () => {
+  it("rejects starts and notifications for an owner that was never configured", async () => {
+    const target = descriptor(
+      "MissingOwner",
+      "type.example.dev/MissingOwner",
+      new InMemoryStorageFactory(),
+    );
+    const scope = runScope("missing-owner", target.ready);
+    const worker = new EnvironmentDeliveryWorker();
+
+    await expect(worker.start({ scopes: [scope] }, [scope.ready.shard])).rejects.toThrow(
+      "Environment delivery owner is not configured.",
+    );
+    expect(() => {
+      worker.notify(scope);
+    }).toThrow("Environment delivery owner is not configured.");
+  });
   it("uses the process node identity for remote worker ownership", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const target = descriptor("ProcessNode", "type.example.dev/ProcessNode", storageFactory);
@@ -213,6 +316,7 @@ describe("EnvironmentDeliveryWorker", () => {
     });
 
     expect(node).toBe("process-node-42");
+    worker.stop();
     worker.stop();
     await worker.awaitSettled();
     await worker.retire();

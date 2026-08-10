@@ -1,0 +1,32 @@
+{
+  "boundaries": [
+    {
+      "id": "server.volatile_subscription_registry",
+      "source": "../../packages/server/src/server/server-environment.ts",
+      "operation": "stand.registry",
+      "disposition": "warn",
+      "test": "packages/server/test/server/server-environment.test.ts"
+    },
+    {
+      "id": "server.delivery_open_reset",
+      "source": "../../packages/server/src/server/server-environment.ts",
+      "operation": "delivery.open",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/server-environment.test.ts"
+    },
+    {
+      "id": "server.log_sync_failure",
+      "source": "../../packages/server/src/server/server-log.ts",
+      "operation": "log.emit",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/server-log.test.ts"
+    },
+    {
+      "id": "server.log_async_failure",
+      "source": "../../packages/server/src/server/server-log.ts",
+      "operation": "log.emit",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/server-log.test.ts"
+    }
+  ]
+}

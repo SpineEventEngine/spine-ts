@@ -3,6 +3,7 @@ import {
   type NodeDiscovery,
   type NodeScheduler,
 } from "@spine-event-engine/deployment";
+import type { ILogLayer } from "loglayer";
 
 import { NodeDnsResolver } from "./node-dns-resolver.js";
 
@@ -90,6 +91,12 @@ export interface GkeNodeDiscoveryOptions {
    * @returns The current Unix time in milliseconds.
    */
   readonly now?: () => number;
+
+  /**
+   * Application-owned logger reserved for component-local records. The component
+   * does not retain or close the supplied logger.
+   */
+  readonly logger?: ILogLayer;
 }
 
 const systemScheduler: NodeScheduler = {

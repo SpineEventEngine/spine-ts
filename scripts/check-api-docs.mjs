@@ -363,7 +363,31 @@ const expectedDeploymentExports = [
   "NodeScheduler",
   "NodeSnapshotReader",
   "ScheduledNodeDiscovery",
+  "ScheduledNodeDiscoveryOptions",
   "StaticNodeDiscovery",
+];
+const expectedDeploymentGceExports = [
+  "GceApplicationNode",
+  "GceApplicationNodeOptions",
+  "GceDeadlineFactory",
+  "GceMetadata",
+  "GceMetadataProvider",
+  "GceMetadataService",
+  "GceNodeDiscovery",
+  "GceNodeDiscoveryOptions",
+  "GceRegistrar",
+  "GceRegistrarLifecycle",
+  "GceRegistrarOptions",
+  "GceRegistryReader",
+  "GceScheduler",
+];
+const expectedDeploymentGkeExports = [
+  "DnsLookup",
+  "GkeDnsAddress",
+  "GkeDnsResolver",
+  "GkeNodeDiscovery",
+  "GkeNodeDiscoveryOptions",
+  "NodeDnsResolver",
 ];
 const expectedStorageExports = [
   "ColumnMapping",
@@ -729,6 +753,8 @@ const clientReactIndexPath = join("packages", "client-react", "src", "index.ts")
 const deliveryClientIndexPath = join("packages", "delivery-client", "src", "index.ts");
 const deliveryServerIndexPath = join("packages", "delivery-server", "src", "index.ts");
 const deploymentIndexPath = join("packages", "deployment", "src", "index.ts");
+const deploymentGceIndexPath = join("packages", "deployment-gce", "src", "index.ts");
+const deploymentGkeIndexPath = join("packages", "deployment-gke", "src", "index.ts");
 const storageIndexPath = join("packages", "storage", "src", "index.ts");
 const datastoreStorageIndexPath = join("packages", "storage-datastore", "src", "index.ts");
 const rdbmsStorageIndexPath = join("packages", "storage-rdbms", "src", "index.ts");
@@ -769,6 +795,8 @@ const clientReactModuleNames = collectDirectModuleNames(apiDocs, "packages/clien
 const deliveryClientModuleNames = collectDirectModuleNames(apiDocs, "packages/delivery-client/src");
 const deliveryServerModuleNames = collectDirectModuleNames(apiDocs, "packages/delivery-server/src");
 const deploymentModuleNames = collectDirectModuleNames(apiDocs, "packages/deployment/src");
+const deploymentGceModuleNames = collectDirectModuleNames(apiDocs, "packages/deployment-gce/src");
+const deploymentGkeModuleNames = collectDirectModuleNames(apiDocs, "packages/deployment-gke/src");
 const storageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage/src");
 const datastoreStorageModuleNames = collectDirectModuleNames(
   apiDocs,
@@ -1095,6 +1123,8 @@ const declaredClientWebExports = collectNamedExports(clientWebIndexPath);
 const declaredDeliveryClientExports = collectNamedExports(deliveryClientIndexPath);
 const declaredDeliveryServerExports = collectNamedExports(deliveryServerIndexPath);
 const declaredDeploymentExports = collectNamedExports(deploymentIndexPath);
+const declaredDeploymentGceExports = collectNamedExports(deploymentGceIndexPath);
+const declaredDeploymentGkeExports = collectNamedExports(deploymentGkeIndexPath);
 const declaredStorageExports = collectNamedExports(storageIndexPath);
 const declaredDatastoreStorageExports = collectNamedExports(datastoreStorageIndexPath);
 const declaredRdbmsStorageExports = collectNamedExports(rdbmsStorageIndexPath);
@@ -1166,6 +1196,24 @@ const missingDeclaredDeploymentExports = expectedDeploymentExports.filter(
 );
 const unexpectedDeploymentExports = declaredDeploymentExports.filter(
   (name) => !expectedDeploymentExports.includes(name),
+);
+const missingDeploymentGceExports = expectedDeploymentGceExports.filter(
+  (name) => !deploymentGceModuleNames.has(name),
+);
+const missingDeclaredDeploymentGceExports = expectedDeploymentGceExports.filter(
+  (name) => !declaredDeploymentGceExports.includes(name),
+);
+const unexpectedDeploymentGceExports = declaredDeploymentGceExports.filter(
+  (name) => !expectedDeploymentGceExports.includes(name),
+);
+const missingDeploymentGkeExports = expectedDeploymentGkeExports.filter(
+  (name) => !deploymentGkeModuleNames.has(name),
+);
+const missingDeclaredDeploymentGkeExports = expectedDeploymentGkeExports.filter(
+  (name) => !declaredDeploymentGkeExports.includes(name),
+);
+const unexpectedDeploymentGkeExports = declaredDeploymentGkeExports.filter(
+  (name) => !expectedDeploymentGkeExports.includes(name),
 );
 const missingDeclaredServerExports = expectedServerExports.filter(
   (name) => !declaredServerExports.includes(name),
@@ -1362,6 +1410,38 @@ if (unexpectedDeploymentExports.length > 0) {
   console.error(
     "@spine-event-engine/deployment root exports changed without updating docs expectations: " +
       unexpectedDeploymentExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (missingDeploymentGceExports.length > 0 || missingDeclaredDeploymentGceExports.length > 0) {
+  console.error(
+    "@spine-event-engine/deployment-gce is missing expected exports: " +
+      [...missingDeploymentGceExports, ...missingDeclaredDeploymentGceExports].join(", "),
+  );
+  process.exit(1);
+}
+
+if (unexpectedDeploymentGceExports.length > 0) {
+  console.error(
+    "@spine-event-engine/deployment-gce root exports changed without updating docs expectations: " +
+      unexpectedDeploymentGceExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (missingDeploymentGkeExports.length > 0 || missingDeclaredDeploymentGkeExports.length > 0) {
+  console.error(
+    "@spine-event-engine/deployment-gke is missing expected exports: " +
+      [...missingDeploymentGkeExports, ...missingDeclaredDeploymentGkeExports].join(", "),
+  );
+  process.exit(1);
+}
+
+if (unexpectedDeploymentGkeExports.length > 0) {
+  console.error(
+    "@spine-event-engine/deployment-gke root exports changed without updating docs expectations: " +
+      unexpectedDeploymentGkeExports.join(", "),
   );
   process.exit(1);
 }
@@ -1582,6 +1662,8 @@ console.log(
     `${expectedDeliveryClientExports.length} expected @spine-event-engine/delivery-client exports`,
     `${expectedDeliveryServerExports.length} expected @spine-event-engine/delivery-server exports`,
     `${expectedDeploymentExports.length} expected @spine-event-engine/deployment exports`,
+    `${expectedDeploymentGceExports.length} expected @spine-event-engine/deployment-gce exports`,
+    `${expectedDeploymentGkeExports.length} expected @spine-event-engine/deployment-gke exports`,
     `${expectedServerExports.length} expected @spine-event-engine/server exports`,
     `${expectedStorageExports.length} expected @spine-event-engine/storage exports`,
     `${expectedTransportExports.length} expected @spine-event-engine/transport exports`,

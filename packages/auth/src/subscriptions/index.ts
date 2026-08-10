@@ -5,6 +5,7 @@ import {
   SubscriptionUpdateSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
+import type { ILogLayer } from "loglayer";
 import type {
   AuthorizationPolicy,
   Clock,
@@ -748,6 +749,12 @@ export interface SubscriptionGatewayOptions {
    * Overrides finite gateway limits.
    */
   readonly limits?: SubscriptionGatewayLimits;
+
+  /**
+   * Application-owned logger reserved for component-local records. The component
+   * does not retain or close the supplied logger.
+   */
+  readonly logger?: ILogLayer;
 }
 
 /**

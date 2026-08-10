@@ -10,11 +10,17 @@ import type { ContextDeliveryDescriptor } from "../../src/context/bounded-contex
 import { DeliveryBuilder } from "../../src/delivery/delivery-builder.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import type { EnvironmentAttachmentHandle } from "../../src/server/environment-attachment.js";
+import type {
+  EnvironmentDeliveryRuntime,
+  EnvironmentGenerationWorker,
+} from "../../src/server/environment-delivery-worker.js";
 import { EnvironmentTests, EnvironmentType } from "../../src/server/environment.js";
 import { BoundedContext } from "../../src/context/bounded-context.js";
 import { InMemorySubscriptionRegistry } from "../../src/stand/subscription-registry.js";
 import { Server } from "../../src/server/server.js";
+import { emitServerError, emitServerWarning } from "../../src/server/server-log.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
+import type { ILogLayer } from "loglayer";
 
 afterEach(async () => {
   await resetServerEnvironmentForTest();
@@ -28,13 +34,181 @@ function configured(
 }
 
 describe("ServerEnvironment delivery lifecycle", () => {
+  it("rejects package lifecycle access for an object outside the environment registry", async () => {
+    const outside = {} as ServerEnvironment;
+    const attachment = {} as EnvironmentAttachmentHandle;
+
+    await expect(
+      serverEnvironmentAccess.attach(outside, { ownership: "caller", descriptors: [] }),
+    ).rejects.toThrow("Attachment requires a ServerEnvironment instance.");
+    expect(() => serverEnvironmentAccess.failedStartPending(outside)).toThrow(
+      "Failed-start observation requires a ServerEnvironment instance.",
+    );
+    expect(() =>
+      serverEnvironmentAccess.failedStartRetryPending(outside, new Error("failed")),
+    ).toThrow("Failed-start retry observation requires a ServerEnvironment instance.");
+    await expect(serverEnvironmentAccess.retryFailedStart(outside)).rejects.toThrow(
+      "Rollback retry requires a ServerEnvironment instance.",
+    );
+    await expect(serverEnvironmentAccess.detach(outside, attachment)).rejects.toThrow(
+      "Detach requires a ServerEnvironment instance.",
+    );
+    await expect(serverEnvironmentAccess.retryDetach(outside, attachment)).rejects.toThrow(
+      "Detach retry requires a ServerEnvironment instance.",
+    );
+    expect(() => serverEnvironmentAccess.detachRetryPending(outside, attachment)).toThrow(
+      "Detach-retry observation requires a ServerEnvironment instance.",
+    );
+    expect(() => serverEnvironmentAccess.endpointSafe(outside, attachment)).toThrow(
+      "Endpoint-safety observation requires a ServerEnvironment instance.",
+    );
+    await expect(serverEnvironmentAccess.stopDelivery(outside)).rejects.toThrow(
+      "Delivery stop requires a ServerEnvironment instance.",
+    );
+    await expect(serverEnvironmentAccess.retryDeliveryStop(outside)).rejects.toThrow(
+      "Delivery stop retry requires a ServerEnvironment instance.",
+    );
+    expect(() => {
+      serverEnvironmentAccess.installTestAttachments(
+        outside,
+        () => ({}) as EnvironmentGenerationWorker,
+      );
+    }).toThrow("Test attachments require a ServerEnvironment instance.");
+  });
+
+  it("passes its exact logger child to an attached delivery runtime", async () => {
+    const child = Object.freeze({ name: "environment-child" });
+    const logger = { child: vi.fn(() => child) };
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      ...{ logger: logger as unknown as ILogLayer },
+    });
+    const environment = ServerEnvironment.instance();
+    let runtime: EnvironmentDeliveryRuntime | undefined;
+    const workerEvents: string[] = [];
+    const worker: EnvironmentGenerationWorker = {
+      add(candidate) {
+        runtime = candidate;
+      },
+      start(obligation, shards) {
+        return Promise.resolve({
+          obligation,
+          shards: shards.map((shard) => ({
+            status: "fulfilled" as const,
+            shard,
+            obligation,
+            run: {
+              status: "IDLE" as const,
+              runs: 1,
+              processed: 0,
+              accepted: 0,
+              delivered: 0,
+              failed: 0,
+              failures: Object.freeze([]),
+            },
+            progress: {
+              runs: 1,
+              processed: 0,
+              accepted: 0,
+              delivered: 0,
+              failed: 0,
+              failures: Object.freeze([]),
+            },
+          })),
+        });
+      },
+      stop() {
+        workerEvents.push("stop");
+      },
+      awaitSettled() {
+        return Promise.resolve();
+      },
+      retire() {
+        return Promise.resolve();
+      },
+      stopOwners() {
+        workerEvents.push("stopOwners");
+      },
+      awaitOwnersSettled() {
+        return Promise.resolve();
+      },
+      retireOwners() {
+        return Promise.resolve();
+      },
+    };
+    serverEnvironmentAccess.installTestAttachments(environment, () => worker);
+
+    const attachment = await serverEnvironmentAccess.attach(environment, {
+      ownership: "caller",
+      descriptors: [environmentDescriptor(environment)],
+    });
+
+    expect(logger.child).toHaveBeenCalledTimes(1);
+    expect(runtime?.logger).toBe(child);
+    await serverEnvironmentAccess.detach(environment, attachment);
+    expect(workerEvents).toContain("stop");
+  });
+
+  it("snapshots one caller-owned logger child when the environment resolves", () => {
+    const child = Object.freeze({});
+    const logger = { child: vi.fn(() => child) };
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      ...{ logger: logger as unknown as ILogLayer },
+    });
+
+    const environment = ServerEnvironment.instance();
+
+    expect(logger.child).toHaveBeenCalledTimes(1);
+    expect(logger.child).toHaveBeenCalledWith();
+    expect("logger" in environment).toBe(false);
+  });
+
+  it("writes default warning and error records as uppercase structured console JSON", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const environment = ServerEnvironment.instance();
+
+    emitServerWarning(serverEnvironmentAccess.loggerFor(environment), "Warning message", {
+      contextName: "Tasks",
+      operation: "stand.registry",
+      reasonCode: "volatile",
+    });
+    emitServerError(serverEnvironmentAccess.loggerFor(environment), "Error message", {
+      operation: "delivery.stop",
+      reasonCode: "failed",
+    });
+    await Promise.resolve();
+
+    const warningRecord = JSON.parse(String(warning.mock.calls[0]?.[0])) as Record<string, unknown>;
+    const errorRecord = JSON.parse(String(error.mock.calls[0]?.[0])) as Record<string, unknown>;
+    expect(warningRecord).toMatchObject({
+      severity: "WARN",
+      message: "Warning message",
+      contextName: "Tasks",
+      operation: "stand.registry",
+      reasonCode: "volatile",
+    });
+    expect(errorRecord).toMatchObject({
+      severity: "ERROR",
+      message: "Error message",
+      operation: "delivery.stop",
+      reasonCode: "failed",
+    });
+    expect(warningRecord.timestamp).toEqual(expect.any(String));
+  });
+
   it("warns once for a volatile registry in production and never in local", async () => {
     const warnings: string[] = [];
+    const logger = {
+      child: vi.fn(),
+      withMetadata: () => ({ warn: (message: string) => warnings.push(message) }),
+      warn: (message: string) => warnings.push(message),
+    };
+    logger.child.mockReturnValue(logger);
     EnvironmentTests.use(EnvironmentType.Production);
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
-      warn: (message) => warnings.push(message),
+      ...{ logger: logger as unknown as ILogLayer },
     });
     const production = ServerEnvironment.instance();
     const context = BoundedContext.singleTenant("Tasks")
@@ -44,19 +218,55 @@ describe("ServerEnvironment delivery lifecycle", () => {
     try {
       serverEnvironmentAccess.warnVolatileRegistry(production, context);
       serverEnvironmentAccess.warnVolatileRegistry(production, context);
-      expect(warnings).toEqual([
-        'Stand subscription registry for context "Tasks" is not persistent.',
-      ]);
+      expect(warnings).toEqual(["Stand subscription registry is not persistent."]);
     } finally {
       await context.close();
       await production.close();
     }
   });
 
+  it("keeps volatile-registry context names bounded and out of the fixed message", async () => {
+    const warnings: string[] = [];
+    const metadata: Record<string, unknown>[] = [];
+    const logger = {
+      child: vi.fn(),
+      withMetadata: (facts: Record<string, unknown>) => {
+        metadata.push(facts);
+        return { warn: (message: string) => warnings.push(message) };
+      },
+    };
+    logger.child.mockReturnValue(logger);
+    EnvironmentTests.use(EnvironmentType.Production);
+    ServerEnvironment.when(EnvironmentType.Production).use({
+      storageFactory: new InMemoryStorageFactory(),
+      transport: { close: () => undefined } as never,
+      ...{ logger: logger as unknown as ILogLayer },
+    });
+    const environment = ServerEnvironment.instance();
+    const context = BoundedContext.singleTenant(`secret-context-${"x".repeat(257)}`)
+      .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
+      .build();
+
+    try {
+      serverEnvironmentAccess.warnVolatileRegistry(environment, context);
+      expect(warnings).toEqual(["Stand subscription registry is not persistent."]);
+      expect(metadata).toEqual([{ operation: "stand.registry", reasonCode: "volatile" }]);
+    } finally {
+      await context.close();
+      await environment.close();
+    }
+  });
+
   it("does not warn for a volatile registry in a local environment", async () => {
     const warnings: string[] = [];
+    const logger = {
+      child: vi.fn(),
+      withMetadata: () => ({ warn: (message: string) => warnings.push(message) }),
+      warn: (message: string) => warnings.push(message),
+    };
+    logger.child.mockReturnValue(logger);
     ServerEnvironment.when(EnvironmentType.Local).use({
-      warn: (message) => warnings.push(message),
+      ...{ logger: logger as unknown as ILogLayer },
     });
     const environment = ServerEnvironment.instance();
     const context = BoundedContext.singleTenant("Tasks")
@@ -72,13 +282,47 @@ describe("ServerEnvironment delivery lifecycle", () => {
     }
   });
 
-  it("warns before Server.start attaches a production context", async () => {
+  it("does not warn for a persistent registry in a production environment", async () => {
     const warnings: string[] = [];
+    const logger = {
+      child: vi.fn(),
+      withMetadata: () => ({ warn: (message: string) => warnings.push(message) }),
+      warn: (message: string) => warnings.push(message),
+    };
+    logger.child.mockReturnValue(logger);
     EnvironmentTests.use(EnvironmentType.Production);
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
-      warn: (message) => warnings.push(message),
+      ...{ logger: logger as unknown as ILogLayer },
+    });
+    const environment = ServerEnvironment.instance();
+    const context = BoundedContext.singleTenant("PersistentTasks")
+      .withSubscriptionRegistry({ persistent: true, close: () => Promise.resolve() } as never)
+      .build();
+
+    try {
+      serverEnvironmentAccess.warnVolatileRegistry(environment, context);
+      expect(warnings).toEqual([]);
+    } finally {
+      await context.close();
+      await environment.close();
+    }
+  });
+
+  it("warns before Server.start attaches a production context", async () => {
+    const warnings: string[] = [];
+    const logger = {
+      child: vi.fn(),
+      withMetadata: () => ({ warn: (message: string) => warnings.push(message) }),
+      warn: (message: string) => warnings.push(message),
+    };
+    logger.child.mockReturnValue(logger);
+    EnvironmentTests.use(EnvironmentType.Production);
+    ServerEnvironment.when(EnvironmentType.Production).use({
+      storageFactory: new InMemoryStorageFactory(),
+      transport: { close: () => undefined } as never,
+      ...{ logger: logger as unknown as ILogLayer },
     });
     const context = BoundedContext.singleTenant("Tasks")
       .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
@@ -86,9 +330,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     const server = new Server({ contexts: [context], port: 0 });
 
     const running = await server.start();
-    expect(warnings).toEqual([
-      'Stand subscription registry for context "Tasks" is not persistent.',
-    ]);
+    expect(warnings).toEqual(["Stand subscription registry is not persistent."]);
     await running.close();
   });
 
