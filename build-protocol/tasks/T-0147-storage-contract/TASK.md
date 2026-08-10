@@ -1,6 +1,6 @@
 # T-0147: JVM-Compatible Storage Contract
 
-Status: In progress; non-releasable stacked checkpoint.
+Status: Complete; reviewed as part of the releasable T-0150 correction train.
 
 ## Objective
 
@@ -105,12 +105,8 @@ T-0150.
 
 ## Review Dispositions
 
-- Style/maintainability: pending final stacked-train review; common contract
-  structure is in scope.
-- Documentation: pending final stacked-train review; public beginner guidance
-  changes only after provider behavior stabilizes.
-- TypeScript/API docs: pending final stacked-train review; public types and
-  declarations are in scope.
-- Performance/reliability: pending final stacked-train review; identity,
-  conversion, and tenant-catalog correctness are in scope.
-- Security: deferred to T-0150's mandatory final tenant-boundary review.
+- Style/maintainability: clean in the final T-0150 stacked-train review.
+- Documentation: clean in the final T-0150 stacked-train review.
+- TypeScript/API docs: clean in the final T-0150 stacked-train review.
+- Performance/reliability: clean in the final T-0150 stacked-train review.
+- Security: the final T-0150 tenant-boundary audit is clean.

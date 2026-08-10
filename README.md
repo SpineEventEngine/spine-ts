@@ -1,11 +1,7 @@
 # Spine TS — DDD and CQRS applications in TypeScript
 
-Spine TS helps Node.js applications apply Domain-Driven Design (DDD) and CQRS
-with typed Protobuf contracts. A command requests a business action; an event
-records a domain fact. A Bounded Context is a boundary around one domain model,
-vocabulary, and set of rules. Aggregates protect write-side consistency, Process
-Managers coordinate multi-step work across entities or Aggregates in response
-to events, and Projections provide query-side views.
+Spine TS helps you build Domain-Driven Design (DDD) and CQRS applications on
+Node.js with less code.
 
 > **🔧 Spine TS is an experimental snapshot.** Its public API may change before
 > the first stable release.
@@ -141,11 +137,6 @@ Spine TS requires Node.js 24 LTS or newer and `pnpm@11.9.0`.
 ## ⚠️ Current limits
 
 - Packages are not published to npm yet; examples run from this workspace.
-- The supplied delivery server is in-memory and loses its state on restart.
-- Browser deployments still need application-selected identity providers,
-  durable sessions, TLS, and network policy.
-- Subscription updates are notifications, not a complete event history. Clients
-  re-query entity state after reconnecting.
 
 ## 📄 License
 
