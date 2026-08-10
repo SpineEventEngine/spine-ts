@@ -374,6 +374,7 @@ export class EventBus {
       }
     }
     this.#subscribers.clear();
+    eventBusLoggers.delete(this);
   }
 
   #notify(event: Event): void {
@@ -388,19 +389,27 @@ export class EventBus {
 
     for (const subscriber of subscribers) {
       try {
-        subscriber.onEvent(clone(EventSchema, event));
-        // spine-log-boundary: server.event_subscriber_failure
+        const result = subscriber.onEvent(clone(EventSchema, event));
+        if (isPromiseLike(result)) {
+          // spine-log-boundary: server.event_subscriber_async_failure
+          void Promise.resolve(result).catch(() => this.#recordSubscriberFailure(typeUrl));
+        }
       } catch {
         // Service-delivery subscribers must not poison event intake or later subscribers.
-        const logger = eventBusLoggers.get(this);
-        if (logger !== undefined) {
-          emitServerError(logger, "Event subscriber failed.", {
-            eventType: typeUrl,
-            operation: "event.subscriber",
-            reasonCode: "subscriber_failed",
-          });
-        }
+        // spine-log-boundary: server.event_subscriber_sync_failure
+        this.#recordSubscriberFailure(typeUrl);
       }
+    }
+  }
+
+  #recordSubscriberFailure(typeUrl: string): void {
+    const logger = eventBusLoggers.get(this);
+    if (logger !== undefined) {
+      emitServerError(logger, "Event subscriber failed.", {
+        eventType: typeUrl,
+        operation: "event.subscriber",
+        reasonCode: "subscriber_failed",
+      });
     }
   }
 
@@ -434,6 +443,15 @@ export class EventBus {
 
     return eventStore as EventStore | typeof forgettingBus;
   }
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return (
+    (typeof value === "object" || typeof value === "function") &&
+    value !== null &&
+    "then" in value &&
+    typeof (value as { then?: unknown }).then === "function"
+  );
 }
 
 const EventBusRoles = Object.freeze({

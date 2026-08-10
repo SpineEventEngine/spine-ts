@@ -2454,6 +2454,7 @@ class ProcessManagerCommandExecution {
 
   #postEvents(events: readonly Event[]): void {
     for (const event of events) {
+      // spine-log-boundary: server.repository_event_follow_up
       void this.#runtime.postEventFollowUp(event).catch((error: unknown) => {
         this.#runtime.recordDispatchFailure(event, error);
       });
@@ -2745,6 +2746,7 @@ class ProcessManagerEventExecution {
 
   #postEvents(events: readonly Event[]): void {
     for (const event of events) {
+      // spine-log-boundary: server.process_manager_event_follow_up
       void this.#runtime.postEventFollowUp(event).catch((error: unknown) => {
         this.#runtime.recordDispatchFailure(event, error);
       });
@@ -3163,6 +3165,7 @@ const RepositorySignals = {
     });
 
     try {
+      // spine-log-boundary: server.repository_rejection_follow_up
       void runtime.postEventFollowUp(event).catch((error: unknown) => {
         runtime.recordDispatchFailure(event, error);
       });
@@ -3442,6 +3445,7 @@ class EntityStateChangePublishing {
 
   #post(runtime: RepositoryRuntime, event: Event): void {
     try {
+      // spine-log-boundary: server.repository_system_follow_up
       void runtime.postSystemFollowUp(event).catch((error: unknown) => {
         runtime.recordDispatchFailure(event, error);
       });
@@ -3590,6 +3594,7 @@ class HandlerDispatchPublishing {
   ): void {
     try {
       runtime.registerSystemEventSchema(schema);
+      // spine-log-boundary: server.repository_system_dispatch_follow_up
       void runtime.postSystemFollowUp(event).catch((error: unknown) => {
         runtime.recordDispatchFailure(event, error);
       });
@@ -4490,6 +4495,7 @@ const RepositoryHistoryInternals = {
           nextVersion = loadedLast === undefined ? nextVersion : versionOf(loadedLast);
           exhausted = loaded.length < requested;
         });
+        // spine-log-boundary: server.repository_history_prefetch
         continuation = next.catch(() => undefined);
         await next;
         return result ?? entries.slice(0, depth);
@@ -4565,6 +4571,7 @@ const DispatchGuards = {
       await dispatch();
       DispatchGuards.rememberGuardCompletion(activeGuard, eventId, depth);
     });
+    // spine-log-boundary: server.repository_dispatch_guard
     activeGuard.chain = next
       .catch(() => undefined)
       .finally(() => {

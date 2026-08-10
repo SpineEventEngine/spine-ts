@@ -830,6 +830,38 @@ describe("EventBus", () => {
     );
   });
 
+  it("contains asynchronous subscriber rejection without delaying later subscribers", async () => {
+    const bus = new EventBus(
+      new EventStore({ name: "Tasks", multitenant: false }, new InMemoryStorageFactory()),
+      [createEventDispatcher([ProjectionStateSchema], () => undefined)],
+    );
+    const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
+    eventBusAccess.installLogger(bus, {
+      withMetadata: (facts: Record<string, unknown>) => ({
+        error: (message: string) => errors.push({ message, facts }),
+      }),
+    } as unknown as ILogLayer);
+    const later = vi.fn();
+    eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
+      onEvent: async () => Promise.reject(new Error("async subscriber failure")),
+    });
+    eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), { onEvent: later });
+
+    await bus.post(createProjectionEvent("event-async"));
+    expect(later).toHaveBeenCalledTimes(1);
+    await delay(0);
+    expect(errors).toEqual([
+      {
+        message: "Event subscriber failed.",
+        facts: {
+          eventType: TypeUrls.derive(ProjectionStateSchema),
+          operation: "event.subscriber",
+          reasonCode: "subscriber_failed",
+        },
+      },
+    ]);
+  });
+
   it("closes direct event subscribers when the bus closes", async () => {
     const store = new EventStore(
       { name: "Tasks", multitenant: false },
