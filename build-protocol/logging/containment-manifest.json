@@ -165,7 +165,14 @@
       "id": "server.subscription_consumer_delivery",
       "source": "../../packages/server/src/stand/subscription-runtime.ts",
       "operation": "subscription.consumer_delivery",
-      "disposition": "no-log",
+      "disposition": "warn",
+      "test": "packages/server/test/stand/subscription-runtime.test.ts"
+    },
+    {
+      "id": "server.subscription_consumer_async_delivery",
+      "source": "../../packages/server/src/stand/subscription-runtime.ts",
+      "operation": "subscription.consumer",
+      "disposition": "warn",
       "test": "packages/server/test/stand/subscription-runtime.test.ts"
     }
   ]

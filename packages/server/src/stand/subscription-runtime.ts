@@ -82,10 +82,14 @@ export class SubscriptionRuntime {
   start(): void {
     if (this.#timer !== undefined || this.#closing) return;
     // spine-log-boundary: server.subscription_initial_reconcile
-    void this.reconcile().catch(() => this.#warnReconciliationFailure());
+    void this.reconcile().catch(() => {
+      this.#warnReconciliationFailure();
+    });
     this.#timer = setInterval(() => {
       // spine-log-boundary: server.subscription_timer_reconcile
-      void this.#reconcileTimer().catch(() => this.#warnReconciliationFailure());
+      void this.#reconcileTimer().catch(() => {
+        this.#warnReconciliationFailure();
+      });
     }, 10_000);
     this.#timer.unref();
   }
@@ -324,13 +328,40 @@ export class SubscriptionRuntime {
 
   #notify(id: string, update: SubscriptionUpdate): void {
     for (const consumer of [...(this.#consumers.get(id) ?? [])]) {
+      const logger = subscriptionRuntimeLoggers.get(this);
       try {
-        consumer(update);
+        const invoke: (next: SubscriptionUpdate) => unknown = consumer;
+        const outcome = invoke(update);
+        if (SubscriptionRuntime.#isPromiseLike(outcome)) {
+          // spine-log-boundary: server.subscription_consumer_async_delivery
+          void Promise.resolve(outcome).catch(() => {
+            SubscriptionRuntime.#warnConsumerFailure(logger, id);
+          });
+        }
         // spine-log-boundary: server.subscription_consumer_delivery
       } catch {
         // Individual best-effort stream consumers cannot suppress peers.
+        SubscriptionRuntime.#warnConsumerFailure(logger, id);
       }
     }
+  }
+
+  static #warnConsumerFailure(logger: ILogLayer | undefined, id: string): void {
+    if (logger === undefined) return;
+    emitServerWarning(logger, "Subscription consumer delivery failed.", {
+      subscriptionId: id,
+      operation: "subscription.consumer",
+      reasonCode: "failed",
+    });
+  }
+
+  static #isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+    return (
+      (typeof value === "object" || typeof value === "function") &&
+      value !== null &&
+      "then" in value &&
+      typeof (value as { then?: unknown }).then === "function"
+    );
   }
 }
 
