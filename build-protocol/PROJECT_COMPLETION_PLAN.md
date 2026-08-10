@@ -194,11 +194,10 @@ removes the invented physical scope and revision fields, adopts native provider
 tenancy and JVM-compatible typed value mapping, and closes the shared-runtime
 cutover.
 
-Wave 9 planning is active under T-0153. Its human Q&A is complete. The approved
-scope and preliminary Wave 10 beginner-guide structure are recorded in
-`build-protocol/planning/WAVE_9_LOGGING_ROUTING_PLAN.md`; runtime implementation
-does not begin until that high-risk public-contract plan passes specialist
-review and is integrated.
+Wave 9 planning is complete under T-0153. Its approved scope and preliminary
+Wave 10 beginner-guide structure are frozen in
+`build-protocol/planning/WAVE_9_LOGGING_ROUTING_PLAN.md`. Runtime implementation
+proceeds through the dependency-ordered T-0154 through T-0167 train.
 
 ## Authored API And Example Quality Correction
 

@@ -1,6 +1,6 @@
 # T-0153: Wave 9 Plan
 
-Status: Verified and pushed; pending integration
+Status: Complete
 
 ## Objective
 
@@ -201,3 +201,14 @@ deterministic Markdown checks and planning review convergence. Runtime tasks
 use changed-source focused coverage during development and one `verify:task`
 after their relevant review corrections converge. T-0167 alone runs the final
 converged `verify:release` and post-merge verification.
+
+## Closure
+
+- Reviewed plan commits `74b09d5c` and `380c5a46` were pushed to
+  `origin/task/T-0153-wave9-plan`.
+- The branch merged without conflict as `b266606e` in a clean integration
+  worktree.
+- A fresh worktree required the repository's ignored Protobuf output to be
+  prepared with `pnpm proto:generate`. After that canonical setup step,
+  `pnpm verify:task -- --no-tests` passed every selected post-merge gate.
+- T-0153 is integrated and Wave 9 runtime work starts with T-0154.
