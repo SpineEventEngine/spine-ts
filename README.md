@@ -1,6 +1,6 @@
 # Spine TS — DDD and CQRS applications in TypeScript
 
-Spine TS helps you build Domain-Driven Design (DDD) and CQRS applications on
+A framework helping build Domain-Driven Design (DDD) and CQRS applications on
 Node.js with less code.
 
 > **🔧 Spine TS is an experimental snapshot.** Its public API may change before
