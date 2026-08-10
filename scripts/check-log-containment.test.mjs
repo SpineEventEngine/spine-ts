@@ -10,6 +10,7 @@ function check(source, boundaries, sourcePath = "source.ts") {
   const file = join(root, sourcePath);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, source);
+  writeFileSync(join(root, "fixture.test.ts"), "export {};\n");
   const manifest = join(root, "manifest.json");
   writeFileSync(manifest, JSON.stringify({ boundaries }));
   return spawnSync(process.execPath, ["scripts/check-log-containment.mjs", manifest], {
@@ -19,7 +20,7 @@ function check(source, boundaries, sourcePath = "source.ts") {
 }
 
 function boundary(id, source = "source.ts") {
-  return { id, source, operation: "retry", disposition: "warn", test: "fixture" };
+  return { id, source, operation: "retry", disposition: "warn", test: "fixture.test.ts" };
 }
 
 test("rejects every checked containment pattern when it has an adjacent manifest binding", () => {

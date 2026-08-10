@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import ts from "typescript";
 
@@ -99,9 +99,10 @@ function validEntry(entry) {
     typeof entry.source === "string" &&
     entry.source.length > 0 &&
     typeof entry.operation === "string" &&
-    entry.operation.length > 0 &&
+    /^[a-z0-9][a-z0-9_.-]{0,63}$/.test(entry.operation) &&
     typeof entry.test === "string" &&
     entry.test.length > 0 &&
+    (existsSync(resolve(root, entry.test)) || existsSync(resolve(repositoryRoot, entry.test))) &&
     ["warn", "error", "no-log"].includes(entry.disposition)
   );
 }

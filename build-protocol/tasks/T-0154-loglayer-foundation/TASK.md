@@ -11,6 +11,16 @@ ERROR call sites belong to T-0155, T-0156, and T-0156A.
 
 ## Classification
 
+## Human-Imposed Requirements Ledger
+
+- Use LogLayer directly; no Spine logger facade, global singleton, mutable
+  static, or framework-owned logger lifecycle.
+- Applications own logger configuration, flush, and close; runtime parts retain
+  only an environment child.
+- Operational call sites and product Markdown remain outside T-0154.
+- Containment boundaries require stable adjacent IDs, a checked manifest, and
+  behavior-focused evidence.
+
 High-risk. This task changes shared dependencies and public server-side option
 types, replaces the legacy warning callback, defines the authentication-secret
 boundary for future logs, and adds shared build tooling used by later logging

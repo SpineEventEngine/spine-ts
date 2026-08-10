@@ -149,11 +149,6 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
    */
   readonly tracerFactory: ServerEnvironmentCloseable | undefined;
 
-  /**
-   * Logger child snapshot used only by this environment's runtime parts.
-   */
-  readonly logger: ILogLayer;
-
   readonly #ownedCloseables: readonly unknown[];
   readonly #closeGroup: RetryableCloseGroup;
   #close: Promise<void> | undefined;
@@ -167,7 +162,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     this.transport = settings.transport;
     this.delivery = settings.delivery;
     this.tracerFactory = settings.tracerFactory;
-    this.logger = settings.logger;
+    environmentLoggers.set(this, settings.logger);
     this.#ownedCloseables = ServerEnvironmentValues.facilitiesToClose(settings);
     warnedVolatileRegistries.set(this, new WeakSet());
     this.#closeGroup = new RetryableCloseGroup(
@@ -177,7 +172,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     environmentAttachments.set(
       this,
       new EnvironmentAttachments({
-        logger: this.logger,
+        logger: ServerEnvironmentValues.loggerFor(this),
         createWorker: () => {
           const ports = ServerEnvironmentValues.ports(this.delivery);
           return new EnvironmentDeliveryWorker({
@@ -352,6 +347,7 @@ interface ServerEnvironmentAccess {
 }
 
 const environmentAttachments = new WeakMap<ServerEnvironment, EnvironmentAttachments>();
+const environmentLoggers = new WeakMap<ServerEnvironment, ILogLayer>();
 const deliveryOpeners = new WeakMap<ServerEnvironment, () => Promise<void>>();
 const testAttachmentsInstallable = new WeakSet<ServerEnvironment>();
 const warnedVolatileRegistries = new WeakMap<ServerEnvironment, WeakSet<BoundedContext>>();
@@ -456,7 +452,10 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     }
     environmentAttachments.set(
       environment,
-      new EnvironmentAttachments({ logger: environment.logger, createWorker }),
+      new EnvironmentAttachments({
+        logger: ServerEnvironmentValues.loggerFor(environment),
+        createWorker,
+      }),
     );
   },
   warnVolatileRegistry(environment: ServerEnvironment, context: BoundedContext) {
@@ -470,8 +469,8 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     warned.add(context);
     // spine-log-boundary: server.volatile_subscription_registry
     emitServerWarning(
-      environment.logger,
-      `Stand subscription registry for context "${context.name.value}" is not persistent.`,
+      ServerEnvironmentValues.loggerFor(environment),
+      "Stand subscription registry is not persistent.",
       { contextName: context.name.value, operation: "stand.registry", reasonCode: "volatile" },
     );
   },
@@ -482,6 +481,11 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
  * @internal Groups private facility-assembly operations for the environment singleton.
  */
 const ServerEnvironmentValues = Object.freeze({
+  loggerFor(environment: ServerEnvironment): ILogLayer {
+    const logger = environmentLoggers.get(environment);
+    if (logger === undefined) throw new TypeError("ServerEnvironment logger is not available.");
+    return logger;
+  },
   openableDelivery(
     delivery: ServerEnvironmentCloseable | undefined,
   ): ServerEnvironmentDelivery | undefined {

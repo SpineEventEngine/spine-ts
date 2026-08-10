@@ -158,7 +158,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
 
     expect(logger.child).toHaveBeenCalledTimes(1);
     expect(logger.child).toHaveBeenCalledWith();
-    expect(environment.logger).toBe(child);
+    expect("logger" in environment).toBe(false);
   });
 
   it("warns once for a volatile registry in production and never in local", async () => {
@@ -183,9 +183,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     try {
       serverEnvironmentAccess.warnVolatileRegistry(production, context);
       serverEnvironmentAccess.warnVolatileRegistry(production, context);
-      expect(warnings).toEqual([
-        'Stand subscription registry for context "Tasks" is not persistent.',
-      ]);
+      expect(warnings).toEqual(["Stand subscription registry is not persistent."]);
     } finally {
       await context.close();
       await production.close();
@@ -265,9 +263,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     const server = new Server({ contexts: [context], port: 0 });
 
     const running = await server.start();
-    expect(warnings).toEqual([
-      'Stand subscription registry for context "Tasks" is not persistent.',
-    ]);
+    expect(warnings).toEqual(["Stand subscription registry is not persistent."]);
     await running.close();
   });
 
