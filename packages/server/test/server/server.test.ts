@@ -1540,6 +1540,10 @@ describe("Server", () => {
   });
 
   it("runs a server under process-owned signal shutdown", async () => {
+    const withMetadata = vi.fn(() => ({ warn: vi.fn(), error: vi.fn() }));
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      logger: { child: () => ({ withMetadata }) } as never,
+    });
     const server = await Server.atPort(0).run();
     const session = http2.connect(server.baseUrl);
     session.on("error", () => undefined);
@@ -1550,6 +1554,7 @@ describe("Server", () => {
 
     await expect(closed).resolves.toBeUndefined();
     await server.close();
+    expect(withMetadata).not.toHaveBeenCalled();
   });
 
   it("keeps a standalone discovery gateway signal-managed without retiring its environment", async () => {

@@ -927,6 +927,7 @@ describe("DeliverySupervisor", () => {
   });
 
   it("cancels the Admin watch as soon as close stops admission", async () => {
+    const withMetadata = vi.fn(() => ({ warn: vi.fn(), error: vi.fn() }));
     let watchSignal: AbortSignal | undefined;
     const supervisor = new DeliverySupervisor({
       source: {
@@ -942,12 +943,14 @@ describe("DeliverySupervisor", () => {
       }),
       onMessage: () => Promise.resolve(),
     });
+    deliverySupervisorAccess.installLogger(supervisor, { withMetadata } as never);
 
     await supervisor.start();
     await Promise.resolve();
     await supervisor.close({ graceMs: 10 });
 
     expect(watchSignal?.aborted).toBe(true);
+    expect(withMetadata).not.toHaveBeenCalled();
   });
 
   it("retains one recovery timer and releases all timer resources on close", async () => {

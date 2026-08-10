@@ -27,4 +27,5 @@ High-risk: asynchronous delivery, retry, timer, environment attachment, and shut
 - WARN is reserved for contained retry/degraded/best-effort work; ERROR only for accepted permanent loss or terminal background/process work.
 - Normal close/cancel, rethrows, validation, surfaced failures, aggregation, and retry-state resets are no-log.
 - Logger failures are contained and must not affect business outcomes.
+- Each failure emits exactly once at its outer containment or termination boundary and is never duplicated by inner observers.
 - T-0156 remains private server-runtime scope: no public exports, contracts, or product Markdown change.

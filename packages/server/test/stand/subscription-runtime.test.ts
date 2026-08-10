@@ -152,6 +152,20 @@ describe("SubscriptionRuntime", () => {
     );
   });
 
+  it("emits no record for a normal runtime close with an installed logger", async () => {
+    const withMetadata = vi.fn(() => ({ warn: vi.fn(), error: vi.fn() }));
+    const runtime = new SubscriptionRuntime(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      new InMemorySubscriptionRegistry(),
+    );
+    subscriptionRuntimeAccess.installLogger(runtime, { withMetadata } as never);
+    await runtime.close();
+    expect(withMetadata).not.toHaveBeenCalled();
+  });
+
   it("exposes its registry and ignores a failed timer reconciliation", async () => {
     vi.useFakeTimers();
     const registry = new FailingSnapshotRegistry();
