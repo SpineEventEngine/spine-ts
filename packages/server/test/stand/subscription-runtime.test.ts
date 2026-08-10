@@ -21,6 +21,12 @@ describe("SubscriptionRuntime", () => {
     expect(() => {
       subscriptionRuntimeAccess.installLogger({} as never, logger as never);
     }).toThrow("Subscription runtime logger requires a SubscriptionRuntime instance.");
+    expect(() => {
+      subscriptionRuntimeAccess.clearLogger({} as never);
+    }).toThrow("Subscription runtime logger requires a SubscriptionRuntime instance.");
+    expect(() => {
+      subscriptionRuntimeAccess.loggerFor({} as never);
+    }).toThrow("Subscription runtime logger requires a SubscriptionRuntime instance.");
     subscriptionRuntimeAccess.installLogger(runtime, logger as never);
     expect(subscriptionRuntimeAccess.loggerFor(runtime)).toBe(logger);
     subscriptionRuntimeAccess.clearLogger(runtime);

@@ -142,6 +142,9 @@ describe("DeliverySupervisor", () => {
     expect(() => {
       deliverySupervisorAccess.installLogger({} as never, logger as never);
     }).toThrow("Delivery supervisor logger requires a DeliverySupervisor instance.");
+    expect(() => {
+      deliverySupervisorAccess.loggerFor({} as never);
+    }).toThrow("Delivery supervisor logger requires a DeliverySupervisor instance.");
     deliverySupervisorAccess.installLogger(supervisor, logger as never);
     expect(deliverySupervisorAccess.loggerFor(supervisor)).toBe(logger);
     await supervisor.start();
