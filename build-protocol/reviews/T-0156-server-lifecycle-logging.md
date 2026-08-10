@@ -4,7 +4,7 @@ Status: Correction-complete; re-review-ready (not final complete)
 
 Current correction evidence: timer retained-cycle warning is exactly-once; `keeps a failed signal close retryable` proves immediate SIGTERM/SIGINT coalesce to one first attempt/error and a later signal retries; the corrected signal-aware recovery close test proves zero records; normal delivery watch, subscription runtime close, and successful process shutdown all capture zero records. Reliability and style re-review remain pending until the cheap gate is repeated.
 
-Fresh changed-range coverage blocks re-review: statements/lines 81/84 (96.43%), functions 20/21 (95.24%), branches 44/49 (89.80%). Exact uncovered changed branches are `bounded-context.ts:1087`, `bounded-context.ts:2239`, `process-server-coordinator.ts:87`, `server.ts:250`, and `subscription-runtime.ts:353`.
+Fresh changed-range coverage gate is clean: statements/lines 81/84 (96.43%), branches 45/49 (91.84%), and functions 20/21 (95.24%), from `/tmp/t0156-no-logger-coverage/lcov.info` (69 files / 1,647 tests). The no-logger consumer test covers `subscription-runtime.ts:353`; the task is correction-complete and re-review-ready.
 
 Coverage correction evidence: the existing real stream-consumer fan-out test now posts a second state change after clearing runtime logger metadata; peer delivery reaches two while WARN remains at two, covering the no-fallback-logger branch.
 
