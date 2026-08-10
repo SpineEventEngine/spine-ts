@@ -195,6 +195,97 @@
       "operation": "delivery.supervisor_close",
       "disposition": "no-log",
       "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.attachment_queued_gate",
+      "source": "../../packages/server/src/server/environment-attachment.ts",
+      "operation": "attachment.queue",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.attachment_queue_serial_tail",
+      "source": "../../packages/server/src/server/environment-attachment.ts",
+      "operation": "attachment.queue",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.attachment_stop_admission_gate",
+      "source": "../../packages/server/src/server/environment-attachment.ts",
+      "operation": "attachment.stop",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.attachment_stop_serial_tail",
+      "source": "../../packages/server/src/server/environment-attachment.ts",
+      "operation": "attachment.stop",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.attachment_permanent_close_serial_tail",
+      "source": "../../packages/server/src/server/environment-attachment.ts",
+      "operation": "attachment.close",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.attachment_detach_serial_tail",
+      "source": "../../packages/server/src/server/environment-attachment.ts",
+      "operation": "attachment.detach",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.attachment_rollback_retry_reset",
+      "source": "../../packages/server/src/server/environment-attachment.ts",
+      "operation": "attachment.rollback",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.attachment_rollback_serial_tail",
+      "source": "../../packages/server/src/server/environment-attachment.ts",
+      "operation": "attachment.rollback",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.delivery_control_settlement_observer",
+      "source": "../../packages/server/src/delivery/delivery-run-control.ts",
+      "operation": "delivery.control",
+      "disposition": "no-log",
+      "test": "packages/server/test/delivery/delivery-run-control.test.ts"
+    },
+    {
+      "id": "server.delivery_coordinator_notify",
+      "source": "../../packages/server/src/delivery/delivery-run-coordinator.ts",
+      "operation": "delivery.coordinator_notify",
+      "disposition": "no-log",
+      "test": "packages/server/test/delivery/delivery-run-coordinator.test.ts"
+    },
+    {
+      "id": "server.delivery_coordinator_remove_idle",
+      "source": "../../packages/server/src/delivery/delivery-run-coordinator.ts",
+      "operation": "delivery.coordinator_remove",
+      "disposition": "no-log",
+      "test": "packages/server/test/delivery/delivery-run-coordinator.test.ts"
+    },
+    {
+      "id": "server.delivery_coordinator_settlement_observer",
+      "source": "../../packages/server/src/delivery/delivery-run-coordinator.ts",
+      "operation": "delivery.coordinator_settlement",
+      "disposition": "no-log",
+      "test": "packages/server/test/delivery/delivery-run-coordinator.test.ts"
+    },
+    {
+      "id": "server.delivery_coordinator_retirement_idle",
+      "source": "../../packages/server/src/delivery/delivery-run-coordinator.ts",
+      "operation": "delivery.coordinator_retirement",
+      "disposition": "no-log",
+      "test": "packages/server/test/delivery/delivery-run-coordinator.test.ts"
     }
   ]
 }

@@ -463,10 +463,12 @@ export class EnvironmentAttachments {
       waiter.status = "complete";
       waiter.gate.resolve(attachment);
     });
+    // spine-log-boundary: server.attachment_queue_serial_tail
     this.#serial = attaching.then(
       () => undefined,
       () => undefined,
     );
+    // spine-log-boundary: server.attachment_queued_gate
     void attaching.catch((error: unknown) => {
       waiter.status = "complete";
       waiter.gate.reject(error);
@@ -602,10 +604,12 @@ export class EnvironmentAttachments {
         },
       );
     });
+    // spine-log-boundary: server.attachment_stop_serial_tail
     this.#serial = admission.then(
       () => undefined,
       () => undefined,
     );
+    // spine-log-boundary: server.attachment_stop_admission_gate
     void admission.catch(gate.reject);
     void stop.promise.then(
       () => {
@@ -882,6 +886,7 @@ export class EnvironmentAttachments {
       this.#permanentlyClosed = true;
     });
     this.#permanentCloseAdmission = admission;
+    // spine-log-boundary: server.attachment_permanent_close_serial_tail
     this.#serial = admission.then(
       () => undefined,
       () => undefined,
@@ -991,6 +996,7 @@ export class EnvironmentAttachments {
     });
     const operation: DetachHandleOperation = { promise: detaching, status: "running" };
     attached.operation = operation;
+    // spine-log-boundary: server.attachment_detach_serial_tail
     this.#serial = detaching.then(
       () => undefined,
       () => undefined,
@@ -1106,10 +1112,12 @@ export class EnvironmentAttachments {
       return this.#continueRollback(rollback);
     });
     rollback.retry = retry;
+    // spine-log-boundary: server.attachment_rollback_serial_tail
     this.#serial = retry.then(
       () => undefined,
       () => undefined,
     );
+    // spine-log-boundary: server.attachment_rollback_retry_reset
     void retry.catch(() => {
       if (this.#failedRollback === rollback) {
         rollback.retry = undefined;
