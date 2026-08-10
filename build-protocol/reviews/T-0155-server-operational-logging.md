@@ -1,6 +1,6 @@
 # T-0155 Review Record
 
-Status: Correction-ready for required review wave
+Status: Targeted re-review ready
 
 ## Required Concerns
 
@@ -55,3 +55,14 @@ Status: Correction-ready for required review wave
 - Normal running-server shutdown clears the service logger. Failed listener
   startup releases its network/HTTP closure; the discarded service is only a
   WeakMap key, so no retained logger exists and no test-only seam is added.
+
+## Final Deterministic Snapshot
+
+- Post-`a3c94f2a`: full server 69 files / 1,637 tests; changed-range LCOV is
+  96.00% statements/lines (72/75), 100% functions (13/13), and 91.67% branches
+  (33/36).
+- Generated build/tooling, exact changed-file ESLint, sequential-build API
+  docs, TSDoc, containment, formatting, and diff checks are clean.
+- Final explorer assignment was read-only explorer, explicit
+  `gpt-5.6-terra` / medium; implementation follow-up was explicit implementer,
+  `gpt-5.6-terra` / medium. This surface exposes no runtime metadata.
