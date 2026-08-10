@@ -23,6 +23,13 @@ changed production sources: statements 39/39 (100%), lines 39/39 (100%),
 functions 14/14 (100%), branches 43/44 (97.73%). The focused runner's global
 repository threshold output is irrelevant to this changed-range result.
 
+Final evidence supersedes the preceding provisional coverage text: fresh final
+LCOV `/tmp/t0156a-cov-final` reports 38/38 statements, 38/38 lines, 42/42
+branches, and 14/14 functions (100% all metrics) over changed production lines
+against `origin/main`. The final focused run passed 12 files / 166 tests; build
+and tooling typechecks, changed ESLint, Prettier, TSDoc, containment, and diff
+checks pass. Status remains correction-complete / re-review-ready.
+
 ## Assignments
 
 - Implementation: existing implementer, explicit `gpt-5.6-terra` / medium,

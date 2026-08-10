@@ -28,7 +28,9 @@ describe("GCE renewal logging", () => {
       },
     ];
     for (const logger of cases)
-      expect(() => { emitGceRegistrarRenewalWarning(logger as never); }).not.toThrow();
+      expect(() => {
+        emitGceRegistrarRenewalWarning(logger as never);
+      }).not.toThrow();
     const warn = vi.fn();
     const logger = { withMetadata: vi.fn(() => ({ warn })) };
     emitGceRegistrarRenewalWarning(logger as never);

@@ -28,7 +28,9 @@ describe("delivery listener logging", () => {
       },
     ];
     for (const logger of cases)
-      expect(() => { emitDeliveryServerError(logger as never); }).not.toThrow();
+      expect(() => {
+        emitDeliveryServerError(logger as never);
+      }).not.toThrow();
     const error = vi.fn();
     const logger = { withMetadata: vi.fn(() => ({ error })) };
     emitDeliveryServerError(logger as never);

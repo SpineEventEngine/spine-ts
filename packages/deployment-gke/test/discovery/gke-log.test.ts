@@ -28,7 +28,9 @@ describe("GKE discovery logging", () => {
       },
     ];
     for (const logger of cases)
-      expect(() => { emitGkeDiscoveryWarning(logger as never); }).not.toThrow();
+      expect(() => {
+        emitGkeDiscoveryWarning(logger as never);
+      }).not.toThrow();
     const warn = vi.fn();
     const logger = { withMetadata: vi.fn(() => ({ warn })) };
     emitGkeDiscoveryWarning(logger as never);
