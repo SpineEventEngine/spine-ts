@@ -197,7 +197,8 @@ cutover.
 Wave 9 planning is complete under T-0153. Its approved scope and preliminary
 Wave 10 beginner-guide structure are frozen in
 `build-protocol/planning/WAVE_9_LOGGING_ROUTING_PLAN.md`. Runtime implementation
-proceeds through the dependency-ordered T-0154 through T-0167 train.
+proceeds through the dependency-ordered T-0154 through T-0167 train. T-0154 is
+complete, reviewed, integrated, and post-merge verified; T-0155 is next.
 
 ## Authored API And Example Quality Correction
 

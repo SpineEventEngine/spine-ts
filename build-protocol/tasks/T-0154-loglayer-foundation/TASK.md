@@ -1,6 +1,6 @@
 # T-0154: LogLayer Foundation
 
-Status: Complete; integration-ready
+Status: Integrated; post-merge verified
 
 ## Objective
 
@@ -83,6 +83,10 @@ slices.
 - Final `verify:task` passed 69 files and 1,629 tests with 95.87% statements
   (1396/1456), 90.01% branches (613/681), 98.18% functions (325/331), and
   96.10% lines (1357/1412).
+- Merged into the `origin/main@e30c2aa4` integration line as `43f1eb9b`.
+  The merge tree exactly matches the verified feature tree. Fresh post-merge
+  generation/build, all five containment fixtures, the live checker, and four
+  focused server files with 157 tests pass.
 
 ## Exclusions
 
