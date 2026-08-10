@@ -415,7 +415,9 @@ export class SpineServices {
         yield update;
       }
     } finally {
-      await this.#removeSubscription(id);
+      if (!record.delivery.closed) {
+        await this.#removeSubscription(id);
+      }
     }
   }
 

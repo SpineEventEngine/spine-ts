@@ -85,7 +85,8 @@ import {
   InMemoryStorageFactory,
   type NormalizedQueryPlan,
 } from "@spine-event-engine/storage";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { ILogLayer } from "loglayer";
 
 import {
   Aggregate,
@@ -101,6 +102,7 @@ import {
   type RunningServer,
 } from "../../src/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
+import { spineServicesAccess } from "../../src/services/spine-services.js";
 import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections.js";
 import { TaskAlreadyDoneSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections_pb.js";
 import { TaskIdSchema as TodoIdSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
@@ -3773,6 +3775,50 @@ describe("SpineServices", () => {
     }
   });
 
+  it("warns once when detached closed-stream cleanup rejects without changing the stream outcome", async () => {
+    const registry = new RejectingDeleteRegistry();
+    const context = BoundedContext.singleTenant("CleanupWarning")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema }))
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    const warn = vi.fn(() => Promise.reject(new Error("logger rejection")));
+    const withMetadata = vi.fn(() => ({ warn }));
+    const services = new SpineServices({ contexts: [context], queueLimit: 1 });
+    spineServicesAccess.installLogger(
+      services,
+      { withMetadata } as unknown as ILogLayer,
+    );
+    let handlers: { subscribe(topic: Topic): Promise<Subscription>; activate(subscription: Subscription): AsyncIterable<SubscriptionUpdate> } | undefined;
+    services.register({
+      service(schema: unknown, implementation: unknown) {
+        if (schema === SubscriptionService) handlers = implementation as typeof handlers;
+        return this;
+      },
+    } as never);
+    const subscription = await handlers?.subscribe(createTopic());
+    if (subscription === undefined) throw new Error("SubscriptionService was not registered.");
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const first = iterator.next();
+    await delay(25);
+    await postEntityStateChanged(context, ProjectionStateSchema, createState("cleanup", "First"));
+    await first;
+    await postEntityStateChanged(context, ProjectionStateSchema, createState("cleanup", "Second"));
+    await postEntityStateChanged(context, ProjectionStateSchema, createState("cleanup", "Third"));
+    await delay(25);
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith("Subscription cleanup failed.");
+    expect(withMetadata).toHaveBeenCalledWith({
+      subscriptionId: subscription.id?.value,
+      operation: "service.subscription_cleanup",
+      reasonCode: "cleanup_failed",
+    });
+    expect(registry.deletions).toBe(1);
+    await iterator.return?.();
+    await context.close();
+  });
+
   it("cancels subscriptions by ID and keeps cleanup idempotent", async () => {
     const unsubscribeCounts: number[] = [];
     const callbacks: ((update: {
@@ -4972,6 +5018,18 @@ class FailingDeleteRegistry extends InMemorySubscriptionRegistry {
 
   override cleanup(): ReturnType<InMemorySubscriptionRegistry["cleanup"]> {
     return Promise.reject(new Error("subscription attachment setup failed"));
+  }
+}
+
+class RejectingDeleteRegistry extends InMemorySubscriptionRegistry {
+  deletions = 0;
+
+  override delete(
+    id: Parameters<InMemorySubscriptionRegistry["delete"]>[0],
+  ): ReturnType<InMemorySubscriptionRegistry["delete"]> {
+    void id;
+    this.deletions += 1;
+    return Promise.reject(new Error("subscription registry cleanup failed"));
   }
 }
 
