@@ -129,6 +129,8 @@ describe("SubscriptionRuntime", () => {
   it("exposes its registry and ignores a failed timer reconciliation", async () => {
     vi.useFakeTimers();
     const registry = new FailingSnapshotRegistry();
+    const warn = vi.fn();
+    const logger = { withMetadata: vi.fn(() => ({ warn })) };
     const runtime = new SubscriptionRuntime(
       {} as never,
       {} as never,
@@ -136,9 +138,16 @@ describe("SubscriptionRuntime", () => {
       {} as never,
       registry,
     );
+    subscriptionRuntimeAccess.installLogger(runtime, logger as never);
     expect(runtime.registry()).toBe(registry);
     runtime.start();
+    await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(10_000);
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(logger.withMetadata).toHaveBeenNthCalledWith(1, {
+      operation: "subscription.reconcile",
+      reasonCode: "failed",
+    });
     await runtime.close();
     vi.useRealTimers();
   });
