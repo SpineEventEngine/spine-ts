@@ -472,15 +472,19 @@ class RuntimeDeliverySupervisorGroup {
 
   notify(shard: ShardIndex): void {
     if (this.#stopped) return;
-    void this.start().then(() => {
-      this.#supervisor.notify(shard);
-    });
+    // spine-log-boundary: server.delivery_notify_start
+    void this.start()
+      .then(() => {
+        this.#supervisor.notify(shard);
+      })
+      .catch(() => undefined);
   }
 
   stop(): void {
     if (this.#stopped) return;
     this.#stopped = true;
     this.#close = this.#supervisor.close();
+    // spine-log-boundary: server.delivery_supervisor_close
     void this.#close.catch(() => undefined);
   }
 

@@ -181,6 +181,20 @@
       "operation": "server.process_shutdown",
       "disposition": "error",
       "test": "packages/server/test/server/server.test.ts"
+    },
+    {
+      "id": "server.delivery_notify_start",
+      "source": "../../packages/server/src/server/environment-delivery-worker.ts",
+      "operation": "delivery.notify_start",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.delivery_supervisor_close",
+      "source": "../../packages/server/src/server/environment-delivery-worker.ts",
+      "operation": "delivery.supervisor_close",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
     }
   ]
 }
