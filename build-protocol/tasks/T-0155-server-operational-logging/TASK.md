@@ -49,8 +49,10 @@ authentication-secret boundary across accepted server work.
 5. Record no log for command/query validation or domain failures, empty Event
    routes, surfaced/rethrown construction or service failures, and test-only
    structural fallbacks.
-6. Add stable adjacent containment IDs and manifest entries for every actual
-   suppression in the owned bus, repository, service, and context partition.
+6. Add stable adjacent containment IDs and manifest entries for every
+   T-0155-introduced or activated suppression in the owned bus, repository,
+   service, and context partition. The complete pre-existing server lifecycle
+   and cleanup inventory remains assigned to T-0156.
 7. Use only the frozen allowlisted fields and fixed messages/codes. Tests must
    prove no payload, exception detail, header, credential, or session secret
    reaches LogLayer.

@@ -281,6 +281,17 @@ class RollingBackTransitionTaskAggregate extends TransitionViolatingTaskAggregat
 class MessageIdTaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {}
 
 describe("SpineServices", () => {
+  it("rejects foreign package-private logger access", () => {
+    const foreign = {} as SpineServices;
+
+    expect(() => spineServicesAccess.installLogger(foreign, {} as never)).toThrow(
+      "SpineServices logger requires a SpineServices instance.",
+    );
+    expect(() => spineServicesAccess.clearLogger(foreign)).toThrow(
+      "SpineServices logger requires a SpineServices instance.",
+    );
+  });
+
   it("uses the current Todo descriptor type names in routing fixtures", () => {
     expect(TaskIdSchema.typeName).toBe("spine.examples.todo.TaskId");
     expect(TaskSchema.typeName).toBe("spine.examples.todo.Task");
