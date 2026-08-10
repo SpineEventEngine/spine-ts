@@ -1,6 +1,6 @@
 # T-0154: LogLayer Foundation
 
-Status: In progress
+Status: Review-ready
 
 ## Objective
 

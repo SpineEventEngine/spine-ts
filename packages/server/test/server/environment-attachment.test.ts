@@ -53,6 +53,14 @@ function serverEnvironment(settings: ServerEnvironmentSettings = {}): ServerEnvi
 }
 
 describe("EnvironmentRegistrations", () => {
+  it("constructs attachment coordination with its local default seams", () => {
+    const attachments = new EnvironmentAttachments();
+
+    expect(attachments.activeRegistrationCount).toBe(0);
+    expect(attachments.configuredOwnerCount).toBe(0);
+    expect(attachments.configuredScopeCount).toBe(0);
+  });
+
   it("shares ownership generations and rejects mixed ownership before mutation", () => {
     const registrations = new EnvironmentRegistrations();
 
@@ -99,6 +107,27 @@ describe("EnvironmentRegistrations", () => {
 
     expect(fresh.generation).not.toBe(first.generation);
     expect(registrations.count).toBe(1);
+    expect(registrations.remove(fresh.token)).toBe(0);
+    expect(() => registrations.clear(first.generation)).toThrow(
+      "Environment generation is not current.",
+    );
+  });
+
+  it("rejects replacing an absent generation", () => {
+    const registrations = new EnvironmentRegistrations();
+
+    expect(() => registrations.replace(Object.freeze({ generation: true }))).toThrow(
+      "Environment generation is not current.",
+    );
+  });
+
+  it("replaces an active generation during a handoff", () => {
+    const registrations = new EnvironmentRegistrations();
+    const active = registrations.claim("caller").generation;
+    const replacement = Object.freeze({ generation: true });
+
+    expect(registrations.replace(replacement)).toBe(active);
+    expect(registrations.generation).toBe(replacement);
   });
 });
 
@@ -115,6 +144,9 @@ describe("RegistrationReadiness", () => {
     expect(() => readiness.prepareTransition(() => undefined)).toThrow(
       "Registration readiness is not open.",
     );
+    readiness.fail();
+    readiness.notify(target.value, target.ready);
+    expect(() => readiness.open([])).toThrow("Registration readiness can only open once.");
   });
 
   it("fails closed for thousands of distinct unknown scopes without coordinator work", () => {
@@ -189,7 +221,7 @@ describe("startup obligations", () => {
       {
         scopes: [
           { scope: rejected, disposition: "REJECTED", cause: failure },
-          { scope: fulfilled, disposition: "FULFILLED" },
+          { scope: fulfilled, disposition: "IDLE" },
           { scope: unknown, disposition: "PARKED" },
         ],
         pending: [],

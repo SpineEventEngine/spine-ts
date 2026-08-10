@@ -42,6 +42,22 @@ describe("server logging containment", () => {
     expect(warn).toHaveBeenCalledWith("retry_failed");
   });
 
+  it("omits a non-integer counter while retaining valid framework facts", () => {
+    const warn = vi.fn();
+    const logger = { withMetadata: vi.fn(() => ({ warn })) };
+
+    emitServerWarning(logger as never, "retry_failed", {
+      count: 1.5,
+      operation: "delivery.retry",
+      reasonCode: "temporary_failure",
+    });
+
+    expect(logger.withMetadata).toHaveBeenCalledWith({
+      operation: "delivery.retry",
+      reasonCode: "temporary_failure",
+    });
+  });
+
   it("contains synchronous and promise-like logging failures", async () => {
     const sync = {
       withMetadata: () => ({

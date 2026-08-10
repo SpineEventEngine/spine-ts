@@ -211,6 +211,34 @@ describe("ServerEnvironment delivery lifecycle", () => {
     }
   });
 
+  it("does not warn for a persistent registry in a production environment", async () => {
+    const warnings: string[] = [];
+    const logger = {
+      child: vi.fn(),
+      withMetadata: () => ({ warn: (message: string) => warnings.push(message) }),
+      warn: (message: string) => warnings.push(message),
+    };
+    logger.child.mockReturnValue(logger);
+    EnvironmentTests.use(EnvironmentType.Production);
+    ServerEnvironment.when(EnvironmentType.Production).use({
+      storageFactory: new InMemoryStorageFactory(),
+      transport: { close: () => undefined } as never,
+      ...{ logger: logger as unknown as ILogLayer },
+    });
+    const environment = ServerEnvironment.instance();
+    const context = BoundedContext.singleTenant("PersistentTasks")
+      .withSubscriptionRegistry({ persistent: true, close: () => Promise.resolve() } as never)
+      .build();
+
+    try {
+      serverEnvironmentAccess.warnVolatileRegistry(environment, context);
+      expect(warnings).toEqual([]);
+    } finally {
+      await context.close();
+      await environment.close();
+    }
+  });
+
   it("warns before Server.start attaches a production context", async () => {
     const warnings: string[] = [];
     const logger = {
