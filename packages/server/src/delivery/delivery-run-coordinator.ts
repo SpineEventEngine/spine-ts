@@ -117,9 +117,11 @@ export class DeliveryRunCoordinator {
     }
     try {
       this.#admit([scope]);
+      // spine-log-boundary: server.delivery_coordinator_notify
       void this.#ensureActive().catch(() => undefined);
     } catch {
       // Readiness notification cannot alter a completed durable write.
+      return;
     }
   }
 
@@ -132,6 +134,7 @@ export class DeliveryRunCoordinator {
   async removeOwners(ownerKeys: readonly string[]): Promise<void> {
     const owners = new Set(ownerKeys);
     this.#removePendingOwners(owners);
+    // spine-log-boundary: server.delivery_coordinator_remove_idle
     await this.#active?.catch(() => undefined);
     this.#removePendingOwners(owners);
     for (const [key, scope] of this.#configured) {
@@ -387,6 +390,7 @@ export class DeliveryRunCoordinator {
     }
     const observed = this.#onSettlement?.(DeliveryRunValues.cloneSettlement(settlement));
     if (DeliveryRunValues.isPromiseLike(observed)) {
+      // spine-log-boundary: server.delivery_coordinator_settlement_observer
       void Promise.resolve(observed).catch(() => undefined);
       throw new Error("Delivery run settlement observer must complete synchronously.");
     }
@@ -417,6 +421,7 @@ export class DeliveryRunCoordinator {
       this.#stopCalled = true;
     }
 
+    // spine-log-boundary: server.delivery_coordinator_retirement_idle
     await this.#active?.catch(() => undefined);
     try {
       await this.#worker.awaitSettled();

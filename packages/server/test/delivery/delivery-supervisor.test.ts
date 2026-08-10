@@ -24,6 +24,7 @@ import type {
   DeliveryWorkRegistry,
 } from "../../src/delivery/delivery-ports.js";
 import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
+import { deliverySupervisorAccess } from "../../src/delivery/delivery-supervisor.js";
 
 import type {
   InboxMessage,
@@ -34,6 +35,162 @@ import type {
 } from "../../src/delivery/inbox.js";
 
 describe("DeliverySupervisor", () => {
+  it("does not log returned failed delivery evidence as a terminal detached run", async () => {
+    const error = vi.fn();
+    const logger = { withMetadata: vi.fn(() => ({ error })) };
+    const supervisor = new DeliverySupervisor({
+      source: {
+        releaseExpired: () => Promise.resolve([]),
+        shardSnapshot: () => Promise.resolve([]),
+        observeShardUpdates: (options) => updatesUntilAborted(options?.signal),
+      },
+      delivery: qualifiedDelivery({
+        run: () => Promise.reject(new Error("delivery secret")),
+      }),
+      onMessage: () => Promise.resolve(),
+    });
+    deliverySupervisorAccess.installLogger(supervisor, logger as never);
+
+    await supervisor.start();
+    supervisor.notify(newShard(0));
+    await supervisor.whenIdle();
+
+    expect(logger.withMetadata).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    await supervisor.close();
+  });
+
+  it("warns once when initial recovery is retained for a later retry", async () => {
+    const warn = vi.fn();
+    const logger = { withMetadata: vi.fn(() => ({ warn })) };
+    const supervisor = new DeliverySupervisor({
+      source: {
+        releaseExpired: () => Promise.resolve([]),
+        shardSnapshot: () => Promise.reject(new Error("snapshot secret")),
+        observeShardUpdates: () => emptyUpdates(),
+      },
+      delivery: new DeliveryBuilder()
+        .withStorageFactory(new InMemoryStorageFactory())
+        .withNode("node")
+        .build(),
+      onMessage: () => Promise.resolve(),
+    });
+
+    deliverySupervisorAccess.installLogger(supervisor, logger as never);
+
+    await expect(supervisor.start()).resolves.toBeUndefined();
+    expect(logger.withMetadata).toHaveBeenCalledTimes(1);
+    expect(logger.withMetadata).toHaveBeenCalledWith({
+      operation: "delivery.recovery",
+      reasonCode: "failed",
+    });
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith("Delivery recovery failed.");
+    await supervisor.close();
+  });
+
+  it("does not warn when close aborts an entered signal-aware recovery", async () => {
+    const entered = Promise.withResolvers<undefined>();
+    const warn = vi.fn();
+    const error = vi.fn();
+    const supervisor = new DeliverySupervisor({
+      source: {
+        releaseExpired: (_staleMs, options) =>
+          new Promise<readonly unknown[]>((_, reject) => {
+            const fail = () => {
+              reject(new Error("aborted"));
+            };
+            if (options?.signal?.aborted) fail();
+            else options?.signal?.addEventListener("abort", fail, { once: true });
+            entered.resolve(undefined);
+          }),
+        shardSnapshot: () => Promise.resolve([]),
+        observeShardUpdates: () => emptyUpdates(),
+      },
+      delivery: new DeliveryBuilder()
+        .withStorageFactory(new InMemoryStorageFactory())
+        .withNode("node")
+        .build(),
+      onMessage: () => Promise.resolve(),
+    });
+    deliverySupervisorAccess.installLogger(supervisor, {
+      withMetadata: vi.fn(() => ({ warn, error })),
+    } as never);
+    const starting = supervisor.start();
+    await entered.promise;
+    await expect(supervisor.close({ graceMs: 0 })).rejects.toThrow(
+      "Delivery supervisor shutdown timed out.",
+    );
+    await starting;
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "throws",
+      {
+        withMetadata: () => ({
+          warn: () => {
+            throw new Error("logger secret");
+          },
+        }),
+      },
+    ],
+    [
+      "rejects",
+      { withMetadata: () => ({ warn: () => Promise.reject(new Error("logger secret")) }) },
+    ],
+  ] as const)("contains a logger that %s during retained recovery", async (_case, logger) => {
+    const supervisor = new DeliverySupervisor({
+      source: {
+        releaseExpired: () => Promise.resolve([]),
+        shardSnapshot: () => Promise.reject(new Error("snapshot secret")),
+        observeShardUpdates: () => emptyUpdates(),
+      },
+      delivery: new DeliveryBuilder()
+        .withStorageFactory(new InMemoryStorageFactory())
+        .withNode("node")
+        .build(),
+      onMessage: () => Promise.resolve(),
+    });
+    deliverySupervisorAccess.installLogger(supervisor, logger as never);
+
+    await expect(supervisor.start()).resolves.toBeUndefined();
+    await Promise.resolve();
+    await supervisor.close();
+  });
+
+  it("rejects foreign logger installation and clears logger metadata on terminal close", async () => {
+    const logger = { withMetadata: vi.fn(() => ({ warn: vi.fn() })) };
+    const supervisor = new DeliverySupervisor({
+      source: {
+        releaseExpired: () => Promise.resolve([]),
+        shardSnapshot: () => Promise.resolve([]),
+        observeShardUpdates: () => emptyUpdates(),
+      },
+      delivery: new DeliveryBuilder()
+        .withStorageFactory(new InMemoryStorageFactory())
+        .withNode("node")
+        .build(),
+      onMessage: () => Promise.resolve(),
+    });
+
+    expect(() => {
+      deliverySupervisorAccess.installLogger({} as never, logger as never);
+    }).toThrow("Delivery supervisor logger requires a DeliverySupervisor instance.");
+    expect(() => {
+      deliverySupervisorAccess.loggerFor({} as never);
+    }).toThrow("Delivery supervisor logger requires a DeliverySupervisor instance.");
+    deliverySupervisorAccess.installLogger(supervisor, logger as never);
+    expect(deliverySupervisorAccess.loggerFor(supervisor)).toBe(logger);
+    await supervisor.start();
+    await supervisor.close();
+    expect(() => {
+      deliverySupervisorAccess.loggerFor(supervisor);
+    }).toThrow("Delivery supervisor logger is not installed.");
+  });
+
   it("does not open a replacement watch until failed recovery later succeeds", async () => {
     let snapshots = 0;
     let watches = 0;
@@ -571,6 +728,8 @@ describe("DeliverySupervisor", () => {
   it("restarts a failed Admin watch with one bounded backoff timer", async () => {
     vi.useFakeTimers();
     try {
+      const warn = vi.fn();
+      const logger = { withMetadata: vi.fn(() => ({ warn })) };
       let watches = 0;
       let snapshots = 0;
       const supervisor = new DeliverySupervisor({
@@ -592,11 +751,18 @@ describe("DeliverySupervisor", () => {
         watchInitialBackoffMs: 10,
         watchMaxBackoffMs: 10,
       });
+      deliverySupervisorAccess.installLogger(supervisor, logger as never);
 
       await supervisor.start();
       vi.runAllTicks();
       expect(watches).toBe(1);
       expect(snapshots).toBe(1);
+      expect(logger.withMetadata).toHaveBeenCalledTimes(1);
+      expect(logger.withMetadata).toHaveBeenCalledWith({
+        operation: "delivery.watch",
+        reasonCode: "failed",
+      });
+      expect(warn).toHaveBeenCalledWith("Delivery shard watch failed.");
       await vi.advanceTimersByTimeAsync(10);
       expect(watches).toBe(2);
       expect(snapshots).toBe(2);
@@ -798,13 +964,14 @@ describe("DeliverySupervisor", () => {
   });
 
   it("cancels the Admin watch as soon as close stops admission", async () => {
+    const withMetadata = vi.fn(() => ({ warn: vi.fn(), error: vi.fn() }));
     let watchSignal: AbortSignal | undefined;
     const supervisor = new DeliverySupervisor({
       source: {
         shardSnapshot: () => Promise.resolve([]),
         observeShardUpdates: (options) => {
           watchSignal = options?.signal;
-          return emptyUpdates();
+          return updatesUntilAborted(options?.signal);
         },
         releaseExpired: () => Promise.resolve([]),
       },
@@ -813,12 +980,14 @@ describe("DeliverySupervisor", () => {
       }),
       onMessage: () => Promise.resolve(),
     });
+    deliverySupervisorAccess.installLogger(supervisor, { withMetadata } as never);
 
     await supervisor.start();
     await Promise.resolve();
     await supervisor.close({ graceMs: 10 });
 
     expect(watchSignal?.aborted).toBe(true);
+    expect(withMetadata).not.toHaveBeenCalled();
   });
 
   it("retains one recovery timer and releases all timer resources on close", async () => {

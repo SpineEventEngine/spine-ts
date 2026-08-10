@@ -1,4 +1,5 @@
 import { create, toBinary } from "@bufbuild/protobuf";
+import type { ILogLayer } from "loglayer";
 import {
   SubscriptionIdSchema,
   SubscriptionSchema,
@@ -6,6 +7,7 @@ import {
 } from "@spine-event-engine/proto/client";
 
 import type { EventBus } from "../bus/event-bus.js";
+import { emitServerWarning } from "../server/server-log.js";
 import { SubscriptionObservers } from "./subscription-observer.js";
 import { standAccess, type Stand, type StandSubscription } from "./stand.js";
 import type { StandSubscriptionEntry, StandSubscriptionRegistry } from "./subscription-registry.js";
@@ -13,6 +15,15 @@ import type { StandSubscriptionEntry, StandSubscriptionRegistry } from "./subscr
 interface LocalSubscriptionAttachment {
   readonly identity: Uint8Array;
   readonly subscription: StandSubscription;
+}
+
+const subscriptionRuntimeLoggers = new WeakMap<SubscriptionRuntime, ILogLayer>();
+const subscriptionRuntimes = new WeakSet<SubscriptionRuntime>();
+
+interface SubscriptionRuntimeAccess {
+  installLogger(runtime: SubscriptionRuntime, logger: ILogLayer): void;
+  clearLogger(runtime: SubscriptionRuntime): void;
+  loggerFor(runtime: SubscriptionRuntime): ILogLayer;
 }
 
 /**
@@ -58,6 +69,7 @@ export class SubscriptionRuntime {
     systemEventBus: EventBus,
     registry: StandSubscriptionRegistry,
   ) {
+    subscriptionRuntimes.add(this);
     this.#domainStand = domainStand;
     this.#systemStand = systemStand;
     this.#domainEventBus = domainEventBus;
@@ -70,8 +82,13 @@ export class SubscriptionRuntime {
    */
   start(): void {
     if (this.#timer !== undefined || this.#closing) return;
-    void this.reconcile().catch(() => undefined);
-    this.#timer = setInterval(() => void this.#reconcileTimer().catch(() => undefined), 10_000);
+    // spine-log-boundary: server.subscription_initial_reconcile
+    void this.reconcile().catch(() => {
+      this.#warnReconciliationFailure();
+    });
+    this.#timer = setInterval(() => {
+      void this.#reconcileTimer();
+    }, 10_000);
     this.#timer.unref();
   }
 
@@ -118,16 +135,31 @@ export class SubscriptionRuntime {
       }
       for (const id of this.#attachments.keys()) if (!seen.has(id)) this.remove(id);
     });
+    // spine-log-boundary: server.subscription_reconcile_tail
     this.#tail = cycle.catch(() => undefined);
     return cycle;
   }
 
   #reconcileTimer(): Promise<void> {
     if (this.#timerReconciliation !== undefined) return this.#timerReconciliation;
-    this.#timerReconciliation = this.reconcile().finally(() => {
+    const reconciliation = this.reconcile().finally(() => {
       this.#timerReconciliation = undefined;
     });
-    return this.#timerReconciliation;
+    this.#timerReconciliation = reconciliation;
+    // spine-log-boundary: server.subscription_timer_reconcile
+    void reconciliation.catch(() => {
+      this.#warnReconciliationFailure();
+    });
+    return reconciliation;
+  }
+
+  #warnReconciliationFailure(): void {
+    const logger = subscriptionRuntimeLoggers.get(this);
+    if (logger === undefined) return;
+    emitServerWarning(logger, "Subscription reconciliation failed.", {
+      operation: "subscription.reconcile",
+      reasonCode: "failed",
+    });
   }
 
   /**
@@ -299,14 +331,70 @@ export class SubscriptionRuntime {
 
   #notify(id: string, update: SubscriptionUpdate): void {
     for (const consumer of [...(this.#consumers.get(id) ?? [])]) {
+      const logger = subscriptionRuntimeLoggers.get(this);
       try {
-        consumer(update);
+        const invoke: (next: SubscriptionUpdate) => unknown = consumer;
+        const outcome = invoke(update);
+        if (SubscriptionRuntime.#isPromiseLike(outcome)) {
+          // spine-log-boundary: server.subscription_consumer_async_delivery
+          void Promise.resolve(outcome).catch(() => {
+            SubscriptionRuntime.#warnConsumerFailure(logger, id);
+          });
+        }
+        // spine-log-boundary: server.subscription_consumer_delivery
       } catch {
         // Individual best-effort stream consumers cannot suppress peers.
+        SubscriptionRuntime.#warnConsumerFailure(logger, id);
       }
     }
   }
+
+  static #warnConsumerFailure(logger: ILogLayer | undefined, id: string): void {
+    if (logger === undefined) return;
+    emitServerWarning(logger, "Subscription consumer delivery failed.", {
+      subscriptionId: id,
+      operation: "subscription.consumer",
+      reasonCode: "failed",
+    });
+  }
+
+  static #isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+    return (
+      (typeof value === "object" || typeof value === "function") &&
+      value !== null &&
+      "then" in value &&
+      typeof (value as { then?: unknown }).then === "function"
+    );
+  }
 }
+
+/**
+ * Exposes framework-only subscription-runtime logging metadata installation.
+ *
+ * @internal
+ */
+export const subscriptionRuntimeAccess: SubscriptionRuntimeAccess = Object.freeze({
+  installLogger(runtime: SubscriptionRuntime, logger: ILogLayer): void {
+    if (!subscriptionRuntimes.has(runtime)) {
+      throw new TypeError("Subscription runtime logger requires a SubscriptionRuntime instance.");
+    }
+    subscriptionRuntimeLoggers.set(runtime, logger);
+  },
+  clearLogger(runtime: SubscriptionRuntime): void {
+    if (!subscriptionRuntimes.has(runtime)) {
+      throw new TypeError("Subscription runtime logger requires a SubscriptionRuntime instance.");
+    }
+    subscriptionRuntimeLoggers.delete(runtime);
+  },
+  loggerFor(runtime: SubscriptionRuntime): ILogLayer {
+    if (!subscriptionRuntimes.has(runtime)) {
+      throw new TypeError("Subscription runtime logger requires a SubscriptionRuntime instance.");
+    }
+    const logger = subscriptionRuntimeLoggers.get(runtime);
+    if (logger === undefined) throw new TypeError("Subscription runtime logger is not installed.");
+    return logger;
+  },
+});
 
 function entryIdentity(entry: StandSubscriptionEntry): Uint8Array {
   const subscription = toBinary(SubscriptionSchema, entry.subscription);

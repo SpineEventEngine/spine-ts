@@ -38,7 +38,10 @@ import {
   EntityRecords,
   standEntityStorageDescriptor,
 } from "../../src/entity/entity-storage-descriptor.js";
-import { SubscriptionRuntime } from "../../src/stand/subscription-runtime.js";
+import {
+  SubscriptionRuntime,
+  subscriptionRuntimeAccess,
+} from "../../src/stand/subscription-runtime.js";
 import {
   eventBusAccess,
   type EventBus as EventBusType,
@@ -254,6 +257,69 @@ describe("Stand", () => {
     await postStateChange(bus, ProjectionStateSchema, createState("after-close", "After close"));
     expect(deliveries).toBe(1);
     await expect(bus.close()).resolves.toBeUndefined();
+  });
+
+  it("contains failing stream consumers while delivering peers and snapshots the logger", async () => {
+    const factory = new InMemoryStorageFactory();
+    const stand = new Stand({
+      context: { name: "Fanout", multitenant: false },
+      storageFactory: factory,
+    });
+    const bus = eventBusAccess.createSystemBus(undefined);
+    const registry = new InMemorySubscriptionRegistry();
+    const id = `subscription-secret-${"x".repeat(257)}`;
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: id }),
+      topic: {
+        id: { value: "updates" },
+        target: {
+          type: TypeUrls.derive(ProjectionStateSchema),
+          criterion: { case: "includeAll", value: true },
+        },
+      },
+    });
+    if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+    stand.register(ProjectionStateSchema);
+    await registry.create(subscription);
+    await registry.activate(subscription.id);
+    eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
+    const runtime = pairedRuntime(stand, factory, registry, bus, bus);
+    const warn = vi.fn();
+    const logger = { withMetadata: vi.fn(() => ({ warn })) };
+    subscriptionRuntimeAccess.installLogger(runtime, logger as never);
+    runtime.start();
+    await runtime.reconcile();
+    const deferred = Promise.withResolvers<undefined>();
+    let peer = 0;
+    await runtime.consume(id, () => {
+      throw new Error("consumer secret");
+    });
+    const deferredConsumer: (update: unknown) => unknown = () => deferred.promise;
+    await runtime.consume(id, deferredConsumer);
+    await runtime.consume(id, () => {
+      peer++;
+    });
+    await postStateChange(bus, ProjectionStateSchema, createState("fanout", "Fanout"));
+    expect(peer).toBe(1);
+    expect(logger.withMetadata).toHaveBeenCalledWith({
+      operation: "subscription.consumer",
+      reasonCode: "failed",
+    });
+    subscriptionRuntimeAccess.clearLogger(runtime);
+    deferred.reject(new Error("late secret"));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(warn).toHaveBeenCalledTimes(2);
+    await postStateChange(
+      bus,
+      ProjectionStateSchema,
+      createState("fanout-without-logger", "Fanout"),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(peer).toBe(2);
+    expect(warn).toHaveBeenCalledTimes(2);
+    await Promise.all([runtime.close(), stand.close(), bus.close()]);
   });
 
   it("detaches every observer and clears consumers when one observer unsubscribe fails", async () => {

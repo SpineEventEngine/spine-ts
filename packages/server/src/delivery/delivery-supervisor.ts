@@ -3,6 +3,17 @@ import type { Delivery } from "./delivery-builder.js";
 import type { DeliveryOperationOptions } from "./delivery-ports.js";
 import { DeliveryRunControl } from "./delivery-run-control.js";
 import { ShardIndex } from "./shard-index.js";
+import type { ILogLayer } from "loglayer";
+
+import { emitServerWarning } from "../server/server-log.js";
+
+const deliverySupervisorLoggers = new WeakMap<DeliverySupervisor, ILogLayer>();
+const deliverySupervisors = new WeakSet<DeliverySupervisor>();
+
+interface DeliverySupervisorAccess {
+  installLogger(supervisor: DeliverySupervisor, logger: ILogLayer): void;
+  loggerFor(supervisor: DeliverySupervisor): ILogLayer;
+}
 
 /**
  * A detached shard update consumed by {@link DeliverySupervisor}.
@@ -124,6 +135,7 @@ export class DeliverySupervisor {
    * @param options The source, delivery, endpoint, and bounds.
    */
   constructor(options: DeliverySupervisorOptions) {
+    deliverySupervisors.add(this);
     this.#source = options.source;
     this.#runs = new DeliveryRunControl(options.delivery);
     this.#onMessage = options.onMessage;
@@ -188,6 +200,7 @@ export class DeliverySupervisor {
       return;
     }
     this.#active.add(key);
+    // spine-log-boundary: server.delivery_run_terminal
     void this.#run(shard, key).catch(() => undefined);
   }
 
@@ -250,6 +263,7 @@ export class DeliverySupervisor {
     if (releaseError !== undefined) throw DeliverySupervisor.#releaseError(releaseError);
     if (this.#active.size > 0) await this.whenIdle();
     this.#closed = true;
+    deliverySupervisorLoggers.delete(this);
     if (timedOut) throw new DeliveryShutdownTimeoutError();
   }
 
@@ -263,6 +277,7 @@ export class DeliverySupervisor {
       await DeliverySupervisor.#waitForIdle(attempt, timeoutMs);
     } catch (error) {
       controller.abort(new Error("Delivery supervisor release cleanup timed out."));
+      // spine-log-boundary: server.delivery_release_timeout_observer
       void attempt.catch(() => undefined);
       throw error;
     }
@@ -273,6 +288,7 @@ export class DeliverySupervisor {
     if (active !== undefined) return active;
     const attempt = this.#source.releaseExpired(this.#staleMs, options).then(() => undefined);
     this.#releaseAttempt = attempt;
+    // spine-log-boundary: server.delivery_release_reset_observer
     void attempt
       .finally(() => {
         if (this.#releaseAttempt === attempt) this.#releaseAttempt = undefined;
@@ -316,10 +332,25 @@ export class DeliverySupervisor {
         if (shard.status === "NOT_PICKED" && shard.messages > 0) this.notify(shard.shard);
       }
       return true;
+      // spine-log-boundary: server.delivery_recovery_failure
     } catch {
       // A later bounded recovery retries; no unknown mutation outcome is assumed successful.
+      if (!this.#isClosing()) this.#warnRecoveryFailure();
       return false;
     }
+  }
+
+  #warnRecoveryFailure(): void {
+    const logger = deliverySupervisorLoggers.get(this);
+    if (logger === undefined) return;
+    emitServerWarning(logger, "Delivery recovery failed.", {
+      operation: "delivery.recovery",
+      reasonCode: "failed",
+    });
+  }
+
+  #isClosing(): boolean {
+    return this.#closing || this.#closed;
   }
 
   #scheduleRecovery(): void {
@@ -351,12 +382,25 @@ export class DeliverySupervisor {
         if (shard.status === "NOT_PICKED" && shard.messages > 0) this.notify(shard.shard);
       }
       failed = !this.#closing && !this.#closed;
+      // spine-log-boundary: server.delivery_watch_failure
     } catch {
       failed = !this.#closing && !this.#closed;
     } finally {
       this.#watching = false;
-      if (failed) this.#scheduleWatchRestart();
+      if (failed) {
+        this.#warnWatchFailure();
+        this.#scheduleWatchRestart();
+      }
     }
+  }
+
+  #warnWatchFailure(): void {
+    const logger = deliverySupervisorLoggers.get(this);
+    if (logger === undefined) return;
+    emitServerWarning(logger, "Delivery shard watch failed.", {
+      operation: "delivery.watch",
+      reasonCode: "failed",
+    });
   }
 
   #scheduleWatchRestart(): void {
@@ -442,6 +486,31 @@ export class DeliverySupervisor {
     return new Error("Delivery supervisor release cleanup failed.");
   }
 }
+
+/**
+ * Exposes framework-only delivery supervisor metadata installation.
+ *
+ * @internal
+ */
+export const deliverySupervisorAccess: DeliverySupervisorAccess = Object.freeze({
+  installLogger(supervisor: DeliverySupervisor, logger: ILogLayer): void {
+    if (!deliverySupervisors.has(supervisor)) {
+      throw new TypeError("Delivery supervisor logger requires a DeliverySupervisor instance.");
+    }
+    deliverySupervisorLoggers.set(supervisor, logger);
+  },
+
+  loggerFor(supervisor: DeliverySupervisor): ILogLayer {
+    if (!deliverySupervisors.has(supervisor)) {
+      throw new TypeError("Delivery supervisor logger requires a DeliverySupervisor instance.");
+    }
+    const logger = deliverySupervisorLoggers.get(supervisor);
+    if (logger === undefined) {
+      throw new TypeError("Delivery supervisor logger is not installed.");
+    }
+    return logger;
+  },
+});
 
 /**
  * Construction options for {@link DeliverySupervisor}.

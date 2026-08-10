@@ -39,6 +39,7 @@ export class DeliveryRunControl {
       aborted = this.#abortError(options.signal);
     };
     options.signal.addEventListener("abort", abort, { once: true });
+    // spine-log-boundary: server.delivery_control_settlement_observer
     void settled.catch(() => undefined);
     return settled
       .then(

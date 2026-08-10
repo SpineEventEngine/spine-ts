@@ -4,6 +4,7 @@ import { InMemoryStorageFactory, type StorageContext } from "@spine-event-engine
 import {
   ServerEnvironment,
   type ServerEnvironmentCloseable,
+  type ServerEnvironmentDelivery,
   serverEnvironmentAccess,
 } from "../../src/server/server-environment.js";
 import type { ContextDeliveryDescriptor } from "../../src/context/bounded-context.js";
@@ -576,12 +577,23 @@ describe("ServerEnvironment delivery lifecycle", () => {
 
   it("does not create an attachment when configured delivery open rejects", async () => {
     const failure = new Error("delivery unavailable");
-    const environment = configured({
-      open: () => Promise.reject(failure),
-      close: () => undefined,
-      inbox: {},
-      workRegistry: {},
+    const records: Record<string, unknown>[] = [];
+    const child = {
+      withMetadata: (facts: Record<string, unknown>) => {
+        records.push(facts);
+        return { warn: vi.fn(), error: vi.fn() };
+      },
+    };
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      delivery: {
+        open: () => Promise.reject(failure),
+        close: () => undefined,
+        inbox: {},
+        workRegistry: {},
+      } as unknown as ServerEnvironmentDelivery,
+      logger: { child: () => child } as unknown as ILogLayer,
     });
+    const environment = ServerEnvironment.instance();
 
     const result: Error | EnvironmentAttachmentHandle = await serverEnvironmentAccess
       .attach(environment, { ownership: "caller", descriptors: [] })
@@ -591,6 +603,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
       );
     if (!(result instanceof Error)) await serverEnvironmentAccess.detach(environment, result);
     expect(result).toBe(failure);
+    expect(records).toEqual([]);
   });
 
   it("coalesces delivery open across concurrent attachment attempts", async () => {
@@ -647,20 +660,32 @@ describe("ServerEnvironment delivery lifecycle", () => {
   it("retries only unfinished environment close phases after partial failure", async () => {
     const events: string[] = [];
     let fail = true;
-    const environment = configured({
-      close: () => {
-        events.push("delivery");
-        if (fail) {
-          fail = false;
-          throw new Error("delivery close failed");
-        }
+    const records: Record<string, unknown>[] = [];
+    const child = {
+      withMetadata: (facts: Record<string, unknown>) => {
+        records.push(facts);
+        return { warn: vi.fn(), error: vi.fn() };
       },
+    };
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      delivery: {
+        close: () => {
+          events.push("delivery");
+          if (fail) {
+            fail = false;
+            throw new Error("delivery close failed");
+          }
+        },
+      },
+      logger: { child: () => child } as unknown as ILogLayer,
     });
+    const environment = ServerEnvironment.instance();
 
     await expect(environment.close()).rejects.toThrow("ServerEnvironment close failed.");
     await expect(environment.close()).resolves.toBeUndefined();
 
     expect(events).toEqual(["delivery", "delivery"]);
+    expect(records).toEqual([]);
   });
 });
 

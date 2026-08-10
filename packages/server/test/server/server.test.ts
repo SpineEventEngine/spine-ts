@@ -1540,6 +1540,10 @@ describe("Server", () => {
   });
 
   it("runs a server under process-owned signal shutdown", async () => {
+    const withMetadata = vi.fn(() => ({ warn: vi.fn(), error: vi.fn() }));
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      logger: { child: () => ({ withMetadata }) } as never,
+    });
     const server = await Server.atPort(0).run();
     const session = http2.connect(server.baseUrl);
     session.on("error", () => undefined);
@@ -1550,6 +1554,7 @@ describe("Server", () => {
 
     await expect(closed).resolves.toBeUndefined();
     await server.close();
+    expect(withMetadata).not.toHaveBeenCalled();
   });
 
   it("keeps a standalone discovery gateway signal-managed without retiring its environment", async () => {
@@ -1668,6 +1673,15 @@ describe("Server", () => {
 
   it("keeps a failed signal close retryable", async () => {
     const original = process.exitCode;
+    const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
+    const child = {
+      withMetadata: (facts: Record<string, unknown>) => ({
+        error: (message: string) => errors.push({ message, facts }),
+      }),
+    };
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      logger: { child: () => child } as unknown as ILogLayer,
+    });
     let attempts = 0;
     const server = await Server.atPort(0)
       .addResource({
@@ -1679,10 +1693,20 @@ describe("Server", () => {
       .run();
     try {
       process.emit("SIGTERM");
+      process.emit("SIGINT");
       await waitFor(() => process.exitCode === 1);
       expect(process.exitCode).toBe(1);
-      await server.close();
+      expect(attempts).toBe(1);
+      expect(errors).toEqual([
+        {
+          message: "Process-owned server shutdown failed.",
+          facts: { operation: "server.process_shutdown", reasonCode: "close_failed" },
+        },
+      ]);
+      process.emit("SIGTERM");
+      await waitFor(() => attempts === 2);
       expect(attempts).toBe(2);
+      expect(errors).toHaveLength(1);
     } finally {
       await server.close().catch(() => undefined);
       process.exitCode = original;

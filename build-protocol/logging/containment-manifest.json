@@ -104,6 +104,188 @@
       "operation": "log.emit",
       "disposition": "no-log",
       "test": "packages/server/test/server/server-log.test.ts"
+    },
+    {
+      "id": "server.delivery_recovery_failure",
+      "source": "../../packages/server/src/delivery/delivery-supervisor.ts",
+      "operation": "delivery.recovery",
+      "disposition": "warn",
+      "test": "packages/server/test/delivery/delivery-supervisor.test.ts"
+    },
+    {
+      "id": "server.delivery_run_terminal",
+      "source": "../../packages/server/src/delivery/delivery-supervisor.ts",
+      "operation": "delivery.run",
+      "disposition": "no-log",
+      "test": "packages/server/test/delivery/delivery-supervisor.test.ts"
+    },
+    {
+      "id": "server.delivery_release_timeout_observer",
+      "source": "../../packages/server/src/delivery/delivery-supervisor.ts",
+      "operation": "delivery.release",
+      "disposition": "no-log",
+      "test": "packages/server/test/delivery/delivery-supervisor.test.ts"
+    },
+    {
+      "id": "server.delivery_release_reset_observer",
+      "source": "../../packages/server/src/delivery/delivery-supervisor.ts",
+      "operation": "delivery.release",
+      "disposition": "no-log",
+      "test": "packages/server/test/delivery/delivery-supervisor.test.ts"
+    },
+    {
+      "id": "server.delivery_watch_failure",
+      "source": "../../packages/server/src/delivery/delivery-supervisor.ts",
+      "operation": "delivery.watch",
+      "disposition": "warn",
+      "test": "packages/server/test/delivery/delivery-supervisor.test.ts"
+    },
+    {
+      "id": "server.subscription_initial_reconcile",
+      "source": "../../packages/server/src/stand/subscription-runtime.ts",
+      "operation": "subscription.reconcile",
+      "disposition": "warn",
+      "test": "packages/server/test/stand/subscription-runtime.test.ts"
+    },
+    {
+      "id": "server.subscription_timer_reconcile",
+      "source": "../../packages/server/src/stand/subscription-runtime.ts",
+      "operation": "subscription.reconcile",
+      "disposition": "warn",
+      "test": "packages/server/test/stand/subscription-runtime.test.ts"
+    },
+    {
+      "id": "server.subscription_reconcile_tail",
+      "source": "../../packages/server/src/stand/subscription-runtime.ts",
+      "operation": "subscription.reconcile",
+      "disposition": "no-log",
+      "test": "packages/server/test/stand/subscription-runtime.test.ts"
+    },
+    {
+      "id": "server.subscription_consumer_delivery",
+      "source": "../../packages/server/src/stand/subscription-runtime.ts",
+      "operation": "subscription.consumer_delivery",
+      "disposition": "warn",
+      "test": "packages/server/test/stand/subscription-runtime.test.ts"
+    },
+    {
+      "id": "server.subscription_consumer_async_delivery",
+      "source": "../../packages/server/src/stand/subscription-runtime.ts",
+      "operation": "subscription.consumer",
+      "disposition": "warn",
+      "test": "packages/server/test/stand/subscription-runtime.test.ts"
+    },
+    {
+      "id": "server.process_shutdown_close",
+      "source": "../../packages/server/src/server/process-server-coordinator.ts",
+      "operation": "server.process_shutdown",
+      "disposition": "error",
+      "test": "packages/server/test/server/server.test.ts"
+    },
+    {
+      "id": "server.delivery_notify_start",
+      "source": "../../packages/server/src/server/environment-delivery-worker.ts",
+      "operation": "delivery.notify_start",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.delivery_supervisor_close",
+      "source": "../../packages/server/src/server/environment-delivery-worker.ts",
+      "operation": "delivery.supervisor_close",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.attachment_queued_gate",
+      "source": "../../packages/server/src/server/environment-attachment.ts",
+      "operation": "attachment.queue",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.attachment_queue_serial_tail",
+      "source": "../../packages/server/src/server/environment-attachment.ts",
+      "operation": "attachment.queue",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.attachment_stop_admission_gate",
+      "source": "../../packages/server/src/server/environment-attachment.ts",
+      "operation": "attachment.stop",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.attachment_stop_serial_tail",
+      "source": "../../packages/server/src/server/environment-attachment.ts",
+      "operation": "attachment.stop",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.attachment_permanent_close_serial_tail",
+      "source": "../../packages/server/src/server/environment-attachment.ts",
+      "operation": "attachment.close",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.attachment_detach_serial_tail",
+      "source": "../../packages/server/src/server/environment-attachment.ts",
+      "operation": "attachment.detach",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.attachment_rollback_retry_reset",
+      "source": "../../packages/server/src/server/environment-attachment.ts",
+      "operation": "attachment.rollback",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.attachment_rollback_serial_tail",
+      "source": "../../packages/server/src/server/environment-attachment.ts",
+      "operation": "attachment.rollback",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/environment-attachment.test.ts"
+    },
+    {
+      "id": "server.delivery_control_settlement_observer",
+      "source": "../../packages/server/src/delivery/delivery-run-control.ts",
+      "operation": "delivery.control",
+      "disposition": "no-log",
+      "test": "packages/server/test/delivery/delivery-run-control.test.ts"
+    },
+    {
+      "id": "server.delivery_coordinator_notify",
+      "source": "../../packages/server/src/delivery/delivery-run-coordinator.ts",
+      "operation": "delivery.coordinator_notify",
+      "disposition": "no-log",
+      "test": "packages/server/test/delivery/delivery-run-coordinator.test.ts"
+    },
+    {
+      "id": "server.delivery_coordinator_remove_idle",
+      "source": "../../packages/server/src/delivery/delivery-run-coordinator.ts",
+      "operation": "delivery.coordinator_remove",
+      "disposition": "no-log",
+      "test": "packages/server/test/delivery/delivery-run-coordinator.test.ts"
+    },
+    {
+      "id": "server.delivery_coordinator_settlement_observer",
+      "source": "../../packages/server/src/delivery/delivery-run-coordinator.ts",
+      "operation": "delivery.coordinator_settlement",
+      "disposition": "no-log",
+      "test": "packages/server/test/delivery/delivery-run-coordinator.test.ts"
+    },
+    {
+      "id": "server.delivery_coordinator_retirement_idle",
+      "source": "../../packages/server/src/delivery/delivery-run-coordinator.ts",
+      "operation": "delivery.coordinator_retirement",
+      "disposition": "no-log",
+      "test": "packages/server/test/delivery/delivery-run-coordinator.test.ts"
     }
   ]
 }

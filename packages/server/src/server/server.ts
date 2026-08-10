@@ -242,11 +242,16 @@ export class Server {
       ? undefined
       : this.#environment;
     const running = this.#start("server").then((server) =>
-      ProcessServerCoordinator.add(server, environment, () => {
-        if (this.#run === running) {
-          this.#run = undefined;
-        }
-      }),
+      ProcessServerCoordinator.add(
+        server,
+        environment,
+        environment === undefined ? undefined : serverEnvironmentAccess.loggerFor(environment),
+        () => {
+          if (this.#run === running) {
+            this.#run = undefined;
+          }
+        },
+      ),
     );
     this.#run = running;
     void running.catch(() => {
