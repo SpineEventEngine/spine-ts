@@ -3785,11 +3785,13 @@ describe("SpineServices", () => {
     const warn = vi.fn(() => Promise.reject(new Error("logger rejection")));
     const withMetadata = vi.fn(() => ({ warn }));
     const services = new SpineServices({ contexts: [context], queueLimit: 1 });
-    spineServicesAccess.installLogger(
-      services,
-      { withMetadata } as unknown as ILogLayer,
-    );
-    let handlers: { subscribe(topic: Topic): Promise<Subscription>; activate(subscription: Subscription): AsyncIterable<SubscriptionUpdate> } | undefined;
+    spineServicesAccess.installLogger(services, { withMetadata } as unknown as ILogLayer);
+    let handlers:
+      | {
+          subscribe(topic: Topic): Promise<Subscription>;
+          activate(subscription: Subscription): AsyncIterable<SubscriptionUpdate>;
+        }
+      | undefined;
     services.register({
       service(schema: unknown, implementation: unknown) {
         if (schema === SubscriptionService) handlers = implementation as typeof handlers;

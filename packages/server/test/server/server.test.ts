@@ -82,9 +82,9 @@ describe("Server", () => {
     const server = await Server.atPort(0).add(context).start();
     expect(logger.child).toHaveBeenCalledTimes(1);
     expect(
-      (boundedContextAccess as unknown as { loggerFor(context: BoundedContext): ILogLayer }).loggerFor(
-        context,
-      ),
+      (
+        boundedContextAccess as unknown as { loggerFor(context: BoundedContext): ILogLayer }
+      ).loggerFor(context),
     ).toBe(child);
     expect(errors).toEqual([]);
 
