@@ -384,6 +384,7 @@ export class Server {
       environment: this.#environment,
       attachment,
       contextTransports,
+      services,
       host,
       port: address.port,
       closeables,
@@ -850,6 +851,7 @@ class RunningHttp2Server implements RunningServer {
   readonly #environment: ServerEnvironment;
   readonly #attachment: EnvironmentAttachmentHandle;
   readonly #contextTransports: ContextTransportGroup;
+  readonly #services: SpineServices;
   readonly host: string;
   readonly port: number;
   readonly baseUrl: string;
@@ -866,6 +868,7 @@ class RunningHttp2Server implements RunningServer {
     this.#environment = options.environment;
     this.#attachment = options.attachment;
     this.#contextTransports = options.contextTransports;
+    this.#services = options.services;
     this.host = options.host;
     this.port = options.port;
     this.baseUrl = `http://${ServerValues.formatHostForUrl(options.host)}:${options.port.toString()}`;
@@ -967,6 +970,7 @@ class RunningHttp2Server implements RunningServer {
     if (detachRejected) {
       ServerValues.throwRunningDetachErrors(detachErrors);
     }
+    spineServicesAccess.clearLogger(this.#services);
   }
 }
 
@@ -978,6 +982,7 @@ interface RunningHttp2ServerOptions {
   readonly environment: ServerEnvironment;
   readonly attachment: EnvironmentAttachmentHandle;
   readonly contextTransports: ContextTransportGroup;
+  readonly services: SpineServices;
   readonly host: string;
   readonly port: number;
 }

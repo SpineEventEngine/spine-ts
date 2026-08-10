@@ -1037,9 +1037,6 @@ export class BoundedContext {
       }, errors);
     }
     ContextParts.clearContextMetadata(this);
-    contextDispatchFailureRecorders.delete(this);
-    contextEventBuses.delete(this);
-    contextLoggers.delete(this);
 
     if (errors.length > 0) {
       throw new AggregateError(ContextParts.flattenErrors(errors), "BoundedContext close failed.");
@@ -2228,6 +2225,14 @@ const ContextParts = Object.freeze({
   },
 
   clearContextMetadata(context: BoundedContext): void {
+    const buses = contextEventBuses.get(context);
+    if (buses !== undefined) {
+      eventBusAccess.clearLogger(buses[0]);
+      eventBusAccess.clearLogger(buses[1]);
+    }
+    contextDispatchFailureRecorders.delete(context);
+    contextEventBuses.delete(context);
+    contextLoggers.delete(context);
     contextSystemPairings.delete(context);
     contextTenantIndexes.delete(context);
     contextStorageFactories.delete(context);

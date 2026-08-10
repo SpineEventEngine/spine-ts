@@ -65,6 +65,7 @@ interface EventBusAccess {
   abortClose(eventBus: EventBus): void;
   acceptedWorkCount(eventBus: EventBus): number;
   installLogger(eventBus: EventBus, logger: ILogLayer): void;
+  clearLogger(eventBus: EventBus): void;
 }
 
 type EventBusIntakeState = "open" | "closing" | "closed";
@@ -525,6 +526,12 @@ interface EventSubscriberRecord {
  * @internal
  */
 export const eventBusAccess: EventBusAccess = Object.freeze({
+  clearLogger(eventBus: EventBus): void {
+    if (!storedDispatchers.has(eventBus)) {
+      throw new TypeError("EventBus logger requires an EventBus instance.");
+    }
+    eventBusLoggers.delete(eventBus);
+  },
   installLogger(eventBus: EventBus, logger: ILogLayer): void {
     if (!storedDispatchers.has(eventBus)) {
       throw new TypeError("EventBus logger requires an EventBus instance.");

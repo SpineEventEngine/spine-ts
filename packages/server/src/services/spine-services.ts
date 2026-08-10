@@ -97,9 +97,11 @@ import {
 } from "../stand/subscription-registry.js";
 
 const serviceLoggers = new WeakMap<SpineServices, ILogLayer>();
+const serviceInstances = new WeakSet<SpineServices>();
 
 interface SpineServicesAccess {
   installLogger(services: SpineServices, logger: ILogLayer): void;
+  clearLogger(services: SpineServices): void;
 }
 
 /**
@@ -154,6 +156,7 @@ export class SpineServices {
    * @param options Configures contexts and subscription bounds.
    */
   constructor(options: SpineServicesOptions) {
+    serviceInstances.add(this);
     this.#contexts = Object.freeze([...options.contexts]);
     this.#queueLimit = ServiceValues.positiveInteger(
       options.queueLimit ?? ServiceValues.defaultQueueLimit,
@@ -663,7 +666,16 @@ export class SpineServices {
  * @internal
  */
 export const spineServicesAccess: SpineServicesAccess = Object.freeze({
+  clearLogger(services: SpineServices): void {
+    if (!serviceInstances.has(services)) {
+      throw new TypeError("SpineServices logger requires a SpineServices instance.");
+    }
+    serviceLoggers.delete(services);
+  },
   installLogger(services: SpineServices, logger: ILogLayer): void {
+    if (!serviceInstances.has(services)) {
+      throw new TypeError("SpineServices logger requires a SpineServices instance.");
+    }
     serviceLoggers.set(services, logger);
   },
 });
