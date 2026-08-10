@@ -9,6 +9,26 @@ import {
 import { InMemorySubscriptionRegistry } from "../../src/stand/subscription-registry.js";
 
 describe("SubscriptionRuntime", () => {
+  it("validates and clears package-private logger metadata", async () => {
+    const logger = { withMetadata: vi.fn(() => ({ warn: vi.fn() })) };
+    const runtime = new SubscriptionRuntime(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      new InMemorySubscriptionRegistry(),
+    );
+    expect(() => {
+      subscriptionRuntimeAccess.installLogger({} as never, logger as never);
+    }).toThrow("Subscription runtime logger requires a SubscriptionRuntime instance.");
+    subscriptionRuntimeAccess.installLogger(runtime, logger as never);
+    expect(subscriptionRuntimeAccess.loggerFor(runtime)).toBe(logger);
+    subscriptionRuntimeAccess.clearLogger(runtime);
+    expect(() => {
+      subscriptionRuntimeAccess.loggerFor(runtime);
+    }).toThrow("Subscription runtime logger is not installed.");
+    await runtime.close();
+  });
   it("warns once when detached initial reconciliation fails", async () => {
     const warn = vi.fn();
     const logger = { withMetadata: vi.fn(() => ({ warn })) };

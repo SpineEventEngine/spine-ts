@@ -23,6 +23,7 @@ const subscriptionRuntimes = new WeakSet<SubscriptionRuntime>();
 interface SubscriptionRuntimeAccess {
   installLogger(runtime: SubscriptionRuntime, logger: ILogLayer): void;
   clearLogger(runtime: SubscriptionRuntime): void;
+  loggerFor(runtime: SubscriptionRuntime): ILogLayer;
 }
 
 /**
@@ -382,6 +383,14 @@ export const subscriptionRuntimeAccess: SubscriptionRuntimeAccess = Object.freez
       throw new TypeError("Subscription runtime logger requires a SubscriptionRuntime instance.");
     }
     subscriptionRuntimeLoggers.delete(runtime);
+  },
+  loggerFor(runtime: SubscriptionRuntime): ILogLayer {
+    if (!subscriptionRuntimes.has(runtime)) {
+      throw new TypeError("Subscription runtime logger requires a SubscriptionRuntime instance.");
+    }
+    const logger = subscriptionRuntimeLoggers.get(runtime);
+    if (logger === undefined) throw new TypeError("Subscription runtime logger is not installed.");
+    return logger;
   },
 });
 
