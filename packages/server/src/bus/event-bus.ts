@@ -391,10 +391,13 @@ export class EventBus {
     for (const subscriber of subscribers) {
       const logger = eventBusLoggers.get(this);
       try {
-        const result = subscriber.onEvent(clone(EventSchema, event));
+        const onEvent: (event: Event) => unknown = subscriber.onEvent.bind(subscriber);
+        const result = onEvent(clone(EventSchema, event));
         if (isPromiseLike(result)) {
           // spine-log-boundary: server.event_subscriber_async_failure
-          void Promise.resolve(result).catch(() => this.#recordSubscriberFailure(typeUrl, logger));
+          void Promise.resolve(result).catch(() => {
+            this.#recordSubscriberFailure(typeUrl, logger);
+          });
         }
       } catch {
         // Service-delivery subscribers must not poison event intake or later subscribers.
