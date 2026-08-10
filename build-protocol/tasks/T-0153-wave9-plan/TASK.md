@@ -1,6 +1,6 @@
 # T-0153: Wave 9 Plan
 
-Status: Verified; pending commit, push, and integration
+Status: Verified and pushed; pending integration
 
 ## Objective
 
