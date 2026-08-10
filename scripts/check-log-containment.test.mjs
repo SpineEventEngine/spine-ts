@@ -20,7 +20,13 @@ function check(source, boundaries, sourcePath = "source.ts") {
 }
 
 function boundary(id, source = "source.ts") {
-  return { id, source, operation: "retry", disposition: "warn", test: "fixture.test.ts" };
+  return {
+    id,
+    source,
+    operation: "retry",
+    disposition: "warn",
+    test: "scripts/check-log-containment.test.mjs",
+  };
 }
 
 test("allows every checked containment pattern when it has an adjacent manifest binding", () => {
@@ -116,6 +122,8 @@ test("validates manifest roots and every required boundary field", () => {
     {},
     { boundaries: [{}] },
     { boundaries: [boundary("bad", "../source.ts")] },
+    { boundaries: [{ ...boundary("absolute-test"), test: "/tmp/fixture.test.ts" }] },
+    { boundaries: [{ ...boundary("traversal-test"), test: "../fixture.test.ts" }] },
   ]) {
     const path = join(root, `manifest-${Math.random().toString(16).slice(2)}.json`);
     writeFileSync(path, JSON.stringify(manifest));

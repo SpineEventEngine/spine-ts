@@ -126,3 +126,15 @@ fixtures, fresh scoped coverage at 95.87% statements / 90.00% branches /
 TSDoc, Prettier, API docs, and diff checking pass. The final parameterized
 `verify:task` execution includes the required containment checker. Security
 remains deferred to T-0167.
+
+## Targeted Re-review Correction Completion
+
+The aggregated targeted findings are corrected together: `server-log.ts` has
+one adjacent no-log manifest binding for each synchronous and detached
+asynchronous suppression; callable thenables are contained; test paths reject
+absolute and traversal forms and must resolve inside the repository; and the
+replacement-generation regression proves exact remote-port as well as logger
+identity. Focused evidence is 47 server tests and 5 checker fixtures, with the
+live checker, generated build/tooling typechecks, changed-file ESLint,
+Prettier, and diff check passing. `verify:task` is intentionally left for the
+parent's post-re-review final gate.

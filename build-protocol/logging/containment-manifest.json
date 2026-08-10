@@ -13,6 +13,20 @@
       "operation": "delivery.open",
       "disposition": "no-log",
       "test": "packages/server/test/server/server-environment.test.ts"
+    },
+    {
+      "id": "server.log_sync_failure",
+      "source": "../../packages/server/src/server/server-log.ts",
+      "operation": "log.emit",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/server-log.test.ts"
+    },
+    {
+      "id": "server.log_async_failure",
+      "source": "../../packages/server/src/server/server-log.ts",
+      "operation": "log.emit",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/server-log.test.ts"
     }
   ]
 }

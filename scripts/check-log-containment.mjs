@@ -5,6 +5,7 @@ import ts from "typescript";
 const manifestPath = resolve(process.argv[2] ?? "build-protocol/logging/containment-manifest.json");
 const root = dirname(manifestPath);
 const repositoryRoot = resolve(root, "../..");
+const projectRoot = resolve(process.cwd());
 const failures = [];
 let manifest;
 try {
@@ -101,13 +102,20 @@ function validEntry(entry) {
     /^[a-z0-9][a-z0-9_.-]{0,63}$/.test(entry.operation) &&
     typeof entry.test === "string" &&
     entry.test.length > 0 &&
-    (existsSync(resolve(root, entry.test)) || existsSync(resolve(repositoryRoot, entry.test))) &&
+    !entry.test.startsWith("/") &&
+    !entry.test.split(/[\\/]/).includes("..") &&
+    existsSync(resolve(projectRoot, entry.test)) &&
+    within(projectRoot, resolve(projectRoot, entry.test)) &&
     ["warn", "error", "no-log"].includes(entry.disposition)
   );
 }
 
 function withinRoot(file) {
-  const path = relative(repositoryRoot, file);
+  return within(repositoryRoot, file);
+}
+
+function within(root, file) {
+  const path = relative(root, file);
   return (
     path !== "" &&
     !path.startsWith("..") &&

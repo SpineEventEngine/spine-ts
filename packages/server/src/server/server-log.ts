@@ -61,7 +61,11 @@ function emitServerLog(
     const emit: (message: string) => unknown =
       level === "warn" ? builder.warn.bind(builder) : builder.error.bind(builder);
     const emitted = emit(message);
-    if (isPromiseLike(emitted)) void Promise.resolve(emitted).catch(() => undefined);
+    if (isPromiseLike(emitted)) {
+      // spine-log-boundary: server.log_async_failure
+      void Promise.resolve(emitted).catch(() => undefined);
+    }
+    // spine-log-boundary: server.log_sync_failure
   } catch {
     // Logging must not affect the containing runtime outcome.
   }
@@ -85,7 +89,7 @@ function cleanFacts(facts: Readonly<Record<string, unknown>>): Record<string, st
 
 function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
   return (
-    typeof value === "object" &&
+    (typeof value === "object" || typeof value === "function") &&
     value !== null &&
     "then" in value &&
     typeof (value as { then?: unknown }).then === "function"

@@ -69,6 +69,14 @@ describe("server logging containment", () => {
     const async = {
       withMetadata: () => ({ warn: () => Promise.reject(new Error("logger")) }),
     };
+    const callableThenable = Object.assign(() => undefined, {
+      then: vi.fn((_: unknown, reject: (reason: Error) => void) => {
+        reject(new Error("logger"));
+      }),
+    });
+    const callable = {
+      withMetadata: () => ({ warn: () => callableThenable }),
+    };
 
     expect(() => {
       emitServerWarning(sync as never, "retry_failed", {});
@@ -76,7 +84,11 @@ describe("server logging containment", () => {
     expect(() => {
       emitServerWarning(async as never, "retry_failed", {});
     }).not.toThrow();
+    expect(() => {
+      emitServerWarning(callable as never, "retry_failed", {});
+    }).not.toThrow();
     await Promise.resolve();
+    expect(callableThenable.then).toHaveBeenCalledOnce();
   });
 
   it("uses the same contained path for error records", () => {

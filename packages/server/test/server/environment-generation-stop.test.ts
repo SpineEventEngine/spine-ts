@@ -6,6 +6,7 @@ import type {
   ContextDeliveryDescriptor,
   DeliveryTenantScope,
 } from "../../src/context/bounded-context.js";
+import type { EnvironmentDeliveryPorts } from "../../src/context/local-inbox-handoff.js";
 import {
   DeliveryReadiness,
   type DeliveryReady,
@@ -121,6 +122,42 @@ describe("environment generation stop", () => {
     expect(candidateWorker.runtimes[0]?.logger).toBe(logger);
     await attachments.detach(handle);
     await attachments.detach(replacementHandle);
+  });
+
+  it("preserves configured remote ports when a replacement delivery generation builds", async () => {
+    const oldWorker = new ControlledWorker([], "ports-old");
+    const candidateWorker = new ControlledWorker([], "ports-candidate");
+    const candidateGate = Promise.withResolvers<undefined>();
+    candidateWorker.gates.push(candidateGate.promise);
+    const workers = [oldWorker, candidateWorker];
+    const ports = Object.freeze({
+      inbox: {} as never,
+      workRegistry: {} as never,
+    }) as EnvironmentDeliveryPorts;
+    let factoryCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      deliveryPorts: () => ports,
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+    });
+    const initial = descriptor(
+      "PortReplacement",
+      "type.example.dev/PortReplacement",
+      new InMemoryStorageFactory(),
+    );
+
+    const handle = await attachments.attach({ ownership: "caller", descriptors: [initial.value] });
+    const stopping = attachments.stopDelivery();
+    await until(() => candidateWorker.starts === 1);
+    candidateGate.resolve(undefined);
+    await stopping;
+
+    expect(initial.transitionOptions.at(-1)?.ports).toBe(ports);
+    await attachments.detach(handle);
   });
 
   it("defers an attachment ordered after stop and joins the published candidate", async () => {
@@ -2409,6 +2446,9 @@ function descriptor(
   readonly contextCalls: number;
   readonly endpointCalls: number;
   readonly storageFactoryCalls: number;
+  readonly transitionOptions: readonly (
+    Parameters<ContextDeliveryDescriptor["transition"]>[2] | undefined
+  )[];
 } {
   const readiness = new DeliveryReadiness();
   const ready: DeliveryReady = Object.freeze({
@@ -2426,6 +2466,9 @@ function descriptor(
   let endpointCalls = 0;
   let storageFactoryCalls = 0;
   let notifications = 0;
+  const observedTransitionOptions: (
+    Parameters<ContextDeliveryDescriptor["transition"]>[2] | undefined
+  )[] = [];
   const value: ContextDeliveryDescriptor = Object.freeze({
     get storageFactory() {
       storageFactoryCalls += 1;
@@ -2470,15 +2513,17 @@ function descriptor(
       scopes: readonly DeliveryReady[],
       onReady: OnDeliveryReady,
       transitionOptions?: { readonly allowEmpty?: boolean },
-    ) =>
-      readiness.transition(
+    ) => {
+      observedTransitionOptions.push(transitionOptions);
+      return readiness.transition(
         scopes,
         (candidate) => {
           notifications += 1;
           return onReady(candidate);
         },
         transitionOptions,
-      ),
+      );
+    },
     replay: () => Promise.resolve(),
   });
   return {
@@ -2503,6 +2548,9 @@ function descriptor(
     },
     get notifications() {
       return notifications;
+    },
+    get transitionOptions() {
+      return Object.freeze([...observedTransitionOptions]);
     },
   };
 }
