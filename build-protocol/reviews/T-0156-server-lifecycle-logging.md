@@ -27,3 +27,5 @@ Watch correction evidence: a failed watch is logged once at its outer restart bo
 Detached-run disposition: controlled delivery normalizes the attempted failure into returned delivery evidence; focused behavior proves that result is no-log. No ERROR hook was added without a reproduced escaping task, preventing duplicate operational records. Subscription runtime is next.
 
 Pre-review inventory evidence: every checker-detected attachment, delivery-control, and coordinator suppression now has one adjacent source ID and one manifest entry. They are no-log because their owner still surfaces the failure, aggregates it, or preserves retry/fault state; focused attachment/control/coordinator tests (137) and the containment checker are green. No new public claim or API exists.
+
+No-log behavior evidence: environment delivery-open rejection and partial-close retry both use a supplied capture logger and produce zero records while retaining the original error/retry outcome (26 focused tests).
