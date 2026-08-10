@@ -1,8 +1,10 @@
 # T-0156 Review Record
 
-Status: Pending implementation
+Status: Correction-complete; re-review-ready (not final complete)
 
 Current correction evidence: timer retained-cycle warning is exactly-once; `keeps a failed signal close retryable` proves immediate SIGTERM/SIGINT coalesce to one first attempt/error and a later signal retries; the corrected signal-aware recovery close test proves zero records; normal delivery watch, subscription runtime close, and successful process shutdown all capture zero records. Reliability and style re-review remain pending until the cheap gate is repeated.
+
+Review chronology: initial style and reliability reviews identified the requirements ledger and lifecycle race/evidence gaps. Residual re-review rejected the first correction batch for missing behavior proof. Phase-1 diagnosis found the abort fixture used the first `releaseExpired` argument (stale milliseconds) as options; the corrected second-argument fixture is green. Residual style and reliability re-reviews remain pending; API/docs remain N/A because no public contract changed.
 
 ## Aggregated correction batch
 
