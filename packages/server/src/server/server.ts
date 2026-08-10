@@ -19,7 +19,11 @@ import {
   BoundedContextBuilder,
   boundedContextAccess,
 } from "../context/bounded-context.js";
-import { SpineServices, type SpineServicesOptions } from "../services/spine-services.js";
+import {
+  SpineServices,
+  spineServicesAccess,
+  type SpineServicesOptions,
+} from "../services/spine-services.js";
 import { ContextTransportGroup } from "./context-transport-group.js";
 import { BrowserServer } from "./browser-server.js";
 import type {
@@ -344,6 +348,7 @@ export class Server {
       contexts,
       ...this.#services,
     });
+    spineServicesAccess.installLogger(services, logger);
     const sessions = new Set<http2.ServerHttp2Session>();
     const httpServer = ServerValues.createHttpServer(
       services,

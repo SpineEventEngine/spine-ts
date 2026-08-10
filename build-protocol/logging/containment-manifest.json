@@ -1,6 +1,13 @@
 {
   "boundaries": [
     {
+      "id": "server.subscription_cleanup_failure",
+      "source": "../../packages/server/src/services/spine-services.ts",
+      "operation": "service.subscription_cleanup",
+      "disposition": "warn",
+      "test": "packages/server/test/services/spine-services.test.ts"
+    },
+    {
       "id": "server.event_bus_close_runtime",
       "source": "../../packages/server/src/bus/event-bus.ts",
       "operation": "event.close",
