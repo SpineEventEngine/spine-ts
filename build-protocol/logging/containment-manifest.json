@@ -398,6 +398,48 @@
       "operation": "auth.subscription.cleanup",
       "disposition": "no-log",
       "test": "packages/auth/test/dynamic-unary-forwarder.test.ts"
+    },
+    {
+      "id": "auth.subscription_expiry_cleanup",
+      "source": "../../packages/auth/src/subscriptions/index.ts",
+      "operation": "auth.subscription.expiry",
+      "disposition": "no-log",
+      "test": "packages/auth/test/subscriptions/index.test.ts"
+    },
+    {
+      "id": "auth.subscription_effect_settlement",
+      "source": "../../packages/auth/src/subscriptions/index.ts",
+      "operation": "auth.subscription.effect",
+      "disposition": "no-log",
+      "test": "packages/auth/test/subscriptions/index.test.ts"
+    },
+    {
+      "id": "auth.subscription_cleanup_tail",
+      "source": "../../packages/auth/src/subscriptions/index.ts",
+      "operation": "auth.subscription.cleanup",
+      "disposition": "no-log",
+      "test": "packages/auth/test/subscriptions/index.test.ts"
+    },
+    {
+      "id": "auth.subscription_cleanup_observer",
+      "source": "../../packages/auth/src/subscriptions/index.ts",
+      "operation": "auth.subscription.cleanup",
+      "disposition": "no-log",
+      "test": "packages/auth/test/subscriptions/index.test.ts"
+    },
+    {
+      "id": "auth.subscription_timer_purge",
+      "source": "../../packages/auth/src/subscriptions/index.ts",
+      "operation": "auth.subscription.purge",
+      "disposition": "no-log",
+      "test": "packages/auth/test/subscriptions/index.test.ts"
+    },
+    {
+      "id": "auth.subscription_recovered_cleanup",
+      "source": "../../packages/auth/src/subscriptions/index.ts",
+      "operation": "auth.subscription.cleanup",
+      "disposition": "no-log",
+      "test": "packages/auth/test/subscriptions/index.test.ts"
     }
   ]
 }

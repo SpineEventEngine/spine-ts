@@ -475,6 +475,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     if (binding.expiring || this.#bindings.get(id) !== binding) return;
     binding.expiring = true;
     binding.controller.abort();
+    // spine-log-boundary: auth.subscription_expiry_cleanup
     void this.#disposeAfterWork(id, binding).catch(() => undefined);
   }
   #dispose(id: string, binding: Binding): void {
@@ -497,6 +498,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
           : new Error("Subscription backend callback threw a non-Error value.", { cause: error }),
       );
     }
+    // spine-log-boundary: auth.subscription_effect_settlement
     const settled = effect.then(
       () => undefined,
       () => undefined,
@@ -516,7 +518,9 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     const cleanup = binding.tail
       .then(() => binding.effectTail)
       .then(() => this.#disposeWithCallback(id, binding));
+    // spine-log-boundary: auth.subscription_cleanup_tail
     binding.tail = cleanup.catch(() => undefined);
+    // spine-log-boundary: auth.subscription_cleanup_observer
     void cleanup.catch(() => undefined);
     return cleanup;
   }
@@ -867,6 +871,7 @@ export class SubscriptionGateway {
     const timer = setTimeout(
       () => {
         this.#expiryTimers.delete(timer);
+        // spine-log-boundary: auth.subscription_timer_purge
         void this.#options.bindings.purgeExpired(whenExpires).catch(() => undefined);
       },
       Math.max(0, whenExpires - nowMs),
@@ -1062,6 +1067,7 @@ export class SubscriptionGateway {
           nowMs: this.#nowMs() ?? expiresAtMs,
           onDefinition: () => Promise.resolve(),
         });
+        // spine-log-boundary: auth.subscription_recovered_cleanup
       } catch {
         // Retain the row: a later request can retry backend cleanup.
       }
