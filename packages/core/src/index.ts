@@ -461,10 +461,16 @@ export interface TypeMetadata<Schema extends MessageSchema = MessageSchema> {
    */
   readonly semanticTags: readonly string[];
 
-  /** Java types declared directly by the descriptor `(is)` option. */
+  /**
+   * Java types declared directly by the descriptor `(is)` option, independent
+   * of caller-supplied compatibility {@link TypeMetadata.semanticTags}.
+   */
   readonly isTypes: readonly string[];
 
-  /** Java types declared by the descriptor file `(every_is)` option. */
+  /**
+   * Java types declared by the descriptor file `(every_is)` option, independent
+   * of caller-supplied compatibility {@link TypeMetadata.semanticTags}.
+   */
   readonly everyIsTypes: readonly string[];
 
   /**
@@ -521,10 +527,18 @@ export interface TypeRegistryLookup {
    */
   findBySemanticTag(semanticTag: string): readonly TypeMetadata[];
 
-  /** Finds registrations declared with descriptor `(is)` Java type. */
+  /**
+   * Finds registrations declared with descriptor `(is)` Java type.
+   * @param javaType The descriptor-declared Java type.
+   * @returns Immutable matching metadata in registration order.
+   */
   findByIs(javaType: string): readonly TypeMetadata[];
 
-  /** Finds registrations declared with descriptor `(every_is)` Java type. */
+  /**
+   * Finds registrations declared with descriptor `(every_is)` Java type.
+   * @param javaType The file-descriptor Java type.
+   * @returns Immutable matching metadata in registration order.
+   */
   findByEveryIs(javaType: string): readonly TypeMetadata[];
 
   /**
@@ -1322,9 +1336,20 @@ export class TypeRegistry {
     return [...(this.#bySemanticTag.get(semanticTag) ?? [])];
   }
 
+  /**
+   * Finds registrations declared with descriptor `(is)` Java type.
+   * @param javaType The descriptor-declared Java type.
+   * @returns Immutable matching metadata in registration order.
+   */
   findByIs(javaType: string): readonly TypeMetadata[] {
     return Object.freeze([...(this.#byIs.get(javaType) ?? [])]);
   }
+
+  /**
+   * Finds registrations declared with descriptor `(every_is)` Java type.
+   * @param javaType The file-descriptor Java type.
+   * @returns Immutable matching metadata in registration order.
+   */
   findByEveryIs(javaType: string): readonly TypeMetadata[] {
     return Object.freeze([...(this.#byEveryIs.get(javaType) ?? [])]);
   }
