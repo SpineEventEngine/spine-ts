@@ -294,7 +294,8 @@ describe("Stand", () => {
     await runtime.consume(id, () => {
       throw new Error("consumer secret");
     });
-    await runtime.consume(id, (() => deferred.promise) as unknown as () => void);
+    const deferredConsumer: (update: unknown) => unknown = () => deferred.promise;
+    await runtime.consume(id, deferredConsumer);
     await runtime.consume(id, () => {
       peer++;
     });

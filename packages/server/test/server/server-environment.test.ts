@@ -4,6 +4,7 @@ import { InMemoryStorageFactory, type StorageContext } from "@spine-event-engine
 import {
   ServerEnvironment,
   type ServerEnvironmentCloseable,
+  type ServerEnvironmentDelivery,
   serverEnvironmentAccess,
 } from "../../src/server/server-environment.js";
 import type { ContextDeliveryDescriptor } from "../../src/context/bounded-context.js";
@@ -589,7 +590,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
         close: () => undefined,
         inbox: {},
         workRegistry: {},
-      },
+      } as unknown as ServerEnvironmentDelivery,
       logger: { child: () => child } as unknown as ILogLayer,
     });
     const environment = ServerEnvironment.instance();
