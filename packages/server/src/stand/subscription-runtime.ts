@@ -87,7 +87,7 @@ export class SubscriptionRuntime {
       this.#warnReconciliationFailure();
     });
     this.#timer = setInterval(() => {
-      this.#reconcileTimer();
+      void this.#reconcileTimer();
     }, 10_000);
     this.#timer.unref();
   }

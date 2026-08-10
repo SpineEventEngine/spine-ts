@@ -4,6 +4,8 @@ Status: Reviewed/converged; pending final verify
 
 Final review convergence: performance/reliability CLEAN (227 focused tests covering timer, abort, signal coalescing, normal close, and no-logger paths). Style/maintainability CLEAN after `d478fe3c` stabilized the active watch fixture. This is not final task completion: final verification remains pending.
 
+Final-verify disposition: one mechanical ESLint no-floating-promises finding at `subscription-runtime.ts:90` was corrected with `void this.#reconcileTimer();`; source lint and focused evidence are green. It does not reopen style or reliability review. Final verification rerun is pending.
+
 Current correction evidence: timer retained-cycle warning is exactly-once; `keeps a failed signal close retryable` proves immediate SIGTERM/SIGINT coalesce to one first attempt/error and a later signal retries; the corrected signal-aware recovery close test proves zero records; normal delivery watch, subscription runtime close, and successful process shutdown all capture zero records. Reliability and style re-review remain pending until the cheap gate is repeated.
 
 Fresh changed-range coverage gate is clean: statements/lines 81/84 (96.43%), branches 45/49 (91.84%), and functions 20/21 (95.24%), from `/tmp/t0156-no-logger-coverage/lcov.info` (69 files / 1,647 tests). The no-logger consumer test covers `subscription-runtime.ts:353`; the task is correction-complete and re-review-ready.
