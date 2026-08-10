@@ -62,3 +62,9 @@ and LCOV commands and paths.
 Runtime metadata is unavailable unless the execution surface exposes it; the
 explicit immutable configured role/profile is then the durable assignment
 evidence.
+
+## Verifier TSDoc Correction
+
+Parent-run `verify:task` found only `tsdoc-block-opener` at
+`scheduled-discovery-log.ts` block 3. The multiline TSDoc repair is
+verifier-rerun-ready; no behavior or review concern reopened.
