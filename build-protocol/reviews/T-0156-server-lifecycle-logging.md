@@ -17,3 +17,5 @@ Cross-check disposition: P0 terminal detached delivery-start/run paths require o
 Implementation disposition: the inspected `EnvironmentDeliveryWorker.add()` detached start has no ordinary terminal rejection because supervisor recovery converts remote source failure into a retryable result. Its observable boundary is recovery WARN; any ERROR classification requires a separately reproduced uncaught background termination.
 
 Initial implementation evidence: recovery WARN uses a private `DeliverySupervisor` logger capability installed only by environment runtime assembly. It has no public option/export/fallback and emits only fixed allowlisted facts. Deterministic containment, ESLint, formatting, and focused test evidence are green; timer/watch, logger-failure, and no-log behavior remain pending before review.
+
+Correction evidence: capability installation rejects foreign objects, normal terminal close clears the WeakMap entry, and both synchronous and rejected logger methods are contained without changing recovery/close behavior. Timer/watch and normal-close no-log assertions remain pending.

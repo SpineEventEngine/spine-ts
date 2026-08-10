@@ -8,9 +8,11 @@ import type { ILogLayer } from "loglayer";
 import { emitServerWarning } from "../server/server-log.js";
 
 const deliverySupervisorLoggers = new WeakMap<DeliverySupervisor, ILogLayer>();
+const deliverySupervisors = new WeakSet<DeliverySupervisor>();
 
 interface DeliverySupervisorAccess {
   installLogger(supervisor: DeliverySupervisor, logger: ILogLayer): void;
+  loggerFor(supervisor: DeliverySupervisor): ILogLayer;
 }
 
 /**
@@ -133,6 +135,7 @@ export class DeliverySupervisor {
    * @param options The source, delivery, endpoint, and bounds.
    */
   constructor(options: DeliverySupervisorOptions) {
+    deliverySupervisors.add(this);
     this.#source = options.source;
     this.#runs = new DeliveryRunControl(options.delivery);
     this.#onMessage = options.onMessage;
@@ -260,6 +263,7 @@ export class DeliverySupervisor {
     if (releaseError !== undefined) throw DeliverySupervisor.#releaseError(releaseError);
     if (this.#active.size > 0) await this.whenIdle();
     this.#closed = true;
+    deliverySupervisorLoggers.delete(this);
     if (timedOut) throw new DeliveryShutdownTimeoutError();
   }
 
@@ -474,7 +478,21 @@ export class DeliverySupervisor {
  */
 export const deliverySupervisorAccess: DeliverySupervisorAccess = Object.freeze({
   installLogger(supervisor: DeliverySupervisor, logger: ILogLayer): void {
+    if (!deliverySupervisors.has(supervisor)) {
+      throw new TypeError("Delivery supervisor logger requires a DeliverySupervisor instance.");
+    }
     deliverySupervisorLoggers.set(supervisor, logger);
+  },
+
+  loggerFor(supervisor: DeliverySupervisor): ILogLayer {
+    if (!deliverySupervisors.has(supervisor)) {
+      throw new TypeError("Delivery supervisor logger requires a DeliverySupervisor instance.");
+    }
+    const logger = deliverySupervisorLoggers.get(supervisor);
+    if (logger === undefined) {
+      throw new TypeError("Delivery supervisor logger is not installed.");
+    }
+    return logger;
   },
 });
 

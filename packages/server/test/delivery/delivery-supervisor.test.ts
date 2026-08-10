@@ -64,6 +64,68 @@ describe("DeliverySupervisor", () => {
     await supervisor.close();
   });
 
+  it.each([
+    [
+      "throws",
+      {
+        withMetadata: () => ({
+          warn: () => {
+            throw new Error("logger secret");
+          },
+        }),
+      },
+    ],
+    [
+      "rejects",
+      { withMetadata: () => ({ warn: () => Promise.reject(new Error("logger secret")) }) },
+    ],
+  ] as const)("contains a logger that %s during retained recovery", async (_case, logger) => {
+    const supervisor = new DeliverySupervisor({
+      source: {
+        releaseExpired: () => Promise.resolve([]),
+        shardSnapshot: () => Promise.reject(new Error("snapshot secret")),
+        observeShardUpdates: () => emptyUpdates(),
+      },
+      delivery: new DeliveryBuilder()
+        .withStorageFactory(new InMemoryStorageFactory())
+        .withNode("node")
+        .build(),
+      onMessage: () => Promise.resolve(),
+    });
+    deliverySupervisorAccess.installLogger(supervisor, logger as never);
+
+    await expect(supervisor.start()).resolves.toBeUndefined();
+    await Promise.resolve();
+    await supervisor.close();
+  });
+
+  it("rejects foreign logger installation and clears logger metadata on terminal close", async () => {
+    const logger = { withMetadata: vi.fn(() => ({ warn: vi.fn() })) };
+    const supervisor = new DeliverySupervisor({
+      source: {
+        releaseExpired: () => Promise.resolve([]),
+        shardSnapshot: () => Promise.resolve([]),
+        observeShardUpdates: () => emptyUpdates(),
+      },
+      delivery: new DeliveryBuilder()
+        .withStorageFactory(new InMemoryStorageFactory())
+        .withNode("node")
+        .build(),
+      onMessage: () => Promise.resolve(),
+    });
+
+    expect(() => {
+      deliverySupervisorAccess.installLogger({} as never, logger as never);
+    }).toThrow("Delivery supervisor logger requires a DeliverySupervisor instance.");
+    deliverySupervisorAccess.installLogger(supervisor, logger as never);
+    expect(deliverySupervisorAccess.loggerFor(supervisor)).toBe(logger);
+    await supervisor.start();
+    await supervisor.close();
+    expect(() => {
+      deliverySupervisorAccess.loggerFor(supervisor);
+    }).toThrow("Delivery supervisor logger is not installed.");
+  });
+
   it("does not open a replacement watch until failed recovery later succeeds", async () => {
     let snapshots = 0;
     let watches = 0;
