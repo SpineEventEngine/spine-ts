@@ -21,12 +21,16 @@ describe("scheduled discovery logging", () => {
       {
         withMetadata: () => ({
           warn: () => ({
-            then: (_: unknown, reject: (e: Error) => void) => reject(new Error(secret)),
+            then: (_: unknown, reject: (e: Error) => void) => {
+              reject(new Error(secret));
+            },
           }),
         }),
       },
     ])
-      expect(() => emitScheduledDiscoveryWarning(logger as never)).not.toThrow();
+      expect(() => {
+        emitScheduledDiscoveryWarning(logger as never);
+      }).not.toThrow();
     const warn = vi.fn();
     const logger = { withMetadata: vi.fn(() => ({ warn })) };
     emitScheduledDiscoveryWarning(logger as never);
@@ -36,7 +40,9 @@ describe("scheduled discovery logging", () => {
     });
     expect(warn).toHaveBeenCalledWith("deployment.discovery.refresh_failed");
     expect(JSON.stringify(logger.withMetadata.mock.calls)).not.toContain(secret);
-    expect(() => emitScheduledDiscoveryWarning(undefined)).not.toThrow();
+    expect(() => {
+      emitScheduledDiscoveryWarning(undefined);
+    }).not.toThrow();
     await Promise.resolve();
   });
 });

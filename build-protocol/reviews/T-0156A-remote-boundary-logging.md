@@ -1,6 +1,6 @@
 # T-0156A Review Record
 
-Status: Mechanically pre-review-ready
+Status: Correction-complete / re-review-ready
 
 ## 2026-08-10 - Aggregated Review Correction
 
