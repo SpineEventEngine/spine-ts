@@ -43,7 +43,8 @@ export type GceRegistrarOptions =
       // prettier-ignore
 
       /**
-       * Application-owned logger for this independently running component.
+       * Application-owned logger reserved for component-local records. The registrar
+       * does not retain or close the supplied logger.
        */
       readonly logger?: ILogLayer;
     })
@@ -51,7 +52,8 @@ export type GceRegistrarOptions =
       // prettier-ignore
 
       /**
-       * Application-owned logger for this independently running component.
+       * Application-owned logger reserved for component-local records. The registrar
+       * does not retain or close the supplied logger.
        */
       readonly logger?: ILogLayer;
     });

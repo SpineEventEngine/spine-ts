@@ -93,7 +93,8 @@ export interface GkeNodeDiscoveryOptions {
   readonly now?: () => number;
 
   /**
-   * Application-owned logger for this independently running component.
+   * Application-owned logger reserved for component-local records. The component
+   * does not retain or close the supplied logger.
    */
   readonly logger?: ILogLayer;
 }

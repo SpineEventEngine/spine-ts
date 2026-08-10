@@ -263,6 +263,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
       .then(() => {
         this.#deliveryOpened = true;
       }));
+    // spine-log-boundary: server.delivery_open_reset
     void opening.catch(() => {
       if (this.#deliveryOpen === opening) this.#deliveryOpen = undefined;
     });
@@ -343,6 +344,7 @@ interface ServerEnvironmentAccess {
     environment: ServerEnvironment,
     createWorker: () => EnvironmentGenerationWorker,
   ): void;
+  loggerFor(environment: ServerEnvironment): ILogLayer;
   warnVolatileRegistry(environment: ServerEnvironment, context: BoundedContext): void;
 }
 
@@ -457,6 +459,9 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
         createWorker,
       }),
     );
+  },
+  loggerFor(environment: ServerEnvironment): ILogLayer {
+    return ServerEnvironmentValues.loggerFor(environment);
   },
   warnVolatileRegistry(environment: ServerEnvironment, context: BoundedContext) {
     if (environment.environment.type !== EnvironmentType.Production) return;

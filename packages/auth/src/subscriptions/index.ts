@@ -751,7 +751,8 @@ export interface SubscriptionGatewayOptions {
   readonly limits?: SubscriptionGatewayLimits;
 
   /**
-   * Application-owned logger for this independently running component.
+   * Application-owned logger reserved for component-local records. The component
+   * does not retain or close the supplied logger.
    */
   readonly logger?: ILogLayer;
 }

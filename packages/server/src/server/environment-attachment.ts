@@ -733,7 +733,12 @@ export class EnvironmentAttachments {
         stop.routeSnapshots = Object.freeze(snapshots);
       }
       if (stop.candidate === undefined) {
-        const candidate = new DeliveryGeneration(this.#createWorker(), this.#report);
+        const candidate = new DeliveryGeneration(
+          this.#createWorker(),
+          this.#report,
+          this.#deliveryPorts(),
+          this.#logger,
+        );
         stop.candidateGeneration = Object.freeze({ generation: true });
         stop.candidate = candidate;
       }

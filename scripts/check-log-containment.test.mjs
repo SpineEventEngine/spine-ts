@@ -23,7 +23,7 @@ function boundary(id, source = "source.ts") {
   return { id, source, operation: "retry", disposition: "warn", test: "fixture.test.ts" };
 }
 
-test("rejects every checked containment pattern when it has an adjacent manifest binding", () => {
+test("allows every checked containment pattern when it has an adjacent manifest binding", () => {
   for (const [name, source] of [
     ["empty catch", "// spine-log-boundary: empty\ntry {} catch {}\n"],
     ["detached catch", "// spine-log-boundary: detached\npromise.catch(() => work());\n"],
@@ -47,7 +47,23 @@ test("rejects every checked containment pattern when it has an adjacent manifest
   ]) {
     const id = source.match(/spine-log-boundary: ([a-z_]+)/)?.[1];
     const result = check(source, [boundary(id)]);
+    assert.equal(result.status, 0, name);
+  }
+});
+
+test("names every unannotated detectable containment suppression", () => {
+  for (const [name, source] of [
+    ["empty catch", "try {} catch {}\n"],
+    ["detached or voided catch", "promise.catch(() => work());\n"],
+    ["detached or voided catch", "void promise.catch(() => undefined);\n"],
+    ["catch callback fulfills sentinel", "await promise.catch(() => undefined);\n"],
+    ["catch callback fulfills sentinel", "await promise.catch(() => false);\n"],
+    ["catch callback fulfills sentinel", "await promise.catch(() => {});\n"],
+    ["rejection callback fulfills sentinel", "await promise.then(work, () => undefined);\n"],
+  ]) {
+    const result = check(source, [boundary("missing")]);
     assert.equal(result.status, 1, name);
+    assert.match(result.stderr, new RegExp(`unannotated ${name}`));
   }
 });
 
@@ -73,7 +89,9 @@ test("requires one adjacent source comment for each manifest ID and resolves sou
   );
   assert.equal(accepted.status, 0, accepted.stderr);
 
-  const detached = check("// spine-log-boundary: gap\n\ntry {} catch {}\n", [boundary("gap")]);
+  const detached = check("// spine-log-boundary: gap\n\n\npromise.then(work);\n", [
+    boundary("gap"),
+  ]);
   assert.equal(detached.status, 1);
 
   const duplicate = check("// spine-log-boundary: duplicate\ntry {} catch {}\n", [

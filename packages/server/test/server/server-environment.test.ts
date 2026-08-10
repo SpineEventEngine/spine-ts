@@ -18,6 +18,7 @@ import { EnvironmentTests, EnvironmentType } from "../../src/server/environment.
 import { BoundedContext } from "../../src/context/bounded-context.js";
 import { InMemorySubscriptionRegistry } from "../../src/stand/subscription-registry.js";
 import { Server } from "../../src/server/server.js";
+import { emitServerError, emitServerWarning } from "../../src/server/server-log.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 import type { ILogLayer } from "loglayer";
 
@@ -161,6 +162,38 @@ describe("ServerEnvironment delivery lifecycle", () => {
     expect("logger" in environment).toBe(false);
   });
 
+  it("writes default warning and error records as uppercase structured console JSON", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const environment = ServerEnvironment.instance();
+
+    emitServerWarning(serverEnvironmentAccess.loggerFor(environment), "Warning message", {
+      contextName: "Tasks",
+      operation: "stand.registry",
+      reasonCode: "volatile",
+    });
+    emitServerError(serverEnvironmentAccess.loggerFor(environment), "Error message", {
+      operation: "delivery.stop",
+      reasonCode: "failed",
+    });
+    await Promise.resolve();
+
+    expect(JSON.parse(String(warning.mock.calls[0]?.[0]))).toMatchObject({
+      severity: "WARN",
+      message: "Warning message",
+      contextName: "Tasks",
+      operation: "stand.registry",
+      reasonCode: "volatile",
+    });
+    expect(JSON.parse(String(error.mock.calls[0]?.[0]))).toMatchObject({
+      severity: "ERROR",
+      message: "Error message",
+      operation: "delivery.stop",
+      reasonCode: "failed",
+    });
+    expect(JSON.parse(String(warning.mock.calls[0]?.[0])).timestamp).toEqual(expect.any(String));
+  });
+
   it("warns once for a volatile registry in production and never in local", async () => {
     const warnings: string[] = [];
     const logger = {
@@ -187,6 +220,38 @@ describe("ServerEnvironment delivery lifecycle", () => {
     } finally {
       await context.close();
       await production.close();
+    }
+  });
+
+  it("keeps volatile-registry context names bounded and out of the fixed message", async () => {
+    const warnings: string[] = [];
+    const metadata: Record<string, unknown>[] = [];
+    const logger = {
+      child: vi.fn(),
+      withMetadata: (facts: Record<string, unknown>) => {
+        metadata.push(facts);
+        return { warn: (message: string) => warnings.push(message) };
+      },
+    };
+    logger.child.mockReturnValue(logger);
+    EnvironmentTests.use(EnvironmentType.Production);
+    ServerEnvironment.when(EnvironmentType.Production).use({
+      storageFactory: new InMemoryStorageFactory(),
+      transport: { close: () => undefined } as never,
+      ...{ logger: logger as unknown as ILogLayer },
+    });
+    const environment = ServerEnvironment.instance();
+    const context = BoundedContext.singleTenant(`secret-context-${"x".repeat(257)}`)
+      .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
+      .build();
+
+    try {
+      serverEnvironmentAccess.warnVolatileRegistry(environment, context);
+      expect(warnings).toEqual(["Stand subscription registry is not persistent."]);
+      expect(metadata).toEqual([{ operation: "stand.registry", reasonCode: "volatile" }]);
+    } finally {
+      await context.close();
+      await environment.close();
     }
   });
 

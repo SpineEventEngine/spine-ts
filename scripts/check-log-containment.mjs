@@ -66,9 +66,8 @@ for (const [file, fileEntries] of sources) {
     }
   }
   for (const violation of violations) {
-    if (comments.some((comment) => adjacent(comment, violation.node, source))) {
-      fail(`${violation.message} in ${file}`);
-    }
+    if (!comments.some((comment) => adjacent(comment, violation.node, source)))
+      fail(`unannotated ${violation.message} in ${file}`);
   }
 }
 
@@ -124,7 +123,7 @@ function commentsIn(text) {
 }
 
 function adjacent(comment, node, source) {
-  const commentLine = source.getLineAndCharacterOfPosition(comment.end).line;
+  const commentLine = source.getLineAndCharacterOfPosition(comment.end - 1).line;
   const nodeLine = source.getLineAndCharacterOfPosition(node.getStart(source)).line;
   return nodeLine === commentLine + 1;
 }

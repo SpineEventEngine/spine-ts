@@ -28,6 +28,7 @@ import type { EnvironmentDeliveryRuntime } from "../../src/server/environment-de
 import { EnvironmentType } from "../../src/server/environment.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "../../src/server/server-environment.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
+import type { ILogLayer } from "loglayer";
 import { tenant } from "../tenant-fixture.js";
 
 describe("environment generation stop", () => {
@@ -78,6 +79,48 @@ describe("environment generation stop", () => {
     expect(handle.generation).not.toBe(oldGeneration);
     expect(factoryCalls).toBe(2);
     await attachments.detach(handle);
+  });
+
+  it("preserves the exact environment logger child in a replacement generation", async () => {
+    const oldWorker = new ControlledWorker([], "logger-old");
+    const candidateWorker = new ControlledWorker([], "logger-candidate");
+    const candidateGate = Promise.withResolvers<undefined>();
+    candidateWorker.gates.push(candidateGate.promise);
+    const workers = [oldWorker, candidateWorker];
+    const logger = Object.freeze({ name: "environment-child" }) as unknown as ILogLayer;
+    let factoryCalls = 0;
+    const attachments = new EnvironmentAttachments({
+      logger,
+      createWorker() {
+        const worker = workers[factoryCalls];
+        factoryCalls += 1;
+        if (worker === undefined) throw new Error("Unexpected generation worker.");
+        return worker;
+      },
+    });
+    const initial = descriptor(
+      "LoggerReplacement",
+      "type.example.dev/LoggerReplacement",
+      new InMemoryStorageFactory(),
+    );
+    const replacement = descriptor(
+      "LoggerReplacementCandidate",
+      "type.example.dev/LoggerReplacementCandidate",
+      new InMemoryStorageFactory(),
+    );
+
+    const handle = await attachments.attach({ ownership: "caller", descriptors: [initial.value] });
+    const stopping = attachments.stopDelivery();
+    await until(() => candidateWorker.starts === 1);
+    const candidate = attachments.attach({ ownership: "caller", descriptors: [replacement.value] });
+    candidateGate.resolve(undefined);
+    await stopping;
+    const replacementHandle = await candidate;
+
+    expect(oldWorker.runtimes[0]?.logger).toBe(logger);
+    expect(candidateWorker.runtimes[0]?.logger).toBe(logger);
+    await attachments.detach(handle);
+    await attachments.detach(replacementHandle);
   });
 
   it("defers an attachment ordered after stop and joins the published candidate", async () => {
@@ -2478,6 +2521,7 @@ class ControlledWorker implements EnvironmentGenerationWorker {
   readonly addFailures = new Map<number, Error>();
   readonly addAttemptTenants: (string | undefined)[] = [];
   readonly addedTenants: (string | undefined)[] = [];
+  readonly runtimes: EnvironmentDeliveryRuntime[] = [];
   addCalls = 0;
   starts = 0;
   stopCalls = 0;
@@ -2498,6 +2542,7 @@ class ControlledWorker implements EnvironmentGenerationWorker {
       throw failure;
     }
     this.addedTenants.push(tenantValue(runtime.tenant.tenantId));
+    this.runtimes.push(runtime);
   }
   start(
     obligation: DeliveryRunObligation,
