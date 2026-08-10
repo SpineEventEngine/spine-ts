@@ -15,3 +15,5 @@ Independent inventory cross-check assignment: existing explorer function, explic
 Cross-check disposition: P0 terminal detached delivery-start/run paths require outer ERROR; P0 recovery/watch/rescan and subscription initial/timer reconciliation require WARN. Inner control-flow suppressions that rethrow, surface, or only reset bookkeeping remain no-log and will be enumerated in the containment partition rather than upgraded blindly.
 
 Implementation disposition: the inspected `EnvironmentDeliveryWorker.add()` detached start has no ordinary terminal rejection because supervisor recovery converts remote source failure into a retryable result. Its observable boundary is recovery WARN; any ERROR classification requires a separately reproduced uncaught background termination.
+
+Initial implementation evidence: recovery WARN uses a private `DeliverySupervisor` logger capability installed only by environment runtime assembly. It has no public option/export/fallback and emits only fixed allowlisted facts. Deterministic containment, ESLint, formatting, and focused test evidence are green; timer/watch, logger-failure, and no-log behavior remain pending before review.

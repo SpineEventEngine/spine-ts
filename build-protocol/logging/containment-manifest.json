@@ -104,6 +104,41 @@
       "operation": "log.emit",
       "disposition": "no-log",
       "test": "packages/server/test/server/server-log.test.ts"
+    },
+    {
+      "id": "server.delivery_recovery_failure",
+      "source": "../../packages/server/src/delivery/delivery-supervisor.ts",
+      "operation": "delivery.recovery",
+      "disposition": "warn",
+      "test": "packages/server/test/delivery/delivery-supervisor.test.ts"
+    },
+    {
+      "id": "server.delivery_run_terminal",
+      "source": "../../packages/server/src/delivery/delivery-supervisor.ts",
+      "operation": "delivery.run",
+      "disposition": "error",
+      "test": "packages/server/test/delivery/delivery-supervisor.test.ts"
+    },
+    {
+      "id": "server.delivery_release_timeout_observer",
+      "source": "../../packages/server/src/delivery/delivery-supervisor.ts",
+      "operation": "delivery.release",
+      "disposition": "no-log",
+      "test": "packages/server/test/delivery/delivery-supervisor.test.ts"
+    },
+    {
+      "id": "server.delivery_release_reset_observer",
+      "source": "../../packages/server/src/delivery/delivery-supervisor.ts",
+      "operation": "delivery.release",
+      "disposition": "no-log",
+      "test": "packages/server/test/delivery/delivery-supervisor.test.ts"
+    },
+    {
+      "id": "server.delivery_watch_failure",
+      "source": "../../packages/server/src/delivery/delivery-supervisor.ts",
+      "operation": "delivery.watch",
+      "disposition": "warn",
+      "test": "packages/server/test/delivery/delivery-supervisor.test.ts"
     }
   ]
 }

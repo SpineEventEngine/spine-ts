@@ -15,6 +15,7 @@ import { Delivery, type OnDeliveryMessage } from "../delivery/delivery.js";
 import type { DeliveryOperationOptions } from "../delivery/delivery-ports.js";
 import {
   DeliverySupervisor,
+  deliverySupervisorAccess,
   type DeliveryShardUpdate,
   type DeliverySource,
 } from "../delivery/delivery-supervisor.js";
@@ -436,6 +437,7 @@ class RuntimeDeliverySupervisorGroup {
     readonly shards: readonly ShardIndex[];
     readonly onMessage: OnDeliveryMessage;
     readonly source?: DeliverySource;
+    readonly logger?: ILogLayer;
   }) {
     const first = options.shards[0];
     if (first === undefined) {
@@ -451,6 +453,9 @@ class RuntimeDeliverySupervisorGroup {
       delivery: options.delivery,
       onMessage: options.onMessage,
     });
+    if (options.logger !== undefined) {
+      deliverySupervisorAccess.installLogger(this.#supervisor, options.logger);
+    }
   }
 
   start(): Promise<void> {
@@ -584,6 +589,7 @@ const EnvironmentDeliveryValues = Object.freeze({
           shards: exactShards,
           onMessage: (message) => runtime.descriptor.replay(message, runtime.tenant.tenantId),
           ...(ports?.source === undefined ? {} : { source: ports.source }),
+          ...(runtime.logger === undefined ? {} : { logger: runtime.logger }),
         });
       }),
     );

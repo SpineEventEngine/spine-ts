@@ -24,6 +24,7 @@ import type {
   DeliveryWorkRegistry,
 } from "../../src/delivery/delivery-ports.js";
 import { DeliveryMonitor } from "../../src/delivery/delivery-monitor.js";
+import { deliverySupervisorAccess } from "../../src/delivery/delivery-supervisor.js";
 
 import type {
   InboxMessage,
@@ -34,6 +35,35 @@ import type {
 } from "../../src/delivery/inbox.js";
 
 describe("DeliverySupervisor", () => {
+  it("warns once when initial recovery is retained for a later retry", async () => {
+    const warn = vi.fn();
+    const logger = { withMetadata: vi.fn(() => ({ warn })) };
+    const supervisor = new DeliverySupervisor({
+      source: {
+        releaseExpired: () => Promise.resolve([]),
+        shardSnapshot: () => Promise.reject(new Error("snapshot secret")),
+        observeShardUpdates: () => emptyUpdates(),
+      },
+      delivery: new DeliveryBuilder()
+        .withStorageFactory(new InMemoryStorageFactory())
+        .withNode("node")
+        .build(),
+      onMessage: () => Promise.resolve(),
+    });
+
+    deliverySupervisorAccess.installLogger(supervisor, logger as never);
+
+    await expect(supervisor.start()).resolves.toBeUndefined();
+    expect(logger.withMetadata).toHaveBeenCalledTimes(1);
+    expect(logger.withMetadata).toHaveBeenCalledWith({
+      operation: "delivery.recovery",
+      reasonCode: "failed",
+    });
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith("Delivery recovery failed.");
+    await supervisor.close();
+  });
+
   it("does not open a replacement watch until failed recovery later succeeds", async () => {
     let snapshots = 0;
     let watches = 0;
