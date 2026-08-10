@@ -12,6 +12,7 @@ import type {
 } from "@spine-event-engine/transport";
 
 import { RetryableCloseGroup } from "./retryable-close.js";
+import { emitServerWarning } from "./server-log.js";
 import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
 import type { EnvironmentDeliveryPorts } from "../context/local-inbox-handoff.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
@@ -463,8 +464,10 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     }
     if (warned.has(context)) return;
     warned.add(context);
-    environment.logger.warn(
+    emitServerWarning(
+      environment.logger,
       `Stand subscription registry for context "${context.name.value}" is not persistent.`,
+      { contextName: context.name.value, operation: "stand.registry", reasonCode: "volatile" },
     );
   },
 });

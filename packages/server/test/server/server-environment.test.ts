@@ -44,6 +44,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     const warnings: string[] = [];
     const logger = {
       child: vi.fn(),
+      withMetadata: () => ({ warn: (message: string) => warnings.push(message) }),
       warn: (message: string) => warnings.push(message),
     };
     logger.child.mockReturnValue(logger);
@@ -74,6 +75,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     const warnings: string[] = [];
     const logger = {
       child: vi.fn(),
+      withMetadata: () => ({ warn: (message: string) => warnings.push(message) }),
       warn: (message: string) => warnings.push(message),
     };
     logger.child.mockReturnValue(logger);
@@ -98,6 +100,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     const warnings: string[] = [];
     const logger = {
       child: vi.fn(),
+      withMetadata: () => ({ warn: (message: string) => warnings.push(message) }),
       warn: (message: string) => warnings.push(message),
     };
     logger.child.mockReturnValue(logger);
