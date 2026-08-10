@@ -825,9 +825,9 @@ describe("EventBus", () => {
     });
 
     await expect(bus.post(createProjectionEvent("event-no-logger"))).resolves.toBeUndefined();
-    expect(() => eventBusAccess.installLogger({} as EventBus, {} as ILogLayer)).toThrow(
-      "EventBus logger requires an EventBus instance.",
-    );
+    expect(() => {
+      eventBusAccess.installLogger({} as EventBus, {} as ILogLayer);
+    }).toThrow("EventBus logger requires an EventBus instance.");
   });
 
   it("contains asynchronous subscriber rejection without delaying later subscribers", async () => {
@@ -843,7 +843,8 @@ describe("EventBus", () => {
     } as unknown as ILogLayer);
     const later = vi.fn();
     eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
-      onEvent: async () => Promise.reject(new Error("async subscriber failure")),
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
+      onEvent: () => Promise.reject(new Error("async subscriber failure")),
     });
     eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), { onEvent: later });
 
@@ -870,9 +871,10 @@ describe("EventBus", () => {
     const errors: string[] = [];
     eventBusAccess.installLogger(bus, {
       withMetadata: () => ({ error: (message: string) => errors.push(message) }),
-    } as ILogLayer);
+    } as unknown as ILogLayer);
     let reject!: (reason: unknown) => void;
     eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
       onEvent: () =>
         new Promise<void>((_resolve, rejected) => {
           reject = rejected;
