@@ -2012,6 +2012,19 @@ describe("BoundedContext assembly", () => {
       expect(() => boundedContextAccess.subscriptionRegistry(context)).toThrow(
         "Subscription registry access requires a built BoundedContext instance.",
       );
+      expect(() => {
+        boundedContextAccess.installLogger(context, {} as never);
+      }).toThrow("Context logger requires a built BoundedContext instance.");
+      expect(() => boundedContextAccess.loggerFor(context)).toThrow(
+        "Context logger requires a built BoundedContext instance.",
+      );
+      expect(() => {
+        boundedContextAccess.recordDispatchFailure(
+          context,
+          create(EventSchema),
+          new Error("ignored"),
+        );
+      }).toThrow("Dispatch failure recording requires a built BoundedContext instance.");
     } finally {
       closeStand.mockRestore();
     }

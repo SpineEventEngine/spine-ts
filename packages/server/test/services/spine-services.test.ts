@@ -2277,6 +2277,39 @@ describe("SpineServices", () => {
     await iterator.return?.();
   });
 
+  it("keeps a closed event subscription detached when best-effort cleanup rejects", async () => {
+    const context = BoundedContext.singleTenant("EventCleanup")
+      .withSubscriptionRegistry(new RejectingDeleteRegistry())
+      .addEventDispatcher(createDomainEventDispatcher(AggregateStateSchema))
+      .build();
+    const services = new SpineServices({ contexts: [context], queueLimit: 1 });
+    let handlers:
+      | {
+          subscribe(topic: Topic): Promise<Subscription>;
+          activate(subscription: Subscription): AsyncIterable<SubscriptionUpdate>;
+        }
+      | undefined;
+    services.register({
+      service(schema: unknown, implementation: unknown) {
+        if (schema === SubscriptionService) handlers = implementation as typeof handlers;
+        return this;
+      },
+    } as never);
+    const subscription = await handlers?.subscribe(createEventTopic());
+    if (subscription === undefined) throw new Error("SubscriptionService was not registered.");
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const first = iterator.next();
+    await delay(25);
+    await context.eventBus().post(createAggregateEvent("event-1", "aggregate-1", "First"));
+    await first;
+    await context.eventBus().post(createAggregateEvent("event-2", "aggregate-1", "Second"));
+    await context.eventBus().post(createAggregateEvent("event-3", "aggregate-1", "Third"));
+    await delay(25);
+
+    await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined });
+    await context.close();
+  });
+
   it("redacts rejection details only from client event subscription updates", async () => {
     const internallyDispatched: ReturnType<typeof createRejectionEvent>[] = [];
     const context = BoundedContext.multitenant("RejectionEvents")

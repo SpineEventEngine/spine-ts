@@ -657,7 +657,11 @@ export class SpineServices {
   }
 }
 
-/** @internal */
+/**
+ * Provides package-private service configuration seams.
+ *
+ * @internal
+ */
 export const spineServicesAccess: SpineServicesAccess = Object.freeze({
   installLogger(services: SpineServices, logger: ILogLayer): void {
     serviceLoggers.set(services, logger);

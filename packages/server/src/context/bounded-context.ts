@@ -1037,6 +1037,9 @@ export class BoundedContext {
       }, errors);
     }
     ContextParts.clearContextMetadata(this);
+    contextDispatchFailureRecorders.delete(this);
+    contextEventBuses.delete(this);
+    contextLoggers.delete(this);
 
     if (errors.length > 0) {
       throw new AggregateError(ContextParts.flattenErrors(errors), "BoundedContext close failed.");
