@@ -12,7 +12,8 @@ Status: Mechanically pre-review-ready
   record accuracy. Rejected: a shared cross-package logging helper, because the
   frozen Wave 9 boundary rules require package-local private emitters and forbid
   a logging facade/package coupling expansion.
-- Correction is in progress; no reviewer rerun or `verify:task` has run.
+- Corrections are complete and the branch is re-review-ready. No reviewer rerun
+  or `verify:task` has run.
 
 Mechanical evidence includes 159 focused passing tests, direct emitter
 fault/secret coverage, generated/tooling typechecks, changed ESLint, TSDoc,

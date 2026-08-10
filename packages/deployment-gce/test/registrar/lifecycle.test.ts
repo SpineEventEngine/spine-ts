@@ -276,13 +276,19 @@ describe("GceRegistrar lifecycle", () => {
     const registrar = new GceRegistrar({
       registry: {
         register: async () => true,
-        renew: () => new Promise((_, reject) => { entered?.(); rejectRenew = reject; }),
+        renew: () =>
+          new Promise((_, reject) => {
+            entered?.();
+            rejectRenew = reject;
+          }),
         cleanup: async () => (calls.push("cleanup"), 0),
         remove: async () => (calls.push("remove"), true),
       } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry,
       node: new ApplicationNode({ id: "node", endpoint: "http://10.0.0.1" }),
       logger: { withMetadata: vi.fn(() => ({ warn })) } as never,
-      scheduler: { schedule: (_delay, scheduled) => ((tick = scheduled), () => calls.push("cancel")) },
+      scheduler: {
+        schedule: (_delay, scheduled) => ((tick = scheduled), () => calls.push("cancel")),
+      },
     });
     await registrar.start();
     tick?.();
