@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { emitServerWarning } from "../../src/server/server-log.js";
+import { emitServerError, emitServerWarning } from "../../src/server/server-log.js";
 
 describe("server logging containment", () => {
   it("emits only allowlisted bounded facts and omits secrets", () => {
@@ -37,5 +37,21 @@ describe("server logging containment", () => {
     expect(() => emitServerWarning(sync as never, "retry_failed", {})).not.toThrow();
     expect(() => emitServerWarning(async as never, "retry_failed", {})).not.toThrow();
     await Promise.resolve();
+  });
+
+  it("uses the same contained path for error records", () => {
+    const error = vi.fn();
+    const logger = { withMetadata: vi.fn(() => ({ error })) };
+
+    emitServerError(logger as never, "delivery_terminated", {
+      operation: "delivery.run",
+      reasonCode: "terminated",
+    });
+
+    expect(logger.withMetadata).toHaveBeenCalledWith({
+      operation: "delivery.run",
+      reasonCode: "terminated",
+    });
+    expect(error).toHaveBeenCalledWith("delivery_terminated");
   });
 });

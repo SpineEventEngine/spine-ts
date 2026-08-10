@@ -26,8 +26,27 @@ export function emitServerWarning(
   message: string,
   facts: Readonly<Record<string, unknown>>,
 ): void {
+  emitServerLog(logger, "warn", message, facts);
+}
+
+/** Emits one internal error without allowing logging failures into runtime work. */
+export function emitServerError(
+  logger: ILogLayer,
+  message: string,
+  facts: Readonly<Record<string, unknown>>,
+): void {
+  emitServerLog(logger, "error", message, facts);
+}
+
+function emitServerLog(
+  logger: ILogLayer,
+  level: "warn" | "error",
+  message: string,
+  facts: Readonly<Record<string, unknown>>,
+): void {
   try {
-    const emitted = logger.withMetadata(cleanFacts(facts)).warn(message);
+    const builder = logger.withMetadata(cleanFacts(facts));
+    const emitted = level === "warn" ? builder.warn(message) : builder.error(message);
     if (isPromiseLike(emitted)) void Promise.resolve(emitted).catch(() => undefined);
   } catch {
     // Logging must not affect the containing runtime outcome.
