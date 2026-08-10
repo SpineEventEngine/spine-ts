@@ -171,6 +171,7 @@ export class DeliveryServer {
       closeNetwork: async () => {
         try {
           await this.#start;
+          // spine-log-boundary: delivery_server.listener_start_close
         } catch {
           // A failed listener has already reached its terminal state.
         }

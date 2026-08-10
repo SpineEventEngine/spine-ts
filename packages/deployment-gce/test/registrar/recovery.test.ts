@@ -2,11 +2,39 @@
  * asynchronous contract methods without awaiting. */
 
 import { ApplicationNode } from "@spine-event-engine/deployment";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { GceRegistrar } from "../../src/index.js";
 
 describe("GceRegistrar recovery", () => {
+  it("warns once when an active renewal fails and schedules a retry", async () => {
+    const ticks: (() => void)[] = [];
+    const warn = vi.fn();
+    const logger = { withMetadata: vi.fn(() => ({ warn })) };
+    const registrar = new GceRegistrar({
+      registry: {
+        register: async () => true,
+        renew: async () => Promise.reject(new Error("temporary registry failure")),
+        cleanup: async () => 0,
+        remove: async () => true,
+      } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry,
+      node: new ApplicationNode({ id: "node", endpoint: "http://10.0.0.1" }),
+      logger: logger as never,
+      scheduler: { schedule: (_delay, tick) => (ticks.push(tick), () => undefined) },
+    });
+
+    await registrar.start();
+    ticks.shift()?.();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(logger.withMetadata).toHaveBeenCalledWith({
+      operation: "deployment.gce.registrar.renew",
+    });
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith("deployment.gce.registrar.renew_failed");
+    await registrar.close();
+  });
+
   it("confirms a lost initial write through the same owner before renewing", async () => {
     const ticks: (() => void)[] = [];
     let scheduleCount = 0;

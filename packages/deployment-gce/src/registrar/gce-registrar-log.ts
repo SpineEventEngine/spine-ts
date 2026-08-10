@@ -1,16 +1,12 @@
 import type { ILogLayer } from "loglayer";
 
-/**
- * Records a contained GKE discovery warning without changing discovery outcomes.
- *
- * @param logger Receives the contained record when supplied.
- */
-export function emitGkeDiscoveryWarning(logger: ILogLayer | undefined): void {
+/** Records a contained GCE renewal warning without changing registrar outcomes. */
+export function emitGceRegistrarRenewalWarning(logger: ILogLayer | undefined): void {
   if (logger === undefined) return;
   try {
-    const record = logger.withMetadata({ operation: "deployment.gke.discovery.refresh" });
+    const record = logger.withMetadata({ operation: "deployment.gce.registrar.renew" });
     const emit: (value: string) => unknown = record.warn.bind(record);
-    const emitted = emit("deployment.gke.discovery.refresh_failed");
+    const emitted = emit("deployment.gce.registrar.renew_failed");
     if (isPromiseLike(emitted)) void Promise.resolve(emitted).catch(() => undefined);
   } catch {
     // Logging must not affect the containing runtime outcome.

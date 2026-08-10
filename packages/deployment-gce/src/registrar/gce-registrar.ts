@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { ILogLayer } from "loglayer";
 
 import { GceMetadataService, type GceMetadataProvider } from "../metadata/gce-metadata-service.js";
+import { emitGceRegistrarRenewalWarning } from "./gce-registrar-log.js";
 import { GceApplicationNode } from "../node/application-node.js";
 import {
   GceOperationRunner,
@@ -93,6 +94,7 @@ export class GceRegistrar {
   readonly #deadlines: GceDeadlineFactory;
   readonly #operationTimeoutMs: number;
   readonly #operations: GceOperationRunner;
+  readonly #logger: ILogLayer | undefined;
   #cancel: (() => void) | undefined;
   #closed = false;
   #started = false;
@@ -128,6 +130,7 @@ export class GceRegistrar {
       this.#operationTimeoutMs,
       this.#abort.signal,
     );
+    this.#logger = options.logger;
   }
 
   /**
@@ -140,6 +143,7 @@ export class GceRegistrar {
     if (this.#closed) throw new Error("GCE registrar is closed.");
     if (this.#started) return;
     this.#started = true;
+    // spine-log-boundary: deployment_gce.registrar_initial_result
     const registered = await this.#enqueue(async () => {
       await this.#resolveNode();
       const node = this.#node;
@@ -186,7 +190,10 @@ export class GceRegistrar {
   #schedule(): void {
     if (this.#closed) return;
     this.#cancel = this.#scheduler.schedule(20_000, () => {
-      void this.#enqueue(() => this.#renew()).catch(() => undefined);
+      // spine-log-boundary: deployment_gce.registrar_renew
+      void this.#enqueue(() => this.#renew()).catch(() => {
+        if (!this.#closed) emitGceRegistrarRenewalWarning(this.#logger);
+      });
     });
   }
 
@@ -223,6 +230,7 @@ export class GceRegistrar {
 
   #enqueue<Result>(operation: () => Promise<Result>): Promise<Result> {
     const next = this.#work.then(operation, operation);
+    // spine-log-boundary: deployment_gce.registrar_work_tail
     this.#work = next.then(
       () => undefined,
       () => undefined,

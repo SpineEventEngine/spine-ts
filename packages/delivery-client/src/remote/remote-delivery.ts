@@ -62,6 +62,7 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
     if (this.#closed) return Promise.reject(new Error("Remote delivery is closed."));
     if (this.#bundle !== undefined) return Promise.resolve();
     const opening = (this.#opening ??= this.#open());
+    // spine-log-boundary: delivery_client.remote_open_reset
     void opening.catch(() => {
       if (this.#opening === opening) this.#opening = undefined;
     });
@@ -106,6 +107,7 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
   close(): Promise<void> {
     this.#closed = true;
     const closing = (this.#closing ??= this.#close());
+    // spine-log-boundary: delivery_client.remote_close_reset
     void closing.catch(() => {
       if (this.#closing === closing) this.#closing = undefined;
     });
@@ -171,6 +173,7 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
     if (opening !== undefined) {
       try {
         await opening;
+        // spine-log-boundary: delivery_client.remote_close_opening
       } catch {
         // Closure makes a pending opening terminal; its resource is handled above.
       }

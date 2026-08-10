@@ -203,6 +203,7 @@ export class GkeNodeDiscovery implements NodeDiscovery {
       if (this.#controllers.size >= maximumRefreshes) return;
       const refresh = this.#refresh(++this.#epoch);
       this.#refreshes.add(refresh);
+      // spine-log-boundary: deployment_gke.discovery_refresh_tail
       void refresh.catch(() => undefined).finally(() => this.#refreshes.delete(refresh));
     });
   }

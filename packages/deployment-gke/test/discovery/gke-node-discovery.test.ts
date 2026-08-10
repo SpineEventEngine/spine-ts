@@ -170,7 +170,9 @@ describe("GkeNodeDiscovery", () => {
     discovery.watch(() => undefined);
     await scheduler.tick();
 
-    expect(logger.withMetadata).toHaveBeenCalledWith({ operation: "deployment.gke.discovery.refresh" });
+    expect(logger.withMetadata).toHaveBeenCalledWith({
+      operation: "deployment.gke.discovery.refresh",
+    });
     expect(warn).toHaveBeenCalledOnce();
     expect(warn).toHaveBeenCalledWith("deployment.gke.discovery.refresh_failed");
     await discovery.close();

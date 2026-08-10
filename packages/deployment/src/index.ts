@@ -164,6 +164,7 @@ export class ScheduledNodeDiscovery implements NodeDiscovery {
 
   #schedule(delayMs: number): void {
     this.#cancel = this.#scheduler.schedule(delayMs, () => {
+      // spine-log-boundary: deployment.scheduled_discovery_refresh_tail
       this.#refreshing = this.#refresh().catch(() => undefined);
     });
   }

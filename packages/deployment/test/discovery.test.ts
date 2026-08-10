@@ -219,6 +219,26 @@ describe("ScheduledNodeDiscovery", () => {
     expect(warn).toHaveBeenCalledWith("deployment.discovery.refresh_failed");
     await source.close();
   });
+
+  it("contains synchronous and rejecting logger failures while retrying discovery", async () => {
+    const ticks: (() => void)[] = [];
+    const source = new ScheduledNodeDiscovery({
+      reader: { read: async () => Promise.reject(new Error("temporary")) },
+      logger: {
+        withMetadata: () => ({
+          warn: () => Promise.reject(new Error("logger unavailable")),
+        }),
+      } as never,
+      scheduler: { schedule: (_delay, tick) => (ticks.push(tick), () => undefined) },
+    });
+
+    source.watch(() => undefined);
+    ticks.shift()?.();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(ticks).toHaveLength(1);
+    await source.close();
+  });
   it("uses an injected zero then ten-second schedule", async () => {
     const delays: number[] = [];
     let tick: (() => void) | undefined;
