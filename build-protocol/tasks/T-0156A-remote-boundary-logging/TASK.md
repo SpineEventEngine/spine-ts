@@ -1,6 +1,6 @@
 # T-0156A: Auth, Remote Delivery, And Deployment Containment Logging
 
-Status: In progress
+Status: Complete
 
 ## Objective
 
