@@ -1,6 +1,6 @@
 # T-0155 Review Record
 
-Status: Final-verification-ready
+Status: Verification-ready
 
 ## Required Concerns
 
@@ -74,3 +74,11 @@ Status: Final-verification-ready
 - Performance/reliability: CLEAN. Existing reviewer profile configured as
   `gpt-5.6-terra` / high; runtime metadata unavailable on this surface.
 - This status is final-verification-ready, not task completion.
+
+## Verifier Correction
+
+- The prior `verify:task` failure was cleanup-rule-only after Proto/build/tooling
+  passed: standalone `isPromiseLike()` lacked an exact necessity disposition.
+  It is now a private static EventBus boundary helper. Focused EventBus (44/44),
+  cleanup, changed-file ESLint, tooling typecheck, Prettier, and diff checks are
+  clean. This record does not rerun `verify:task`.

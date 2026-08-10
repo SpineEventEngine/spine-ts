@@ -393,7 +393,7 @@ export class EventBus {
       try {
         const onEvent: (event: Event) => unknown = subscriber.onEvent.bind(subscriber);
         const result = onEvent(clone(EventSchema, event));
-        if (isPromiseLike(result)) {
+        if (EventBus.#isPromiseLike(result)) {
           // spine-log-boundary: server.event_subscriber_async_failure
           void Promise.resolve(result).catch(() => {
             this.#recordSubscriberFailure(typeUrl, logger);
@@ -447,15 +447,15 @@ export class EventBus {
 
     return eventStore as EventStore | typeof forgettingBus;
   }
-}
 
-function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
-  return (
-    (typeof value === "object" || typeof value === "function") &&
-    value !== null &&
-    "then" in value &&
-    typeof (value as { then?: unknown }).then === "function"
-  );
+  static #isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+    return (
+      (typeof value === "object" || typeof value === "function") &&
+      value !== null &&
+      "then" in value &&
+      typeof (value as { then?: unknown }).then === "function"
+    );
+  }
 }
 
 const EventBusRoles = Object.freeze({
