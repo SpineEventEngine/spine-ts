@@ -1,3 +1,11 @@
 {
-  "boundaries": []
+  "boundaries": [
+    {
+      "id": "server.volatile_subscription_registry",
+      "source": "../../packages/server/src/server/server-environment.ts",
+      "operation": "stand.registry",
+      "disposition": "warn",
+      "test": "packages/server/test/server/server-environment.test.ts"
+    }
+  ]
 }

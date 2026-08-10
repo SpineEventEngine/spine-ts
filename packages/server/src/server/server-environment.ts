@@ -464,6 +464,7 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     }
     if (warned.has(context)) return;
     warned.add(context);
+    // spine-log-boundary: server.volatile_subscription_registry
     emitServerWarning(
       environment.logger,
       `Stand subscription registry for context "${context.name.value}" is not persistent.`,

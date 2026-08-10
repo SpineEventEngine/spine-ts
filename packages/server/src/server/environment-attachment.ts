@@ -504,6 +504,7 @@ export class EnvironmentAttachments {
           this.#createWorker(),
           this.#report,
           this.#deliveryPorts(),
+          options.logger,
         );
       } catch (error) {
         if (this.#registrations.remove(claim.token) === 0) {
@@ -1476,6 +1477,8 @@ class RegistrationOwnership {
 
 class DeliveryGeneration {
   readonly #worker: EnvironmentGenerationWorker;
+  /** Environment logger child retained for later runtime containment owners. */
+  readonly logger: ILogLayer;
   readonly #ports: EnvironmentDeliveryPorts | undefined;
   readonly #report: (causes: readonly unknown[]) => Promise<void>;
   readonly #descriptors = new WeakSet<ContextDeliveryDescriptor>();
@@ -1498,10 +1501,13 @@ class DeliveryGeneration {
     worker: EnvironmentGenerationWorker,
     report: (causes: readonly unknown[]) => Promise<void>,
     ports?: EnvironmentDeliveryPorts,
+    logger?: ILogLayer,
   ) {
     this.#worker = worker;
     this.#report = report;
     this.#ports = ports;
+    if (logger === undefined) throw new TypeError("Delivery generation requires an environment logger.");
+    this.logger = logger;
   }
 
   get replacementSafe(): boolean {
