@@ -27,10 +27,22 @@ test("rejects every checked containment pattern when it has an adjacent manifest
     ["empty catch", "// spine-log-boundary: empty\ntry {} catch {}\n"],
     ["detached catch", "// spine-log-boundary: detached\npromise.catch(() => work());\n"],
     ["voided catch", "// spine-log-boundary: voided\nvoid promise.catch(() => undefined);\n"],
-    ["catch undefined sentinel", "// spine-log-boundary: undefined\nawait promise.catch(() => undefined);\n"],
-    ["catch boolean sentinel", "// spine-log-boundary: boolean\nawait promise.catch(() => false);\n"],
-    ["catch empty sentinel", "// spine-log-boundary: empty_value\nawait promise.catch(() => {});\n"],
-    ["rejection callback sentinel", "// spine-log-boundary: rejection\nawait promise.then(work, () => undefined);\n"],
+    [
+      "catch undefined sentinel",
+      "// spine-log-boundary: undefined\nawait promise.catch(() => undefined);\n",
+    ],
+    [
+      "catch boolean sentinel",
+      "// spine-log-boundary: boolean\nawait promise.catch(() => false);\n",
+    ],
+    [
+      "catch empty sentinel",
+      "// spine-log-boundary: empty_value\nawait promise.catch(() => {});\n",
+    ],
+    [
+      "rejection callback sentinel",
+      "// spine-log-boundary: rejection\nawait promise.then(work, () => undefined);\n",
+    ],
   ]) {
     const id = source.match(/spine-log-boundary: ([a-z_]+)/)?.[1];
     const result = check(source, [boundary(id)]);
@@ -60,16 +72,13 @@ test("requires one adjacent source comment for each manifest ID and resolves sou
   );
   assert.equal(accepted.status, 0, accepted.stderr);
 
-  const detached = check(
-    "// spine-log-boundary: gap\n\ntry {} catch {}\n",
-    [boundary("gap")],
-  );
+  const detached = check("// spine-log-boundary: gap\n\ntry {} catch {}\n", [boundary("gap")]);
   assert.equal(detached.status, 1);
 
-  const duplicate = check(
-    "// spine-log-boundary: duplicate\ntry {} catch {}\n",
-    [boundary("duplicate"), boundary("duplicate")],
-  );
+  const duplicate = check("// spine-log-boundary: duplicate\ntry {} catch {}\n", [
+    boundary("duplicate"),
+    boundary("duplicate"),
+  ]);
   assert.equal(duplicate.status, 1);
 
   const stale = check("// spine-log-boundary: stale\nconst value = 1;\n", [boundary("stale")]);
@@ -78,8 +87,17 @@ test("requires one adjacent source comment for each manifest ID and resolves sou
 
 test("validates manifest roots and every required boundary field", () => {
   const root = mkdtempSync(join(tmpdir(), "spine-log-manifest-"));
-  writeFileSync(join(root, "source.ts"), "// spine-log-boundary: retry\ntry {} catch { report(); }\n");
-  for (const manifest of [null, [], {}, { boundaries: [{}] }, { boundaries: [boundary("bad", "../source.ts")] }]) {
+  writeFileSync(
+    join(root, "source.ts"),
+    "// spine-log-boundary: retry\ntry {} catch { report(); }\n",
+  );
+  for (const manifest of [
+    null,
+    [],
+    {},
+    { boundaries: [{}] },
+    { boundaries: [boundary("bad", "../source.ts")] },
+  ]) {
     const path = join(root, `manifest-${Math.random().toString(16).slice(2)}.json`);
     writeFileSync(path, JSON.stringify(manifest));
     const result = spawnSync(process.execPath, ["scripts/check-log-containment.mjs", path], {

@@ -19,6 +19,7 @@ import { BoundedContext } from "../../src/context/bounded-context.js";
 import { InMemorySubscriptionRegistry } from "../../src/stand/subscription-registry.js";
 import { Server } from "../../src/server/server.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
+import type { ILogLayer } from "loglayer";
 
 afterEach(async () => {
   await resetServerEnvironmentForTest();
@@ -35,7 +36,9 @@ describe("ServerEnvironment delivery lifecycle", () => {
   it("passes its exact logger child to an attached delivery runtime", async () => {
     const child = Object.freeze({ name: "environment-child" });
     const logger = { child: vi.fn(() => child) };
-    ServerEnvironment.when(EnvironmentType.Local).use({ ...{ logger } });
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      ...{ logger: logger as unknown as ILogLayer },
+    });
     const environment = ServerEnvironment.instance();
     let runtime: EnvironmentDeliveryRuntime | undefined;
     const worker: EnvironmentGenerationWorker = {
@@ -99,7 +102,9 @@ describe("ServerEnvironment delivery lifecycle", () => {
   it("snapshots one caller-owned logger child when the environment resolves", async () => {
     const child = Object.freeze({});
     const logger = { child: vi.fn(() => child) };
-    ServerEnvironment.when(EnvironmentType.Local).use({ ...{ logger } });
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      ...{ logger: logger as unknown as ILogLayer },
+    });
 
     const environment = ServerEnvironment.instance();
 
@@ -120,7 +125,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
-      ...{ logger },
+      ...{ logger: logger as unknown as ILogLayer },
     });
     const production = ServerEnvironment.instance();
     const context = BoundedContext.singleTenant("Tasks")
@@ -148,7 +153,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     };
     logger.child.mockReturnValue(logger);
     ServerEnvironment.when(EnvironmentType.Local).use({
-      ...{ logger },
+      ...{ logger: logger as unknown as ILogLayer },
     });
     const environment = ServerEnvironment.instance();
     const context = BoundedContext.singleTenant("Tasks")
@@ -176,7 +181,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
-      ...{ logger },
+      ...{ logger: logger as unknown as ILogLayer },
     });
     const context = BoundedContext.singleTenant("Tasks")
       .withSubscriptionRegistry(new InMemorySubscriptionRegistry())

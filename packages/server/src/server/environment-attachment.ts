@@ -87,7 +87,6 @@ export interface EnvironmentAttachOptions {
    * Lists context delivery descriptors to attach.
    */
   readonly descriptors: readonly ContextDeliveryDescriptor[];
-
 }
 
 class AttachedEnvironmentRegistration implements EnvironmentRegistrationClaim {

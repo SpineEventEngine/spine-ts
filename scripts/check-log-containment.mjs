@@ -10,7 +10,9 @@ let manifest;
 try {
   manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 } catch (error) {
-  fail(`cannot read containment manifest: ${error instanceof Error ? error.message : String(error)}`);
+  fail(
+    `cannot read containment manifest: ${error instanceof Error ? error.message : String(error)}`,
+  );
 }
 
 const entries = validRoot(manifest) ? manifest.boundaries : [];
@@ -38,7 +40,9 @@ for (const [file, fileEntries] of sources) {
   try {
     text = readFileSync(file, "utf8");
   } catch (error) {
-    fail(`cannot read containment source ${file}: ${error instanceof Error ? error.message : String(error)}`);
+    fail(
+      `cannot read containment source ${file}: ${error instanceof Error ? error.message : String(error)}`,
+    );
     continue;
   }
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
@@ -74,7 +78,12 @@ if (failures.length > 0) {
 }
 
 function validRoot(value) {
-  if (value === null || typeof value !== "object" || Array.isArray(value) || !Array.isArray(value.boundaries)) {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    !Array.isArray(value.boundaries)
+  ) {
     fail("containment manifest must be an object with a boundaries array");
     return false;
   }
@@ -85,17 +94,25 @@ function validEntry(entry) {
   return (
     entry !== null &&
     typeof entry === "object" &&
-    typeof entry.id === "string" && /^[a-z0-9][a-z0-9_.-]*$/.test(entry.id) &&
-    typeof entry.source === "string" && entry.source.length > 0 &&
-    typeof entry.operation === "string" && entry.operation.length > 0 &&
-    typeof entry.test === "string" && entry.test.length > 0 &&
+    typeof entry.id === "string" &&
+    /^[a-z0-9][a-z0-9_.-]*$/.test(entry.id) &&
+    typeof entry.source === "string" &&
+    entry.source.length > 0 &&
+    typeof entry.operation === "string" &&
+    entry.operation.length > 0 &&
+    typeof entry.test === "string" &&
+    entry.test.length > 0 &&
     ["warn", "error", "no-log"].includes(entry.disposition)
   );
 }
 
 function withinRoot(file) {
   const path = relative(repositoryRoot, file);
-  return path !== "" && !path.startsWith("..") && !path.includes(`..${process.platform === "win32" ? "\\" : "/"}`);
+  return (
+    path !== "" &&
+    !path.startsWith("..") &&
+    !path.includes(`..${process.platform === "win32" ? "\\" : "/"}`)
+  );
 }
 
 function commentsIn(text) {
@@ -125,7 +142,8 @@ function visit(node, candidates, violations) {
       if (isDetached(node) && !rethrows(callback)) {
         violations.push({ message: "detached or voided catch", node });
       }
-      if (fulfillsSentinel(callback)) violations.push({ message: "catch callback fulfills sentinel", node });
+      if (fulfillsSentinel(callback))
+        violations.push({ message: "catch callback fulfills sentinel", node });
     }
     if (isThen(node) && node.arguments.length > 1) {
       candidates.push(node);
@@ -157,17 +175,29 @@ function isDetached(node) {
 }
 function rethrows(callback) {
   return ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)
-    ? ts.isBlock(callback.body) && callback.body.statements.some((statement) => ts.isThrowStatement(statement))
+    ? ts.isBlock(callback.body) &&
+        callback.body.statements.some((statement) => ts.isThrowStatement(statement))
     : false;
 }
 function fulfillsSentinel(callback) {
-  if (callback === undefined || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) return false;
+  if (
+    callback === undefined ||
+    (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))
+  )
+    return false;
   if (!ts.isBlock(callback.body)) return sentinel(callback.body);
   if (callback.body.statements.length === 0) return true;
-  return callback.body.statements.some((statement) => ts.isReturnStatement(statement) && sentinel(statement.expression));
+  return callback.body.statements.some(
+    (statement) => ts.isReturnStatement(statement) && sentinel(statement.expression),
+  );
 }
 function sentinel(value) {
-  return value === undefined || value.kind === ts.SyntaxKind.TrueKeyword || value.kind === ts.SyntaxKind.FalseKeyword || ts.isIdentifier(value) && value.text === "undefined";
+  return (
+    value === undefined ||
+    value.kind === ts.SyntaxKind.TrueKeyword ||
+    value.kind === ts.SyntaxKind.FalseKeyword ||
+    (ts.isIdentifier(value) && value.text === "undefined")
+  );
 }
 function fail(message) {
   failures.push(message);

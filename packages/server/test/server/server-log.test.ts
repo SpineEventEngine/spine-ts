@@ -29,7 +29,13 @@ describe("server logging containment", () => {
   });
 
   it("contains synchronous and promise-like logging failures", async () => {
-    const sync = { withMetadata: () => ({ warn: () => { throw new Error("logger"); } }) };
+    const sync = {
+      withMetadata: () => ({
+        warn: () => {
+          throw new Error("logger");
+        },
+      }),
+    };
     const async = {
       withMetadata: () => ({ warn: () => Promise.reject(new Error("logger")) }),
     };
