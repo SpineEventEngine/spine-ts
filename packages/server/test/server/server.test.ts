@@ -1668,6 +1668,15 @@ describe("Server", () => {
 
   it("keeps a failed signal close retryable", async () => {
     const original = process.exitCode;
+    const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
+    const child = {
+      withMetadata: (facts: Record<string, unknown>) => ({
+        error: (message: string) => errors.push({ message, facts }),
+      }),
+    };
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      logger: { child: () => child } as unknown as ILogLayer,
+    });
     let attempts = 0;
     const server = await Server.atPort(0)
       .addResource({
@@ -1681,8 +1690,15 @@ describe("Server", () => {
       process.emit("SIGTERM");
       await waitFor(() => process.exitCode === 1);
       expect(process.exitCode).toBe(1);
+      expect(errors).toEqual([
+        {
+          message: "Process-owned server shutdown failed.",
+          facts: { operation: "server.process_shutdown", reasonCode: "close_failed" },
+        },
+      ]);
       await server.close();
       expect(attempts).toBe(2);
+      expect(errors).toHaveLength(1);
     } finally {
       await server.close().catch(() => undefined);
       process.exitCode = original;

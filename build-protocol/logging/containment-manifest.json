@@ -174,6 +174,13 @@
       "operation": "subscription.consumer",
       "disposition": "warn",
       "test": "packages/server/test/stand/subscription-runtime.test.ts"
+    },
+    {
+      "id": "server.process_shutdown_close",
+      "source": "../../packages/server/src/server/process-server-coordinator.ts",
+      "operation": "server.process_shutdown",
+      "disposition": "error",
+      "test": "packages/server/test/server/server.test.ts"
     }
   ]
 }

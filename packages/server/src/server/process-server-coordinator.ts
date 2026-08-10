@@ -1,9 +1,13 @@
 import type { RunningServer } from "./server.js";
 import type { ServerEnvironment } from "./server-environment.js";
+import type { ILogLayer } from "loglayer";
+
+import { emitServerError } from "./server-log.js";
 
 interface RunRecord {
   readonly server: RunningServer;
   readonly environment: ServerEnvironment | undefined;
+  readonly logger: ILogLayer | undefined;
   retirement: Promise<void> | undefined;
 }
 
@@ -19,6 +23,7 @@ export const ProcessServerCoordinator: Readonly<{
   add(
     server: RunningServer,
     environment: ServerEnvironment | undefined,
+    logger: ILogLayer | undefined,
     onRetired: () => void,
   ): RunningServer;
   installSignals(): void;
@@ -28,9 +33,10 @@ export const ProcessServerCoordinator: Readonly<{
   add(
     server: RunningServer,
     environment: ServerEnvironment | undefined,
+    logger: ILogLayer | undefined,
     onRetired: () => void,
   ): RunningServer {
-    const record: RunRecord = { server, environment, retirement: undefined };
+    const record: RunRecord = { server, environment, logger, retirement: undefined };
     running.push(record);
     ProcessServerCoordinator.installSignals();
     return {
@@ -60,8 +66,15 @@ export const ProcessServerCoordinator: Readonly<{
       try {
         await record.server.close();
         await ProcessServerCoordinatorValues.retire(record);
+        // spine-log-boundary: server.process_shutdown_close
       } catch {
         process.exitCode = 1;
+        if (record.logger !== undefined) {
+          emitServerError(record.logger, "Process-owned server shutdown failed.", {
+            operation: "server.process_shutdown",
+            reasonCode: "close_failed",
+          });
+        }
       }
     }
   },
