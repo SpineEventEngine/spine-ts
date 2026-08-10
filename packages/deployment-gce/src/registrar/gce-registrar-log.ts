@@ -5,7 +5,10 @@ import type { ILogLayer } from "loglayer";
  *
  * @param logger Receives the contained record when supplied.
  */
-export const gceRegistrarLog = Object.freeze({
+export const gceRegistrarLog: Readonly<{
+  warnRenewal(logger: ILogLayer | undefined): void;
+  isPromiseLike(value: unknown): value is PromiseLike<unknown>;
+}> = Object.freeze({
   warnRenewal(logger: ILogLayer | undefined): void {
     if (logger === undefined) return;
     try {

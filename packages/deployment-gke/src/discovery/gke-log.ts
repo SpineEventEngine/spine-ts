@@ -5,7 +5,10 @@ import type { ILogLayer } from "loglayer";
  *
  * @param logger Receives the contained record when supplied.
  */
-export const gkeDiscoveryLog = Object.freeze({
+export const gkeDiscoveryLog: Readonly<{
+  warn(logger: ILogLayer | undefined): void;
+  isPromiseLike(value: unknown): value is PromiseLike<unknown>;
+}> = Object.freeze({
   warn(logger: ILogLayer | undefined): void {
     if (logger === undefined) return;
     try {

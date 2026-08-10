@@ -1,7 +1,10 @@
 import type { ILogLayer } from "loglayer";
 
 /** Contains scheduled discovery logging failures. */
-export const scheduledDiscoveryLog = Object.freeze({
+export const scheduledDiscoveryLog: Readonly<{
+  warn(logger: ILogLayer | undefined): void;
+  isPromiseLike(value: unknown): value is PromiseLike<unknown>;
+}> = Object.freeze({
   warn(logger: ILogLayer | undefined): void {
     if (logger === undefined) return;
     try {

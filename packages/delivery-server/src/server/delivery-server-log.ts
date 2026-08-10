@@ -5,7 +5,10 @@ import type { ILogLayer } from "loglayer";
  *
  * @param logger Receives the contained record when supplied.
  */
-export const deliveryServerLog = Object.freeze({
+export const deliveryServerLog: Readonly<{
+  error(logger: ILogLayer | undefined): void;
+  isPromiseLike(value: unknown): value is PromiseLike<unknown>;
+}> = Object.freeze({
   error(logger: ILogLayer | undefined): void {
     if (logger === undefined) return;
     try {
