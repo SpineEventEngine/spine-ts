@@ -59,12 +59,30 @@ export interface NodeSnapshotReader {
   read(signal: AbortSignal): Promise<readonly ApplicationNode[]>;
 }
 
-/** Configures scheduled application-node discovery. */
+/**
+ * Configures scheduled application-node discovery.
+ */
 export interface ScheduledNodeDiscoveryOptions {
+  // prettier-ignore
+
+  /**
+   * Reads the current application-node snapshot.
+   */
   readonly reader: NodeSnapshotReader;
+
+  /**
+   * Schedules refresh ticks when supplied.
+   */
   readonly scheduler?: NodeScheduler;
+
+  /**
+   * Sets the refresh interval in milliseconds when supplied.
+   */
   readonly intervalMs?: number;
-  /** Application-owned logger for this independently running component. */
+
+  /**
+   * Application-owned logger for this independently running component.
+   */
   readonly logger?: ILogLayer;
 }
 

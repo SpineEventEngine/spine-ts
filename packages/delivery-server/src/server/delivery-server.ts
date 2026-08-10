@@ -68,7 +68,9 @@ export interface DeliveryServerOptions {
    */
   readonly maxTrackedShards?: number;
 
-  /** Application-owned logger for this independently running component. */
+  /**
+   * Application-owned logger for this independently running component.
+   */
   readonly logger?: ILogLayer;
 }
 

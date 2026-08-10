@@ -20,7 +20,13 @@ const allowedFields = new Set([
 ]);
 const code = /^[a-z0-9][a-z0-9_.-]{0,63}$/;
 
-/** Emits one internal warning without allowing logging failures into runtime work. */
+/**
+ * Records one internal warning without allowing logging failures into runtime work.
+ *
+ * @param logger Receives the contained record.
+ * @param message Supplies the stable warning message.
+ * @param facts Supplies allowlisted structured facts.
+ */
 export function emitServerWarning(
   logger: ILogLayer,
   message: string,
@@ -29,7 +35,13 @@ export function emitServerWarning(
   emitServerLog(logger, "warn", message, facts);
 }
 
-/** Emits one internal error without allowing logging failures into runtime work. */
+/**
+ * Records one internal error without allowing logging failures into runtime work.
+ *
+ * @param logger Receives the contained record.
+ * @param message Supplies the stable error message.
+ * @param facts Supplies allowlisted structured facts.
+ */
 export function emitServerError(
   logger: ILogLayer,
   message: string,

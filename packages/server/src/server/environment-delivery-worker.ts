@@ -60,7 +60,9 @@ export interface EnvironmentDeliveryRuntime {
    */
   readonly scopes: readonly DeliveryRunScope[];
 
-  /** Environment child available to downstream delivery containment owners. */
+  /**
+   * Environment child available to downstream delivery containment owners.
+   */
   readonly logger?: ILogLayer;
 }
 

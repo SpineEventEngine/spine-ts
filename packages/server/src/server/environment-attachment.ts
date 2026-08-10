@@ -139,7 +139,9 @@ export interface EnvironmentAttachmentsOptions {
    */
   readonly createWorker?: () => EnvironmentGenerationWorker;
 
-  /** Immutable environment logger child propagated to each delivery runtime. */
+  /**
+   * Immutable environment logger child propagated to each delivery runtime.
+   */
   readonly logger?: ILogLayer;
 
   /**
@@ -1477,7 +1479,10 @@ class RegistrationOwnership {
 
 class DeliveryGeneration {
   readonly #worker: EnvironmentGenerationWorker;
-  /** Environment logger child retained for later runtime containment owners. */
+
+  /**
+   * Environment logger child retained for later runtime containment owners.
+   */
   readonly logger: ILogLayer | undefined;
   readonly #ports: EnvironmentDeliveryPorts | undefined;
   readonly #report: (causes: readonly unknown[]) => Promise<void>;

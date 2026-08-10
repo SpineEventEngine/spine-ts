@@ -89,7 +89,9 @@ export interface DynamicUnaryOptions {
    */
   readonly maxBackendEnvelopeBytes?: number;
 
-  /** Application-owned logger for this independently running component. */
+  /**
+   * Application-owned logger for this independently running component.
+   */
   readonly logger?: ILogLayer;
 }
 

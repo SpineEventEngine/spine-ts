@@ -39,8 +39,22 @@ interface MetadataRegistrarOptions extends GceRegistrarBaseOptions {
  * Supply either an explicit node or a metadata-derived node with its port.
  */
 export type GceRegistrarOptions =
-  | (ExplicitRegistrarOptions & { readonly logger?: ILogLayer })
-  | (MetadataRegistrarOptions & { readonly logger?: ILogLayer });
+  | (ExplicitRegistrarOptions & {
+      // prettier-ignore
+
+      /**
+       * Application-owned logger for this independently running component.
+       */
+      readonly logger?: ILogLayer;
+    })
+  | (MetadataRegistrarOptions & {
+      // prettier-ignore
+
+      /**
+       * Application-owned logger for this independently running component.
+       */
+      readonly logger?: ILogLayer;
+    });
 
 /**
  * Couples registrar lifecycle work to an application listener lifecycle.
