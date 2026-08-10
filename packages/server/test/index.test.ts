@@ -2,7 +2,7 @@ import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { TypeUrls } from "@spine-event-engine/core";
+import { TypeRegistry, TypeUrls } from "@spine-event-engine/core";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { CommandSchema, file_spine_options } from "@spine-event-engine/proto";
@@ -552,6 +552,21 @@ describe("@spine-event-engine/server", () => {
     expect(metadata.columns.map((field) => field.name)).toEqual(["name", "priority"]);
     expect(metadata.setOnceFields.map((field) => field.name)).toEqual(["id"]);
     expect(metadata.semanticTags).toEqual(["example.tags.ProjectionTag", "example.tags.SharedTag"]);
+  });
+
+  it("shares descriptor is and every-is provenance with the core registry", () => {
+    const registry = new TypeRegistry();
+    const projection = registry.register(ProjectionStateSchema);
+    const aggregate = registry.register(AggregateStateSchema, {
+      semanticTags: ["example.tags.ProjectionTag"],
+    });
+
+    expect(projection.isTypes).toEqual(["example.tags.ProjectionTag"]);
+    expect(projection.everyIsTypes).toEqual(["example.tags.SharedTag"]);
+    expect(registry.findByIs("example.tags.ProjectionTag")).toEqual([projection]);
+    expect(registry.findByEveryIs("example.tags.SharedTag")).toEqual([projection, aggregate]);
+    expect(registry.findByIs("example.tags.ProjectionTag")).not.toContain(aggregate);
+    expect(Object.isFrozen(registry.findByIs("example.tags.ProjectionTag"))).toBe(true);
   });
 
   it("keeps explicit aggregate visibility and descriptor ordering deterministic", () => {
