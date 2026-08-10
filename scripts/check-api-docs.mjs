@@ -363,6 +363,7 @@ const expectedDeploymentExports = [
   "NodeScheduler",
   "NodeSnapshotReader",
   "ScheduledNodeDiscovery",
+  "ScheduledNodeDiscoveryOptions",
   "StaticNodeDiscovery",
 ];
 const expectedStorageExports = [
