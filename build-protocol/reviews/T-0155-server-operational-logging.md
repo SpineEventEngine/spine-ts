@@ -1,6 +1,6 @@
 # T-0155 Review Record
 
-Status: Ready for required review wave
+Status: Correction-ready for required review wave
 
 ## Required Concerns
 
@@ -44,3 +44,14 @@ Status: Ready for required review wave
   diff gives 96.08% statements/lines (49/51), 100% functions (8/8), and 95.24%
   branches (20/21). The full-file aggregate remains lower only because the
   changed files contain large unchanged baseline regions.
+
+## Correction Evidence
+
+- Independent containment fixtures 5/5 and the live checker pass. Five focused
+  suites, including repository behavior, pass 366/366; full server evidence is
+  69 files / 1,636 tests.
+- Exact changed-range LCOV is 95.89% statements/lines (70/73), 100% functions
+  (13/13), and 91.67% branches (33/36).
+- Normal running-server shutdown clears the service logger. Failed listener
+  startup releases its network/HTTP closure; the discarded service is only a
+  WeakMap key, so no retained logger exists and no test-only seam is added.

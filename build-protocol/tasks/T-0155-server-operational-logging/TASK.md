@@ -1,6 +1,6 @@
 # T-0155: Server Operational Logging
 
-Status: In progress
+Status: Correction-ready
 
 ## Objective
 
@@ -93,3 +93,14 @@ authentication-secret boundary across accepted server work.
 - Documentation: N/A because public TSDoc and product Markdown are excluded.
 - Security: deferred to T-0167; deterministic secret-negative tests are
   mandatory here.
+
+## Correction Disposition
+
+- Normal owner shutdown clears the `SpineServices` logger through
+  `RunningHttp2Server`. On failed listener startup, the cleanup path deletes
+  the network/HTTP-server closure; the discarded service is only a WeakMap key,
+  so it retains neither service nor logger. No public or test-only observable
+  seam is warranted.
+- T-0155 inventories only introduced or activated bus, repository, service, and
+  context boundaries. T-0156 retains the complete pre-existing lifecycle and
+  cleanup inventory.
