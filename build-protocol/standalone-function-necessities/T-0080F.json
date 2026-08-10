@@ -1330,5 +1330,50 @@
     "name": "primitiveIdKind",
     "disposition": "necessity",
     "reason": "TypeScript Entity descriptor boundary: primitiveIdKind maps generated scalar ID fields into the shared typed RecordSpec contract."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/server/server-log.ts",
+    "kind": "function-declaration",
+    "identity": "emitServerWarning()#1",
+    "name": "emitServerWarning",
+    "disposition": "necessity",
+    "reason": "TypeScript logging boundary: emitServerWarning remains standalone as the narrow package-private warning entry point shared by runtime call sites."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/server/server-log.ts",
+    "kind": "function-declaration",
+    "identity": "emitServerError()#1",
+    "name": "emitServerError",
+    "disposition": "necessity",
+    "reason": "TypeScript logging boundary: emitServerError remains standalone as the narrow package-private error entry point shared by runtime call sites."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/server/server-log.ts",
+    "kind": "function-declaration",
+    "identity": "emitServerLog()#1",
+    "name": "emitServerLog",
+    "disposition": "necessity",
+    "reason": "TypeScript logging boundary: emitServerLog remains standalone because warning and error entry points share one fault-contained emission rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/server/server-log.ts",
+    "kind": "function-declaration",
+    "identity": "cleanFacts()#1",
+    "name": "cleanFacts",
+    "disposition": "necessity",
+    "reason": "TypeScript logging boundary: cleanFacts remains standalone so warning and error emission share the exact allowlisted fact sanitization rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/server/server-log.ts",
+    "kind": "function-declaration",
+    "identity": "isPromiseLike()#1",
+    "name": "isPromiseLike",
+    "disposition": "necessity",
+    "reason": "TypeScript logging boundary: isPromiseLike remains standalone so fault containment recognizes object and callable thenables through one exact rule."
   }
 ]

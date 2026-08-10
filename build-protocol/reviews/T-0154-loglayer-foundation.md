@@ -138,3 +138,21 @@ identity. Focused evidence is 47 server tests and 5 checker fixtures, with the
 live checker, generated build/tooling typechecks, changed-file ESLint,
 Prettier, and diff check passing. `verify:task` is intentionally left for the
 parent's post-re-review final gate.
+
+## Targeted Re-review Result
+
+- Style/maintainability: CLEAN. The two emitter boundaries are manifest-bound,
+  callable thenables are covered, and focused-test paths are repository-bound.
+- Performance/reliability: CLEAN. Replacement generations preserve exact
+  remote-port and logger identity, and emitter failures remain contained.
+- TypeScript/API documentation: remains CLEAN; the correction did not alter
+  public declarations or TSDoc.
+- Documentation: remains CLEAN; the correction did not alter documentation
+  claims or the Wave 10 product-Markdown deferral.
+- Security: still deferred to the one final Wave 9 review in T-0167.
+
+The first final `verify:task` attempt then exposed missing cleanup-rule
+necessity dispositions for the five new package-private logging functions.
+This deterministic ledger-only correction does not reopen a specialist review
+lane. Cleanup enforcement, focused formatting, and diff checking pass before
+the replacement final verification run.
