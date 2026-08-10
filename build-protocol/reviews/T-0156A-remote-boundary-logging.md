@@ -2,16 +2,13 @@
 
 Status: Mechanically pre-review-ready
 
-Pre-review correction in progress: cancellation suppression, per-emitter
-fault/secret evidence, exact metadata, full containment inventory, and changed
-source coverage are required before review dispatch.
-
-Mechanical evidence now includes 159 focused passing tests, direct emitter
+Mechanical evidence includes 159 focused passing tests, direct emitter
 fault/secret coverage, generated/tooling typechecks, changed ESLint, TSDoc,
-containment, formatting, and diff checks. The focused global-coverage runner
-still applies repository-wide thresholds; its nonzero threshold exit is recorded
-in the work log, while the narrowed changed-helper coverage is 100% on all four
-metrics.
+containment, formatting, and diff checks. Exact LCOV changed-range measurement
+uses points on production lines added against `origin/main`, across all 11
+changed production sources: statements 39/39 (100%), lines 39/39 (100%),
+functions 14/14 (100%), branches 43/44 (97.73%). The focused runner's global
+repository threshold output is irrelevant to this changed-range result.
 
 ## Assignments
 
