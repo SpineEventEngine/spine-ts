@@ -6,7 +6,7 @@ import {
 import type { ILogLayer } from "loglayer";
 
 import { NodeDnsResolver } from "./node-dns-resolver.js";
-import { emitGkeDiscoveryWarning } from "./gke-log.js";
+import { gkeDiscoveryLog } from "./gke-log.js";
 
 /**
  * Represents one DNS address with its optional answer TTL in seconds.
@@ -247,7 +247,7 @@ export class GkeNodeDiscovery implements NodeDiscovery {
     } catch {
       if (controller.signal.aborted || epoch !== this.#epoch) return;
       // spine-log-boundary: deployment_gke.discovery_refresh
-      emitGkeDiscoveryWarning(this.#logger);
+      gkeDiscoveryLog.warn(this.#logger);
       if (
         this.#validUntilMs !== undefined &&
         this.#now() >= this.#validUntilMs &&

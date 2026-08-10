@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { emitGkeDiscoveryWarning } from "../../src/discovery/gke-log.js";
+import { gkeDiscoveryLog } from "../../src/discovery/gke-log.js";
 describe("GKE discovery logging", () => {
   it("contains logger failures and emits fixed safe output", async () => {
     const secret = "token password cookie authorization signing session CSRF OIDC";
@@ -29,11 +29,11 @@ describe("GKE discovery logging", () => {
     ];
     for (const logger of cases)
       expect(() => {
-        emitGkeDiscoveryWarning(logger as never);
+        gkeDiscoveryLog.warn(logger as never);
       }).not.toThrow();
     const warn = vi.fn();
     const logger = { withMetadata: vi.fn(() => ({ warn })) };
-    emitGkeDiscoveryWarning(logger as never);
+    gkeDiscoveryLog.warn(logger as never);
     expect(logger.withMetadata).toHaveBeenCalledWith({
       operation: "deployment.gke.discovery.refresh",
       reasonCode: "failed",

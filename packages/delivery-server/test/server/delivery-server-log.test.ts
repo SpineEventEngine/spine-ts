@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { emitDeliveryServerError } from "../../src/server/delivery-server-log.js";
+import { deliveryServerLog } from "../../src/server/delivery-server-log.js";
 describe("delivery listener logging", () => {
   it("contains logger failures and emits fixed safe output", async () => {
     const secret = "token password cookie authorization signing session CSRF OIDC";
@@ -29,11 +29,11 @@ describe("delivery listener logging", () => {
     ];
     for (const logger of cases)
       expect(() => {
-        emitDeliveryServerError(logger as never);
+        deliveryServerLog.error(logger as never);
       }).not.toThrow();
     const error = vi.fn();
     const logger = { withMetadata: vi.fn(() => ({ error })) };
-    emitDeliveryServerError(logger as never);
+    deliveryServerLog.error(logger as never);
     expect(logger.withMetadata).toHaveBeenCalledWith({
       operation: "delivery.listener.start",
       reasonCode: "failed",

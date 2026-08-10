@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { ILogLayer } from "loglayer";
 
 import { GceMetadataService, type GceMetadataProvider } from "../metadata/gce-metadata-service.js";
-import { emitGceRegistrarRenewalWarning } from "./gce-registrar-log.js";
+import { gceRegistrarLog } from "./gce-registrar-log.js";
 import { GceApplicationNode } from "../node/application-node.js";
 import {
   GceOperationRunner,
@@ -192,7 +192,7 @@ export class GceRegistrar {
     this.#cancel = this.#scheduler.schedule(20_000, () => {
       // spine-log-boundary: deployment_gce.registrar_renew
       void this.#enqueue(() => this.#renew()).catch(() => {
-        if (!this.#closed) emitGceRegistrarRenewalWarning(this.#logger);
+        if (!this.#closed) gceRegistrarLog.warnRenewal(this.#logger);
       });
     });
   }

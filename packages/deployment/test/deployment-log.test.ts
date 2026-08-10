@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { emitScheduledDiscoveryWarning } from "../src/deployment-log.js";
+import { scheduledDiscoveryLog } from "../src/discovery/scheduled-discovery-log.js";
 
 describe("scheduled discovery logging", () => {
   it("contains logger failures and emits only fixed safe output", async () => {
@@ -29,11 +29,11 @@ describe("scheduled discovery logging", () => {
       },
     ])
       expect(() => {
-        emitScheduledDiscoveryWarning(logger as never);
+        scheduledDiscoveryLog.warn(logger as never);
       }).not.toThrow();
     const warn = vi.fn();
     const logger = { withMetadata: vi.fn(() => ({ warn })) };
-    emitScheduledDiscoveryWarning(logger as never);
+    scheduledDiscoveryLog.warn(logger as never);
     expect(logger.withMetadata).toHaveBeenCalledWith({
       operation: "deployment.discovery.refresh",
       reasonCode: "failed",
@@ -41,7 +41,7 @@ describe("scheduled discovery logging", () => {
     expect(warn).toHaveBeenCalledWith("deployment.discovery.refresh_failed");
     expect(JSON.stringify(logger.withMetadata.mock.calls)).not.toContain(secret);
     expect(() => {
-      emitScheduledDiscoveryWarning(undefined);
+      scheduledDiscoveryLog.warn(undefined);
     }).not.toThrow();
     await Promise.resolve();
   });

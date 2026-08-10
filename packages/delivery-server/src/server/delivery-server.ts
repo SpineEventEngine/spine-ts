@@ -14,7 +14,7 @@ import { HealthHandlers } from "../health/health-service.js";
 import { DeliveryAssembly } from "./assembly.js";
 import { DeliveryConfig, type DeliveryConfiguration } from "./config.js";
 import { DeliveryShutdown } from "./shutdown.js";
-import { emitDeliveryServerError } from "./delivery-server-log.js";
+import { deliveryServerLog } from "./delivery-server-log.js";
 
 /**
  * Construction-time configuration for {@link DeliveryServer}.
@@ -215,7 +215,7 @@ export class DeliveryServer {
       return this;
     } catch (error) {
       // spine-log-boundary: delivery_server.listener_start
-      emitDeliveryServerError(this.#logger);
+      deliveryServerLog.error(this.#logger);
       await this.#closeListener(server);
       throw error;
     }
