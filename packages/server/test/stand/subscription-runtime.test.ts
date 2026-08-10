@@ -109,13 +109,23 @@ describe("SubscriptionRuntime", () => {
       {} as never,
       registry,
     );
+    const warn = vi.fn();
+    subscriptionRuntimeAccess.installLogger(runtime, {
+      withMetadata: vi.fn(() => ({ warn })),
+    } as never);
 
     try {
       runtime.start();
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(10_000);
       await registry.cleanupStarted;
       await vi.advanceTimersByTimeAsync(30_000);
-      expect(registry.cleanupCalls).toBe(1);
-      registry.releaseCleanup();
+      expect(registry.cleanupCalls).toBe(2);
+      registry.rejectCleanup();
+      await vi.advanceTimersByTimeAsync(0);
+      await Promise.resolve();
+      expect(warn).toHaveBeenCalledOnce();
       await runtime.close();
     } finally {
       vi.useRealTimers();
@@ -209,8 +219,8 @@ describe("SubscriptionRuntime", () => {
 
 class GatedCleanupRegistry extends InMemorySubscriptionRegistry {
   cleanupCalls = 0;
-  #gated = true;
   #release: (() => void) | undefined;
+  #reject: ((error: Error) => void) | undefined;
   #started: (() => void) | undefined;
   readonly cleanupStarted = new Promise<void>((resolve) => {
     this.#started = resolve;
@@ -219,14 +229,17 @@ class GatedCleanupRegistry extends InMemorySubscriptionRegistry {
   releaseCleanup(): void {
     this.#release?.();
   }
+  rejectCleanup(): void {
+    this.#reject?.(new Error("cleanup failed"));
+  }
 
   override async cleanup() {
     this.cleanupCalls++;
-    if (!this.#gated) return await super.cleanup();
-    this.#gated = false;
+    if (this.cleanupCalls !== 2) return await super.cleanup();
     this.#started?.();
-    await new Promise<void>((resolve) => {
+    await new Promise<void>((resolve, reject) => {
       this.#release = resolve;
+      this.#reject = reject;
     });
     return await super.cleanup();
   }
