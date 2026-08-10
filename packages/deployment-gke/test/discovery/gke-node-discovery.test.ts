@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/require-await */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DynamicUnaryForwarder, type DynamicUnaryClient } from "@spine-event-engine/auth";
 import { ApplicationNode } from "@spine-event-engine/deployment";
 import { create, toBinary } from "@bufbuild/protobuf";
@@ -153,6 +153,27 @@ describe("GkeNodeDiscovery", () => {
     expect(() => discovery.watch(() => undefined)).toThrow("is closed");
     expect(scheduler.cancelled).toBeGreaterThan(0);
     await expect(scheduler.tick()).rejects.toThrow("No scheduled tick.");
+  });
+
+  it("warns once for an active DNS refresh failure without logging cancellation", async () => {
+    const scheduler = new Scheduler();
+    const warn = vi.fn();
+    const logger = { withMetadata: vi.fn(() => ({ warn })) };
+    const discovery = new GkeNodeDiscovery({
+      serviceName: "api.default.svc.cluster.local",
+      port: 8080,
+      logger: logger as never,
+      resolver: { resolve: async () => Promise.reject(new Error("temporary DNS failure")) },
+      scheduler,
+    });
+
+    discovery.watch(() => undefined);
+    await scheduler.tick();
+
+    expect(logger.withMetadata).toHaveBeenCalledWith({ operation: "deployment.gke.discovery.refresh" });
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith("deployment.gke.discovery.refresh_failed");
+    await discovery.close();
   });
 
   it("coalesces concurrent close callers onto one shutdown promise", async () => {

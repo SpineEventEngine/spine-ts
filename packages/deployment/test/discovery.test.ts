@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-empty-function, @typescript-eslint/require-await */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ApplicationNode, ScheduledNodeDiscovery, StaticNodeDiscovery } from "../src/index.js";
 
@@ -198,6 +198,26 @@ describe("ScheduledNodeDiscovery", () => {
     ticks.shift()?.();
     await Promise.resolve();
     expect(reads).toBe(2);
+  });
+
+  it("warns once when an active refresh fails and retains the last snapshot", async () => {
+    const ticks: (() => void)[] = [];
+    const warn = vi.fn();
+    const logger = { withMetadata: vi.fn(() => ({ warn })) };
+    const source = new ScheduledNodeDiscovery({
+      reader: { read: async () => Promise.reject(new Error("temporary")) },
+      logger: logger as never,
+      scheduler: { schedule: (_delay, tick) => (ticks.push(tick), () => undefined) },
+    });
+
+    source.watch(() => undefined);
+    ticks.shift()?.();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(logger.withMetadata).toHaveBeenCalledWith({ operation: "deployment.discovery.refresh" });
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith("deployment.discovery.refresh_failed");
+    await source.close();
   });
   it("uses an injected zero then ten-second schedule", async () => {
     const delays: number[] = [];
