@@ -33,5 +33,27 @@ commits and may not spawn subagents.
 
 ## Review Assignments
 
-Reviewer assignments will be recorded with explicit role, scope, model, and
-reasoning after implementation and mechanical preflight converge.
+- Style/maintainability: existing `style_maintainability_reviewer`, reviewing
+  the milestone diff's module depth, naming, checker structure, test quality,
+  and absence of a logging facade/global/fallback. Expected model
+  `gpt-5.6-terra`, reasoning `high`; both dispatch fields explicit; no
+  subagents.
+- TypeScript/API documentation: existing `typescript_api_docs_reviewer`,
+  reviewing the exact `ILogLayer` public options/exclusions, dependency/export
+  contracts, declaration snapshots, TSDoc, and compatibility. Expected model
+  `gpt-5.6-terra`, reasoning `high`; both dispatch fields explicit; no
+  subagents.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  reviewing logger failure containment, child/lifecycle ownership, propagation
+  identity, bounded sanitization, default output, and checker soundness.
+  Expected model `gpt-5.6-terra`, reasoning `high`; both dispatch fields
+  explicit; no subagents.
+- Documentation: existing `documentation_reviewer`, reviewing only public
+  TSDoc/API-documentation completeness and the Wave 10 Markdown deferral.
+  Immutable configured profile `gpt-5.6-luna`, reasoning `medium`; the Desktop
+  role surface does not accept Luna as an explicit override, so the role will
+  be dispatched without an override and that limitation recorded. No
+  subagents.
+- Security is not dispatched here because the approved Wave defers the one
+  final security review to T-0167. Deterministic secret-boundary tests and
+  scans are part of this review package.
