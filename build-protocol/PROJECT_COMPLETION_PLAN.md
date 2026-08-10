@@ -166,12 +166,15 @@ durably closed.
   examples and affected documentation; and finish with a repository-wide
   invention audit. T-0129 owns the
   [frozen plan and dependency split](planning/WAVE_8_STORAGE_CORRECTION_PLAN.md).
-- **Wave 9:** framework operational logging, a Google Cloud Logging adapter,
-  and repository-wide copyright-header correction. Its Q&A will also decide
-  the deferred logging questions and the application-node discovery overflow
-  message.
-- **Wave 10:** multiple-Gateway behavior. It does not promise that the framework
-  can make an operator's Gateway replacement interruption-free.
+- **Wave 9:** server-side operational logging through LogLayer, direct Google
+  Cloud Logging integration, JVM-style customizable Command, Event, and Entity
+  state-update routing, `(is)`/`(every_is)` semantic routing, Event-field
+  `@Where` filters, implicit required Command and Entity IDs, and rejection
+  conformance. T-0153 owns the frozen dependency plan.
+- **Wave 10:** the beginner-guide and repository-wide Markdown rewrite,
+  copyright-header correction, and multiple-Gateway behavior. It does not
+  promise that the framework can make an operator's Gateway replacement
+  interruption-free.
 
 Wave 6 Q&A, its original implementation, review, release verification,
 integration, and documentation closure are complete. T-0113 records the
@@ -186,10 +189,16 @@ Wave 8's T-0129 through T-0144 sequence is complete: the storage correction,
 delivery-policy cutover, validation upgrade, example and documentation
 convergence, invention audit, release verification, and post-merge proof are
 clean. The subsequent T-0145 through T-0150 correction train is also complete,
-reviewed, and release-verified. It removes the invented physical scope and
-revision fields, adopts native provider tenancy and JVM-compatible typed value
-mapping, and closes the shared-runtime cutover. The stacked train is pushed but
-is not yet merged to `main`.
+reviewed, release-verified, merged to `main`, and remotely synchronized. It
+removes the invented physical scope and revision fields, adopts native provider
+tenancy and JVM-compatible typed value mapping, and closes the shared-runtime
+cutover.
+
+Wave 9 planning is active under T-0153. Its human Q&A is complete. The approved
+scope and preliminary Wave 10 beginner-guide structure are recorded in
+`build-protocol/planning/WAVE_9_LOGGING_ROUTING_PLAN.md`; runtime implementation
+does not begin until that high-risk public-contract plan passes specialist
+review and is integrated.
 
 ## Authored API And Example Quality Correction
 

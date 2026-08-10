@@ -5231,3 +5231,97 @@ Consequences:
   categories, and both JVM-to-TS and TS-to-JVM fixtures.
 - Active beginner documentation must explain the physical mapping without
   exposing internal codecs as user configuration.
+
+## D-0112: Use Established Logging And JVM-Style Signal Conventions
+
+Status: Accepted
+
+Date: 2026-08-10
+
+Task: T-0153 planning and the Wave 9 implementation train
+
+Context:
+
+- Server-side packages contain operational failure boundaries but do not share
+  a structured logging contract. The isolated `warn` callback on
+  `ServerEnvironment` cannot carry typed context or collector transports.
+- Applications need the same established logging API as framework code, while
+  retaining control of logger configuration, transports, and lifecycle.
+- Command, Event, and Entity state-update routing is only partially implemented
+  in Spine TS and is not publicly customizable like Spine JVM.
+- Spine TS does not yet expose JVM-style semantic `(is)`/`(every_is)` routes or
+  Event-field `@Where` filters.
+- Command and Entity Proto models repeat `(required) = true` on ID fields even
+  though Spine JVM treats the first declared field as implicitly required when
+  the option is absent.
+- Rejection generation and runtime dispatch already exist. The missing work is
+  conformance and demonstration, not a parallel rejection mechanism.
+
+Decision:
+
+- Use LogLayer directly as the server-side framework and application logging
+  API. Accept application-created loggers, derive child loggers, and leave
+  lifecycle and transport configuration with the application.
+- Pass environment children explicitly through attachment/runtime construction.
+  Independently operated auth, delivery, and deployment components accept the
+  same application-created `ILogLayer` in their existing options. Do not use a
+  global logger or per-module fallback.
+- Provide structured default output and prove application composition with
+  LogLayer's official Google Cloud Logging transport. Do not wrap it as a Spine
+  adapter. Keep the contract transport-neutral so later integrations such as
+  Sentry do not require a Spine-specific logging facade.
+- Log operational WARN and ERROR records once at the boundary that contains or
+  terminates the failure. A logging failure never changes framework behavior.
+- Permit stable domain and infrastructure identifiers in structured fields but
+  prohibit every authentication secret, including credentials, tokens,
+  passwords, cookies, authorization headers, signing keys, session secrets, and
+  CSRF/OIDC secrets.
+- Provide customizable routing for Commands, Events, and Entity state updates.
+  Commands are unicast; Events and state updates may route to zero, one, or many
+  Entity IDs.
+- Evaluate an Event/state route once at signal acceptance, reject more than
+  1,000 returned targets before any handoff, persist one validated target per
+  Inbox row, and replay that stored target without invoking application route
+  code again.
+- For default Event routing, use a valid compatible producer ID. Fall back to
+  the first declared Event field only when the valid producer type is
+  incompatible. Fail when a producer claims the compatible type but is
+  malformed.
+- Support exact-message routes plus semantic `(is)` and `(every_is)` routes.
+  Precedence is exact message, then `(is)`, then `(every_is)`, then default.
+  Ambiguous or incomplete construction fails.
+- Preserve descriptor `(is)`, descriptor `(every_is)`, and caller compatibility
+  tag provenance separately. Generated handler metadata moves to a fail-fast
+  version 2 for state subscriptions and `@Where`; stale version 1 registries are
+  regenerated rather than silently accepted.
+- Add an Event-handler method decorator `@Where` with the public fields
+  `eventField` and `equals`. It supports nested paths and Stringifier-based
+  literal conversion, and it applies only to Event-consuming `@Subscribe`,
+  `@React`, and Event-to-command `@Command` handlers. Invalid declarations fail.
+- Treat the first declared field in a Command or Entity state as implicitly
+  required when no explicit `(required)` option is present. Redundant explicit
+  declarations remain valid; an explicit option remains authoritative.
+- Preserve the existing rejection mechanism and verify both approved rejection
+  filename forms. Use Message Board to demonstrate the Wave 9 conventions.
+
+Security impact:
+
+- Logging changes the authentication-secret exposure boundary and therefore
+  requires dedicated negative redaction tests and a final security review.
+- Routing and filtering reject malformed types, paths, literals, and ambiguous
+  registrations before dispatch. Custom routes cannot bypass tenant or Entity
+  repository boundaries.
+- Stable identifiers are operational correlation data and may still be
+  sensitive. Applications choose collector access, retention, and transport
+  policy; framework defaults never add payloads or secret-bearing envelopes.
+
+Consequences:
+
+- Logging, routing, filter, and implicit-ID changes are split into
+  dependency-ordered review-sized tasks under
+  `planning/WAVE_9_LOGGING_ROUTING_PLAN.md`.
+- Public TSDoc ships with each runtime slice. Root/package READMEs,
+  `docs/USER_GUIDE.md`, other product/example Markdown, repository-wide
+  copyright-header correction, and multiple-Gateway behavior move to Wave 10.
+- Browser logging, Sentry integration, Cloud Run, and npm publication remain
+  outside Wave 9.
