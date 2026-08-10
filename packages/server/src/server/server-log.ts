@@ -46,7 +46,9 @@ function emitServerLog(
 ): void {
   try {
     const builder = logger.withMetadata(cleanFacts(facts));
-    const emitted = level === "warn" ? builder.warn(message) : builder.error(message);
+    const emit: (message: string) => unknown =
+      level === "warn" ? builder.warn.bind(builder) : builder.error.bind(builder);
+    const emitted = emit(message);
     if (isPromiseLike(emitted)) void Promise.resolve(emitted).catch(() => undefined);
   } catch {
     // Logging must not affect the containing runtime outcome.

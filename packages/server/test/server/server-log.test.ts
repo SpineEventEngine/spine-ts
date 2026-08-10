@@ -70,8 +70,12 @@ describe("server logging containment", () => {
       withMetadata: () => ({ warn: () => Promise.reject(new Error("logger")) }),
     };
 
-    expect(() => emitServerWarning(sync as never, "retry_failed", {})).not.toThrow();
-    expect(() => emitServerWarning(async as never, "retry_failed", {})).not.toThrow();
+    expect(() => {
+      emitServerWarning(sync as never, "retry_failed", {});
+    }).not.toThrow();
+    expect(() => {
+      emitServerWarning(async as never, "retry_failed", {});
+    }).not.toThrow();
     await Promise.resolve();
   });
 

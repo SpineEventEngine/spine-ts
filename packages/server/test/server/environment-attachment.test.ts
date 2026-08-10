@@ -108,9 +108,9 @@ describe("EnvironmentRegistrations", () => {
     expect(fresh.generation).not.toBe(first.generation);
     expect(registrations.count).toBe(1);
     expect(registrations.remove(fresh.token)).toBe(0);
-    expect(() => registrations.clear(first.generation)).toThrow(
-      "Environment generation is not current.",
-    );
+    expect(() => {
+      registrations.clear(first.generation);
+    }).toThrow("Environment generation is not current.");
   });
 
   it("rejects replacing an absent generation", () => {
@@ -135,17 +135,23 @@ describe("RegistrationReadiness", () => {
   it("rejects transition preparation before readiness is open", () => {
     const target = descriptor("Phase", "type.example.dev/Phase", new InMemoryStorageFactory());
     const scope = runScope("phase-owner", target.ready);
+    const prepared = vi.fn();
     const readiness = new RegistrationReadiness(
       [{ descriptor: target.value, scopes: [scope] }],
       () => scope,
-      () => undefined,
+      () => {
+        prepared();
+      },
     );
 
-    expect(() => readiness.prepareTransition(() => undefined)).toThrow(
-      "Registration readiness is not open.",
-    );
+    expect(() => {
+      readiness.prepareTransition(() => {
+        prepared();
+      });
+    }).toThrow("Registration readiness is not open.");
     readiness.fail();
     readiness.notify(target.value, target.ready);
+    expect(prepared).not.toHaveBeenCalled();
     expect(() => readiness.open([])).toThrow("Registration readiness can only open once.");
   });
 
@@ -275,7 +281,9 @@ describe("EnvironmentDeliveryWorker", () => {
     await expect(worker.start({ scopes: [scope] }, [scope.ready.shard])).rejects.toThrow(
       "Environment delivery owner is not configured.",
     );
-    expect(() => worker.notify(scope)).toThrow("Environment delivery owner is not configured.");
+    expect(() => {
+      worker.notify(scope);
+    }).toThrow("Environment delivery owner is not configured.");
   });
   it("uses the process node identity for remote worker ownership", async () => {
     const storageFactory = new InMemoryStorageFactory();

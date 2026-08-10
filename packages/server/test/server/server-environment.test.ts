@@ -67,12 +67,12 @@ describe("ServerEnvironment delivery lifecycle", () => {
     await expect(serverEnvironmentAccess.retryDeliveryStop(outside)).rejects.toThrow(
       "Delivery stop retry requires a ServerEnvironment instance.",
     );
-    expect(() =>
+    expect(() => {
       serverEnvironmentAccess.installTestAttachments(
         outside,
         () => ({}) as EnvironmentGenerationWorker,
-      ),
-    ).toThrow("Test attachments require a ServerEnvironment instance.");
+      );
+    }).toThrow("Test attachments require a ServerEnvironment instance.");
   });
 
   it("passes its exact logger child to an attached delivery runtime", async () => {
@@ -83,6 +83,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     });
     const environment = ServerEnvironment.instance();
     let runtime: EnvironmentDeliveryRuntime | undefined;
+    const workerEvents: string[] = [];
     const worker: EnvironmentGenerationWorker = {
       add(candidate) {
         runtime = candidate;
@@ -114,21 +115,25 @@ describe("ServerEnvironment delivery lifecycle", () => {
           })),
         });
       },
-      stop() {},
+      stop() {
+        workerEvents.push("stop");
+      },
       awaitSettled() {
         return Promise.resolve();
       },
       retire() {
         return Promise.resolve();
       },
-      stopOwners() {},
+      stopOwners() {
+        workerEvents.push("stopOwners");
+      },
       awaitOwnersSettled() {
         return Promise.resolve();
       },
       retireOwners() {
         return Promise.resolve();
       },
-    } as EnvironmentGenerationWorker;
+    };
     serverEnvironmentAccess.installTestAttachments(environment, () => worker);
 
     const attachment = await serverEnvironmentAccess.attach(environment, {
@@ -139,9 +144,10 @@ describe("ServerEnvironment delivery lifecycle", () => {
     expect(logger.child).toHaveBeenCalledTimes(1);
     expect(runtime?.logger).toBe(child);
     await serverEnvironmentAccess.detach(environment, attachment);
+    expect(workerEvents).toContain("stop");
   });
 
-  it("snapshots one caller-owned logger child when the environment resolves", async () => {
+  it("snapshots one caller-owned logger child when the environment resolves", () => {
     const child = Object.freeze({});
     const logger = { child: vi.fn(() => child) };
     ServerEnvironment.when(EnvironmentType.Local).use({
