@@ -2,6 +2,18 @@
 
 Status: Mechanically pre-review-ready
 
+## 2026-08-10 - Aggregated Review Correction
+
+- Reviewed by `t0156a_style_review` (configured `gpt-5.6-terra` / high) and
+  `t0156a_reliability_review` (configured `gpt-5.6-terra` / high). Runtime
+  metadata is unavailable; configured profiles are the durable evidence.
+- Accepted: cancellation and close containment regressions, fixed deployment
+  emitter API, package-owned test placement, deterministic lifecycle gates, and
+  record accuracy. Rejected: a shared cross-package logging helper, because the
+  frozen Wave 9 boundary rules require package-local private emitters and forbid
+  a logging facade/package coupling expansion.
+- Correction is in progress; no reviewer rerun or `verify:task` has run.
+
 Mechanical evidence includes 159 focused passing tests, direct emitter
 fault/secret coverage, generated/tooling typechecks, changed ESLint, TSDoc,
 containment, formatting, and diff checks. Exact LCOV changed-range measurement

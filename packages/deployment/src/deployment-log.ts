@@ -1,24 +1,19 @@
 import type { ILogLayer } from "loglayer";
 
-const operations = new Set(["deployment.discovery.refresh"]);
-
 /**
  * Records a contained deployment warning without changing component outcomes.
  *
  * @param logger Receives the contained record when supplied.
- * @param message Supplies the fixed warning message.
- * @param operation Supplies the allowlisted boundary operation.
  */
-export function emitDeploymentWarning(
-  logger: ILogLayer | undefined,
-  message: string,
-  operation: string,
-): void {
-  if (logger === undefined || !operations.has(operation)) return;
+export function emitScheduledDiscoveryWarning(logger: ILogLayer | undefined): void {
+  if (logger === undefined) return;
   try {
-    const record = logger.withMetadata({ operation, reasonCode: "failed" });
+    const record = logger.withMetadata({
+      operation: "deployment.discovery.refresh",
+      reasonCode: "failed",
+    });
     const emit: (value: string) => unknown = record.warn.bind(record);
-    const emitted = emit(message);
+    const emitted = emit("deployment.discovery.refresh_failed");
     if (isPromiseLike(emitted)) void Promise.resolve(emitted).catch(() => undefined);
   } catch {
     // Logging must not affect the containing runtime outcome.

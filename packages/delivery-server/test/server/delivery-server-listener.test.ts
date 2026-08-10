@@ -68,6 +68,8 @@ describe("DeliveryServer listener", () => {
     });
     expect(error).toHaveBeenCalledOnce();
     expect(error).toHaveBeenCalledWith("delivery.listener.start_failed");
+    await failed.close();
+    expect(error).toHaveBeenCalledOnce();
   });
 
   it("closes an idle owned HTTP/2 session", async () => {

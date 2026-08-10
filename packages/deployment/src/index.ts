@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition, @typescript-eslint/require-await */
 
 import { ApplicationNode } from "./discovery/application-node.js";
-import { emitDeploymentWarning } from "./deployment-log.js";
+import { emitScheduledDiscoveryWarning } from "./deployment-log.js";
 import type { ILogLayer } from "loglayer";
 
 export { ApplicationNode } from "./discovery/application-node.js";
@@ -179,11 +179,7 @@ export class ScheduledNodeDiscovery implements NodeDiscovery {
     } catch {
       if (this.#closed || controller.signal.aborted) return;
       // spine-log-boundary: deployment.scheduled_discovery_refresh
-      emitDeploymentWarning(
-        this.#logger,
-        "deployment.discovery.refresh_failed",
-        "deployment.discovery.refresh",
-      );
+      emitScheduledDiscoveryWarning(this.#logger);
       // Retain the last successful snapshot and retry at the configured interval.
     } finally {
       this.#controller = undefined;
