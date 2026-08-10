@@ -2,6 +2,7 @@ import { clone } from "@bufbuild/protobuf";
 import { AnyMessages, Validate, type MessageSchema } from "@spine-event-engine/core";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
 import type { EventStore } from "@spine-event-engine/storage";
+import type { ILogLayer } from "loglayer";
 
 import {
   runtimeAccess,
@@ -10,6 +11,7 @@ import {
 } from "../runtime/runtime.js";
 import { EventDispatcherRegistry } from "./event-dispatcher-registry.js";
 import type { EventDispatcher } from "./event-dispatcher.js";
+import { emitServerError } from "../server/server-log.js";
 
 const storedDispatchers = new WeakMap<EventBus, (event: Event) => Promise<void>>();
 const storedFollowUpDispatchers = new WeakMap<EventBus, (event: Event) => Promise<void>>();
@@ -32,6 +34,7 @@ const eventBusWorkCounters = new WeakMap<EventBus, () => number>();
 const forgettingBus: unique symbol = Symbol("forgetting-bus");
 const forgettingBuses = new WeakSet<EventBus>();
 const eventBusRoles = new WeakMap<EventBus, EventBusRole>();
+const eventBusLoggers = new WeakMap<EventBus, ILogLayer>();
 
 type EventBusRole = "domain" | "system";
 
@@ -61,6 +64,7 @@ interface EventBusAccess {
   finishClose(eventBus: EventBus): Promise<void>;
   abortClose(eventBus: EventBus): void;
   acceptedWorkCount(eventBus: EventBus): number;
+  installLogger(eventBus: EventBus, logger: ILogLayer): void;
 }
 
 type EventBusIntakeState = "open" | "closing" | "closed";
@@ -386,6 +390,14 @@ export class EventBus {
         subscriber.onEvent(clone(EventSchema, event));
       } catch {
         // Service-delivery subscribers must not poison event intake or later subscribers.
+        const logger = eventBusLoggers.get(this);
+        if (logger !== undefined) {
+          emitServerError(logger, "Event subscriber failed.", {
+            eventType: typeUrl,
+            operation: "event.subscriber",
+            reasonCode: "subscriber_failed",
+          });
+        }
       }
     }
   }
@@ -493,6 +505,12 @@ interface EventSubscriberRecord {
  * @internal
  */
 export const eventBusAccess: EventBusAccess = Object.freeze({
+  installLogger(eventBus: EventBus, logger: ILogLayer): void {
+    if (!storedDispatchers.has(eventBus)) {
+      throw new TypeError("EventBus logger requires an EventBus instance.");
+    }
+    eventBusLoggers.set(eventBus, logger);
+  },
   createForgettingBus(dispatchers: Iterable<EventDispatcher> = []): EventBus {
     const eventBus = new EventBus(forgettingBus as never, dispatchers);
     forgettingBuses.add(eventBus);

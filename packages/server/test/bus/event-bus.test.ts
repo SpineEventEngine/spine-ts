@@ -22,6 +22,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EventBus, type EventDispatcher } from "../../src/index.js";
+import type { ILogLayer } from "loglayer";
 import { eventBusAccess } from "../../src/bus/event-bus.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
@@ -766,6 +767,13 @@ describe("EventBus", () => {
       }),
     ]);
     const typeUrl = TypeUrls.derive(ProjectionStateSchema);
+    const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
+    const logger = {
+      withMetadata: (facts: Record<string, unknown>) => ({
+        error: (message: string) => errors.push({ message, facts }),
+      }),
+    };
+    eventBusAccess.installLogger(bus, logger as unknown as ILogLayer);
     const secondSubscription: { current?: { unsubscribe(): void } } = {};
 
     eventBusAccess.subscribe(bus, typeUrl, {
@@ -792,6 +800,16 @@ describe("EventBus", () => {
       "dispatch:event-snapshot",
       "first:event-snapshot",
       "second:event-snapshot",
+    ]);
+    expect(errors).toEqual([
+      {
+        message: "Event subscriber failed.",
+        facts: {
+          eventType: "type.googleapis.com/ProjectionState",
+          operation: "event.subscriber",
+          reasonCode: "subscriber_failed",
+        },
+      },
     ]);
   });
 
