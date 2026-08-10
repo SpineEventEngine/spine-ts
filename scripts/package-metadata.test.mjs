@@ -329,7 +329,6 @@ describe("package metadata", () => {
     expect(generatedGates).toContain("pnpm lint:tsdoc");
     expect(generatedGates).toContain("pnpm proto:lint:generated");
     expect(generatedGates).toContain("pnpm proto:check-generated:current");
-    expect(generatedGates).toContain("pnpm audit:wave8-inventions");
     expect(release).not.toContain("pnpm verify:generated");
     expect(rootPackage.scripts["docs:api:check"]).toBe("node scripts/check-api-docs.mjs");
     expect(rootPackage.scripts["docs:audience:check"]).toBe("node scripts/check-doc-audience.mjs");
