@@ -242,7 +242,7 @@ describe("ScheduledNodeDiscovery", () => {
 
     source.watch(() => undefined);
     ticks.shift()?.();
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await flush();
 
     expect(logger.withMetadata).toHaveBeenCalledWith({
       operation: "deployment.discovery.refresh",
@@ -267,7 +267,7 @@ describe("ScheduledNodeDiscovery", () => {
 
     source.watch(() => undefined);
     ticks.shift()?.();
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await flush();
 
     expect(ticks).toHaveLength(1);
     await source.close();
@@ -303,3 +303,8 @@ describe("ScheduledNodeDiscovery", () => {
     expect(() => source.watch(() => undefined)).toThrow("closed");
   });
 });
+
+async function flush(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}

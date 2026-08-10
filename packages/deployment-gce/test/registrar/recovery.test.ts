@@ -25,7 +25,7 @@ describe("GceRegistrar recovery", () => {
 
     await registrar.start();
     ticks.shift()?.();
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(logger.withMetadata).toHaveBeenCalledWith({
       operation: "deployment.gce.registrar.renew",

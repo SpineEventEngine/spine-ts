@@ -179,6 +179,25 @@ describe("GkeNodeDiscovery", () => {
     await discovery.close();
   });
 
+  it("does not warn when close aborts an active DNS refresh", async () => {
+    const scheduler = new Scheduler();
+    const warn = vi.fn();
+    let reject: ((error: Error) => void) | undefined;
+    const discovery = new GkeNodeDiscovery({
+      serviceName: "api.default.svc.cluster.local",
+      port: 8080,
+      logger: { withMetadata: vi.fn(() => ({ warn })) } as never,
+      resolver: { resolve: () => new Promise((_, fail) => (reject = fail)) },
+      scheduler,
+    });
+    discovery.watch(() => undefined);
+    const refreshing = scheduler.tick();
+    const closing = discovery.close();
+    reject?.(new Error("cancelled"));
+    await Promise.all([refreshing, closing]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it("coalesces concurrent close callers onto one shutdown promise", async () => {
     const scheduler = new Scheduler();
     let settle: (() => void) | undefined;
