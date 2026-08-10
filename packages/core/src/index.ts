@@ -62,6 +62,8 @@ import {
   YearMonthSchema,
   ZoneIdSchema,
   ZonedDateTimeSchema,
+  is,
+  every_is,
   type_url_prefix,
   type ConstraintViolation,
   type ProtoModule,
@@ -459,6 +461,12 @@ export interface TypeMetadata<Schema extends MessageSchema = MessageSchema> {
    */
   readonly semanticTags: readonly string[];
 
+  /** Java types declared directly by the descriptor `(is)` option. */
+  readonly isTypes: readonly string[];
+
+  /** Java types declared by the descriptor file `(every_is)` option. */
+  readonly everyIsTypes: readonly string[];
+
   /**
    * Checks whether a file option is set on this schema's file descriptor.
    * @param option The file option extension.
@@ -512,6 +520,12 @@ export interface TypeRegistryLookup {
    * @returns The matching metadata entries.
    */
   findBySemanticTag(semanticTag: string): readonly TypeMetadata[];
+
+  /** Finds registrations declared with descriptor `(is)` Java type. */
+  findByIs(javaType: string): readonly TypeMetadata[];
+
+  /** Finds registrations declared with descriptor `(every_is)` Java type. */
+  findByEveryIs(javaType: string): readonly TypeMetadata[];
 
   /**
    * Gets metadata by fully qualified Protobuf type name or throws a descriptive error.
@@ -1139,6 +1153,8 @@ export class TypeRegistry {
   readonly #byFullName = new Map<string, TypeMetadata>();
   readonly #byTypeUrl = new Map<string, TypeMetadata>();
   readonly #bySemanticTag = new Map<string, TypeMetadata[]>();
+  readonly #byIs = new Map<string, TypeMetadata[]>();
+  readonly #byEveryIs = new Map<string, TypeMetadata[]>();
   readonly #bySchema = new WeakMap<object, TypeMetadata>();
   readonly #bySchemaDescriptor = new WeakMap<object, TypeMetadata>();
 
@@ -1264,6 +1280,8 @@ export class TypeRegistry {
       entries.push(metadata);
       this.#bySemanticTag.set(tag, entries);
     }
+    for (const value of metadata.isTypes) this.#index(this.#byIs, value, metadata);
+    for (const value of metadata.everyIsTypes) this.#index(this.#byEveryIs, value, metadata);
 
     return metadata;
   }
@@ -1302,6 +1320,18 @@ export class TypeRegistry {
    */
   findBySemanticTag(semanticTag: string): readonly TypeMetadata[] {
     return [...(this.#bySemanticTag.get(semanticTag) ?? [])];
+  }
+
+  findByIs(javaType: string): readonly TypeMetadata[] {
+    return Object.freeze([...(this.#byIs.get(javaType) ?? [])]);
+  }
+  findByEveryIs(javaType: string): readonly TypeMetadata[] {
+    return Object.freeze([...(this.#byEveryIs.get(javaType) ?? [])]);
+  }
+  #index(index: Map<string, TypeMetadata[]>, value: string, metadata: TypeMetadata): void {
+    const entries = index.get(value) ?? [];
+    entries.push(metadata);
+    index.set(value, entries);
   }
 
   /**
@@ -1453,6 +1483,8 @@ const RegistryLookups = {
   ): TypeMetadata<Schema> {
     const firstField = schema.fields[0];
     const tags = [...new Set(semanticTags)].sort();
+    const isTypes = RegistryLookups.semanticOption(schema, is, schema.typeName);
+    const everyIsTypes = RegistryLookups.semanticOption(schema.file, every_is, schema.file.name);
     return Object.freeze({
       fullTypeName: schema.typeName,
       typeUrl,
@@ -1464,6 +1496,8 @@ const RegistryLookups = {
       firstField,
       firstFieldName: firstField?.name,
       semanticTags: Object.freeze(tags),
+      isTypes,
+      everyIsTypes,
       hasFileOption<Value>(option: FileOptionExtension<Value>): boolean {
         return hasOption(schema.file, option);
       },
@@ -1471,6 +1505,14 @@ const RegistryLookups = {
         return getOption(schema.file, option);
       },
     });
+  },
+
+  semanticOption(owner: object, option: GenExtension<any, any>, name: string): readonly string[] {
+    if (!hasOption(owner as any, option as any)) return Object.freeze([]);
+    const value = (getOption(owner as any, option as any) as { javaType: string }).javaType.trim();
+    if (value.length === 0)
+      throw new Error(`Semantic option "${name}" must declare a non-empty java_type.`);
+    return Object.freeze([value]);
   },
 
   /**
@@ -1482,6 +1524,8 @@ const RegistryLookups = {
       findByTypeUrl: (typeUrl: string) => registry.findByTypeUrl(typeUrl),
       findBySchema: <Schema extends MessageSchema>(schema: Schema) => registry.findBySchema(schema),
       findBySemanticTag: (semanticTag: string) => registry.findBySemanticTag(semanticTag),
+      findByIs: (javaType: string) => registry.findByIs(javaType),
+      findByEveryIs: (javaType: string) => registry.findByEveryIs(javaType),
       getByFullName: (fullTypeName: string) => registry.getByFullName(fullTypeName),
       getByTypeUrl: (typeUrl: string) => registry.getByTypeUrl(typeUrl),
       getBySchema: <Schema extends MessageSchema>(schema: Schema) => registry.getBySchema(schema),

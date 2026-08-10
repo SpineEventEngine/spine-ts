@@ -544,6 +544,9 @@ describe("@spine-event-engine/core type registry", () => {
     });
 
     expect(registry.findBySemanticTag("io.spine.FieldSelector")).toEqual([metadata]);
+    expect(registry.findByIs("io.spine.FieldSelector")).toEqual([]);
+    expect(metadata.isTypes).toEqual([]);
+    expect(metadata.everyIsTypes).toEqual([]);
   });
 
   it("registers the current curated Spine schemas in the default registry", () => {
@@ -596,6 +599,8 @@ describe("@spine-event-engine/core type registry", () => {
     );
     expect(spineCoreRegistry.findBySchema(FieldPathSchema)?.schema).toBe(FieldPathSchema);
     expect(spineCoreRegistry.findBySemanticTag("io.spine.SomeMarker")).toEqual([]);
+    expect(spineCoreRegistry.findByIs("io.spine.SomeMarker")).toEqual([]);
+    expect(spineCoreRegistry.findByEveryIs("io.spine.SomeMarker")).toEqual([]);
     expect(spineCoreRegistry.list().map((metadata) => metadata.fullTypeName)).toContain(
       "spine.validation.ValidationError",
     );
