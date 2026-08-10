@@ -2081,7 +2081,7 @@ class DeliveryGeneration {
       storageFactory,
       tenant,
       context,
-      logger: this.logger,
+      ...(this.logger === undefined ? {} : { logger: this.logger }),
       scopes: Object.freeze(
         endpoints.map((endpoint) =>
           EnvironmentAttachmentValues.readyScope(owner, endpoint, tenant),
