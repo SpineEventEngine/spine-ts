@@ -1,6 +1,6 @@
 # T-0154 Review Log
 
-Status: Awaiting implementation
+Status: Awaiting coverage convergence before review
 
 ## Required Concerns
 
