@@ -177,6 +177,7 @@ export class ScheduledNodeDiscovery implements NodeDiscovery {
       const nodes = await this.#reader.read(controller.signal);
       if (!this.#closed) this.#watcher?.([...nodes]);
     } catch {
+      if (this.#closed || controller.signal.aborted) return;
       // spine-log-boundary: deployment.scheduled_discovery_refresh
       emitDeploymentWarning(
         this.#logger,

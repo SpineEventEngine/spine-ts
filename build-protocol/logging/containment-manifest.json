@@ -370,6 +370,34 @@
       "operation": "deployment.gce.registrar.initial",
       "disposition": "no-log",
       "test": "packages/deployment-gce/test/registrar/recovery.test.ts"
+    },
+    {
+      "id": "auth.dynamic_subscription_activation",
+      "source": "../../packages/auth/src/gateway/dynamic-unary-forwarder.ts",
+      "operation": "auth.subscription.activate",
+      "disposition": "no-log",
+      "test": "packages/auth/test/dynamic-unary-forwarder.test.ts"
+    },
+    {
+      "id": "auth.dynamic_subscription_cleanup",
+      "source": "../../packages/auth/src/gateway/dynamic-unary-forwarder.ts",
+      "operation": "auth.subscription.cleanup",
+      "disposition": "no-log",
+      "test": "packages/auth/test/dynamic-unary-forwarder.test.ts"
+    },
+    {
+      "id": "auth.dynamic_reconciliation",
+      "source": "../../packages/auth/src/gateway/dynamic-unary-forwarder.ts",
+      "operation": "auth.subscription.reconcile",
+      "disposition": "no-log",
+      "test": "packages/auth/test/dynamic-unary-forwarder.test.ts"
+    },
+    {
+      "id": "auth.dynamic_cleanup_retry",
+      "source": "../../packages/auth/src/gateway/dynamic-unary-forwarder.ts",
+      "operation": "auth.subscription.cleanup",
+      "disposition": "no-log",
+      "test": "packages/auth/test/dynamic-unary-forwarder.test.ts"
     }
   ]
 }

@@ -8,7 +8,10 @@ import type { ILogLayer } from "loglayer";
 export function emitGkeDiscoveryWarning(logger: ILogLayer | undefined): void {
   if (logger === undefined) return;
   try {
-    const record = logger.withMetadata({ operation: "deployment.gke.discovery.refresh" });
+    const record = logger.withMetadata({
+      operation: "deployment.gke.discovery.refresh",
+      reasonCode: "failed",
+    });
     const emit: (value: string) => unknown = record.warn.bind(record);
     const emitted = emit("deployment.gke.discovery.refresh_failed");
     if (isPromiseLike(emitted)) void Promise.resolve(emitted).catch(() => undefined);

@@ -16,7 +16,7 @@ export function emitDeploymentWarning(
 ): void {
   if (logger === undefined || !operations.has(operation)) return;
   try {
-    const record = logger.withMetadata({ operation });
+    const record = logger.withMetadata({ operation, reasonCode: "failed" });
     const emit: (value: string) => unknown = record.warn.bind(record);
     const emitted = emit(message);
     if (isPromiseLike(emitted)) void Promise.resolve(emitted).catch(() => undefined);

@@ -182,6 +182,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       this.#pending = undefined;
       try {
         await this.#replace(snapshot.nodes, snapshot.generation);
+        // spine-log-boundary: auth.dynamic_reconciliation
       } catch {
         // A later complete snapshot starts a fresh reconciliation owner.
       }
@@ -462,6 +463,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   ): void {
     if (child.active || definition.updates === undefined) return;
     child.active = true;
+    // spine-log-boundary: auth.dynamic_subscription_activation
     child.activation = client
       .activate(
         {
@@ -554,6 +556,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
           this.#failedChildCleanup.add({ client: cleanupClient, backend: child.backend });
         }
       }
+      // spine-log-boundary: auth.dynamic_subscription_cleanup
       await child.activation.catch(() => undefined);
     };
     if (cleanupClient === undefined) {
@@ -577,6 +580,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       try {
         await pending.client.dispose(pending.backend, new AbortController().signal);
         this.#failedChildCleanup.delete(pending);
+        // spine-log-boundary: auth.dynamic_cleanup_retry
       } catch {
         // A later membership reconciliation retries this cleanup.
       }

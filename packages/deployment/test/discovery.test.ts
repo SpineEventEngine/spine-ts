@@ -173,6 +173,36 @@ describe("ScheduledNodeDiscovery", () => {
     rejectRead?.(new Error("aborted"));
     await closing;
   });
+
+  it("does not warn when close cancels an active reader", async () => {
+    let rejectRead: ((reason: Error) => void) | undefined;
+    const warn = vi.fn();
+    const source = new ScheduledNodeDiscovery({
+      reader: {
+        read: (signal) =>
+          new Promise((_, reject) => {
+            rejectRead = reject;
+            signal.addEventListener(
+              "abort",
+              () => {
+                reject(new Error("cancelled"));
+              },
+              { once: true },
+            );
+          }),
+      },
+      logger: { withMetadata: vi.fn(() => ({ warn })) } as never,
+      scheduler: { schedule: (_delay, tick) => (queueMicrotask(tick), () => undefined) },
+    });
+
+    source.watch(() => undefined);
+    await Promise.resolve();
+    const closing = source.close();
+    rejectRead?.(new Error("cancelled"));
+    await closing;
+
+    expect(warn).not.toHaveBeenCalled();
+  });
   it("retries after a reader failure and permits only one watch", async () => {
     const ticks: (() => void)[] = [];
     let reads = 0;
@@ -214,7 +244,10 @@ describe("ScheduledNodeDiscovery", () => {
     ticks.shift()?.();
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-    expect(logger.withMetadata).toHaveBeenCalledWith({ operation: "deployment.discovery.refresh" });
+    expect(logger.withMetadata).toHaveBeenCalledWith({
+      operation: "deployment.discovery.refresh",
+      reasonCode: "failed",
+    });
     expect(warn).toHaveBeenCalledOnce();
     expect(warn).toHaveBeenCalledWith("deployment.discovery.refresh_failed");
     await source.close();

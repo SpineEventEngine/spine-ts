@@ -172,6 +172,7 @@ describe("GkeNodeDiscovery", () => {
 
     expect(logger.withMetadata).toHaveBeenCalledWith({
       operation: "deployment.gke.discovery.refresh",
+      reasonCode: "failed",
     });
     expect(warn).toHaveBeenCalledOnce();
     expect(warn).toHaveBeenCalledWith("deployment.gke.discovery.refresh_failed");

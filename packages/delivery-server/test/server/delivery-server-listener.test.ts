@@ -62,7 +62,10 @@ describe("DeliveryServer listener", () => {
     );
     await expect(failed.start()).rejects.toBeInstanceOf(Error);
     await expect(failed.start()).rejects.toBeInstanceOf(Error);
-    expect(logger.withMetadata).toHaveBeenCalledWith({ operation: "delivery.listener.start" });
+    expect(logger.withMetadata).toHaveBeenCalledWith({
+      operation: "delivery.listener.start",
+      reasonCode: "failed",
+    });
     expect(error).toHaveBeenCalledOnce();
     expect(error).toHaveBeenCalledWith("delivery.listener.start_failed");
   });

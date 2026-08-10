@@ -8,7 +8,10 @@ import type { ILogLayer } from "loglayer";
 export function emitDeliveryServerError(logger: ILogLayer | undefined): void {
   if (logger === undefined) return;
   try {
-    const record = logger.withMetadata({ operation: "delivery.listener.start" });
+    const record = logger.withMetadata({
+      operation: "delivery.listener.start",
+      reasonCode: "failed",
+    });
     const emit: (value: string) => unknown = record.error.bind(record);
     const emitted = emit("delivery.listener.start_failed");
     if (isPromiseLike(emitted)) void Promise.resolve(emitted).catch(() => undefined);

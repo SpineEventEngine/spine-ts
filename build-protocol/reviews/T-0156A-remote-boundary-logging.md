@@ -2,6 +2,10 @@
 
 Status: Pending implementation
 
+Pre-review correction in progress: cancellation suppression, per-emitter
+fault/secret evidence, exact metadata, full containment inventory, and changed
+source coverage are required before review dispatch.
+
 ## Assignments
 
 - Implementation: existing implementer, explicit `gpt-5.6-terra` / medium,

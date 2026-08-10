@@ -29,6 +29,7 @@ describe("GceRegistrar recovery", () => {
 
     expect(logger.withMetadata).toHaveBeenCalledWith({
       operation: "deployment.gce.registrar.renew",
+      reasonCode: "failed",
     });
     expect(warn).toHaveBeenCalledOnce();
     expect(warn).toHaveBeenCalledWith("deployment.gce.registrar.renew_failed");
