@@ -156,3 +156,8 @@ necessity dispositions for the five new package-private logging functions.
 This deterministic ledger-only correction does not reopen a specialist review
 lane. Cleanup enforcement, focused formatting, and diff checking pass before
 the replacement final verification run.
+
+The replacement final `verify:task` completed with exit code 0: 69 server test
+files and 1,629 tests passed; changed-source coverage is 95.87% statements,
+90.01% branches, 98.18% functions, and 96.10% lines. The task is
+integration-ready.
