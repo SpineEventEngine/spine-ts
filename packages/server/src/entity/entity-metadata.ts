@@ -1,6 +1,7 @@
 import { getOption, hasOption } from "@bufbuild/protobuf";
 import type { DescField, DescFile, Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { TypeRegistry } from "@spine-event-engine/core";
 import type { Entity } from "./entity.js";
 import {
   column,
@@ -296,7 +297,10 @@ export function describeEntityMetadata<Schema extends DescriptorMessageSchema>(
       .filter((field) => hasOption(field, set_once) && getOption(field, set_once))
       .map(EntityDescriptors.field),
   );
-  const semanticTags = EntityDescriptors.tags(schema);
+  const registered = new TypeRegistry().register(schema as never);
+  const semanticTags = Object.freeze([
+    ...new Set([...registered.isTypes, ...registered.everyIsTypes]),
+  ]);
   const metadata: EntityMetadata<Schema> = {
     schema,
     descriptor: schema,

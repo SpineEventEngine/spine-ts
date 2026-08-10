@@ -1511,7 +1511,7 @@ const RegistryLookups = {
     if (!hasOption(owner as any, option as any)) return Object.freeze([]);
     const value = (getOption(owner as any, option as any) as { javaType: string }).javaType.trim();
     if (value.length === 0)
-      throw new Error(`Semantic option "${name}" must declare a non-empty java_type.`);
+      throw new Error(`semantic tag option "${name}" must declare a non-empty java_type.`);
     return Object.freeze([value]);
   },
 
