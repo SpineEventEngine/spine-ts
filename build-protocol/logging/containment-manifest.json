@@ -1,6 +1,20 @@
 {
   "boundaries": [
     {
+      "id": "server.event_bus_close_runtime",
+      "source": "../../packages/server/src/bus/event-bus.ts",
+      "operation": "event.close",
+      "disposition": "no-log",
+      "test": "packages/server/test/bus/event-bus.test.ts"
+    },
+    {
+      "id": "server.event_subscriber_failure",
+      "source": "../../packages/server/src/bus/event-bus.ts",
+      "operation": "event.subscriber",
+      "disposition": "error",
+      "test": "packages/server/test/bus/event-bus.test.ts"
+    },
+    {
       "id": "server.volatile_subscription_registry",
       "source": "../../packages/server/src/server/server-environment.ts",
       "operation": "stand.registry",

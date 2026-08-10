@@ -2,6 +2,7 @@ import { constants as fsConstants } from "node:fs";
 import { access, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import type { ILogLayer } from "loglayer";
 
 import { clone, getOption, hasOption, type Message } from "@bufbuild/protobuf";
 import { TypeUrls, type MessageSchema } from "@spine-event-engine/core";
@@ -511,6 +512,8 @@ const contextTenantIndexes = new WeakMap<BoundedContext, TenantIndex>();
 const contextStorageFactories = new WeakMap<BoundedContext, StorageFactory>();
 const contextDeliveryDescriptors = new WeakMap<BoundedContext, ContextDeliveryDescriptor>();
 const contextSubscriptionRuntimes = new WeakMap<BoundedContext, SubscriptionRuntime>();
+const contextLoggers = new WeakMap<BoundedContext, ILogLayer>();
+const contextEventBuses = new WeakMap<BoundedContext, readonly [EventBus, EventBus]>();
 const systemEventPosters = new WeakMap<BoundedContext, (event: Event) => Promise<void>>();
 const builderBuilds = new WeakMap<
   BoundedContextBuilder,
@@ -538,6 +541,8 @@ interface BoundedContextAccess {
     id: string,
     onUpdate: (update: import("@spine-event-engine/proto/client").SubscriptionUpdate) => void,
   ): Promise<import("../stand/stand.js").StandSubscription>;
+  installLogger(context: BoundedContext, logger: ILogLayer): void;
+  loggerFor(context: BoundedContext): ILogLayer;
   delivery(context: BoundedContext): ContextDeliveryDescriptor;
 }
 let constructBoundedContext:
@@ -656,6 +661,7 @@ export class BoundedContext {
     this.#commandBus = commandBus;
     this.#eventBus = eventBus;
     this.#systemEventBus = systemEventBus;
+    contextEventBuses.set(this, [eventBus, systemEventBus]);
     this.#stand = stand;
     this.#systemStand = systemStand;
     this.#subscriptionRuntime = subscriptionRuntime;
@@ -1048,6 +1054,27 @@ export class BoundedContext {
  * Exposes framework-only operations for built contexts and their builders.
  */
 export const boundedContextAccess: BoundedContextAccess = Object.freeze({
+  installLogger(context: BoundedContext, logger: ILogLayer): void {
+    if (!contextStorageFactories.has(context)) {
+      throw new TypeError("Context logger requires a built BoundedContext instance.");
+    }
+    contextLoggers.set(context, logger);
+    const buses = contextEventBuses.get(context);
+    if (buses === undefined) {
+      throw new TypeError("Context logger requires a built BoundedContext instance.");
+    }
+    eventBusAccess.installLogger(buses[0], logger);
+    eventBusAccess.installLogger(buses[1], logger);
+  },
+
+  loggerFor(context: BoundedContext): ILogLayer {
+    const logger = contextLoggers.get(context);
+    if (logger === undefined) {
+      throw new TypeError("Context logger requires a built BoundedContext instance.");
+    }
+    return logger;
+  },
+
   isBuilder(value: unknown): value is BoundedContextBuilder {
     return (
       typeof value === "object" &&

@@ -62,10 +62,33 @@ import {
 } from "../../src/index.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 import { BrowserServer } from "../../src/server/browser-server.js";
+import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { attachDurableSubscriptionCleanup } from "../../src/server/durable-subscription-bindings.js";
 import { EnvironmentTests } from "../../src/server/environment.js";
+import type { ILogLayer } from "loglayer";
 
 describe("Server", () => {
+  it("propagates the environment logger child to built context event buses", async () => {
+    const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
+    const child = {
+      withMetadata: (facts: Record<string, unknown>) => ({
+        error: (message: string) => errors.push({ message, facts }),
+      }),
+    };
+    const logger = { child: vi.fn(() => child) };
+    ServerEnvironment.when(EnvironmentType.Local).use({ logger: logger as unknown as ILogLayer });
+    const context = BoundedContext.singleTenant("Tasks").build();
+    const server = await Server.atPort(0).add(context).start();
+    expect(logger.child).toHaveBeenCalledTimes(1);
+    expect(
+      (boundedContextAccess as unknown as { loggerFor(context: BoundedContext): ILogLayer }).loggerFor(
+        context,
+      ),
+    ).toBe(child);
+    expect(errors).toEqual([]);
+    await server.close();
+  });
+
   it("maps discovered TLS authority to the Node HTTP/2 server name", () => {
     expect(
       BrowserServer.dynamicTransportOptions(

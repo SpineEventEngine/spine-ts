@@ -291,7 +291,9 @@ export class Server {
       this.#contexts,
       this.#environment.storageFactory,
     );
+    const logger = serverEnvironmentAccess.loggerFor(this.#environment);
     for (const context of contexts) {
+      boundedContextAccess.installLogger(context, logger);
       serverEnvironmentAccess.warnVolatileRegistry(this.#environment, context);
     }
     let attachment: EnvironmentAttachmentHandle;

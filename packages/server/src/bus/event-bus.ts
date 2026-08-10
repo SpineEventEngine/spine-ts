@@ -192,6 +192,7 @@ export class EventBus {
     try {
       this.#eventStore?.close();
     } finally {
+      // spine-log-boundary: server.event_bus_close_runtime
       void this.#started.then(() => this.#runtime.close()).catch(() => undefined);
       this.#intakeState = "closed";
       this.#clearSubscribers();
@@ -388,6 +389,7 @@ export class EventBus {
     for (const subscriber of subscribers) {
       try {
         subscriber.onEvent(clone(EventSchema, event));
+        // spine-log-boundary: server.event_subscriber_failure
       } catch {
         // Service-delivery subscribers must not poison event intake or later subscribers.
         const logger = eventBusLoggers.get(this);
