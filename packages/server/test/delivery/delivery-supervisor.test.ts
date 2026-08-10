@@ -663,6 +663,8 @@ describe("DeliverySupervisor", () => {
   it("restarts a failed Admin watch with one bounded backoff timer", async () => {
     vi.useFakeTimers();
     try {
+      const warn = vi.fn();
+      const logger = { withMetadata: vi.fn(() => ({ warn })) };
       let watches = 0;
       let snapshots = 0;
       const supervisor = new DeliverySupervisor({
@@ -684,11 +686,18 @@ describe("DeliverySupervisor", () => {
         watchInitialBackoffMs: 10,
         watchMaxBackoffMs: 10,
       });
+      deliverySupervisorAccess.installLogger(supervisor, logger as never);
 
       await supervisor.start();
       vi.runAllTicks();
       expect(watches).toBe(1);
       expect(snapshots).toBe(1);
+      expect(logger.withMetadata).toHaveBeenCalledTimes(1);
+      expect(logger.withMetadata).toHaveBeenCalledWith({
+        operation: "delivery.watch",
+        reasonCode: "failed",
+      });
+      expect(warn).toHaveBeenCalledWith("Delivery shard watch failed.");
       await vi.advanceTimersByTimeAsync(10);
       expect(watches).toBe(2);
       expect(snapshots).toBe(2);

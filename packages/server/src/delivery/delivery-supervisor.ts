@@ -383,8 +383,20 @@ export class DeliverySupervisor {
       failed = !this.#closing && !this.#closed;
     } finally {
       this.#watching = false;
-      if (failed) this.#scheduleWatchRestart();
+      if (failed) {
+        this.#warnWatchFailure();
+        this.#scheduleWatchRestart();
+      }
     }
+  }
+
+  #warnWatchFailure(): void {
+    const logger = deliverySupervisorLoggers.get(this);
+    if (logger === undefined) return;
+    emitServerWarning(logger, "Delivery shard watch failed.", {
+      operation: "delivery.watch",
+      reasonCode: "failed",
+    });
   }
 
   #scheduleWatchRestart(): void {

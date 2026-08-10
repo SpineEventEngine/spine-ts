@@ -19,3 +19,5 @@ Implementation disposition: the inspected `EnvironmentDeliveryWorker.add()` deta
 Initial implementation evidence: recovery WARN uses a private `DeliverySupervisor` logger capability installed only by environment runtime assembly. It has no public option/export/fallback and emits only fixed allowlisted facts. Deterministic containment, ESLint, formatting, and focused test evidence are green; timer/watch, logger-failure, and no-log behavior remain pending before review.
 
 Correction evidence: capability installation rejects foreign objects, normal terminal close clears the WeakMap entry, and both synchronous and rejected logger methods are contained without changing recovery/close behavior. Timer/watch and normal-close no-log assertions remain pending.
+
+Watch correction evidence: a failed watch is logged once at its outer restart boundary, not inside the source iterator, and normal close retains its no-log classification. Timer/rescan and detached-run classification remain pending.
