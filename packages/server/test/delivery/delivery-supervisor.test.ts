@@ -113,10 +113,9 @@ describe("DeliverySupervisor", () => {
         .build(),
       onMessage: () => Promise.resolve(),
     });
-    deliverySupervisorAccess.installLogger(
-      supervisor,
-      { withMetadata: vi.fn(() => ({ warn, error })) } as never,
-    );
+    deliverySupervisorAccess.installLogger(supervisor, {
+      withMetadata: vi.fn(() => ({ warn, error })),
+    } as never);
     const starting = supervisor.start();
     await entered.promise;
     await expect(supervisor.close({ graceMs: 0 })).rejects.toThrow(
@@ -126,10 +125,6 @@ describe("DeliverySupervisor", () => {
     expect(warn).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
   });
-
-
-
-
 
   it.each([
     [
@@ -976,7 +971,7 @@ describe("DeliverySupervisor", () => {
         shardSnapshot: () => Promise.resolve([]),
         observeShardUpdates: (options) => {
           watchSignal = options?.signal;
-          return emptyUpdates();
+          return updatesUntilAborted(options?.signal);
         },
         releaseExpired: () => Promise.resolve([]),
       },

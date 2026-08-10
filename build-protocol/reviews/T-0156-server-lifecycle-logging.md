@@ -10,6 +10,8 @@ Coverage correction evidence: the existing real stream-consumer fan-out test now
 
 Review chronology: initial style and reliability reviews identified the requirements ledger and lifecycle race/evidence gaps. Residual re-review rejected the first correction batch for missing behavior proof. Phase-1 diagnosis found the abort fixture used the first `releaseExpired` argument (stale milliseconds) as options; the corrected second-argument fixture is green. Residual style and reliability re-reviews remain pending; API/docs remain N/A because no public contract changed.
 
+Final style residual disposition: resolved. The normal watch-shutdown capture-logger test now holds a real abortable watch (`updatesUntilAborted`) through close, eliminating the prior microtask race. Targeted and full supervisor evidence is green; no coverage rerun is required for this test-fixture-only change.
+
 ## Aggregated correction batch
 
 - Style/maintainability finding accepted: add the Human-Imposed Requirements Ledger in TASK.md. Resolved.
