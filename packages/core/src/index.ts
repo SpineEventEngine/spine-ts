@@ -1532,8 +1532,12 @@ const RegistryLookups = {
     });
   },
 
+  // Descriptor option extendees are intentionally generic across message and file owners.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   semanticOption(owner: object, option: GenExtension<any, any>, name: string): readonly string[] {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if (!hasOption(owner as any, option as any)) return Object.freeze([]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const value = (getOption(owner as any, option as any) as { javaType: string }).javaType.trim();
     if (value.length === 0)
       throw new Error(`semantic tag option "${name}" must declare a non-empty java_type.`);
