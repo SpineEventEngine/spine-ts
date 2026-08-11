@@ -140,7 +140,7 @@ describe("DeliveryMonitor delivery", () => {
     [create(AnySchema), "type.example/Task", "Delivery target ID must be a non-default Any."],
     [Identifiers.pack("string", "task-1"), "", "Delivery target type must be a non-empty string."],
   ])("rejects incomplete shard coordinates", (targetId, targetType, message) => {
-    expect(() => UniformAcrossAllShards.singleShard().shardFor(targetId as never, targetType)).toThrow(
+    expect(() => UniformAcrossAllShards.singleShard().shardFor(targetId, targetType)).toThrow(
       message,
     );
   });
@@ -163,7 +163,7 @@ describe("DeliveryMonitor delivery", () => {
           inboxId: { targetId, targetTypeUrl: targetType },
           id: { value: `shard-${String(index)}`, shard: before },
           shard: before,
-        } as never),
+        }),
       );
       return [before, second.shardFor(restored.inboxId.targetId, targetType)] as const;
     });
@@ -189,9 +189,7 @@ describe("DeliveryMonitor delivery", () => {
 
     expect(() =>
       delivery.strategy.shardFor(Identifiers.pack("string", "task-1"), "type.example/Task"),
-    ).toThrow(
-      "Delivery strategy shard total must equal its resolved shard count.",
-    );
+    ).toThrow("Delivery strategy shard total must equal its resolved shard count.");
   });
 
   it.each([

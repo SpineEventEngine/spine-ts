@@ -820,10 +820,12 @@ describe("BoundedContext assembly", () => {
             (
               await Promise.all(
                 rows.map((row) =>
-                  recoveryContext.stand().read(
-                    ProcessManagerStateSchema,
-                    Identifiers.unpack("string", row.inboxId.targetId),
-                  ),
+                  recoveryContext
+                    .stand()
+                    .read(
+                      ProcessManagerStateSchema,
+                      Identifiers.unpack("string", row.inboxId.targetId),
+                    ),
                 ),
               )
             ).every((state) => state !== undefined),
@@ -2487,7 +2489,10 @@ async function persistDescriptorRow(input: {
     context: input.descriptor.storageContext({}),
     storageFactory: input.storageFactory,
   }).inbox.receive({
-    inboxId: { targetTypeUrl: input.targetTypeUrl, targetId: Identifiers.pack("string", input.targetId) },
+    inboxId: {
+      targetTypeUrl: input.targetTypeUrl,
+      targetId: Identifiers.pack("string", input.targetId),
+    },
     signalId: input.signalId,
     label: input.label,
     signal: input.signal,

@@ -197,7 +197,7 @@ const Values = Object.freeze({
     )
       throw new InboxMessageError("Inbox message ID shard does not match message shard.");
     if (
-      typeof inbox.targetId?.typeUrl !== "string" ||
+      typeof inbox.targetId.typeUrl !== "string" ||
       inbox.targetId.typeUrl.trim().length === 0 ||
       !(inbox.targetId.value instanceof Uint8Array) ||
       typeof inbox.targetTypeUrl !== "string" ||

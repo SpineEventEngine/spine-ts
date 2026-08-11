@@ -4660,7 +4660,10 @@ const InboxMessages = {
   sameTargetId(left: Any, right: Any): boolean {
     const leftBytes = toBinary(AnySchema, left);
     const rightBytes = toBinary(AnySchema, right);
-    return leftBytes.length === rightBytes.length && leftBytes.every((value, index) => value === rightBytes[index]);
+    return (
+      leftBytes.length === rightBytes.length &&
+      leftBytes.every((value, index) => value === rightBytes[index])
+    );
   },
 
   readInboxCommand(message: InboxMessage): Command {
@@ -5002,8 +5005,11 @@ const InboxReplay = {
     }
 
     const route = repository.routeEvent(event);
-    const entityId = route.entityIds.find(
-      (id) => InboxMessages.sameTargetId(InboxMessages.inboxTargetId(id, repository.idField), message.inboxId.targetId),
+    const entityId = route.entityIds.find((id) =>
+      InboxMessages.sameTargetId(
+        InboxMessages.inboxTargetId(id, repository.idField),
+        message.inboxId.targetId,
+      ),
     );
 
     if (entityId === undefined) {
@@ -5029,8 +5035,11 @@ const InboxReplay = {
     }
 
     const route = repository.routeEvent(event);
-    const entityId = route.entityIds.find(
-      (id) => InboxMessages.sameTargetId(InboxMessages.inboxTargetId(id, repository.idField), message.inboxId.targetId),
+    const entityId = route.entityIds.find((id) =>
+      InboxMessages.sameTargetId(
+        InboxMessages.inboxTargetId(id, repository.idField),
+        message.inboxId.targetId,
+      ),
     );
 
     if (entityId === undefined) {

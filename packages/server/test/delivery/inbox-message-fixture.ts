@@ -18,7 +18,10 @@ export function createMessage(
       shard: ShardIndex.single(),
     }),
     inboxId: Object.freeze({
-      targetId: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: "projection-1" })),
+      targetId: AnyMessages.pack(
+        StringValueSchema,
+        create(StringValueSchema, { value: "projection-1" }),
+      ),
       targetTypeUrl: "type.example.dev/tasks.Projection",
     }),
     signalId,

@@ -438,7 +438,10 @@ describe("LocalProjectionInbox", () => {
       releaseReplay = resolve;
     });
     const input = {
-      inboxId: { targetId: Identifiers.pack("string", "projection-failing-duplicate"), targetTypeUrl },
+      inboxId: {
+        targetId: Identifiers.pack("string", "projection-failing-duplicate"),
+        targetTypeUrl,
+      },
       signalId: "event-failing-duplicate",
       signal: eventSignal(),
       label: "UPDATE_SUBSCRIBER" as const,
@@ -610,7 +613,10 @@ describe("LocalProjectionInbox", () => {
 
     await expect(
       inbox.receive(delivery, {
-        inboxId: { targetId: Identifiers.pack("string", "projection-shard-mismatch"), targetTypeUrl },
+        inboxId: {
+          targetId: Identifiers.pack("string", "projection-shard-mismatch"),
+          targetTypeUrl,
+        },
         signalId: "event-shard-mismatch",
         signal: eventSignal(),
         label: "UPDATE_SUBSCRIBER",

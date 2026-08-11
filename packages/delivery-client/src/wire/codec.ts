@@ -311,7 +311,7 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
    */
   target(inbox: InboxMessage["inboxId"]): { typeUrl: string; value: Uint8Array } {
     if (
-      typeof inbox.targetId?.typeUrl !== "string" ||
+      typeof inbox.targetId.typeUrl !== "string" ||
       !DeliveryValues.hasText(inbox.targetId.typeUrl) ||
       !(inbox.targetId.value instanceof Uint8Array) ||
       inbox.targetId.value.length === 0 ||

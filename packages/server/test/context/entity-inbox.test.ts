@@ -1,5 +1,5 @@
 import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { Identifiers } from "@spine-event-engine/core";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
@@ -1229,7 +1229,10 @@ describe("LocalEntityInbox", () => {
     try {
       await expect(
         inbox.receive(delivery, {
-          inboxId: { targetId: typedTarget("pm-4"), targetTypeUrl: "type.example.dev/Tasks.ProcessManager" },
+          inboxId: {
+            targetId: typedTarget("pm-4"),
+            targetTypeUrl: "type.example.dev/Tasks.ProcessManager",
+          },
           signalId: "signal-4",
           signal: commandSignal(),
           label: "HANDLE_COMMAND",
@@ -1513,7 +1516,11 @@ describe("LocalEntityInbox", () => {
   });
 
   it("resolves each input shard once and persists that resolved shard", async () => {
-    const shardFor = vi.fn((targetId) => new ShardIndex(targetValue({ inboxId: { targetId } } as InboxMessage).length % 2, 2));
+    const shardFor = vi.fn((targetId: Any) => {
+      const value = Identifiers.unpack("string", targetId);
+      if (value === undefined) throw new Error("Expected a string target.");
+      return new ShardIndex(value.length % 2, 2);
+    });
     const strategy: DeliveryStrategy = { shardCount: 2, shardFor };
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -1570,7 +1577,10 @@ function twoShardStrategy(): DeliveryStrategy {
   return {
     shardCount: 2,
     shardFor(targetId): ShardIndex {
-      return new ShardIndex(targetValue({ inboxId: { targetId } } as InboxMessage) === "even" ? 0 : 1, 2);
+      return new ShardIndex(
+        targetValue({ inboxId: { targetId } } as InboxMessage) === "even" ? 0 : 1,
+        2,
+      );
     },
   };
 }

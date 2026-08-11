@@ -45,7 +45,7 @@ describe("InboxRecords", () => {
           InboxRecords.write({
             ...createMessage(`golden-${String(index)}`, `signal-${String(index)}`, 1n),
             inboxId: { targetId, targetTypeUrl: "type.example.dev/TypedEntity" },
-          } as never),
+          }),
         ).inboxId.targetId,
     );
 
