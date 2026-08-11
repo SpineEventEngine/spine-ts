@@ -5,7 +5,6 @@ import { dirname, resolve } from "node:path";
 
 import type * as Protobuf from "@bufbuild/protobuf";
 import type * as ProtobufWkt from "@bufbuild/protobuf/wkt";
-import type * as SpineProto from "@spine-event-engine/proto";
 import ts from "typescript";
 
 import type {
@@ -318,9 +317,10 @@ interface HandlerDecoratorUse extends DecoratorUse {
 const handlerDecorators = new Set<HandlerDecorator>(["Assign", "Command", "React", "Subscribe"]);
 const entityBaseNames = new Set(["Aggregate", "Projection", "ProcessManager"]);
 const maxAliasDepth = 50;
+// `spine.options.entity` in the frozen `spine/options.proto` contract.
+const entityOptionFieldNumber = 73903;
 const protobuf = requirePackage("@bufbuild/protobuf") as typeof Protobuf;
 const protobufWkt = requirePackage("@bufbuild/protobuf/wkt") as typeof ProtobufWkt;
-const spineProto = requirePackage("@spine-event-engine/proto") as typeof SpineProto;
 
 const HandlerSources = Object.freeze({
   appSourceFiles(program: ts.Program): readonly ts.SourceFile[] {
@@ -1573,7 +1573,7 @@ const HandlerSources = Object.freeze({
     return {
       name: message.name,
       isEntityState:
-        message.options !== undefined && protobuf.hasExtension(message.options, spineProto.entity),
+        message.options?.$unknown?.some((field) => field.no === entityOptionFieldNumber) === true,
       nested: message.nestedType.map(HandlerSources.descriptorMessage),
     };
   },
