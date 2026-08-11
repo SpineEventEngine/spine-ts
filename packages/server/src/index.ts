@@ -250,6 +250,10 @@ export {
 export { type MessageId, type PrimitiveId } from "./repository/primitive-id.js";
 export { CommandRouting, type CommandRoute } from "./repository/command-routing.js";
 export { EventRouting, type EventRoute } from "./repository/event-routing.js";
+export {
+  StateUpdateRouting,
+  type StateUpdateRoute,
+} from "./repository/state-update-routing.js";
 
 export {
   type ConcreteRepositoryEntityType,
