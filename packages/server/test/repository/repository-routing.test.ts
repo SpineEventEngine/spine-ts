@@ -87,6 +87,7 @@ import {
   ProcessManager,
   Projection,
   Repository,
+  type RepositoryOptions,
   RepositoryIdentityError,
   ShardIndex,
   EntityHandlers,
@@ -185,6 +186,11 @@ type Int64ProjectionId = Message<"Int64ProjectionId"> & {
 };
 
 type Int64MessageIdProjectionState = Message<"Int64MessageIdProjectionState"> & {
+  id?: Int64ProjectionId;
+  name: string;
+};
+
+type Int64MessageIdSourceState = Message<"Int64MessageIdSourceState"> & {
   id?: Int64ProjectionId;
   name: string;
 };
@@ -296,6 +302,27 @@ const fileInt64MessageIdEventFixture = (() => {
   }
   return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
     file_spine_options,
+  ]);
+})();
+const fileInt64MessageIdSourceFixture = (() => {
+  const descriptorSet = fromBinary(
+    FileDescriptorSetSchema,
+    Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
+  );
+  const source = descriptorSet.file[0];
+  if (source === undefined) throw new Error("Entity metadata fixture descriptor set is empty.");
+  const descriptor = clone(FileDescriptorProtoSchema, source);
+  const state = descriptor.messageType[9];
+  if (state === undefined) throw new Error("Message-ID source state declaration is missing.");
+  descriptor.name = "int64_message_id_source.proto";
+  descriptor.dependency = [source.name];
+  descriptor.messageType = [state];
+  state.name = "Int64MessageIdSourceState";
+  const idField = state.field[0];
+  if (idField === undefined) throw new Error("Message-ID source state ID field is missing.");
+  idField.typeName = ".Int64ProjectionId";
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    fileInt64MessageIdFixture,
   ]);
 })();
 const ProjectionStateSchema = messageDesc(
@@ -422,6 +449,10 @@ const Int64MessageIdProjectionStateSchema = messageDesc(
   fileInt64MessageIdFixture,
   9,
 ) as GenMessage<Int64MessageIdProjectionState>;
+const Int64MessageIdSourceStateSchema = messageDesc(
+  fileInt64MessageIdSourceFixture,
+  0,
+) as GenMessage<Int64MessageIdSourceState>;
 const Int64MessageIdProjectionEventSchema = messageDesc(
   fileInt64MessageIdEventFixture,
   1,
@@ -1308,7 +1339,7 @@ class PassiveTaskProjection extends Projection<string, typeof ProjectionStateSch
     void event;
   }
 
-  subscribeState(state: ProjectionState): void {
+  subscribeState(state: AggregateState): void {
     PassiveTaskProjection.subscriberCalls++;
     void state;
   }
@@ -1330,11 +1361,11 @@ class StateObservingProjection extends Projection<string, typeof ProjectionState
     this.subscriberCalls = 0;
   }
 
-  subscribeState(state: ProjectionState): void {
+  subscribeState(state: AggregateState): void {
     StateObservingProjection.subscriberCalls++;
     this.update((draft) => {
       draft.name = `${state.name} (projected)`;
-      draft.priority = state.priority + 1;
+      draft.priority = state.archived ? 2 : 1;
     });
   }
 }
@@ -10775,6 +10806,9 @@ class ObservingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
 }
 
 it("rejects state-update routing for Aggregate repositories", () => {
+  expectTypeOf<
+    RepositoryOptions<typeof TaskAggregate>["stateUpdateRouting"]
+  >().toEqualTypeOf<undefined>();
   expect(
     () =>
       new Repository({
@@ -10785,12 +10819,43 @@ it("rejects state-update routing for Aggregate repositories", () => {
   ).toThrow(/State-update routing is supported only by Projection repositories/);
 });
 
+it("rejects state-update routing for Process Manager repositories", () => {
+  expectTypeOf<
+    RepositoryOptions<typeof RoutingProcessManager>["stateUpdateRouting"]
+  >().toEqualTypeOf<undefined>();
+  expect(
+    () =>
+      new Repository({
+        entityType: RoutingProcessManager,
+        schema: ProcessManagerStateSchema,
+        stateUpdateRouting: StateUpdateRouting.create<string>(),
+      } as never),
+  ).toThrow(/State-update routing is supported only by Projection repositories/);
+});
+
 describe("Projection state-update routing", () => {
+  it("rejects a recursive subscription to the repository state", () => {
+    const handlers = EntityHandlers.define(
+      StateObservingProjection,
+      ProjectionStateSchema,
+      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
+    );
+
+    expect(
+      () =>
+        new Repository({
+          entityType: StateObservingProjection,
+          schema: ProjectionStateSchema,
+          handlers,
+        }),
+    ).toThrow(/cannot subscribe to updates of its repository state/);
+  });
+
   it("uses the first compatible state field and ignores unrelated state types", () => {
     const handlers = EntityHandlers.define(
       ExecutingTaskProjection,
       ProjectionStateSchema,
-      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
+      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeTask")],
     );
     const repository = new Repository({
       entityType: ExecutingTaskProjection,
@@ -10798,13 +10863,16 @@ describe("Projection state-update routing", () => {
       handlers,
     });
 
-    expect(repository.routeStateUpdate(createStateChangedEvent("state-1"))).toMatchObject({
+    expect(
+      repositoryAccess.routeStateUpdate(repository, createStateChangedEvent("state-1")),
+    ).toMatchObject({
       entityIds: ["state-1"],
-      messageFullTypeName: ProjectionStateSchema.typeName,
+      messageFullTypeName: AggregateStateSchema.typeName,
     });
     expect(
-      repository.routeStateUpdate(
-        createStateChangedEvent("other", create(AggregateStateSchema, { id: "other" })),
+      repositoryAccess.routeStateUpdate(
+        repository,
+        createStateChangedEvent("other", create(ProjectionStateSchema, { id: "other" })),
       ),
     ).toBeUndefined();
   });
@@ -10813,7 +10881,7 @@ describe("Projection state-update routing", () => {
     const handlers = EntityHandlers.define(
       ExecutingTaskProjection,
       ProjectionStateSchema,
-      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
+      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeTask")],
     );
     const repository = new Repository({
       entityType: ExecutingTaskProjection,
@@ -10822,10 +10890,11 @@ describe("Projection state-update routing", () => {
     });
 
     expect(() =>
-      repository.routeStateUpdate(
+      repositoryAccess.routeStateUpdate(
+        repository,
         createStateChangedEvent(
           "empty-id",
-          create(ProjectionStateSchema, { id: "", name: "not-an-id" }),
+          create(AggregateStateSchema, { id: "", name: "not-an-id" }),
         ),
       ),
     ).toThrow(/state update routing requires an ID compatible with the Entity state/);
@@ -10852,7 +10921,7 @@ describe("Projection state-update routing", () => {
     const handlers = EntityHandlers.define(
       Int64MessageIdProjection,
       Int64MessageIdProjectionStateSchema,
-      (builder) => [builder.subscribe(Int64MessageIdProjectionStateSchema, "subscribeState")],
+      (builder) => [builder.subscribe(Int64MessageIdSourceStateSchema, "subscribeState")],
     );
     const repository = new Repository({
       entityType: Int64MessageIdProjection,
@@ -10862,10 +10931,11 @@ describe("Projection state-update routing", () => {
     const id = create(Int64ProjectionIdSchema, { value: 42n });
 
     expect(
-      repository.routeStateUpdate(
+      repositoryAccess.routeStateUpdate(
+        repository,
         createStateChangedEvent(
           "int64-message",
-          create(Int64MessageIdProjectionStateSchema, { id, name: "Message ID" }),
+          create(Int64MessageIdSourceStateSchema, { id, name: "Message ID" }),
         ),
       )?.entityIds,
     ).toEqual([id]);
@@ -10876,16 +10946,16 @@ describe("Projection state-update routing", () => {
     const handlers = EntityHandlers.define(
       ExecutingTaskProjection,
       ProjectionStateSchema,
-      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
+      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeTask")],
     );
     const repository = new Repository({
       entityType: ExecutingTaskProjection,
       schema: ProjectionStateSchema,
       handlers,
-      stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectionStateSchema, route),
+      stateUpdateRouting: StateUpdateRouting.create<string>().route(AggregateStateSchema, route),
     });
 
-    const result = repository.routeStateUpdate(createStateChangedEvent("source"));
+    const result = repositoryAccess.routeStateUpdate(repository, createStateChangedEvent("source"));
 
     expect(route).toHaveBeenCalledOnce();
     expect(result?.entityIds).toEqual(["second", "first"]);
@@ -10896,17 +10966,17 @@ describe("Projection state-update routing", () => {
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectionStateSchema,
-      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
+      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
     );
     const event = createStateChangedEvent("built-in");
     const cases = [
       StateUpdateRouting.create<string>()
-        .route(ProjectionStateSchema, () => ["exact"])
-        .routeSemantic("example.tags.ZProjectionTag", () => ["direct"])
+        .route(AggregateStateSchema, () => ["exact"])
+        .routeSemantic("example.tags.AggregateTag", () => ["direct"])
         .routeSemantic("example.tags.ASharedTag", () => ["file"])
         .replaceDefault(() => ["replacement"]),
       StateUpdateRouting.create<string>()
-        .routeSemantic("example.tags.ZProjectionTag", () => ["direct"])
+        .routeSemantic("example.tags.AggregateTag", () => ["direct"])
         .routeSemantic("example.tags.ASharedTag", () => ["file"])
         .replaceDefault(() => ["replacement"]),
       StateUpdateRouting.create<string>()
@@ -10918,12 +10988,15 @@ describe("Projection state-update routing", () => {
     expect(
       cases.map(
         (stateUpdateRouting) =>
-          new Repository({
-            entityType: StateObservingProjection,
-            schema: ProjectionStateSchema,
-            handlers,
-            stateUpdateRouting,
-          }).routeStateUpdate(event)?.entityIds,
+          repositoryAccess.routeStateUpdate(
+            new Repository({
+              entityType: StateObservingProjection,
+              schema: ProjectionStateSchema,
+              handlers,
+              stateUpdateRouting,
+            }),
+            event,
+          )?.entityIds,
       ),
     ).toEqual([["exact"], ["direct"], ["file"], ["replacement"]]);
   });
@@ -10932,7 +11005,7 @@ describe("Projection state-update routing", () => {
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectionStateSchema,
-      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
+      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
     );
     expect(
       () =>
@@ -10952,30 +11025,32 @@ describe("Projection state-update routing", () => {
       schema: ProjectionStateSchema,
       handlers,
     });
-    expect(() => repository.routeStateUpdate(createProjectionEvent("domain", "target"))).toThrow(
-      /requires an EntityStateChanged System event/,
-    );
+    expect(() =>
+      repositoryAccess.routeStateUpdate(repository, createProjectionEvent("domain", "target")),
+    ).toThrow(/requires an EntityStateChanged System event/);
     const missingState = create(EventSchema, {
       id: create(EventIdSchema, { value: "missing-state" }),
       message: AnyMessages.pack(EntityStateChangedSchema, create(EntityStateChangedSchema), {
         validate: false,
       }),
     });
-    expect(() => repository.routeStateUpdate(missingState)).toThrow(/requires.*newState/);
+    expect(() => repositoryAccess.routeStateUpdate(repository, missingState)).toThrow(
+      /requires.*newState/,
+    );
     const unreadableState = create(EventSchema, {
       id: create(EventIdSchema, { value: "unreadable-state" }),
       message: AnyMessages.pack(
         EntityStateChangedSchema,
         create(EntityStateChangedSchema, {
           newState: create(AnySchema, {
-            typeUrl: TypeUrls.derive(ProjectionStateSchema),
+            typeUrl: TypeUrls.derive(AggregateStateSchema),
             value: new Uint8Array([255]),
           }),
         }),
         { validate: false },
       ),
     });
-    expect(() => repository.routeStateUpdate(unreadableState)).toThrow();
+    expect(() => repositoryAccess.routeStateUpdate(repository, unreadableState)).toThrow();
   });
 
   it("normalizes a missing EventContext before invoking a custom route", () => {
@@ -10983,18 +11058,18 @@ describe("Projection state-update routing", () => {
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectionStateSchema,
-      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
+      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
     );
     const repository = new Repository({
       entityType: StateObservingProjection,
       schema: ProjectionStateSchema,
       handlers,
-      stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectionStateSchema, route),
+      stateUpdateRouting: StateUpdateRouting.create<string>().route(AggregateStateSchema, route),
     });
     const event = createStateChangedEvent("source");
     event.context = undefined;
 
-    repository.routeStateUpdate(event);
+    repositoryAccess.routeStateUpdate(repository, event);
 
     expect(route).toHaveBeenCalledWith(
       expect.objectContaining({ id: "source" }),
@@ -11008,13 +11083,13 @@ describe("Projection state-update routing", () => {
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectionStateSchema,
-      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
+      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
     );
     const repository = new Repository({
       entityType: StateObservingProjection,
       schema: ProjectionStateSchema,
       handlers,
-      stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectionStateSchema, route),
+      stateUpdateRouting: StateUpdateRouting.create<string>().route(AggregateStateSchema, route),
     });
     const context = BoundedContext.singleTenant("State updates").add(repository).build();
 
@@ -11023,7 +11098,7 @@ describe("Projection state-update routing", () => {
         context,
         createStateChangedEvent(
           "source",
-          create(ProjectionStateSchema, { id: "source", name: "Source", priority: 1 }),
+          create(AggregateStateSchema, { id: "source", name: "Source" }),
         ),
       );
 
@@ -11032,12 +11107,12 @@ describe("Projection state-update routing", () => {
       await expect(context.stand().read(ProjectionStateSchema, "first")).resolves.toMatchObject({
         id: "first",
         name: "Source (projected)",
-        priority: 2,
+        priority: 1,
       });
       await expect(context.stand().read(ProjectionStateSchema, "second")).resolves.toMatchObject({
         id: "second",
         name: "Source (projected)",
-        priority: 2,
+        priority: 1,
       });
     } finally {
       await context.close();
@@ -11051,13 +11126,13 @@ describe("Projection state-update routing", () => {
     const handlers = EntityHandlers.define(
       PassiveTaskProjection,
       ProjectionStateSchema,
-      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
+      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
     );
     const repository = new Repository({
       entityType: PassiveTaskProjection,
       schema: ProjectionStateSchema,
       handlers,
-      stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectionStateSchema, route),
+      stateUpdateRouting: StateUpdateRouting.create<string>().route(AggregateStateSchema, route),
     });
     const context = BoundedContext.singleTenant("Stored state updates")
       .add(repository)
@@ -11103,7 +11178,7 @@ describe("Projection state-update routing", () => {
             { validate: false },
           ),
         }),
-      ).rejects.toThrow(/readable stored Entity state update/);
+      ).rejects.toThrow(/Projection inbox replay requires EntityStateChanged\.newState/);
       expect(route).toHaveBeenCalledTimes(routeCallsBeforeReplay);
     } finally {
       await context.close();
@@ -11116,13 +11191,13 @@ describe("Projection state-update routing", () => {
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectionStateSchema,
-      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
+      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
     );
     const repository = new Repository({
       entityType: StateObservingProjection,
       schema: ProjectionStateSchema,
       handlers,
-      stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectionStateSchema, route),
+      stateUpdateRouting: StateUpdateRouting.create<string>().route(AggregateStateSchema, route),
     });
     const context = BoundedContext.singleTenant("Empty state updates").add(repository).build();
 
@@ -11142,7 +11217,7 @@ describe("Projection state-update routing", () => {
     const handlers = EntityHandlers.define(
       PassiveTaskProjection,
       ProjectionStateSchema,
-      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
+      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
     );
     const repository = new Repository({
       entityType: PassiveTaskProjection,
@@ -11164,7 +11239,7 @@ describe("Projection state-update routing", () => {
       await dispatcher.dispatch(related);
       const unrelated = createStateChangedEvent(
         "unrelated-system",
-        create(AggregateStateSchema, { id: "unrelated-system" }),
+        create(ProjectionStateSchema, { id: "unrelated-system" }),
       );
       await dispatcher.dispatch(unrelated);
       await accept(unrelated);
@@ -11180,7 +11255,7 @@ describe("Projection state-update routing", () => {
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectionStateSchema,
-      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
+      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
     );
     const event = createStateChangedEvent("source");
 
@@ -11194,7 +11269,7 @@ describe("Projection state-update routing", () => {
         entityType: StateObservingProjection,
         schema: ProjectionStateSchema,
         handlers,
-        stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectionStateSchema, route),
+        stateUpdateRouting: StateUpdateRouting.create<string>().route(AggregateStateSchema, route),
       });
       const context = BoundedContext.singleTenant("Invalid state route").add(repository).build();
       try {
@@ -11213,7 +11288,7 @@ describe("Projection state-update routing", () => {
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectionStateSchema,
-      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
+      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
     );
 
     expect(
@@ -11223,7 +11298,7 @@ describe("Projection state-update routing", () => {
           schema: ProjectionStateSchema,
           handlers,
           stateUpdateRouting: StateUpdateRouting.create<string>().route(
-            AggregateStateSchema,
+            Int32AggregateStateSchema,
             () => ["target"],
           ),
         }),
@@ -11235,7 +11310,7 @@ describe("Projection state-update routing", () => {
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectionStateSchema,
-      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
+      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
     );
     const context = BoundedContext.multitenant("Tenant state updates")
       .add(
@@ -11253,7 +11328,7 @@ describe("Projection state-update routing", () => {
         context,
         createStateChangedEvent(
           "shared",
-          create(ProjectionStateSchema, { id: "shared", name: "Tenant A", priority: 1 }),
+          create(AggregateStateSchema, { id: "shared", name: "Tenant A" }),
           "tenant-a",
         ),
       );
@@ -11278,15 +11353,15 @@ describe("Projection state-update routing", () => {
 
 function createStateChangedEvent(
   id: string,
-  state: Message = create(ProjectionStateSchema, { id }),
+  state: Message = create(AggregateStateSchema, { id }),
   tenantId?: string,
 ) {
   const stateSchema =
-    state.$typeName === ProjectionStateSchema.typeName
-      ? ProjectionStateSchema
-      : state.$typeName === Int64MessageIdProjectionStateSchema.typeName
-        ? Int64MessageIdProjectionStateSchema
-        : AggregateStateSchema;
+    state.$typeName === AggregateStateSchema.typeName
+      ? AggregateStateSchema
+      : state.$typeName === Int64MessageIdSourceStateSchema.typeName
+        ? Int64MessageIdSourceStateSchema
+        : ProjectionStateSchema;
   const origin =
     tenantId === undefined ? undefined : projectionEventOrigin({ pastMessageTenantId: tenantId });
   if (tenantId !== undefined && origin === undefined) {
