@@ -1,6 +1,6 @@
 # Wave 9 Logging, Routing, And Model-Conventions Plan
 
-Status: Approved; pending T-0153 integration
+Status: Implementation complete; T-0167 closure in progress
 
 Date: 2026-08-10
 
