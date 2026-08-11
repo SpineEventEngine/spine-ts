@@ -317,6 +317,34 @@ describe("generated handler registry ingestion", () => {
     ).toThrow(/invalid Event field filter/);
   });
 
+  it("reports hostile generated filter values through the ingestion error contract", () => {
+    for (const where of [null, ["board", "announcements"], 42]) {
+      let failure: unknown;
+      try {
+        new HandlerRegistryIngestor().ingest({
+          version: 2,
+          entities: [
+            {
+              entityType: GeneratedProjection,
+              stateSchema: ProjectionStateSchema,
+              handlers: [
+                {
+                  ...record("event-subscription", "subscribeCreated", EventSchema, []),
+                  where,
+                },
+              ],
+            },
+          ],
+        });
+      } catch (error) {
+        failure = error;
+      }
+
+      expect(failure).toBeInstanceOf(HandlerRegistryIngestionError);
+      expect(failure).toMatchObject({ code: "INVALID_SCHEMA" });
+    }
+  });
+
   it("accepts generated event reactions with no emitted schemas", () => {
     const metadata = new HandlerRegistryIngestor().ingest({
       version: 2,

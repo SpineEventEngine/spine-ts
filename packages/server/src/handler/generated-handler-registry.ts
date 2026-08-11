@@ -430,16 +430,28 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   },
 
   validateWhere(handler: GeneratedHandlerRecordInput): void {
-    const where = handler.where;
+    const where = handler.where as unknown;
     if (where === undefined) return;
+    if (
+      typeof where !== "object" ||
+      where === null ||
+      Array.isArray(where) ||
+      (Reflect.getPrototypeOf(where) !== Object.prototype && Reflect.getPrototypeOf(where) !== null)
+    ) {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        `Generated handler "${handler.methodName}" declares an invalid Event field filter.`,
+      );
+    }
     const keys = Object.keys(where);
+    const filter = where as Record<string, unknown>;
     if (
       keys.length !== 2 ||
       !keys.includes("eventField") ||
       !keys.includes("equals") ||
-      typeof where.eventField !== "string" ||
-      where.eventField.trim().length === 0 ||
-      typeof where.equals !== "string" ||
+      typeof filter.eventField !== "string" ||
+      filter.eventField.trim().length === 0 ||
+      typeof filter.equals !== "string" ||
       (handler.kind !== "event-subscription" &&
         handler.kind !== "event-reaction" &&
         handler.kind !== "command-reaction")

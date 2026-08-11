@@ -57,9 +57,25 @@ describe("Event handler field filtering", () => {
         candidate("two", "id.value", "same"),
       ]),
     ).toThrow(/duplicate canonical value/);
-    expect(() => EventHandlerFilters.compile([candidate("one"), candidate("two")])).toThrow(
-      /more than one unfiltered fallback/,
-    );
+    expect(() =>
+      EventHandlerFilters.compile([
+        candidate("one", "id", '{"value":"same"}'),
+        candidate("two", "id", '{ "value": "same" }'),
+      ]),
+    ).toThrow(/duplicate canonical value/);
+    expect(() =>
+      EventHandlerFilters.compile([
+        candidate("filtered", "id.value", "filtered"),
+        candidate("one"),
+        candidate("two"),
+      ]),
+    ).toThrow(/more than one unfiltered fallback/);
+  });
+
+  it("preserves multiple ordinary handlers when no filter is declared", () => {
+    const plan = EventHandlerFilters.compile([candidate("one"), candidate("two")]);
+
+    expect(plan.select(create(EventSchema))).toEqual(["one", "two"]);
   });
 
   it("rejects unknown, repeated, and non-message intermediate fields", () => {

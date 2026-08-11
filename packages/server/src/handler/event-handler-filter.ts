@@ -48,9 +48,6 @@ export const EventHandlerFilters: Readonly<EventHandlerFilterCompiler> = Object.
     const schema = candidates[0]?.schema;
     if (schema === undefined) return EmptyFilterPlan;
     const fallbacks = candidates.filter(({ where }) => where === undefined);
-    if (fallbacks.length > 1) {
-      throw new Error("Event handler filtering has more than one unfiltered fallback.");
-    }
     const filtered = candidates.filter(
       (
         candidate,
@@ -58,10 +55,12 @@ export const EventHandlerFilters: Readonly<EventHandlerFilterCompiler> = Object.
         candidate.where !== undefined,
     );
     if (filtered.length === 0) {
-      const fallback = fallbacks[0];
       return Object.freeze({
-        select: () => Object.freeze(fallback === undefined ? [] : [fallback.value]),
+        select: () => Object.freeze(fallbacks.map(({ value }) => value)),
       });
+    }
+    if (fallbacks.length > 1) {
+      throw new Error("Event handler filtering has more than one unfiltered fallback.");
     }
     const path = filtered[0]?.where.eventField;
     if (path === undefined) return EmptyFilterPlan;

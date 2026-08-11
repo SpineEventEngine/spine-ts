@@ -1155,6 +1155,32 @@ class FilteredTaskProjection extends Projection<string, typeof ProjectionStateSc
   }
 }
 
+class FilteredEventAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  static calls: string[] = [];
+
+  static reset(): void {
+    this.calls = [];
+  }
+
+  reactAnnouncements(event: ProjectionEvent): AggregateState {
+    FilteredEventAggregate.calls.push(`announcements:${event.name}`);
+    return this.result(event);
+  }
+
+  reactFallback(event: ProjectionEvent): AggregateState {
+    FilteredEventAggregate.calls.push(`fallback:${event.name}`);
+    return this.result(event);
+  }
+
+  private result(event: ProjectionEvent): AggregateState {
+    this.update((draft) => {
+      draft.id = event.id;
+      draft.name = event.name;
+    });
+    return create(AggregateStateSchema, { id: event.id, name: event.name });
+  }
+}
+
 class ManagedTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
   static subscriberCalls = 0;
 
@@ -1548,6 +1574,36 @@ class RoutingProcessManager extends ProcessManager<
       name: `${event.name} produced event`,
       archived: false,
     });
+  }
+}
+
+class FilteredProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  static calls: string[] = [];
+
+  static reset(): void {
+    this.calls = [];
+  }
+
+  reactAnnouncements(event: ProjectionEvent): void {
+    FilteredProcessManager.calls.push(`react-announcements:${event.name}`);
+  }
+
+  reactFallback(event: ProjectionEvent): void {
+    FilteredProcessManager.calls.push(`react-fallback:${event.name}`);
+  }
+
+  commandAnnouncements(event: ProjectionEvent): AggregateState {
+    FilteredProcessManager.calls.push(`command-announcements:${event.name}`);
+    return create(AggregateStateSchema, { id: event.id, name: event.name });
+  }
+
+  commandFallback(event: ProjectionEvent): AggregateState {
+    FilteredProcessManager.calls.push(`command-fallback:${event.name}`);
+    return create(AggregateStateSchema, { id: event.id, name: event.name });
   }
 }
 
@@ -6278,6 +6334,75 @@ describe("repository signal routing", () => {
     }
   });
 
+  it("selects one filtered Aggregate Event reactor before its fallback", async () => {
+    FilteredEventAggregate.reset();
+    const context = BoundedContext.singleTenant("Filtered aggregates")
+      .add(createFilteredAggregateRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: () => Promise.resolve(),
+      })
+      .build();
+
+    try {
+      await context.eventBus().post(
+        createProjectionEvent("event-filtered-aggregate-one", "filtered-aggregate-one", {
+          name: "announcements",
+        }),
+      );
+      await context.eventBus().post(
+        createProjectionEvent("event-filtered-aggregate-two", "filtered-aggregate-two", {
+          name: "general",
+        }),
+      );
+
+      expect(FilteredEventAggregate.calls).toEqual([
+        "announcements:announcements",
+        "fallback:general",
+      ]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("filters Process Manager Event and command reactions independently", async () => {
+    FilteredProcessManager.reset();
+    const commands: SpineCommand[] = [];
+    const context = BoundedContext.singleTenant("Filtered process managers")
+      .add(createFilteredProcessManagerRepository())
+      .addCommandDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: (command) => {
+          commands.push(command);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await context.eventBus().post(
+        createProjectionEvent("event-filtered-pm-one", "filtered-pm-one", {
+          name: "announcements",
+        }),
+      );
+      await context
+        .eventBus()
+        .post(
+          createProjectionEvent("event-filtered-pm-two", "filtered-pm-two", { name: "general" }),
+        );
+
+      expect(FilteredProcessManager.calls).toEqual([
+        "react-announcements:announcements",
+        "command-announcements:announcements",
+        "react-fallback:general",
+        "command-fallback:general",
+      ]);
+      expect(commands).toHaveLength(2);
+    } finally {
+      await context.close();
+    }
+  });
+
   it("emits a System subscriber-dispatch diagnostic after projection admission", async () => {
     const diagnostics: SpineEvent[] = [];
     const event = createProjectionEvent("subscriber-diagnostic", "subscriber-id");
@@ -8873,6 +8998,83 @@ function createFilteredProjectionRepository(): Repository<typeof FilteredTaskPro
   return new Repository({
     entityType: FilteredTaskProjection,
     schema: ProjectionStateSchema,
+    handlers,
+  });
+}
+
+function createFilteredAggregateRepository(): Repository<typeof FilteredEventAggregate> {
+  const handlers = HandlerMetadataValues.defineArity(
+    FilteredEventAggregate,
+    AggregateStateSchema,
+    (builder) => [
+      builder.react(ProjectionEventSchema, "reactAnnouncements"),
+      builder.react(ProjectionEventSchema, "reactFallback"),
+    ],
+    [
+      {
+        kind: "event-reaction",
+        methodName: "reactAnnouncements",
+        parameterCount: 1,
+        emittedSchemas: [AggregateStateSchema],
+        where: { eventField: "name", equals: "announcements" },
+      },
+      {
+        kind: "event-reaction",
+        methodName: "reactFallback",
+        parameterCount: 1,
+        emittedSchemas: [AggregateStateSchema],
+      },
+    ],
+  );
+
+  return new Repository({
+    entityType: FilteredEventAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createFilteredProcessManagerRepository(): Repository<typeof FilteredProcessManager> {
+  const handlers = HandlerMetadataValues.defineArity(
+    FilteredProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [
+      builder.react(ProjectionEventSchema, "reactAnnouncements"),
+      builder.react(ProjectionEventSchema, "reactFallback"),
+      builder.command(ProjectionEventSchema, "commandAnnouncements"),
+      builder.command(ProjectionEventSchema, "commandFallback"),
+    ],
+    [
+      {
+        kind: "event-reaction",
+        methodName: "reactAnnouncements",
+        parameterCount: 1,
+        where: { eventField: "name", equals: "announcements" },
+      },
+      {
+        kind: "event-reaction",
+        methodName: "reactFallback",
+        parameterCount: 1,
+      },
+      {
+        kind: "command-reaction",
+        methodName: "commandAnnouncements",
+        parameterCount: 1,
+        emittedSchemas: [AggregateStateSchema],
+        where: { eventField: "name", equals: "announcements" },
+      },
+      {
+        kind: "command-reaction",
+        methodName: "commandFallback",
+        parameterCount: 1,
+        emittedSchemas: [AggregateStateSchema],
+      },
+    ],
+  );
+
+  return new Repository({
+    entityType: FilteredProcessManager,
+    schema: ProcessManagerStateSchema,
     handlers,
   });
 }

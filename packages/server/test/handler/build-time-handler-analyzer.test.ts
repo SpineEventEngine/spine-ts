@@ -263,6 +263,147 @@ describe("build-time handler analyzer", () => {
     ]);
   });
 
+  it("rejects every non-static or unsupported Where declaration", () => {
+    const methods = `
+      @Where(filter)
+      @Subscribe
+      variable(event: TaskCreated): void { void event; }
+
+      @Where({ ...filter })
+      @Subscribe
+      spread(event: TaskCreated): void { void event; }
+
+      @Where({ ["eventField"]: "board", equals: "one" })
+      @Subscribe
+      computed(event: TaskCreated): void { void event; }
+
+      @Where({ eventField: "board" })
+      @Subscribe
+      missing(event: TaskCreated): void { void event; }
+
+      @Where({ eventField: "board", eventField: "other", equals: "one" })
+      @Subscribe
+      duplicate(event: TaskCreated): void { void event; }
+
+      @Where({ eventField: "board", equals: "one", unexpected: "value" })
+      @Subscribe
+      unknown(event: TaskCreated): void { void event; }
+
+      @Where({ eventField: "board", equals: 42 })
+      @Subscribe
+      nonString(event: TaskCreated): void { void event; }
+
+      @Where({ eventField: "board", equals: "one" })
+      @Where({ eventField: "board", equals: "two" })
+      @Subscribe
+      multiple(event: TaskCreated): void { void event; }
+
+      @Where({ eventField: "board", equals: "one" })
+      @Assign
+      assignment(command: CreateTask): TaskCreated { throw new Error(String(command)); }
+
+      @Where({ eventField: "board", equals: "one" })
+      @Command
+      commandInput(command: CreateTask): RenameTask { throw new Error(String(command)); }
+
+      @Where({ eventField: "board", equals: "one" })
+      undecorated(event: TaskCreated): void { void event; }
+    `;
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/invalid-where.ts",
+        `
+          const filter = { eventField: "board", equals: "one" };
+          ${handlerFixtureSource(
+            "Projection",
+            "TaskListSchema",
+            methods,
+            `
+              import { type CreateTask, type RenameTask } from "../generated/commands_pb.js";
+              import { type TaskCreated } from "../generated/events_pb.js";
+            `,
+          )}
+        `,
+      ),
+    );
+
+    expect(result.entities).toEqual([]);
+    expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual(
+      [
+        "variable",
+        "spread",
+        "computed",
+        "missing",
+        "duplicate",
+        "unknown",
+        "nonString",
+        "multiple",
+        "assignment",
+        "commandInput",
+        "undecorated",
+      ].map((methodName) => ["INVALID_WHERE", methodName]),
+    );
+  });
+
+  it("rejects Where on an Entity-state subscription", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/state-where.ts", {
+        "src/state-where.ts": handlerFixtureSource(
+          "Projection",
+          "TaskListSchema",
+          `
+            @Where({ eventField: "id", equals: "one" })
+            @Subscribe
+            state(state: ObservedState): void { void state; }
+          `,
+          `import { type ObservedState } from "../generated/state_pb.js";`,
+        ),
+        "generated/task_list_pb.ts": generatedModuleWithDescriptorMessages(
+          "spine/examples/todo/task_list.proto",
+          [{ exportName: "TaskList", descriptorName: "TaskList", entityState: true }],
+        ),
+        "generated/state_pb.ts": generatedModuleWithDescriptorMessages(
+          "spine/examples/todo/observed_state.proto",
+          [{ exportName: "ObservedState", descriptorName: "ObservedState", entityState: true }],
+        ),
+      }),
+    );
+
+    expect(result.entities).toEqual([]);
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({ code: "INVALID_WHERE", methodName: "state" }),
+    ]);
+  });
+
+  it("recognizes Where through a server namespace import", () => {
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/namespaced-where.ts",
+        `
+          import * as Spine from "@spine-event-engine/server";
+          import { TaskListSchema } from "../generated/task_list_pb.js";
+          import { type TaskCreated } from "../generated/events_pb.js";
+
+          export class NamespacedProjection extends Spine.Projection<
+            string,
+            typeof TaskListSchema,
+            number
+          > {
+            @Spine.Where({ eventField: "board", equals: "announcements" })
+            @Spine.Subscribe
+            observe(event: TaskCreated): void { void event; }
+          }
+        `,
+      ),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.entities[0]?.handlers[0]).toMatchObject({
+      kind: "event-subscription",
+      where: { eventField: "board", equals: "announcements" },
+    });
+  });
+
   it("rejects rejection messages as assignment inputs and normal handler outputs", () => {
     const roles = [
       ["Assign", "assignRejection", "TaskAlreadyDone", "TaskCreated", "INVALID_SIGNAL_TYPE"],

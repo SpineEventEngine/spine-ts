@@ -120,6 +120,7 @@ import {
   type StateSubscriptionHandlerMetadata,
   type HandlerParameterCount,
   type RegisteredHandlerMetadata,
+  type WhereOptions,
 } from "../handler/handler-metadata.js";
 import { standAccess, type Stand } from "../stand/stand.js";
 import { TransitionValidationError } from "./command-errors.js";
@@ -4071,7 +4072,7 @@ const RepositoryHandlers = {
     Value extends {
       readonly handler: {
         readonly schema: DescriptorMessageSchema;
-        readonly where?: import("../handler/handler-metadata.js").WhereOptions;
+        readonly where?: WhereOptions;
       };
     },
   >(
