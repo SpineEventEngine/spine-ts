@@ -1,6 +1,6 @@
 # T-0167A Review Record
 
-Status: Clean and release verified; integration pending
+Status: Clean, release verified, and integrated; post-main proof pending
 
 ## Review boundary
 

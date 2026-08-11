@@ -1,7 +1,7 @@
 # Spine TS Project Completion Plan
 
-Status: Initial release and T-0080 authored-API/example quality correction
-complete; Wave 9 reopened for T-0167A correction pending integration
+Status: Initial release, T-0080 authored-API/example quality correction, and
+Wave 9 T-0167A semantic-routing correction complete
 
 Plan date: 2026-07-12
 
@@ -194,13 +194,12 @@ removes the invented physical scope and revision fields, adopts native provider
 tenancy and JVM-compatible typed value mapping, and closes the shared-runtime
 cutover.
 
-Wave 9 is reopened for the bounded T-0167A correction after human review found
-that TypeScript interpretation of Java-specific `(is).java_type` and
-`(every_is).java_type`, and the interface-routing APIs built on it, were not an
-approved TypeScript contract. T-0167A removes those surfaces while preserving
-exact/default routing and the canonical frozen Proto definitions. The original
-Wave 9 implementation under T-0153 through T-0167 otherwise remains complete. Its approved scope and
-preliminary Wave 10 beginner-guide structure are frozen in
+Wave 9 is complete under T-0153 through T-0167 and the T-0167A human-review
+correction. T-0167A removes TypeScript interpretation of Java-specific
+`(is).java_type` and `(every_is).java_type`, and the interface-routing APIs
+built on them, while preserving exact/default routing and the canonical frozen
+Proto definitions. Its approved scope and preliminary Wave 10 beginner-guide
+structure are frozen in
 `build-protocol/planning/WAVE_9_LOGGING_ROUTING_PLAN.md`. The dependency-ordered
 implementation train, cross-wave audits, specialist and security concern
 review, fixture convergence, release profile, fast-forward integration, and

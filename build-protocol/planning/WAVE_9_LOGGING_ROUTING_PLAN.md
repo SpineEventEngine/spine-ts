@@ -1,6 +1,6 @@
 # Wave 9 Logging, Routing, And Model-Conventions Plan
 
-Status: Reopened for T-0167A correction; integration pending
+Status: Complete, including the integrated T-0167A semantic-routing correction
 
 Date: 2026-08-10
 
