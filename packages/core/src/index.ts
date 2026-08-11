@@ -6,6 +6,7 @@ import {
   fromJsonString,
   getOption,
   hasOption,
+  ScalarType,
   toBinary,
   toJsonString,
 } from "@bufbuild/protobuf";
@@ -17,6 +18,7 @@ import type {
   Registry,
 } from "@bufbuild/protobuf";
 import type { GenExtension, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { base64Decode, base64Encode } from "@bufbuild/protobuf/wire";
 import {
   AnySchema,
   Int32ValueSchema,
@@ -877,6 +879,175 @@ function restoreAnyTypeUrls(value: unknown, typeUrls: ReadonlyMap<string, string
   for (const item of Object.values(record)) restoreAnyTypeUrls(item, typeUrls);
 }
 
+const FieldStringifiers = Object.freeze({
+  create(
+    field: DescField,
+    messageStringifier: (schema: MessageSchema) => Stringifier<unknown>,
+  ): Stringifier<unknown> {
+    switch (field.fieldKind) {
+      case "message":
+        return messageStringifier(field.message as MessageSchema);
+      case "enum":
+        return this.enum(field);
+      case "scalar":
+        return this.scalar(field);
+      case "list":
+      case "map":
+        throw new Error("Stringifiers support only singular Protobuf fields.");
+    }
+  },
+
+  enum(field: Extract<DescField, { fieldKind: "enum" }>): Stringifier<unknown> {
+    return Object.freeze({
+      fromString(value: string): unknown {
+        const named = field.enum.values.find((candidate) => candidate.name === value);
+        return (
+          named?.number ??
+          Number(FieldStringifiers.integerText(value, -(2n ** 31n), 2n ** 31n - 1n))
+        );
+      },
+      toString(value: unknown): string {
+        const number = FieldStringifiers.integerValue(value, -(2n ** 31n), 2n ** 31n - 1n);
+        return field.enum.value[Number(number)]?.name ?? number.toString();
+      },
+    });
+  },
+
+  scalar(field: Extract<DescField, { fieldKind: "scalar" }>): Stringifier<unknown> {
+    switch (field.scalar) {
+      case ScalarType.STRING:
+        return this.string;
+      case ScalarType.BOOL:
+        return this.boolean;
+      case ScalarType.BYTES:
+        return this.bytes;
+      case ScalarType.DOUBLE:
+      case ScalarType.FLOAT:
+        return this.number;
+      case ScalarType.INT32:
+      case ScalarType.SFIXED32:
+      case ScalarType.SINT32:
+        return this.integer(-(2n ** 31n), 2n ** 31n - 1n, false);
+      case ScalarType.FIXED32:
+      case ScalarType.UINT32:
+        return this.integer(0n, 2n ** 32n - 1n, false);
+      case ScalarType.INT64:
+      case ScalarType.SFIXED64:
+      case ScalarType.SINT64:
+        return this.integer(-(2n ** 63n), 2n ** 63n - 1n, field.longAsString);
+      case ScalarType.FIXED64:
+      case ScalarType.UINT64:
+        return this.integer(0n, 2n ** 64n - 1n, field.longAsString);
+    }
+  },
+
+  string: Object.freeze({
+    fromString(value: string): unknown {
+      return value;
+    },
+    toString(value: unknown): string {
+      if (typeof value !== "string") throw new TypeError("Field value must be a string.");
+      return value;
+    },
+  }),
+
+  boolean: Object.freeze({
+    fromString(value: string): unknown {
+      if (value === "true") return true;
+      if (value === "false") return false;
+      throw new Error("Field value must be a canonical boolean.");
+    },
+    toString(value: unknown): string {
+      if (typeof value !== "boolean") throw new TypeError("Field value must be a boolean.");
+      return value ? "true" : "false";
+    },
+  }),
+
+  bytes: Object.freeze({
+    fromString(value: string): unknown {
+      let decoded: Uint8Array;
+      try {
+        decoded = base64Decode(value);
+      } catch {
+        throw new Error("Field value must be canonical base64.");
+      }
+      if (base64Encode(decoded, "std") !== value) {
+        throw new Error("Field value must be canonical base64.");
+      }
+      return decoded;
+    },
+    toString(value: unknown): string {
+      if (!(value instanceof Uint8Array)) {
+        throw new TypeError("Field value must be a byte array.");
+      }
+      return base64Encode(value, "std");
+    },
+  }),
+
+  number: Object.freeze({
+    fromString(value: string): unknown {
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed)) throw new Error("Field value must be a finite number.");
+      if (String(parsed) !== value) throw new Error("Field value must be a canonical number.");
+      return parsed;
+    },
+    toString(value: unknown): string {
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        throw new TypeError("Field value must be a finite number.");
+      }
+      return String(value);
+    },
+  }),
+
+  integer(min: bigint, max: bigint, asString: boolean): Stringifier<unknown> {
+    return Object.freeze({
+      fromString(value: string): unknown {
+        const restored = FieldStringifiers.integerText(value, min, max);
+        return asString
+          ? restored.toString()
+          : max <= BigInt(Number.MAX_SAFE_INTEGER)
+            ? Number(restored)
+            : restored;
+      },
+      toString(value: unknown): string {
+        const restored = FieldStringifiers.integerValue(value, min, max, asString);
+        return restored.toString();
+      },
+    });
+  },
+
+  integerText(value: string, min: bigint, max: bigint): bigint {
+    if (!/^(?:0|-?[1-9]\d*)$/u.test(value)) {
+      throw new Error("Field value must be a canonical integer.");
+    }
+    const restored = BigInt(value);
+    if (restored < min || restored > max) {
+      const kind = min === 0n && max === 2n ** 64n - 1n ? "uint64" : "declared integer";
+      throw new Error(`Field value is outside the ${kind} range.`);
+    }
+    return restored;
+  },
+
+  integerValue(value: unknown, min: bigint, max: bigint, asString = false): bigint {
+    let converted: bigint;
+    if (asString) {
+      if (typeof value !== "string") throw new TypeError("Field value must be an integer string.");
+      converted = this.integerText(value, min, max);
+    } else if (typeof value === "bigint") {
+      converted = value;
+    } else if (typeof value === "number" && Number.isSafeInteger(value)) {
+      converted = BigInt(value);
+    } else {
+      throw new TypeError("Field value must be an integer.");
+    }
+    if (converted < min || converted > max) {
+      const kind = min === 0n && max === 2n ** 64n - 1n ? "uint64" : "declared integer";
+      throw new Error(`Field value is outside the ${kind} range.`);
+    }
+    return converted;
+  },
+});
+
 /**
  * Supplies reversible default stringifiers for generated Protobuf messages.
  */
@@ -904,6 +1075,17 @@ export const Stringifiers = {
         ? new Map<string, string>()
         : new Map(types.list().map((metadata) => [metadata.schema.typeName, metadata.typeUrl]));
     return defaultMessageStringifier(schema, registry, typeUrls);
+  },
+
+  /**
+   * Creates a reversible stringifier for one supported singular field.
+   *
+   * @param field The Protobuf field descriptor.
+   * @param types The optional generated-type registry used by message fields.
+   * @returns A stringifier for the field's runtime value.
+   */
+  forField(field: DescField, types?: TypeRegistryLookup | Registry): Stringifier<unknown> {
+    return FieldStringifiers.create(field, (schema) => this.forMessage(schema, types));
   },
 } as const;
 Object.freeze(Stringifiers);
@@ -965,6 +1147,16 @@ export class StringifierRegistry {
     return registered === undefined
       ? defaultMessageStringifier(schema, this.#types, this.#typeUrls)
       : (registered as Stringifier<MessageShape<Schema>>);
+  }
+
+  /**
+   * Returns the configured reversible mapping for one supported singular field.
+   *
+   * @param field The Protobuf field descriptor.
+   * @returns A stringifier for the field's runtime value.
+   */
+  forField(field: DescField): Stringifier<unknown> {
+    return FieldStringifiers.create(field, (schema) => this.forMessage(schema));
   }
 }
 
