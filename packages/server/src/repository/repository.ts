@@ -4128,7 +4128,11 @@ const RepositoryRoutes = {
     const commandReactions = RepositoryHandlers.createCommandReactionMap(handlers);
     const commandRoutes = RepositoryRoutes.resolveCommandRoutes(commandSchemas, commandRouting);
     const eventRoutes = RepositoryRoutes.resolveEventRoutes(eventSchemas, eventRouting);
-    const stateRoutes = RepositoryRoutes.resolveStateRoutes(stateSchemas, stateUpdateRouting);
+    const stateRoutes = RepositoryRoutes.resolveStateRoutes(
+      stateSchemas,
+      stateUpdateRouting,
+      metadata.idField,
+    );
 
     return Object.freeze({
       commandSchemas,
@@ -4404,6 +4408,7 @@ const RepositoryRoutes = {
       semantic: ReadonlyMap<string, StateUpdateRoute<Id>>;
       defaultRoute: StateUpdateRoute<Id> | undefined;
     }>,
+    targetIdField: DescriptorFieldMetadata,
   ): ReadonlyMap<DescriptorMessageSchema, StateUpdateRoute<Id>> {
     const routes = new Map<DescriptorMessageSchema, StateUpdateRoute<Id>>();
     const schemaSet = new Set<MessageSchema>(schemas);
@@ -4447,6 +4452,15 @@ const RepositoryRoutes = {
       }
       if (candidates[0] !== undefined) routes.set(schema, candidates[0]);
       else if (routing.defaultRoute !== undefined) routes.set(schema, routing.defaultRoute);
+      else if (
+        !schema.fields.some((field) =>
+          RepositoryRoutes.compatibleStateIdField(field, targetIdField),
+        )
+      ) {
+        throw new Error(
+          `Repository state-update routing has no compatible field in "${schema.typeName}".`,
+        );
+      }
     }
     return routes;
   },
@@ -4593,17 +4607,32 @@ const RepositoryRoutes = {
     targetIdField: DescriptorFieldMetadata,
     signalKind: "state update",
   ): unknown {
-    for (const field of schema.fields) {
-      if (field.fieldKind === "list" || field.fieldKind === "map") continue;
-      const value = (state as Record<string, unknown>)[field.localName];
-      if (value === undefined || value === null || RepositoryRoutes.isBlankRouteId(value)) continue;
-      try {
-        return RepositoryRoutes.readRouteId(value, targetIdField, signalKind).id;
-      } catch {
-        // State fields are examined in declaration order; incompatible values are not targets.
-      }
+    const field = schema.fields.find((candidate) =>
+      RepositoryRoutes.compatibleStateIdField(candidate, targetIdField),
+    );
+    if (field === undefined)
+      throw new Error("Repository state-update routing requires a compatible state field.");
+    const value = (state as Record<string, unknown>)[field.localName];
+    return RepositoryRoutes.readRouteId(value, targetIdField, signalKind).id;
+  },
+
+  compatibleStateIdField(
+    field: MessageSchema["fields"][number],
+    targetIdField: DescriptorFieldMetadata,
+  ): boolean {
+    if (field.fieldKind === "list" || field.fieldKind === "map") return false;
+    const target = targetIdField.descriptor;
+    if (field.fieldKind === "message" && target.fieldKind === "message")
+      return field.message.typeName === target.message.typeName;
+    if (field.fieldKind !== "scalar" || target.fieldKind !== "scalar") return false;
+    try {
+      return (
+        RepositoryRoutes.primitiveIdentifierType(field.scalar) ===
+        RepositoryRoutes.primitiveIdentifierType(target.scalar)
+      );
+    } catch {
+      return false;
     }
-    throw new Error("Repository state-update routing requires a compatible state field.");
   },
 
   isBlankRouteId(value: unknown): boolean {

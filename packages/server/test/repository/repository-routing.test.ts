@@ -10724,6 +10724,45 @@ describe("Projection state-update routing", () => {
     ).toBeUndefined();
   });
 
+  it("rejects an empty first compatible field instead of routing by a later field", () => {
+    const handlers = EntityHandlers.define(
+      ExecutingTaskProjection,
+      ProjectionStateSchema,
+      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
+    );
+    const repository = new Repository({
+      entityType: ExecutingTaskProjection,
+      schema: ProjectionStateSchema,
+      handlers,
+    });
+
+    expect(() =>
+      repository.routeStateUpdate(
+        createStateChangedEvent(
+          "empty-id",
+          create(ProjectionStateSchema, { id: "", name: "not-an-id" }),
+        ),
+      ),
+    ).toThrow(/state update routing requires an ID compatible with the Entity state/);
+  });
+
+  it("rejects construction when the built-in route has no compatible state field", () => {
+    const handlers = EntityHandlers.define(
+      Int64MessageIdProjection,
+      Int64MessageIdProjectionStateSchema,
+      (builder) => [builder.subscribe(Int32AggregateStateSchema, "subscribeState")],
+    );
+
+    expect(
+      () =>
+        new Repository({
+          entityType: Int64MessageIdProjection,
+          schema: Int64MessageIdProjectionStateSchema,
+          handlers,
+        }),
+    ).toThrow(/no compatible field.*Int32AggregateState/i);
+  });
+
   it("evaluates an exact multicast route once and stably deduplicates targets", () => {
     const route = vi.fn(() => ["second", "first", "second"]);
     const handlers = EntityHandlers.define(
