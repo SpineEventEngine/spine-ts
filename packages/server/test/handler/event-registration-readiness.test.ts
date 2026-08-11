@@ -325,6 +325,7 @@ describe("event registration readiness", () => {
       commandAssignments: [],
       commandReactions: [],
       eventSubscriptions: [mutableHandler],
+      stateSubscriptions: [],
       eventReactions: [],
       eventApplications: [],
     };
@@ -390,6 +391,7 @@ describe("event registration readiness", () => {
       commandAssignments: [],
       commandReactions: [],
       eventSubscriptions: [mutableHandler],
+      stateSubscriptions: [],
       eventReactions: [],
       eventApplications: [],
     };
@@ -439,6 +441,7 @@ describe("event registration readiness", () => {
       commandAssignments: [],
       commandReactions: [],
       eventSubscriptions: [handler],
+      stateSubscriptions: [],
       eventReactions: [],
       eventApplications: [],
     };
@@ -521,6 +524,7 @@ function createRegistryLookupForEventNames(
       commandAssignments: [],
       commandReactions: [],
       eventSubscriptions: [handler],
+      stateSubscriptions: [],
       eventReactions: [],
       eventApplications: [],
     };

@@ -296,7 +296,7 @@ interface TypeWalk {
 
 type HandlerDecorator = "Assign" | "Command" | "React" | "Subscribe";
 type ServerDecorator = HandlerDecorator | "Apply";
-type SignalKind = "command" | "event" | "rejection";
+type SignalKind = "command" | "event" | "rejection" | "state";
 
 interface DecoratorUse {
   readonly hasArguments: boolean;
@@ -433,7 +433,7 @@ const HandlerSources = Object.freeze({
     }
 
     return {
-      kind: HandlerSources.handlerKind(handler.name),
+      kind: HandlerSources.handlerKind(handler.name, signalSchema, stateSchema),
       methodName: method,
       signalSchema,
       emittedSchemas,
@@ -505,7 +505,7 @@ const HandlerSources = Object.freeze({
       HandlerSources.validateEntityState(node, stateSchema, scope, className, method),
       HandlerSources.validateName(node, scope, className),
       HandlerSources.validateVisibility(node, scope, className, method),
-      HandlerSources.validateParameters(node, decorator, scope, className, method),
+      HandlerSources.validateParameters(node, decorator, stateSchema, scope, className, method),
       HandlerSources.validateReturn(node, decorator, scope, className, method),
     ].some(Boolean);
   },
@@ -575,6 +575,7 @@ const HandlerSources = Object.freeze({
   validateParameters(
     node: ts.MethodDeclaration,
     decorator: HandlerDecorator,
+    stateSchema: SchemaReference | undefined,
     scope: AnalyzerScope,
     className: string,
     method: string | undefined,
@@ -603,7 +604,11 @@ const HandlerSources = Object.freeze({
     }
 
     const signal = HandlerSources.schemaUseFromType(node.parameters[0].type, scope.imports);
-    if (signal !== undefined && HandlerSources.acceptsSignalKind(decorator, signal.kind)) {
+    if (
+      signal !== undefined &&
+      (HandlerSources.acceptsSignalKind(decorator, signal.kind) ||
+        (decorator === "Subscribe" && HandlerSources.sameSchema(signal.reference, stateSchema)))
+    ) {
       return false;
     }
 
@@ -1054,7 +1059,11 @@ const HandlerSources = Object.freeze({
     );
   },
 
-  handlerKind(decorator: HandlerDecorator): GeneratedHandlerKind {
+  handlerKind(
+    decorator: HandlerDecorator,
+    signalSchema: SchemaReference,
+    stateSchema: SchemaReference | undefined,
+  ): GeneratedHandlerKind {
     switch (decorator) {
       case "Assign":
         return "command-assignment";
@@ -1063,8 +1072,18 @@ const HandlerSources = Object.freeze({
       case "React":
         return "event-reaction";
       case "Subscribe":
-        return "event-subscription";
+        return HandlerSources.sameSchema(signalSchema, stateSchema)
+          ? "state-subscription"
+          : "event-subscription";
     }
+  },
+
+  sameSchema(left: SchemaReference, right: SchemaReference | undefined): boolean {
+    return (
+      right !== undefined &&
+      left.moduleSpecifier === right.moduleSpecifier &&
+      left.exportName === right.exportName
+    );
   },
 
   acceptsSignalKind(decorator: HandlerDecorator, kind: SignalKind | undefined): boolean {

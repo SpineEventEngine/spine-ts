@@ -124,6 +124,26 @@ describe("build-time handler analyzer", () => {
     });
   });
 
+  it("classifies a bare Subscribe parameter matching the entity schema as a state subscription", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/state-subscription.ts", {
+        "src/state-subscription.ts": stateSubscriptionSource,
+        "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
+      }),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.entities[0]?.handlers).toEqual([
+      {
+        kind: "state-subscription",
+        methodName: "observe",
+        signalSchema: schema("../generated/task_pb.js", "TaskSchema"),
+        emittedSchemas: [],
+        parameterCount: 1,
+      },
+    ]);
+  });
+
   it("accepts top-level rejection inputs for every event-consuming handler kind", () => {
     const roles = [
       ["Subscribe", "observe", "void", "event-subscription", [], 2],
@@ -926,6 +946,18 @@ const neutralEventSource = `
     @Subscribe
     observe(event: TaskCreated): void {
       void event;
+    }
+  }
+`;
+
+const stateSubscriptionSource = `
+  import { Projection, Subscribe } from "@spine-event-engine/server";
+  import { TaskSchema, type Task } from "../generated/task_pb.js";
+
+  export class StateProjection extends Projection<string, typeof TaskSchema, bigint> {
+    @Subscribe
+    observe(state: Task): void {
+      void state;
     }
   }
 `;

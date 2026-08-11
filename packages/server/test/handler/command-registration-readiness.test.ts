@@ -244,6 +244,7 @@ describe("command registration readiness", () => {
       commandAssignments: [mutableHandler],
       commandReactions: [],
       eventSubscriptions: [],
+      stateSubscriptions: [],
       eventReactions: [],
       eventApplications: [],
     };
@@ -309,6 +310,7 @@ describe("command registration readiness", () => {
       commandAssignments: [mutableHandler],
       commandReactions: [],
       eventSubscriptions: [],
+      stateSubscriptions: [],
       eventReactions: [],
       eventApplications: [],
     };
@@ -358,6 +360,7 @@ describe("command registration readiness", () => {
       commandAssignments: [handler],
       commandReactions: [],
       eventSubscriptions: [],
+      stateSubscriptions: [],
       eventReactions: [],
       eventApplications: [],
     };
@@ -427,6 +430,7 @@ function createRegistryLookupForCommandNames(
       commandAssignments: [handler],
       commandReactions: [],
       eventSubscriptions: [],
+      stateSubscriptions: [],
       eventReactions: [],
       eventApplications: [],
     };

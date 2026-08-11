@@ -9,7 +9,7 @@ import {
   type HandlerMetadata,
 } from "./handler-metadata.js";
 
-type DecoratedHandlerKind = HandlerKind;
+type DecoratedHandlerKind = Exclude<HandlerKind, "state-subscription">;
 
 interface DecoratedHandlerRecord {
   readonly kind: DecoratedHandlerKind;

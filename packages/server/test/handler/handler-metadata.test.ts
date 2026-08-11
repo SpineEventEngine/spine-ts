@@ -42,6 +42,10 @@ class TaskProjection {
     void event;
   }
 
+  subscribeState(state: ProjectionState): void {
+    void state;
+  }
+
   reactToCreated(event: Message<"spine.core.Event">): void {
     void event;
   }
@@ -194,6 +198,24 @@ describe("handler metadata", () => {
     expect(Object.isFrozen(metadata.handlers)).toBe(true);
     expect(Object.isFrozen(metadata.handlers[0])).toBe(true);
     expect(Object.isFrozen(metadata.eventApplications)).toBe(true);
+  });
+
+  it("keeps Entity-state subscriptions out of Event subscription metadata", () => {
+    const metadata = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
+      builder.subscribe(EventSchema, "subscribeCreated"),
+      builder.subscribe(ProjectionStateSchema, "subscribeState"),
+    ]);
+
+    expect(metadata.handlers.map((handler) => handler.kind)).toEqual([
+      "event-subscription",
+      "state-subscription",
+    ]);
+    expect(metadata.eventSubscriptions.map((handler) => handler.methodName)).toEqual([
+      "subscribeCreated",
+    ]);
+    expect(metadata.stateSubscriptions.map((handler) => handler.methodName)).toEqual([
+      "subscribeState",
+    ]);
   });
 
   it("keeps explicit handler registration one-argument compatible by default", () => {

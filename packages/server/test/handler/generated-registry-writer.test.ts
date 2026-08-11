@@ -40,7 +40,7 @@ describe("generated registry writer", () => {
         'import { TaskSchema } from "../spine/examples/todo/tasks_pb.js";',
         "",
         "export const generatedHandlerRegistry: GeneratedHandlerRegistry = {",
-        "  version: 1,",
+        "  version: 2,",
         "  entities: [",
         "    {",
         "      entityType: TaskAggregate,",
@@ -766,7 +766,7 @@ function createCompileFixture(): string {
     ),
     [
       "export interface GeneratedHandlerRegistry {",
-      "  readonly version: 1;",
+      "  readonly version: 2;",
       "  readonly entities: readonly {",
       "    readonly entityType: new (...args: never[]) => object;",
       "    readonly stateSchema: object;",

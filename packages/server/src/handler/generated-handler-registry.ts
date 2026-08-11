@@ -1,4 +1,4 @@
-import type { DescriptorMessageSchema } from "../entity/entity-metadata.js";
+import { isEntitySchema, type DescriptorMessageSchema } from "../entity/entity-metadata.js";
 import {
   HandlerMetadataValues,
   HandlerMetadataRegistry,
@@ -20,7 +20,7 @@ export interface GeneratedHandlerRegistry {
   /**
    * Generated registry contract version.
    */
-  readonly version: 1;
+  readonly version: 2;
 
   /**
    * Entity handler groups declared by the generated module.
@@ -112,7 +112,11 @@ export class HandlerRegistryIngestionError extends Error {
  * @internal
  */
 export type GeneratedHandlerKind =
-  "command-assignment" | "command-reaction" | "event-subscription" | "event-reaction";
+  | "command-assignment"
+  | "command-reaction"
+  | "event-subscription"
+  | "state-subscription"
+  | "event-reaction";
 
 /**
  * Describes public handler arity recorded by generated registry tooling.
@@ -222,7 +226,7 @@ export interface GeneratedHandlerRecord<
   readonly methodName: HandlerMethodName<Instance>;
 }
 
-const registryVersion = 1;
+const registryVersion = 2;
 
 interface GeneratedRegistryOperations {
   assert(registry: unknown): asserts registry is GeneratedHandlerRegistry;
@@ -275,7 +279,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
       entity.handlers.map((handler) => ({
         kind: handler.kind,
         methodName: handler.methodName,
-        ...(handler.kind === "event-subscription"
+        ...(handler.kind === "event-subscription" || handler.kind === "state-subscription"
           ? {}
           : { emittedSchemas: Object.freeze([...handler.emittedSchemas]) }),
         parameterCount: handler.parameterCount,
@@ -299,6 +303,11 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
           handler.methodName as HandlerMethodName<Instance>,
         );
       case "event-subscription":
+        return builder.subscribe(
+          handler.signalSchema,
+          handler.methodName as HandlerMethodName<Instance>,
+        );
+      case "state-subscription":
         return builder.subscribe(
           handler.signalSchema,
           handler.methodName as HandlerMethodName<Instance>,
@@ -345,8 +354,14 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
       );
     });
 
-    if (handler.kind === "event-subscription") {
+    if (handler.kind === "event-subscription" || handler.kind === "state-subscription") {
       GeneratedRegistry.validateSubscription(handler);
+      if (handler.kind === "state-subscription" && !isEntitySchema(handler.signalSchema)) {
+        throw new HandlerRegistryIngestionError(
+          "INVALID_SCHEMA",
+          `Generated state subscription handler "${handler.methodName}" must declare an entity state schema.`,
+        );
+      }
       return;
     }
 
@@ -404,6 +419,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
       kind === "command-assignment" ||
       kind === "command-reaction" ||
       kind === "event-subscription" ||
+      kind === "state-subscription" ||
       kind === "event-reaction"
     );
   },

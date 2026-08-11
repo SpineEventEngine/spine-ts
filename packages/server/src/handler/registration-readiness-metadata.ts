@@ -179,6 +179,11 @@ class ReadinessMetadataOwner {
         clonedHandlers,
         clonedSchemas,
       ),
+      stateSubscriptions: this.#cloneHandlers(
+        entityHandlers.stateSubscriptions ?? [],
+        clonedHandlers,
+        clonedSchemas,
+      ),
       eventReactions: this.#cloneHandlers(
         entityHandlers.eventReactions,
         clonedHandlers,
