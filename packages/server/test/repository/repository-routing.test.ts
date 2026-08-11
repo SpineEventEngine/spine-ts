@@ -4098,33 +4098,36 @@ describe("repository signal routing", () => {
       .add(repository)
       .withStorageFactory(factory)
       .build();
-    const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: factory,
-    });
-    const target = requireEntityInboxTarget(repository);
-    const command = createAggregateCommand("command-pm-count", "pm-count", "Counted");
-    await context.commandBus().post(command);
-    await waitForCondition(() => RoutingProcessManager.commandCalls === 1);
-    expect(routeCalls).toBe(1);
-    const replayCommand = createAggregateCommand(
-      "command-pm-count-replay",
-      "pm-count",
-      "Counted replay",
-    );
-    const received = await storeEntityInboxCommand(
-      delivery,
-      replayCommand,
-      new Date("2026-07-08T09:02:15.000Z"),
-      1n,
-      { targetId: Identifiers.pack("string", "pm-count") },
-    );
+    try {
+      const delivery = new Delivery({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: factory,
+      });
+      const target = requireEntityInboxTarget(repository);
+      const command = createAggregateCommand("command-pm-count", "pm-count", "Counted");
+      await context.commandBus().post(command);
+      await waitForCondition(() => RoutingProcessManager.commandCalls === 1);
+      expect(routeCalls).toBe(1);
+      const replayCommand = createAggregateCommand(
+        "command-pm-count-replay",
+        "pm-count",
+        "Counted replay",
+      );
+      const received = await storeEntityInboxCommand(
+        delivery,
+        replayCommand,
+        new Date("2026-07-08T09:02:15.000Z"),
+        1n,
+        { targetId: Identifiers.pack("string", "pm-count") },
+      );
 
-    await expect(target.replay(received)).resolves.toBeUndefined();
+      await expect(target.replay(received)).resolves.toBeUndefined();
 
-    expect(routeCalls).toBe(1);
-    expect(RoutingProcessManager.commandCalls).toBe(2);
-    await context.close();
+      expect(routeCalls).toBe(1);
+      expect(RoutingProcessManager.commandCalls).toBe(2);
+    } finally {
+      await context.close();
+    }
   });
 
   it("does not call custom Aggregate routing again for a stored message ID", async () => {
@@ -4140,37 +4143,43 @@ describe("repository signal routing", () => {
       .add(repository)
       .withStorageFactory(factory)
       .build();
-    const delivery = new Delivery({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory: factory,
-    });
-    const target = requireEntityInboxTarget(repository);
-    const command = createTaskCommand("command-message-count", "message-count", "Counted");
-    await context.commandBus().post(command);
-    await expect(
-      context.stand().read(TaskSchema, create(TaskIdSchema, { value: "message-count" })),
-    ).resolves.toBeDefined();
-    expect(routeCalls).toBe(1);
-    const replayCommand = createTaskCommand(
-      "command-message-count-replay",
-      "message-count",
-      "Counted replay",
-    );
-    const received = await storeEntityInboxCommand(
-      delivery,
-      replayCommand,
-      new Date("2026-07-08T09:02:20.000Z"),
-      1n,
-      {
-        targetId: Identifiers.pack(TaskIdSchema, create(TaskIdSchema, { value: "message-count" })),
-        targetTypeUrl: TypeUrls.derive(TaskSchema),
-      },
-    );
+    try {
+      const delivery = new Delivery({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: factory,
+      });
+      const target = requireEntityInboxTarget(repository);
+      const command = createTaskCommand("command-message-count", "message-count", "Counted");
+      await context.commandBus().post(command);
+      await expect(
+        context.stand().read(TaskSchema, create(TaskIdSchema, { value: "message-count" })),
+      ).resolves.toBeDefined();
+      expect(routeCalls).toBe(1);
+      const replayCommand = createTaskCommand(
+        "command-message-count-replay",
+        "message-count",
+        "Counted replay",
+      );
+      const received = await storeEntityInboxCommand(
+        delivery,
+        replayCommand,
+        new Date("2026-07-08T09:02:20.000Z"),
+        1n,
+        {
+          targetId: Identifiers.pack(
+            TaskIdSchema,
+            create(TaskIdSchema, { value: "message-count" }),
+          ),
+          targetTypeUrl: TypeUrls.derive(TaskSchema),
+        },
+      );
 
-    await expect(target.replay(received)).resolves.toBeDefined();
+      await expect(target.replay(received)).resolves.toBeDefined();
 
-    expect(routeCalls).toBe(1);
-    await context.close();
+      expect(routeCalls).toBe(1);
+    } finally {
+      await context.close();
+    }
   });
 
   it("reconstructs stored int32 and int64 targets without rerouting", async () => {
