@@ -194,7 +194,12 @@ removes the invented physical scope and revision fields, adopts native provider
 tenancy and JVM-compatible typed value mapping, and closes the shared-runtime
 cutover.
 
-Wave 9 is complete under T-0153 through T-0167. Its approved scope and
+Wave 9 is reopened for the bounded T-0167A correction after human review found
+that TypeScript interpretation of Java-specific `(is).java_type` and
+`(every_is).java_type`, and the interface-routing APIs built on it, were not an
+approved TypeScript contract. T-0167A removes those surfaces while preserving
+exact/default routing and the canonical frozen Proto definitions. The original
+Wave 9 implementation under T-0153 through T-0167 otherwise remains complete. Its approved scope and
 preliminary Wave 10 beginner-guide structure are frozen in
 `build-protocol/planning/WAVE_9_LOGGING_ROUTING_PLAN.md`. The dependency-ordered
 implementation train, cross-wave audits, specialist and security concern
