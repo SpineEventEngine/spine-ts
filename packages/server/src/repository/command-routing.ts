@@ -78,7 +78,8 @@ export class CommandRouting<Id> {
   /**
    * Registers a descriptor semantic Command route.
    *
-   * @param javaType Descriptor `(is)` or `(every_is)` Java type.
+   * @param javaType Canonical descriptor `(is)` or `(every_is)` Java type,
+   *   without surrounding whitespace.
    * @param via Route that calculates the target Entity ID.
    * @returns These mutable route declarations.
    */
