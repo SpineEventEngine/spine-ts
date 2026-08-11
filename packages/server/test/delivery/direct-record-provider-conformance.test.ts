@@ -1,7 +1,7 @@
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { access } from "node:fs/promises";
-import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
+import { Identifiers, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import {
   InboxMessageSchema,
   ShardSessionRecordSchema,
@@ -130,7 +130,10 @@ describe("direct durable record provider selection", () => {
 function message() {
   return {
     id: { value: "provider-message", shard: new ShardIndex(0, 1) },
-    inboxId: { targetId: "entity", targetTypeUrl: "type.spine.io/test.Entity" },
+    inboxId: {
+      targetId: Identifiers.pack("string", "entity"),
+      targetTypeUrl: "type.spine.io/test.Entity",
+    },
     signalId: "signal",
     signal: create(AnySchema, {
       typeUrl: "type.spine.io/spine.core.Command",
