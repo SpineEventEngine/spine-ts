@@ -1616,23 +1616,7 @@ class AggregateEventExecution {
     );
   }
 
-  async run(): Promise<void> {
-    const intake = this.#readIntake();
-
-    if (intake.reactors.length === 0 && intake.commanders.length === 0) {
-      return;
-    }
-
-    const commands: Command[] = [];
-
-    for (const entityId of intake.route.entityIds) {
-      commands.push(...(await this.#executeEntity(entityId, intake)));
-    }
-
-    await this.#postCommands(commands);
-  }
-
-  async runTarget(entityId: unknown, acceptedRoute?: RepositoryEventRoute): Promise<void> {
+  async runTarget(entityId: unknown, acceptedRoute: RepositoryEventRoute): Promise<void> {
     const intake = this.#readIntake(acceptedRoute);
 
     if (intake.reactors.length === 0 && intake.commanders.length === 0) {
@@ -1642,7 +1626,7 @@ class AggregateEventExecution {
     await this.#postCommands(await this.#executeEntity(entityId, intake));
   }
 
-  #readIntake(acceptedRoute?: RepositoryEventRoute): {
+  #readIntake(acceptedRoute: RepositoryEventRoute): {
     readonly message: unknown;
     readonly route: RepositoryEventRoute;
     readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
@@ -1655,7 +1639,7 @@ class AggregateEventExecution {
       "event",
     );
     const message = EntityInvocation.unpackRequired(eventMessage, eventSchema, "event");
-    const route = acceptedRoute ?? this.#repository.routeEvent(this.#event);
+    const route = acceptedRoute;
     const reactors = this.#routing.eventReadiness
       ?.findEventReactors(route.messageFullTypeName)
       .filter((reactor) => RepositoryHandlers.handlerEmittedSchemas(reactor.handler).length > 0);
@@ -1913,7 +1897,7 @@ class ProjectionEventExecution {
     this.#rebuild = rebuild;
   }
 
-  async run(acceptedRoute?: RepositoryEventRoute): Promise<void> {
+  async run(acceptedRoute: RepositoryEventRoute): Promise<void> {
     const intake = this.#readIntake(acceptedRoute);
 
     if (intake.subscribers.length === 0) {
@@ -1930,7 +1914,7 @@ class ProjectionEventExecution {
     }
   }
 
-  async runTarget(entityId: unknown, acceptedRoute?: RepositoryEventRoute): Promise<void> {
+  async runTarget(entityId: unknown, acceptedRoute: RepositoryEventRoute): Promise<void> {
     const intake = this.#readIntake(acceptedRoute);
 
     if (intake.subscribers.length === 0) {
@@ -2530,7 +2514,7 @@ class ProcessManagerEventExecution {
     this.#support = new ProcessManagerExecutionSupport(repository, runtime);
   }
 
-  async run(acceptedRoute?: RepositoryEventRoute): Promise<void> {
+  async run(acceptedRoute: RepositoryEventRoute): Promise<void> {
     const intake = this.#readIntake(acceptedRoute);
 
     if (intake.reactors.length === 0 && intake.commanders.length === 0) {
@@ -2557,7 +2541,7 @@ class ProcessManagerEventExecution {
     );
   }
 
-  async runTarget(entityId: unknown, acceptedRoute?: RepositoryEventRoute): Promise<void> {
+  async runTarget(entityId: unknown, acceptedRoute: RepositoryEventRoute): Promise<void> {
     const intake = this.#readIntake(acceptedRoute);
 
     if (intake.reactors.length === 0 && intake.commanders.length === 0) {
@@ -2576,7 +2560,7 @@ class ProcessManagerEventExecution {
     );
   }
 
-  #readIntake(acceptedRoute?: RepositoryEventRoute): {
+  #readIntake(acceptedRoute: RepositoryEventRoute): {
     readonly message: unknown;
     readonly route: RepositoryEventRoute;
     readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
@@ -2589,7 +2573,7 @@ class ProcessManagerEventExecution {
       "event",
     );
     const message = EntityInvocation.unpackRequired(eventMessage, eventSchema, "event");
-    const route = acceptedRoute ?? this.#repository.routeEvent(this.#event);
+    const route = acceptedRoute;
     const reactors = this.#routing.eventReadiness?.findEventReactors(route.messageFullTypeName);
     const commanders = this.#routing.commandReactions(route.messageFullTypeName);
 
@@ -5088,8 +5072,7 @@ const InboxReplay = {
       event,
       "Entity Inbox replay",
     );
-    const entityId = route.entityIds[0];
-    if (entityId === undefined) throw new Error("Entity Inbox replay requires a stored target ID.");
+    const [entityId] = route.entityIds;
 
     await new ProcessManagerEventExecution(repository, routing, runtime, event).runTarget(
       entityId,
@@ -5123,10 +5106,7 @@ const InboxReplay = {
       event,
       "Projection inbox replay",
     );
-    const entityId = route.entityIds[0];
-    if (entityId === undefined) {
-      throw new Error("Projection inbox replay requires a stored target ID.");
-    }
+    const [entityId] = route.entityIds;
 
     await new ProjectionEventExecution(repository, routing, runtime, event).runTarget(
       entityId,
@@ -5282,7 +5262,7 @@ const InboxReplay = {
     message: InboxMessage,
     event: Event,
     replayName: string,
-  ): RepositoryEventRoute {
+  ): RepositoryEventRoute & { readonly entityIds: readonly [unknown] } {
     const expectedTargetTypeUrl = TypeUrls.derive(repository.stateSchema);
 
     if (message.inboxId.targetTypeUrl !== expectedTargetTypeUrl) {
@@ -5296,8 +5276,9 @@ const InboxReplay = {
       "event",
     );
     const entityId = InboxMessages.targetEntityId(message.inboxId.targetId, repository.idField);
+    const entityIds: readonly [unknown] = Object.freeze([entityId]);
     return Object.freeze({
-      entityIds: Object.freeze([entityId]),
+      entityIds,
       messageFullTypeName: schema.typeName,
       invocation: "deferred",
     });

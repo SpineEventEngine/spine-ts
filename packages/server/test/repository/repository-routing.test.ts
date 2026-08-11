@@ -3469,6 +3469,10 @@ describe("repository signal routing", () => {
         Array.from({ length: 1_001 }, (_, index) => `target-${String(index)}`),
       ),
     );
+    const notAnArray = createRoutingRepository(
+      undefined,
+      EventRouting.create<string>().route(ProjectionStateSchema, () => "target" as never),
+    );
 
     expect(() =>
       invalid.routeEvent(createProjectionEvent("event-invalid-targets", "ignored")),
@@ -3476,6 +3480,9 @@ describe("repository signal routing", () => {
     expect(() =>
       overflow.routeEvent(createProjectionEvent("event-overflow-targets", "ignored")),
     ).toThrow(/at most 1,000/);
+    expect(() =>
+      notAnArray.routeEvent(createProjectionEvent("event-non-array-targets", "ignored")),
+    ).toThrow(/array of Entity IDs/);
   });
 
   it("uses a compatible producer without requiring first-field equality", () => {
@@ -3613,6 +3620,29 @@ describe("repository signal routing", () => {
         }),
       ).entityIds,
     ).toEqual([producerId]);
+  });
+
+  it("rejects a malformed producer that claims a compatible message ID type", () => {
+    const repository = createMessageIdTaskRepository();
+
+    expect(() =>
+      repository.routeEvent(
+        SignalEnvelopes.event({
+          id: create(EventIdSchema, { value: "event-malformed-message-producer" }),
+          context: create(EventContextSchema, {
+            producerId: create(AnySchema, {
+              typeUrl: TypeUrls.derive(TaskIdSchema),
+              value: new Uint8Array([255]),
+            }),
+          }),
+          schema: TaskCreatedSchema,
+          message: create(TaskCreatedSchema, {
+            id: create(TaskIdSchema, { value: "first-field-task" }),
+            title: "Malformed producer",
+          }),
+        }),
+      ),
+    ).toThrow(/readable compatible producer ID/);
   });
 
   it("falls back to a scalar first field for an incompatible message producer type", () => {

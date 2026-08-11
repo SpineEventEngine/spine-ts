@@ -16,6 +16,11 @@ describe("EventRouting", () => {
     expect(() => EventRouting.create<string>().routeSemantic("   ", route)).toThrow(
       /non-empty Java type/,
     );
+    expect(() =>
+      EventRouting.create<string>()
+        .routeSemantic("example.Type", route)
+        .routeSemantic("example.Type", route),
+    ).toThrow(/duplicate semantic event route/);
     expect(() => EventRouting.create<string>().route(EventSchema, undefined as never)).toThrow(
       /requires a route function/,
     );
