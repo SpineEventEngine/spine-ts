@@ -36,12 +36,22 @@ export class StateUpdateRouting<Id> {
     states.set(this, { exact: new Map(), semantic: new Map(), defaultRoute: undefined });
   }
 
-  /** Creates empty Entity-state route declarations. */
+  /**
+   * Creates empty Entity-state route declarations.
+   *
+   * @returns Mutable declarations for one repository.
+   */
   static create<Id>(): StateUpdateRouting<Id> {
     return new StateUpdateRouting<Id>();
   }
 
-  /** Registers an exact generated Entity-state schema route. */
+  /**
+   * Registers an exact generated Entity-state schema route.
+   *
+   * @param schema Generated Entity-state schema to match.
+   * @param via Route function to invoke.
+   * @returns These mutable declarations.
+   */
   route<Schema extends MessageSchema>(schema: Schema, via: StateUpdateRoute<Id, Schema>): this {
     if (typeof via !== "function")
       throw new TypeError("State-update routing requires a route function.");
@@ -52,7 +62,13 @@ export class StateUpdateRouting<Id> {
     return this;
   }
 
-  /** Registers a descriptor `(is)` or `(every_is)` Entity-state route. */
+  /**
+   * Registers a descriptor `(is)` or `(every_is)` Entity-state route.
+   *
+   * @param javaType Canonical semantic Java type name.
+   * @param via Route function to invoke.
+   * @returns These mutable declarations.
+   */
   routeSemantic(javaType: string, via: StateUpdateRoute<Id>): this {
     if (typeof javaType !== "string" || javaType.trim().length === 0)
       throw new TypeError("State-update semantic routing requires a non-empty Java type.");
@@ -67,7 +83,12 @@ export class StateUpdateRouting<Id> {
     return this;
   }
 
-  /** Replaces the first-compatible-field default state route. */
+  /**
+   * Replaces the first-compatible-field default state route.
+   *
+   * @param via Replacement route function.
+   * @returns These mutable declarations.
+   */
   replaceDefault(via: StateUpdateRoute<Id>): this {
     if (typeof via !== "function")
       throw new TypeError("State-update routing requires a route function.");
@@ -76,7 +97,11 @@ export class StateUpdateRouting<Id> {
   }
 }
 
-/** @internal Internal access to state-routing declaration state. */
+/**
+ * Internal access to state-routing declaration state.
+ *
+ * @internal Repository construction support.
+ */
 export const StateUpdateRoutingInternals: Readonly<{
   state<Id>(routing: StateUpdateRouting<Id>): State<Id>;
   snapshot<Id>(routing: StateUpdateRouting<Id> | undefined): Readonly<{

@@ -1467,9 +1467,8 @@ export class BoundedContextBuilder {
         ...ContextParts.repositoryEventDispatchers(registeredRepositories),
         ...this.#eventDispatchers,
       ];
-      const repositorySystemEventDispatchers = ContextParts.repositorySystemEventDispatchers(
-        registeredRepositories,
-      );
+      const repositorySystemEventDispatchers =
+        ContextParts.repositorySystemEventDispatchers(registeredRepositories);
       const domainEventDispatchers = ContextParts.domainEventDispatchers(eventDispatchers);
       const systemEventDispatchers = [
         ...ContextParts.systemEventDispatchers(eventDispatchers),

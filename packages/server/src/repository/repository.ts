@@ -245,6 +245,7 @@ export interface RepositoryOptions<
   EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
 > {
   // prettier-ignore
+
   /**
    * Entity constructor owned by this repository identity.
    */
@@ -277,7 +278,9 @@ export interface RepositoryOptions<
    */
   readonly eventRouting?: EventRouting<RepositoryEntityId<EntityType>>;
 
-  /** Mutable state-update declarations allowed only for Projections. */
+  /**
+   * Mutable state-update declarations allowed only for Projections.
+   */
   readonly stateUpdateRouting?: StateUpdateRouting<RepositoryEntityId<EntityType>>;
 
   /**
@@ -687,6 +690,8 @@ export class Repository<
   /**
    * Calculates target Projection IDs for one Entity state-change System event.
    *
+   * @param event Entity state-change System event to route.
+   * @returns The calculated route, or `undefined` when this repository does not subscribe.
    * @internal State changes are normally delivered through a built bounded context.
    */
   routeStateUpdate(
@@ -748,9 +753,17 @@ export interface RepositoryEventRoute<Id = unknown> {
   readonly invocation: RepositoryRouteInvocation;
 }
 
-/** @internal Route calculated for one unpacked Entity state update. */
+/**
+ * Route calculated for one unpacked Entity state update.
+ *
+ * @internal Framework delivery metadata.
+ */
 export interface RepositoryStateUpdateRoute<Id = unknown> extends RepositoryEventRoute<Id> {
-  /** Unpacked source Entity state selected from `EntityStateChanged.newState`. */
+  // prettier-ignore
+
+  /**
+   * Unpacked source Entity state selected from `EntityStateChanged.newState`.
+   */
   readonly state: Message;
 }
 
@@ -998,7 +1011,12 @@ export interface RepositoryAccess {
    */
   eventDispatcher(repository: RepositoryView): EventDispatcher | undefined;
 
-  /** Returns the repository System Event dispatcher, if present. */
+  /**
+   * Returns the repository System Event dispatcher, if present.
+   *
+   * @param repository The repository to inspect.
+   * @returns The System Event dispatcher, if present.
+   */
   systemEventDispatcher(repository: RepositoryView): EventDispatcher | undefined;
 
   /**
@@ -4495,14 +4513,7 @@ const RepositoryRoutes = {
     const custom = routes.get(schema);
     const candidateIds =
       custom === undefined
-        ? [
-            RepositoryRoutes.readFirstCompatibleFieldId(
-              state,
-              schema,
-              targetIdField,
-              "state update",
-            ) as Id,
-          ]
+        ? [RepositoryRoutes.firstCompatibleId(state, schema, targetIdField, "state update") as Id]
         : RepositoryRoutes.callStateUpdateRoute(custom, state, event.context, targetIdField);
     return Object.freeze({
       entityIds: Object.freeze([...candidateIds]),
@@ -4601,7 +4612,7 @@ const RepositoryRoutes = {
     return value;
   },
 
-  readFirstCompatibleFieldId(
+  firstCompatibleId(
     state: Message,
     schema: MessageSchema,
     targetIdField: DescriptorFieldMetadata,

@@ -23,6 +23,15 @@ describe("StateUpdateRouting", () => {
         .routeSemantic("example.State", route)
         .routeSemantic("example.State", route),
     ).toThrow(/duplicate semantic state-update route/);
+    expect(() =>
+      StateUpdateRouting.create().route(EntityStateChangedSchema, undefined as never),
+    ).toThrow(/route function/);
+    expect(() =>
+      StateUpdateRouting.create().routeSemantic("example.Other", undefined as never),
+    ).toThrow(/route function/);
+    expect(() => StateUpdateRouting.create().replaceDefault(undefined as never)).toThrow(
+      /route function/,
+    );
   });
 
   it("copies declarations into an immutable construction snapshot", () => {

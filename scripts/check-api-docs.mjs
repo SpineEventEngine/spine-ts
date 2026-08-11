@@ -627,6 +627,8 @@ const expectedServerExports = [
   "ServerRuntimeLifecycle",
   "ServerRuntimeRejectedState",
   "ServerRuntimeRoutingPlan",
+  "StateUpdateRoute",
+  "StateUpdateRouting",
   "RoutingPlanInput",
   "ServerRuntimeState",
   "ServerRuntimeStateError",
