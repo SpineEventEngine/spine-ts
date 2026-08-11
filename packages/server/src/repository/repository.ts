@@ -976,6 +976,9 @@ export interface RepositoryAccess {
    */
   eventDispatcher(repository: RepositoryView): EventDispatcher | undefined;
 
+  /** Returns the repository System Event dispatcher, if present. */
+  systemEventDispatcher(repository: RepositoryView): EventDispatcher | undefined;
+
   /**
    * Returns the Entity Inbox target configured for a repository.
    *
@@ -1060,6 +1063,10 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     return repositoryDispatchers.get(repository)?.event;
   },
 
+  systemEventDispatcher(repository: RepositoryView): EventDispatcher | undefined {
+    return repositoryDispatchers.get(repository)?.systemEvent;
+  },
+
   entityInboxTarget(repository: RepositoryView): EntityInboxTarget | undefined {
     return repositoryEntityInboxTargets.get(repository);
   },
@@ -1100,6 +1107,7 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
 interface RepositoryDispatchers {
   readonly command: CommandDispatcher | undefined;
   readonly event: EventDispatcher | undefined;
+  readonly systemEvent: EventDispatcher | undefined;
 }
 
 interface RepositoryRouting<Id = unknown> {
@@ -5471,6 +5479,7 @@ const RepositoryDispatch = {
                 );
               },
             }),
+      systemEvent: undefined,
     });
   },
 

@@ -1467,8 +1467,14 @@ export class BoundedContextBuilder {
         ...ContextParts.repositoryEventDispatchers(registeredRepositories),
         ...this.#eventDispatchers,
       ];
+      const repositorySystemEventDispatchers = ContextParts.repositorySystemEventDispatchers(
+        registeredRepositories,
+      );
       const domainEventDispatchers = ContextParts.domainEventDispatchers(eventDispatchers);
-      const systemEventDispatchers = ContextParts.systemEventDispatchers(eventDispatchers);
+      const systemEventDispatchers = [
+        ...ContextParts.systemEventDispatchers(eventDispatchers),
+        ...repositorySystemEventDispatchers,
+      ];
       const commandBus = new CommandBus([
         ...this.#commandDispatchers,
         ...ContextParts.repositoryCommandDispatchers(registeredRepositories),
@@ -2187,6 +2193,15 @@ const ContextParts = Object.freeze({
   repositoryEventDispatchers(repositories: readonly RepositoryView[]): readonly EventDispatcher[] {
     return repositories.flatMap((repository) => {
       const dispatcher = repositoryAccess.eventDispatcher(repository);
+      return dispatcher === undefined ? [] : [dispatcher];
+    });
+  },
+
+  repositorySystemEventDispatchers(
+    repositories: readonly RepositoryView[],
+  ): readonly EventDispatcher[] {
+    return repositories.flatMap((repository) => {
+      const dispatcher = repositoryAccess.systemEventDispatcher(repository);
       return dispatcher === undefined ? [] : [dispatcher];
     });
   },
