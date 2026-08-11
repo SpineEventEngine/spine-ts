@@ -23,8 +23,8 @@ export function checkRejectionSourceNames(sourceNames) {
     .map((sourceName) => `${sourceName} must use "rejections.proto" or "*_rejections.proto".`);
 }
 
-function trackedProtoSources() {
-  const result = spawnSync("git", ["ls-files", "-z", "--", "*.proto"], {
+export function trackedProtoSources(run = spawnSync) {
+  const result = run("git", ["ls-files", "-z", "--", "*.proto"], {
     cwd: repoRoot,
     encoding: "utf8",
   });
@@ -34,8 +34,8 @@ function trackedProtoSources() {
   return result.stdout.split("\0").filter(Boolean);
 }
 
-export function main() {
-  const failures = checkRejectionSourceNames(trackedProtoSources());
+export function main(sourceNames = trackedProtoSources()) {
+  const failures = checkRejectionSourceNames(sourceNames);
   if (failures.length === 0) {
     console.log("Rejection source naming checks passed.");
     return 0;

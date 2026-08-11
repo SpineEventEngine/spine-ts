@@ -11,7 +11,6 @@ import type {
   GeneratedHandlerKind,
   GeneratedHandlerParameterCount,
 } from "./generated-handler-registry.js";
-import { RejectionSources } from "./rejection-source.js";
 
 /**
  * Build-time analysis result for bare decorated entity handler methods.
@@ -1701,7 +1700,8 @@ const HandlerSources = Object.freeze({
     sourceFile: string,
     messageIndexes: readonly number[] | undefined,
   ): SignalKind | undefined {
-    if (RejectionSources.matches(sourceFile)) {
+    const sourceName = sourceFile.split(/[\\/]/u).at(-1);
+    if (sourceName === "rejections.proto" || sourceName?.endsWith("_rejections.proto") === true) {
       return messageIndexes?.length === 1 ? "rejection" : undefined;
     }
     if (sourceFile.endsWith("commands.proto")) {
