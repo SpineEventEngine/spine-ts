@@ -1,5 +1,5 @@
 import type { EntityMetadata, DescriptorMessageSchema } from "../entity/entity-metadata.js";
-import { describeEntityMetadata } from "../entity/entity-metadata.js";
+import { describeEntityMetadata, isEntitySchema } from "../entity/entity-metadata.js";
 
 /**
  * Entity class value accepted by explicit handler metadata registration.
@@ -23,6 +23,7 @@ export type HandlerKind =
   | "command-assignment"
   | "command-reaction"
   | "event-subscription"
+  | "state-subscription"
   | "event-reaction"
   | "event-application";
 
@@ -144,6 +145,14 @@ export type EventSubscriptionHandlerMetadata<
 > = BaseHandlerMetadata<"event-subscription", Schema, MethodName>;
 
 /**
+ * Metadata for an Entity-state subscription method.
+ */
+export type StateSubscriptionHandlerMetadata<
+  Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
+  MethodName extends string = string,
+> = BaseHandlerMetadata<"state-subscription", Schema, MethodName>;
+
+/**
  * Metadata for an event reactor method.
  */
 export type EventReactionHandlerMetadata<
@@ -188,6 +197,7 @@ export type HandlerMetadata<
   | CommandAssignmentHandlerMetadata<Schema, MethodName>
   | CommandReactionHandlerMetadata<Schema, MethodName>
   | EventSubscriptionHandlerMetadata<Schema, MethodName>
+  | StateSubscriptionHandlerMetadata<Schema, MethodName>
   | EventReactionHandlerMetadata<Schema, MethodName>
   | EventApplicationHandlerMetadata<Schema, MethodName>;
 
@@ -225,16 +235,20 @@ export interface HandlerRegistrationBuilder<Instance extends object> {
   ): CommandReactionHandlerMetadata<Schema, HandlerMethodName<Instance>>;
 
   /**
-   * Registers an event subscriber method.
+   * Registers an Event/rejection or Entity-state subscriber method.
    *
-   * @param schema Event schema accepted by the method.
+   * @param schema Event, rejection, or descriptor-marked Entity state schema
+   * accepted by the method.
    * @param methodName Entity method name.
-   * @returns The registered event-subscription metadata.
+   * @returns Event-subscription metadata for signals, or state-subscription
+   * metadata for descriptor-marked Entity state schemas.
    */
   subscribe<Schema extends DescriptorMessageSchema>(
     schema: Schema,
     methodName: HandlerMethodName<Instance>,
-  ): EventSubscriptionHandlerMetadata<Schema, HandlerMethodName<Instance>>;
+  ):
+    | EventSubscriptionHandlerMetadata<Schema, HandlerMethodName<Instance>>
+    | StateSubscriptionHandlerMetadata<Schema, HandlerMethodName<Instance>>;
 
   /**
    * Registers an event reactor method.
@@ -301,6 +315,11 @@ export interface EntityHandlersMetadata<
    * Event subscribers in declaration order.
    */
   readonly eventSubscriptions: readonly EventSubscriptionHandlerMetadata[];
+
+  /**
+   * Entity-state subscribers in declaration order.
+   */
+  readonly stateSubscriptions: readonly StateSubscriptionHandlerMetadata[];
 
   /**
    * Event reactors in declaration order.
@@ -795,6 +814,7 @@ class EntityHandlersOwner {
       commandAssignments: this.#ofKind(handlers, "command-assignment"),
       commandReactions: this.#ofKind(handlers, "command-reaction"),
       eventSubscriptions: this.#ofKind(handlers, "event-subscription"),
+      stateSubscriptions: this.#ofKind(handlers, "state-subscription"),
       eventReactions: this.#ofKind(handlers, "event-reaction"),
       eventApplications: this.#ofKind(handlers, "event-application"),
     };
@@ -819,7 +839,15 @@ class EntityHandlersOwner {
       subscribe: <Schema extends DescriptorMessageSchema>(
         schema: Schema,
         methodName: HandlerMethodName<Instance>,
-      ) => this.#handler(entityType, "event-subscription", schema, methodName, built, arities),
+      ) =>
+        this.#handler(
+          entityType,
+          isEntitySchema(schema) ? "state-subscription" : "event-subscription",
+          schema,
+          methodName,
+          built,
+          arities,
+        ),
       react: <Schema extends DescriptorMessageSchema>(
         schema: Schema,
         methodName: HandlerMethodName<Instance>,

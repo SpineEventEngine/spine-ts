@@ -1,7 +1,8 @@
 import { Buffer } from "node:buffer";
 
-import { create, toBinary } from "@bufbuild/protobuf";
-import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
+import { create, setExtension, toBinary } from "@bufbuild/protobuf";
+import { FileDescriptorProtoSchema, MessageOptionsSchema } from "@bufbuild/protobuf/wkt";
+import { entity, EntityOptionSchema } from "@spine-event-engine/proto";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
@@ -85,7 +86,10 @@ describe("build-time handler analyzer", () => {
           "spine/examples/todo/task_events.proto",
           "TaskCreated",
         ),
-        "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
+        "generated/task_pb.ts": generatedModuleWithDescriptorMessages(
+          "spine/examples/todo/tasks.proto",
+          [{ exportName: "Task", descriptorName: "Task", entityState: true }],
+        ),
       }),
     );
 
@@ -122,6 +126,62 @@ describe("build-time handler analyzer", () => {
       emittedSchemas: [],
       parameterCount: 1,
     });
+  });
+
+  it("classifies a bare Subscribe parameter matching the entity schema as a state subscription", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/state-subscription.ts", {
+        "src/state-subscription.ts": stateSubscriptionSource,
+        "generated/task_pb.ts": generatedModuleWithDescriptorMessages(
+          "spine/examples/todo/tasks.proto",
+          [{ exportName: "Task", descriptorName: "Task", entityState: true }],
+        ),
+      }),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.entities[0]?.handlers).toEqual([
+      {
+        kind: "state-subscription",
+        methodName: "observe",
+        signalSchema: schema("../generated/task_pb.js", "TaskSchema"),
+        emittedSchemas: [],
+        parameterCount: 1,
+      },
+    ]);
+  });
+
+  it("classifies a subscription to another Entity state from descriptor metadata", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/foreign-state-subscription.ts", {
+        "src/foreign-state-subscription.ts": foreignStateSubscriptionSource,
+        "generated/receiver_pb.ts": generatedModuleWithDescriptorMessages(
+          "spine/examples/neutral/receiver.proto",
+          [{ exportName: "ReceiverState", descriptorName: "ReceiverState", entityState: true }],
+        ),
+        "generated/foreign_pb.ts": generatedModuleWithDescriptorMessages(
+          "spine/examples/neutral/foreign.proto",
+          [{ exportName: "ForeignState", descriptorName: "ForeignState", entityState: true }],
+        ),
+        "generated/audit_pb.ts": generatedModule(
+          "spine/examples/neutral/audit.proto",
+          "AuditRecord",
+        ),
+      }),
+    );
+
+    expect(result.entities[0]?.handlers).toEqual([
+      {
+        kind: "state-subscription",
+        methodName: "observeForeign",
+        signalSchema: schema("../generated/foreign_pb.js", "ForeignStateSchema"),
+        emittedSchemas: [],
+        parameterCount: 1,
+      },
+    ]);
+    expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual([
+      ["INVALID_SIGNAL_TYPE", "observeAudit"],
+    ]);
   });
 
   it("accepts top-level rejection inputs for every event-consuming handler kind", () => {
@@ -775,7 +835,11 @@ function generatedModule(protoSource: string, ...names: string[]): string {
 
 function generatedModuleWithDescriptorMessages(
   protoSource: string,
-  messages: readonly { readonly exportName: string; readonly descriptorName: string }[],
+  messages: readonly {
+    readonly exportName: string;
+    readonly descriptorName: string;
+    readonly entityState?: boolean;
+  }[],
 ): string {
   const file = "file_spine_example_todo_v1_test";
   const schemas = messages
@@ -863,11 +927,18 @@ function generatedModuleWithMixedDescriptors(): string {
 
 function fileDescriptor(
   protoSource: string,
-  messages: readonly { readonly descriptorName: string }[],
+  messages: readonly { readonly descriptorName: string; readonly entityState?: boolean }[],
 ): string {
   const descriptor = create(FileDescriptorProtoSchema, {
     name: protoSource,
-    messageType: messages.map(({ descriptorName }) => ({ name: descriptorName })),
+    messageType: messages.map(({ descriptorName, entityState }) => {
+      if (entityState !== true) {
+        return { name: descriptorName };
+      }
+      const options = create(MessageOptionsSchema);
+      setExtension(options, entity, create(EntityOptionSchema));
+      return { name: descriptorName, options };
+    }),
   });
 
   return Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64");
@@ -926,6 +997,37 @@ const neutralEventSource = `
     @Subscribe
     observe(event: TaskCreated): void {
       void event;
+    }
+  }
+`;
+
+const stateSubscriptionSource = `
+  import { Projection, Subscribe } from "@spine-event-engine/server";
+  import { TaskSchema, type Task } from "../generated/task_pb.js";
+
+  export class StateProjection extends Projection<string, typeof TaskSchema, bigint> {
+    @Subscribe
+    observe(state: Task): void {
+      void state;
+    }
+  }
+`;
+
+const foreignStateSubscriptionSource = `
+  import { Projection, Subscribe } from "@spine-event-engine/server";
+  import { ReceiverStateSchema } from "../generated/receiver_pb.js";
+  import { type ForeignState } from "../generated/foreign_pb.js";
+  import { type AuditRecord } from "../generated/audit_pb.js";
+
+  export class ReceiverProjection extends Projection<string, typeof ReceiverStateSchema, bigint> {
+    @Subscribe
+    observeForeign(state: ForeignState): void {
+      void state;
+    }
+
+    @Subscribe
+    observeAudit(record: AuditRecord): void {
+      void record;
     }
   }
 `;

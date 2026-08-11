@@ -718,6 +718,7 @@ const expectedServerExports = [
   "EventRuntimeTransportHandler",
   "EventReactionHandlerMetadata",
   "EventSubscriptionHandlerMetadata",
+  "StateSubscriptionHandlerMetadata",
   "HandlerKind",
   "HandlerMetadata",
   "HandlerMetadataError",

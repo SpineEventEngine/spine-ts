@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 
 import type * as Protobuf from "@bufbuild/protobuf";
 import type * as ProtobufWkt from "@bufbuild/protobuf/wkt";
+import type * as SpineProto from "@spine-event-engine/proto";
 import ts from "typescript";
 
 import type {
@@ -286,7 +287,13 @@ interface GeneratedFile {
 
 interface DescriptorMessage {
   readonly name: string;
+  readonly isEntityState: boolean;
   readonly nested: readonly DescriptorMessage[];
+}
+
+interface DescriptorMessageSelection {
+  readonly descriptor: DescriptorMessage;
+  readonly exportName: string;
 }
 
 interface TypeWalk {
@@ -296,7 +303,7 @@ interface TypeWalk {
 
 type HandlerDecorator = "Assign" | "Command" | "React" | "Subscribe";
 type ServerDecorator = HandlerDecorator | "Apply";
-type SignalKind = "command" | "event" | "rejection";
+type SignalKind = "command" | "event" | "rejection" | "state";
 
 interface DecoratorUse {
   readonly hasArguments: boolean;
@@ -313,6 +320,7 @@ const entityBaseNames = new Set(["Aggregate", "Projection", "ProcessManager"]);
 const maxAliasDepth = 50;
 const protobuf = requirePackage("@bufbuild/protobuf") as typeof Protobuf;
 const protobufWkt = requirePackage("@bufbuild/protobuf/wkt") as typeof ProtobufWkt;
+const spineProto = requirePackage("@spine-event-engine/proto") as typeof SpineProto;
 
 const HandlerSources = Object.freeze({
   appSourceFiles(program: ts.Program): readonly ts.SourceFile[] {
@@ -419,10 +427,8 @@ const HandlerSources = Object.freeze({
       return undefined;
     }
 
-    const signalSchema = HandlerSources.schemaUseFromType(
-      node.parameters[0]?.type,
-      scope.imports,
-    )?.reference;
+    const signal = HandlerSources.schemaUseFromType(node.parameters[0]?.type, scope.imports);
+    const signalSchema = signal?.reference;
     const emittedSchemas = HandlerSources.emittedSchemaUses(
       node.type,
       handler.name,
@@ -433,7 +439,7 @@ const HandlerSources = Object.freeze({
     }
 
     return {
-      kind: HandlerSources.handlerKind(handler.name),
+      kind: HandlerSources.handlerKind(handler.name, signal?.kind),
       methodName: method,
       signalSchema,
       emittedSchemas,
@@ -1054,7 +1060,10 @@ const HandlerSources = Object.freeze({
     );
   },
 
-  handlerKind(decorator: HandlerDecorator): GeneratedHandlerKind {
+  handlerKind(
+    decorator: HandlerDecorator,
+    signalKind: SignalKind | undefined,
+  ): GeneratedHandlerKind {
     switch (decorator) {
       case "Assign":
         return "command-assignment";
@@ -1063,7 +1072,7 @@ const HandlerSources = Object.freeze({
       case "React":
         return "event-reaction";
       case "Subscribe":
-        return "event-subscription";
+        return signalKind === "state" ? "state-subscription" : "event-subscription";
     }
   },
 
@@ -1075,7 +1084,9 @@ const HandlerSources = Object.freeze({
       return kind === "command";
     }
 
-    return kind === "event" || kind === "rejection";
+    return (
+      kind === "event" || kind === "rejection" || (decorator === "Subscribe" && kind === "state")
+    );
   },
 
   signalMessage(decorator: HandlerDecorator): string {
@@ -1086,7 +1097,9 @@ const HandlerSources = Object.freeze({
       return "a generated command type";
     }
 
-    return "a generated event or rejection type";
+    return decorator === "Subscribe"
+      ? "a generated event, rejection, or Entity state type"
+      : "a generated event or rejection type";
   },
 
   emittedSignalKind(decorator: HandlerDecorator): SignalKind | undefined {
@@ -1436,13 +1449,19 @@ const HandlerSources = Object.freeze({
       return { found: true, kind: undefined };
     }
     const indexes = HandlerSources.messageDescIndexes(call);
-    const messageName = HandlerSources.descriptorMessageName(file, indexes);
+    const message = HandlerSources.descriptorMessageAt(file, indexes);
+    const messageName = message?.exportName;
     const expectedName = schemaExportName.replace(/Schema$/, "");
     if (messageName === undefined || messageName !== expectedName) {
       return { found: true, kind: undefined };
     }
 
-    return { found: true, kind: HandlerSources.signalKindFromProto(file.sourceFile, indexes) };
+    return {
+      found: true,
+      kind: message?.descriptor.isEntityState
+        ? "state"
+        : HandlerSources.signalKindFromProto(file.sourceFile, indexes),
+    };
   },
 
   messageDescIndexes(call: ts.CallExpression): readonly number[] | undefined {
@@ -1461,18 +1480,19 @@ const HandlerSources = Object.freeze({
     return indexes.length === 0 ? undefined : indexes;
   },
 
-  descriptorMessageName(
+  descriptorMessageAt(
     file: GeneratedFile,
     indexes: readonly number[] | undefined,
-  ): string | undefined {
+  ): DescriptorMessageSelection | undefined {
     if (indexes === undefined) {
       return undefined;
     }
-    const path: string[] = [];
     let messages = file.messages;
+    let message: DescriptorMessage | undefined;
+    const path: string[] = [];
 
     for (const index of indexes) {
-      const message = messages[index];
+      message = messages[index];
       if (message === undefined) {
         return undefined;
       }
@@ -1480,7 +1500,7 @@ const HandlerSources = Object.freeze({
       messages = message.nested;
     }
 
-    return path.join("_");
+    return message === undefined ? undefined : { descriptor: message, exportName: path.join("_") };
   },
 
   fileDescriptor(initializer: ts.Expression | undefined): GeneratedFile | undefined {
@@ -1549,14 +1569,12 @@ const HandlerSources = Object.freeze({
     return undefined;
   },
 
-  descriptorMessage(message: { name: string; nestedType: readonly unknown[] }): DescriptorMessage {
+  descriptorMessage(message: ProtobufWkt.DescriptorProto): DescriptorMessage {
     return {
       name: message.name,
-      nested: message.nestedType.map((nested) =>
-        HandlerSources.descriptorMessage(
-          nested as { name: string; nestedType: readonly unknown[] },
-        ),
-      ),
+      isEntityState:
+        message.options !== undefined && protobuf.hasExtension(message.options, spineProto.entity),
+      nested: message.nestedType.map(HandlerSources.descriptorMessage),
     };
   },
 });

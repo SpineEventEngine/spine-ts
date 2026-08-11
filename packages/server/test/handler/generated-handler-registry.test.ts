@@ -89,9 +89,93 @@ const AggregateStateSchema = messageDesc(
 ) as GenMessage<AggregateState>;
 
 describe("generated handler registry ingestion", () => {
+  it("ingests version-2 state subscriptions separately from Event subscriptions", () => {
+    const metadata = new HandlerRegistryIngestor().ingest({
+      version: 2,
+      entities: [
+        {
+          entityType: GeneratedProjection,
+          stateSchema: ProjectionStateSchema,
+          handlers: [
+            record("event-subscription", "subscribeCreated", EventSchema, []),
+            {
+              kind: "state-subscription",
+              methodName: "subscribeCreated",
+              signalSchema: ProjectionStateSchema,
+              emittedSchemas: [],
+              parameterCount: 1,
+            },
+          ],
+        },
+      ],
+    });
+    const entity = metadata[0] as (typeof metadata)[number] & {
+      readonly stateSubscriptions: readonly { readonly kind: string }[];
+    };
+
+    expect(entity.eventSubscriptions.map((handler) => handler.kind)).toEqual([
+      "event-subscription",
+    ]);
+    expect(entity.stateSubscriptions.map((handler) => handler.kind)).toEqual([
+      "state-subscription",
+    ]);
+  });
+
+  it("rejects version-1 generated registries after the version-2 cutover", () => {
+    expect(() => new HandlerRegistryIngestor().ingest({ version: 1, entities: [] })).toThrow(
+      /version 1 is not supported/,
+    );
+  });
+
+  it("rejects an Event subscription record that declares an Entity-state schema", () => {
+    expect(() =>
+      new HandlerRegistryIngestor().ingest({
+        version: 2,
+        entities: [
+          {
+            entityType: GeneratedProjection,
+            stateSchema: ProjectionStateSchema,
+            handlers: [
+              {
+                kind: "event-subscription",
+                methodName: "subscribeCreated",
+                signalSchema: ProjectionStateSchema,
+                emittedSchemas: [],
+                parameterCount: 1,
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(/must not declare an entity state schema/);
+  });
+
+  it("rejects a state subscription whose signal is not an Entity state", () => {
+    expect(() =>
+      new HandlerRegistryIngestor().ingest({
+        version: 2,
+        entities: [
+          {
+            entityType: GeneratedProjection,
+            stateSchema: ProjectionStateSchema,
+            handlers: [
+              {
+                kind: "state-subscription",
+                methodName: "subscribeCreated",
+                signalSchema: EventSchema,
+                emittedSchemas: [],
+                parameterCount: 1,
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(expect.objectContaining({ code: "INVALID_SCHEMA" }));
+  });
+
   it("ingests generated records into canonical frozen handler metadata", () => {
     const metadata = new HandlerRegistryIngestor().ingest({
-      version: 1,
+      version: 2,
       entities: [
         {
           entityType: GeneratedProjection,
@@ -166,7 +250,7 @@ describe("generated handler registry ingestion", () => {
 
   it("accepts generated event reactions with no emitted schemas", () => {
     const metadata = new HandlerRegistryIngestor().ingest({
-      version: 1,
+      version: 2,
       entities: [
         {
           entityType: GeneratedProjection,
@@ -200,7 +284,7 @@ describe("generated handler registry ingestion", () => {
       ],
     } satisfies GeneratedEntityHandlers<GeneratedProjection, typeof ProjectionStateSchema>;
     const registry = {
-      version: 1,
+      version: 2,
       entities: [group],
     } satisfies GeneratedHandlerRegistry;
 
@@ -210,7 +294,7 @@ describe("generated handler registry ingestion", () => {
 
   it("can register ingested metadata into a caller-owned handler metadata registry", () => {
     const registry = new HandlerRegistryIngestor().register({
-      version: 1,
+      version: 2,
       entities: [
         {
           entityType: GeneratedProjection,
@@ -230,7 +314,7 @@ describe("generated handler registry ingestion", () => {
   it("does not mutate caller-owned registries when registration validation fails", () => {
     const ingestor = new HandlerRegistryIngestor();
     const registry = ingestor.register({
-      version: 1,
+      version: 2,
       entities: [
         {
           entityType: OtherGeneratedProjection,
@@ -246,7 +330,7 @@ describe("generated handler registry ingestion", () => {
     expect(() =>
       ingestor.register(
         {
-          version: 1,
+          version: 2,
           entities: [
             {
               entityType: GeneratedProjection,
@@ -274,22 +358,22 @@ describe("generated handler registry ingestion", () => {
   it("rejects unsupported generated registry versions", () => {
     expect(() =>
       new HandlerRegistryIngestor().ingest({
-        version: 2,
+        version: 3,
         entities: [],
       }),
     ).toThrow(HandlerRegistryIngestionError);
     expect(() =>
       new HandlerRegistryIngestor().ingest({
-        version: 2,
+        version: 3,
         entities: [],
       }),
-    ).toThrow(/version 2 is not supported/);
+    ).toThrow(/version 3 is not supported/);
   });
 
   it("rejects event-application records", () => {
     expect(() =>
       new HandlerRegistryIngestor().ingest({
-        version: 1,
+        version: 2,
         entities: [
           {
             entityType: GeneratedProjection,
@@ -309,7 +393,7 @@ describe("generated handler registry ingestion", () => {
   it("rejects invalid generated handler arity", () => {
     expect(() =>
       new HandlerRegistryIngestor().ingest({
-        version: 1,
+        version: 2,
         entities: [
           {
             entityType: GeneratedProjection,
@@ -329,7 +413,7 @@ describe("generated handler registry ingestion", () => {
   it("rejects malformed generated state, signal, and emitted schemas", () => {
     for (const registry of [
       {
-        version: 1,
+        version: 2,
         entities: [
           {
             entityType: GeneratedProjection,
@@ -339,7 +423,7 @@ describe("generated handler registry ingestion", () => {
         ],
       },
       {
-        version: 1,
+        version: 2,
         entities: [
           {
             entityType: GeneratedProjection,
@@ -356,7 +440,7 @@ describe("generated handler registry ingestion", () => {
         ],
       },
       {
-        version: 1,
+        version: 2,
         entities: [
           {
             entityType: GeneratedProjection,
@@ -384,7 +468,7 @@ describe("generated handler registry ingestion", () => {
     ] as const) {
       expect(() =>
         new HandlerRegistryIngestor().ingest({
-          version: 1,
+          version: 2,
           entities: [
             {
               entityType: GeneratedProjection,
@@ -400,7 +484,7 @@ describe("generated handler registry ingestion", () => {
   it("rejects emitted schemas on generated event subscriptions", () => {
     expect(() =>
       new HandlerRegistryIngestor().ingest({
-        version: 1,
+        version: 2,
         entities: [
           {
             entityType: GeneratedProjection,
@@ -417,7 +501,7 @@ describe("generated handler registry ingestion", () => {
   it("keeps method validation in EntityHandlers.define", () => {
     expect(() =>
       new HandlerRegistryIngestor().ingest({
-        version: 1,
+        version: 2,
         entities: [
           {
             entityType: GeneratedProjection,
@@ -434,7 +518,7 @@ describe("generated handler registry ingestion", () => {
   it("keeps duplicate validation in HandlerMetadataRegistry", () => {
     expect(() =>
       new HandlerRegistryIngestor().register({
-        version: 1,
+        version: 2,
         entities: [
           {
             entityType: GeneratedProjection,

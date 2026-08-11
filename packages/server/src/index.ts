@@ -300,6 +300,7 @@ export {
   type EventApplicationOptions,
   type EventReactionHandlerMetadata,
   type EventSubscriptionHandlerMetadata,
+  type StateSubscriptionHandlerMetadata,
   type HandlerKind,
   type HandlerMetadata,
   EntityHandlers,
