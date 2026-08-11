@@ -1,5 +1,6 @@
 import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { AnyMessages } from "@spine-event-engine/core";
 import { EventSchema } from "@spine-event-engine/proto";
 
 import type { InboxMessage } from "../../src/delivery/inbox.js";
@@ -17,7 +18,7 @@ export function createMessage(
       shard: ShardIndex.single(),
     }),
     inboxId: Object.freeze({
-      targetId: "projection-1",
+      targetId: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: "projection-1" })),
       targetTypeUrl: "type.example.dev/tasks.Projection",
     }),
     signalId,

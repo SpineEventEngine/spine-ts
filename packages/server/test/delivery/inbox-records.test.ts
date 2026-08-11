@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { create } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { Int32ValueSchema } from "@bufbuild/protobuf/wkt";
+import { AnyMessages } from "@spine-event-engine/core";
 
 import { InboxRecords } from "../../src/delivery/inbox-records.js";
 import { InboxMessageError, ShardIndex } from "../../src/index.js";
@@ -13,6 +15,19 @@ describe("InboxRecords", () => {
     expect(restored).toEqual(source);
     expect(restored).not.toBe(source);
     expect(restored.id).not.toBe(source.id);
+  });
+
+  it("preserves a typed JVM EntityId Any without forcing StringValue", () => {
+    const targetId = AnyMessages.pack(Int32ValueSchema, create(Int32ValueSchema, { value: 7 }));
+    const source = {
+      ...createMessage("typed-message", "typed-signal", 1n),
+      inboxId: { targetId, targetTypeUrl: "type.example.dev/TypedEntity" },
+    } as never;
+
+    const wire = InboxRecords.write(source);
+
+    expect(wire.inboxId?.entityId?.id).toEqual(targetId);
+    expect(InboxRecords.read(wire).inboxId.targetId).toEqual(targetId);
   });
 
   it("rejects an invalid shard before serialization", () => {

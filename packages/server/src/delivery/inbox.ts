@@ -120,7 +120,7 @@ export interface InboxId {
   /**
    * Target entity ID routed to one inbox.
    */
-  readonly targetId: string;
+  readonly targetId: Any;
 
   /**
    * Target entity state type URL.

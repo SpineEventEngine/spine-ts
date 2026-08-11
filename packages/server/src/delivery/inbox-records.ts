@@ -1,5 +1,5 @@
-import { create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema, TimestampSchema, type Any } from "@bufbuild/protobuf/wkt";
+import { clone, create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
+import { AnySchema, TimestampSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import {
   InboxIdSchema,
@@ -113,13 +113,7 @@ const Values = Object.freeze({
       signalId: create(InboxSignalIdSchema, { value: message.signalId }),
       inboxId: create(InboxIdSchema, {
         entityId: {
-          id: create(AnySchema, {
-            typeUrl: "type.googleapis.com/google.protobuf.StringValue",
-            value: toBinary(
-              StringValueSchema,
-              create(StringValueSchema, { value: message.inboxId.targetId }),
-            ),
-          }),
+          id: clone(AnySchema, message.inboxId.targetId),
         },
         typeUrl: message.inboxId.targetTypeUrl,
       }),
@@ -148,7 +142,8 @@ const Values = Object.freeze({
     const signal = record.signalId?.value;
     if (
       inbox === undefined ||
-      entity?.typeUrl !== "type.googleapis.com/google.protobuf.StringValue" ||
+      typeof entity?.typeUrl !== "string" ||
+      entity.typeUrl.trim().length === 0 ||
       typeof signal !== "string" ||
       signal.trim().length === 0 ||
       typeof inbox.typeUrl !== "string" ||
@@ -158,13 +153,7 @@ const Values = Object.freeze({
       record.version < 0
     )
       throw new DeliveryStorageCorruptionError("Inbox message record is invalid.");
-    let targetId: string;
-    try {
-      targetId = fromBinary(StringValueSchema, entity.value).value;
-    } catch (error) {
-      throw new DeliveryStorageCorruptionError("Inbox target ID is invalid.", { cause: error });
-    }
-    if (targetId.trim().length === 0)
+    if (!(entity.value instanceof Uint8Array))
       throw new DeliveryStorageCorruptionError("Inbox target ID is invalid.");
     const payload =
       record.payload.case === undefined
@@ -173,7 +162,7 @@ const Values = Object.freeze({
     Values.payloadForLabel(Values.readLabel(record.label), payload, DeliveryStorageCorruptionError);
     return Object.freeze({
       id: Object.freeze({ value: Values.text(id.uuid, "Inbox message ID"), shard }),
-      inboxId: Object.freeze({ targetId, targetTypeUrl: inbox.typeUrl }),
+      inboxId: Object.freeze({ targetId: clone(AnySchema, entity), targetTypeUrl: inbox.typeUrl }),
       signalId: signal,
       ...(payload === undefined ? {} : { signal: payload }),
       label: Values.readLabel(record.label),
@@ -199,8 +188,9 @@ const Values = Object.freeze({
     )
       throw new InboxMessageError("Inbox message ID shard does not match message shard.");
     if (
-      typeof inbox.targetId !== "string" ||
-      inbox.targetId.trim().length === 0 ||
+      typeof inbox.targetId?.typeUrl !== "string" ||
+      inbox.targetId.typeUrl.trim().length === 0 ||
+      !(inbox.targetId.value instanceof Uint8Array) ||
       typeof inbox.targetTypeUrl !== "string" ||
       inbox.targetTypeUrl.trim().length === 0 ||
       typeof value.signalId !== "string" ||

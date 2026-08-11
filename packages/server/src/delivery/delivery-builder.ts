@@ -1,3 +1,5 @@
+import { fromBinary, toBinary } from "@bufbuild/protobuf";
+import { AnySchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
 import type { StorageContext, StorageFactory } from "@spine-event-engine/storage";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
 
@@ -70,7 +72,7 @@ export interface DeliveryStrategy {
    * @param targetType The target type URL.
    * @returns The durable shard for the target.
    */
-  shardFor(targetId: string, targetType: string): ShardIndex;
+  shardFor(targetId: Any, targetType: string): ShardIndex;
 }
 
 /**
@@ -118,19 +120,32 @@ export class UniformAcrossAllShards implements DeliveryStrategy {
    * @param targetType The target type URL.
    * @returns The stable shard for the target.
    */
-  shardFor(targetId: string, targetType: string): ShardIndex {
-    if (typeof targetId !== "string" || targetId.length === 0) {
-      throw new Error("Delivery target ID must be a non-empty string.");
+  shardFor(targetId: Any, targetType: string): ShardIndex {
+    if (typeof targetId.typeUrl !== "string" || targetId.typeUrl.length === 0) {
+      throw new Error("Delivery target ID must be a non-default Any.");
     }
     if (typeof targetType !== "string" || targetType.length === 0) {
       throw new Error("Delivery target type must be a non-empty string.");
     }
     return new ShardIndex(
-      DeliveryValues.hash(`${targetType}:${targetId}`) % this.shardCount,
+      DeliveryValues.hash(`${targetType}:${DeliveryTargets.key(targetId)}`) % this.shardCount,
       this.shardCount,
     );
   }
 }
+
+const DeliveryTargets = Object.freeze({
+  key(targetId: Any): string {
+    if (targetId.typeUrl === "type.googleapis.com/google.protobuf.StringValue") {
+      try {
+        return fromBinary(StringValueSchema, targetId.value).value;
+      } catch {
+        throw new Error("Delivery target ID must be a valid StringValue.");
+      }
+    }
+    return `${targetId.typeUrl}:${Buffer.from(toBinary(AnySchema, targetId)).toString("base64")}`;
+  },
+});
 
 export { DeliveryMonitor, type DeliveryStatistics } from "./delivery-monitor.js";
 
@@ -427,7 +442,7 @@ const DeliveryValues = Object.freeze({
     const shardCount = this.requireStrategy(strategy).shardCount;
     return Object.freeze({
       shardCount,
-      shardFor(targetId: string, targetType: string): ShardIndex {
+      shardFor(targetId: Any, targetType: string): ShardIndex {
         const shard = strategy.shardFor(targetId, targetType);
         if (shard.ofTotal !== shardCount) {
           throw new Error("Delivery strategy shard total must equal its resolved shard count.");

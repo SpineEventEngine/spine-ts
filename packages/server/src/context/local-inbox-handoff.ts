@@ -1,3 +1,4 @@
+import type { Any } from "@bufbuild/protobuf/wkt";
 import type { TenantId } from "@spine-event-engine/proto";
 import { TenantBoundary } from "@spine-event-engine/storage";
 
@@ -352,7 +353,7 @@ export interface LocalInboxKeyInput {
    * Identifies the inbox target receiving the message.
    */
   readonly inboxId: {
-    readonly targetId: string;
+    readonly targetId: Any;
     readonly targetTypeUrl: string;
   };
 
