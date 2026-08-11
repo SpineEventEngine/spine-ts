@@ -400,7 +400,9 @@ export interface RegisterTypeOptions {
   readonly typeUrl?: string;
 
   /**
-   * Semantic marker tags from Spine `(is)` or `(every_is)` metadata.
+   * Caller-supplied compatibility tags for semantic-tag lookup only. They do
+   * not populate or impersonate descriptor-backed `(is)` / `(every_is)`
+   * provenance, lookup, or routing.
    */
   readonly semanticTags?: readonly string[];
 }
@@ -457,7 +459,9 @@ export interface TypeMetadata<Schema extends MessageSchema = MessageSchema> {
   readonly firstFieldName: string | undefined;
 
   /**
-   * Semantic tags explicitly registered for this schema.
+   * Caller-supplied compatibility tags for semantic-tag lookup only. They
+   * cannot populate or impersonate descriptor-backed `(is)` / `(every_is)`
+   * provenance, lookup, or routing.
    */
   readonly semanticTags: readonly string[];
 
@@ -1241,7 +1245,9 @@ export class TypeRegistry {
   /**
    * Registers one schema and returns its immutable metadata.
    * @param schema The generated message schema.
-   * @param options Optional type URL and semantic tag metadata.
+   * @param options Optional type URL and caller-supplied compatibility tags.
+   * Compatibility tags cannot populate or impersonate descriptor-backed
+   * `(is)` / `(every_is)` provenance, lookup, or routing.
    * @returns The registered schema metadata.
    */
   register<Schema extends MessageSchema>(

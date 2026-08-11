@@ -4,7 +4,7 @@ import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { TypeRegistry, TypeUrls } from "@spine-event-engine/core";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { CommandSchema, file_spine_options } from "@spine-event-engine/proto";
 import {
   serverEntityMetadataFixtureGeneration,
@@ -536,7 +536,7 @@ describe("@spine-event-engine/server", () => {
     }
   });
 
-  it("extracts entity kind, default visibility, routing hints, columns, set-once fields, and tags", () => {
+  it("extracts entity kind, default visibility, routing hints, columns, set-once fields, and canonical tags", () => {
     const metadata = describeEntityMetadata(ProjectionStateSchema);
 
     expect(metadata.fullTypeName).toBe("ProjectionState");
@@ -551,22 +551,25 @@ describe("@spine-event-engine/server", () => {
     expect(metadata.firstFieldRoutingHint.field.name).toBe("id");
     expect(metadata.columns.map((field) => field.name)).toEqual(["name", "priority"]);
     expect(metadata.setOnceFields.map((field) => field.name)).toEqual(["id"]);
-    expect(metadata.semanticTags).toEqual(["example.tags.ProjectionTag", "example.tags.SharedTag"]);
+    expect(metadata.semanticTags).toEqual([
+      "example.tags.ASharedTag",
+      "example.tags.ZProjectionTag",
+    ]);
   });
 
   it("shares descriptor is and every-is provenance with the core registry", () => {
     const registry = new TypeRegistry();
     const projection = registry.register(ProjectionStateSchema);
     const aggregate = registry.register(AggregateStateSchema, {
-      semanticTags: ["example.tags.ProjectionTag"],
+      semanticTags: ["example.tags.ZProjectionTag"],
     });
 
-    expect(projection.isTypes).toEqual(["example.tags.ProjectionTag"]);
-    expect(projection.everyIsTypes).toEqual(["example.tags.SharedTag"]);
-    expect(registry.findByIs("example.tags.ProjectionTag")).toEqual([projection]);
-    expect(registry.findByEveryIs("example.tags.SharedTag")).toEqual([projection, aggregate]);
-    expect(registry.findByIs("example.tags.ProjectionTag")).not.toContain(aggregate);
-    expect(Object.isFrozen(registry.findByIs("example.tags.ProjectionTag"))).toBe(true);
+    expect(projection.isTypes).toEqual(["example.tags.ZProjectionTag"]);
+    expect(projection.everyIsTypes).toEqual(["example.tags.ASharedTag"]);
+    expect(registry.findByIs("example.tags.ZProjectionTag")).toEqual([projection]);
+    expect(registry.findByEveryIs("example.tags.ASharedTag")).toEqual([projection, aggregate]);
+    expect(registry.findByIs("example.tags.ZProjectionTag")).not.toContain(aggregate);
+    expect(Object.isFrozen(registry.findByIs("example.tags.ZProjectionTag"))).toBe(true);
   });
 
   it("keeps explicit aggregate visibility and descriptor ordering deterministic", () => {
@@ -578,7 +581,7 @@ describe("@spine-event-engine/server", () => {
     expect(metadata.visibilitySource).toBe("explicit");
     expect(metadata.columns).toEqual([]);
     expect(metadata.setOnceFields.map((field) => field.name)).toEqual(["id"]);
-    expect(metadata.semanticTags).toEqual(["example.tags.AggregateTag", "example.tags.SharedTag"]);
+    expect(metadata.semanticTags).toEqual(["example.tags.ASharedTag", "example.tags.AggregateTag"]);
   });
 
   it("normalizes the remaining supported entity kinds and visibility values", () => {
@@ -594,6 +597,13 @@ describe("@spine-event-engine/server", () => {
   it("ignores column declarations on entity kinds that are not column-eligible", () => {
     expect(describeEntityMetadata(AggregateStateSchema).columns).toEqual([]);
     expect(describeEntityMetadata(GenericStateSchema).columns).toEqual([]);
+  });
+
+  it("deduplicates and freezes semantic tags shared by descriptor provenance sources", () => {
+    const tags = describeEntityMetadata(GenericStateSchema).semanticTags;
+
+    expect(tags).toEqual(["example.tags.ASharedTag"]);
+    expect(Object.isFrozen(tags)).toBe(true);
   });
 
   it("documents the checked-in fixture regeneration path", () => {
@@ -626,9 +636,31 @@ describe("@spine-event-engine/server", () => {
     expect(() => describeEntityMetadata(InvalidColumnStateSchema)).toThrow(
       /column field "InvalidColumnState\.tags" must be singular/,
     );
-    expect(() => describeEntityMetadata(InvalidTagStateSchema)).toThrow(
-      /semantic tag option "InvalidTagState" must declare a non-empty java_type/,
+    let invalidTagError: unknown;
+    try {
+      describeEntityMetadata(InvalidTagStateSchema);
+    } catch (error) {
+      invalidTagError = error;
+    }
+    expect(invalidTagError).toBeInstanceOf(DescriptorMetadataError);
+    expect(invalidTagError).toMatchObject({ code: "INVALID_SEMANTIC_TAG" });
+    expect(invalidTagError).toHaveProperty(
+      "message",
+      'semantic tag option "InvalidTagState" must declare a non-empty java_type.',
     );
+  });
+
+  it("preserves unrelated core registry errors at the descriptor boundary", () => {
+    const cause = new Error("unrelated registry failure");
+    const register = vi.spyOn(TypeRegistry.prototype, "register").mockImplementationOnce(() => {
+      throw cause;
+    });
+
+    try {
+      expect(() => describeEntityMetadata(ProjectionStateSchema)).toThrow(cause);
+    } finally {
+      register.mockRestore();
+    }
   });
 
   it("rejects malformed descriptor semantic values without indexing the schema", () => {
@@ -638,7 +670,7 @@ describe("@spine-event-engine/server", () => {
       /semantic tag option "InvalidTagState" must declare a non-empty java_type/,
     );
     expect(registry.findByIs("example.tags.InvalidTag")).toEqual([]);
-    expect(registry.findByEveryIs("example.tags.SharedTag")).toEqual([]);
+    expect(registry.findByEveryIs("example.tags.ASharedTag")).toEqual([]);
     expect(registry.findByFullName(InvalidTagStateSchema.typeName)).toBeUndefined();
   });
 });

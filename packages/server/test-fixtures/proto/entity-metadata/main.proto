@@ -2,11 +2,11 @@ syntax = "proto3";
 
 import "spine/options.proto";
 
-option (every_is).java_type = "example.tags.SharedTag";
+option (every_is).java_type = "example.tags.ASharedTag";
 
 message ProjectionState {
   option (entity).kind = PROJECTION;
-  option (is).java_type = "example.tags.ProjectionTag";
+  option (is).java_type = "example.tags.ZProjectionTag";
 
   string id = 1 [(set_once) = true];
   string name = 2 [(column) = true];
@@ -25,6 +25,7 @@ message AggregateState {
 
 message GenericState {
   option (entity).kind = ENTITY;
+  option (is).java_type = "example.tags.ASharedTag";
 
   string id = 1;
   string searchable = 2 [(column) = true];

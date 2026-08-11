@@ -9,8 +9,6 @@ import {
   type EntityOption,
   EntityOption_Kind,
   EntityOption_Visibility,
-  every_is,
-  is,
   set_once,
 } from "@spine-event-engine/proto";
 
@@ -297,10 +295,18 @@ export function describeEntityMetadata<Schema extends DescriptorMessageSchema>(
       .filter((field) => hasOption(field, set_once) && getOption(field, set_once))
       .map(EntityDescriptors.field),
   );
-  const registered = new TypeRegistry().register(schema as never);
-  const semanticTags = Object.freeze([
-    ...new Set([...registered.isTypes, ...registered.everyIsTypes]),
-  ]);
+  let registered: ReturnType<TypeRegistry["register"]>;
+  try {
+    registered = new TypeRegistry().register(schema as never);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("semantic tag option ")) {
+      throw new DescriptorMetadataError("INVALID_SEMANTIC_TAG", error.message);
+    }
+    throw error;
+  }
+  const semanticTags = Object.freeze(
+    [...new Set([...registered.isTypes, ...registered.everyIsTypes])].sort(),
+  );
   const metadata: EntityMetadata<Schema> = {
     schema,
     descriptor: schema,
@@ -392,22 +398,5 @@ const EntityDescriptors = Object.freeze({
           return EntityDescriptors.field(field);
         }),
     );
-  },
-  tags(schema: DescriptorMessageSchema): readonly string[] {
-    const tags = new Set<string>();
-    if (hasOption(schema.file, every_is))
-      tags.add(EntityDescriptors.tag(getOption(schema.file, every_is).javaType, schema.file.name));
-    if (hasOption(schema, is))
-      tags.add(EntityDescriptors.tag(getOption(schema, is).javaType, schema.typeName));
-    return Object.freeze([...tags].sort());
-  },
-  tag(rawValue: string, owner: string): string {
-    const value = rawValue.trim();
-    if (value.length === 0)
-      throw new DescriptorMetadataError(
-        "INVALID_SEMANTIC_TAG",
-        `Entity semantic tag option "${owner}" must declare a non-empty java_type.`,
-      );
-    return value;
   },
 });
