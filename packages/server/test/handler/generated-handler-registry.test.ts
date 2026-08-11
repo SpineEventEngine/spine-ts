@@ -127,6 +127,29 @@ describe("generated handler registry ingestion", () => {
     );
   });
 
+  it("rejects a state subscription whose signal is not an Entity state", () => {
+    expect(() =>
+      new HandlerRegistryIngestor().ingest({
+        version: 2,
+        entities: [
+          {
+            entityType: GeneratedProjection,
+            stateSchema: ProjectionStateSchema,
+            handlers: [
+              {
+                kind: "state-subscription",
+                methodName: "subscribeCreated",
+                signalSchema: EventSchema,
+                emittedSchemas: [],
+                parameterCount: 1,
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(expect.objectContaining({ code: "INVALID_SCHEMA" }));
+  });
+
   it("ingests generated records into canonical frozen handler metadata", () => {
     const metadata = new HandlerRegistryIngestor().ingest({
       version: 2,

@@ -144,7 +144,9 @@ export type EventSubscriptionHandlerMetadata<
   MethodName extends string = string,
 > = BaseHandlerMetadata<"event-subscription", Schema, MethodName>;
 
-/** Metadata for an Entity-state subscription method. */
+/**
+ * Metadata for an Entity-state subscription method.
+ */
 export type StateSubscriptionHandlerMetadata<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
   MethodName extends string = string,
@@ -312,7 +314,9 @@ export interface EntityHandlersMetadata<
    */
   readonly eventSubscriptions: readonly EventSubscriptionHandlerMetadata[];
 
-  /** Entity-state subscribers in declaration order. */
+  /**
+   * Entity-state subscribers in declaration order.
+   */
   readonly stateSubscriptions: readonly StateSubscriptionHandlerMetadata[];
 
   /**
