@@ -1,6 +1,6 @@
 # T-0157 Review Record
 
-Status: Correction-complete; targeted re-review pending
+Status: Complete
 
 ## Assignments
 
@@ -94,3 +94,21 @@ pending.
 - Final gates pass: `pnpm lint:cleanup`, `pnpm typecheck:build:generated`,
   `pnpm typecheck:tooling`, `pnpm lint:tsdoc`, `pnpm docs:api:check`, exact
   changed-TypeScript ESLint, Prettier, and `git diff --check`.
+
+## Final Review And Verification
+
+- Style/maintainability: CLEAN. The frozen grouped discriminator is focused,
+  cleanup-compliant, and retains the private code-bearing implementation.
+- TypeScript/API documentation: CLEAN. The provenance arrays, compatibility
+  metadata, registry lookups, and `SemanticOptionErrors.isInvalid()` narrowing
+  contract are accurate and declaration-safe.
+- Documentation/TSDoc: CLEAN. Product Markdown remains untouched for Wave 10.
+- Performance/reliability: CLEAN. Malformed registration is atomic, unrelated
+  errors are not translated, lookups are immutable, and tag order is canonical.
+- Runtime metadata was unavailable; the configured immutable reviewer profiles
+  recorded above are the evidence.
+- Final `verify:task -- --no-coverage` passed all repository gates and 2 files /
+  69 tests. Final changed-source coverage remains 100% in every metric:
+  statements/lines 29/29, branches 14/14, and functions 8/8.
+
+Disposition: accepted for merge.
