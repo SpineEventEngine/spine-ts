@@ -1,6 +1,6 @@
 # T-0165 Review Record
 
-Status: Concern review complete; final verification pending
+Status: Accepted; integration pending
 
 ## Assignments
 
@@ -49,5 +49,13 @@ claimed.
   credential, authorization, or externally reachable runtime behavior changed;
   final Wave 9 security review remains assigned to T-0167.
 
-No correction finding remains. Final bounded verification and integration are
-pending.
+No correction finding remains. Integration is pending.
+
+## Final verification
+
+`verify:task --no-coverage` passed the complete bounded gate set and its 6-file
+/ 122-test focused selection. Release readiness verified 82 package imports, 51
+package assets, and 320 relative Markdown links. The separately measured
+changed-source coverage remains above every required threshold.
+
+T-0165 is accepted for integration.

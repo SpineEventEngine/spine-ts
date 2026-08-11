@@ -1,6 +1,6 @@
 # T-0165: Rejection conformance
 
-Status: Review-complete; final verification pending
+Status: Accepted; integration pending
 
 ## Objective
 
