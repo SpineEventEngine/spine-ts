@@ -6,7 +6,11 @@ import { pathToFileURL } from "node:url";
 import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import {
+  FileDescriptorProtoSchema,
+  FileDescriptorSetSchema,
+  StringValueSchema,
+} from "@bufbuild/protobuf/wkt";
 import { AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   EventContextSchema,
@@ -84,7 +88,7 @@ export async function lifecycleFixture(
         {
           kind: "event-subscription" as const,
           methodName: "onEvent",
-          signalSchema: LifecycleStateSchema,
+          signalSchema: StringValueSchema,
           emittedSchemas: [],
           parameterCount: 1 as const,
         },
@@ -103,7 +107,7 @@ export async function lifecycleFixture(
         dispatch: () => Promise.resolve(),
       })
       .addEventDispatcher({
-        messageSchemas: () => [LifecycleStateSchema],
+        messageSchemas: () => [StringValueSchema],
         dispatch: () => Promise.resolve(),
       })
       .build();
@@ -114,7 +118,7 @@ export async function lifecycleFixture(
   ) =>
     BoundedContext.singleTenant(name)
       .addEventDispatcher({
-        messageSchemas: () => [LifecycleStateSchema],
+        messageSchemas: () => [StringValueSchema],
         dispatch: (event) => {
           const id = event.id?.value ?? "missing";
           observed.push(id);
@@ -129,8 +133,8 @@ export async function lifecycleFixture(
         producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: id })),
         version: create(VersionSchema, { number: 1 }),
       }),
-      schema: LifecycleStateSchema,
-      message: create(LifecycleStateSchema, { id }),
+      schema: StringValueSchema,
+      message: create(StringValueSchema, { value: id }),
     });
   const context = await createContext("Lifecycle");
 
@@ -431,7 +435,7 @@ function generatedRegistry(
   const moduleDirectory = join(directory, "generated/handler");
   const registryPath = join(moduleDirectory, "generated-handler-registry.js");
   mkdirSync(moduleDirectory, { recursive: true });
-  (globalThis as Record<string, unknown>)[slot] = Object.freeze({ version: 1, entities });
+  (globalThis as Record<string, unknown>)[slot] = Object.freeze({ version: 2, entities });
   writeFileSync(
     registryPath,
     `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,

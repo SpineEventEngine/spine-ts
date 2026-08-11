@@ -42,6 +42,11 @@ import {
   type NativeAggregateState,
   type NativeProjectionState,
 } from "../../test-fixtures/native-subscription-fixtures.js";
+import {
+  TaskCreatedSchema,
+  type TaskCreated,
+} from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import { TaskIdSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 
 class NativeAggregate extends Aggregate<string, typeof NativeAggregateStateSchema, bigint> {
   assign(command: NativeAggregateState): NativeAggregateState {
@@ -64,14 +69,15 @@ class NativeAggregate extends Aggregate<string, typeof NativeAggregateStateSchem
 }
 
 class NativeProjection extends Projection<string, typeof NativeProjectionStateSchema, number> {
-  project(event: NativeProjectionState): void {
+  project(event: TaskCreated): void {
+    const id = event.id?.value ?? "";
     this.update((draft) =>
       Object.assign(
         draft,
         create(NativeProjectionStateSchema, {
-          id: event.id,
-          name: `${event.name} projection`,
-          priority: event.priority + 1,
+          id,
+          name: `${event.title} projection`,
+          priority: 2,
         }),
       ),
     );
@@ -158,7 +164,7 @@ describe("native service subscriptions", () => {
           handlers: EntityHandlers.define(
             NativeProjection,
             NativeProjectionStateSchema,
-            (builder) => [builder.subscribe(NativeProjectionStateSchema, "project")],
+            (builder) => [builder.subscribe(TaskCreatedSchema, "project")],
           ),
         }),
       )
@@ -174,7 +180,7 @@ describe("native service subscriptions", () => {
       const next = nextSubscriptionUpdate(iterator);
       await activationTurn();
 
-      await context.eventBus().post(createProjectionEvent("projection-1", "Projection"));
+      await context.eventBus().post(createProjectionTriggerEvent("projection-1", "Projection"));
 
       await expectNativeState(next, NativeProjectionStateSchema, {
         id: "projection-1",
@@ -291,6 +297,21 @@ function createProjectionEvent(id: string, name: string) {
     }),
     schema: NativeProjectionStateSchema,
     message: create(NativeProjectionStateSchema, { id, name, priority: 1 }),
+  });
+}
+
+function createProjectionTriggerEvent(id: string, title: string) {
+  return SignalEnvelopes.event({
+    id: create(EventIdSchema, { value: `event-${id}` }),
+    context: create(EventContextSchema, {
+      origin: { case: "importContext", value: createActorContext() },
+      producerId: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
+    }),
+    schema: TaskCreatedSchema,
+    message: create(TaskCreatedSchema, {
+      id: create(TaskIdSchema, { value: id }),
+      title,
+    }),
   });
 }
 

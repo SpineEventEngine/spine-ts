@@ -187,14 +187,14 @@ class GeneratedTaskAggregate extends Aggregate<string, typeof AggregateStateSche
   }
 }
 class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
-  onProjection(event: ProjectionState): void {
+  onProjection(event: ProcessManagerState): void {
     this.update((draft) =>
       Object.assign(
         draft,
         create(ProjectionStateSchema, {
           id: event.id,
-          name: event.name,
-          priority: event.priority,
+          name: event.queue,
+          priority: 1,
         }),
       ),
     );
@@ -494,9 +494,9 @@ describe("BoundedContext assembly", () => {
         stateSchema: ProjectionStateSchema,
         handlers: [
           {
-            kind: "event-subscription",
+            kind: "state-subscription",
             methodName: "onProjection",
-            signalSchema: ProjectionStateSchema,
+            signalSchema: ProcessManagerStateSchema,
             emittedSchemas: [],
             parameterCount: 1,
           },
@@ -1220,9 +1220,9 @@ describe("BoundedContext assembly", () => {
         stateSchema: ProjectionStateSchema,
         handlers: [
           {
-            kind: "event-subscription",
+            kind: "state-subscription",
             methodName: "onProjection",
-            signalSchema: ProjectionStateSchema,
+            signalSchema: AggregateStateSchema,
             emittedSchemas: [],
             parameterCount: 1,
           },
@@ -2416,7 +2416,11 @@ function createGeneratedRegistryFixture(
     readonly stateSchema: GenMessage<Message>;
     readonly handlers: readonly {
       readonly kind:
-        "command-assignment" | "command-reaction" | "event-subscription" | "event-reaction";
+        | "command-assignment"
+        | "command-reaction"
+        | "event-subscription"
+        | "state-subscription"
+        | "event-reaction";
       readonly methodName: string;
       readonly signalSchema: GenMessage<Message>;
       readonly emittedSchemas: readonly GenMessage<Message>[];
@@ -2431,7 +2435,7 @@ function createGeneratedRegistryFixture(
   const values = globalThis as Record<string, unknown>;
 
   mkdirSync(moduleDir, { recursive: true });
-  values[slot] = Object.freeze({ version: 1, entities });
+  values[slot] = Object.freeze({ version: 2, entities });
   writeFileSync(
     registryPath,
     `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,

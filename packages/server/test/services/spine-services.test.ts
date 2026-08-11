@@ -106,6 +106,10 @@ import { spineServicesAccess } from "../../src/services/spine-services.js";
 import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections.js";
 import { TaskAlreadyDoneSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections_pb.js";
 import { TaskIdSchema as TodoIdSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import {
+  TaskCreatedSchema,
+  type TaskCreated,
+} from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 import { TaskSchema as TodoTaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
@@ -196,14 +200,15 @@ const TaskIdSchema = messageDesc(fileTaskIdFixture, 0) as GenMessage<TaskId>;
 const TaskSchema = messageDesc(fileTaskFixture, 0) as GenMessage<Task>;
 
 class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
-  subscribeTask(event: ProjectionState): void {
+  subscribeTask(event: TaskCreated): void {
+    const id = event.id?.value ?? "";
     this.update((draft) =>
       Object.assign(
         draft,
         create(ProjectionStateSchema, {
-          id: event.id,
-          name: `${event.name} (projected)`,
-          priority: event.priority + 1,
+          id,
+          name: `${event.title} (projected)`,
+          priority: 2,
         }),
       ),
     );
@@ -4268,7 +4273,7 @@ function createFailingCommandDispatcher(): CommandDispatcher {
 
 function createProjectionRepositoryWithHandlers(): Repository<typeof TaskProjection> {
   const handlers = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
-    builder.subscribe(ProjectionStateSchema, "subscribeTask"),
+    builder.subscribe(TaskCreatedSchema, "subscribeTask"),
   ]);
 
   return new Repository({
@@ -4497,8 +4502,11 @@ function createProjectionEvent(id: string, entityId: string) {
       ),
       version: create(VersionSchema, { number: 1 }),
     }),
-    schema: ProjectionStateSchema,
-    message: createState(entityId, "Task"),
+    schema: TaskCreatedSchema,
+    message: create(TaskCreatedSchema, {
+      id: create(GeneratedTaskIdSchema, { value: entityId }),
+      title: "Task",
+    }),
   });
 }
 
