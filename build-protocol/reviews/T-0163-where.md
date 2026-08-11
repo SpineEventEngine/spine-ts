@@ -1,6 +1,6 @@
 # T-0163 Review Record
 
-Status: Accepted; pending integration
+Status: Post-integration correction accepted
 
 ## Assignments
 
@@ -16,6 +16,26 @@ Status: Accepted; pending integration
 
 Runtime model metadata is unavailable on this surface. Explicit configured
 profiles are recorded as acceptance evidence.
+
+## 2026-08-11 generated-source correction review
+
+The current execution policy prohibited spawning reviewer subagents. The
+primary orchestrator performed the affected concern checks locally; no
+independent reviewer result is claimed.
+
+- Reliability: CLEAN. The correction changes generated metadata provenance
+  recognition only and adds no state, concurrency, persistence, or lifecycle
+  behavior.
+- Style/maintainability: CLEAN. One existing ingestion predicate now recognizes
+  the two canonical authored/generated forms. No competing parser or public
+  helper was added.
+- TypeScript/API and documentation/TSDoc: CLEAN. No public contract or product
+  documentation changed; exact naming remains fail-closed.
+- Security: N/A. No trust boundary or secret-bearing path changed.
+
+Focused generated-registry tests pass 24/24. Source coverage is 97.46%
+statements, 94.25% branches, 100% functions, and 97.36% lines. Generated build,
+ESLint, cleanup, TSDoc, formatting, and diff checks pass.
 
 ## Mechanical evidence
 

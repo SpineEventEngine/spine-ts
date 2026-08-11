@@ -296,6 +296,62 @@ describe("generated handler registry ingestion", () => {
     expect(Object.isFrozen(filter)).toBe(true);
   });
 
+  it("accepts normalized generated Event and rejection source names", () => {
+    const generatedEvent = {
+      ...EventSchema,
+      file: { ...EventSchema.file, name: "example/task_events" },
+    } as typeof EventSchema;
+    const generatedRejection = {
+      ...StringValueSchema,
+      file: { ...StringValueSchema.file, name: "example/task_rejections" },
+    } as unknown as typeof EventSchema;
+
+    for (const signalSchema of [generatedEvent, generatedRejection]) {
+      expect(() =>
+        new HandlerRegistryIngestor().ingest({
+          version: 2,
+          entities: [
+            {
+              entityType: GeneratedProjection,
+              stateSchema: ProjectionStateSchema,
+              handlers: [
+                {
+                  ...record("event-subscription", "subscribeCreated", signalSchema, []),
+                  where: { eventField: "value", equals: "accepted" },
+                },
+              ],
+            },
+          ],
+        }),
+      ).not.toThrow();
+    }
+  });
+
+  it("rejects normalized misleading Event source names", () => {
+    const misleadingEvent = {
+      ...StringValueSchema,
+      file: { ...StringValueSchema.file, name: "example/notevents" },
+    } as unknown as typeof EventSchema;
+
+    expect(() =>
+      new HandlerRegistryIngestor().ingest({
+        version: 2,
+        entities: [
+          {
+            entityType: GeneratedProjection,
+            stateSchema: ProjectionStateSchema,
+            handlers: [
+              {
+                ...record("event-subscription", "subscribeCreated", misleadingEvent, []),
+                where: { eventField: "value", equals: "rejected" },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(/invalid Event field filter/);
+  });
+
   it("rejects malformed or unsupported generated Event field filters", () => {
     const invalid = [
       { eventField: "", equals: "announcements" },
