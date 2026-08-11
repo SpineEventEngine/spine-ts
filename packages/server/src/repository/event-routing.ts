@@ -7,6 +7,14 @@ import type { EventContext } from "@spine-event-engine/proto";
  *
  * The route must be deterministic and side-effect-free. It runs once for an
  * accepted admission; durable replay uses stored targets instead.
+ *
+ * @typeParam Id Entity ID type owned by the receiving repository.
+ * @typeParam Schema Generated Event message schema.
+ * @param message Unpacked Event message.
+ * @param context Normalized Event context. When the signal omits its context,
+ *   the framework supplies the default generated `EventContext` value.
+ * @returns Target Entity IDs. An empty array deliberately suppresses delivery
+ *   to this repository.
  */
 export type EventRoute<Id, Schema extends MessageSchema = MessageSchema> = (
   message: MessageShape<Schema>,
@@ -24,6 +32,8 @@ const states = new WeakMap<object, State<unknown>>();
  * Mutable Event route declarations snapshotted by repository construction.
  */
 export class EventRouting<Id> {
+  // prettier-ignore
+
   /**
    * Creates empty mutable Event route declarations.
    */

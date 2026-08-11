@@ -52,6 +52,7 @@ import {
   type CommandRoute,
   type CommandRouting,
 } from "./command-routing.js";
+import { EventRoutingInternals, type EventRoute, type EventRouting } from "./event-routing.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { Delivery } from "../delivery/delivery.js";
@@ -257,6 +258,11 @@ export interface RepositoryOptions<
    * Mutable Command route declarations snapshotted when this repository is constructed.
    */
   readonly commandRouting?: CommandRouting<RepositoryEntityId<EntityType>>;
+
+  /**
+   * Mutable Event route declarations snapshotted when this repository is constructed.
+   */
+  readonly eventRouting?: EventRouting<RepositoryEntityId<EntityType>>;
 
   /**
    * Generated event schemas that aggregate or process-manager handlers may emit.
@@ -498,6 +504,7 @@ export class Repository<
       options.handlers,
       options.events ?? [],
       CommandRoutingInternals.snapshot(options.commandRouting),
+      EventRoutingInternals.snapshot(options.eventRouting),
     );
     repositoryProducedEventSchemas.set(
       this,
@@ -3959,6 +3966,11 @@ const RepositoryRoutes = {
       semantic: ReadonlyMap<string, CommandRoute<RepositoryEntityId<EntityType>>>;
       defaultRoute: CommandRoute<RepositoryEntityId<EntityType>> | undefined;
     }>,
+    eventRouting: Readonly<{
+      exact: ReadonlyMap<MessageSchema, EventRoute<RepositoryEntityId<EntityType>>>;
+      semantic: ReadonlyMap<string, EventRoute<RepositoryEntityId<EntityType>>>;
+      defaultRoute: EventRoute<RepositoryEntityId<EntityType>> | undefined;
+    }>,
   ): RepositoryRouting<RepositoryEntityId<EntityType>> {
     const handlers = RepositoryHandlers.normalizeHandlers(handlersOption);
     RepositoryHandlers.validateHandlers(entityType, metadata, handlers);
@@ -4001,6 +4013,7 @@ const RepositoryRoutes = {
     );
     const commandReactions = RepositoryHandlers.createCommandReactionMap(handlers);
     const commandRoutes = RepositoryRoutes.resolveCommandRoutes(commandSchemas, commandRouting);
+    const eventRoutes = RepositoryRoutes.resolveEventRoutes(eventSchemas, eventRouting);
 
     return Object.freeze({
       commandSchemas,
@@ -4027,6 +4040,7 @@ const RepositoryRoutes = {
           eventSchemas,
           metadata.idField,
           entityFamily,
+          eventRoutes,
         ),
     });
   },
@@ -4141,6 +4155,7 @@ const RepositoryRoutes = {
     schemas: readonly MessageSchema[],
     targetIdField: DescriptorFieldMetadata,
     entityFamily: EntityFamily,
+    eventRoutes: ReadonlyMap<MessageSchema, EventRoute<Id>>,
   ): RepositoryEventRoute<Id> {
     const message = event.message;
     if (message === undefined || message.typeUrl === "") {
@@ -4157,6 +4172,21 @@ const RepositoryRoutes = {
       throw new Error(`Repository event routing has no receiver for "${schema.typeName}".`);
     }
 
+    const customRoute = eventRoutes.get(schema);
+    if (customRoute !== undefined) {
+      return Object.freeze({
+        entityIds: RepositoryRoutes.callEventRoute(
+          customRoute,
+          message,
+          schema,
+          event.context,
+          targetIdField,
+        ),
+        messageFullTypeName: schema.typeName,
+        invocation: "deferred",
+      });
+    }
+
     const targetId =
       entityFamily === "process-manager"
         ? RepositoryRoutes.readRouteId(
@@ -4171,6 +4201,89 @@ const RepositoryRoutes = {
       messageFullTypeName: schema.typeName,
       invocation: "deferred",
     });
+  },
+
+  resolveEventRoutes<Id>(
+    schemas: readonly MessageSchema[],
+    routing: Readonly<{
+      exact: ReadonlyMap<MessageSchema, EventRoute<Id>>;
+      semantic: ReadonlyMap<string, EventRoute<Id>>;
+      defaultRoute: EventRoute<Id> | undefined;
+    }>,
+  ): ReadonlyMap<MessageSchema, EventRoute<Id>> {
+    const routes = new Map<MessageSchema, EventRoute<Id>>();
+    const schemaSet = new Set(schemas);
+    for (const [schema, route] of routing.exact) {
+      if (!schemaSet.has(schema)) {
+        throw new Error(
+          `Repository event routing has an unregistered exact route for "${schema.typeName}".`,
+        );
+      }
+      routes.set(schema, route);
+    }
+
+    const registered = schemas.map((schema) => ({
+      schema,
+      metadata: new TypeRegistry().register(schema),
+    }));
+    for (const javaType of routing.semantic.keys()) {
+      const registeredRoute = registered.some(
+        ({ metadata }) =>
+          metadata.isTypes.includes(javaType) || metadata.everyIsTypes.includes(javaType),
+      );
+      if (!registeredRoute) {
+        throw new Error(
+          `Repository event routing has an unregistered semantic route for "${javaType}".`,
+        );
+      }
+    }
+
+    for (const { schema, metadata } of registered) {
+      if (routes.has(schema)) continue;
+      const direct = metadata.isTypes
+        .map((javaType) => routing.semantic.get(javaType))
+        .filter((route): route is EventRoute<Id> => route !== undefined);
+      const file = metadata.everyIsTypes
+        .map((javaType) => routing.semantic.get(javaType))
+        .filter((route): route is EventRoute<Id> => route !== undefined);
+      const candidates = direct.length > 0 ? direct : file;
+      if (candidates.length > 1) {
+        throw new Error(
+          `Repository event routing has ambiguous semantic routes for "${schema.typeName}".`,
+        );
+      }
+      if (candidates[0] !== undefined) routes.set(schema, candidates[0]);
+      else if (routing.defaultRoute !== undefined) routes.set(schema, routing.defaultRoute);
+    }
+    return routes;
+  },
+
+  callEventRoute<Id>(
+    route: EventRoute<Id>,
+    message: NonNullable<Event["message"]>,
+    schema: MessageSchema,
+    context: Event["context"] | undefined,
+    targetIdField: DescriptorFieldMetadata,
+  ): readonly Id[] {
+    const unpacked = AnyMessages.unpack(message, schema);
+    if (unpacked === undefined) {
+      throw new Error("Repository event routing requires a readable Event message.");
+    }
+    const candidates = route(unpacked, context ?? create(EventContextSchema));
+    if (!Array.isArray(candidates)) {
+      throw new Error("Repository event routing requires an array of Entity IDs.");
+    }
+    if (candidates.length > 1_000) {
+      throw new Error("Repository event routing accepts at most 1,000 Entity IDs.");
+    }
+
+    const unique = new Map<string, Id>();
+    for (const candidate of candidates) {
+      const id = RepositoryRoutes.readRouteId(candidate, targetIdField, "event").id as Id;
+      const key = DispatchGuards.canonicalEntityIdKey(id);
+      if (!unique.has(key)) unique.set(key, structuredClone(id));
+    }
+    return Object.freeze([...unique.values()]);
   },
 
   schemaForTypeUrl(

@@ -83,6 +83,7 @@ import {
   Aggregate,
   BoundedContext,
   CommandRouting,
+  EventRouting,
   ProcessManager,
   Projection,
   Repository,
@@ -3311,6 +3312,108 @@ describe("repository signal routing", () => {
     await expect(
       context.eventBus().post(createProjectionEvent("event-3", "posted-task")),
     ).resolves.toBeUndefined();
+  });
+
+  it("uses one immutable stable-deduplicated custom Event target plan", () => {
+    const returned = ["target-b", "target-a", "target-b"];
+    const routing = EventRouting.create<string>().route(ProjectionStateSchema, () => returned);
+    const repository = createRoutingRepository(undefined, routing);
+
+    const route = repository.routeEvent(createProjectionEvent("event-custom-targets", "ignored"));
+    returned[0] = "mutated";
+
+    expect(route.entityIds).toEqual(["target-b", "target-a"]);
+    expect(Object.isFrozen(route.entityIds)).toBe(true);
+  });
+
+  it("applies exact, direct semantic, file semantic, and replacement Event precedence", () => {
+    const exact = createRoutingRepository(
+      undefined,
+      EventRouting.create<string>()
+        .route(ProjectionStateSchema, () => ["exact"])
+        .routeSemantic("example.tags.ZProjectionTag", () => ["direct"])
+        .routeSemantic("example.tags.ASharedTag", () => ["file"])
+        .replaceDefault(() => ["replacement"]),
+    );
+    const direct = createRoutingRepository(
+      undefined,
+      EventRouting.create<string>()
+        .routeSemantic("example.tags.ZProjectionTag", () => ["direct"])
+        .routeSemantic("example.tags.ASharedTag", () => ["file"])
+        .replaceDefault(() => ["replacement"]),
+    );
+    const file = createRoutingRepository(
+      undefined,
+      EventRouting.create<string>()
+        .routeSemantic("example.tags.ASharedTag", () => ["file"])
+        .replaceDefault(() => ["replacement"]),
+    );
+    const replacement = createRoutingRepository(
+      undefined,
+      EventRouting.create<string>().replaceDefault(() => ["replacement"]),
+    );
+    const event = createProjectionEvent("event-precedence", "declaration");
+
+    expect(exact.routeEvent(event).entityIds).toEqual(["exact"]);
+    expect(direct.routeEvent(event).entityIds).toEqual(["direct"]);
+    expect(file.routeEvent(event).entityIds).toEqual(["file"]);
+    expect(replacement.routeEvent(event).entityIds).toEqual(["replacement"]);
+  });
+
+  it("keeps the Event routing snapshot captured by repository construction", () => {
+    const routing = EventRouting.create<string>().replaceDefault(() => ["first"]);
+    const repository = createRoutingRepository(undefined, routing);
+    routing.replaceDefault(() => ["second"]);
+
+    expect(
+      repository.routeEvent(createProjectionEvent("event-snapshot", "field")).entityIds,
+    ).toEqual(["first"]);
+  });
+
+  it("accepts an empty custom Event target plan", () => {
+    const repository = createRoutingRepository(
+      undefined,
+      EventRouting.create<string>().route(ProjectionStateSchema, () => []),
+    );
+
+    expect(
+      repository.routeEvent(createProjectionEvent("event-no-targets", "ignored")).entityIds,
+    ).toEqual([]);
+  });
+
+  it("rejects Event routes that cannot apply to a registered receiver", () => {
+    expect(() =>
+      createRoutingRepository(
+        undefined,
+        EventRouting.create<string>().route(TaskCreatedSchema, () => ["target"]),
+      ),
+    ).toThrow(/unregistered exact route/);
+    expect(() =>
+      createRoutingRepository(
+        undefined,
+        EventRouting.create<string>().routeSemantic("example.tags.Unknown", () => ["target"]),
+      ),
+    ).toThrow(/unregistered semantic route/);
+  });
+
+  it("validates the complete custom Event target plan before returning it", () => {
+    const invalid = createRoutingRepository(
+      undefined,
+      EventRouting.create<string>().route(ProjectionStateSchema, () => ["valid", "  "]),
+    );
+    const overflow = createRoutingRepository(
+      undefined,
+      EventRouting.create<string>().route(ProjectionStateSchema, () =>
+        Array.from({ length: 1_001 }, (_, index) => `target-${String(index)}`),
+      ),
+    );
+
+    expect(() =>
+      invalid.routeEvent(createProjectionEvent("event-invalid-targets", "ignored")),
+    ).toThrow(/compatible with the Entity state/);
+    expect(() =>
+      overflow.routeEvent(createProjectionEvent("event-overflow-targets", "ignored")),
+    ).toThrow(/at most 1,000/);
   });
 
   it("keeps a primitive Unknown producer subject to first-field equality", () => {
@@ -8272,6 +8375,7 @@ describe("repository signal routing", () => {
 
 function createRoutingRepository(
   commandRouting?: CommandRouting<string>,
+  eventRouting?: EventRouting<string>,
 ): Repository<typeof TaskAggregate> {
   const handlers = EntityHandlers.define(TaskAggregate, AggregateStateSchema, (builder) => [
     builder.assign(AggregateStateSchema, "assignTask"),
@@ -8283,6 +8387,7 @@ function createRoutingRepository(
     schema: AggregateStateSchema,
     handlers,
     ...(commandRouting === undefined ? {} : { commandRouting }),
+    ...(eventRouting === undefined ? {} : { eventRouting }),
   });
 }
 
