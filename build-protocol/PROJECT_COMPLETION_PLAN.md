@@ -1,7 +1,7 @@
 # Spine TS Project Completion Plan
 
-Status: Initial release, post-release JVM parity Waves 1 through 9, and T-0080
-authored-API/example quality correction complete
+Status: Initial release and T-0080 authored-API/example quality correction
+complete; Wave 9 reopened for T-0167A correction pending integration
 
 Plan date: 2026-07-12
 

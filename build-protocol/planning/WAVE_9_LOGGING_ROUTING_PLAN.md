@@ -1,6 +1,6 @@
 # Wave 9 Logging, Routing, And Model-Conventions Plan
 
-Status: Complete, integrated, and post-merge verified
+Status: Reopened for T-0167A correction; integration pending
 
 Date: 2026-08-10
 
@@ -391,7 +391,7 @@ behavior before production edits.
   Event cases;
 - Process Manager and Projection behavior under the same general contracts;
 - exact > replacement-default precedence;
-- incomplete, wrong, duplicate, and ambiguous semantic registrations fail at
+- invalid exact-route declarations and replacement defaults fail at
   construction;
 - generated registry and packed-consumer coverage for public metadata.
 
@@ -496,7 +496,7 @@ after cutover, and preserves generated version-2 Event behavior.
 Depends on T-0160. Owns state routing, repository/context state-update
 dispatch, `EntityStateChanged` unpacking, existing Projection handoff, and
 `UPDATE_SUBSCRIBER` reuse. RED evidence covers first type-compatible field,
-missing compatible field, exact/semantic/replacement routes, multicast and
+missing compatible field, exact and replacement-default routes, multicast and
 empty routes, durable replay, tenant selection, and ID validation.
 
 ### T-0162: Field Stringifiers

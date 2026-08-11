@@ -1,6 +1,6 @@
 # T-0167A Review Record
 
-Status: Implementation in progress
+Status: Review corrections applied; re-review ready
 
 ## Review boundary
 
@@ -56,3 +56,19 @@ configured role/profile is the acceptance evidence.
   durable no-reroute replay retain focused coverage.
 - Changed-range inspection is recorded in the work log. Deletion-only paths
   require no added coverage; no uncovered added runtime branch was identified.
+
+## Review results and correction disposition
+
+- **Style/maintainability:** findings accepted and resolved: stale semantic
+  validation language and the dead core invalid-option fixture were removed.
+- **TypeScript/API:** clean after removal of the retired public
+  `TransportSemanticTag` inventory entry.
+- **Performance/reliability:** clean; exact/default selection, zero-target
+  routes, stored typed targets, and no-reroute replay retain focused evidence.
+- **Documentation/TSDoc:** the documentation-review dispatch was explicitly
+  rejected by the collaboration surface. The immutable existing
+  `documentation_reviewer` profile (`gpt-5.6-luna` / medium) remains the
+  configured assignment evidence; its reported stale-status and plan wording
+  findings are resolved in this correction batch.
+- **Security:** N/A. The correction removes metadata and routing paths; it
+  changes no trust boundary, authorization, secret handling, or logged data.

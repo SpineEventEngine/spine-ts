@@ -3,11 +3,7 @@ import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import {
-  AnySchema,
-  FileDescriptorProtoSchema,
-  FileDescriptorSetSchema,
-} from "@bufbuild/protobuf/wkt";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -48,8 +44,6 @@ type RequiredName = Message<"example.validation.RequiredName"> & {
   name: string;
 };
 
-type InvalidSemanticOption = Message<"InvalidTagState"> & { id: string };
-
 // Descriptor fixture compiled from:
 // syntax = "proto3"; package example.validation;
 // message RequiredName { string name = 1 [(required) = true]; }
@@ -59,35 +53,6 @@ const fileExampleValidationFixture = fileDesc(
   [file_spine_options],
 );
 const RequiredNameSchema = messageDesc(fileExampleValidationFixture, 0) as GenMessage<RequiredName>;
-
-// Descriptor fixture compiled from an `(is).java_type = ""` message option.
-const invalidSemanticOptionDescriptorSet = fromBinary(
-  FileDescriptorSetSchema,
-  Buffer.from(
-    "CpYCCiFlbnRpdHktbWV0YWRhdGEvaW52YWxpZC10YWcucHJvdG8aE3NwaW5lL29wdG" +
-      "lvbnMucHJvdG8iLQoPSW52YWxpZFRhZ1N0YXRlEg4KAmlkGAEgASgJUgJpZDoK+ook" +
-      "AggE2oskAEqkAQoGEgQAAAkBCggKAQwSAwAAEgoJCgIDABIDAgAdCgoKAgQAEgQEAAkB" +
-      "CgoKAwQAARIDBAgXCgoKAwQABxIDBQIgCg4KBwQAB6/BBAESAwUCIAoKCgMEAAcSAwYC" +
-      "HQoOCgcEAAe7wQQBEgMGAh0KDAoFBAACAAUSAwgCCAoLCgQEAAIAEgMIAhAKDAoFBAAC" +
-      "AAESAwgJCwoMCgUEAAIAAxIDCA4PYgZwcm90bzM=",
-    "base64",
-  ),
-);
-const invalidSemanticOptionDescriptor = invalidSemanticOptionDescriptorSet.file[0];
-if (invalidSemanticOptionDescriptor === undefined) {
-  throw new Error("Invalid semantic option fixture is empty.");
-}
-const fileInvalidSemanticOptionFixture = fileDesc(
-  Buffer.from(toBinary(FileDescriptorProtoSchema, invalidSemanticOptionDescriptor)).toString(
-    "base64",
-  ),
-  [file_spine_options],
-);
-const InvalidSemanticOptionSchema = messageDesc(
-  fileInvalidSemanticOptionFixture,
-  0,
-) as GenMessage<InvalidSemanticOption>;
-void InvalidSemanticOptionSchema;
 
 const fileRequiredRejectionsFixture = fileDesc(
   "CiFleGFtcGxlL3JlcXVpcmVkX3JlamVjdGlvbnMucHJvdG8SEmV4YW1wbGUudmFsaWRhdGlvbiIi" +

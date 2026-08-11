@@ -1,6 +1,6 @@
 # T-0167A: Remove TypeScript Semantic Routing
 
-Status: Implementation in progress
+Status: Correction complete; re-review ready
 
 ## Objective
 
