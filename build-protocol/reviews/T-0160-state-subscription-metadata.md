@@ -1,6 +1,6 @@
 # T-0160 Review Record
 
-Status: Accepted; merge-ready
+Status: Accepted behavior; fresh-worktree packaging re-review pending
 
 ## Assignments
 
@@ -88,3 +88,8 @@ explicit immutable configured role/profile is then the durable evidence.
 - Packaging style/maintainability confirmation: CLEAN. The type-only contract,
   runtime resolver, and evidence records are coherent; `git diff --check`
   passes.
+- A genuinely fresh integration worktree showed that the prior resolver still
+  depended on compiled Proto package output unavailable during generation. The
+  revised correction inspects only the frozen `spine.options.entity` extension
+  field number in descriptor unknown fields, which is sufficient for presence-
+  based provenance and removes the premature runtime package dependency.
