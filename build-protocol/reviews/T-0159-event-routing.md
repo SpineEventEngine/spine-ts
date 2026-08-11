@@ -1,6 +1,6 @@
 # T-0159 Review Record
 
-Status: Correction-complete; targeted re-review ready
+Status: Accepted; merge-ready
 
 ## Assignments
 
@@ -44,3 +44,23 @@ explicit immutable configured role/profile is then the durable evidence.
   (97.14%), 81 / 86 branches (94.19%), and 33 / 33 functions (100%).
 - Tooling typecheck, TSDoc, API docs, exact changed-source ESLint, Prettier,
   and `git diff --check` pass.
+
+## Targeted Re-review
+
+- Documentation/TSDoc: CLEAN; public routing and EventBus acceptance comments
+  match the corrected contract and product Markdown remains deferred.
+- TypeScript/API documentation: CLEAN; canonical keying stays internal and no
+  declaration or compatibility regression was introduced.
+- Style/maintainability: CLEAN; keying is centralized, type-distinct,
+  bigint-safe, fail-closed, and covered by deterministic admission/replay.
+- Performance/reliability: CLEAN; routing, persistence, dispatch guards, and
+  entity storage use the same packed typed identity with no collision,
+  lifecycle, or replay regression. The reviewer reran 4 files / 275 tests.
+
+## Final Verification
+
+- The single final `verify:task --no-coverage` profile passed every generated
+  build, tooling, repository ESLint, cleanup, TSDoc, logging-containment,
+  formatting, documentation/API, Proto, and release-readiness gate.
+- Its focused runtime profile passed 9 files / 429 tests. Changed-range coverage
+  remains the fresh correction measurement recorded above.
