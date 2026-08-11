@@ -37,6 +37,10 @@ Focused generated-registry tests pass 24/24. Source coverage is 97.46%
 statements, 94.25% branches, 100% functions, and 97.36% lines. Generated build,
 ESLint, cleanup, TSDoc, formatting, and diff checks pass.
 
+The single bounded `verify:task --no-coverage` profile passed every gate and
+the 24-test generated-registry selection. The correction is accepted for
+integration.
+
 ## Mechanical evidence
 
 - Generated build and complete focused suite: 6 files, 333/333 tests.
