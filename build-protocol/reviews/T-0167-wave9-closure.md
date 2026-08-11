@@ -1,6 +1,6 @@
 # T-0167 Review Record
 
-Status: Fixture correction and renewed preflight clean; release verification pending
+Status: Clean and release-verified; integration pending
 
 ## Review boundary
 
@@ -82,3 +82,8 @@ preflight is required before the next release-profile run.
 The renewed preflight passes every generated, type, lint, cleanup, TSDoc,
 TypeDoc/API, formatting, Proto, containment, documentation-audience,
 release-readiness, and diff gate. The corrected release profile is authorized.
+
+The corrected release profile passes 244 files / 3,888 tests, with 3 files and
+14 tests skipped. Repository coverage is 94.19% statements, 90.43% branches,
+94.13% functions, and 95.19% lines. The review boundary is clean and ready for
+fast-forward integration.
