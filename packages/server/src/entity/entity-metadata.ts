@@ -1,6 +1,7 @@
 import { getOption, hasOption } from "@bufbuild/protobuf";
 import type { DescField, DescFile, Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { SemanticOptionErrors, TypeRegistry } from "@spine-event-engine/core";
 import type { Entity } from "./entity.js";
 import {
   column,
@@ -8,8 +9,6 @@ import {
   type EntityOption,
   EntityOption_Kind,
   EntityOption_Visibility,
-  every_is,
-  is,
   set_once,
 } from "@spine-event-engine/proto";
 
@@ -296,7 +295,18 @@ export function describeEntityMetadata<Schema extends DescriptorMessageSchema>(
       .filter((field) => hasOption(field, set_once) && getOption(field, set_once))
       .map(EntityDescriptors.field),
   );
-  const semanticTags = EntityDescriptors.tags(schema);
+  let registered: ReturnType<TypeRegistry["register"]>;
+  try {
+    registered = new TypeRegistry().register(schema as never);
+  } catch (error) {
+    if (SemanticOptionErrors.isInvalid(error)) {
+      throw new DescriptorMetadataError("INVALID_SEMANTIC_TAG", error.message);
+    }
+    throw error;
+  }
+  const semanticTags = Object.freeze(
+    [...new Set([...registered.isTypes, ...registered.everyIsTypes])].sort(),
+  );
   const metadata: EntityMetadata<Schema> = {
     schema,
     descriptor: schema,
@@ -388,22 +398,5 @@ const EntityDescriptors = Object.freeze({
           return EntityDescriptors.field(field);
         }),
     );
-  },
-  tags(schema: DescriptorMessageSchema): readonly string[] {
-    const tags = new Set<string>();
-    if (hasOption(schema.file, every_is))
-      tags.add(EntityDescriptors.tag(getOption(schema.file, every_is).javaType, schema.file.name));
-    if (hasOption(schema, is))
-      tags.add(EntityDescriptors.tag(getOption(schema, is).javaType, schema.typeName));
-    return Object.freeze([...tags].sort());
-  },
-  tag(rawValue: string, owner: string): string {
-    const value = rawValue.trim();
-    if (value.length === 0)
-      throw new DescriptorMetadataError(
-        "INVALID_SEMANTIC_TAG",
-        `Entity semantic tag option "${owner}" must declare a non-empty java_type.`,
-      );
-    return value;
   },
 });

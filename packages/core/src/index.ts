@@ -62,6 +62,8 @@ import {
   YearMonthSchema,
   ZoneIdSchema,
   ZonedDateTimeSchema,
+  is,
+  every_is,
   type_url_prefix,
   type ConstraintViolation,
   type ProtoModule,
@@ -74,6 +76,17 @@ const VALIDATION_RUNTIME_FAILURE_MESSAGE = "Validation runtime failed.";
 const TRANSITION_RULE_FAILURE_MESSAGE = "Transition validation rule failed.";
 const REJECTION_CONSTRUCTOR = Symbol("RejectionThrowable");
 const REJECTION_THROWABLES = new WeakSet<object>();
+const INVALID_SEMANTIC_OPTION_ERROR = "INVALID_SEMANTIC_OPTION";
+
+class InvalidSemanticOptionError extends Error {
+  readonly code: string = INVALID_SEMANTIC_OPTION_ERROR;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidSemanticOptionError";
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
 
 /**
  * Standard Protobuf `Any` prefix used when a file has no Spine type URL option.
@@ -84,6 +97,27 @@ export const DEFAULT_TYPE_URL_PREFIX = "type.googleapis.com";
  * Protobuf-ES schema shape accepted by the Spine TS type registry.
  */
 export type MessageSchema = GenMessage<Message>;
+
+/**
+ * Identifies core failures caused by malformed descriptor semantic options.
+ */
+// prettier-ignore
+export const SemanticOptionErrors: Readonly<{
+
+  /**
+   * Checks whether a thrown value is the core invalid-semantic-option failure.
+   *
+   * @param value Value thrown while registering descriptor metadata.
+   * @returns Whether the value carries the invalid semantic-option code.
+   */
+  isInvalid(value: unknown): value is Error & { readonly code: "INVALID_SEMANTIC_OPTION" };
+}> = Object.freeze({
+  isInvalid(value: unknown): value is Error & { readonly code: "INVALID_SEMANTIC_OPTION" } {
+    return (
+      value instanceof InvalidSemanticOptionError && value.code === INVALID_SEMANTIC_OPTION_ERROR
+    );
+  },
+});
 
 /**
  * Structured result returned by {@link Validate.message}.
@@ -398,7 +432,9 @@ export interface RegisterTypeOptions {
   readonly typeUrl?: string;
 
   /**
-   * Semantic marker tags from Spine `(is)` or `(every_is)` metadata.
+   * Caller-supplied compatibility tags for semantic-tag lookup only. They do
+   * not populate or impersonate descriptor-backed `(is)` / `(every_is)`
+   * provenance, lookup, or routing.
    */
   readonly semanticTags?: readonly string[];
 }
@@ -455,9 +491,23 @@ export interface TypeMetadata<Schema extends MessageSchema = MessageSchema> {
   readonly firstFieldName: string | undefined;
 
   /**
-   * Semantic tags explicitly registered for this schema.
+   * Caller-supplied compatibility tags for semantic-tag lookup only. They
+   * cannot populate or impersonate descriptor-backed `(is)` / `(every_is)`
+   * provenance, lookup, or routing.
    */
   readonly semanticTags: readonly string[];
+
+  /**
+   * Java types declared directly by the descriptor `(is)` option, independent
+   * of caller-supplied compatibility {@link TypeMetadata.semanticTags}.
+   */
+  readonly isTypes: readonly string[];
+
+  /**
+   * Java types declared by the descriptor file `(every_is)` option, independent
+   * of caller-supplied compatibility {@link TypeMetadata.semanticTags}.
+   */
+  readonly everyIsTypes: readonly string[];
 
   /**
    * Checks whether a file option is set on this schema's file descriptor.
@@ -512,6 +562,20 @@ export interface TypeRegistryLookup {
    * @returns The matching metadata entries.
    */
   findBySemanticTag(semanticTag: string): readonly TypeMetadata[];
+
+  /**
+   * Finds registrations declared with descriptor `(is)` Java type.
+   * @param javaType The descriptor-declared Java type.
+   * @returns Immutable matching metadata in registration order.
+   */
+  findByIs(javaType: string): readonly TypeMetadata[];
+
+  /**
+   * Finds registrations declared with descriptor `(every_is)` Java type.
+   * @param javaType The file-descriptor Java type.
+   * @returns Immutable matching metadata in registration order.
+   */
+  findByEveryIs(javaType: string): readonly TypeMetadata[];
 
   /**
    * Gets metadata by fully qualified Protobuf type name or throws a descriptive error.
@@ -1139,6 +1203,8 @@ export class TypeRegistry {
   readonly #byFullName = new Map<string, TypeMetadata>();
   readonly #byTypeUrl = new Map<string, TypeMetadata>();
   readonly #bySemanticTag = new Map<string, TypeMetadata[]>();
+  readonly #byIs = new Map<string, TypeMetadata[]>();
+  readonly #byEveryIs = new Map<string, TypeMetadata[]>();
   readonly #bySchema = new WeakMap<object, TypeMetadata>();
   readonly #bySchemaDescriptor = new WeakMap<object, TypeMetadata>();
 
@@ -1211,7 +1277,9 @@ export class TypeRegistry {
   /**
    * Registers one schema and returns its immutable metadata.
    * @param schema The generated message schema.
-   * @param options Optional type URL and semantic tag metadata.
+   * @param options Optional type URL and caller-supplied compatibility tags.
+   * Compatibility tags cannot populate or impersonate descriptor-backed
+   * `(is)` / `(every_is)` provenance, lookup, or routing.
    * @returns The registered schema metadata.
    */
   register<Schema extends MessageSchema>(
@@ -1264,6 +1332,8 @@ export class TypeRegistry {
       entries.push(metadata);
       this.#bySemanticTag.set(tag, entries);
     }
+    for (const value of metadata.isTypes) this.#index(this.#byIs, value, metadata);
+    for (const value of metadata.everyIsTypes) this.#index(this.#byEveryIs, value, metadata);
 
     return metadata;
   }
@@ -1302,6 +1372,29 @@ export class TypeRegistry {
    */
   findBySemanticTag(semanticTag: string): readonly TypeMetadata[] {
     return [...(this.#bySemanticTag.get(semanticTag) ?? [])];
+  }
+
+  /**
+   * Finds registrations declared with descriptor `(is)` Java type.
+   * @param javaType The descriptor-declared Java type.
+   * @returns Immutable matching metadata in registration order.
+   */
+  findByIs(javaType: string): readonly TypeMetadata[] {
+    return Object.freeze([...(this.#byIs.get(javaType) ?? [])]);
+  }
+
+  /**
+   * Finds registrations declared with descriptor `(every_is)` Java type.
+   * @param javaType The file-descriptor Java type.
+   * @returns Immutable matching metadata in registration order.
+   */
+  findByEveryIs(javaType: string): readonly TypeMetadata[] {
+    return Object.freeze([...(this.#byEveryIs.get(javaType) ?? [])]);
+  }
+  #index(index: Map<string, TypeMetadata[]>, value: string, metadata: TypeMetadata): void {
+    const entries = index.get(value) ?? [];
+    entries.push(metadata);
+    index.set(value, entries);
   }
 
   /**
@@ -1453,6 +1546,8 @@ const RegistryLookups = {
   ): TypeMetadata<Schema> {
     const firstField = schema.fields[0];
     const tags = [...new Set(semanticTags)].sort();
+    const isTypes = RegistryLookups.semanticOption(schema, is, schema.typeName);
+    const everyIsTypes = RegistryLookups.semanticOption(schema.file, every_is, schema.file.name);
     return Object.freeze({
       fullTypeName: schema.typeName,
       typeUrl,
@@ -1464,6 +1559,8 @@ const RegistryLookups = {
       firstField,
       firstFieldName: firstField?.name,
       semanticTags: Object.freeze(tags),
+      isTypes,
+      everyIsTypes,
       hasFileOption<Value>(option: FileOptionExtension<Value>): boolean {
         return hasOption(schema.file, option);
       },
@@ -1471,6 +1568,20 @@ const RegistryLookups = {
         return getOption(schema.file, option);
       },
     });
+  },
+
+  // Descriptor option extendees are intentionally generic across message and file owners.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  semanticOption(owner: object, option: GenExtension<any, any>, name: string): readonly string[] {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!hasOption(owner as any, option as any)) return Object.freeze([]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const value = (getOption(owner as any, option as any) as { javaType: string }).javaType.trim();
+    if (value.length === 0)
+      throw new InvalidSemanticOptionError(
+        `semantic tag option "${name}" must declare a non-empty java_type.`,
+      );
+    return Object.freeze([value]);
   },
 
   /**
@@ -1482,6 +1593,8 @@ const RegistryLookups = {
       findByTypeUrl: (typeUrl: string) => registry.findByTypeUrl(typeUrl),
       findBySchema: <Schema extends MessageSchema>(schema: Schema) => registry.findBySchema(schema),
       findBySemanticTag: (semanticTag: string) => registry.findBySemanticTag(semanticTag),
+      findByIs: (javaType: string) => registry.findByIs(javaType),
+      findByEveryIs: (javaType: string) => registry.findByEveryIs(javaType),
       getByFullName: (fullTypeName: string) => registry.getByFullName(fullTypeName),
       getByTypeUrl: (typeUrl: string) => registry.getByTypeUrl(typeUrl),
       getBySchema: <Schema extends MessageSchema>(schema: Schema) => registry.getBySchema(schema),
