@@ -2,7 +2,9 @@
 
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { create } from "@bufbuild/protobuf";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { TenantIdSchema } from "@spine-event-engine/proto";
+import { Identifiers } from "@spine-event-engine/core";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { describe, expect, it } from "vitest";
 
@@ -132,10 +134,10 @@ describe("DeliveryMonitor delivery", () => {
   });
 
   it.each([
-    ["", "type.example/Task", "Delivery target ID must be a non-empty string."],
-    ["task-1", "", "Delivery target type must be a non-empty string."],
+    [create(AnySchema), "type.example/Task", "Delivery target ID must be a non-default Any."],
+    [Identifiers.pack("string", "task-1"), "", "Delivery target type must be a non-empty string."],
   ])("rejects incomplete shard coordinates", (targetId, targetType, message) => {
-    expect(() => UniformAcrossAllShards.singleShard().shardFor(targetId, targetType)).toThrow(
+    expect(() => UniformAcrossAllShards.singleShard().shardFor(targetId as never, targetType)).toThrow(
       message,
     );
   });
@@ -492,7 +494,7 @@ function build(): DeliveryBuilder {
 function message(signalId: string, targetId: string, shard: ShardIndex) {
   return {
     id: { value: signalId, shard },
-    inboxId: { targetId, targetTypeUrl: "type" },
+    inboxId: { targetId: Identifiers.pack("string", targetId), targetTypeUrl: "type" },
     signalId,
     label: "UPDATE_SUBSCRIBER" as const,
     status: "TO_DELIVER" as const,
