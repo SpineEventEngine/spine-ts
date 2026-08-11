@@ -26,6 +26,25 @@ model/reasoning before dispatch. Runtime metadata will be recorded when the
 surface exposes it; otherwise the immutable role profile and limitation will
 be recorded.
 
+## Specialist review dispatch
+
+- Existing `style_maintainability_reviewer`: review removal completeness,
+  single-path maintainability, stale compatibility seams, and test quality;
+  explicitly dispatched with configured `gpt-5.6-terra` / high.
+- Existing `typescript_api_docs_reviewer`: review public TypeScript removals,
+  declarations, exports, and affected TSDoc; explicitly dispatched with
+  configured `gpt-5.6-terra` / high.
+- Existing `performance_reliability_reviewer`: review exact/default route
+  selection, bounded target behavior, persistence, and replay preservation;
+  explicitly dispatched with configured `gpt-5.6-terra` / high.
+- Existing `documentation_reviewer`: review only active plan, API reference,
+  task/work/review claims, and the Wave 10 product-Markdown boundary;
+  explicitly dispatched with configured `gpt-5.6-luna` / medium.
+
+The Desktop collaboration surface accepts explicit role dispatch. Runtime
+self-introspection may remain unavailable; in that case the immutable
+configured role/profile is the acceptance evidence.
+
 ## Implementation handoff
 
 - Review-ready endpoint: `bd7fa642` plus the pending record checkpoint.
