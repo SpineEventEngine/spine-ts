@@ -451,6 +451,15 @@
   },
   {
     "rule": "standalone-function",
+    "file": "packages/server/src/handler/handler-decorators.ts",
+    "kind": "function-declaration",
+    "identity": "Where()#1",
+    "name": "Where",
+    "disposition": "necessity",
+    "reason": "TypeScript decorator contract requires Where to remain a directly callable public decorator factory."
+  },
+  {
+    "rule": "standalone-function",
     "file": "packages/server/src/repository/commit-fence.ts",
     "kind": "function-declaration",
     "identity": "commitFenced()#1",

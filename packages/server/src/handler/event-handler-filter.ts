@@ -7,8 +7,21 @@ import type { WhereOptions } from "./handler-metadata.js";
  * Internal handler candidate consumed by Event field filter compilation.
  */
 export interface EventHandlerFilterCandidate<Value> {
+  // prettier-ignore
+
+  /**
+   * Registered handler value returned when the candidate is selected.
+   */
   readonly value: Value;
+
+  /**
+   * Event schema used to resolve the declared source-name path.
+   */
   readonly schema: DescriptorMessageSchema;
+
+  /**
+   * Optional generated Event field filter.
+   */
   readonly where?: WhereOptions;
 }
 
@@ -16,6 +29,14 @@ export interface EventHandlerFilterCandidate<Value> {
  * Immutable, construction-time validated selector for one Event receptor category.
  */
 export interface EventHandlerFilterPlan<Value> {
+  // prettier-ignore
+
+  /**
+   * Returns the matching filtered value, fallback, or ordinary handlers.
+   *
+   * @param message Unpacked Event message validated by repository intake.
+   * @returns Frozen selected values in declaration order.
+   */
   select(message: unknown): readonly Value[];
 }
 
@@ -44,9 +65,9 @@ export const EventHandlerFilters: Readonly<EventHandlerFilterCompiler> = Object.
   compile<Value>(
     candidates: readonly EventHandlerFilterCandidate<Value>[],
   ): EventHandlerFilterPlan<Value> {
-    if (candidates.length === 0) return EmptyFilterPlan;
-    const schema = candidates[0]?.schema;
-    if (schema === undefined) return EmptyFilterPlan;
+    const [first] = candidates;
+    if (first === undefined) return EmptyFilterPlan;
+    const schema = first.schema;
     const fallbacks = candidates.filter(({ where }) => where === undefined);
     const filtered = candidates.filter(
       (
@@ -54,7 +75,8 @@ export const EventHandlerFilters: Readonly<EventHandlerFilterCompiler> = Object.
       ): candidate is EventHandlerFilterCandidate<Value> & { readonly where: WhereOptions } =>
         candidate.where !== undefined,
     );
-    if (filtered.length === 0) {
+    const [firstFiltered] = filtered;
+    if (firstFiltered === undefined) {
       return Object.freeze({
         select: () => Object.freeze(fallbacks.map(({ value }) => value)),
       });
@@ -62,8 +84,7 @@ export const EventHandlerFilters: Readonly<EventHandlerFilterCompiler> = Object.
     if (fallbacks.length > 1) {
       throw new Error("Event handler filtering has more than one unfiltered fallback.");
     }
-    const path = filtered[0]?.where.eventField;
-    if (path === undefined) return EmptyFilterPlan;
+    const path = firstFiltered.where.eventField;
     if (filtered.some(({ where }) => where.eventField !== path)) {
       throw new Error("Event handler filters for one receptor must use the same Event field path.");
     }

@@ -200,7 +200,7 @@ export function React(
 }
 
 /**
- * Filters an Event-consuming handler by one Event field value.
+ * Creates one Event field equality filter for an Event-consuming handler.
  *
  * Generated handler analysis validates the declaration and carries it into
  * immutable repository metadata. The decorator itself does not inspect or

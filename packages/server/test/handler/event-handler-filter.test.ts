@@ -1,5 +1,5 @@
 import { create } from "@bufbuild/protobuf";
-import { EventSchema } from "@spine-event-engine/proto";
+import { CommandContextSchema, EventSchema } from "@spine-event-engine/proto";
 import { CompositeFilterSchema } from "@spine-event-engine/proto/client";
 import { describe, expect, it } from "vitest";
 
@@ -42,6 +42,27 @@ describe("Event handler field filtering", () => {
     ]);
 
     expect(plan.select(create(EventSchema))).toEqual([]);
+    expect(plan.select(null)).toEqual([]);
+  });
+
+  it("resolves oneof fields by their Proto source names", () => {
+    const plan = EventHandlerFilters.compile([
+      candidate("payload", "context.past_message.message.type_url", "type.example/Message"),
+    ]);
+
+    expect(
+      plan.select(
+        create(EventSchema, {
+          context: {
+            origin: {
+              case: "pastMessage",
+              value: { message: { typeUrl: "type.example/Message" } },
+            },
+          },
+        }),
+      ),
+    ).toEqual(["payload"]);
+    expect(plan.select(create(EventSchema, { context: {} }))).toEqual([]);
   });
 
   it("rejects conflicting paths, canonical values, and fallbacks", () => {
@@ -70,6 +91,16 @@ describe("Event handler field filtering", () => {
         candidate("two"),
       ]),
     ).toThrow(/more than one unfiltered fallback/);
+    expect(() =>
+      EventHandlerFilters.compile([
+        candidate("event", "id.value", "same"),
+        {
+          value: "context",
+          schema: CommandContextSchema,
+          where: { eventField: "id.value", equals: "same" },
+        },
+      ]),
+    ).toThrow(/same Event type/);
   });
 
   it("preserves multiple ordinary handlers when no filter is declared", () => {
@@ -88,6 +119,15 @@ describe("Event handler field filtering", () => {
           value: "repeated",
           schema: CompositeFilterSchema,
           where: { eventField: "filter", equals: "value" },
+        },
+      ]),
+    ).toThrow(/unsupported repeated or map field/);
+    expect(() =>
+      EventHandlerFilters.compile([
+        {
+          value: "map",
+          schema: CommandContextSchema,
+          where: { eventField: "attributes", equals: "value" },
         },
       ]),
     ).toThrow(/unsupported repeated or map field/);

@@ -114,7 +114,16 @@ export interface BuildHandlerRecord {
  * Build-time representation of one `@Where` declaration.
  */
 export interface BuildWhereOptions {
+  // prettier-ignore
+
+  /**
+   * Proto source-name path selected by the declaration.
+   */
   readonly eventField: string;
+
+  /**
+   * Declared field value in Stringifier text form.
+   */
   readonly equals: string;
 }
 
