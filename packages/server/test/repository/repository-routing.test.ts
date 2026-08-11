@@ -79,6 +79,7 @@ import type { ILogLayer } from "loglayer";
 import {
   Aggregate,
   BoundedContext,
+  CommandRouting,
   ProcessManager,
   Projection,
   Repository,
@@ -3062,6 +3063,16 @@ describe("repository signal routing", () => {
     expectTypeOf(route.entityId).toEqualTypeOf<string>();
 
     expect(() => BoundedContext.singleTenant("Tasks").add(repository).build()).not.toThrow();
+  });
+
+  it("uses an exact Command route instead of the declaration-first field", () => {
+    const repository = createRoutingRepository(
+      CommandRouting.create<string>().route(AggregateStateSchema, () => "custom-task"),
+    );
+
+    expect(repository.routeCommand(createAggregateCommand("command-custom", "first-task"))).toMatchObject({
+      entityId: "custom-task",
+    });
   });
 
   it("rejects blank first-field command IDs before handler invocation", () => {
@@ -7819,7 +7830,9 @@ describe("repository signal routing", () => {
   });
 });
 
-function createRoutingRepository(): Repository<typeof TaskAggregate> {
+function createRoutingRepository(
+  commandRouting?: CommandRouting<string>,
+): Repository<typeof TaskAggregate> {
   const handlers = EntityHandlers.define(TaskAggregate, AggregateStateSchema, (builder) => [
     builder.assign(AggregateStateSchema, "assignTask"),
     builder.react(ProjectionStateSchema, "reactToProjection"),
@@ -7829,6 +7842,7 @@ function createRoutingRepository(): Repository<typeof TaskAggregate> {
     entityType: TaskAggregate,
     schema: AggregateStateSchema,
     handlers,
+    commandRouting,
   });
 }
 

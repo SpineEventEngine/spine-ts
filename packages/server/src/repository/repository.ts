@@ -45,6 +45,11 @@ import type { EntityCommitStorage } from "@spine-event-engine/storage/internal/e
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
 
 import { CommandValidationError } from "../bus/command-errors.js";
+import {
+  CommandRoutingInternals,
+  type CommandRoute,
+  type CommandRouting,
+} from "./command-routing.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { Delivery } from "../delivery/delivery.js";
@@ -241,6 +246,11 @@ export interface RepositoryOptions<
    * use `number` version metadata, matching the Stand version shape used by the local runtime.
    */
   readonly handlers?: RepositoryHandlersOptionFor<EntityType>;
+
+  /**
+   * Mutable Command route declarations snapshotted when this repository is constructed.
+   */
+  readonly commandRouting?: CommandRouting<RepositoryEntityId<EntityType>>;
 
   /**
    * Generated event schemas that aggregate or process-manager handlers may emit.
@@ -481,6 +491,7 @@ export class Repository<
       this.#metadata,
       options.handlers,
       options.events ?? [],
+      CommandRoutingInternals.snapshot(options.commandRouting),
     );
     repositoryProducedEventSchemas.set(
       this,
@@ -3940,6 +3951,11 @@ const RepositoryRoutes = {
     metadata: EntityMetadata,
     handlersOption: RepositoryHandlersOption,
     producedEvents: readonly MessageSchema[],
+    commandRouting: Readonly<{
+      exact: ReadonlyMap<MessageSchema, CommandRoute<RepositoryEntityId<EntityType>>>;
+      semantic: ReadonlyMap<string, CommandRoute<RepositoryEntityId<EntityType>>>;
+      defaultRoute: CommandRoute<RepositoryEntityId<EntityType>> | undefined;
+    }>,
   ): RepositoryRouting<RepositoryEntityId<EntityType>> {
     const handlers = RepositoryHandlers.normalizeHandlers(handlersOption);
     RepositoryHandlers.validateHandlers(entityType, metadata, handlers);
@@ -3997,6 +4013,7 @@ const RepositoryRoutes = {
           commandReadiness,
           commandSchemas,
           metadata.idField,
+          commandRouting.exact,
         ),
       routeEvent: (event: Event) =>
         RepositoryRoutes.routeEvent<RepositoryEntityId<EntityType>>(
@@ -4015,6 +4032,7 @@ const RepositoryRoutes = {
     readiness: CommandRegistrationReadinessLookup | undefined,
     schemas: readonly MessageSchema[],
     targetIdField: DescriptorFieldMetadata,
+    exactRoutes: ReadonlyMap<MessageSchema, CommandRoute<Id>>,
   ): RepositoryCommandRoute<Id> {
     const message = command.message;
     if (message === undefined || message.typeUrl === "") {
@@ -4027,15 +4045,30 @@ const RepositoryRoutes = {
       throw new Error(`Repository command routing has no assignee for "${schema.typeName}".`);
     }
 
+    const customRoute = exactRoutes.get(schema);
+    const candidateId =
+      customRoute === undefined
+        ? RepositoryRoutes.readFirstFieldId(message, schema, "command")
+        : RepositoryRoutes.callCommandRoute(customRoute, message, schema, command.context);
+
     return Object.freeze({
-      entityId: RepositoryRoutes.readRouteId(
-        RepositoryRoutes.readFirstFieldId(message, schema, "command"),
-        targetIdField,
-        "command",
-      ).id as Id,
+      entityId: RepositoryRoutes.readRouteId(candidateId, targetIdField, "command").id as Id,
       messageFullTypeName: schema.typeName,
       invocation: "deferred",
     });
+  },
+
+  callCommandRoute<Id>(
+    route: CommandRoute<Id>,
+    message: NonNullable<Command["message"]>,
+    schema: MessageSchema,
+    context: Command["context"] | undefined,
+  ): Id {
+    const unpacked = AnyMessages.unpack(message, schema);
+    if (unpacked === undefined) {
+      throw new Error("Repository command routing requires a readable Command message.");
+    }
+    return route(unpacked, context ?? create(CommandContextSchema));
   },
 
   routeEvent<Id>(
