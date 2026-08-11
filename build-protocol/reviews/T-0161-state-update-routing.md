@@ -1,6 +1,6 @@
 # T-0161 Review Record
 
-Status: Review corrections complete; targeted re-review pending
+Status: Accepted
 
 ## Assignments
 
@@ -51,3 +51,20 @@ The execution surface does not expose runtime-model metadata. Explicit configure
   branches 124/137 (90.51%), and functions 47/47 (100%).
 - Generated build, tooling typecheck, changed-file ESLint, cleanup, TSDoc,
   logging containment, TypeDoc/API inventory, Prettier, and diff checks pass.
+
+## Final acceptance
+
+- Style/maintainability: CLEAN after the shared decoder, internal route seam,
+  explicit family coverage, and cycle-graph correction.
+- TypeScript/API: CLEAN after the public route leak and non-Projection option
+  type were removed.
+- Performance/reliability: CLEAN after direct and indirect state-subscription
+  feedback cycles were rejected before runtime activation.
+- Documentation/TSDoc: CLEAN; task status and evidence are coherent, with
+  product Markdown still assigned to Wave 10.
+- Security: N/A for this bounded internal routing slice; retained for T-0167.
+- Final `verify:task --no-coverage` passed its complete deterministic gate and
+  237/237 focused tests. The separate fresh changed-range coverage result above
+  satisfies the task's coverage gate.
+
+T-0161 is accepted for integration.

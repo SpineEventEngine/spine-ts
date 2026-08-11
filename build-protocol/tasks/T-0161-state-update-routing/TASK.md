@@ -1,6 +1,6 @@
 # T-0161: State-update routing and delivery
 
-Status: Review corrections complete; targeted re-review pending
+Status: Complete
 
 ## Objective
 
