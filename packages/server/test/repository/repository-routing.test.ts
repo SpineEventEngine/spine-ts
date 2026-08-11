@@ -10683,3 +10683,70 @@ it("rejects state-update routing for Aggregate repositories", () => {
       } as never),
   ).toThrow(/State-update routing is supported only by Projection repositories/);
 });
+
+describe("Projection state-update routing", () => {
+  it("uses the first compatible state field and ignores unrelated state types", () => {
+    const handlers = EntityHandlers.define(
+      ExecutingTaskProjection,
+      ProjectionStateSchema,
+      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
+    );
+    const repository = new Repository({
+      entityType: ExecutingTaskProjection,
+      schema: ProjectionStateSchema,
+      handlers,
+    });
+
+    expect(repository.routeStateUpdate(createStateChangedEvent("state-1"))).toMatchObject({
+      entityIds: ["state-1"],
+      messageFullTypeName: ProjectionStateSchema.typeName,
+    });
+    expect(
+      repository.routeStateUpdate(
+        createStateChangedEvent("other", create(AggregateStateSchema, { id: "other" })),
+      ),
+    ).toBeUndefined();
+  });
+
+  it("evaluates an exact multicast route once and stably deduplicates targets", () => {
+    const route = vi.fn(() => ["second", "first", "second"]);
+    const handlers = EntityHandlers.define(
+      ExecutingTaskProjection,
+      ProjectionStateSchema,
+      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
+    );
+    const repository = new Repository({
+      entityType: ExecutingTaskProjection,
+      schema: ProjectionStateSchema,
+      handlers,
+      stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectionStateSchema, route),
+    });
+
+    const result = repository.routeStateUpdate(createStateChangedEvent("source"));
+
+    expect(route).toHaveBeenCalledOnce();
+    expect(result?.entityIds).toEqual(["second", "first"]);
+    expect(Object.isFrozen(result?.entityIds)).toBe(true);
+  });
+});
+
+function createStateChangedEvent(
+  id: string,
+  state: Message = create(ProjectionStateSchema, { id }),
+) {
+  const stateSchema =
+    state.$typeName === ProjectionStateSchema.typeName
+      ? ProjectionStateSchema
+      : AggregateStateSchema;
+  return create(EventSchema, {
+    id: create(EventIdSchema, { value: `state-change-${id}` }),
+    message: AnyMessages.pack(
+      EntityStateChangedSchema,
+      create(EntityStateChangedSchema, {
+        newState: AnyMessages.pack(stateSchema, state as never, { validate: false }),
+      }),
+      { validate: false },
+    ),
+    context: create(EventContextSchema),
+  });
+}
