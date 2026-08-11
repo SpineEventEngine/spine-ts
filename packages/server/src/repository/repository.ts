@@ -6,6 +6,7 @@ import {
   RejectionThrowable,
   Validate,
   TypeUrls,
+  TypeRegistry,
   AnyMessages,
 } from "@spine-event-engine/core";
 import {
@@ -3997,6 +3998,7 @@ const RepositoryRoutes = {
       ),
     );
     const commandReactions = RepositoryHandlers.createCommandReactionMap(handlers);
+    const commandRoutes = RepositoryRoutes.resolveCommandRoutes(commandSchemas, commandRouting);
 
     return Object.freeze({
       commandSchemas,
@@ -4013,7 +4015,7 @@ const RepositoryRoutes = {
           commandReadiness,
           commandSchemas,
           metadata.idField,
-          commandRouting.exact,
+          commandRoutes,
         ),
       routeEvent: (event: Event) =>
         RepositoryRoutes.routeEvent<RepositoryEntityId<EntityType>>(
@@ -4032,7 +4034,7 @@ const RepositoryRoutes = {
     readiness: CommandRegistrationReadinessLookup | undefined,
     schemas: readonly MessageSchema[],
     targetIdField: DescriptorFieldMetadata,
-    exactRoutes: ReadonlyMap<MessageSchema, CommandRoute<Id>>,
+    commandRoutes: ReadonlyMap<MessageSchema, CommandRoute<Id>>,
   ): RepositoryCommandRoute<Id> {
     const message = command.message;
     if (message === undefined || message.typeUrl === "") {
@@ -4045,7 +4047,7 @@ const RepositoryRoutes = {
       throw new Error(`Repository command routing has no assignee for "${schema.typeName}".`);
     }
 
-    const customRoute = exactRoutes.get(schema);
+    const customRoute = commandRoutes.get(schema);
     const candidateId =
       customRoute === undefined
         ? RepositoryRoutes.readFirstFieldId(message, schema, "command")
@@ -4056,6 +4058,53 @@ const RepositoryRoutes = {
       messageFullTypeName: schema.typeName,
       invocation: "deferred",
     });
+  },
+
+  resolveCommandRoutes<Id>(
+    schemas: readonly MessageSchema[],
+    routing: Readonly<{
+      exact: ReadonlyMap<MessageSchema, CommandRoute<Id>>;
+      semantic: ReadonlyMap<string, CommandRoute<Id>>;
+      defaultRoute: CommandRoute<Id> | undefined;
+    }>,
+  ): ReadonlyMap<MessageSchema, CommandRoute<Id>> {
+    const routes = new Map<MessageSchema, CommandRoute<Id>>();
+    const schemaSet = new Set(schemas);
+
+    for (const [schema, route] of routing.exact) {
+      if (!schemaSet.has(schema)) {
+        throw new Error(`Repository command routing has an unregistered exact route for "${schema.typeName}".`);
+      }
+      routes.set(schema, route);
+    }
+
+    const registered = schemas.map((schema) => ({ schema, metadata: new TypeRegistry().register(schema) }));
+    for (const javaType of routing.semantic.keys()) {
+      const registeredRoute = registered.some(
+        ({ metadata }) =>
+          metadata.isTypes.includes(javaType) || metadata.everyIsTypes.includes(javaType),
+      );
+      if (!registeredRoute) {
+        throw new Error(`Repository command routing has an unregistered semantic route for "${javaType}".`);
+      }
+    }
+
+    for (const { schema, metadata } of registered) {
+      if (routes.has(schema)) continue;
+      const direct = metadata.isTypes
+        .map((javaType) => routing.semantic.get(javaType))
+        .filter((route): route is CommandRoute<Id> => route !== undefined);
+      const file = metadata.everyIsTypes
+        .map((javaType) => routing.semantic.get(javaType))
+        .filter((route): route is CommandRoute<Id> => route !== undefined);
+      const candidates = direct.length > 0 ? direct : file;
+      if (candidates.length > 1) {
+        throw new Error(`Repository command routing has ambiguous semantic routes for "${schema.typeName}".`);
+      }
+      if (candidates[0] !== undefined) routes.set(schema, candidates[0]);
+      else if (routing.defaultRoute !== undefined) routes.set(schema, routing.defaultRoute);
+    }
+    return routes;
   },
 
   callCommandRoute<Id>(

@@ -3075,6 +3075,18 @@ describe("repository signal routing", () => {
     });
   });
 
+  it("prefers descriptor direct semantic Command routes over file semantic routes", () => {
+    const repository = createRoutingRepository(
+      CommandRouting.create<string>()
+        .routeSemantic("example.tags.ASharedTag", () => "file-task")
+        .routeSemantic("example.tags.AggregateTag", () => "direct-task"),
+    );
+
+    expect(repository.routeCommand(createAggregateCommand("command-semantic", "first-task"))).toMatchObject({
+      entityId: "direct-task",
+    });
+  });
+
   it("rejects blank first-field command IDs before handler invocation", () => {
     const repository = createRoutingRepository();
 
