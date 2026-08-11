@@ -1,6 +1,6 @@
 # T-0160 Review Record
 
-Status: Accepted behavior; fresh-worktree packaging re-review pending
+Status: Accepted; final verification pending
 
 ## Assignments
 
@@ -93,3 +93,9 @@ explicit immutable configured role/profile is then the durable evidence.
   revised correction inspects only the frozen `spine.options.entity` extension
   field number in descriptor unknown fields, which is sufficient for presence-
   based provenance and removes the premature runtime package dependency.
+- Fresh-worktree packaging reliability confirmation: CLEAN. Field `73903`
+  matches the frozen extension declaration; missing or mismatched provenance
+  stays unclassified and fails closed. The analyzer suite passes 28/28.
+- Fresh-worktree packaging style/maintainability confirmation: CLEAN. The named
+  constant and presence check mirror Buf extension semantics without adding a
+  parser; records and `git diff --check` are clean.
