@@ -248,6 +248,7 @@ export {
 } from "./runtime/runtime-transport.js";
 
 export { type MessageId, type PrimitiveId } from "./repository/primitive-id.js";
+export { CommandRouting, type CommandRoute } from "./repository/command-routing.js";
 
 export {
   type ConcreteRepositoryEntityType,

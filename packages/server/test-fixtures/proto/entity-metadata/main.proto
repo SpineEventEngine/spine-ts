@@ -88,3 +88,25 @@ message MessageIdProjectionState {
   // A queryable name.
   string name = 2 [(column) = true];
 }
+
+message Int32AggregateState {
+  option (entity).kind = PROCESS_MANAGER;
+
+  int32 id = 1 [(set_once) = true];
+  string name = 2;
+}
+
+message Int64ProcessManagerState {
+  option (entity).kind = PROCESS_MANAGER;
+
+  int64 id = 1 [(set_once) = true];
+  string queue = 2;
+}
+
+message RepeatedIdCommand {
+  repeated string id = 1;
+}
+
+message MapIdCommand {
+  map<string, string> id = 1;
+}

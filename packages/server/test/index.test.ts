@@ -218,6 +218,7 @@ describe("@spine-event-engine/server", () => {
         "BoundedContextNameError",
         "CommandBus",
         "CommandRegistrationReadiness",
+        "CommandRouting",
         "DeliveryBuilder",
         "DeliveryMonitor",
         "DeliveryShutdownTimeoutError",

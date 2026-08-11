@@ -1,0 +1,90 @@
+# T-0158 Review Record
+
+Status: Complete
+
+## Assignments
+
+- Implementation: existing implementer, explicit `gpt-5.6-terra` / medium,
+  no subagents.
+- Style/maintainability: required, configured `gpt-5.6-terra` / high.
+- TypeScript/API documentation: required, configured `gpt-5.6-terra` / high.
+- Documentation/TSDoc: required, configured documentation reviewer
+  `gpt-5.6-luna` / medium.
+- Performance/reliability: required, configured `gpt-5.6-terra` / high.
+- Security: N/A because routing does not change a trust boundary.
+
+Runtime metadata is unavailable unless the execution surface exposes it; the
+explicit immutable configured role/profile is then the durable evidence.
+
+## Mechanical Evidence
+
+- Generated build passes.
+- Focused behavior and API profile passes 5 files / 232 tests.
+- Exact changed-range LCOV: statements/lines 108/113 (95.58%), branches
+  100/110 (90.91%), functions 26/26 (100%).
+- Changed-file ESLint, tooling typecheck, TSDoc, TypeDoc/API inventory,
+  generated fixture check, Prettier, and `git diff --check` are required clean
+  before reviewer dispatch.
+
+## Review Wave
+
+- Style/maintainability: requested correction. Repository-derived numeric
+  producer IDs used the generic `DoubleValue` codec, and replay-count tests
+  bypassed real admission.
+- TypeScript/API documentation: requested correction. Semantic Java type names
+  admitted non-canonical whitespace, the public constructor expanded the
+  frozen factory API, and `CommandRoute` did not describe default context.
+- Documentation/TSDoc: requested correction. A historical work-log statement
+  described persisted targets as trusted without naming schema decoding and ID
+  validation.
+- Performance/reliability: requested correction for the typed producer-ID
+  mismatch and for evidence at the real admission boundary. Its broader request
+  for one route invocation across independent duplicate/retry admissions is not
+  accepted: that is not the frozen contract and cannot survive restart without
+  a prohibited durable route receipt or marker.
+- Security: N/A; routing changes no authentication, authorization, secret, or
+  external trust boundary.
+
+## Correction Disposition
+
+- Repository event contexts, lifecycle events, rejection events, and handler
+  diagnostic receiver IDs now use one descriptor-aware `EntityIds` packer.
+  JVM-compatible `Int32Value` producer IDs are readable.
+- Actual `commandBus` admission followed by direct stored-target replay covers
+  both Aggregate and Process Manager routes. Each accepted admission invokes
+  the application route once; replay invokes it zero times.
+- `CommandRouting` construction, semantic-key validation, route callback TSDoc,
+  and historical route-selection wording are corrected.
+- Targeted re-review is required for style/maintainability, TypeScript/API docs,
+  documentation/TSDoc, and performance/reliability. Security remains N/A.
+
+## Targeted Re-review
+
+- Performance/reliability: CLEAN. The reviewer accepted the once-per-admission
+  disposition and verified descriptor-aware IDs across records, event contexts,
+  lifecycle events, diagnostics, rejections, and JVM-shaped input.
+- Style/maintainability: CLEAN after both live-context tests moved cleanup into
+  `try/finally` blocks.
+- TypeScript/API documentation: CLEAN after `routeSemantic()` documented its
+  canonical no-surrounding-whitespace key requirement.
+- Documentation/TSDoc: CLEAN. The work log and public comments distinguish
+  stored route selection from schema validation and describe the normalized
+  callback context.
+- Security: N/A remains unchanged.
+
+## Final Mechanical Evidence
+
+- Generated build passes; focused correction profile passes 5 files / 234
+  tests.
+- Fresh LCOV at `/tmp/t0158-cov-review-correction/lcov.info`, intersected with
+  production lines changed from `origin/main`, reports statements/lines
+  117/122 (95.90%), branches 102/112 (91.07%), and functions 26/26 (100%).
+- Tooling typecheck, TSDoc, TypeDoc/API inventory, changed-file ESLint,
+  Prettier, and `git diff --check` pass.
+- A `verify:task --coverage` attempt passed all shared gates and 234 tests but
+  failed its whole-file 90% threshold because `coverage.include` measures every
+  unrelated pre-existing branch in `repository.ts`. Exact changed-range LCOV is
+  the acceptance metric above. The final verifier uses the supported
+  `--no-coverage` profile with the same tests and retains the exact LCOV result.
+- Final `pnpm verify:task -- --no-coverage` passed every shared deterministic
+  gate and 5 focused files / 234 tests.

@@ -1,4 +1,4 @@
-import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
+import { clone, create, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema, type Any, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   ValidationException,
@@ -6,6 +6,7 @@ import {
   RejectionThrowable,
   Validate,
   TypeUrls,
+  TypeRegistry,
   AnyMessages,
   Identifiers,
 } from "@spine-event-engine/core";
@@ -46,6 +47,11 @@ import type { EntityCommitStorage } from "@spine-event-engine/storage/internal/e
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
 
 import { CommandValidationError } from "../bus/command-errors.js";
+import {
+  CommandRoutingInternals,
+  type CommandRoute,
+  type CommandRouting,
+} from "./command-routing.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { Delivery } from "../delivery/delivery.js";
@@ -71,7 +77,11 @@ import {
   type EntityConstructor,
   type FirstFieldRoutingHint,
 } from "../entity/entity-metadata.js";
-import { EntityRecords, entityStorageDescriptor } from "../entity/entity-storage-descriptor.js";
+import {
+  EntityIds,
+  EntityRecords,
+  entityStorageDescriptor,
+} from "../entity/entity-storage-descriptor.js";
 import { SpecScanner } from "../entity/spec-scanner.js";
 import {
   CommandRegistrationReadiness,
@@ -242,6 +252,11 @@ export interface RepositoryOptions<
    * use `number` version metadata, matching the Stand version shape used by the local runtime.
    */
   readonly handlers?: RepositoryHandlersOptionFor<EntityType>;
+
+  /**
+   * Mutable Command route declarations snapshotted when this repository is constructed.
+   */
+  readonly commandRouting?: CommandRouting<RepositoryEntityId<EntityType>>;
 
   /**
    * Generated event schemas that aggregate or process-manager handlers may emit.
@@ -482,6 +497,7 @@ export class Repository<
       this.#metadata,
       options.handlers,
       options.events ?? [],
+      CommandRoutingInternals.snapshot(options.commandRouting),
     );
     repositoryProducedEventSchemas.set(
       this,
@@ -1378,7 +1394,7 @@ class AggregateCommandExecution {
     );
   }
 
-  async run(): Promise<EntityInboxFollowUp | undefined> {
+  async run(replayedRoute?: RepositoryCommandRoute): Promise<EntityInboxFollowUp | undefined> {
     void RepositorySignals.requireCommandId(this.#command);
 
     const commandMessage = EntityInvocation.requireSignalMessage(this.#command.message, "command");
@@ -1389,7 +1405,7 @@ class AggregateCommandExecution {
     );
     const message = EntityInvocation.unpackRequired(commandMessage, commandSchema, "command");
 
-    const route = this.#repository.routeCommand(this.#command);
+    const route = replayedRoute ?? this.#repository.routeCommand(this.#command);
     const assignee = this.#routing.commandReadiness?.findCommandAssignee(route.messageFullTypeName);
 
     if (assignee === undefined) {
@@ -1417,7 +1433,13 @@ class AggregateCommandExecution {
       if (!RejectionThrowable.is(error)) {
         throw error;
       }
-      RepositorySignals.postRejectionEvent(this.#runtime, this.#command, route.entityId, error);
+      RepositorySignals.postRejectionEvent(
+        this.#runtime,
+        this.#repository,
+        this.#command,
+        route.entityId,
+        error,
+      );
       return undefined;
     }
     const events = this.#bindProducedEvents(
@@ -2319,7 +2341,7 @@ class ProcessManagerCommandExecution {
     this.#support = new ProcessManagerExecutionSupport(repository, runtime);
   }
 
-  async run(): Promise<void> {
+  async run(replayedRoute?: RepositoryCommandRoute): Promise<void> {
     RepositorySignals.requireCommandId(this.#command);
     const commandMessage = EntityInvocation.requireSignalMessage(this.#command.message, "command");
     const commandSchema = RepositoryRoutes.schemaForTypeUrl(
@@ -2328,7 +2350,7 @@ class ProcessManagerCommandExecution {
       "command",
     );
     const message = EntityInvocation.unpackRequired(commandMessage, commandSchema, "command");
-    const route = this.#repository.routeCommand(this.#command);
+    const route = replayedRoute ?? this.#repository.routeCommand(this.#command);
     const assignee = this.#routing.commandReadiness?.findCommandAssignee(route.messageFullTypeName);
 
     if (assignee === undefined) {
@@ -2353,7 +2375,13 @@ class ProcessManagerCommandExecution {
       if (!RejectionThrowable.is(error)) {
         throw error;
       }
-      RepositorySignals.postRejectionEvent(this.#runtime, this.#command, route.entityId, error);
+      RepositorySignals.postRejectionEvent(
+        this.#runtime,
+        this.#repository,
+        this.#command,
+        route.entityId,
+        error,
+      );
       return;
     }
 
@@ -2779,7 +2807,7 @@ interface RepositoryEntityStorage<I, S extends Message> {
 
 interface RoutableId {
   readonly id: unknown;
-  readonly value: string | number | boolean;
+  readonly value: string | number | bigint | boolean;
 }
 
 /**
@@ -3126,38 +3154,29 @@ const RepositorySignals = {
     return Number(version);
   },
 
-  runtimeProducerId(entityId: unknown): string | number | boolean | undefined {
-    return PrimitiveIds.readFinite(entityId);
-  },
-
   eventContextWithProducer(
     context: NonNullable<Event["context"]>,
     repository: RepositoryView,
     entityId: unknown,
   ): NonNullable<Event["context"]> {
-    const idField = repository.idField.descriptor;
-    const producerId =
-      idField.fieldKind === "message"
-        ? AnyMessages.pack(idField.message as MessageSchema, entityId as never)
-        : PrimitiveIds.pack(entityId as never);
+    const producerId = EntityIds.pack(repository.stateSchema, entityId);
     return create(EventContextSchema, { ...context, producerId });
   },
 
   postRejectionEvent(
     runtime: RepositoryRuntime,
+    repository: RepositoryView,
     command: Command,
     entityId: unknown,
     rejection: RejectionThrowable,
   ): void {
     runtime.registerEventSchema(rejection.schema);
-    const metadata = runtime.signalMetadata.eventFromCommand(command, 1, {
-      producerId: RepositorySignals.runtimeProducerId(entityId) ?? "Unknown",
-    });
+    const metadata = runtime.signalMetadata.eventFromCommand(command, 1, {});
     const event = create(EventSchema, {
       id: metadata.id,
       message: AnyMessages.pack(rejection.schema, rejection.messageThrown()),
       context: create(EventContextSchema, {
-        ...metadata.context,
+        ...RepositorySignals.eventContextWithProducer(metadata.context, repository, entityId),
         rejection: create(RejectionEventContextSchema, {
           command: clone(CommandSchema, command),
           stacktrace: rejection.stack ?? "",
@@ -3254,12 +3273,10 @@ class EntityStateChangePublishing {
     lifecycle: EntityLifecycleFlags,
     version: number,
   ): void {
-    const producerId = RepositorySignals.runtimeProducerId(entityId);
     this.#publish(
       runtime,
       (ordinal) =>
         runtime.signalMetadata.eventFromCommand(command, ordinal, {
-          ...(producerId === undefined ? {} : { producerId }),
           version,
         }),
       {
@@ -3281,12 +3298,10 @@ class EntityStateChangePublishing {
     lifecycle: EntityLifecycleFlags,
     version: number,
   ): void {
-    const producerId = RepositorySignals.runtimeProducerId(entityId);
     this.#publish(
       runtime,
       (ordinal) =>
         runtime.signalMetadata.eventFromEvent(source, ordinal, {
-          ...(producerId === undefined ? {} : { producerId }),
           version,
         }),
       {
@@ -3313,7 +3328,11 @@ class EntityStateChangePublishing {
           draft.schema,
           draft.messageAt(metadata.context.timestamp) as never,
         ),
-        context: metadata.context,
+        context: RepositorySignals.eventContextWithProducer(
+          metadata.context,
+          change.repository,
+          change.entityId,
+        ),
       });
       this.#post(runtime, event);
     });
@@ -3473,10 +3492,7 @@ class EntityStateChangePublishing {
   }
 
   #packEntityId(repository: RepositoryView, entityId: unknown) {
-    const field = repository.idField.descriptor;
-    return field.fieldKind === "message"
-      ? AnyMessages.pack(field.message as MessageSchema, entityId as never)
-      : PrimitiveIds.pack(entityId as never);
+    return EntityIds.pack(repository.stateSchema, entityId);
   }
 }
 const EntityStateChangePublisher = Object.freeze(new EntityStateChangePublishing());
@@ -3605,10 +3621,7 @@ class HandlerDispatchPublishing {
   }
 
   #packEntityId(repository: RepositoryView, entityId: unknown): Any {
-    const field = repository.idField.descriptor;
-    return field.fieldKind === "message"
-      ? AnyMessages.pack(field.message as MessageSchema, entityId as never)
-      : PrimitiveIds.pack(entityId as never);
+    return EntityIds.pack(repository.stateSchema, entityId);
   }
 
   #eventMessage(
@@ -3941,6 +3954,11 @@ const RepositoryRoutes = {
     metadata: EntityMetadata,
     handlersOption: RepositoryHandlersOption,
     producedEvents: readonly MessageSchema[],
+    commandRouting: Readonly<{
+      exact: ReadonlyMap<MessageSchema, CommandRoute<RepositoryEntityId<EntityType>>>;
+      semantic: ReadonlyMap<string, CommandRoute<RepositoryEntityId<EntityType>>>;
+      defaultRoute: CommandRoute<RepositoryEntityId<EntityType>> | undefined;
+    }>,
   ): RepositoryRouting<RepositoryEntityId<EntityType>> {
     const handlers = RepositoryHandlers.normalizeHandlers(handlersOption);
     RepositoryHandlers.validateHandlers(entityType, metadata, handlers);
@@ -3982,6 +4000,7 @@ const RepositoryRoutes = {
       ),
     );
     const commandReactions = RepositoryHandlers.createCommandReactionMap(handlers);
+    const commandRoutes = RepositoryRoutes.resolveCommandRoutes(commandSchemas, commandRouting);
 
     return Object.freeze({
       commandSchemas,
@@ -3998,6 +4017,7 @@ const RepositoryRoutes = {
           commandReadiness,
           commandSchemas,
           metadata.idField,
+          commandRoutes,
         ),
       routeEvent: (event: Event) =>
         RepositoryRoutes.routeEvent<RepositoryEntityId<EntityType>>(
@@ -4016,6 +4036,7 @@ const RepositoryRoutes = {
     readiness: CommandRegistrationReadinessLookup | undefined,
     schemas: readonly MessageSchema[],
     targetIdField: DescriptorFieldMetadata,
+    commandRoutes: ReadonlyMap<MessageSchema, CommandRoute<Id>>,
   ): RepositoryCommandRoute<Id> {
     const message = command.message;
     if (message === undefined || message.typeUrl === "") {
@@ -4028,15 +4049,86 @@ const RepositoryRoutes = {
       throw new Error(`Repository command routing has no assignee for "${schema.typeName}".`);
     }
 
+    const customRoute = commandRoutes.get(schema);
+    const candidateId =
+      customRoute === undefined
+        ? RepositoryRoutes.readFirstFieldId(message, schema, "command")
+        : RepositoryRoutes.callCommandRoute(customRoute, message, schema, command.context);
+
     return Object.freeze({
-      entityId: RepositoryRoutes.readRouteId(
-        RepositoryRoutes.readFirstFieldId(message, schema, "command"),
-        targetIdField,
-        "command",
-      ).id as Id,
+      entityId: RepositoryRoutes.readRouteId(candidateId, targetIdField, "command").id as Id,
       messageFullTypeName: schema.typeName,
       invocation: "deferred",
     });
+  },
+
+  resolveCommandRoutes<Id>(
+    schemas: readonly MessageSchema[],
+    routing: Readonly<{
+      exact: ReadonlyMap<MessageSchema, CommandRoute<Id>>;
+      semantic: ReadonlyMap<string, CommandRoute<Id>>;
+      defaultRoute: CommandRoute<Id> | undefined;
+    }>,
+  ): ReadonlyMap<MessageSchema, CommandRoute<Id>> {
+    const routes = new Map<MessageSchema, CommandRoute<Id>>();
+    const schemaSet = new Set(schemas);
+
+    for (const [schema, route] of routing.exact) {
+      if (!schemaSet.has(schema)) {
+        throw new Error(
+          `Repository command routing has an unregistered exact route for "${schema.typeName}".`,
+        );
+      }
+      routes.set(schema, route);
+    }
+
+    const registered = schemas.map((schema) => ({
+      schema,
+      metadata: new TypeRegistry().register(schema),
+    }));
+    for (const javaType of routing.semantic.keys()) {
+      const registeredRoute = registered.some(
+        ({ metadata }) =>
+          metadata.isTypes.includes(javaType) || metadata.everyIsTypes.includes(javaType),
+      );
+      if (!registeredRoute) {
+        throw new Error(
+          `Repository command routing has an unregistered semantic route for "${javaType}".`,
+        );
+      }
+    }
+
+    for (const { schema, metadata } of registered) {
+      if (routes.has(schema)) continue;
+      const direct = metadata.isTypes
+        .map((javaType) => routing.semantic.get(javaType))
+        .filter((route): route is CommandRoute<Id> => route !== undefined);
+      const file = metadata.everyIsTypes
+        .map((javaType) => routing.semantic.get(javaType))
+        .filter((route): route is CommandRoute<Id> => route !== undefined);
+      const candidates = direct.length > 0 ? direct : file;
+      if (candidates.length > 1) {
+        throw new Error(
+          `Repository command routing has ambiguous semantic routes for "${schema.typeName}".`,
+        );
+      }
+      if (candidates[0] !== undefined) routes.set(schema, candidates[0]);
+      else if (routing.defaultRoute !== undefined) routes.set(schema, routing.defaultRoute);
+    }
+    return routes;
+  },
+
+  callCommandRoute<Id>(
+    route: CommandRoute<Id>,
+    message: NonNullable<Command["message"]>,
+    schema: MessageSchema,
+    context: Command["context"] | undefined,
+  ): Id {
+    const unpacked = AnyMessages.unpack(message, schema);
+    if (unpacked === undefined) {
+      throw new Error("Repository command routing requires a readable Command message.");
+    }
+    return route(unpacked, context ?? create(CommandContextSchema));
   },
 
   routeEvent<Id>(
@@ -4107,9 +4199,16 @@ const RepositoryRoutes = {
       throw new Error(`Repository ${signalKind} routing requires a readable first field.`);
     }
 
+    if (firstField.fieldKind === "list" || firstField.fieldKind === "map") {
+      throw new Error(`Repository ${signalKind} routing requires a singular non-map first field.`);
+    }
+
     const value = (unpacked as Record<string, unknown>)[firstField.localName];
     if (value === undefined || value === null || RepositoryRoutes.isBlankRouteId(value)) {
       throw new Error(`Repository ${signalKind} routing requires a non-empty first field.`);
+    }
+    if (signalKind === "command" && (value === 0 || value === false)) {
+      throw new Error("Repository command routing requires a non-default first field.");
     }
 
     return value;
@@ -4121,7 +4220,7 @@ const RepositoryRoutes = {
     return typeof id === "string" && id.trim().length === 0;
   },
 
-  readProducerId(event: Event): string | number | boolean | undefined {
+  readProducerId(event: Event): string | number | bigint | boolean | undefined {
     const producerId = event.context?.producerId;
     if (producerId === undefined) {
       return undefined;
@@ -4212,7 +4311,10 @@ const RepositoryRoutes = {
     if (descriptor.fieldKind === "message") {
       return RepositoryRoutes.readMessageRouteId(value, descriptor.message.typeName, signalKind);
     }
-    return RepositoryRoutes.readPrimitiveRouteId(value, signalKind);
+    if (descriptor.fieldKind === "scalar") {
+      return RepositoryRoutes.readPrimitiveRouteId(value, descriptor.scalar, signalKind);
+    }
+    throw new Error(`Repository ${signalKind} routing requires a scalar or message-valued ID.`);
   },
 
   readMessageRouteId(
@@ -4234,12 +4336,17 @@ const RepositoryRoutes = {
     });
   },
 
-  readPrimitiveRouteId(value: unknown, signalKind: "command" | "event"): RoutableId {
+  readPrimitiveRouteId(
+    value: unknown,
+    targetType: ScalarType,
+    signalKind: "command" | "event",
+  ): RoutableId {
     const messageValue = MessageIds.readValue(value);
-    const id = PrimitiveIds.readFinite(messageValue ?? value);
+    const candidate = messageValue ?? value;
+    const id = RepositoryRoutes.readCompatiblePrimitiveId(candidate, targetType);
     if (id === undefined) {
       throw new Error(
-        `Repository ${signalKind} routing requires a finite primitive or single-field message ID.`,
+        `Repository ${signalKind} routing requires an ID compatible with the Entity state.`,
       );
     }
 
@@ -4247,6 +4354,33 @@ const RepositoryRoutes = {
       id,
       value: id,
     });
+  },
+
+  readCompatiblePrimitiveId(
+    value: unknown,
+    targetType: ScalarType,
+  ): string | number | bigint | undefined {
+    switch (targetType) {
+      case ScalarType.STRING:
+        return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+      case ScalarType.INT32:
+      case ScalarType.SINT32:
+      case ScalarType.SFIXED32:
+        return typeof value === "number" &&
+          Number.isInteger(value) &&
+          value >= -(2 ** 31) &&
+          value < 2 ** 31
+          ? value
+          : undefined;
+      case ScalarType.INT64:
+      case ScalarType.SINT64:
+      case ScalarType.SFIXED64:
+        return typeof value === "bigint" && value >= -(1n << 63n) && value < 1n << 63n
+          ? value
+          : undefined;
+      default:
+        return undefined;
+    }
   },
 };
 Object.freeze(RepositoryRoutes);
@@ -4661,6 +4795,34 @@ const InboxMessages = {
     return InboxTargets.equal(left, right);
   },
 
+  targetEntityId(targetId: Any, idField: DescriptorFieldMetadata): unknown {
+    const descriptor = idField.descriptor;
+    let entityId: unknown;
+    if (descriptor.fieldKind === "message") {
+      entityId = Identifiers.unpack(descriptor.message as MessageSchema, targetId);
+    } else if (descriptor.fieldKind === "scalar") {
+      switch (descriptor.scalar) {
+        case ScalarType.STRING:
+          entityId = Identifiers.unpack("string", targetId);
+          break;
+        case ScalarType.INT32:
+        case ScalarType.SINT32:
+        case ScalarType.SFIXED32:
+          entityId = Identifiers.unpack("int32", targetId);
+          break;
+        case ScalarType.INT64:
+        case ScalarType.SINT64:
+        case ScalarType.SFIXED64:
+          entityId = Identifiers.unpack("int64", targetId);
+          break;
+      }
+    }
+    if (entityId === undefined) {
+      throw new Error("Entity Inbox replay stored target ID is incompatible with the repository.");
+    }
+    return RepositoryRoutes.readRouteId(entityId, idField, "command").id;
+  },
+
   readInboxCommand(message: InboxMessage): Command {
     if (message.label !== "HANDLE_COMMAND") {
       throw new Error(`Entity Inbox replay does not handle "${message.label}" messages.`);
@@ -4746,9 +4908,9 @@ const InboxReplay = {
     const command = InboxMessages.readInboxCommand(message);
     InboxReplay.validateReplayTenant(runtime.context, deliveryTenantId, command);
     InboxReplay.validateReplayedCommandPayload(routing, command);
-    InboxReplay.validateReplayTarget(repository, message, command);
+    const route = InboxReplay.replayCommandRoute(repository, routing, message, command);
 
-    return await new AggregateCommandExecution(repository, routing, runtime, command).run();
+    return await new AggregateCommandExecution(repository, routing, runtime, command).run(route);
   },
 
   async replayPmInbox(
@@ -4790,9 +4952,9 @@ const InboxReplay = {
 
     InboxReplay.validateReplayTenant(runtime.context, deliveryTenantId, command);
     InboxReplay.validateReplayedCommandPayload(routing, command);
-    InboxReplay.validateReplayTarget(repository, message, command);
+    const route = InboxReplay.replayCommandRoute(repository, routing, message, command);
 
-    await new ProcessManagerCommandExecution(repository, routing, runtime, command).run();
+    await new ProcessManagerCommandExecution(repository, routing, runtime, command).run(route);
   },
 
   async replayProcessManagerEvent(
@@ -4961,13 +5123,12 @@ const InboxReplay = {
     }
   },
 
-  validateReplayTarget(
-    repository: RepositoryView & {
-      routeCommand(command: Command): RepositoryCommandRoute;
-    },
+  replayCommandRoute(
+    repository: RepositoryView,
+    routing: RepositoryRouting,
     message: InboxMessage,
     command: Command,
-  ): void {
+  ): RepositoryCommandRoute {
     const expectedTargetTypeUrl = TypeUrls.derive(repository.stateSchema);
 
     if (message.inboxId.targetTypeUrl !== expectedTargetTypeUrl) {
@@ -4976,12 +5137,18 @@ const InboxReplay = {
       );
     }
 
-    const route = repository.routeCommand(command);
-    const expectedTargetId = InboxMessages.inboxTargetId(route.entityId, repository.idField);
+    const commandMessage = EntityInvocation.requireSignalMessage(command.message, "command");
+    const schema = RepositoryRoutes.schemaForTypeUrl(
+      routing.commandSchemas,
+      commandMessage.typeUrl,
+      "command",
+    );
 
-    if (!InboxMessages.sameTargetId(message.inboxId.targetId, expectedTargetId)) {
-      throw new Error("Entity Inbox replay stored target ID does not match the routed command.");
-    }
+    return Object.freeze({
+      entityId: InboxMessages.targetEntityId(message.inboxId.targetId, repository.idField),
+      messageFullTypeName: schema.typeName,
+      invocation: "deferred",
+    });
   },
 
   replayProcessManagerId(
