@@ -1,6 +1,6 @@
 # T-0166 Review Record
 
-Status: Review complete; final verification pending
+Status: Complete; merge-ready
 
 ## Assignments
 
@@ -27,7 +27,9 @@ profiles are recorded as acceptance evidence.
   lines, 15/16 branches, and 7/7 functions: 100%, 93.75%, 100%, and 100%.
 - Cleanup enforcement, changed-file ESLint, TSDoc, TypeDoc/API inventory,
   Proto lint/generated-current, release-readiness, Prettier, and diff checks
-  pass. The final bounded `verify:task` remains pending.
+  pass. The final bounded `verify:task -- --no-coverage …` passes 121 focused
+  tests after completing every deterministic task gate; coverage is the fresh
+  separate changed-range measurement above.
 
 ## Concern review wave
 
