@@ -1,6 +1,6 @@
 # T-0162 Review Record
 
-Status: Implementation in progress
+Status: Ready for review
 
 ## Assignments
 
@@ -16,8 +16,13 @@ configured profiles are recorded as acceptance evidence.
 
 ## Mechanical evidence
 
-Pending implementation convergence.
+- Focused core behavior passes 87/87 tests.
+- Whole changed-production-file coverage passes: statements 369/383 (96.34%),
+  branches 225/245 (91.83%), functions 107/109 (98.16%), and lines 345/355
+  (97.18%).
+- Generated build, tooling typecheck, changed-file ESLint, cleanup, TSDoc,
+  logging containment, TypeDoc/API inventory, formatting, and diff checks pass.
 
 ## Specialist review wave
 
-Pending deterministic mechanical gates.
+Ready for the single specialist review wave.

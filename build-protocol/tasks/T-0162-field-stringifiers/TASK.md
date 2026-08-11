@@ -1,6 +1,6 @@
 # T-0162: Field stringifiers
 
-Status: Implementation in progress
+Status: Ready for review
 
 ## Objective
 
