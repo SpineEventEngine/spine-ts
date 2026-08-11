@@ -1,6 +1,6 @@
 import { create } from "@bufbuild/protobuf";
 import { Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyMessages, Identifiers } from "@spine-event-engine/core";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
@@ -68,6 +68,31 @@ describe("Inbox", () => {
 
     expect(InboxTargets.equal(text, integer)).toBe(false);
     expect(InboxTargets.key(text)).not.toBe(InboxTargets.key(integer));
+  });
+
+  it("deduplicates equal typed targets but not printable values from another identifier kind", async () => {
+    const inbox = open("Tasks");
+    const first = {
+      ...input(createMessage("ignored", "same-signal", 1n)),
+      inboxId: { targetId: Identifiers.pack("int32", 42), targetTypeUrl: "type.example.dev/tasks.Typed" },
+    };
+    const duplicate = { ...first, version: 2n };
+    const otherKind = {
+      ...first,
+      signalId: "same-signal",
+      inboxId: { targetId: Identifiers.pack("string", "42"), targetTypeUrl: "type.example.dev/tasks.Typed" },
+      version: 3n,
+    };
+
+    const written = await inbox.receive(first);
+    await inbox.markDelivered(written.message);
+    const sameTyped = await inbox.receive(duplicate);
+    const differentTyped = await inbox.receive(otherKind);
+
+    await expect(inbox.storage.admit(sameTyped.message)).resolves.toBeUndefined();
+    await expect(inbox.storage.admit(differentTyped.message)).resolves.toMatchObject({
+      inboxId: { targetId: Identifiers.pack("string", "42") },
+    });
   });
 });
 
