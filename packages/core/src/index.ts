@@ -99,18 +99,25 @@ export const DEFAULT_TYPE_URL_PREFIX = "type.googleapis.com";
 export type MessageSchema = GenMessage<Message>;
 
 /**
- * Checks whether an error identifies a malformed descriptor semantic option.
- *
- * @param error Value thrown while registering descriptor metadata.
- * @returns Whether the error is the core invalid-semantic-option failure.
+ * Identifies core failures caused by malformed descriptor semantic options.
  */
-export function isInvalidSemanticOptionError(
-  error: unknown,
-): error is Error & { readonly code: "INVALID_SEMANTIC_OPTION" } {
-  return (
-    error instanceof InvalidSemanticOptionError && error.code === INVALID_SEMANTIC_OPTION_ERROR
-  );
-}
+// prettier-ignore
+export const SemanticOptionErrors: Readonly<{
+
+  /**
+   * Checks whether a thrown value is the core invalid-semantic-option failure.
+   *
+   * @param value Value thrown while registering descriptor metadata.
+   * @returns Whether the value carries the invalid semantic-option code.
+   */
+  isInvalid(value: unknown): value is Error & { readonly code: "INVALID_SEMANTIC_OPTION" };
+}> = Object.freeze({
+  isInvalid(value: unknown): value is Error & { readonly code: "INVALID_SEMANTIC_OPTION" } {
+    return (
+      value instanceof InvalidSemanticOptionError && value.code === INVALID_SEMANTIC_OPTION_ERROR
+    );
+  },
+});
 
 /**
  * Structured result returned by {@link Validate.message}.

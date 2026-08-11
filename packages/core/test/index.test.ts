@@ -32,7 +32,7 @@ import {
 
 import {
   DEFAULT_TYPE_URL_PREFIX,
-  isInvalidSemanticOptionError,
+  SemanticOptionErrors,
   type MessageValidationResult,
   type TypeMetadata,
   TypeRegistry,
@@ -65,7 +65,12 @@ const RequiredNameSchema = messageDesc(fileExampleValidationFixture, 0) as GenMe
 const invalidSemanticOptionDescriptorSet = fromBinary(
   FileDescriptorSetSchema,
   Buffer.from(
-    "CpYCCiFlbnRpdHktbWV0YWRhdGEvaW52YWxpZC10YWcucHJvdG8aE3NwaW5lL29wdGlvbnMucHJvdG8iLQoPSW52YWxpZFRhZ1N0YXRlEg4KAmlkGAEgASgJUgJpZDoK+ookAggE2oskAEqkAQoGEgQAAAkBCggKAQwSAwAAEgoJCgIDABIDAgAdCgoKAgQAEgQEAAkBCgoKAwQAARIDBAgXCgoKAwQABxIDBQIgCg4KBwQAB6/BBAESAwUCIAoKCgMEAAcSAwYCHQoOCgcEAAe7wQQBEgMGAh0KDAoFBAACAAUSAwgCCAoLCgQEAAIAEgMIAhAKDAoFBAACAAESAwgJCwoMCgUEAAIAAxIDCA4PYgZwcm90bzM=",
+    "CpYCCiFlbnRpdHktbWV0YWRhdGEvaW52YWxpZC10YWcucHJvdG8aE3NwaW5lL29wdG" +
+      "lvbnMucHJvdG8iLQoPSW52YWxpZFRhZ1N0YXRlEg4KAmlkGAEgASgJUgJpZDoK+ook" +
+      "AggE2oskAEqkAQoGEgQAAAkBCggKAQwSAwAAEgoJCgIDABIDAgAdCgoKAgQAEgQEAAkB" +
+      "CgoKAwQAARIDBAgXCgoKAwQABxIDBQIgCg4KBwQAB6/BBAESAwUCIAoKCgMEAAcSAwYC" +
+      "HQoOCgcEAAe7wQQBEgMGAh0KDAoFBAACAAUSAwgCCAoLCgQEAAIAEgMIAhAKDAoFBAAC" +
+      "AAESAwgJCwoMCgUEAAIAAxIDCA4PYgZwcm90bzM=",
     "base64",
   ),
 );
@@ -587,8 +592,8 @@ describe("@spine-event-engine/core type registry", () => {
       error = caught;
     }
 
-    expect(isInvalidSemanticOptionError(error)).toBe(true);
-    if (isInvalidSemanticOptionError(error)) {
+    expect(SemanticOptionErrors.isInvalid(error)).toBe(true);
+    if (SemanticOptionErrors.isInvalid(error)) {
       expect(error.code).toBe("INVALID_SEMANTIC_OPTION");
     }
   });

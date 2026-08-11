@@ -2,7 +2,7 @@ import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { isInvalidSemanticOptionError, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
+import { SemanticOptionErrors, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { CommandSchema, file_spine_options } from "@spine-event-engine/proto";
@@ -671,9 +671,9 @@ describe("@spine-event-engine/server", () => {
       malformedOptionError = error;
     }
 
-    expect(isInvalidSemanticOptionError(malformedOptionError)).toBe(true);
+    expect(SemanticOptionErrors.isInvalid(malformedOptionError)).toBe(true);
     expect(
-      isInvalidSemanticOptionError(
+      SemanticOptionErrors.isInvalid(
         new Error('semantic tag option "unrelated" must declare a non-empty java_type.'),
       ),
     ).toBe(false);

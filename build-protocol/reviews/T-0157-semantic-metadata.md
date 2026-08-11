@@ -59,7 +59,7 @@ pending.
 ## Typed Discriminator Residual Correction
 
 - Accepted style P2: core now exposes the documented
-  `isInvalidSemanticOptionError()` discriminator while retaining its
+  `SemanticOptionErrors.isInvalid()` discriminator while retaining its
   code-bearing error implementation internally. Server code translates only
   that exact error; an unrelated plain `Error` with the former message prefix
   is propagated unchanged. The guard is a required supported core contract for
@@ -79,3 +79,18 @@ pending.
   `git diff --check`.
 - Targeted re-review: style/maintainability and TypeScript/API documentation;
   performance/reliability is affected by the error-boundary behavior change.
+
+## Verifier Cleanup Correction
+
+- Verifier-only cleanup replaces the former standalone guard with frozen
+  root-exported `SemanticOptionErrors.isInvalid(value)`. The internal
+  code-bearing error and
+  exact server translation behavior are unchanged; the core fixture payload is
+  only line-wrapped.
+- This correction affects style/maintainability and TypeScript/API
+  documentation. Performance/reliability does not need re-review because the
+  runtime discriminator behavior is preserved. Documentation/TSDoc remains
+  mechanical only.
+- Final gates pass: `pnpm lint:cleanup`, `pnpm typecheck:build:generated`,
+  `pnpm typecheck:tooling`, `pnpm lint:tsdoc`, `pnpm docs:api:check`, exact
+  changed-TypeScript ESLint, Prettier, and `git diff --check`.
