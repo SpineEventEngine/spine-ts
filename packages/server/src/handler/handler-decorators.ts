@@ -134,7 +134,7 @@ export function Command(
  * @typeParam This - Entity instance that owns the method.
  * @typeParam Parameters - Parameters accepted by the method.
  * @typeParam Return - Result returned by the method.
- * @param value Decorated method implementation or event schema.
+ * @param value Decorated method implementation.
  * @param context Standard decorator context for bare usage.
  */
 export function Subscribe<This extends object, Parameters extends readonly unknown[], Return>(

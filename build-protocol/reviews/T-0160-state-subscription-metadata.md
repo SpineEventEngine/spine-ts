@@ -61,3 +61,15 @@ explicit immutable configured role/profile is then the durable evidence.
 - Fresh exact changed-production LCOV from
   `/tmp/t0160-correction-cov/lcov.info` is 9 / 9 statements and lines (100%)
   and 18 / 18 branches (100%). No executable function point was added.
+
+## Targeted Re-review
+
+- Documentation/TSDoc: CLEAN; public subscriber contracts and records are
+  accurate, with product Markdown still deferred.
+- Performance/reliability: CLEAN; the reviewer independently passed 5 files /
+  89 tests and confirmed descriptor provenance, cross-module classification,
+  fail-closed controls, and staged registry atomicity.
+- Style/maintainability and TypeScript/API documentation: the substantive
+  correction is CLEAN. Both reported the same P2 wording-only residual: the
+  bare decorator overload's method parameter still mentioned an Event schema.
+  That stale alternative is removed; only these two lanes need confirmation.
