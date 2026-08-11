@@ -1,6 +1,6 @@
 # T-0162 Review Record
 
-Status: Review corrections complete; targeted re-review pending
+Status: Accepted
 
 ## Assignments
 
@@ -50,4 +50,21 @@ configured profiles are recorded as acceptance evidence.
   formatting, and diff checks pass.
 
 Targeted documentation/TSDoc, style/maintainability, and
-performance/reliability re-review is pending.
+performance/reliability re-reviews completed CLEAN.
+
+## Final acceptance
+
+- Documentation/TSDoc: CLEAN after the public field matrix and constraints were
+  documented.
+- Style/maintainability: CLEAN after signed-zero and float32 behavior were
+  centralized and covered.
+- Performance/reliability: CLEAN after signed-zero preservation, binary32
+  normalization, canonical text, and overflow rejection were verified.
+- TypeScript/API: CLEAN by orchestrator contract review; the frozen signatures
+  are unchanged and the TypeDoc/API inventory passes.
+- Security: N/A for this pure conversion API; retained for Wave final review.
+- Final `verify:task --coverage` passed every deterministic gate, 89/89 focused
+  tests, and whole-file coverage at 95.12% statements, 91.01% branches, 98.21%
+  functions, and 96.55% lines.
+
+T-0162 is accepted for integration.
