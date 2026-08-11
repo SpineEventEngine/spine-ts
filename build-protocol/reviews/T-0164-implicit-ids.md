@@ -1,6 +1,6 @@
 # T-0164 Review Record
 
-Status: Implementation in progress
+Status: Review complete; final verification pending
 
 ## Assignments
 
@@ -16,8 +16,45 @@ profiles are recorded as acceptance evidence.
 
 ## Mechanical evidence
 
-Pending implementation convergence.
+- Focused behavior: 4 files, 294/294 tests.
+- Full server: 74 files, 1,758/1,758 tests.
+- Wave integration fixtures: 5 files, 249/249 tests; cross-process transport:
+  1 file, 7/7 tests.
+- Generated build, tooling typecheck, cleanup enforcement, TSDoc, TypeDoc/API
+  inventory, changed-file ESLint/Prettier, and `git diff --check` pass.
+- Focused coverage for changed production files:
+  - `implicit-required-id.ts`: 97.61% statements, 100% branches/functions,
+    97.5% lines;
+  - `command-bus.ts`: 98.87% statements, 96.55% branches, 100% functions,
+    98.78% lines;
+  - `entity-transition-validation.ts`: 93.05% statements, 90.4% branches,
+    100% functions, 92.85% lines.
+- The focused runner reports the expected global-threshold failure because it
+  instruments the whole monorepo from four selected tests; all 294 tests pass
+  and the changed-source metrics above exceed the task threshold.
 
 ## Concern review wave
 
-Pending deterministic mechanical gates.
+The current system instruction does not authorize spawning subagents. The
+primary orchestrator therefore performed distinct concern-specific passes
+without inventing substitute reviewer identities.
+
+- Performance/reliability: CLEAN. Rules are cached by generated schema in
+  `WeakMap`s; validation adds no unbounded state. Fresh admission, durable
+  replay, and all Entity-family commit paths are symmetric and fail before
+  handler/storage side effects.
+- Style/maintainability: CLEAN. One package-private policy owns field ordering,
+  explicit-option precedence, presence semantics, filename classification, and
+  sanitized violations. No public compatibility facade or competing parser was
+  added.
+- TypeScript/API documentation: CLEAN. There is no new public export. The
+  affected public transition-validation TSDoc now describes ordinary,
+  implicit-ID, and set-once validation in execution order.
+- Documentation: CLEAN. Product Markdown is unchanged and remains deferred to
+  Wave 10. Task/work/review records distinguish the T-0164 runtime change from
+  the Wave integration fixture corrections.
+- Security: N/A. This slice adds no new trust boundary, secret, transport, or
+  authentication surface; validation errors use the existing sanitized result
+  path. Final Wave 9 security review remains assigned to T-0167.
+
+No correction finding remains. Final `verify:task` is pending.
