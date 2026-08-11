@@ -23,8 +23,13 @@ interface ImplicitRequiredIdPolicy {
     schema: Schema,
     message: MessageShape<Schema>,
   ): MessageValidationResult;
-  entityRule<Schema extends DescriptorMessageSchema>(): TransitionValidationRule<Schema>;
+  entityRule<Schema extends DescriptorMessageSchema>(
+    schema: Schema,
+  ): TransitionValidationRule<Schema>;
 }
+
+const commandRules = new WeakMap<DescriptorMessageSchema, TransitionValidationRule>();
+const entityRules = new WeakMap<DescriptorMessageSchema, TransitionValidationRule>();
 
 /**
  * Applies the declaration-first implicit-required convention at server signal boundaries.
@@ -36,57 +41,69 @@ export const ImplicitRequiredIds: Readonly<ImplicitRequiredIdPolicy> = Object.fr
     schema: Schema,
     message: MessageShape<Schema>,
   ): MessageValidationResult {
-    return schema.file.proto.name.endsWith("commands.proto")
-      ? ImplicitRequiredIdsInternal.validate(schema, message)
-      : Validate.transition({ schema, previous: undefined, next: message });
+    if (!ImplicitRequiredIdsInternal.commandSchema(schema)) {
+      return Validate.transition({ schema, previous: undefined, next: message });
+    }
+    const rule = ImplicitRequiredIdsInternal.cachedRule(commandRules, schema);
+    return Validate.transition({ schema, previous: undefined, next: message }, [rule]);
   },
 
-  entityRule<Schema extends DescriptorMessageSchema>(): TransitionValidationRule<Schema> {
-    return {
-      validateTransition: ({ schema, next }) =>
-        ImplicitRequiredIdsInternal.violations(schema, next),
-    };
+  entityRule<Schema extends DescriptorMessageSchema>(
+    schema: Schema,
+  ): TransitionValidationRule<Schema> {
+    return ImplicitRequiredIdsInternal.cachedRule(entityRules, schema);
   },
 });
 
 const ImplicitRequiredIdsInternal = Object.freeze({
-  validate<Schema extends DescriptorMessageSchema>(
-    schema: Schema,
-    message: MessageShape<Schema>,
-  ): MessageValidationResult {
-    return Validate.transition({ schema, previous: undefined, next: message }, [
-      ImplicitRequiredIds.entityRule<Schema>(),
-    ]);
+  commandSchema(schema: DescriptorMessageSchema): boolean {
+    const fileName = schema.file.proto.name.split("/").at(-1);
+    return fileName === "commands.proto" || fileName?.endsWith("_commands.proto") === true;
   },
 
-  violations<Schema extends DescriptorMessageSchema>(
+  cachedRule<Schema extends DescriptorMessageSchema>(
+    cache: WeakMap<DescriptorMessageSchema, TransitionValidationRule>,
     schema: Schema,
-    message: MessageShape<Schema>,
-  ) {
-    const [field] = schema.fields;
+  ): TransitionValidationRule<Schema> {
+    const cached = cache.get(schema) as TransitionValidationRule<Schema> | undefined;
+    if (cached !== undefined) return cached;
+    const rule = ImplicitRequiredIdsInternal.rule<Schema>(schema.fields[0]);
+    cache.set(schema, rule);
+    return rule;
+  },
+
+  rule<Schema extends DescriptorMessageSchema>(
+    field: DescField | undefined,
+  ): TransitionValidationRule<Schema> {
     if (
       field === undefined ||
       hasOption(field, required) ||
-      !ImplicitRequiredIdsInternal.supported(field) ||
-      !ImplicitRequiredIdsInternal.missing(field, message)
+      !ImplicitRequiredIdsInternal.supported(field)
     ) {
-      return [];
+      return { validateTransition: () => [] };
     }
-    return [
-      create(ConstraintViolationSchema, {
-        typeName: schema.typeName,
-        fieldPath: create(FieldPathSchema, { fieldName: [field.name] }),
-        message: create(TemplateStringSchema, {
-          withPlaceholders: requiredMessage,
-          placeholderValue: {
-            "field.path": field.name,
-            "field.type": ImplicitRequiredIdsInternal.typeName(field),
-            "message.type": schema.typeName,
-            "parent.type": schema.typeName,
-          },
-        }),
+    return {
+      validateTransition: ({ schema, next }) =>
+        ImplicitRequiredIdsInternal.missing(field, next)
+          ? [ImplicitRequiredIdsInternal.violation(schema, field)]
+          : [],
+    };
+  },
+
+  violation(schema: DescriptorMessageSchema, field: DescField) {
+    return create(ConstraintViolationSchema, {
+      typeName: schema.typeName,
+      fieldPath: create(FieldPathSchema, { fieldName: [field.name] }),
+      message: create(TemplateStringSchema, {
+        withPlaceholders: requiredMessage,
+        placeholderValue: {
+          "field.path": field.name,
+          "field.type": ImplicitRequiredIdsInternal.typeName(field),
+          "message.type": schema.typeName,
+          "parent.type": schema.typeName,
+        },
       }),
-    ];
+    });
   },
 
   supported(field: DescField): boolean {

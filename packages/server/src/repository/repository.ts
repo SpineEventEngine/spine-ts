@@ -126,6 +126,7 @@ import {
 import { standAccess, type Stand } from "../stand/stand.js";
 import { TransitionValidationError } from "./command-errors.js";
 import { MessageIds, PrimitiveIds } from "./primitive-id.js";
+import { ImplicitRequiredIds } from "../entity/implicit-required-id.js";
 
 type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = DescriptorMessageSchema> =
   | Aggregate<unknown, Schema, unknown>
@@ -5650,6 +5651,10 @@ const InboxReplay = {
         throw new CommandValidationError(error.asMessage());
       }
       throw error;
+    }
+    const implicitId = ImplicitRequiredIds.validateCommand(commandSchema, payload);
+    if (!implicitId.valid) {
+      throw new CommandValidationError(implicitId.error);
     }
   },
 

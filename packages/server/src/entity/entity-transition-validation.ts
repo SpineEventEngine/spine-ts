@@ -16,6 +16,7 @@ import {
   type DescriptorFieldMetadata,
   type DescriptorMessageSchema,
 } from "./entity-metadata.js";
+import { ImplicitRequiredIds } from "./implicit-required-id.js";
 
 /**
  * Request for built-in server entity state transition validation.
@@ -59,8 +60,10 @@ const transitionRulesBySchema = new WeakMap<
 /**
  * Returns the built-in validation result for a proposed entity state transition.
  *
- * The validator currently enforces descriptor-derived `(set_once)` fields,
- * delegates result shaping to `@spine-event-engine/core` `Validate.transition()`, and does
+ * The validator first applies ordinary message validation, then enforces an
+ * implicit required declaration-first Entity ID when no explicit `(required)`
+ * option is present, and finally enforces descriptor-derived `(set_once)`
+ * fields. It delegates result shaping to `@spine-event-engine/core` and does
  * not instantiate entities, dispatch handlers, touch repositories, or perform
  * runtime I/O. Repeated, map-valued, and explicit optional `(set_once)` fields
  * are rejected with field-specific violations.
@@ -68,11 +71,13 @@ const transitionRulesBySchema = new WeakMap<
  * `describeEntityMetadata()`.
  *
  * @param request Schema and previous/next state values to validate.
- * @returns Sanitized validation result with any set-once violations.
+ * @returns Sanitized validation result with any message or transition violations.
  */
 export function validateEntityStateTransition<Schema extends DescriptorMessageSchema>(
   request: StateTransitionRequest<Schema>,
 ): StateTransitionResult {
+  const message = Validate.message(request.schema, request.next);
+  if (!message.valid) return message;
   return Validate.transition(request, StateTransitions.rules(request.schema));
 }
 
@@ -104,7 +109,10 @@ const StateTransitions = Object.freeze({
     }
 
     const metadata = describeEntityMetadata(schema);
-    const rules = Object.freeze([StateTransitions.setOnceRule<Schema>(metadata.setOnceFields)]);
+    const rules = Object.freeze([
+      ImplicitRequiredIds.entityRule(schema),
+      StateTransitions.setOnceRule<Schema>(metadata.setOnceFields),
+    ]);
 
     transitionRulesBySchema.set(schema, rules);
 

@@ -105,6 +105,7 @@ import {
   StateUpdateRouting,
 } from "../../src/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
+import { CommandValidationError } from "../../src/bus/command-errors.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { Delivery } from "../../src/delivery/delivery.js";
 import { InboxTargets } from "../../src/delivery/inbox.js";
@@ -128,6 +129,12 @@ type ProjectionState = Message<"ProjectionState"> & {
 };
 
 type ProjectionEvent = Message<"ProjectionEvent"> & {
+  id: string;
+  name: string;
+  priority: number;
+};
+
+type ImplicitTaskCommand = Message<"ImplicitTaskCommand"> & {
   id: string;
   name: string;
   priority: number;
@@ -257,6 +264,29 @@ const fileProjectionEventFixture = (() => {
     file_spine_options,
   ]);
 })();
+const fileImplicitCommandFixture = (() => {
+  const descriptorSet = fromBinary(
+    FileDescriptorSetSchema,
+    Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
+  );
+  const source = descriptorSet.file[0];
+  const state = source?.messageType[0];
+  if (source === undefined || state === undefined) {
+    throw new Error("Implicit Command fixture declaration is missing.");
+  }
+  const descriptor = clone(FileDescriptorProtoSchema, source);
+  const command = descriptor.messageType[0];
+  if (command === undefined) throw new Error("Implicit Command fixture is missing.");
+  descriptor.name = "implicit_commands.proto";
+  descriptor.messageType = [command];
+  command.name = "ImplicitTaskCommand";
+  if (command.options !== undefined) {
+    command.options.$unknown = command.options.$unknown?.filter((field) => field.no !== 73_903);
+  }
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+  ]);
+})();
 const fileInt64MessageIdFixture = (() => {
   const descriptorSet = fromBinary(
     FileDescriptorSetSchema,
@@ -339,6 +369,10 @@ const ProjectionEventSchema = messageDesc(
   fileProjectionEventFixture,
   0,
 ) as GenMessage<ProjectionEvent>;
+const ImplicitTaskCommandSchema = messageDesc(
+  fileImplicitCommandFixture,
+  0,
+) as GenMessage<ImplicitTaskCommand>;
 const AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   1,
@@ -471,6 +505,56 @@ class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigin
 
   reactToProjection(event: ProjectionEvent): void {
     void event;
+  }
+}
+
+class ImplicitIdAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  static calls = 0;
+
+  static reset(): void {
+    this.calls = 0;
+  }
+
+  assign(command: ImplicitTaskCommand): void {
+    void command;
+    ImplicitIdAggregate.calls += 1;
+  }
+}
+
+class BlankStateIdAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  static calls = 0;
+
+  assign(command: AggregateState): void {
+    this.update((draft) => Object.assign(draft, command, { id: "" }));
+    BlankStateIdAggregate.calls += 1;
+  }
+}
+
+class BlankStateIdProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  static calls = 0;
+
+  assign(command: AggregateState): void {
+    this.update((draft) => {
+      draft.id = "";
+      draft.queue = command.name;
+    });
+    BlankStateIdProcessManager.calls += 1;
+  }
+}
+
+class BlankStateIdProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  static calls = 0;
+
+  subscribe(event: ProjectionEvent): void {
+    this.update((draft) => {
+      draft.id = "";
+      draft.name = event.name;
+    });
+    BlankStateIdProjection.calls += 1;
   }
 }
 
@@ -4702,6 +4786,80 @@ describe("repository signal routing", () => {
       expect(routeCalls).toBe(1);
     } finally {
       await context.close();
+    }
+  });
+
+  it("rejects an empty implicit Command ID during durable Aggregate replay", async () => {
+    ImplicitIdAggregate.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createImplicitIdAggregateRepository();
+    const context = BoundedContext.singleTenant("Implicit replay")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    try {
+      const delivery = new Delivery({
+        context: { name: "Implicit replay", multitenant: false },
+        storageFactory: factory,
+      });
+      const received = await storeEntityInboxCommand(
+        delivery,
+        createImplicitTaskCommand("implicit-replay", ""),
+        new Date("2026-08-11T10:00:00.000Z"),
+        1n,
+        {
+          targetId: Identifiers.pack("string", "target"),
+          targetTypeUrl: TypeUrls.derive(AggregateStateSchema),
+        },
+      );
+
+      await expect(requireEntityInboxTarget(repository).replay(received)).rejects.toBeInstanceOf(
+        CommandValidationError,
+      );
+      expect(ImplicitIdAggregate.calls).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("rejects empty implicit state IDs before every Entity-family commit", async () => {
+    BlankStateIdAggregate.calls = 0;
+    BlankStateIdProcessManager.calls = 0;
+    BlankStateIdProjection.calls = 0;
+    const aggregate = BoundedContext.singleTenant("Blank aggregate ID")
+      .add(createBlankStateIdAggregateRepository())
+      .build();
+    const processManager = BoundedContext.singleTenant("Blank PM ID")
+      .add(createBlankStateIdProcessManagerRepository())
+      .build();
+    const projection = BoundedContext.singleTenant("Blank projection ID")
+      .add(createBlankStateIdProjectionRepository())
+      .build();
+    try {
+      await expect(
+        aggregate.commandBus().post(createAggregateCommand("blank-aggregate", "aggregate-id")),
+      ).resolves.toBeUndefined();
+      await expect(
+        processManager.commandBus().post(createAggregateCommand("blank-pm", "pm-id")),
+      ).resolves.toBeUndefined();
+      await expect(
+        projection.eventBus().post(createProjectionEvent("blank-projection", "projection-id")),
+      ).resolves.toBeUndefined();
+
+      expect(BlankStateIdAggregate.calls).toBe(1);
+      expect(BlankStateIdProcessManager.calls).toBe(1);
+      expect(BlankStateIdProjection.calls).toBe(1);
+      await expect(
+        aggregate.stand().read(AggregateStateSchema, "aggregate-id"),
+      ).resolves.toBeUndefined();
+      await expect(
+        processManager.stand().read(ProcessManagerStateSchema, "pm-id"),
+      ).resolves.toBeUndefined();
+      await expect(
+        projection.stand().read(ProjectionStateSchema, "projection-id"),
+      ).resolves.toBeUndefined();
+    } finally {
+      await Promise.all([aggregate.close(), processManager.close(), projection.close()]);
     }
   });
 
@@ -8992,6 +9150,51 @@ function createRoutingRepository(
   });
 }
 
+function createImplicitIdAggregateRepository(): Repository<typeof ImplicitIdAggregate> {
+  const handlers = EntityHandlers.define(ImplicitIdAggregate, AggregateStateSchema, (builder) => [
+    builder.assign(ImplicitTaskCommandSchema, "assign"),
+  ]);
+  return new Repository({
+    entityType: ImplicitIdAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createBlankStateIdAggregateRepository(): Repository<typeof BlankStateIdAggregate> {
+  return new Repository({
+    entityType: BlankStateIdAggregate,
+    schema: AggregateStateSchema,
+    handlers: EntityHandlers.define(BlankStateIdAggregate, AggregateStateSchema, (builder) => [
+      builder.assign(AggregateStateSchema, "assign"),
+    ]),
+  });
+}
+
+function createBlankStateIdProcessManagerRepository(): Repository<
+  typeof BlankStateIdProcessManager
+> {
+  return new Repository({
+    entityType: BlankStateIdProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers: EntityHandlers.define(
+      BlankStateIdProcessManager,
+      ProcessManagerStateSchema,
+      (builder) => [builder.assign(AggregateStateSchema, "assign")],
+    ),
+  });
+}
+
+function createBlankStateIdProjectionRepository(): Repository<typeof BlankStateIdProjection> {
+  return new Repository({
+    entityType: BlankStateIdProjection,
+    schema: ProjectionStateSchema,
+    handlers: EntityHandlers.define(BlankStateIdProjection, ProjectionStateSchema, (builder) => [
+      builder.subscribe(ProjectionEventSchema, "subscribe"),
+    ]),
+  });
+}
+
 function createExecutingProjectionRepository(
   eventRouting?: EventRouting<string>,
 ): Repository<typeof ExecutingTaskProjection> {
@@ -10238,6 +10441,15 @@ function createAggregateCommand(id: string, aggregateId: string, name = "Task", 
       name,
       archived: false,
     }),
+  });
+}
+
+function createImplicitTaskCommand(commandId: string, entityId: string) {
+  return SignalEnvelopes.command({
+    id: create(CommandIdSchema, { uuid: commandId }),
+    context: create(CommandContextSchema),
+    schema: ImplicitTaskCommandSchema,
+    message: create(ImplicitTaskCommandSchema, { id: entityId, name: "Implicit" }),
   });
 }
 

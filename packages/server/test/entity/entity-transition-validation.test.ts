@@ -1,9 +1,21 @@
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import {
+  clone,
+  create,
+  fromBinary,
+  setExtension,
+  toBinary,
+  type Message,
+} from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import {
+  FieldOptionsSchema,
+  FileDescriptorProtoSchema,
+  FileDescriptorSetSchema,
+} from "@bufbuild/protobuf/wkt";
 import { describe, expect, it } from "vitest";
 import { file_spine_options } from "@spine-event-engine/proto";
+import { required } from "@spine-event-engine/proto/generated/spine/options_pb.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 import * as serverRoot from "../../src/index.js";
@@ -75,6 +87,31 @@ function createFixtureFileDescriptor(descriptorSetBase64: string) {
   ]);
 }
 
+function projectionStateWithRequired(value: boolean) {
+  const descriptorSet = fromBinary(
+    FileDescriptorSetSchema,
+    Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
+  );
+  const source = descriptorSet.file[0];
+  if (source === undefined) throw new Error("Entity metadata fixture descriptor is missing.");
+  const descriptor = clone(FileDescriptorProtoSchema, source);
+  const state = descriptor.messageType[0];
+  const id = state?.field[0];
+  if (state === undefined || id === undefined) {
+    throw new Error("Projection state ID fixture is missing.");
+  }
+  descriptor.name = value ? "explicit_required_state.proto" : "explicit_optional_state.proto";
+  state.name = value ? "ExplicitRequiredState" : "ExplicitOptionalState";
+  id.options ??= create(FieldOptionsSchema);
+  setExtension(id.options, required, value);
+  descriptor.messageType = [state];
+  const file = fileDesc(
+    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
+    [file_spine_options],
+  );
+  return messageDesc(file, 0) as GenMessage<ProjectionState>;
+}
+
 const fileEntityMetadataFixture = createFixtureFileDescriptor(
   serverEntityMetadataTestFixtures.main.descriptorSetBase64,
 );
@@ -103,6 +140,8 @@ const OptionalSetOnceStateSchema = messageDesc(
   fileEntityMetadataFixture,
   7,
 ) as GenMessage<OptionalSetOnceState>;
+const ExplicitRequiredStateSchema = projectionStateWithRequired(true);
+const ExplicitOptionalStateSchema = projectionStateWithRequired(false);
 
 describe("entity state transition validation", () => {
   it("exports the public high-level entity state transition validator", () => {
@@ -129,6 +168,38 @@ describe("entity state transition validation", () => {
         "violations": [],
       }
     `);
+  });
+
+  it("rejects creation with an empty implicit Entity ID", () => {
+    const result = validateEntityStateTransition({
+      schema: ProjectionStateSchema,
+      previous: undefined,
+      next: create(ProjectionStateSchema, { name: "Draft", priority: 1 }),
+    });
+
+    expect(result.valid).toBe(false);
+    if (result.valid) throw new Error("Expected an implicit Entity ID violation.");
+    expect(result.violations).toHaveLength(1);
+    expect(result.violations[0].fieldPath?.fieldName).toEqual(["id"]);
+  });
+
+  it("keeps explicit required true authoritative and explicit false disabling", () => {
+    const requiredResult = validateEntityStateTransition({
+      schema: ExplicitRequiredStateSchema,
+      previous: undefined,
+      next: create(ExplicitRequiredStateSchema),
+    });
+    const optionalResult = validateEntityStateTransition({
+      schema: ExplicitOptionalStateSchema,
+      previous: undefined,
+      next: create(ExplicitOptionalStateSchema),
+    });
+
+    expect(requiredResult.valid).toBe(false);
+    if (requiredResult.valid) throw new Error("Expected explicit required validation.");
+    expect(requiredResult.violations).toHaveLength(1);
+    expect(requiredResult.violations[0].fieldPath?.fieldName).toEqual(["id"]);
+    expect(optionalResult.valid).toBe(true);
   });
 
   it("caches descriptor-derived transition rules per schema", () => {
@@ -158,7 +229,21 @@ describe("entity state transition validation", () => {
         next,
       }).valid,
     ).toBe(true);
-    expect(firstSchema.getFieldsReadCount()).toBe(fieldsReadsAfterFirstValidation);
+    const fieldsReadsAfterSecondValidation = firstSchema.getFieldsReadCount();
+    const repeatedValidationReads =
+      fieldsReadsAfterSecondValidation - fieldsReadsAfterFirstValidation;
+    expect(repeatedValidationReads).toBeGreaterThan(0);
+    expect(repeatedValidationReads).toBeLessThan(fieldsReadsAfterFirstValidation);
+    expect(
+      validateEntityStateTransition({
+        schema: firstSchema.schema,
+        previous: undefined,
+        next,
+      }).valid,
+    ).toBe(true);
+    expect(firstSchema.getFieldsReadCount() - fieldsReadsAfterSecondValidation).toBe(
+      repeatedValidationReads,
+    );
 
     expect(
       validateEntityStateTransition({

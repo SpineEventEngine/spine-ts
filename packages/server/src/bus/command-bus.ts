@@ -8,6 +8,7 @@ import {
   SingleProcessServerRuntime,
 } from "../runtime/runtime.js";
 import { CommandValidationError } from "./command-errors.js";
+import { ImplicitRequiredIds } from "../entity/implicit-required-id.js";
 import { CommandDispatcherRegistry } from "./command-dispatcher-registry.js";
 import type { CommandDispatcher } from "./command-dispatcher.js";
 
@@ -174,6 +175,10 @@ export class CommandBus {
         throw new CommandValidationError(error.asMessage());
       }
       throw error;
+    }
+    const implicitId = ImplicitRequiredIds.validateCommand(registration.schema, message);
+    if (!implicitId.valid) {
+      throw new CommandValidationError(implicitId.error);
     }
 
     await registration.dispatcher.dispatch(clone(CommandSchema, command));
