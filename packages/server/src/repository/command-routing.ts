@@ -23,7 +23,6 @@ export type CommandRoute<Id, Schema extends MessageSchema = MessageSchema> = (
 
 interface CommandRoutingState<Id> {
   readonly exact: Map<MessageSchema, CommandRoute<Id>>;
-  readonly semantic: Map<string, CommandRoute<Id>>;
   defaultRoute: CommandRoute<Id> | undefined;
 }
 
@@ -43,7 +42,6 @@ export class CommandRouting<Id> {
   private constructor() {
     routingStates.set(this, {
       exact: new Map<MessageSchema, CommandRoute<Id>>(),
-      semantic: new Map<string, CommandRoute<Id>>(),
       defaultRoute: undefined,
     });
   }
@@ -76,28 +74,6 @@ export class CommandRouting<Id> {
   }
 
   /**
-   * Registers a descriptor semantic Command route.
-   *
-   * @param javaType Canonical descriptor `(is)` or `(every_is)` Java type,
-   *   without surrounding whitespace.
-   * @param via Route that calculates the target Entity ID.
-   * @returns These mutable route declarations.
-   */
-  routeSemantic(javaType: string, via: CommandRoute<Id>): this {
-    if (typeof javaType !== "string" || javaType.trim().length === 0)
-      throw new TypeError("Command semantic routing requires a non-empty Java type.");
-    if (javaType !== javaType.trim())
-      throw new TypeError("Command semantic routing requires a canonical Java type.");
-    if (typeof via !== "function")
-      throw new TypeError("Command routing requires a route function.");
-    const state = CommandRoutingInternals.state(this);
-    if (state.semantic.has(javaType))
-      throw new Error("Command routing has a duplicate semantic command route.");
-    state.semantic.set(javaType, via);
-    return this;
-  }
-
-  /**
    * Replaces the declaration-first default Command route.
    *
    * @param via Route that calculates the target Entity ID.
@@ -120,7 +96,6 @@ export const CommandRoutingInternals: Readonly<{
   state<Id>(routing: CommandRouting<Id>): CommandRoutingState<Id>;
   snapshot<Id>(routing: CommandRouting<Id> | undefined): Readonly<{
     exact: ReadonlyMap<MessageSchema, CommandRoute<Id>>;
-    semantic: ReadonlyMap<string, CommandRoute<Id>>;
     defaultRoute: CommandRoute<Id> | undefined;
   }>;
 }> = Object.freeze({
@@ -129,20 +104,17 @@ export const CommandRoutingInternals: Readonly<{
   },
   snapshot<Id>(routing: CommandRouting<Id> | undefined): Readonly<{
     exact: ReadonlyMap<MessageSchema, CommandRoute<Id>>;
-    semantic: ReadonlyMap<string, CommandRoute<Id>>;
     defaultRoute: CommandRoute<Id> | undefined;
   }> {
     if (routing === undefined) {
       return Object.freeze({
         exact: new Map<MessageSchema, CommandRoute<Id>>(),
-        semantic: new Map<string, CommandRoute<Id>>(),
         defaultRoute: undefined,
       });
     }
     const state = CommandRoutingInternals.state(routing);
     return Object.freeze({
       exact: new Map(state.exact),
-      semantic: new Map(state.semantic),
       defaultRoute: state.defaultRoute,
     });
   },

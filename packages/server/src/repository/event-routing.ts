@@ -24,7 +24,6 @@ export type EventRoute<Id, Schema extends MessageSchema = MessageSchema> = (
 
 interface State<Id> {
   readonly exact: Map<MessageSchema, EventRoute<Id>>;
-  readonly semantic: Map<string, EventRoute<Id>>;
   defaultRoute: EventRoute<Id> | undefined;
 }
 const states = new WeakMap<object, State<unknown>>();
@@ -39,7 +38,7 @@ export class EventRouting<Id> {
    * Creates empty mutable Event route declarations.
    */
   private constructor() {
-    states.set(this, { exact: new Map(), semantic: new Map(), defaultRoute: undefined });
+    states.set(this, { exact: new Map(), defaultRoute: undefined });
   }
 
   /**
@@ -69,27 +68,6 @@ export class EventRouting<Id> {
   }
 
   /**
-   * Registers a descriptor semantic Event route.
-   *
-   * @param javaType Canonical descriptor `(is)` or `(every_is)` Java type,
-   *   without surrounding whitespace.
-   * @param via Route that calculates target Entity IDs.
-   * @returns These mutable route declarations.
-   */
-  routeSemantic(javaType: string, via: EventRoute<Id>): this {
-    if (typeof javaType !== "string" || javaType.trim().length === 0)
-      throw new TypeError("Event semantic routing requires a non-empty Java type.");
-    if (javaType !== javaType.trim())
-      throw new TypeError("Event semantic routing requires a canonical Java type.");
-    if (typeof via !== "function") throw new TypeError("Event routing requires a route function.");
-    const state = EventRoutingInternals.state(this);
-    if (state.semantic.has(javaType))
-      throw new Error("Event routing has a duplicate semantic event route.");
-    state.semantic.set(javaType, via);
-    return this;
-  }
-
-  /**
    * Replaces the producer-aware default Event route.
    *
    * @param via Route that calculates target Entity IDs.
@@ -111,7 +89,6 @@ export const EventRoutingInternals: Readonly<{
   state<Id>(routing: EventRouting<Id>): State<Id>;
   snapshot<Id>(routing: EventRouting<Id> | undefined): Readonly<{
     exact: ReadonlyMap<MessageSchema, EventRoute<Id>>;
-    semantic: ReadonlyMap<string, EventRoute<Id>>;
     defaultRoute: EventRoute<Id> | undefined;
   }>;
 }> = Object.freeze({
@@ -120,20 +97,17 @@ export const EventRoutingInternals: Readonly<{
   },
   snapshot<Id>(routing: EventRouting<Id> | undefined): Readonly<{
     exact: ReadonlyMap<MessageSchema, EventRoute<Id>>;
-    semantic: ReadonlyMap<string, EventRoute<Id>>;
     defaultRoute: EventRoute<Id> | undefined;
   }> {
     if (routing === undefined) {
       return Object.freeze({
         exact: new Map<MessageSchema, EventRoute<Id>>(),
-        semantic: new Map<string, EventRoute<Id>>(),
         defaultRoute: undefined,
       });
     }
     const state = EventRoutingInternals.state(routing);
     return Object.freeze({
       exact: new Map(state.exact),
-      semantic: new Map(state.semantic),
       defaultRoute: state.defaultRoute,
     });
   },

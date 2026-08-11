@@ -14,7 +14,6 @@ import {
   RejectionThrowable,
   Validate,
   TypeUrls,
-  TypeRegistry,
   AnyMessages,
   Identifiers,
   StringifierRegistry,
@@ -4180,17 +4179,14 @@ const RepositoryRoutes = {
     producedEvents: readonly MessageSchema[],
     commandRouting: Readonly<{
       exact: ReadonlyMap<MessageSchema, CommandRoute<RepositoryEntityId<EntityType>>>;
-      semantic: ReadonlyMap<string, CommandRoute<RepositoryEntityId<EntityType>>>;
       defaultRoute: CommandRoute<RepositoryEntityId<EntityType>> | undefined;
     }>,
     eventRouting: Readonly<{
       exact: ReadonlyMap<MessageSchema, EventRoute<RepositoryEntityId<EntityType>>>;
-      semantic: ReadonlyMap<string, EventRoute<RepositoryEntityId<EntityType>>>;
       defaultRoute: EventRoute<RepositoryEntityId<EntityType>> | undefined;
     }>,
     stateUpdateRouting: Readonly<{
       exact: ReadonlyMap<MessageSchema, StateUpdateRoute<RepositoryEntityId<EntityType>>>;
-      semantic: ReadonlyMap<string, StateUpdateRoute<RepositoryEntityId<EntityType>>>;
       defaultRoute: StateUpdateRoute<RepositoryEntityId<EntityType>> | undefined;
     }>,
     stringifiers: StringifierRegistry,
@@ -4356,7 +4352,6 @@ const RepositoryRoutes = {
     schemas: readonly MessageSchema[],
     routing: Readonly<{
       exact: ReadonlyMap<MessageSchema, CommandRoute<Id>>;
-      semantic: ReadonlyMap<string, CommandRoute<Id>>;
       defaultRoute: CommandRoute<Id> | undefined;
     }>,
   ): ReadonlyMap<MessageSchema, CommandRoute<Id>> {
@@ -4372,38 +4367,9 @@ const RepositoryRoutes = {
       routes.set(schema, route);
     }
 
-    const registered = schemas.map((schema) => ({
-      schema,
-      metadata: new TypeRegistry().register(schema),
-    }));
-    for (const javaType of routing.semantic.keys()) {
-      const registeredRoute = registered.some(
-        ({ metadata }) =>
-          metadata.isTypes.includes(javaType) || metadata.everyIsTypes.includes(javaType),
-      );
-      if (!registeredRoute) {
-        throw new Error(
-          `Repository command routing has an unregistered semantic route for "${javaType}".`,
-        );
-      }
-    }
-
-    for (const { schema, metadata } of registered) {
+    for (const schema of schemas) {
       if (routes.has(schema)) continue;
-      const direct = metadata.isTypes
-        .map((javaType) => routing.semantic.get(javaType))
-        .filter((route): route is CommandRoute<Id> => route !== undefined);
-      const file = metadata.everyIsTypes
-        .map((javaType) => routing.semantic.get(javaType))
-        .filter((route): route is CommandRoute<Id> => route !== undefined);
-      const candidates = direct.length > 0 ? direct : file;
-      if (candidates.length > 1) {
-        throw new Error(
-          `Repository command routing has ambiguous semantic routes for "${schema.typeName}".`,
-        );
-      }
-      if (candidates[0] !== undefined) routes.set(schema, candidates[0]);
-      else if (routing.defaultRoute !== undefined) routes.set(schema, routing.defaultRoute);
+      if (routing.defaultRoute !== undefined) routes.set(schema, routing.defaultRoute);
     }
     return routes;
   },
@@ -4475,7 +4441,6 @@ const RepositoryRoutes = {
     schemas: readonly MessageSchema[],
     routing: Readonly<{
       exact: ReadonlyMap<MessageSchema, EventRoute<Id>>;
-      semantic: ReadonlyMap<string, EventRoute<Id>>;
       defaultRoute: EventRoute<Id> | undefined;
     }>,
   ): ReadonlyMap<MessageSchema, EventRoute<Id>> {
@@ -4490,38 +4455,9 @@ const RepositoryRoutes = {
       routes.set(schema, route);
     }
 
-    const registered = schemas.map((schema) => ({
-      schema,
-      metadata: new TypeRegistry().register(schema),
-    }));
-    for (const javaType of routing.semantic.keys()) {
-      const registeredRoute = registered.some(
-        ({ metadata }) =>
-          metadata.isTypes.includes(javaType) || metadata.everyIsTypes.includes(javaType),
-      );
-      if (!registeredRoute) {
-        throw new Error(
-          `Repository event routing has an unregistered semantic route for "${javaType}".`,
-        );
-      }
-    }
-
-    for (const { schema, metadata } of registered) {
+    for (const schema of schemas) {
       if (routes.has(schema)) continue;
-      const direct = metadata.isTypes
-        .map((javaType) => routing.semantic.get(javaType))
-        .filter((route): route is EventRoute<Id> => route !== undefined);
-      const file = metadata.everyIsTypes
-        .map((javaType) => routing.semantic.get(javaType))
-        .filter((route): route is EventRoute<Id> => route !== undefined);
-      const candidates = direct.length > 0 ? direct : file;
-      if (candidates.length > 1) {
-        throw new Error(
-          `Repository event routing has ambiguous semantic routes for "${schema.typeName}".`,
-        );
-      }
-      if (candidates[0] !== undefined) routes.set(schema, candidates[0]);
-      else if (routing.defaultRoute !== undefined) routes.set(schema, routing.defaultRoute);
+      if (routing.defaultRoute !== undefined) routes.set(schema, routing.defaultRoute);
     }
     return routes;
   },
@@ -4553,7 +4489,6 @@ const RepositoryRoutes = {
     schemas: readonly DescriptorMessageSchema[],
     routing: Readonly<{
       exact: ReadonlyMap<MessageSchema, StateUpdateRoute<Id>>;
-      semantic: ReadonlyMap<string, StateUpdateRoute<Id>>;
       defaultRoute: StateUpdateRoute<Id> | undefined;
     }>,
     targetIdField: DescriptorFieldMetadata,
@@ -4568,38 +4503,9 @@ const RepositoryRoutes = {
       }
       routes.set(schema, route);
     }
-    const registered = schemas.map((schema) => ({
-      schema,
-      metadata: new TypeRegistry().register(schema),
-    }));
-    for (const javaType of routing.semantic.keys()) {
-      if (
-        !registered.some(
-          ({ metadata }) =>
-            metadata.isTypes.includes(javaType) || metadata.everyIsTypes.includes(javaType),
-        )
-      ) {
-        throw new Error(
-          `Repository state-update routing has an unregistered semantic route for "${javaType}".`,
-        );
-      }
-    }
-    for (const { schema, metadata } of registered) {
+    for (const schema of schemas) {
       if (routes.has(schema)) continue;
-      const direct = metadata.isTypes
-        .map((javaType) => routing.semantic.get(javaType))
-        .filter((route): route is StateUpdateRoute<Id> => route !== undefined);
-      const every = metadata.everyIsTypes
-        .map((javaType) => routing.semantic.get(javaType))
-        .filter((route): route is StateUpdateRoute<Id> => route !== undefined);
-      const candidates = direct.length > 0 ? direct : every;
-      if (candidates.length > 1) {
-        throw new Error(
-          `Repository state-update routing has ambiguous semantic routes for "${schema.typeName}".`,
-        );
-      }
-      if (candidates[0] !== undefined) routes.set(schema, candidates[0]);
-      else if (routing.defaultRoute !== undefined) routes.set(schema, routing.defaultRoute);
+      if (routing.defaultRoute !== undefined) routes.set(schema, routing.defaultRoute);
       else if (
         !schema.fields.some((field) =>
           RepositoryRoutes.compatibleStateIdField(field, targetIdField),

@@ -5,7 +5,7 @@ import { StateUpdateRouting } from "../../src/index.js";
 import { StateUpdateRoutingInternals } from "../../src/repository/state-update-routing.js";
 
 describe("StateUpdateRouting", () => {
-  it("creates factory-only declarations and rejects duplicate canonical registrations", () => {
+  it("creates factory-only exact and replacement-default declarations", () => {
     const route = () => ["target"];
     expect(() =>
       StateUpdateRouting.create<string>()
@@ -13,25 +13,16 @@ describe("StateUpdateRouting", () => {
         .route(EntityStateChangedSchema, route),
     ).toThrow(/duplicate exact state-update route/);
     expect(() =>
-      StateUpdateRouting.create<string>().routeSemantic(" example.State", route),
-    ).toThrow(/canonical Java type/);
-    expect(() => StateUpdateRouting.create<string>().routeSemantic("   ", route)).toThrow(
-      /non-empty Java type/,
-    );
-    expect(() =>
-      StateUpdateRouting.create<string>()
-        .routeSemantic("example.State", route)
-        .routeSemantic("example.State", route),
-    ).toThrow(/duplicate semantic state-update route/);
-    expect(() =>
       StateUpdateRouting.create().route(EntityStateChangedSchema, undefined as never),
-    ).toThrow(/route function/);
-    expect(() =>
-      StateUpdateRouting.create().routeSemantic("example.Other", undefined as never),
     ).toThrow(/route function/);
     expect(() => StateUpdateRouting.create().replaceDefault(undefined as never)).toThrow(
       /route function/,
     );
+
+    if (false) {
+      // @ts-expect-error Interface-based routing is not a TypeScript API.
+      StateUpdateRouting.create<string>().routeSemantic("example.State", route);
+    }
   });
 
   it("copies declarations into an immutable construction snapshot", () => {
@@ -40,10 +31,10 @@ describe("StateUpdateRouting", () => {
     const routing = StateUpdateRouting.create<string>().route(EntityStateChangedSchema, first);
 
     const snapshot = StateUpdateRoutingInternals.snapshot(routing);
-    routing.routeSemantic("example.State", second).replaceDefault(second);
+    routing.replaceDefault(second);
 
     expect(snapshot.exact.get(EntityStateChangedSchema)).toBe(first);
-    expect(snapshot.semantic).toEqual(new Map());
+    expect(snapshot).not.toHaveProperty("semantic");
     expect(snapshot.defaultRoute).toBeUndefined();
   });
 });

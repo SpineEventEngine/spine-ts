@@ -23,7 +23,6 @@ export type StateUpdateRoute<Id, Schema extends MessageSchema = MessageSchema> =
 
 interface State<Id> {
   readonly exact: Map<MessageSchema, StateUpdateRoute<Id>>;
-  readonly semantic: Map<string, StateUpdateRoute<Id>>;
   defaultRoute: StateUpdateRoute<Id> | undefined;
 }
 const states = new WeakMap<object, State<unknown>>();
@@ -33,7 +32,7 @@ const states = new WeakMap<object, State<unknown>>();
  */
 export class StateUpdateRouting<Id> {
   private constructor() {
-    states.set(this, { exact: new Map(), semantic: new Map(), defaultRoute: undefined });
+    states.set(this, { exact: new Map(), defaultRoute: undefined });
   }
 
   /**
@@ -63,27 +62,6 @@ export class StateUpdateRouting<Id> {
   }
 
   /**
-   * Registers a descriptor `(is)` or `(every_is)` Entity-state route.
-   *
-   * @param javaType Canonical semantic Java type name.
-   * @param via Route function to invoke.
-   * @returns These mutable declarations.
-   */
-  routeSemantic(javaType: string, via: StateUpdateRoute<Id>): this {
-    if (typeof javaType !== "string" || javaType.trim().length === 0)
-      throw new TypeError("State-update semantic routing requires a non-empty Java type.");
-    if (javaType !== javaType.trim())
-      throw new TypeError("State-update semantic routing requires a canonical Java type.");
-    if (typeof via !== "function")
-      throw new TypeError("State-update routing requires a route function.");
-    const state = StateUpdateRoutingInternals.state(this);
-    if (state.semantic.has(javaType))
-      throw new Error("State-update routing has a duplicate semantic state-update route.");
-    state.semantic.set(javaType, via);
-    return this;
-  }
-
-  /**
    * Replaces the first-compatible-field default state route.
    *
    * @param via Replacement route function.
@@ -106,7 +84,6 @@ export const StateUpdateRoutingInternals: Readonly<{
   state<Id>(routing: StateUpdateRouting<Id>): State<Id>;
   snapshot<Id>(routing: StateUpdateRouting<Id> | undefined): Readonly<{
     exact: ReadonlyMap<MessageSchema, StateUpdateRoute<Id>>;
-    semantic: ReadonlyMap<string, StateUpdateRoute<Id>>;
     defaultRoute: StateUpdateRoute<Id> | undefined;
   }>;
 }> = Object.freeze({
@@ -117,14 +94,12 @@ export const StateUpdateRoutingInternals: Readonly<{
     if (routing === undefined) {
       return Object.freeze({
         exact: new Map<MessageSchema, StateUpdateRoute<Id>>(),
-        semantic: new Map<string, StateUpdateRoute<Id>>(),
         defaultRoute: undefined,
       });
     }
     const state = StateUpdateRoutingInternals.state(routing);
     return Object.freeze({
       exact: new Map(state.exact),
-      semantic: new Map(state.semantic),
       defaultRoute: state.defaultRoute,
     });
   },

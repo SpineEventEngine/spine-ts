@@ -6,7 +6,7 @@ import { CommandRouting } from "../../src/index.js";
 import { CommandRoutingInternals } from "../../src/repository/command-routing.js";
 
 describe("CommandRouting", () => {
-  it("rejects duplicate and malformed exact and semantic registrations", () => {
+  it("exposes only exact and replacement-default declarations", () => {
     const route = () => "target";
 
     expect(() =>
@@ -15,23 +15,14 @@ describe("CommandRouting", () => {
     expect(() => CommandRouting.create<string>().route(CommandSchema, undefined as never)).toThrow(
       /requires a route function/,
     );
-    expect(() =>
-      CommandRouting.create<string>()
-        .routeSemantic("example.Type", route)
-        .routeSemantic("example.Type", route),
-    ).toThrow(/duplicate semantic command route/);
-    expect(() => CommandRouting.create<string>().routeSemantic("   ", route)).toThrow(
-      /non-empty Java type/,
-    );
-    expect(() => CommandRouting.create<string>().routeSemantic(" example.Type", route)).toThrow(
-      /canonical Java type/,
-    );
-    expect(() =>
-      CommandRouting.create<string>().routeSemantic("example.Type", undefined as never),
-    ).toThrow(/requires a route function/);
     expect(() => CommandRouting.create<string>().replaceDefault(undefined as never)).toThrow(
       /requires a route function/,
     );
+
+    if (false) {
+      // @ts-expect-error Interface-based routing is not a TypeScript API.
+      CommandRouting.create<string>().routeSemantic("example.Type", route);
+    }
 
     expect(
       CommandRouting.create<string>()
@@ -50,10 +41,10 @@ describe("CommandRouting", () => {
     const routing = CommandRouting.create<string>().route(CommandSchema, first);
 
     const snapshot = CommandRoutingInternals.snapshot(routing);
-    routing.routeSemantic("example.Command", second).replaceDefault(second);
+    routing.replaceDefault(second);
 
     expect(snapshot.exact.get(CommandSchema)).toBe(first);
-    expect(snapshot.semantic).toEqual(new Map());
+    expect(snapshot).not.toHaveProperty("semantic");
     expect(snapshot.defaultRoute).toBeUndefined();
   });
 });
