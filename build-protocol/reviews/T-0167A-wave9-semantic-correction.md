@@ -1,6 +1,6 @@
 # T-0167A Review Record
 
-Status: Review corrections applied; re-review ready
+Status: Clean; release verification pending
 
 ## Review boundary
 
@@ -72,3 +72,16 @@ configured role/profile is the acceptance evidence.
   findings are resolved in this correction batch.
 - **Security:** N/A. The correction removes metadata and routing paths; it
   changes no trust boundary, authorization, secret handling, or logged data.
+
+## Targeted re-review
+
+- Style/maintainability re-review is clean: the stale active-plan claims and
+  dead malformed-semantic fixture are gone.
+- Documentation/TSDoc re-review is clean: lifecycle statuses accurately say
+  Wave 9 is reopened pending integration; active evidence says exact plus
+  replacement-default routes; the narrow Transport reference, canonical Proto
+  preservation, and Wave 10 boundary are coherent.
+- TypeScript/API and performance/reliability remained clean and were not
+  reopened by the record/test-only correction.
+
+All relevant concerns are clean. The release profile is authorized.
