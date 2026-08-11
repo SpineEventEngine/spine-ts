@@ -40,8 +40,14 @@ The execution surface does not expose runtime-model metadata. Explicit configure
 
 ## Correction evidence
 
-- Focused routing/declaration suites pass 234/234.
-- Fresh changed-range coverage passes: statements and lines 179/188 (95.21%),
-  branches 112/123 (91.06%), and functions 100%.
+- The first targeted reliability re-review found that rejecting direct
+  self-subscriptions did not reject a two-Projection dependency cycle.
+  Bounded-context preflight now detects every cycle among registered
+  Projection state types before bus/runtime activation. A one-way dependency
+  remains valid, and subscriptions outside Projection repositories fail at
+  repository construction.
+- Focused routing/declaration suites pass 237/237.
+- Fresh changed-range coverage passes: statements and lines 206/216 (95.37%),
+  branches 124/137 (90.51%), and functions 47/47 (100%).
 - Generated build, tooling typecheck, changed-file ESLint, cleanup, TSDoc,
   logging containment, TypeDoc/API inventory, Prettier, and diff checks pass.

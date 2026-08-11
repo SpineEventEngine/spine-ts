@@ -2178,6 +2178,40 @@ const ContextParts = Object.freeze({
       }
       stateTypeNames.add(snapshot.stateFullTypeName);
     }
+
+    ContextParts.rejectStateCycles(repositories);
+  },
+
+  rejectStateCycles(repositories: readonly RepositoryView[]): void {
+    const dependencies = new Map<string, readonly string[]>();
+    for (const repository of repositories) {
+      const stateType = ContextParts.repositorySnapshot(repository).stateFullTypeName;
+      dependencies.set(stateType, repositoryAccess.stateSubscriptionTypes(repository));
+    }
+
+    const visited = new Set<string>();
+    const visiting = new Set<string>();
+    const path: string[] = [];
+    const visit = (stateType: string): void => {
+      if (visited.has(stateType)) return;
+      if (visiting.has(stateType)) {
+        const start = path.indexOf(stateType);
+        const cycle = [...path.slice(start), stateType];
+        throw new Error(
+          `Projection state subscriptions form a feedback cycle: ${cycle.join(" -> ")}.`,
+        );
+      }
+      visiting.add(stateType);
+      path.push(stateType);
+      for (const dependency of dependencies.get(stateType) ?? []) {
+        if (dependencies.has(dependency)) visit(dependency);
+      }
+      path.pop();
+      visiting.delete(stateType);
+      visited.add(stateType);
+    };
+
+    for (const stateType of dependencies.keys()) visit(stateType);
   },
 
   repositoryCommandDispatchers(

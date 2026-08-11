@@ -1014,6 +1014,14 @@ export interface RepositoryAccess {
   systemEventDispatcher(repository: RepositoryView): EventDispatcher | undefined;
 
   /**
+   * Returns Entity state type names subscribed by the repository.
+   *
+   * @param repository The repository to inspect.
+   * @returns The subscribed Entity state type names.
+   */
+  stateSubscriptionTypes(repository: RepositoryView): readonly string[];
+
+  /**
    * Calculates a Projection's internal route for an Entity state-change System event.
    *
    * @param repository The Projection repository to route through.
@@ -1111,6 +1119,14 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
 
   systemEventDispatcher(repository: RepositoryView): EventDispatcher | undefined {
     return repositoryDispatchers.get(repository)?.systemEvent;
+  },
+
+  stateSubscriptionTypes(repository: RepositoryView): readonly string[] {
+    const routing = repositoryRoutings.get(repository);
+    if (routing === undefined) {
+      throw new TypeError("State subscriptions require a Repository instance.");
+    }
+    return Object.freeze(routing.stateSchemas.map((schema) => schema.typeName));
   },
 
   routeStateUpdate(
@@ -4141,6 +4157,9 @@ const RepositoryRoutes = {
         handler.stateSubscriptions.map((subscription) => subscription.schema),
       ),
     ) as readonly DescriptorMessageSchema[];
+    if (entityFamily !== "projection" && stateSchemas.length > 0) {
+      throw new Error("Entity state subscriptions are supported only by Projection repositories.");
+    }
     if (stateSchemas.some((schema) => schema.typeName === metadata.schema.typeName)) {
       throw new Error(
         "A Projection cannot subscribe to updates of its repository state because each " +

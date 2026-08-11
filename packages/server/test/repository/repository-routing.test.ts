@@ -10833,6 +10833,36 @@ it("rejects state-update routing for Process Manager repositories", () => {
   ).toThrow(/State-update routing is supported only by Projection repositories/);
 });
 
+it("rejects Entity state subscribers outside Projection repositories", () => {
+  const aggregateHandlers = EntityHandlers.define(
+    TaskAggregate,
+    AggregateStateSchema,
+    (builder) => [builder.subscribe(ProjectionStateSchema, "reactToProjection")],
+  );
+  const processManagerHandlers = EntityHandlers.define(
+    RoutingProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [builder.subscribe(ProjectionStateSchema, "reactTask")],
+  );
+
+  expect(
+    () =>
+      new Repository({
+        entityType: TaskAggregate,
+        schema: AggregateStateSchema,
+        handlers: aggregateHandlers,
+      }),
+  ).toThrow(/Entity state subscriptions are supported only by Projection repositories/);
+  expect(
+    () =>
+      new Repository({
+        entityType: RoutingProcessManager,
+        schema: ProcessManagerStateSchema,
+        handlers: processManagerHandlers,
+      }),
+  ).toThrow(/Entity state subscriptions are supported only by Projection repositories/);
+});
+
 describe("Projection state-update routing", () => {
   it("rejects a recursive subscription to the repository state", () => {
     const handlers = EntityHandlers.define(
@@ -10849,6 +10879,58 @@ describe("Projection state-update routing", () => {
           handlers,
         }),
     ).toThrow(/cannot subscribe to updates of its repository state/);
+  });
+
+  it("rejects a feedback cycle between Projection state subscriptions", () => {
+    const projectionHandlers = EntityHandlers.define(
+      StateObservingProjection,
+      ProjectionStateSchema,
+      (builder) => [builder.subscribe(TaskListSchema, "subscribeState")],
+    );
+    const taskListHandlers = EntityHandlers.define(
+      AlternateCatchUpProjection,
+      TaskListSchema,
+      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeAggregate")],
+    );
+    const projection = new Repository({
+      entityType: StateObservingProjection,
+      schema: ProjectionStateSchema,
+      handlers: projectionHandlers,
+    });
+    const taskList = new Repository({
+      entityType: AlternateCatchUpProjection,
+      schema: TaskListSchema,
+      handlers: taskListHandlers,
+    });
+
+    expect(() =>
+      BoundedContext.singleTenant("State subscription cycle").add(projection).add(taskList).build(),
+    ).toThrow(/Projection state subscriptions form a feedback cycle/);
+  });
+
+  it("allows a one-way dependency between Projection state subscriptions", async () => {
+    const handlers = EntityHandlers.define(
+      StateObservingProjection,
+      ProjectionStateSchema,
+      (builder) => [builder.subscribe(TaskListSchema, "subscribeState")],
+    );
+    const context = BoundedContext.singleTenant("One-way state subscription")
+      .add(
+        new Repository({
+          entityType: StateObservingProjection,
+          schema: ProjectionStateSchema,
+          handlers,
+        }),
+      )
+      .add(
+        new Repository({
+          entityType: AlternateCatchUpProjection,
+          schema: TaskListSchema,
+        }),
+      )
+      .build();
+
+    await context.close();
   });
 
   it("uses the first compatible state field and ignores unrelated state types", () => {
