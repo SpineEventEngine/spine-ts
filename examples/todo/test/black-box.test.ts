@@ -984,7 +984,7 @@ describe("@spine-event-engine/example-todo", () => {
     const iterator = subscription.updates[Symbol.asyncIterator]();
 
     try {
-      await establishRejectionSubscriptionReadiness(scope, {
+      await establishRejectionSubscriptionReadiness(rejectionPublisher(context), {
         next: async () => {
           const result = await iterator.next();
           return result.done || result.value.kind !== "update"
@@ -1825,6 +1825,30 @@ function createTaskAlreadyDoneProbe(suffix: string) {
     message: create(TaskAlreadyDoneSchema, {
       id: create(TaskIdSchema, { value: taskId }),
     }),
+  };
+}
+
+function rejectionPublisher(
+  context: Awaited<ReturnType<TodoModule["createTodoContext"]>>,
+): RejectionPublisher {
+  return {
+    postEvent(schema, message) {
+      const producerId = message.id;
+      if (producerId === undefined) {
+        throw new Error("A rejection readiness probe requires a Task ID.");
+      }
+      return context.eventBus().post(
+        SignalEnvelopes.event({
+          id: signalMetadata.eventId(),
+          context: create(EventContextSchema, {
+            timestamp: signalMetadata.timestamp(),
+            producerId: AnyMessages.pack(TaskIdSchema, producerId),
+          }),
+          schema,
+          message,
+        }),
+      );
+    },
   };
 }
 

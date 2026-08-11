@@ -8,11 +8,12 @@ import { resolve } from "node:path";
 export const RejectionGenerator: Readonly<{
   generateCompanions(schema: Schema): void;
   tsDoc(comment: string | undefined): string;
+  isSourceName(sourceName: string): boolean;
 }> = Object.freeze({
   generateCompanions(schema: Schema): void {
     for (const file of schema.files) {
       if (
-        !file.proto.name.endsWith("rejections.proto") ||
+        !RejectionGenerator.isSourceName(file.proto.name) ||
         file.proto.name.startsWith("spine/delivery/")
       )
         continue;
@@ -60,6 +61,14 @@ export const RejectionGenerator: Readonly<{
       )
       .filter(Boolean);
     return `/**\n * ${lines.join(" ") || "Creates this rejection throwable."}\n */\n`;
+  },
+
+  /**
+   * Tests whether a Proto source uses an approved rejection basename.
+   */
+  isSourceName(sourceName: string): boolean {
+    const basename = sourceName.split("/").at(-1);
+    return basename === "rejections.proto" || basename?.endsWith("_rejections.proto") === true;
   },
 });
 

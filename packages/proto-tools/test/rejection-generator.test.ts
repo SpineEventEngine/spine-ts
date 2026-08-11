@@ -49,6 +49,27 @@ describe("generated rejection documentation", () => {
     expect(generated).toBe(0);
   });
 
+  it("does not treat a misleading rejection suffix as an authored rejection file", () => {
+    let generated = 0;
+    const schema = {
+      files: [
+        {
+          proto: { name: "tasks/notrejections.proto" },
+          messages: [{ parent: undefined }],
+          name: "tasks/notrejections",
+        },
+      ],
+      generateFile: () => {
+        generated++;
+        throw new Error("misleading source must not generate output");
+      },
+    } as unknown as Schema;
+
+    RejectionGenerator.generateCompanions(schema);
+
+    expect(generated).toBe(0);
+  });
+
   it("emits a companion for an owned top-level rejection message", () => {
     const printed: string[] = [];
     const messageProto = {};
@@ -82,5 +103,38 @@ describe("generated rejection documentation", () => {
     expect(printed).toEqual([
       expect.stringContaining("export const TaskRejected: { readonly create"),
     ]);
+  });
+
+  it("emits companions for both approved rejection basenames", () => {
+    const generated: string[] = [];
+    const messageProto = {};
+    const message = {
+      kind: "message",
+      name: "DomainRejected",
+      parent: undefined,
+      proto: messageProto,
+      file: { proto: { messageType: [messageProto] } },
+    };
+    const schema = {
+      files: ["domain/rejections.proto", "domain/task_rejections.proto"].map((name) => ({
+        proto: { name },
+        messages: [message],
+        name: name.slice(0, -6),
+      })),
+      generateFile: (name: string) => {
+        generated.push(name);
+        return {
+          import: (value: string) => value,
+          preamble: () => undefined,
+          importSchema: () => "RejectionSchema",
+          print: () => undefined,
+          export: (_kind: string, value: string) => value,
+        };
+      },
+    } as unknown as Schema;
+
+    RejectionGenerator.generateCompanions(schema);
+
+    expect(generated).toHaveLength(2);
   });
 });

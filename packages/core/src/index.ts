@@ -322,7 +322,10 @@ export class RejectionThrowable<Schema extends MessageSchema = MessageSchema> ex
   }
 
   private static assertSchema(schema: MessageSchema): void {
-    if (schema.parent !== undefined || !schema.file.proto.name.endsWith("rejections.proto")) {
+    const basename = schema.file.proto.name.split("/").at(-1);
+    const rejectionSource =
+      basename === "rejections.proto" || basename?.endsWith("_rejections.proto") === true;
+    if (schema.parent !== undefined || !rejectionSource) {
       throw new TypeError(
         `Rejection schema "${schema.typeName}" must be a top-level message declared in a rejections.proto file.`,
       );

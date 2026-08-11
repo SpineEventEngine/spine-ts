@@ -123,6 +123,14 @@ export function main(argv = process.argv.slice(2)) {
     return exampleQualityStatus;
   }
 
+  const rejectionNamingStatus = runCommand("rejection source naming", process.execPath, [
+    join(repoRoot, "scripts/check-rejection-conventions.mjs"),
+  ]);
+
+  if (rejectionNamingStatus !== 0) {
+    return rejectionNamingStatus;
+  }
+
   const descriptorStatus = runCommand("frozen descriptor compatibility", process.execPath, [
     join(repoRoot, "packages/proto/scripts/verify-descriptor-compatibility.mjs"),
   ]);

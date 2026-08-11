@@ -289,6 +289,32 @@ describe("RejectionThrowable", () => {
     expect(() => RejectionThrowable.create(NestedRejectionSchema, { reason: "nested" })).toThrow(
       TypeError,
     );
+    const packageRejectionSchema = {
+      ...RequiredRejectionSchema,
+      file: {
+        ...RequiredRejectionSchema.file,
+        proto: {
+          ...RequiredRejectionSchema.file.proto,
+          name: "example/rejections.proto",
+        },
+      },
+    } as typeof RequiredRejectionSchema;
+    expect(() =>
+      RejectionThrowable.create(packageRejectionSchema, { name: "package rejection" }),
+    ).not.toThrow();
+    const misleadingSchema = {
+      ...RequiredRejectionSchema,
+      file: {
+        ...RequiredRejectionSchema.file,
+        proto: {
+          ...RequiredRejectionSchema.file.proto,
+          name: "example/notrejections.proto",
+        },
+      },
+    } as typeof RequiredRejectionSchema;
+    expect(() => RejectionThrowable.create(misleadingSchema, { name: "misleading" })).toThrow(
+      TypeError,
+    );
   });
 
   it("rejects direct construction at compile time and runtime", () => {

@@ -1,7 +1,11 @@
 import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import {
+  FileDescriptorProtoSchema,
+  FileDescriptorSetSchema,
+  StringValueSchema,
+} from "@bufbuild/protobuf/wkt";
 import { CommandSchema, EventSchema, file_spine_options } from "@spine-event-engine/proto";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
@@ -363,6 +367,35 @@ describe("generated handler registry ingestion", () => {
       expect(failure).toBeInstanceOf(HandlerRegistryIngestionError);
       expect(failure).toMatchObject({ code: "INVALID_SCHEMA" });
     }
+  });
+
+  it("rejects filtered generated input from a misleading rejection filename", () => {
+    const misleadingSchema = {
+      ...StringValueSchema,
+      file: {
+        ...StringValueSchema.file,
+        name: "example/notrejections.proto",
+        proto: { ...StringValueSchema.file.proto, name: "example/notrejections.proto" },
+      },
+    } as unknown as typeof EventSchema;
+
+    expect(() =>
+      new HandlerRegistryIngestor().ingest({
+        version: 2,
+        entities: [
+          {
+            entityType: GeneratedProjection,
+            stateSchema: ProjectionStateSchema,
+            handlers: [
+              {
+                ...record("event-subscription", "subscribeCreated", misleadingSchema, []),
+                where: { eventField: "value", equals: "rejected" },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(/invalid Event field filter/);
   });
 
   it("accepts generated event reactions with no emitted schemas", () => {

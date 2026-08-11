@@ -9,6 +9,7 @@ import {
   type HandlerRegistrationBuilder,
   type WhereOptions,
 } from "./handler-metadata.js";
+import { RejectionSources } from "./rejection-source.js";
 
 /**
  * Describes the generated handler registry module shape accepted by the framework ingestor.
@@ -469,7 +470,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
     const fileName = schema.file.name;
     return (
       fileName.endsWith("events.proto") ||
-      fileName.endsWith("rejections.proto") ||
+      RejectionSources.matches(fileName) ||
       schema.typeName === "spine.core.Event"
     );
   },

@@ -479,6 +479,35 @@ describe("build-time handler analyzer", () => {
     );
   });
 
+  it("does not classify a misleading rejection filename as a rejection signal", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/misleading-rejection.ts", {
+        "src/misleading-rejection.ts": handlerFixtureSource(
+          "Projection",
+          "TaskListSchema",
+          `
+            @Subscribe
+            observe(signal: MisleadingRejection): void { void signal; }
+          `,
+          `import { type MisleadingRejection } from "../generated/notrejections_pb.js";`,
+        ),
+        "generated/notrejections_pb.ts": generatedModule(
+          "spine/examples/todo/notrejections.proto",
+          "MisleadingRejection",
+        ),
+        "generated/task_list_pb.ts": generatedModule(
+          "spine/examples/todo/task_list.proto",
+          "TaskList",
+        ),
+      }),
+    );
+
+    expect(result.entities).toEqual([]);
+    expect(result.diagnostics.map(({ code, methodName }) => [code, methodName])).toEqual([
+      ["INVALID_SIGNAL_TYPE", "observe"],
+    ]);
+  });
+
   it("does not classify neutral descriptors from misleading command module paths", () => {
     const result = analyzeBuildHandlers(
       programWithSources("src/misleading.ts", {
