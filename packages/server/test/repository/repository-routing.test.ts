@@ -99,6 +99,7 @@ import {
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { Delivery } from "../../src/delivery/delivery.js";
+import { InboxTargets } from "../../src/delivery/inbox.js";
 import { describeEntityMetadata } from "../../src/entity/entity-metadata.js";
 import {
   EntityRecords,
@@ -172,6 +173,15 @@ type TaskCreated = Message<"spine.examples.todo.TaskCreated"> & {
   title: string;
 };
 
+type Int64ProjectionId = Message<"Int64ProjectionId"> & {
+  value: bigint;
+};
+
+type Int64MessageIdProjectionState = Message<"Int64MessageIdProjectionState"> & {
+  id?: Int64ProjectionId;
+  name: string;
+};
+
 type NumberRouteEvent = Message<"spine_ts.test.NumberRouteEvent"> & {
   id: number;
 };
@@ -200,6 +210,30 @@ function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [fil
 const fileEntityMetadataFixture = createFixtureFileDescriptor(
   serverEntityMetadataTestFixtures.main.descriptorSetBase64,
 );
+const fileInt64MessageIdFixture = (() => {
+  const descriptorSet = fromBinary(
+    FileDescriptorSetSchema,
+    Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
+  );
+  const source = descriptorSet.file[0];
+  if (source === undefined) throw new Error("Entity metadata fixture descriptor set is empty.");
+  const descriptor = clone(FileDescriptorProtoSchema, source);
+  const id = descriptor.messageType[8];
+  const value = id?.field[0];
+  const state = descriptor.messageType[9];
+  if (id === undefined || value === undefined || state === undefined) {
+    throw new Error("Entity metadata fixture message-ID declarations are missing.");
+  }
+  id.name = "Int64ProjectionId";
+  value.type = FieldDescriptorProto_Type.INT64;
+  state.name = "Int64MessageIdProjectionState";
+  const idField = state.field[0];
+  if (idField === undefined) throw new Error("Message-ID state ID field is missing.");
+  idField.typeName = ".Int64ProjectionId";
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+  ]);
+})();
 const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
@@ -312,6 +346,14 @@ const WrongIdRouteEventSchema = messageDesc(
   fileWrongIdRouteFixture,
   0,
 ) as GenMessage<WrongIdRouteEvent>;
+const Int64ProjectionIdSchema = messageDesc(
+  fileInt64MessageIdFixture,
+  8,
+) as GenMessage<Int64ProjectionId>;
+const Int64MessageIdProjectionStateSchema = messageDesc(
+  fileInt64MessageIdFixture,
+  9,
+) as GenMessage<Int64MessageIdProjectionState>;
 
 class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(command: AggregateState): void {
@@ -320,6 +362,19 @@ class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigin
 
   reactToProjection(event: ProjectionState): void {
     void event;
+  }
+}
+
+class Int64MessageIdProjection extends Projection<
+  Int64ProjectionId,
+  typeof Int64MessageIdProjectionStateSchema,
+  number
+> {
+  static calls = 0;
+
+  subscribeState(event: Int64MessageIdProjectionState): void {
+    void event;
+    Int64MessageIdProjection.calls += 1;
   }
 }
 
@@ -1520,12 +1575,10 @@ describe("repository signal routing", () => {
     expect(descriptor.id.unpack(record.entityId as NonNullable<typeof record.entityId>)).toBe(
       "task-1",
     );
-    expect(descriptor.id.key(null as never)).toBe("null");
-    expect(descriptor.id.key("task-1")).toBe("string:task-1");
-    expect(descriptor.id.key(1)).toBe("number:1");
-    expect(descriptor.id.key(false)).toBe("boolean:false");
-    expect(descriptor.id.key(1n)).toBe("bigint:1");
-    expect(descriptor.id.key(structured as never)).toBe('json:{"value":"task-1"}');
+    expect(descriptor.id.key("task-1")).toBe(
+      InboxTargets.key(Identifiers.pack("string", "task-1")),
+    );
+    expect(descriptor.id.key("task-1")).not.toBe(descriptor.id.key("task-2"));
     expect(descriptor.id.clone(structured as never)).toEqual(structured);
     expect(descriptor.id.clone(structured as never)).not.toBe(structured);
   });
@@ -3344,6 +3397,56 @@ describe("repository signal routing", () => {
 
     expect(route.entityIds).toEqual(["target-b", "target-a"]);
     expect(Object.isFrozen(route.entityIds)).toBe(true);
+  });
+
+  it("deduplicates and replays a message target containing an int64 value", async () => {
+    Int64MessageIdProjection.calls = 0;
+    let routeCalls = 0;
+    const eventRouting = EventRouting.create<Int64ProjectionId>().route(
+      Int64MessageIdProjectionStateSchema,
+      (message) => {
+        routeCalls += 1;
+        if (message.id === undefined) throw new Error("Expected an int64 message ID.");
+        return [message.id, clone(Int64ProjectionIdSchema, message.id)];
+      },
+    );
+    const factory = new InMemoryStorageFactory();
+    const repository = createInt64MessageIdProjectionRepository(eventRouting);
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const id = create(Int64ProjectionIdSchema, { value: 42n });
+    const event = SignalEnvelopes.event({
+      id: create(EventIdSchema, { value: "event-int64-message-id" }),
+      context: create(EventContextSchema),
+      schema: Int64MessageIdProjectionStateSchema,
+      message: create(Int64MessageIdProjectionStateSchema, { id, name: "Int64 ID" }),
+    });
+
+    try {
+      expect(repository.routeEvent(event).entityIds).toEqual([id]);
+      expect(routeCalls).toBe(1);
+
+      await context.eventBus().post(event);
+      expect(routeCalls).toBe(2);
+
+      const delivery = new Delivery({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: factory,
+      });
+      const rows = await delivery.inbox.read(ShardIndex.single(), {
+        statuses: ["TO_DELIVER", "DELIVERED"],
+      });
+      const stored = rows.find((row) => row.signalId === "event-int64-message-id");
+      if (stored === undefined) throw new Error("Expected a delivered int64-ID inbox row.");
+
+      await requireProjectionInboxTarget(repository).replay(stored);
+      expect(routeCalls).toBe(2);
+      expect(Int64MessageIdProjection.calls).toBe(2);
+    } finally {
+      await context.close();
+    }
   });
 
   it("applies exact, direct semantic, file semantic, and replacement Event precedence", () => {
@@ -8568,6 +8671,23 @@ function createExecutingProjectionRepository(
     handlers,
     events: [NumberRouteEventSchema],
     ...(eventRouting === undefined ? {} : { eventRouting }),
+  });
+}
+
+function createInt64MessageIdProjectionRepository(
+  eventRouting: EventRouting<Int64ProjectionId>,
+): Repository<typeof Int64MessageIdProjection> {
+  const handlers = EntityHandlers.define(
+    Int64MessageIdProjection,
+    Int64MessageIdProjectionStateSchema,
+    (builder) => [builder.subscribe(Int64MessageIdProjectionStateSchema, "subscribeState")],
+  );
+
+  return new Repository({
+    entityType: Int64MessageIdProjection,
+    schema: Int64MessageIdProjectionStateSchema,
+    handlers,
+    eventRouting,
   });
 }
 

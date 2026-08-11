@@ -1,6 +1,6 @@
 # T-0159 Review Record
 
-Status: Review wave in progress
+Status: Correction-complete; targeted re-review ready
 
 ## Assignments
 
@@ -18,10 +18,29 @@ explicit immutable configured role/profile is then the durable evidence.
 
 ## Canonical Review Disposition
 
-- Style/maintainability: pending implementation and mechanical convergence.
-- TypeScript/API documentation: pending implementation and mechanical
-  convergence.
-- Documentation/TSDoc: pending implementation and mechanical convergence.
-- Performance/reliability: pending implementation and mechanical convergence.
+- Style/maintainability: accepted one stale `routeEvent()` TSDoc finding. The
+  comment now describes compatible-producer selection, incompatible-producer
+  fallback, malformed-compatible failure, and zero-to-many custom targets.
+- TypeScript/API documentation: accepted the same stale `routeEvent()` finding
+  plus two contract-clarity findings. `EventRoute` now states the framework's
+  validation/copy/deduplication/freeze/1,000-target behavior, and EventBus
+  acceptance now distinguishes pre-dispatch acceptance from new-Event storage.
+- Documentation/TSDoc: accepted the stale `routeEvent()` contract finding; the
+  corrected public comments pass TSDoc and generated API checks.
+- Performance/reliability: accepted the message-ID `bigint` canonicalization
+  finding. Custom routes and repository/entity storage now key IDs by their
+  descriptor-aware packed `Any` bytes rather than JSON. A real Projection
+  admission/replay test covers duplicate message IDs containing `int64`.
 - Security: N/A; no authentication, authorization, secret, or external trust
   boundary changes.
+
+## Correction Evidence
+
+- Generated build and full server suite pass: 71 files / 1,693 tests.
+- Focused correction suites pass: 4 files / 275 tests under coverage; the
+  repository-global threshold output is not the bounded changed-range result.
+- Exact `origin/main` changed-production LCOV from
+  `/tmp/t0159-correction-cov/lcov.info` is 136 / 140 statements and lines
+  (97.14%), 81 / 86 branches (94.19%), and 33 / 33 functions (100%).
+- Tooling typecheck, TSDoc, API docs, exact changed-source ESLint, Prettier,
+  and `git diff --check` pass.

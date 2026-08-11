@@ -65,7 +65,7 @@ import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { Delivery } from "../delivery/delivery.js";
 import { commitFenced } from "./commit-fence.js";
-import type { InboxMessage, InboxMessageInput } from "../delivery/inbox.js";
+import { InboxTargets, type InboxMessage, type InboxMessageInput } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import {
   Aggregate,
@@ -654,12 +654,13 @@ export class Repository<
   }
 
   /**
-   * Routes an event to one or more entity IDs without invoking a handler.
+   * Routes an Event without invoking a handler.
    *
-   * A packed message-valued `EventContext.producerId` is decoded using the event
-   * message's first-field schema. It must identify the same entity as that first
-   * field: message targets compare the complete ID message, while scalar targets
-   * compare the message ID's scalar value. A mismatch is rejected.
+   * The default route uses a readable producer whose typed ID is compatible
+   * with the Entity ID. A valid producer of another type falls back to the
+   * Event's declaration-first field. A producer that claims the compatible type
+   * but cannot be decoded is rejected. Custom routes may select zero, one, or
+   * many targets.
    *
    * @param event The event envelope to route.
    * @returns The calculated event route.
@@ -1708,7 +1709,7 @@ class AggregateEventExecution {
     await this.#support.appendDiagnosticEvent(
       loaded,
       entityId,
-      DispatchGuards.guardedJournalEvent(this.#event, entityId),
+      DispatchGuards.guardedJournalEvent(this.#repository, this.#event, entityId),
     );
 
     return Object.freeze(commands);
@@ -1829,7 +1830,7 @@ class AggregateEventExecution {
         ? create(EventIdSchema, {
             value:
               `${metadata.id.value}.target.` +
-              encodeURIComponent(DispatchGuards.canonicalEntityIdKey(entityId)),
+              encodeURIComponent(DispatchGuards.canonicalEntityIdKey(this.#repository, entityId)),
           })
         : metadata.id,
       message: AnyMessages.pack(schema, signal as never),
@@ -2598,7 +2599,10 @@ class ProcessManagerEventExecution {
     const produced = await this.#invokeHandlers(entityId, loaded.entity, intake);
 
     const events = this.#bindProducedEvents(produced.events, entityId);
-    const diagnostics = [DispatchGuards.guardedJournalEvent(this.#event, entityId), ...events];
+    const diagnostics = [
+      DispatchGuards.guardedJournalEvent(this.#repository, this.#event, entityId),
+      ...events,
+    ];
     const committed = await this.#support.commit(
       loaded,
       tenantOptions,
@@ -4263,7 +4267,7 @@ const RepositoryRoutes = {
     const unique = new Map<string, Id>();
     for (const candidate of candidates) {
       const id = RepositoryRoutes.readRouteId(candidate, targetIdField, "event").id as Id;
-      const key = DispatchGuards.canonicalEntityIdKey(id);
+      const key = InboxTargets.key(InboxMessages.inboxTargetId(id, targetIdField));
       if (!unique.has(key)) unique.set(key, structuredClone(id));
     }
     return Object.freeze([...unique.values()]);
@@ -4757,7 +4761,7 @@ const DispatchGuards = {
     const eventId = event.id?.value;
     if (depth === undefined || eventId === undefined || eventId.length === 0) return dispatch();
     if (entityId === undefined) return dispatch();
-    const key = DispatchGuards.canonicalEntityIdKey(entityId);
+    const key = DispatchGuards.canonicalEntityIdKey(repository, entityId);
     const journalEventId = DispatchGuards.guardedJournalEventId(eventId, key);
     let guards = repositoryDispatchGuards.get(repository);
     if (guards === undefined) {
@@ -4833,7 +4837,7 @@ const DispatchGuards = {
     }
   },
 
-  guardedJournalEvent(event: Event, entityId: unknown): Event {
+  guardedJournalEvent(repository: RepositoryView, event: Event, entityId: unknown): Event {
     const sourceId = event.id?.value;
     if (sourceId === undefined) return event;
     return create(EventSchema, {
@@ -4841,7 +4845,7 @@ const DispatchGuards = {
       id: create(EventIdSchema, {
         value: DispatchGuards.guardedJournalEventId(
           sourceId,
-          DispatchGuards.canonicalEntityIdKey(entityId),
+          DispatchGuards.canonicalEntityIdKey(repository, entityId),
         ),
       }),
     });
@@ -4851,17 +4855,8 @@ const DispatchGuards = {
     return `${sourceId}.guard.${encodeURIComponent(entityKey)}`;
   },
 
-  canonicalEntityIdKey(id: unknown): string {
-    if (id === null) return "null";
-    switch (typeof id) {
-      case "string":
-      case "number":
-      case "boolean":
-      case "bigint":
-        return `${typeof id}:${String(id)}`;
-      default:
-        return `json:${JSON.stringify(id)}`;
-    }
+  canonicalEntityIdKey(repository: RepositoryView, id: unknown): string {
+    return InboxTargets.key(InboxMessages.inboxTargetId(id, repository.idField));
   },
 };
 Object.freeze(DispatchGuards);

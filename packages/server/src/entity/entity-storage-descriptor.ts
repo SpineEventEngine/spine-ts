@@ -1,5 +1,5 @@
-import { clone, create, ScalarType, type Message } from "@bufbuild/protobuf";
-import type { Any } from "@bufbuild/protobuf/wkt";
+import { clone, create, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
+import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, Identifiers } from "@spine-event-engine/core";
 import { VersionSchema } from "@spine-event-engine/proto";
 import {
@@ -108,7 +108,7 @@ export function entityStorageDescriptor<I>(
     context,
     id: {
       clone: (id) => structuredClone(id),
-      key: canonicalEntityIdKey,
+      key: (id) => canonicalEntityIdKey(spec.sourceType, id),
       pack: (id) => EntityIds.pack(spec.sourceType, id),
       unpack: (id): I | undefined => {
         try {
@@ -284,15 +284,6 @@ type EntityRecordConverter = Readonly<{
 
 const stateCache = new WeakMap<EntityRecord, Map<DescriptorMessageSchema, EntityRecordValue>>();
 
-function canonicalEntityIdKey(id: unknown): string {
-  if (id === null) return "null";
-  switch (typeof id) {
-    case "string":
-    case "number":
-    case "boolean":
-    case "bigint":
-      return `${typeof id}:${String(id)}`;
-    default:
-      return `json:${JSON.stringify(id)}`;
-  }
+function canonicalEntityIdKey(schema: DescriptorMessageSchema, id: unknown): string {
+  return Buffer.from(toBinary(AnySchema, EntityIds.pack(schema, id))).toString("base64");
 }

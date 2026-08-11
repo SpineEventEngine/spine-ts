@@ -3,18 +3,19 @@ import type { MessageSchema } from "@spine-event-engine/core";
 import type { EventContext } from "@spine-event-engine/proto";
 
 /**
- * Calculates immutable target Entity IDs for one Event admission.
+ * Calculates target Entity IDs for one Event admission.
  *
  * The route must be deterministic and side-effect-free. It runs once for an
  * accepted admission; durable replay uses stored targets instead.
  *
- * @typeParam Id Entity ID type owned by the receiving repository.
+ * @typeParam Id Entity ID type used by the receiving repository.
  * @typeParam Schema Generated Event message schema.
  * @param message Unpacked Event message.
  * @param context Normalized Event context. When the signal omits its context,
  *   the framework supplies the default generated `EventContext` value.
- * @returns Target Entity IDs. An empty array deliberately suppresses delivery
- *   to this repository.
+ * @returns Up to 1,000 target Entity IDs. The framework validates the complete
+ *   result, copies and stable-deduplicates its IDs, and freezes the accepted
+ *   plan. An empty array deliberately suppresses delivery to this repository.
  */
 export type EventRoute<Id, Schema extends MessageSchema = MessageSchema> = (
   message: MessageShape<Schema>,
@@ -44,7 +45,7 @@ export class EventRouting<Id> {
   /**
    * Creates empty Event route declarations.
    *
-   * @typeParam Id Entity ID type owned by the receiving repository.
+   * @typeParam Id Entity ID type used by the receiving repository.
    * @returns Mutable Event route declarations.
    */
   static create<Id>(): EventRouting<Id> {
