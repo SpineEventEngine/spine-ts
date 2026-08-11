@@ -1389,7 +1389,7 @@ class AggregateCommandExecution {
     );
   }
 
-  async run(): Promise<EntityInboxFollowUp | undefined> {
+  async run(replayedRoute?: RepositoryCommandRoute): Promise<EntityInboxFollowUp | undefined> {
     void RepositorySignals.requireCommandId(this.#command);
 
     const commandMessage = EntityInvocation.requireSignalMessage(this.#command.message, "command");
@@ -1400,7 +1400,7 @@ class AggregateCommandExecution {
     );
     const message = EntityInvocation.unpackRequired(commandMessage, commandSchema, "command");
 
-    const route = this.#repository.routeCommand(this.#command);
+    const route = replayedRoute ?? this.#repository.routeCommand(this.#command);
     const assignee = this.#routing.commandReadiness?.findCommandAssignee(route.messageFullTypeName);
 
     if (assignee === undefined) {
@@ -2330,7 +2330,7 @@ class ProcessManagerCommandExecution {
     this.#support = new ProcessManagerExecutionSupport(repository, runtime);
   }
 
-  async run(): Promise<void> {
+  async run(replayedRoute?: RepositoryCommandRoute): Promise<void> {
     RepositorySignals.requireCommandId(this.#command);
     const commandMessage = EntityInvocation.requireSignalMessage(this.#command.message, "command");
     const commandSchema = RepositoryRoutes.schemaForTypeUrl(
@@ -2339,7 +2339,7 @@ class ProcessManagerCommandExecution {
       "command",
     );
     const message = EntityInvocation.unpackRequired(commandMessage, commandSchema, "command");
-    const route = this.#repository.routeCommand(this.#command);
+    const route = replayedRoute ?? this.#repository.routeCommand(this.#command);
     const assignee = this.#routing.commandReadiness?.findCommandAssignee(route.messageFullTypeName);
 
     if (assignee === undefined) {
@@ -4823,9 +4823,9 @@ const InboxReplay = {
     const command = InboxMessages.readInboxCommand(message);
     InboxReplay.validateReplayTenant(runtime.context, deliveryTenantId, command);
     InboxReplay.validateReplayedCommandPayload(routing, command);
-    InboxReplay.validateReplayTarget(repository, message, command);
+    const route = InboxReplay.replayCommandRoute(repository, routing, message, command);
 
-    return await new AggregateCommandExecution(repository, routing, runtime, command).run();
+    return await new AggregateCommandExecution(repository, routing, runtime, command).run(route);
   },
 
   async replayPmInbox(
@@ -4867,9 +4867,9 @@ const InboxReplay = {
 
     InboxReplay.validateReplayTenant(runtime.context, deliveryTenantId, command);
     InboxReplay.validateReplayedCommandPayload(routing, command);
-    InboxReplay.validateReplayTarget(repository, message, command);
+    const route = InboxReplay.replayCommandRoute(repository, routing, message, command);
 
-    await new ProcessManagerCommandExecution(repository, routing, runtime, command).run();
+    await new ProcessManagerCommandExecution(repository, routing, runtime, command).run(route);
   },
 
   async replayProcessManagerEvent(
@@ -5038,13 +5038,12 @@ const InboxReplay = {
     }
   },
 
-  validateReplayTarget(
-    repository: RepositoryView & {
-      routeCommand(command: Command): RepositoryCommandRoute;
-    },
+  replayCommandRoute(
+    repository: RepositoryView,
+    routing: RepositoryRouting,
     message: InboxMessage,
     command: Command,
-  ): void {
+  ): RepositoryCommandRoute {
     const expectedTargetTypeUrl = TypeUrls.derive(repository.stateSchema);
 
     if (message.inboxId.targetTypeUrl !== expectedTargetTypeUrl) {
@@ -5053,12 +5052,19 @@ const InboxReplay = {
       );
     }
 
-    const route = repository.routeCommand(command);
-    const expectedTargetId = InboxMessages.inboxTargetId(route.entityId);
+    const commandMessage = EntityInvocation.requireSignalMessage(command.message, "command");
+    const schema = RepositoryRoutes.schemaForTypeUrl(routing.commandSchemas, commandMessage.typeUrl, "command");
+    const field = repository.idField.descriptor;
+    const storedId =
+      field.fieldKind === "message"
+        ? create(field.message as MessageSchema, { value: message.inboxId.targetId } as never)
+        : message.inboxId.targetId;
 
-    if (message.inboxId.targetId !== expectedTargetId) {
-      throw new Error("Entity Inbox replay stored target ID does not match the routed command.");
-    }
+    return Object.freeze({
+      entityId: RepositoryRoutes.readRouteId(storedId, repository.idField, "command").id,
+      messageFullTypeName: schema.typeName,
+      invocation: "deferred",
+    });
   },
 
   replayProcessManagerId(

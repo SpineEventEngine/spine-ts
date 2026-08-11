@@ -3846,7 +3846,7 @@ describe("repository signal routing", () => {
     expect(RoutingProcessManager.commandCalls).toBe(0);
   });
 
-  it("rejects Entity Inbox replay when stored target metadata does not match the routed command", async () => {
+  it("uses the persisted Entity Inbox target without rerouting the command", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
     const repository = createProcessManagerAssignRepository();
@@ -3876,10 +3876,10 @@ describe("repository signal routing", () => {
       },
     );
 
-    await expect(target.replay(wrongId)).rejects.toThrow(/target/i);
+    await expect(target.replay(wrongId)).resolves.toBeUndefined();
     await expect(target.replay(wrongType)).rejects.toThrow(/target/i);
 
-    expect(RoutingProcessManager.commandCalls).toBe(0);
+    expect(RoutingProcessManager.commandCalls).toBe(1);
   });
 
   it("rejects Entity Inbox replay before the repository is bound to a runtime", async () => {
