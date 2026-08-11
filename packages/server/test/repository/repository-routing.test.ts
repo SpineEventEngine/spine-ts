@@ -8639,7 +8639,7 @@ function createGeneratedTwoArgProjectionRepository(
     entityType: GeneratedTwoArgProjection,
     schema: ProjectionStateSchema,
     handlers,
-    eventRouting,
+    ...(eventRouting === undefined ? {} : { eventRouting }),
   });
 }
 
