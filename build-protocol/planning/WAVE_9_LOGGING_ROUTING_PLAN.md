@@ -127,22 +127,10 @@ This is not a regex over every `catch` or fire-and-forget call.
   incompatible type falls back to the first declared Event field. A producer
   that is absent, or that claims the compatible type but is malformed, fails;
   it does not fall back.
-- Exact-message routes precede semantic routes. Message-level `(is)` routes
-  precede file-level `(every_is)` routes. Ambiguous registrations fail when the
-  repository is built.
-- Semantic tags are non-empty, case-sensitive Java type names. `TypeRegistry`
-  automatically extracts and deduplicates descriptor `(is)` and `(every_is)`
-  metadata. Caller-supplied compatibility tags cannot impersonate either
-  descriptor source for routing.
-- `TypeMetadata` preserves provenance through separate public
-  `isTypes: readonly string[]`, `everyIsTypes: readonly string[]`, and existing
-  `semanticTags: readonly string[]` members. `semanticTags` becomes explicitly
-  compatibility-only. `TypeRegistryLookup` gains `findByIs(javaType)` and
-  `findByEveryIs(javaType)` returning immutable metadata lists; routing consumes
-  only these descriptor-backed lookups.
-- Duplicate exact or semantic registrations fail. If several registrations
-  apply within the highest selected semantic tier, repository construction
-  fails. An exact registration suppresses lower tiers.
+- Exact-message routes precede the replacement default. TypeScript does not
+  interpret Java-specific `(is)` or `(every_is)` options.
+- Duplicate exact registrations fail. Repository construction snapshots the
+  declared exact routes and optional replacement default.
 - The default Command route reads the first field in descriptor declaration
   order. It must be singular, non-map, ID-compatible, valid, and non-default.
   Custom IDs are still validated.
@@ -306,21 +294,18 @@ export type StateUpdateRoute<Id, Schema extends MessageSchema = MessageSchema> =
 export class CommandRouting<Id> {
   static create<Id>(): CommandRouting<Id>;
   route<Schema extends MessageSchema>(schema: Schema, via: CommandRoute<Id, Schema>): this;
-  routeSemantic(javaType: string, via: CommandRoute<Id>): this;
   replaceDefault(via: CommandRoute<Id>): this;
 }
 
 export class EventRouting<Id> {
   static create<Id>(): EventRouting<Id>;
   route<Schema extends MessageSchema>(schema: Schema, via: EventRoute<Id, Schema>): this;
-  routeSemantic(javaType: string, via: EventRoute<Id>): this;
   replaceDefault(via: EventRoute<Id>): this;
 }
 
 export class StateUpdateRouting<Id> {
   static create<Id>(): StateUpdateRouting<Id>;
   route<Schema extends MessageSchema>(schema: Schema, via: StateUpdateRoute<Id, Schema>): this;
-  routeSemantic(javaType: string, via: StateUpdateRoute<Id>): this;
   replaceDefault(via: StateUpdateRoute<Id>): this;
 }
 ```
@@ -405,7 +390,7 @@ behavior before production edits.
 - producer-compatible, producer-incompatible fallback, and malformed-compatible
   Event cases;
 - Process Manager and Projection behavior under the same general contracts;
-- exact > `(is)` > `(every_is)` > default precedence;
+- exact > replacement-default precedence;
 - incomplete, wrong, duplicate, and ambiguous semantic registrations fail at
   construction;
 - generated registry and packed-consumer coverage for public metadata.
@@ -479,16 +464,15 @@ T-0154; no logging facade or callback API is introduced.
 
 Depends on T-0154 and may proceed beside T-0155, T-0156, and T-0156A. Owns core
 `TypeRegistry` provenance fields and lookups, option extraction, shared Entity
-semantic extraction, exports, and metadata tests. RED evidence covers `(is)`,
-`(every_is)`, deduplication, malformed tags, source precedence, and proof that
-caller compatibility tags cannot impersonate descriptor declarations.
+metadata tests. The correction T-0167A removes this superseded semantic-routing
+surface while preserving exact routes and replacement defaults.
 
 ### T-0158: `CommandRouting`
 
 Depends on T-0157. Owns the new routing module, Command members of
 `RepositoryOptions`, construction, dispatch and replay, exports, and tests. RED
-evidence covers public types, configuration snapshots, exact/semantic/default
-precedence, ambiguity, default replacement, invalid return values, and
+evidence covers public types, configuration snapshots, exact/default
+precedence, default replacement, invalid return values, and
 declaration-order defaults.
 
 ### T-0159: `EventRouting`
@@ -496,7 +480,7 @@ declaration-order defaults.
 Depends on T-0158. Owns Event routing plus the Event portions of repository,
 Process Manager/Projection handoff, and replay. RED evidence covers the complete
 producer matrix, incompatible fallback, removal of the equality requirement,
-multicast and stable deduplication, empty routes, semantic precedence, and
+multicast and stable deduplication, empty routes, exact/default precedence, and
 malformed custom IDs.
 
 ### T-0160: State-subscription metadata

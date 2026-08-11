@@ -6,16 +6,8 @@ import {
   type TransportTopic,
 } from "@spine-event-engine/transport";
 import { BoundedContext, type BoundedContextSnapshot } from "../context/bounded-context.js";
-import {
-  CommandRegistrationReadiness,
-  type CommandRegistrationAssigneeMetadata,
-} from "../handler/command-registration-readiness.js";
-import {
-  EventRegistrationReadiness,
-  type EventRegistrationApplicationMetadata,
-  type EventRegistrationReactorMetadata,
-  type EventRegistrationSubscriberMetadata,
-} from "../handler/event-registration-readiness.js";
+import { CommandRegistrationReadiness } from "../handler/command-registration-readiness.js";
+import { EventRegistrationReadiness } from "../handler/event-registration-readiness.js";
 import { ReadinessMetadata } from "../handler/registration-readiness-metadata.js";
 const deterministicValidationErrorTag = Symbol("runtimeRoutingDeterministicValidation");
 

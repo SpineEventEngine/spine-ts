@@ -211,7 +211,6 @@ export interface EntityMetadata<Schema extends DescriptorMessageSchema = Descrip
    * Fields marked `(set_once) = true`, in descriptor declaration order.
    */
   readonly setOnceFields: readonly DescriptorFieldMetadata[];
-
 }
 
 /**

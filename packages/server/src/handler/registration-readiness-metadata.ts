@@ -11,7 +11,6 @@ import type {
 } from "./handler-metadata.js";
 import { HandlerMetadataValues } from "./handler-metadata.js";
 
-
 /**
  * Frozen fields shared by a readiness entry and its registered handler.
  */

@@ -170,9 +170,7 @@ describe("server runtime routing", () => {
       { signalKind: "command", messageTypeUrl: TypeUrls.derive(AggregateStateSchema) },
       { signalKind: "command", messageTypeUrl: TypeUrls.derive(CommandSchema) },
     ]);
-    expect(plan.commands.topics.every((topic) => !Object.hasOwn(topic, "semanticTags"))).toBe(
-      true,
-    );
+    expect(plan.commands.topics.every((topic) => !Object.hasOwn(topic, "semanticTags"))).toBe(true);
     expect(
       plan.commands.subscriptions.map(({ subscriberId, mode }) => ({ subscriberId, mode })),
     ).toEqual([

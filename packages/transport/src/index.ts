@@ -52,14 +52,14 @@ export interface TransportTopicInput<Kind extends TransportSignalKind = Transpor
    * Identifies the canonical payload type URL.
    */
   readonly messageTypeUrl: string;
-
 }
 
 /**
  * Defines an immutable transport topic and routing descriptor.
  */
-export interface TransportTopic<Kind extends TransportSignalKind = TransportSignalKind>
-  extends TransportTopicInput<Kind> {
+export interface TransportTopic<
+  Kind extends TransportSignalKind = TransportSignalKind,
+> extends TransportTopicInput<Kind> {
   // prettier-ignore
 
   /**
@@ -309,10 +309,7 @@ const TransportTopicParts = {
       throw new Error("Transport messageTypeUrl must use canonical 'prefix/type.name' format.");
     return typeUrl;
   },
-  routingKey(
-    kind: TransportSignalKind,
-    typeUrl: string,
-  ): string {
+  routingKey(kind: TransportSignalKind, typeUrl: string): string {
     return `${kind}:${encodeURIComponent(typeUrl)}`;
   },
 };

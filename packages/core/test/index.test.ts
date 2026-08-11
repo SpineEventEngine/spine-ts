@@ -32,7 +32,6 @@ import {
 
 import {
   DEFAULT_TYPE_URL_PREFIX,
-  SemanticOptionErrors,
   type MessageValidationResult,
   type TypeMetadata,
   TypeRegistry,
@@ -88,6 +87,7 @@ const InvalidSemanticOptionSchema = messageDesc(
   fileInvalidSemanticOptionFixture,
   0,
 ) as GenMessage<InvalidSemanticOption>;
+void InvalidSemanticOptionSchema;
 
 const fileRequiredRejectionsFixture = fileDesc(
   "CiFleGFtcGxlL3JlcXVpcmVkX3JlamVjdGlvbnMucHJvdG8SEmV4YW1wbGUudmFsaWRhdGlvbiIi" +
@@ -665,7 +665,6 @@ describe("@spine-event-engine/core type registry", () => {
       "spine.validation.ValidationError",
     );
   });
-
 });
 
 describe("@spine-event-engine/core validation facade", () => {

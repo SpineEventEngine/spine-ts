@@ -16,11 +16,6 @@ describe("EventRouting", () => {
     expect(() => EventRouting.create<string>().replaceDefault(undefined as never)).toThrow(
       /requires a route function/,
     );
-
-    if (false) {
-      // @ts-expect-error Interface-based routing is not a TypeScript API.
-      EventRouting.create<string>().routeSemantic("example.Type", route);
-    }
   });
 
   it("copies declarations into an immutable construction snapshot", () => {

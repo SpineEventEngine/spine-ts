@@ -168,7 +168,7 @@ durably closed.
   [frozen plan and dependency split](planning/WAVE_8_STORAGE_CORRECTION_PLAN.md).
 - **Wave 9:** server-side operational logging through LogLayer, direct Google
   Cloud Logging integration, JVM-style customizable Command, Event, and Entity
-  state-update routing, `(is)`/`(every_is)` semantic routing, Event-field
+  state-update routing, Event-field
   `@Where` filters, implicit required Command and Entity IDs, and rejection
   conformance. T-0153 owns the frozen dependency plan.
 - **Wave 10:** the beginner-guide and repository-wide Markdown rewrite,

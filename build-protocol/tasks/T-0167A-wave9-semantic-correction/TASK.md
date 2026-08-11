@@ -40,7 +40,8 @@ period is required.
 8. Run a one-time repository audit for residual TypeScript interpretation.
    Do not add a permanent checker, manifest, or routine test-run scan.
 9. Product Markdown remains Wave 10 work. Correct affected public TSDoc and
-   canonical build-protocol records only.
+   canonical build-protocol records only. `packages/transport/REFERENCE.md` is
+   the narrow exception: it directly documented the removed public topic field.
 
 ## Acceptance criteria
 

@@ -493,5 +493,5 @@ function metadataWithTags(semanticTags: unknown): EntityHandlersMetadata["entity
   return Object.freeze({
     ...createProjectionEntityMetadata(),
     semanticTags,
-  }) as EntityHandlersMetadata["entity"];
+  });
 }

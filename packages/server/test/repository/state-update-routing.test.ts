@@ -18,11 +18,6 @@ describe("StateUpdateRouting", () => {
     expect(() => StateUpdateRouting.create().replaceDefault(undefined as never)).toThrow(
       /route function/,
     );
-
-    if (false) {
-      // @ts-expect-error Interface-based routing is not a TypeScript API.
-      StateUpdateRouting.create<string>().routeSemantic("example.State", route);
-    }
   });
 
   it("copies declarations into an immutable construction snapshot", () => {

@@ -12,9 +12,9 @@ transport topic/routing/subscription/operation types, and immutable helpers
 
 ## Topics and subscriptions
 
-`TransportTopics.create()` validates a signal kind, message type URL, and
-optional semantic tags, then creates a copy-safe topic with a deterministic
-routing key. `TransportSubscriptions.create()` creates an immutable descriptor
+`TransportTopics.create()` validates a signal kind and message type URL, then
+creates a copy-safe topic with a deterministic routing key.
+`TransportSubscriptions.create()` creates an immutable descriptor
 for a subscriber and a topic. Its mode is `fan-out` by default or
 `competing-consumer` when requested. `TransportOperations.hasKind()` checks an
 operation's signal kind.

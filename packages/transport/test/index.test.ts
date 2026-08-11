@@ -83,8 +83,7 @@ describe("@spine-event-engine/transport", () => {
           routingKey: "event:type.spine.io%2Fexample.TaskArchived",
         },
       },
-      descriptorKey:
-        "event:type.spine.io%2Fexample.TaskArchived#fan-out#projection-worker",
+      descriptorKey: "event:type.spine.io%2Fexample.TaskArchived#fan-out#projection-worker",
     });
     expect(subscription.topic).not.toHaveProperty("socketType");
     expect(subscription.topic).not.toHaveProperty("endpoint");

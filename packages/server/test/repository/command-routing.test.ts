@@ -19,11 +19,6 @@ describe("CommandRouting", () => {
       /requires a route function/,
     );
 
-    if (false) {
-      // @ts-expect-error Interface-based routing is not a TypeScript API.
-      CommandRouting.create<string>().routeSemantic("example.Type", route);
-    }
-
     expect(
       CommandRouting.create<string>()
         .route(CommandSchema, (message, context) => {

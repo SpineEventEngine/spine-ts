@@ -87,7 +87,6 @@ export const DEFAULT_TYPE_URL_PREFIX = "type.googleapis.com";
  */
 export type MessageSchema = GenMessage<Message>;
 
-
 /**
  * Structured result returned by {@link Validate.message}.
  */
@@ -402,7 +401,6 @@ export interface RegisterTypeOptions {
    * schema file's Spine `type_url_prefix` option.
    */
   readonly typeUrl?: string;
-
 }
 
 /**
@@ -456,7 +454,6 @@ export interface TypeMetadata<Schema extends MessageSchema = MessageSchema> {
    */
   readonly firstFieldName: string | undefined;
 
-
   /**
    * Checks whether a file option is set on this schema's file descriptor.
    * @param option The file option extension.
@@ -503,7 +500,6 @@ export interface TypeRegistryLookup {
    * @returns Matching metadata, if registered.
    */
   findBySchema<Schema extends MessageSchema>(schema: Schema): TypeMetadata<Schema> | undefined;
-
 
   /**
    * Gets metadata by fully qualified Protobuf type name or throws a descriptive error.
@@ -1540,7 +1536,6 @@ export class TypeRegistry {
     return this.#bySchema.get(schema) as TypeMetadata<Schema> | undefined;
   }
 
-
   /**
    * Gets metadata by fully qualified Protobuf type name or throws a descriptive error.
    * @param fullTypeName The Protobuf type name.
@@ -1683,10 +1678,7 @@ const RegistryLookups = {
   /**
    * Creates immutable descriptor-backed schema metadata.
    */
-  metadata<Schema extends MessageSchema>(
-    schema: Schema,
-    typeUrl: string,
-  ): TypeMetadata<Schema> {
+  metadata<Schema extends MessageSchema>(schema: Schema, typeUrl: string): TypeMetadata<Schema> {
     const firstField = schema.fields[0];
     return Object.freeze({
       fullTypeName: schema.typeName,
