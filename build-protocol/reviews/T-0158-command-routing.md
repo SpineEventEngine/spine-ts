@@ -1,6 +1,6 @@
 # T-0158 Review Record
 
-Status: Pre-review
+Status: Correction in progress
 
 ## Assignments
 
@@ -28,9 +28,32 @@ explicit immutable configured role/profile is then the durable evidence.
 
 ## Review Wave
 
-- Style/maintainability: pending.
-- TypeScript/API documentation: pending.
-- Documentation/TSDoc: pending.
-- Performance/reliability: pending.
+- Style/maintainability: requested correction. Repository-derived numeric
+  producer IDs used the generic `DoubleValue` codec, and replay-count tests
+  bypassed real admission.
+- TypeScript/API documentation: requested correction. Semantic Java type names
+  admitted non-canonical whitespace, the public constructor expanded the
+  frozen factory API, and `CommandRoute` did not describe default context.
+- Documentation/TSDoc: requested correction. A historical work-log statement
+  described persisted targets as trusted without naming schema decoding and ID
+  validation.
+- Performance/reliability: requested correction for the typed producer-ID
+  mismatch and for evidence at the real admission boundary. Its broader request
+  for one route invocation across independent duplicate/retry admissions is not
+  accepted: that is not the frozen contract and cannot survive restart without
+  a prohibited durable route receipt or marker.
 - Security: N/A; routing changes no authentication, authorization, secret, or
   external trust boundary.
+
+## Correction Disposition
+
+- Repository event contexts, lifecycle events, rejection events, and handler
+  diagnostic receiver IDs now use one descriptor-aware `EntityIds` packer.
+  JVM-compatible `Int32Value` producer IDs are readable.
+- Actual `commandBus` admission followed by direct stored-target replay covers
+  both Aggregate and Process Manager routes. Each accepted admission invokes
+  the application route once; replay invokes it zero times.
+- `CommandRouting` construction, semantic-key validation, route callback TSDoc,
+  and historical route-selection wording are corrected.
+- Targeted re-review is required for style/maintainability, TypeScript/API docs,
+  documentation/TSDoc, and performance/reliability. Security remains N/A.

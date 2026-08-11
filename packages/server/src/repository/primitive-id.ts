@@ -2,6 +2,7 @@ import { create } from "@bufbuild/protobuf";
 import {
   BoolValueSchema,
   DoubleValueSchema,
+  Int32ValueSchema,
   Int64ValueSchema,
   StringValueSchema,
   type Any,
@@ -135,6 +136,7 @@ export const PrimitiveIds: PrimitiveIdCodec = Object.freeze({
 
     return (
       AnyMessages.unpack(id, StringValueSchema)?.value ??
+      AnyMessages.unpack(id, Int32ValueSchema)?.value ??
       AnyMessages.unpack(id, DoubleValueSchema)?.value ??
       AnyMessages.unpack(id, Int64ValueSchema)?.value ??
       AnyMessages.unpack(id, BoolValueSchema)?.value ??

@@ -10,6 +10,8 @@ import {
   FieldDescriptorProto_Type,
   FileDescriptorProtoSchema,
   FileDescriptorSetSchema,
+  Int32ValueSchema,
+  Int64ValueSchema,
   StringValueSchema,
   TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
@@ -2077,7 +2079,7 @@ describe("repository signal routing", () => {
     ManagedTaskAggregate.reset();
   });
 
-  it("uses the JVM-compatible Unknown producer for a message-valued entity ID", async () => {
+  it("uses the typed message-valued entity ID as the rejection producer", async () => {
     RejectionObservingProjection.reset();
     MessageIdRejectingAggregate.failure = TaskAlreadyDone.create({
       id: create(GeneratedTaskIdSchema, { value: "task-message-id" }),
@@ -2096,7 +2098,9 @@ describe("repository signal routing", () => {
 
     const [event] = await waitForStoredEvents(eventStore, 1);
     await waitForCondition(() => RejectionObservingProjection.messages.length === 1);
-    expect(readReadableProducerId(event)).toBe("Unknown");
+    expect(
+      AnyMessages.unpack(event?.context?.producerId as never, GeneratedTaskIdSchema)?.value,
+    ).toBe("task-message-id");
     expect(event?.context?.version).toBeUndefined();
     expect(RejectionObservingProjection.messages[0]?.id?.value).toBe("task-message-id");
   });
@@ -4090,27 +4094,37 @@ describe("repository signal routing", () => {
     });
     const factory = new InMemoryStorageFactory();
     const repository = createProcessManagerAssignRepository(routing);
-    BoundedContext.singleTenant("Tasks").add(repository).withStorageFactory(factory).build();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
     });
     const target = requireEntityInboxTarget(repository);
     const command = createAggregateCommand("command-pm-count", "pm-count", "Counted");
-    const route = repository.routeCommand(command);
+    await context.commandBus().post(command);
+    await waitForCondition(() => RoutingProcessManager.commandCalls === 1);
+    expect(routeCalls).toBe(1);
+    const replayCommand = createAggregateCommand(
+      "command-pm-count-replay",
+      "pm-count",
+      "Counted replay",
+    );
     const received = await storeEntityInboxCommand(
       delivery,
-      command,
+      replayCommand,
       new Date("2026-07-08T09:02:15.000Z"),
       1n,
-      { targetId: Identifiers.pack("string", route.entityId) },
+      { targetId: Identifiers.pack("string", "pm-count") },
     );
 
-    expect(routeCalls).toBe(1);
     await expect(target.replay(received)).resolves.toBeUndefined();
 
     expect(routeCalls).toBe(1);
-    expect(RoutingProcessManager.commandCalls).toBe(1);
+    expect(RoutingProcessManager.commandCalls).toBe(2);
+    await context.close();
   });
 
   it("does not call custom Aggregate routing again for a stored message ID", async () => {
@@ -4122,29 +4136,41 @@ describe("repository signal routing", () => {
     });
     const factory = new InMemoryStorageFactory();
     const repository = createMessageIdProducingRepository(routing);
-    BoundedContext.singleTenant("Tasks").add(repository).withStorageFactory(factory).build();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
     });
     const target = requireEntityInboxTarget(repository);
     const command = createTaskCommand("command-message-count", "message-count", "Counted");
-    const route = repository.routeCommand(command);
+    await context.commandBus().post(command);
+    await expect(
+      context.stand().read(TaskSchema, create(TaskIdSchema, { value: "message-count" })),
+    ).resolves.toBeDefined();
+    expect(routeCalls).toBe(1);
+    const replayCommand = createTaskCommand(
+      "command-message-count-replay",
+      "message-count",
+      "Counted replay",
+    );
     const received = await storeEntityInboxCommand(
       delivery,
-      command,
+      replayCommand,
       new Date("2026-07-08T09:02:20.000Z"),
       1n,
       {
-        targetId: Identifiers.pack(TaskIdSchema, route.entityId),
+        targetId: Identifiers.pack(TaskIdSchema, create(TaskIdSchema, { value: "message-count" })),
         targetTypeUrl: TypeUrls.derive(TaskSchema),
       },
     );
 
-    expect(routeCalls).toBe(1);
     await expect(target.replay(received)).resolves.toBeDefined();
 
     expect(routeCalls).toBe(1);
+    await context.close();
   });
 
   it("reconstructs stored int32 and int64 targets without rerouting", async () => {
@@ -4209,6 +4235,66 @@ describe("repository signal routing", () => {
     await expect(
       requireEntityInboxTarget(int64Repository).replay(int64Message),
     ).resolves.toBeUndefined();
+  });
+
+  it("publishes descriptor-typed numeric Entity IDs in system event contexts", async () => {
+    const int32Events: SpineEvent[] = [];
+    const int32Context = BoundedContext.singleTenant("Numeric int32 producer")
+      .add(createInt32RoutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema],
+        dispatch: (event) => {
+          int32Events.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    const int64Events: SpineEvent[] = [];
+    const int64Context = BoundedContext.singleTenant("Numeric int64 producer")
+      .add(createInt64RoutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema],
+        dispatch: (event) => {
+          int64Events.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await int32Context.commandBus().post(
+        SignalEnvelopes.command({
+          id: create(CommandIdSchema, { uuid: "command-int32-producer" }),
+          context: create(CommandContextSchema),
+          schema: Int32AggregateStateSchema,
+          message: create(Int32AggregateStateSchema, { id: 42, name: "Int32" }),
+        }),
+      );
+      await int64Context.commandBus().post(
+        SignalEnvelopes.command({
+          id: create(CommandIdSchema, { uuid: "command-int64-producer" }),
+          context: create(CommandContextSchema),
+          schema: Int64ProcessManagerStateSchema,
+          message: create(Int64ProcessManagerStateSchema, { id: 42n, queue: "Int64" }),
+        }),
+      );
+      await waitForCondition(() => int32Events.length === 2 && int64Events.length === 2);
+
+      expect(
+        int32Events.map(
+          (event) =>
+            AnyMessages.unpack(event.context?.producerId as never, Int32ValueSchema)?.value,
+        ),
+      ).toEqual([42, 42]);
+      expect(
+        int64Events.map(
+          (event) =>
+            AnyMessages.unpack(event.context?.producerId as never, Int64ValueSchema)?.value,
+        ),
+      ).toEqual([42n, 42n]);
+    } finally {
+      await Promise.all([int32Context.close(), int64Context.close()]);
+    }
   });
 
   it("rejects Entity Inbox replay before the repository is bound to a runtime", async () => {

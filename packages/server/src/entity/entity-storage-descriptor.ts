@@ -1,4 +1,5 @@
 import { clone, create, ScalarType, type Message } from "@bufbuild/protobuf";
+import type { Any } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, Identifiers } from "@spine-event-engine/core";
 import { VersionSchema } from "@spine-event-engine/proto";
 import {
@@ -123,8 +124,15 @@ export function entityStorageDescriptor<I>(
   };
 }
 
-const EntityIds = Object.freeze({
-  pack(schema: DescriptorMessageSchema, entityId: unknown) {
+/**
+ * Packs Entity IDs according to the declaration-first ID field of their state.
+ *
+ * @internal
+ */
+export const EntityIds: Readonly<{
+  pack(schema: DescriptorMessageSchema, entityId: unknown): Any;
+}> = Object.freeze({
+  pack(schema: DescriptorMessageSchema, entityId: unknown): Any {
     const idField = describeEntityMetadata(schema).idField.descriptor;
     if (idField.fieldKind === "message") {
       return Identifiers.pack(idField.message as DescriptorMessageSchema, entityId as never);

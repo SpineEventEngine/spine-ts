@@ -8,7 +8,12 @@ import type { CommandContext } from "@spine-event-engine/proto";
  * @typeParam Id Entity ID type owned by the receiving repository.
  * @typeParam Schema Generated Command message schema.
  * @param message Unpacked Command message.
- * @param context Command context supplied with the signal.
+ * @param context Normalized Command context. When the signal omits its context,
+ *   the framework supplies the default generated `CommandContext` value.
+ * The route must be deterministic and side-effect-free. The framework invokes
+ * it once for each accepted admission, and durable replay uses the stored
+ * target instead of invoking it again.
+ *
  * @returns Target Entity ID.
  */
 export type CommandRoute<Id, Schema extends MessageSchema = MessageSchema> = (
@@ -35,7 +40,7 @@ export class CommandRouting<Id> {
   /**
    * Creates empty mutable Command route declarations.
    */
-  constructor() {
+  private constructor() {
     routingStates.set(this, {
       exact: new Map<MessageSchema, CommandRoute<Id>>(),
       semantic: new Map<string, CommandRoute<Id>>(),
@@ -80,6 +85,8 @@ export class CommandRouting<Id> {
   routeSemantic(javaType: string, via: CommandRoute<Id>): this {
     if (typeof javaType !== "string" || javaType.trim().length === 0)
       throw new TypeError("Command semantic routing requires a non-empty Java type.");
+    if (javaType !== javaType.trim())
+      throw new TypeError("Command semantic routing requires a canonical Java type.");
     if (typeof via !== "function")
       throw new TypeError("Command routing requires a route function.");
     const state = CommandRoutingInternals.state(this);

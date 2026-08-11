@@ -23,6 +23,9 @@ describe("CommandRouting", () => {
     expect(() => CommandRouting.create<string>().routeSemantic("   ", route)).toThrow(
       /non-empty Java type/,
     );
+    expect(() => CommandRouting.create<string>().routeSemantic(" example.Type", route)).toThrow(
+      /canonical Java type/,
+    );
     expect(() =>
       CommandRouting.create<string>().routeSemantic("example.Type", undefined as never),
     ).toThrow(/requires a route function/);

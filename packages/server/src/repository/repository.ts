@@ -77,7 +77,11 @@ import {
   type EntityConstructor,
   type FirstFieldRoutingHint,
 } from "../entity/entity-metadata.js";
-import { EntityRecords, entityStorageDescriptor } from "../entity/entity-storage-descriptor.js";
+import {
+  EntityIds,
+  EntityRecords,
+  entityStorageDescriptor,
+} from "../entity/entity-storage-descriptor.js";
 import { SpecScanner } from "../entity/spec-scanner.js";
 import {
   CommandRegistrationReadiness,
@@ -1429,7 +1433,13 @@ class AggregateCommandExecution {
       if (!RejectionThrowable.is(error)) {
         throw error;
       }
-      RepositorySignals.postRejectionEvent(this.#runtime, this.#command, route.entityId, error);
+      RepositorySignals.postRejectionEvent(
+        this.#runtime,
+        this.#repository,
+        this.#command,
+        route.entityId,
+        error,
+      );
       return undefined;
     }
     const events = this.#bindProducedEvents(
@@ -2365,7 +2375,13 @@ class ProcessManagerCommandExecution {
       if (!RejectionThrowable.is(error)) {
         throw error;
       }
-      RepositorySignals.postRejectionEvent(this.#runtime, this.#command, route.entityId, error);
+      RepositorySignals.postRejectionEvent(
+        this.#runtime,
+        this.#repository,
+        this.#command,
+        route.entityId,
+        error,
+      );
       return;
     }
 
@@ -3138,38 +3154,29 @@ const RepositorySignals = {
     return Number(version);
   },
 
-  runtimeProducerId(entityId: unknown): string | number | bigint | boolean | undefined {
-    return PrimitiveIds.readFinite(entityId);
-  },
-
   eventContextWithProducer(
     context: NonNullable<Event["context"]>,
     repository: RepositoryView,
     entityId: unknown,
   ): NonNullable<Event["context"]> {
-    const idField = repository.idField.descriptor;
-    const producerId =
-      idField.fieldKind === "message"
-        ? AnyMessages.pack(idField.message as MessageSchema, entityId as never)
-        : PrimitiveIds.pack(entityId as never);
+    const producerId = EntityIds.pack(repository.stateSchema, entityId);
     return create(EventContextSchema, { ...context, producerId });
   },
 
   postRejectionEvent(
     runtime: RepositoryRuntime,
+    repository: RepositoryView,
     command: Command,
     entityId: unknown,
     rejection: RejectionThrowable,
   ): void {
     runtime.registerEventSchema(rejection.schema);
-    const metadata = runtime.signalMetadata.eventFromCommand(command, 1, {
-      producerId: RepositorySignals.runtimeProducerId(entityId) ?? "Unknown",
-    });
+    const metadata = runtime.signalMetadata.eventFromCommand(command, 1, {});
     const event = create(EventSchema, {
       id: metadata.id,
       message: AnyMessages.pack(rejection.schema, rejection.messageThrown()),
       context: create(EventContextSchema, {
-        ...metadata.context,
+        ...RepositorySignals.eventContextWithProducer(metadata.context, repository, entityId),
         rejection: create(RejectionEventContextSchema, {
           command: clone(CommandSchema, command),
           stacktrace: rejection.stack ?? "",
@@ -3266,12 +3273,10 @@ class EntityStateChangePublishing {
     lifecycle: EntityLifecycleFlags,
     version: number,
   ): void {
-    const producerId = RepositorySignals.runtimeProducerId(entityId);
     this.#publish(
       runtime,
       (ordinal) =>
         runtime.signalMetadata.eventFromCommand(command, ordinal, {
-          ...(producerId === undefined ? {} : { producerId }),
           version,
         }),
       {
@@ -3293,12 +3298,10 @@ class EntityStateChangePublishing {
     lifecycle: EntityLifecycleFlags,
     version: number,
   ): void {
-    const producerId = RepositorySignals.runtimeProducerId(entityId);
     this.#publish(
       runtime,
       (ordinal) =>
         runtime.signalMetadata.eventFromEvent(source, ordinal, {
-          ...(producerId === undefined ? {} : { producerId }),
           version,
         }),
       {
@@ -3325,7 +3328,11 @@ class EntityStateChangePublishing {
           draft.schema,
           draft.messageAt(metadata.context.timestamp) as never,
         ),
-        context: metadata.context,
+        context: RepositorySignals.eventContextWithProducer(
+          metadata.context,
+          change.repository,
+          change.entityId,
+        ),
       });
       this.#post(runtime, event);
     });
@@ -3485,10 +3492,7 @@ class EntityStateChangePublishing {
   }
 
   #packEntityId(repository: RepositoryView, entityId: unknown) {
-    const field = repository.idField.descriptor;
-    return field.fieldKind === "message"
-      ? AnyMessages.pack(field.message as MessageSchema, entityId as never)
-      : PrimitiveIds.pack(entityId as never);
+    return EntityIds.pack(repository.stateSchema, entityId);
   }
 }
 const EntityStateChangePublisher = Object.freeze(new EntityStateChangePublishing());
@@ -3617,10 +3621,7 @@ class HandlerDispatchPublishing {
   }
 
   #packEntityId(repository: RepositoryView, entityId: unknown): Any {
-    const field = repository.idField.descriptor;
-    return field.fieldKind === "message"
-      ? AnyMessages.pack(field.message as MessageSchema, entityId as never)
-      : PrimitiveIds.pack(entityId as never);
+    return EntityIds.pack(repository.stateSchema, entityId);
   }
 
   #eventMessage(
