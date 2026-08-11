@@ -1,6 +1,6 @@
 # T-0167 Review Record
 
-Status: Fixture correction clean; renewed preflight pending
+Status: Fixture correction and renewed preflight clean; release verification pending
 
 ## Review boundary
 
@@ -78,3 +78,7 @@ clean: no production or public contract changed, descriptor provenance is
 explicit, and typed identity is preserved across the process boundary. The
 three corrected files pass together (3 files / 23 tests). A renewed cheap
 preflight is required before the next release-profile run.
+
+The renewed preflight passes every generated, type, lint, cleanup, TSDoc,
+TypeDoc/API, formatting, Proto, containment, documentation-audience,
+release-readiness, and diff gate. The corrected release profile is authorized.

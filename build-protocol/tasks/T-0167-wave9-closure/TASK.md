@@ -1,6 +1,6 @@
 # T-0167: Wave 9 Closure
 
-Status: Release-fixture corrections complete; renewed preflight pending
+Status: Release-fixture corrections and renewed preflight complete; release verification pending
 
 ## Objective
 
