@@ -1,5 +1,6 @@
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { Identifiers } from "@spine-event-engine/core";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
@@ -102,7 +103,7 @@ describe("LocalEntityInbox", () => {
     await expect(inbox.receiveAll(delivery, inputs)).rejects.toBe(writeFailure);
     expect(drainMessage).toHaveBeenCalledOnce();
     expect(drainMessage.mock.calls[0]?.[0]).toMatchObject({
-      inboxId: { targetId: "persisted" },
+      inboxId: { targetId: typedTarget("persisted") },
     });
   });
 
@@ -119,8 +120,8 @@ describe("LocalEntityInbox", () => {
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
       replay(message) {
-        replayed.push(message.inboxId.targetId);
-        return message.inboxId.targetId === "first"
+        replayed.push(targetValue(message));
+        return targetValue(message) === "first"
           ? Promise.reject(drainFailure)
           : Promise.resolve(undefined);
       },
@@ -151,8 +152,8 @@ describe("LocalEntityInbox", () => {
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
       async replay(message) {
-        replayed.push(message.inboxId.targetId);
-        if (message.inboxId.targetId === "admitted") {
+        replayed.push(targetValue(message));
+        if (targetValue(message) === "admitted") {
           replayStarted.resolve(undefined);
           await releaseReplay.promise;
         }
@@ -227,7 +228,7 @@ describe("LocalEntityInbox", () => {
     const receive = inbox.receive(
       delivery,
       {
-        inboxId: { targetId: "pm-ready", targetTypeUrl },
+        inboxId: { targetId: typedTarget("pm-ready"), targetTypeUrl },
         signalId: "signal-ready",
         signal: commandSignal(),
         label: "HANDLE_COMMAND",
@@ -253,7 +254,7 @@ describe("LocalEntityInbox", () => {
   it("emits for each persisted batch row before a later persistence rejection", async () => {
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const inputs = ["first", "second", "unattempted"].map((targetId) => ({
-      inboxId: { targetId, targetTypeUrl },
+      inboxId: { targetId: typedTarget(targetId), targetTypeUrl },
       signalId: "event-partial",
       label: "REACT_UPON_EVENT" as const,
       status: "TO_DELIVER" as const,
@@ -308,7 +309,7 @@ describe("LocalEntityInbox", () => {
     await inbox.receiveAll(
       delivery,
       ["first", "second"].map((targetId) => ({
-        inboxId: { targetId, targetTypeUrl },
+        inboxId: { targetId: typedTarget(targetId), targetTypeUrl },
         signalId: `command-${targetId}`,
         signal: commandSignal(),
         label: "HANDLE_COMMAND" as const,
@@ -351,7 +352,7 @@ describe("LocalEntityInbox", () => {
       targetTypeUrl,
       labels: processManagerLabels,
       replay(message) {
-        seen.push(message.inboxId.targetId);
+        seen.push(targetValue(message));
         return Promise.resolve(undefined);
       },
     });
@@ -360,7 +361,7 @@ describe("LocalEntityInbox", () => {
       inbox.receiveAll(
         delivery,
         ["first", "second"].map((targetId) => ({
-          inboxId: { targetId, targetTypeUrl },
+          inboxId: { targetId: typedTarget(targetId), targetTypeUrl },
           signalId: "event-observer-failure",
           signal: eventSignal(),
           label: "REACT_UPON_EVENT" as const,
@@ -404,7 +405,7 @@ describe("LocalEntityInbox", () => {
     });
 
     const receive = inbox.receive(delivery, {
-      inboxId: { targetId: "pm-foreign-observer", targetTypeUrl },
+      inboxId: { targetId: typedTarget("pm-foreign-observer"), targetTypeUrl },
       signalId: "foreign-observer-failure",
       signal: commandSignal(),
       label: "HANDLE_COMMAND",
@@ -426,7 +427,7 @@ describe("LocalEntityInbox", () => {
       inbox: { receive: () => Promise.reject(new Error("write rejected")) },
     } as unknown as Delivery;
     const input = {
-      inboxId: { targetId: "pm-dedup", targetTypeUrl },
+      inboxId: { targetId: typedTarget("pm-dedup"), targetTypeUrl },
       signalId: "signal-dedup",
       signal: commandSignal(),
       label: "HANDLE_COMMAND" as const,
@@ -477,7 +478,7 @@ describe("LocalEntityInbox", () => {
       .receiveAll(
         delivery,
         ["first", "second"].map((targetId) => ({
-          inboxId: { targetId, targetTypeUrl },
+          inboxId: { targetId: typedTarget(targetId), targetTypeUrl },
           signalId: "event-drain-failure",
           signal: eventSignal(),
           label: "REACT_UPON_EVENT" as const,
@@ -512,7 +513,7 @@ describe("LocalEntityInbox", () => {
     });
 
     await delivery.inbox.receive({
-      inboxId: { targetId: "pm-command", targetTypeUrl },
+      inboxId: { targetId: typedTarget("pm-command"), targetTypeUrl },
       signalId: "command-1",
       signal: commandSignal(),
       label: "HANDLE_COMMAND",
@@ -522,7 +523,7 @@ describe("LocalEntityInbox", () => {
       version: 1n,
     });
     await delivery.inbox.receive({
-      inboxId: { targetId: "pm-event", targetTypeUrl },
+      inboxId: { targetId: typedTarget("pm-event"), targetTypeUrl },
       signalId: "event-1",
       signal: eventSignal(),
       label: "REACT_UPON_EVENT",
@@ -575,7 +576,7 @@ describe("LocalEntityInbox", () => {
     });
 
     const delivered = await inbox.receive(delivery, {
-      inboxId: { targetId: "pm-1", targetTypeUrl },
+      inboxId: { targetId: typedTarget("pm-1"), targetTypeUrl },
       signalId: "signal-1",
       signal: commandSignal(),
       label: "HANDLE_COMMAND",
@@ -627,7 +628,7 @@ describe("LocalEntityInbox", () => {
     });
 
     await inbox.receive(delivery, {
-      inboxId: { targetId: "pm-event-1", targetTypeUrl },
+      inboxId: { targetId: typedTarget("pm-event-1"), targetTypeUrl },
       signalId: "event-1",
       signal: eventSignal(),
       label: "REACT_UPON_EVENT",
@@ -669,7 +670,7 @@ describe("LocalEntityInbox", () => {
       releaseReplay = resolve;
     });
     const input = {
-      inboxId: { targetId: "pm-duplicate", targetTypeUrl },
+      inboxId: { targetId: typedTarget("pm-duplicate"), targetTypeUrl },
       signalId: "signal-duplicate",
       signal: commandSignal(),
       label: "HANDLE_COMMAND" as const,
@@ -726,7 +727,7 @@ describe("LocalEntityInbox", () => {
     });
     const inputs = [
       {
-        inboxId: { targetId: "pm-first", targetTypeUrl: firstTypeUrl },
+        inboxId: { targetId: typedTarget("pm-first"), targetTypeUrl: firstTypeUrl },
         signalId: "event-duplicate-batch",
         signal: eventSignal(),
         label: "REACT_UPON_EVENT" as const,
@@ -734,7 +735,7 @@ describe("LocalEntityInbox", () => {
         shard,
       },
       {
-        inboxId: { targetId: "pm-second", targetTypeUrl: secondTypeUrl },
+        inboxId: { targetId: typedTarget("pm-second"), targetTypeUrl: secondTypeUrl },
         signalId: "event-duplicate-batch",
         signal: eventSignal(),
         label: "REACT_UPON_EVENT" as const,
@@ -775,7 +776,7 @@ describe("LocalEntityInbox", () => {
     const [firstMessages, duplicateMessages] = await Promise.all([first, duplicate]);
 
     expect(duplicateMessages.map(({ id }) => id)).toEqual(firstMessages.map(({ id }) => id));
-    expect(seen.map(({ inboxId }) => inboxId.targetId)).toEqual(["pm-first", "pm-second"]);
+    expect(seen.map(targetValue)).toEqual(["pm-first", "pm-second"]);
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
       {
         signalId: "event-duplicate-batch",
@@ -809,14 +810,14 @@ describe("LocalEntityInbox", () => {
       releaseReplay = resolve;
     });
     const firstInput = {
-      inboxId: { targetId: "pm-first", targetTypeUrl: firstTypeUrl },
+      inboxId: { targetId: typedTarget("pm-first"), targetTypeUrl: firstTypeUrl },
       signalId: "event-mixed-batch-to-single",
       signal: eventSignal(),
       label: "REACT_UPON_EVENT" as const,
       status: "TO_DELIVER" as const,
     };
     const secondInput = {
-      inboxId: { targetId: "pm-second", targetTypeUrl: secondTypeUrl },
+      inboxId: { targetId: typedTarget("pm-second"), targetTypeUrl: secondTypeUrl },
       signalId: "event-mixed-batch-to-single",
       signal: eventSignal(),
       label: "REACT_UPON_EVENT" as const,
@@ -863,7 +864,7 @@ describe("LocalEntityInbox", () => {
     const [batchMessages, duplicateMessage] = await Promise.all([batch, duplicate]);
 
     expect(duplicateMessage.id).toEqual(batchMessages[1]?.id);
-    expect(seen.map(({ inboxId }) => inboxId.targetId)).toEqual(["pm-first", "pm-second"]);
+    expect(seen.map(targetValue)).toEqual(["pm-first", "pm-second"]);
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
       {
         signalId: "event-mixed-batch-to-single",
@@ -897,7 +898,7 @@ describe("LocalEntityInbox", () => {
       releaseReplay = resolve;
     });
     const firstInput = {
-      inboxId: { targetId: "pm-first", targetTypeUrl: firstTypeUrl },
+      inboxId: { targetId: typedTarget("pm-first"), targetTypeUrl: firstTypeUrl },
       signalId: "event-mixed-single-to-batch",
       signal: eventSignal(),
       label: "REACT_UPON_EVENT" as const,
@@ -905,7 +906,7 @@ describe("LocalEntityInbox", () => {
       shard,
     };
     const secondInput = {
-      inboxId: { targetId: "pm-second", targetTypeUrl: secondTypeUrl },
+      inboxId: { targetId: typedTarget("pm-second"), targetTypeUrl: secondTypeUrl },
       signalId: "event-mixed-single-to-batch",
       signal: eventSignal(),
       label: "REACT_UPON_EVENT" as const,
@@ -953,7 +954,7 @@ describe("LocalEntityInbox", () => {
     const [singleMessage, batchMessages] = await Promise.all([single, batch]);
 
     expect(batchMessages[0]?.id).toEqual(singleMessage.id);
-    expect(seen.map(({ inboxId }) => inboxId.targetId)).toEqual(["pm-first", "pm-second"]);
+    expect(seen.map(targetValue)).toEqual(["pm-first", "pm-second"]);
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
       {
         signalId: "event-mixed-single-to-batch",
@@ -991,7 +992,7 @@ describe("LocalEntityInbox", () => {
     });
 
     await delivery.inbox.receive({
-      inboxId: { targetId: "pm-0", targetTypeUrl },
+      inboxId: { targetId: typedTarget("pm-0"), targetTypeUrl },
       signalId: "signal-0",
       signal: earlierSignal,
       label: "HANDLE_COMMAND",
@@ -1005,7 +1006,7 @@ describe("LocalEntityInbox", () => {
       inbox.receive(
         delivery,
         corruptedInput({
-          inboxId: { targetId: "pm-1", targetTypeUrl },
+          inboxId: { targetId: typedTarget("pm-1"), targetTypeUrl },
           signalId: "signal-1",
           signal: laterSignal,
           label: "HANDLE_COMMAND",
@@ -1076,7 +1077,7 @@ describe("LocalEntityInbox", () => {
 
     await delivery.inbox.receive({
       inboxId: {
-        targetId: "projection-0",
+        targetId: typedTarget("projection-0"),
         targetTypeUrl: "type.example.dev/Tasks.Projection",
       },
       signalId: "event-0",
@@ -1089,7 +1090,7 @@ describe("LocalEntityInbox", () => {
     });
     await delivery.inbox.receive({
       inboxId: {
-        targetId: "pm-0",
+        targetId: typedTarget("pm-0"),
         targetTypeUrl: unrelatedProcessManagerTypeUrl,
       },
       signalId: "signal-0",
@@ -1102,7 +1103,7 @@ describe("LocalEntityInbox", () => {
     });
 
     await inbox.receive(delivery, {
-      inboxId: { targetId: "pm-1", targetTypeUrl },
+      inboxId: { targetId: typedTarget("pm-1"), targetTypeUrl },
       signalId: "signal-1",
       signal: commandSignal(),
       label: "HANDLE_COMMAND",
@@ -1154,7 +1155,7 @@ describe("LocalEntityInbox", () => {
 
     await expect(
       inbox.receive(delivery, {
-        inboxId: { targetId: "pm-2", targetTypeUrl },
+        inboxId: { targetId: typedTarget("pm-2"), targetTypeUrl },
         signalId: "signal-2",
         signal: commandSignal(),
         label: "HANDLE_COMMAND",
@@ -1192,7 +1193,7 @@ describe("LocalEntityInbox", () => {
 
     await expect(
       inbox.receive(delivery, {
-        inboxId: { targetId: "pm-3", targetTypeUrl },
+        inboxId: { targetId: typedTarget("pm-3"), targetTypeUrl },
         signalId: "signal-3",
         signal: commandSignal(),
         label: "HANDLE_COMMAND",
@@ -1228,7 +1229,7 @@ describe("LocalEntityInbox", () => {
     try {
       await expect(
         inbox.receive(delivery, {
-          inboxId: { targetId: "pm-4", targetTypeUrl: "type.example.dev/Tasks.ProcessManager" },
+          inboxId: { targetId: typedTarget("pm-4"), targetTypeUrl: "type.example.dev/Tasks.ProcessManager" },
           signalId: "signal-4",
           signal: commandSignal(),
           label: "HANDLE_COMMAND",
@@ -1268,7 +1269,7 @@ describe("LocalEntityInbox", () => {
       inbox.receive(
         delivery,
         corruptedInput({
-          inboxId: { targetId: "pm-5", targetTypeUrl },
+          inboxId: { targetId: typedTarget("pm-5"), targetTypeUrl },
           signalId: "signal-5",
           signal: commandSignal(),
           label: "HANDLE_COMMAND",
@@ -1312,7 +1313,7 @@ describe("LocalEntityInbox", () => {
       inbox.receive(
         delivery,
         corruptedInput({
-          inboxId: { targetId: "pm-6", targetTypeUrl },
+          inboxId: { targetId: typedTarget("pm-6"), targetTypeUrl },
           signalId: "signal-6",
           signal: eventSignal(),
           label: "UPDATE_SUBSCRIBER",
@@ -1350,7 +1351,7 @@ describe("LocalEntityInbox", () => {
 
     await expect(
       inbox.receive(delivery, {
-        inboxId: { targetId: "pm-label-mismatch", targetTypeUrl },
+        inboxId: { targetId: typedTarget("pm-label-mismatch"), targetTypeUrl },
         signalId: "event-label-mismatch",
         signal: eventSignal(),
         label: "REACT_UPON_EVENT",
@@ -1386,7 +1387,7 @@ describe("LocalEntityInbox", () => {
 
     await expect(
       inbox.receive(delivery, {
-        inboxId: { targetId: "pm-shard-mismatch", targetTypeUrl },
+        inboxId: { targetId: typedTarget("pm-shard-mismatch"), targetTypeUrl },
         signalId: "command-shard-mismatch",
         signal: commandSignal(),
         label: "HANDLE_COMMAND",
@@ -1416,7 +1417,7 @@ describe("LocalEntityInbox", () => {
     await expect(
       inbox.receive(delivery, {
         inboxId: {
-          targetId: "pm-7",
+          targetId: typedTarget("pm-7"),
           targetTypeUrl: "type.example.dev/Tasks.ProcessManager",
         },
         signalId: "signal-7",
@@ -1451,7 +1452,7 @@ describe("LocalEntityInbox", () => {
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
       replay(message) {
-        const targetId = message.inboxId.targetId;
+        const targetId = targetValue(message);
         return Promise.resolve(async () => {
           followUps.push(targetId);
           if (targetId === "first") await first.promise;
@@ -1499,7 +1500,7 @@ describe("LocalEntityInbox", () => {
       labels: ["HANDLE_COMMAND"],
       replay(message) {
         return Promise.resolve(async () => {
-          if (message.inboxId.targetId === "even") await gate.promise;
+          if (targetValue(message) === "even") await gate.promise;
         });
       },
     });
@@ -1512,7 +1513,7 @@ describe("LocalEntityInbox", () => {
   });
 
   it("resolves each input shard once and persists that resolved shard", async () => {
-    const shardFor = vi.fn((targetId: string) => new ShardIndex(targetId.length % 2, 2));
+    const shardFor = vi.fn((targetId) => new ShardIndex(targetValue({ inboxId: { targetId } } as InboxMessage).length % 2, 2));
     const strategy: DeliveryStrategy = { shardCount: 2, shardFor };
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -1543,7 +1544,7 @@ describe("LocalEntityInbox", () => {
 
 function processInput(targetTypeUrl: string, targetId: string): ReceiveInput {
   return {
-    inboxId: { targetId, targetTypeUrl },
+    inboxId: { targetId: typedTarget(targetId), targetTypeUrl },
     signalId: `signal-${targetId}`,
     signal: commandSignal(),
     label: "HANDLE_COMMAND",
@@ -1568,10 +1569,20 @@ function eventSignal() {
 function twoShardStrategy(): DeliveryStrategy {
   return {
     shardCount: 2,
-    shardFor(targetId: string): ShardIndex {
-      return new ShardIndex(targetId === "even" ? 0 : 1, 2);
+    shardFor(targetId): ShardIndex {
+      return new ShardIndex(targetValue({ inboxId: { targetId } } as InboxMessage) === "even" ? 0 : 1, 2);
     },
   };
+}
+
+function typedTarget(value: string) {
+  return Identifiers.pack("string", value);
+}
+
+function targetValue(message: Pick<InboxMessage, "inboxId">): string {
+  const value = Identifiers.unpack("string", message.inboxId.targetId);
+  if (value === undefined) throw new Error("Expected a string Inbox target fixture.");
+  return value;
 }
 
 interface ForeignDeferred {
