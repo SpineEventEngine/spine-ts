@@ -1,5 +1,5 @@
 import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { access } from "node:fs/promises";
 import { Identifiers, StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import {
@@ -52,14 +52,18 @@ describe("direct durable record provider selection", () => {
       storageFactory: factory,
       now: () => new Date(1_000),
     });
-    await inbox.write(message());
+    const typedMessage = message();
+    await inbox.write(typedMessage);
+    await expect(inbox.read(ShardIndex.single())).resolves.toMatchObject([
+      { inboxId: { targetId: typedMessage.inboxId.targetId } },
+    ]);
     await registry.pickUp(
       ShardIndex.single(),
       create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
     );
-    expect(selected.map((type) => (type as { readonly typeName: string }).typeName).sort()).toEqual(
-      [InboxMessageSchema.typeName, ShardSessionRecordSchema.typeName].sort(),
-    );
+    expect(
+      [...new Set(selected.map((type) => (type as { readonly typeName: string }).typeName))].sort(),
+    ).toEqual([InboxMessageSchema.typeName, ShardSessionRecordSchema.typeName].sort());
 
     factory.close();
   });
@@ -95,7 +99,7 @@ describe("direct durable record provider selection", () => {
       end: vi.fn(() => Promise.resolve()),
     } as never);
     const stringifiers = new StringifierRegistry();
-    stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+    stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema, Int32ValueSchema]));
     const factory = await MysqlStorageFactory.newBuilder()
       .setOptions({ url: "mysql://db.example/direct-records" })
       .setStringifierRegistry(stringifiers)
@@ -131,7 +135,7 @@ function message() {
   return {
     id: { value: "provider-message", shard: new ShardIndex(0, 1) },
     inboxId: {
-      targetId: Identifiers.pack("string", "entity"),
+      targetId: Identifiers.pack("int32", 42),
       targetTypeUrl: "type.spine.io/test.Entity",
     },
     signalId: "signal",

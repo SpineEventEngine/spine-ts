@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { create } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { Int32ValueSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, Identifiers } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
 
 import { InboxRecords } from "../../src/delivery/inbox-records.js";
-import { InboxMessageError, ShardIndex } from "../../src/index.js";
+import { DeliveryStorageCorruptionError, InboxMessageError, ShardIndex } from "../../src/index.js";
 import { createMessage } from "./inbox-message-fixture.js";
 
 describe("InboxRecords", () => {
@@ -39,17 +39,24 @@ describe("InboxRecords", () => {
       Identifiers.pack(UserIdSchema, create(UserIdSchema, { value: "42" })),
     ];
 
-    const restored = targets.map((targetId, index) =>
-      InboxRecords.read(
-        InboxRecords.write({
-          ...createMessage(`golden-${String(index)}`, `signal-${String(index)}`, 1n),
-          inboxId: { targetId, targetTypeUrl: "type.example.dev/TypedEntity" },
-        } as never),
-      ).inboxId.targetId,
+    const restored = targets.map(
+      (targetId, index) =>
+        InboxRecords.read(
+          InboxRecords.write({
+            ...createMessage(`golden-${String(index)}`, `signal-${String(index)}`, 1n),
+            inboxId: { targetId, targetTypeUrl: "type.example.dev/TypedEntity" },
+          } as never),
+        ).inboxId.targetId,
     );
 
     expect(restored).toEqual(targets);
-    expect(new Set(restored.map((target) => `${target.typeUrl}:${Buffer.from(target.value).toString("base64")}`)).size).toBe(4);
+    expect(
+      new Set(
+        restored.map(
+          (target) => `${target.typeUrl}:${Buffer.from(target.value).toString("base64")}`,
+        ),
+      ).size,
+    ).toBe(4);
   });
 
   it("rejects an invalid shard before serialization", () => {
@@ -70,6 +77,31 @@ describe("InboxRecords", () => {
         signal: create(AnySchema, { typeUrl: "type", value: "not-bytes" as never }),
       }),
     ).toThrow(InboxMessageError);
+  });
+
+  it("rejects default and malformed primitive target identities", () => {
+    const source = createMessage("message", "signal", 1n);
+    expect(() =>
+      InboxRecords.write({
+        ...source,
+        inboxId: { ...source.inboxId, targetId: create(AnySchema) },
+      }),
+    ).toThrow(InboxMessageError);
+
+    const wire = InboxRecords.write(source);
+    const corrupt = {
+      ...wire,
+      inboxId: {
+        ...wire.inboxId,
+        entityId: {
+          id: create(AnySchema, {
+            typeUrl: `type.googleapis.com/${StringValueSchema.typeName}`,
+            value: Uint8Array.of(0xff),
+          }),
+        },
+      },
+    };
+    expect(() => InboxRecords.read(corrupt as never)).toThrow(DeliveryStorageCorruptionError);
   });
 
   it("preserves generated shard coordinates", () => {

@@ -1,5 +1,12 @@
 import { clone, create, fromBinary, ScalarType, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, TimestampSchema, type Any } from "@bufbuild/protobuf/wkt";
+import {
+  AnySchema,
+  Int32ValueSchema,
+  Int64ValueSchema,
+  StringValueSchema,
+  TimestampSchema,
+  type Any,
+} from "@bufbuild/protobuf/wkt";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import {
   InboxIdSchema,
@@ -99,6 +106,7 @@ export const inboxRecordSpec: RecordSpec<WireInboxMessageId, WireInboxMessage> =
 const Values = Object.freeze({
   write(input: InboxMessage): WireInboxMessage {
     const message = Values.input(input);
+    Values.target(message.inboxId.targetId, InboxMessageError);
     Values.payloadForLabel(message.label, message.signal, InboxMessageError);
     const payload =
       message.signal === undefined ? { case: undefined } : Values.payload(message.signal);
@@ -155,6 +163,7 @@ const Values = Object.freeze({
       throw new DeliveryStorageCorruptionError("Inbox message record is invalid.");
     if (!(entity.value instanceof Uint8Array))
       throw new DeliveryStorageCorruptionError("Inbox target ID is invalid.");
+    Values.target(entity, DeliveryStorageCorruptionError);
     const payload =
       record.payload.case === undefined
         ? undefined
@@ -217,6 +226,26 @@ const Values = Object.freeze({
     if (signal.typeUrl === "type.spine.io/spine.core.Event")
       return { case: "event" as const, value: fromBinary(EventSchema, signal.value) };
     throw new InboxMessageError("Inbox signal must contain a command or event payload.");
+  },
+  target(
+    value: Any,
+    ErrorType: typeof InboxMessageError | typeof DeliveryStorageCorruptionError,
+  ): void {
+    try {
+      switch (value.typeUrl) {
+        case "type.googleapis.com/google.protobuf.StringValue":
+          fromBinary(StringValueSchema, value.value);
+          break;
+        case "type.googleapis.com/google.protobuf.Int32Value":
+          fromBinary(Int32ValueSchema, value.value);
+          break;
+        case "type.googleapis.com/google.protobuf.Int64Value":
+          fromBinary(Int64ValueSchema, value.value);
+          break;
+      }
+    } catch (error) {
+      throw new ErrorType("Inbox target ID is invalid.", { cause: error });
+    }
   },
   payloadForLabel(
     label: DeliveryLabel,
