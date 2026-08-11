@@ -302,6 +302,14 @@ const RegistrySource = Object.freeze({
         `          signalSchema: ${signalSchema},`,
         `          emittedSchemas: [${emitted}],`,
         `          parameterCount: ${String(handler.parameterCount)},`,
+        ...(handler.where === undefined
+          ? []
+          : [
+              "          where: {",
+              `            eventField: ${RegistrySource.stringLiteral(handler.where.eventField)},`,
+              `            equals: ${RegistrySource.stringLiteral(handler.where.equals)},`,
+              "          },",
+            ]),
         "        },",
       );
     });

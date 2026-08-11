@@ -1,0 +1,90 @@
+import { create } from "@bufbuild/protobuf";
+import { EventSchema } from "@spine-event-engine/proto";
+import { CompositeFilterSchema } from "@spine-event-engine/proto/client";
+import { describe, expect, it } from "vitest";
+
+import { EventHandlerFilters } from "../../src/handler/event-handler-filter.js";
+
+describe("Event handler field filtering", () => {
+  it("prefers the matching filtered handler and otherwise uses the fallback", () => {
+    const plan = EventHandlerFilters.compile([
+      candidate("announcements", "id.value", "announcements"),
+      candidate("fallback"),
+    ]);
+
+    expect(plan.select(create(EventSchema, { id: { value: "announcements" } }))).toEqual([
+      "announcements",
+    ]);
+    expect(plan.select(create(EventSchema, { id: { value: "general" } }))).toEqual(["fallback"]);
+  });
+
+  it("ignores an Event when no filter matches and no fallback exists", () => {
+    const plan = EventHandlerFilters.compile([
+      candidate("announcements", "id.value", "announcements"),
+    ]);
+
+    expect(plan.select(create(EventSchema, { id: { value: "general" } }))).toEqual([]);
+  });
+
+  it("matches message-valued fields through compact Proto JSON", () => {
+    const plan = EventHandlerFilters.compile([
+      candidate("announcements", "id", '{"value":"announcements"}'),
+    ]);
+
+    expect(plan.select(create(EventSchema, { id: { value: "announcements" } }))).toEqual([
+      "announcements",
+    ]);
+  });
+
+  it("does not match a missing optional intermediate message", () => {
+    const plan = EventHandlerFilters.compile([
+      candidate("payload", "message.type_url", "type.example/Message"),
+    ]);
+
+    expect(plan.select(create(EventSchema))).toEqual([]);
+  });
+
+  it("rejects conflicting paths, canonical values, and fallbacks", () => {
+    expect(() =>
+      EventHandlerFilters.compile([
+        candidate("one", "id.value", "one"),
+        candidate("two", "context.actor.value", "two"),
+      ]),
+    ).toThrow(/same Event field path/);
+    expect(() =>
+      EventHandlerFilters.compile([
+        candidate("one", "id.value", "same"),
+        candidate("two", "id.value", "same"),
+      ]),
+    ).toThrow(/duplicate canonical value/);
+    expect(() => EventHandlerFilters.compile([candidate("one"), candidate("two")])).toThrow(
+      /more than one unfiltered fallback/,
+    );
+  });
+
+  it("rejects unknown, repeated, and non-message intermediate fields", () => {
+    expect(() => EventHandlerFilters.compile([candidate("unknown", "unknown", "value")])).toThrow(
+      /unknown field/,
+    );
+    expect(() =>
+      EventHandlerFilters.compile([
+        {
+          value: "repeated",
+          schema: CompositeFilterSchema,
+          where: { eventField: "filter", equals: "value" },
+        },
+      ]),
+    ).toThrow(/unsupported repeated or map field/);
+    expect(() =>
+      EventHandlerFilters.compile([candidate("scalar", "id.value.part", "value")]),
+    ).toThrow(/intermediate field.*message/);
+  });
+});
+
+function candidate(value: string, eventField?: string, equals?: string) {
+  return {
+    value,
+    schema: EventSchema,
+    ...(eventField === undefined || equals === undefined ? {} : { where: { eventField, equals } }),
+  };
+}

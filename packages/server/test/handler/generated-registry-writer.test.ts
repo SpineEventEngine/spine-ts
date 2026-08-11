@@ -136,6 +136,43 @@ describe("generated registry writer", () => {
     expect(source).toContain('kind: "command-reaction"');
   });
 
+  it("renders Event field filters into generated handler records", () => {
+    const repoRoot = "/workspace/repo";
+    const outputFile = join(repoRoot, "generated/handler/generated-handler-registry.ts");
+    const source = new GeneratedRegistryWriter().render(
+      {
+        diagnostics: [],
+        entities: [
+          {
+            className: "TaskProjection",
+            sourceFile: join(repoRoot, "src/task-projection.ts"),
+            stateSchema: schema("../generated/task_pb.js", "TaskSchema"),
+            handlers: [
+              {
+                kind: "event-subscription",
+                methodName: "onTaskCreated",
+                signalSchema: schema("../generated/event_pb.js", "TaskCreatedSchema"),
+                emittedSchemas: [],
+                parameterCount: 1,
+                where: { eventField: "board", equals: '{"value":"announcements"}' },
+              },
+            ],
+          },
+        ],
+      },
+      { outputFile },
+    );
+
+    expect(source).toContain(
+      [
+        "          where: {",
+        '            eventField: "board",',
+        String.raw`            equals: "{\"value\":\"announcements\"}",`,
+        "          },",
+      ].join("\n"),
+    );
+  });
+
   it("renders safe string literals for module specifiers and method names", () => {
     const repoRoot = "/workspace/repo";
     const outputFile = join(repoRoot, "generated/handler/generated-handler-registry.ts");

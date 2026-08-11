@@ -7,6 +7,7 @@ import {
   type HandlerMethodName,
   type HandlerMetadata,
   type HandlerRegistrationBuilder,
+  type WhereOptions,
 } from "./handler-metadata.js";
 
 /**
@@ -208,6 +209,11 @@ export interface GeneratedHandlerRecordInput {
    * Public method arity: `handler(signal)` or `handler(signal, context)`.
    */
   readonly parameterCount: GeneratedHandlerParameterCount;
+
+  /**
+   * Optional generated Event field equality filter.
+   */
+  readonly where?: WhereOptions;
 }
 
 /**
@@ -240,6 +246,7 @@ interface GeneratedRegistryOperations {
   validateSchema(schema: DescriptorMessageSchema, label: string): void;
   validateEmits(handler: GeneratedHandlerRecordInput): void;
   validateSubscription(handler: GeneratedHandlerRecordInput): void;
+  validateWhere(handler: GeneratedHandlerRecordInput): void;
   isKind(kind: string): kind is GeneratedHandlerKind;
 }
 
@@ -283,6 +290,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
           ? {}
           : { emittedSchemas: Object.freeze([...handler.emittedSchemas]) }),
         parameterCount: handler.parameterCount,
+        ...(handler.where === undefined ? {} : { where: Object.freeze({ ...handler.where }) }),
       })),
     );
   },
@@ -353,6 +361,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
         `emitted schema ${String(index)} for generated handler "${handler.methodName}"`,
       );
     });
+    GeneratedRegistry.validateWhere(handler);
 
     if (handler.kind === "event-subscription" || handler.kind === "state-subscription") {
       GeneratedRegistry.validateSubscription(handler);
@@ -418,6 +427,28 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
       "UNEXPECTED_EMITTED_SCHEMAS",
       `Generated event subscription handler "${handler.methodName}" must not declare emitted schemas.`,
     );
+  },
+
+  validateWhere(handler: GeneratedHandlerRecordInput): void {
+    const where = handler.where;
+    if (where === undefined) return;
+    const keys = Object.keys(where);
+    if (
+      keys.length !== 2 ||
+      !keys.includes("eventField") ||
+      !keys.includes("equals") ||
+      typeof where.eventField !== "string" ||
+      where.eventField.trim().length === 0 ||
+      typeof where.equals !== "string" ||
+      (handler.kind !== "event-subscription" &&
+        handler.kind !== "event-reaction" &&
+        handler.kind !== "command-reaction")
+    ) {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        `Generated handler "${handler.methodName}" declares an invalid Event field filter.`,
+      );
+    }
   },
 
   isKind(kind: string): kind is GeneratedHandlerKind {

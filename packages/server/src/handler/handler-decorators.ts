@@ -7,7 +7,10 @@ import {
   type HandlerKind,
   type HandlerMethodName,
   type HandlerMetadata,
+  type WhereOptions,
 } from "./handler-metadata.js";
+
+export type { WhereOptions } from "./handler-metadata.js";
 
 type DecoratedHandlerKind = Exclude<HandlerKind, "state-subscription">;
 
@@ -57,23 +60,6 @@ export type HandlerMethodValue<
   Parameters extends readonly unknown[] = readonly unknown[],
   Return = unknown,
 > = (this: This, ...parameters: Parameters) => Return;
-
-/**
- * Declares one equality filter for an Event-consuming handler.
- */
-export interface WhereOptions {
-  // prettier-ignore
-
-  /**
-   * Proto source-name path of the Event field to compare.
-   */
-  readonly eventField: string;
-
-  /**
-   * Expected field value in its canonical Stringifier representation.
-   */
-  readonly equals: string;
-}
 
 const handlerDecoratorMetadataKey = Symbol("@spine-event-engine/server.handlerDecorators");
 

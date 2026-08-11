@@ -118,6 +118,28 @@ export interface BaseHandlerMetadata<
    * Public method arity: `handler(signal)` or `handler(signal, context)`.
    */
   readonly parameterCount: HandlerParameterCount;
+
+  /**
+   * Optional Event field equality filter generated for this handler.
+   */
+  readonly where?: WhereOptions;
+}
+
+/**
+ * Declares one equality filter for an Event-consuming handler.
+ */
+export interface WhereOptions {
+  // prettier-ignore
+
+  /**
+   * Proto source-name path of the Event field to compare.
+   */
+  readonly eventField: string;
+
+  /**
+   * Expected field value in its canonical Stringifier representation.
+   */
+  readonly equals: string;
 }
 
 /**
@@ -711,6 +733,11 @@ export interface HandlerArity {
    * Generated Protobuf-ES schemas emitted by the handler return type.
    */
   readonly emittedSchemas?: readonly DescriptorMessageSchema[];
+
+  /**
+   * Optional generated Event field filter.
+   */
+  readonly where?: WhereOptions;
 }
 
 /**
@@ -891,6 +918,7 @@ class EntityHandlersOwner {
       messageFullTypeName: schema.typeName,
       methodName,
       parameterCount: generated?.parameterCount ?? 1,
+      ...(generated?.where === undefined ? {} : { where: Object.freeze({ ...generated.where }) }),
     });
     if (generated?.emittedSchemas !== undefined) {
       this.#emittedSchemas.set(handler as HandlerMetadata, generated.emittedSchemas);
@@ -909,6 +937,7 @@ class EntityHandlersOwner {
           ...(arity.emittedSchemas === undefined
             ? {}
             : { emittedSchemas: Object.freeze([...arity.emittedSchemas]) }),
+          ...(arity.where === undefined ? {} : { where: Object.freeze({ ...arity.where }) }),
         }),
       );
     }
@@ -1020,4 +1049,5 @@ export const EntityHandlers: Readonly<EntityHandlerDefinitions> = Object.freeze(
 interface HandlerGeneratedData {
   readonly parameterCount: HandlerParameterCount;
   readonly emittedSchemas?: readonly DescriptorMessageSchema[];
+  readonly where?: WhereOptions;
 }

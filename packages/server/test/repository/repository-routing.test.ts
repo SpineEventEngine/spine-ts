@@ -1139,6 +1139,22 @@ class ExecutingTaskProjection extends Projection<string, typeof ProjectionStateS
   }
 }
 
+class FilteredTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  static calls: string[] = [];
+
+  static reset(): void {
+    this.calls = [];
+  }
+
+  subscribeAnnouncements(event: ProjectionEvent): void {
+    FilteredTaskProjection.calls.push(`announcements:${event.name}`);
+  }
+
+  subscribeFallback(event: ProjectionEvent): void {
+    FilteredTaskProjection.calls.push(`fallback:${event.name}`);
+  }
+}
+
 class ManagedTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
   static subscriberCalls = 0;
 
@@ -6235,6 +6251,33 @@ describe("repository signal routing", () => {
     });
   });
 
+  it("selects one filtered projection subscriber before its fallback", async () => {
+    FilteredTaskProjection.reset();
+    const context = BoundedContext.singleTenant("Filtered projections")
+      .add(createFilteredProjectionRepository())
+      .build();
+
+    try {
+      await context.eventBus().post(
+        createProjectionEvent("event-filtered-announcements", "filtered-announcements", {
+          name: "announcements",
+        }),
+      );
+      await context
+        .eventBus()
+        .post(
+          createProjectionEvent("event-filtered-general", "filtered-general", { name: "general" }),
+        );
+
+      expect(FilteredTaskProjection.calls).toEqual([
+        "announcements:announcements",
+        "fallback:general",
+      ]);
+    } finally {
+      await context.close();
+    }
+  });
+
   it("emits a System subscriber-dispatch diagnostic after projection admission", async () => {
     const diagnostics: SpineEvent[] = [];
     const event = createProjectionEvent("subscriber-diagnostic", "subscriber-id");
@@ -8801,6 +8844,36 @@ function createExecutingProjectionRepository(
     handlers,
     events: [NumberRouteEventSchema],
     ...(eventRouting === undefined ? {} : { eventRouting }),
+  });
+}
+
+function createFilteredProjectionRepository(): Repository<typeof FilteredTaskProjection> {
+  const handlers = HandlerMetadataValues.defineArity(
+    FilteredTaskProjection,
+    ProjectionStateSchema,
+    (builder) => [
+      builder.subscribe(ProjectionEventSchema, "subscribeAnnouncements"),
+      builder.subscribe(ProjectionEventSchema, "subscribeFallback"),
+    ],
+    [
+      {
+        kind: "event-subscription",
+        methodName: "subscribeAnnouncements",
+        parameterCount: 1,
+        where: { eventField: "name", equals: "announcements" },
+      },
+      {
+        kind: "event-subscription",
+        methodName: "subscribeFallback",
+        parameterCount: 1,
+      },
+    ],
+  );
+
+  return new Repository({
+    entityType: FilteredTaskProjection,
+    schema: ProjectionStateSchema,
+    handlers,
   });
 }
 

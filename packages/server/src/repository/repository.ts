@@ -105,6 +105,10 @@ import {
   EventRegistrationReadiness,
   type EventRegistrationReadinessLookup,
 } from "../handler/event-registration-readiness.js";
+import {
+  EventHandlerFilters,
+  type EventHandlerFilterPlan,
+} from "../handler/event-handler-filter.js";
 import { SignalMetadata } from "../runtime/signal-metadata.js";
 import {
   HandlerMetadataRegistry,
@@ -1197,7 +1201,13 @@ interface RepositoryRouting<Id = unknown> {
   >;
   commandReactions(
     eventFullTypeName: string,
+    message: unknown,
   ): readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[];
+  eventReactors(
+    eventFullTypeName: string,
+    message: unknown,
+  ): readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
+  eventSubscribers(eventFullTypeName: string, message: unknown): RepositoryEventSubscribers;
   routeCommand(command: Command): RepositoryCommandRoute<Id>;
   routeEvent(event: Event): RepositoryEventRoute<Id>;
   routeStateUpdate(event: Event): RepositoryStateUpdateRoute<Id> | undefined;
@@ -1740,15 +1750,15 @@ class AggregateEventExecution {
     );
     const message = EntityInvocation.unpackRequired(eventMessage, eventSchema, "event");
     const route = acceptedRoute;
-    const reactors = this.#routing.eventReadiness
-      ?.findEventReactors(route.messageFullTypeName)
+    const reactors = this.#routing
+      .eventReactors(route.messageFullTypeName, message)
       .filter((reactor) => RepositoryHandlers.handlerEmittedSchemas(reactor.handler).length > 0);
-    const commanders = this.#routing.commandReactions(route.messageFullTypeName);
+    const commanders = this.#routing.commandReactions(route.messageFullTypeName, message);
 
     return Object.freeze({
       message,
       route,
-      reactors: Object.freeze([...(reactors ?? [])]),
+      reactors: Object.freeze([...reactors]),
       commanders,
     });
   }
@@ -2090,13 +2100,18 @@ class ProjectionEventExecution {
     readonly subscribers: RepositoryEventSubscribers;
   } {
     const route = acceptedRoute ?? this.#repository.routeEvent(this.#event);
-    const subscribers = this.#routing.eventReadiness?.findEventSubscribers(
-      route.messageFullTypeName,
+    const packedMessage = EntityInvocation.requireSignalMessage(this.#event.message, "event");
+    const eventSchema = RepositoryRoutes.schemaForTypeUrl(
+      this.#routing.eventSchemas,
+      packedMessage.typeUrl,
+      "event",
     );
+    const message = EntityInvocation.unpackRequired(packedMessage, eventSchema, "event");
+    const subscribers = this.#routing.eventSubscribers(route.messageFullTypeName, message);
 
     return Object.freeze({
       route,
-      subscribers: Object.freeze([...(subscribers ?? [])]),
+      subscribers,
     });
   }
 
@@ -2733,13 +2748,13 @@ class ProcessManagerEventExecution {
     );
     const message = EntityInvocation.unpackRequired(eventMessage, eventSchema, "event");
     const route = acceptedRoute;
-    const reactors = this.#routing.eventReadiness?.findEventReactors(route.messageFullTypeName);
-    const commanders = this.#routing.commandReactions(route.messageFullTypeName);
+    const reactors = this.#routing.eventReactors(route.messageFullTypeName, message);
+    const commanders = this.#routing.commandReactions(route.messageFullTypeName, message);
 
     return Object.freeze({
       message,
       route,
-      reactors: Object.freeze([...(reactors ?? [])]),
+      reactors: Object.freeze([...reactors]),
       commanders,
     });
   }
@@ -4052,6 +4067,39 @@ const RepositoryHandlers = {
     return byEvent;
   },
 
+  createEventFilterPlans<
+    Value extends {
+      readonly handler: {
+        readonly schema: DescriptorMessageSchema;
+        readonly where?: import("../handler/handler-metadata.js").WhereOptions;
+      };
+    },
+  >(
+    byEvent: ReadonlyMap<string, readonly Value[]>,
+  ): ReadonlyMap<string, EventHandlerFilterPlan<Value>> {
+    const plans = new Map<string, EventHandlerFilterPlan<Value>>();
+    for (const [eventType, values] of byEvent) {
+      plans.set(
+        eventType,
+        EventHandlerFilters.compile(
+          values.map((value) => ({
+            value,
+            schema: value.handler.schema,
+            ...(value.handler.where === undefined ? {} : { where: value.handler.where }),
+          })),
+        ),
+      );
+    }
+    return plans;
+  },
+
+  readinessMap<Value>(
+    schemas: readonly MessageSchema[],
+    find: (typeName: string) => readonly Value[],
+  ): ReadonlyMap<string, readonly Value[]> {
+    return new Map(schemas.map((schema) => [schema.typeName, find(schema.typeName)]));
+  },
+
   handlerEmittedSchemas(
     handler:
       | CommandAssignmentHandlerMetadata
@@ -4186,6 +4234,17 @@ const RepositoryRoutes = {
       ),
     );
     const commandReactions = RepositoryHandlers.createCommandReactionMap(handlers);
+    const eventSubscribers = RepositoryHandlers.readinessMap(
+      eventSchemas,
+      (typeName) => eventReadiness?.findEventSubscribers(typeName) ?? [],
+    );
+    const eventReactors = RepositoryHandlers.readinessMap(
+      eventSchemas,
+      (typeName) => eventReadiness?.findEventReactors(typeName) ?? [],
+    );
+    const commandReactionFilters = RepositoryHandlers.createEventFilterPlans(commandReactions);
+    const eventSubscriberFilters = RepositoryHandlers.createEventFilterPlans(eventSubscribers);
+    const eventReactorFilters = RepositoryHandlers.createEventFilterPlans(eventReactors);
     const commandRoutes = RepositoryRoutes.resolveCommandRoutes(commandSchemas, commandRouting);
     const eventRoutes = RepositoryRoutes.resolveEventRoutes(eventSchemas, eventRouting);
     const stateRoutes = RepositoryRoutes.resolveStateRoutes(
@@ -4203,8 +4262,12 @@ const RepositoryRoutes = {
       eventReadiness,
       stateSchemas,
       stateSubscriptions,
-      commandReactions: (eventFullTypeName: string) =>
-        Object.freeze([...(commandReactions.get(eventFullTypeName) ?? [])]),
+      commandReactions: (eventFullTypeName: string, message: unknown) =>
+        commandReactionFilters.get(eventFullTypeName)?.select(message) ?? Object.freeze([]),
+      eventReactors: (eventFullTypeName: string, message: unknown) =>
+        eventReactorFilters.get(eventFullTypeName)?.select(message) ?? Object.freeze([]),
+      eventSubscribers: (eventFullTypeName: string, message: unknown) =>
+        eventSubscriberFilters.get(eventFullTypeName)?.select(message) ?? Object.freeze([]),
       routeCommand: (command: Command) =>
         RepositoryRoutes.routeCommand<RepositoryEntityId<EntityType>>(
           command,

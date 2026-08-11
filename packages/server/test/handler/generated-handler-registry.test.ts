@@ -248,6 +248,75 @@ describe("generated handler registry ingestion", () => {
     expect(Object.isFrozen(entity?.handlers[0])).toBe(true);
   });
 
+  it("preserves and freezes generated Event field filters", () => {
+    const where = { eventField: "board", equals: '{"value":"announcements"}' };
+    const metadata = new HandlerRegistryIngestor().ingest({
+      version: 2,
+      entities: [
+        {
+          entityType: GeneratedProjection,
+          stateSchema: ProjectionStateSchema,
+          handlers: [
+            {
+              ...record("event-subscription", "subscribeCreated", EventSchema, []),
+              where,
+            },
+          ],
+        },
+      ],
+    });
+    const filter = metadata[0]?.eventSubscriptions[0]?.where;
+
+    expect(filter).toEqual(where);
+    expect(filter).not.toBe(where);
+    expect(Object.isFrozen(filter)).toBe(true);
+  });
+
+  it("rejects malformed or unsupported generated Event field filters", () => {
+    const invalid = [
+      { eventField: "", equals: "announcements" },
+      { eventField: "board", equals: "announcements", extra: true },
+    ];
+
+    for (const where of invalid) {
+      expect(() =>
+        new HandlerRegistryIngestor().ingest({
+          version: 2,
+          entities: [
+            {
+              entityType: GeneratedProjection,
+              stateSchema: ProjectionStateSchema,
+              handlers: [
+                {
+                  ...record("event-subscription", "subscribeCreated", EventSchema, []),
+                  where,
+                },
+              ],
+            },
+          ],
+        }),
+      ).toThrow(/invalid Event field filter/);
+    }
+
+    expect(() =>
+      new HandlerRegistryIngestor().ingest({
+        version: 2,
+        entities: [
+          {
+            entityType: GeneratedProjection,
+            stateSchema: ProjectionStateSchema,
+            handlers: [
+              {
+                ...record("command-assignment", "assignCreate", CommandSchema, [EventSchema]),
+                where: { eventField: "board", equals: "announcements" },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(/invalid Event field filter/);
+  });
+
   it("accepts generated event reactions with no emitted schemas", () => {
     const metadata = new HandlerRegistryIngestor().ingest({
       version: 2,
