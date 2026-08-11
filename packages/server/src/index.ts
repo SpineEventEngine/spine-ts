@@ -10,6 +10,7 @@ export {
   type ReadCatchUpOptions,
   type ReadCatchUpResult,
   type EventEndpoint,
+  type GeneratedRepositoryOptions,
   type DispatchErrorSnapshot,
   type StoredEventDispatchFailure,
   type TenantMode,

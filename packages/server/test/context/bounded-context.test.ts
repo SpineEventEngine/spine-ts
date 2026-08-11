@@ -42,6 +42,7 @@ import {
   BoundedContext,
   BoundedContextBuilder,
   BoundedContextNameError,
+  EventRouting,
   ProcessManager,
   Projection,
   Repository,
@@ -552,6 +553,48 @@ describe("BoundedContext assembly", () => {
       "attached environment delivery",
     );
     await serverEnvironmentAccess.detach(ServerEnvironment.instance(), attachment);
+  });
+
+  it("passes custom routing when adding an Entity class with generated handlers", async () => {
+    const registryRoot = createGeneratedRegistryRoot([
+      {
+        entityType: TaskProjection,
+        stateSchema: ProjectionStateSchema,
+        handlers: [
+          {
+            kind: "state-subscription",
+            methodName: "onProjection",
+            signalSchema: ProcessManagerStateSchema,
+            emittedSchemas: [],
+            parameterCount: 1,
+          },
+        ],
+      },
+    ]);
+    const eventRouting = EventRouting.create<string>().route(ProjectionStateSchema, () => [
+      "custom-target",
+    ]);
+    await expect(
+      BoundedContext.singleTenant("CustomRouting")
+        .withGeneratedRegistryRoot(registryRoot)
+        .add(TaskProjection, { eventRouting })
+        .buildAsync(),
+    ).rejects.toThrow('unregistered exact route for "ProjectionState"');
+  });
+
+  it("rejects generated options for an explicitly assembled repository", () => {
+    const builder = BoundedContext.singleTenant("ExplicitRepository");
+    const invalidAdd = builder as unknown as {
+      add(entry: unknown, options: object): unknown;
+    };
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+
+    expect(() => invalidAdd.add(repository, {})).toThrow(
+      "Explicit Repository instances do not accept generated options.",
+    );
   });
 
   it("enumerates every configured entity inbox shard from the context delivery strategy", async () => {

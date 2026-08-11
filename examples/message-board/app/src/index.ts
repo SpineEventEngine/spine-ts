@@ -4,6 +4,7 @@ import {
   Aggregate,
   Assign,
   BoundedContext,
+  EventRouting,
   Projection,
   Server,
   Subscribe,
@@ -35,7 +36,6 @@ import { MessageAlreadyPosted } from "@spine-event-engine/example-message-board-
 import { BoardAccessPolicy, BoardContextResolver } from "./board-access.js";
 import { LocalBoardSession } from "./local-session.js";
 import { typeRegistry } from "./model-registry.js";
-import { MessageBoardRepositories } from "./repositories.js";
 
 export { typeRegistry } from "./model-registry.js";
 export { messageBoardProtoModule } from "@spine-event-engine/example-message-board-model";
@@ -202,16 +202,17 @@ export class MessageBoardApplication {
   async createContext(
     storageFactory: StorageFactory = new InMemoryStorageFactory(),
   ): Promise<BoundedContext> {
-    const repositories = await MessageBoardRepositories.load(new URL("..", import.meta.url), {
-      aggregate: BoardMessageAggregate,
-      messages: BoardViewProjection,
-      announcements: AnnouncementBoardProjection,
-    });
+    const announcementRouting = EventRouting.create<BoardId>().route(
+      MessagePostedSchema,
+      (event) =>
+        event.board?.value === "announcements" ? [clone(BoardIdSchema, event.board)] : [],
+    );
     return BoundedContext.singleTenant("MessageBoard")
       .withStorageFactory(storageFactory)
-      .add(repositories.aggregate)
-      .add(repositories.messages)
-      .add(repositories.announcements)
+      .withGeneratedRegistryRoot(new URL("..", import.meta.url))
+      .add(BoardMessageAggregate)
+      .add(BoardViewProjection)
+      .add(AnnouncementBoardProjection, { eventRouting: announcementRouting })
       .buildAsync();
   }
 

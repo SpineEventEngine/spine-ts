@@ -704,6 +704,7 @@ const expectedServerExports = [
   "GeneratedRegistryDiscovery",
   "GeneratedRegistryDiscoveryError",
   "GeneratedRegistryDiscoveryOptions",
+  "GeneratedRepositoryOptions",
   "RegistryDiscoveryErrorCode",
   "ActorContextInput",
   "EntityKind",

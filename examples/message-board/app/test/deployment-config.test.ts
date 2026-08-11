@@ -129,11 +129,20 @@ describe("MessageBoard deployment configuration", () => {
 
   it("configures production storage and transport as environment-owned facilities", () => {
     const config = MessageBoardDeployment.application(completeEnvironment);
-    const storage = MessageBoardDeployment.configureServer(config, client, {
-      ...completeEnvironment,
-      NODE_ENV: "production",
-      SPINE_IPC_DIRECTORY: "/tmp/spine-message-board-config-test",
-    });
+    const logger = MessageBoardDeployment.logger({
+      entry: vi.fn((_metadata: unknown, data: unknown) => data),
+      write: vi.fn(),
+    } as never);
+    const storage = MessageBoardDeployment.configureServer(
+      config,
+      client,
+      {
+        ...completeEnvironment,
+        NODE_ENV: "production",
+        SPINE_IPC_DIRECTORY: "/tmp/spine-message-board-config-test",
+      },
+      logger,
+    );
 
     expect(storage?.isOpen()).toBe(true);
   });

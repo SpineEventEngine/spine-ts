@@ -51,6 +51,7 @@ import {
   type EntityInbox,
   type RepositoryEntityType,
   type RepositoryIdentitySnapshot,
+  type RepositoryOptions,
   type EntityInboxTarget,
   type ProjectionInbox,
   type ProjectionInboxTarget,
@@ -1201,6 +1202,20 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
 });
 
 /**
+ * Customizes a repository assembled from an Entity class and generated handlers.
+ *
+ * @typeParam EntityType - The Entity class added to a Bounded Context builder.
+ */
+export type GeneratedRepositoryOptions<
+  EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
+> = Readonly<
+  Pick<
+    RepositoryOptions<EntityType>,
+    "commandRouting" | "eventRouting" | "stateUpdateRouting" | "stringifierRegistry"
+  >
+>;
+
+/**
  * Assembles a {@link BoundedContext} from repositories and dispatchers.
  */
 export class BoundedContextBuilder {
@@ -1209,6 +1224,7 @@ export class BoundedContextBuilder {
   readonly #eventDispatchers = new Set<EventDispatcher>();
   readonly #repositories = new Set<RepositoryView>();
   readonly #entityTypes = new Set<RepositoryEntityType>();
+  readonly #generatedRepositoryOptions = new Map<RepositoryEntityType, object>();
   #deliveryStrategy: DeliveryStrategy = UniformAcrossAllShards.singleShard();
   #storageFactory: StorageFactory | undefined;
   #subscriptionRegistry: StandSubscriptionRegistry | undefined;
@@ -1276,21 +1292,51 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Adds an entry to the context registration list.
+   * Adds an explicitly assembled repository.
    *
-   * @param entry Registers a repository or entity class.
-   * @returns Returns this builder for further configuration.
+   * @param entry The repository to register.
+   * @returns This builder for further configuration.
+   */
+  add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
+    entry: Repository<EntityType>,
+  ): this;
+
+  /**
+   * Adds an Entity class whose repository is assembled from generated handlers.
+   *
+   * @param entry The Entity class to register.
+   * @param options Optional custom routing and field mappings for its generated repository.
+   * @returns This builder for further configuration.
+   */
+  add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
+    entry: EntityType,
+    options?: GeneratedRepositoryOptions<EntityType>,
+  ): this;
+
+  /**
+   * Adds an explicitly assembled repository or an Entity class.
+   *
+   * @param entry The repository or Entity class to register.
+   * @param options Optional settings used only when an Entity class is supplied.
+   * @returns This builder for further configuration.
    */
   add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
     entry: Repository<EntityType> | EntityType,
+    options?: GeneratedRepositoryOptions<EntityType>,
   ): this {
     if (repositoryAccess.hasInstance(entry)) {
+      if (options !== undefined) {
+        throw new TypeError("Explicit Repository instances do not accept generated options.");
+      }
       this.#repositories.add(entry);
       return this;
     }
 
     ContextParts.requireEntityClass(entry, "BoundedContextBuilder.add(repository)");
     this.#entityTypes.add(entry);
+    if (options !== undefined) {
+      this.#generatedRepositoryOptions.set(entry, Object.freeze({ ...options }));
+    }
     return this;
   }
 
@@ -1576,7 +1622,12 @@ export class BoundedContextBuilder {
 
     return Object.freeze(
       entityTypes.map((entityType) =>
-        ContextParts.createGeneratedRepository(entityType, registries, metadata),
+        ContextParts.createGeneratedRepository(
+          entityType,
+          registries,
+          metadata,
+          this.#generatedRepositoryOptions.get(entityType),
+        ),
       ),
     );
   }
@@ -2084,16 +2135,21 @@ const ContextParts = Object.freeze({
     entityType: RepositoryEntityType,
     registries: readonly GeneratedHandlerRegistry[],
     metadata: HandlerMetadataRegistry,
+    options?: object,
   ): RepositoryView {
     const generated = ContextParts.findGeneratedEntity(entityType, registries);
     const handlers = ContextParts.findGeneratedHandlers(entityType, generated, metadata);
 
-    return new Repository({
-      entityType: entityType as never,
-      schema: generated.stateSchema,
-      handlers: handlers as never,
-      events: ContextParts.aggregateAssignedEvents(generated),
-    });
+    const repositoryOptions = Object.assign(
+      {
+        entityType,
+        schema: generated.stateSchema,
+        handlers,
+        events: ContextParts.aggregateAssignedEvents(generated),
+      },
+      options,
+    );
+    return new Repository(repositoryOptions as never);
   },
 
   findGeneratedEntity(

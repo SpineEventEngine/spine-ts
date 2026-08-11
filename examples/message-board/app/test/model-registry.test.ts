@@ -74,6 +74,36 @@ describe("MessageBoard Projection backend", () => {
     }
   });
 
+  it("assembles every supported application server mode", async () => {
+    const start = vi.fn().mockResolvedValue({ baseUrl: "http://started" });
+    const run = vi.fn().mockResolvedValue({ baseUrl: "http://running" });
+    const add = vi.fn(function (this: unknown) {
+      return this;
+    });
+    const atPort = vi.spyOn(Server, "atPort").mockReturnValue({ add, run, start } as never);
+    const storage = new InMemoryStorageFactory();
+    try {
+      await expect(application.start({ host: "127.0.0.2", port: 1 })).resolves.toEqual({
+        baseUrl: "http://started",
+      });
+      await expect(application.run()).resolves.toEqual({ baseUrl: "http://running" });
+      await expect(application.runApplication({ port: 2 }, storage)).resolves.toEqual({
+        baseUrl: "http://running",
+      });
+      await expect(
+        application.runCombined({ port: 3, webOrigin: "https://board.example.com" }, storage),
+      ).resolves.toEqual({ baseUrl: "http://running" });
+
+      expect(atPort).toHaveBeenCalledTimes(4);
+      expect(start).toHaveBeenCalledOnce();
+      expect(run).toHaveBeenCalledTimes(3);
+      expect(add).toHaveBeenCalledTimes(4);
+    } finally {
+      atPort.mockRestore();
+      storage.close();
+    }
+  });
+
   it("persists a message-valued aggregate ID as the event producer ID", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const context = await application.createContext(storageFactory);

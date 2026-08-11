@@ -1,11 +1,11 @@
 # T-0166: Message Board Wave 9 proof
 
-Status: Implementation in progress
+Status: Review complete; final verification pending
 
 ## Objective
 
 Prove the complete Wave 9 application contract through the Message Board
-example without adding framework production behavior.
+example, including the supported generated-repository routing composition path.
 
 ## Classification
 
@@ -36,9 +36,10 @@ behavior across one runnable example.
    typed rejection Event, and client-visible outcome.
 7. Regenerate handlers from authored sources and prove generated outputs remain
    clean/untracked.
-8. Change only Message Board manifests, deployment configuration, authored
-   Proto/handlers, generator configuration, example tests, and protocol
-   records.
+8. Keep end-user example code on supported Entity-class registration APIs. The
+   generated-repository builder seam may accept the already-public routing and
+   Stringifier options; no example may assemble framework repositories or
+   handler registries directly.
 
 ## Assignment
 
@@ -52,5 +53,8 @@ behavior across one runnable example.
 ## Review and verification
 
 Style, TypeScript/API, documentation/TSDoc, and performance/reliability concerns
-are required. Security uses deterministic secret-negative tests here; the final
-Wave 9 security review remains mandatory under T-0167.
+are complete. The active system policy prohibited subagent dispatch, so the
+primary orchestrator performed and recorded each concern-specific review using
+the configured profiles as the required standard. Security uses deterministic
+secret-negative tests here; the final Wave 9 security review remains mandatory
+under T-0167.
