@@ -1,6 +1,6 @@
 # T-0158 Review Record
 
-Status: Correction in progress
+Status: Review-complete; final verification pending
 
 ## Assignments
 
@@ -57,3 +57,27 @@ explicit immutable configured role/profile is then the durable evidence.
   and historical route-selection wording are corrected.
 - Targeted re-review is required for style/maintainability, TypeScript/API docs,
   documentation/TSDoc, and performance/reliability. Security remains N/A.
+
+## Targeted Re-review
+
+- Performance/reliability: CLEAN. The reviewer accepted the once-per-admission
+  disposition and verified descriptor-aware IDs across records, event contexts,
+  lifecycle events, diagnostics, rejections, and JVM-shaped input.
+- Style/maintainability: CLEAN after both live-context tests moved cleanup into
+  `try/finally` blocks.
+- TypeScript/API documentation: CLEAN after `routeSemantic()` documented its
+  canonical no-surrounding-whitespace key requirement.
+- Documentation/TSDoc: CLEAN. The work log and public comments distinguish
+  stored route selection from schema validation and describe the normalized
+  callback context.
+- Security: N/A remains unchanged.
+
+## Final Mechanical Evidence
+
+- Generated build passes; focused correction profile passes 5 files / 234
+  tests.
+- Fresh LCOV at `/tmp/t0158-cov-review-correction/lcov.info`, intersected with
+  production lines changed from `origin/main`, reports statements/lines
+  117/122 (95.90%), branches 102/112 (91.07%), and functions 26/26 (100%).
+- Tooling typecheck, TSDoc, TypeDoc/API inventory, changed-file ESLint,
+  Prettier, and `git diff --check` pass.
