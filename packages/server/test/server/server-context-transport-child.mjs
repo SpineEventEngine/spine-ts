@@ -20,6 +20,8 @@ import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { createZeroMqTransport, ZeroMqConfig } from "@spine-event-engine/transport/zeromq";
 
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.ts";
+import { TaskCreatedSchema } from "../../../../examples/todo/dist/generated/spine/examples/todo/task_events_pb.js";
+import { TaskIdSchema } from "../../../../examples/todo/dist/generated/spine/examples/todo/task_id_pb.js";
 
 const ipcDirectory = requiredEnvironment("SPINE_T0038B_IPC_DIRECTORY");
 const adapterIdentity = adapterIdentityEnvironment("SPINE_T0038B_ADAPTER_IDENTITY");
@@ -40,23 +42,23 @@ class TaskAggregate extends Aggregate {
     return SignalEnvelopes.event({
       id: create(EventIdSchema, { value: `event-${command.id}` }),
       context: create(EventContextSchema),
-      schema: ProjectionStateSchema,
-      message: create(ProjectionStateSchema, {
-        id: command.id,
-        name: command.name,
-        priority: 1,
+      schema: TaskCreatedSchema,
+      message: create(TaskCreatedSchema, {
+        id: create(TaskIdSchema, { value: command.id }),
+        title: command.name,
       }),
     });
   }
 
   applyTask(event) {
+    const id = event.id?.value ?? "";
     this.startTransaction();
     this.update((draft) =>
       Object.assign(
         draft,
         create(AggregateStateSchema, {
-          id: event.id,
-          name: event.name,
+          id,
+          name: event.title,
           archived: false,
         }),
       ),
@@ -67,32 +69,34 @@ class TaskAggregate extends Aggregate {
 
 class TaskProjection extends Projection {
   subscribeTask(event) {
+    const id = event.id?.value ?? "";
     this.update((draft) =>
       Object.assign(
         draft,
         create(ProjectionStateSchema, {
-          id: event.id,
-          name: `${event.name} (projected)`,
-          priority: event.priority + 1,
+          id,
+          name: `${event.title} (projected)`,
+          priority: 2,
         }),
       ),
     );
-    observe("primary-projected", eventSource(event.id), event.id);
+    observe("primary-projected", eventSource(id), id);
   }
 }
 
 class AuditProjection extends Projection {
   subscribeTask(event) {
+    const id = event.id?.value ?? "";
     this.update((draft) =>
       Object.assign(
         draft,
         create(SingularSetOnceStateSchema, {
-          id: event.id,
-          mutableNote: `${event.name} (audited)`,
+          id,
+          mutableNote: `${event.title} (audited)`,
         }),
       ),
     );
-    observe("secondary-projected", eventSource(event.id), event.id);
+    observe("secondary-projected", eventSource(id), id);
   }
 }
 
@@ -124,7 +128,7 @@ process.once("SIGTERM", () => {
 try {
   const handlers = EntityHandlers.define(TaskAggregate, AggregateStateSchema, (builder) => [
     builder.assign(AggregateStateSchema, "assignTask"),
-    builder.apply(ProjectionStateSchema, "applyTask"),
+    builder.apply(TaskCreatedSchema, "applyTask"),
   ]);
   const aggregateRepository = new Repository({
     entityType: TaskAggregate,
@@ -134,7 +138,7 @@ try {
   const projectionHandlers = EntityHandlers.define(
     TaskProjection,
     ProjectionStateSchema,
-    (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
+    (builder) => [builder.subscribe(TaskCreatedSchema, "subscribeTask")],
   );
   const projectionRepository = new Repository({
     entityType: TaskProjection,
@@ -144,7 +148,7 @@ try {
   const auditHandlers = EntityHandlers.define(
     AuditProjection,
     SingularSetOnceStateSchema,
-    (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
+    (builder) => [builder.subscribe(TaskCreatedSchema, "subscribeTask")],
   );
   const auditRepository = new Repository({
     entityType: AuditProjection,

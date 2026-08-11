@@ -28,6 +28,8 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import { TaskIdSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 
 const transportTimeoutMs = 2_000;
 const phaseTimeoutMs = 5_000;
@@ -47,11 +49,6 @@ type AggregateState = Message<"AggregateState"> & {
 
 type TestTransportOptions = ZeroMqTransportOptions & {
   readonly onBackgroundFailure?: (error: Error) => void;
-};
-type ProjectionState = Message<"ProjectionState"> & {
-  readonly id: string;
-  readonly name: string;
-  readonly priority: number;
 };
 type ObservationBehavior = "command-handled" | "primary-projected" | "secondary-projected";
 type ObservationSource = "command" | "inbound-event";
@@ -150,7 +147,7 @@ interface CommandIntakeResponse {
   readonly acceptedFor: "async-work";
 }
 
-const { AggregateStateSchema, ProjectionStateSchema } = fixtureSchemas();
+const { AggregateStateSchema } = fixtureSchemas();
 const signalMetadata = new SignalMetadata();
 
 describe("Server context transport across Node processes", () => {
@@ -525,7 +522,7 @@ class CrossProcessFixture {
   async publishEventUntilObserved(event: Event, entityId: string): Promise<ObservationBehavior[]> {
     const topic = TransportTopics.create({
       signalKind: "event",
-      messageTypeUrl: TypeUrls.derive(ProjectionStateSchema),
+      messageTypeUrl: TypeUrls.derive(TaskCreatedSchema),
     });
     const deadline = Date.now() + phaseTimeoutMs;
 
@@ -689,7 +686,6 @@ class CrossProcessFixture {
 
 function fixtureSchemas(): {
   readonly AggregateStateSchema: GenMessage<AggregateState>;
-  readonly ProjectionStateSchema: GenMessage<ProjectionState>;
 } {
   const descriptorSet = fromBinary(
     FileDescriptorSetSchema,
@@ -706,7 +702,6 @@ function fixtureSchemas(): {
 
   return {
     AggregateStateSchema: messageDesc(file, 1),
-    ProjectionStateSchema: messageDesc(file, 0),
   };
 }
 
@@ -734,11 +729,10 @@ function createInboundEvent(): Event {
       producerId: Identifiers.pack("string", inboundEventEntityId),
       version: create(VersionSchema, { number: 1 }),
     }),
-    schema: ProjectionStateSchema,
-    message: create(ProjectionStateSchema, {
-      id: inboundEventEntityId,
-      name: "Transported event",
-      priority: 7,
+    schema: TaskCreatedSchema,
+    message: create(TaskCreatedSchema, {
+      id: create(TaskIdSchema, { value: inboundEventEntityId }),
+      title: "Transported event",
     }),
   });
 }
