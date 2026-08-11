@@ -907,7 +907,15 @@ const FieldStringifiers = Object.freeze({
         );
       },
       toString(value: unknown): string {
-        const number = FieldStringifiers.integerValue(value, -(2n ** 31n), 2n ** 31n - 1n);
+        if (typeof value !== "number" || !Number.isInteger(value)) {
+          throw new TypeError("Enum field value must be an integer number.");
+        }
+        const number = FieldStringifiers.integerValue(
+          value,
+          -(2n ** 31n),
+          2n ** 31n - 1n,
+          "number",
+        );
         return field.enum.value[Number(number)]?.name ?? number.toString();
       },
     });
@@ -927,17 +935,17 @@ const FieldStringifiers = Object.freeze({
       case ScalarType.INT32:
       case ScalarType.SFIXED32:
       case ScalarType.SINT32:
-        return this.integer(-(2n ** 31n), 2n ** 31n - 1n, false);
+        return this.integer(-(2n ** 31n), 2n ** 31n - 1n, "number");
       case ScalarType.FIXED32:
       case ScalarType.UINT32:
-        return this.integer(0n, 2n ** 32n - 1n, false);
+        return this.integer(0n, 2n ** 32n - 1n, "number");
       case ScalarType.INT64:
       case ScalarType.SFIXED64:
       case ScalarType.SINT64:
-        return this.integer(-(2n ** 63n), 2n ** 63n - 1n, field.longAsString);
+        return this.integer(-(2n ** 63n), 2n ** 63n - 1n, field.longAsString ? "string" : "bigint");
       case ScalarType.FIXED64:
       case ScalarType.UINT64:
-        return this.integer(0n, 2n ** 64n - 1n, field.longAsString);
+        return this.integer(0n, 2n ** 64n - 1n, field.longAsString ? "string" : "bigint");
     }
   },
 
@@ -999,18 +1007,25 @@ const FieldStringifiers = Object.freeze({
     },
   }),
 
-  integer(min: bigint, max: bigint, asString: boolean): Stringifier<unknown> {
+  integer(
+    min: bigint,
+    max: bigint,
+    representation: "number" | "bigint" | "string",
+  ): Stringifier<unknown> {
     return Object.freeze({
       fromString(value: string): unknown {
         const restored = FieldStringifiers.integerText(value, min, max);
-        return asString
-          ? restored.toString()
-          : max <= BigInt(Number.MAX_SAFE_INTEGER)
-            ? Number(restored)
-            : restored;
+        switch (representation) {
+          case "number":
+            return Number(restored);
+          case "bigint":
+            return restored;
+          case "string":
+            return restored.toString();
+        }
       },
       toString(value: unknown): string {
-        const restored = FieldStringifiers.integerValue(value, min, max, asString);
+        const restored = FieldStringifiers.integerValue(value, min, max, representation);
         return restored.toString();
       },
     });
@@ -1028,14 +1043,23 @@ const FieldStringifiers = Object.freeze({
     return restored;
   },
 
-  integerValue(value: unknown, min: bigint, max: bigint, asString = false): bigint {
+  integerValue(
+    value: unknown,
+    min: bigint,
+    max: bigint,
+    representation: "number" | "bigint" | "string",
+  ): bigint {
     let converted: bigint;
-    if (asString) {
+    if (representation === "string") {
       if (typeof value !== "string") throw new TypeError("Field value must be an integer string.");
       converted = this.integerText(value, min, max);
-    } else if (typeof value === "bigint") {
+    } else if (representation === "bigint" && typeof value === "bigint") {
       converted = value;
-    } else if (typeof value === "number" && Number.isSafeInteger(value)) {
+    } else if (
+      representation === "number" &&
+      typeof value === "number" &&
+      Number.isSafeInteger(value)
+    ) {
       converted = BigInt(value);
     } else {
       throw new TypeError("Field value must be an integer.");

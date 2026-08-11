@@ -6,6 +6,7 @@ import { AnySchema, FieldMaskSchema } from "@bufbuild/protobuf/wkt";
 import {
   FieldDescriptorProto_Label,
   FieldDescriptorProto_Type,
+  FieldOptions_JSType,
   FileDescriptorProtoSchema,
 } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, UserIdSchema } from "@spine-event-engine/proto";
@@ -43,6 +44,7 @@ type FieldValues = Message<"example.stringifiers.FieldValues"> & {
   fixed64Value: bigint;
   sfixed64Value: bigint;
   sint64Value: bigint;
+  stringInt64Value: string;
 };
 
 const fieldStringifierFile = fileDesc(
@@ -116,6 +118,10 @@ const fieldStringifierFile = fileDesc(
               field("fixed64_value", 17, FieldDescriptorProto_Type.FIXED64),
               field("sfixed64_value", 18, FieldDescriptorProto_Type.SFIXED64),
               field("sint64_value", 19, FieldDescriptorProto_Type.SINT64),
+              {
+                ...field("string_int64_value", 20, FieldDescriptorProto_Type.INT64),
+                options: { jstype: FieldOptions_JSType.JS_STRING },
+              },
             ],
           },
         ],
@@ -254,6 +260,7 @@ describe("JVM-compatible identifier and stringifier contracts", () => {
     ["fixed64Value", 42n, "42"],
     ["sfixed64Value", -42n, "-42"],
     ["sint64Value", -42n, "-42"],
+    ["stringInt64Value", "42", "42"],
   ] as const)("round-trips the singular %s field", (name, value, text) => {
     const stringifier = Stringifiers.forField(FieldValuesSchema.field[name]);
 
@@ -312,6 +319,30 @@ describe("JVM-compatible identifier and stringifier contracts", () => {
     expect(() =>
       Stringifiers.forField(FieldValuesSchema.field.uint64Value).fromString("-1"),
     ).toThrow("uint64 range");
+    expect(() =>
+      Stringifiers.forField(FieldValuesSchema.field.int32Value).fromString("2147483648"),
+    ).toThrow("declared integer range");
+    expect(() =>
+      Stringifiers.forField(FieldValuesSchema.field.int64Value).fromString("9223372036854775808"),
+    ).toThrow("declared integer range");
+  });
+
+  it("rejects runtime values that do not match the field representation", () => {
+    expect(() => Stringifiers.forField(FieldValuesSchema.field.int32Value).toString(1n)).toThrow(
+      "integer",
+    );
+    expect(() => Stringifiers.forField(FieldValuesSchema.field.int64Value).toString(1)).toThrow(
+      "integer",
+    );
+    expect(() =>
+      Stringifiers.forField(FieldValuesSchema.field.stringInt64Value).toString(1n),
+    ).toThrow("integer string");
+    expect(() => Stringifiers.forField(FieldValuesSchema.field.status).toString(1n)).toThrow(
+      "integer number",
+    );
+    expect(() =>
+      Stringifiers.forField(FieldValuesSchema.field.doubleValue).toString(Number.NaN),
+    ).toThrow("finite number");
   });
 
   it("rejects repeated and map fields", () => {
