@@ -21,6 +21,9 @@ export interface EventDispatcher {
   /**
    * Performs dispatcher-specific acceptance before the bus stores an event.
    *
+   * The bus gives each dispatcher its own Event snapshot. After successful
+   * storage, the same snapshot is passed to this dispatcher's `dispatch()`.
+   *
    * @param event the event envelope to validate.
    * @returns A promise that resolves after validation completes.
    */
@@ -28,6 +31,9 @@ export interface EventDispatcher {
 
   /**
    * Dispatches one generated Spine event envelope.
+   *
+   * When `accept()` is present, this receives the dispatcher-local snapshot
+   * that acceptance validated.
    *
    * @param event the event envelope to dispatch.
    * @returns A promise that resolves after the event is dispatched.

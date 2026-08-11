@@ -331,6 +331,10 @@ class Int32RoutingAggregate extends ProcessManager<
   assign(command: Int32AggregateState): void {
     this.update((draft) => Object.assign(draft, command));
   }
+
+  react(event: Int32AggregateState): void {
+    void event;
+  }
 }
 
 class Int64RoutingProcessManager extends ProcessManager<
@@ -340,6 +344,10 @@ class Int64RoutingProcessManager extends ProcessManager<
 > {
   assign(command: Int64ProcessManagerState): void {
     this.update((draft) => Object.assign(draft, command));
+  }
+
+  react(event: Int64ProcessManagerState): void {
+    void event;
   }
 }
 
@@ -3393,6 +3401,48 @@ describe("repository signal routing", () => {
     ).toEqual([]);
   });
 
+  it("suppresses Projection delivery when custom Event routing returns no targets", async () => {
+    ExecutingTaskProjection.reset();
+    let routeCalls = 0;
+    const repository = createExecutingProjectionRepository(
+      EventRouting.create<string>().route(ProjectionStateSchema, () => {
+        routeCalls += 1;
+        return [];
+      }),
+    );
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+
+    try {
+      await context.eventBus().post(createProjectionEvent("event-no-delivery", "ignored"));
+
+      expect(routeCalls).toBe(1);
+      expect(ExecutingTaskProjection.subscriberCalls).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("uses one custom Event plan for every Aggregate target", async () => {
+    GuardedAggregate.reset();
+    let routeCalls = 0;
+    const repository = createGuardedAggregateRepository(
+      EventRouting.create<string>().route(ProjectionStateSchema, () => {
+        routeCalls += 1;
+        return ["aggregate-one", "aggregate-two"];
+      }),
+    );
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+
+    try {
+      await context.eventBus().post(createProjectionEvent("event-aggregate-many", "ignored"));
+
+      expect(routeCalls).toBe(1);
+      expect(GuardedAggregate.calls).toBe(2);
+    } finally {
+      await context.close();
+    }
+  });
+
   it("rejects Event routes that cannot apply to a registered receiver", () => {
     expect(() =>
       createRoutingRepository(
@@ -3446,6 +3496,32 @@ describe("repository signal routing", () => {
     });
 
     expect(repository.routeEvent(event).entityIds).toEqual(["Unknown"]);
+  });
+
+  it("routes canonical zero-valued int32 and int64 producer IDs", () => {
+    const int32 = createInt32RoutingRepository();
+    const int64 = createInt64RoutingRepository();
+
+    expect(
+      int32.routeEvent(
+        SignalEnvelopes.event({
+          id: create(EventIdSchema, { value: "event-int32-producer" }),
+          context: create(EventContextSchema, { producerId: Identifiers.pack("int32", 0) }),
+          schema: Int32AggregateStateSchema,
+          message: create(Int32AggregateStateSchema, { id: 42, name: "Int32" }),
+        }),
+      ).entityIds,
+    ).toEqual([0]);
+    expect(
+      int64.routeEvent(
+        SignalEnvelopes.event({
+          id: create(EventIdSchema, { value: "event-int64-producer" }),
+          context: create(EventContextSchema, { producerId: Identifiers.pack("int64", 0n) }),
+          schema: Int64ProcessManagerStateSchema,
+          message: create(Int64ProcessManagerStateSchema, { id: 42n, queue: "Int64" }),
+        }),
+      ).entityIds,
+    ).toEqual([0n]);
   });
 
   it("routes message-valued event IDs by their primitive value field", () => {
@@ -4980,13 +5056,9 @@ describe("repository signal routing", () => {
   it("guards each target of a multi-target Process Manager route independently", async () => {
     SplitRouteProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    const repository = createGuardedSplitPmRepo();
-    const routeEvent = repository.routeEvent.bind(repository);
-    Object.assign(repository, {
-      routeEvent(event: SpineEvent) {
-        return { ...routeEvent(event), entityIds: Object.freeze(["pm-one", "pm-two"]) };
-      },
-    });
+    const repository = createGuardedSplitPmRepo(
+      EventRouting.create<string>().route(ProjectionStateSchema, () => ["pm-one", "pm-two"]),
+    );
     BoundedContext.singleTenant("Tasks").add(repository).withStorageFactory(factory).build();
     const dispatcher = repositoryAccess.eventDispatcher(repository);
     if (dispatcher === undefined) throw new Error("Expected a process-manager event dispatcher.");
@@ -5275,7 +5347,7 @@ describe("repository signal routing", () => {
     await context.close();
   });
 
-  it("rejects invalid stored process-manager event rows before handler code", async () => {
+  it("uses the stored process-manager target and rejects other invalid replay rows", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
     const repository = createProcessManagerReactRepository();
@@ -5321,9 +5393,7 @@ describe("repository signal routing", () => {
       { signalId: "event-pm-replay-label", label: "UPDATE_SUBSCRIBER" },
     );
 
-    await expect(target.replay(wrongId)).rejects.toThrow(
-      "Entity Inbox replay stored target ID does not match the routed event.",
-    );
+    await expect(target.replay(wrongId)).resolves.toBeUndefined();
     await expect(target.replay(wrongType)).rejects.toThrow(
       "Entity Inbox replay stored target type does not match the routed repository.",
     );
@@ -5331,7 +5401,45 @@ describe("repository signal routing", () => {
       'Entity Inbox replay does not handle "UPDATE_SUBSCRIBER" messages.',
     );
 
-    expect(RoutingProcessManager.eventCalls).toBe(0);
+    expect(RoutingProcessManager.eventCalls).toBe(1);
+  });
+
+  it("routes a Process Manager Event once at admission and not during replay", async () => {
+    RoutingProcessManager.reset();
+    let routeCalls = 0;
+    const eventRouting = EventRouting.create<string>().route(ProjectionStateSchema, (message) => {
+      routeCalls += 1;
+      return [message.id];
+    });
+    const factory = new InMemoryStorageFactory();
+    const repository = createProcessManagerReactRepository(eventRouting);
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+
+    try {
+      await context.eventBus().post(createProjectionEvent("event-pm-admission", "pm-admission"));
+      await waitForCondition(() => RoutingProcessManager.eventCalls === 1);
+      expect(routeCalls).toBe(1);
+
+      const delivery = new Delivery({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: factory,
+      });
+      const replay = await storePmInboxEvent(
+        delivery,
+        createProjectionEvent("event-pm-replay-count", "pm-admission"),
+        new Date("2026-08-11T04:55:00.000Z"),
+        1n,
+      );
+
+      await expect(requireEntityInboxTarget(repository).replay(replay)).resolves.toBeUndefined();
+      expect(routeCalls).toBe(1);
+      expect(RoutingProcessManager.eventCalls).toBe(2);
+    } finally {
+      await context.close();
+    }
   });
 
   it("guards repeated Process Manager inbox replay per target with the retained source event", async () => {
@@ -7704,19 +7812,6 @@ describe("repository signal routing", () => {
         targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
       },
     );
-    const mismatchedTarget = await storePmInboxEvent(
-      delivery,
-      event,
-      new Date("2026-07-24T21:20:05.000Z"),
-      6n,
-      {
-        label: "UPDATE_SUBSCRIBER",
-        signalId: "event-projection-replay-mismatched-target",
-        targetId: "other-projection",
-        targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
-      },
-    );
-
     try {
       await expect(target.replay({ ...valid, label: "REACT_UPON_EVENT" } as never)).rejects.toThrow(
         'Projection inbox replay does not handle "REACT_UPON_EVENT" messages.',
@@ -7733,18 +7828,55 @@ describe("repository signal routing", () => {
       await expect(
         target.replay(mismatchedTenant as never, createTenantId("tenant-a")),
       ).rejects.toThrow("Projection inbox replay stored event tenant does not match.");
-      await expect(
-        target.replay(mismatchedTarget as never, createTenantId("tenant-a")),
-      ).rejects.toThrow(
-        "Projection inbox replay stored target ID does not match the routed event.",
-      );
-
       expect(ExecutingTaskProjection.subscriberCalls).toBe(0);
       await expect(
         context.stand().read(ProjectionStateSchema, "projection-replay", {
           tenantId: createTenantId("tenant-a"),
         }),
       ).resolves.toBeUndefined();
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("routes a Projection Event once at admission and not during replay", async () => {
+    ExecutingTaskProjection.reset();
+    let routeCalls = 0;
+    const eventRouting = EventRouting.create<string>().route(ProjectionStateSchema, (message) => {
+      routeCalls += 1;
+      return [message.id];
+    });
+    const factory = new InMemoryStorageFactory();
+    const repository = createExecutingProjectionRepository(eventRouting);
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+
+    try {
+      await context
+        .eventBus()
+        .post(createProjectionEvent("event-projection-admission", "projection-admission"));
+      await waitForCondition(() => ExecutingTaskProjection.subscriberCalls === 1);
+      expect(routeCalls).toBe(1);
+
+      const delivery = new Delivery({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: factory,
+      });
+      const replay = await storePmInboxEvent(
+        delivery,
+        createProjectionEvent("event-projection-replay-count", "projection-admission"),
+        new Date("2026-08-11T04:56:00.000Z"),
+        1n,
+        { label: "UPDATE_SUBSCRIBER", targetTypeUrl: TypeUrls.derive(ProjectionStateSchema) },
+      );
+
+      await expect(
+        requireProjectionInboxTarget(repository).replay(replay),
+      ).resolves.toBeUndefined();
+      expect(routeCalls).toBe(1);
+      expect(ExecutingTaskProjection.subscriberCalls).toBe(2);
     } finally {
       await context.close();
     }
@@ -8391,7 +8523,9 @@ function createRoutingRepository(
   });
 }
 
-function createExecutingProjectionRepository(): Repository<typeof ExecutingTaskProjection> {
+function createExecutingProjectionRepository(
+  eventRouting?: EventRouting<string>,
+): Repository<typeof ExecutingTaskProjection> {
   const handlers = EntityHandlers.define(
     ExecutingTaskProjection,
     ProjectionStateSchema,
@@ -8403,6 +8537,7 @@ function createExecutingProjectionRepository(): Repository<typeof ExecutingTaskP
     schema: ProjectionStateSchema,
     handlers,
     events: [NumberRouteEventSchema],
+    ...(eventRouting === undefined ? {} : { eventRouting }),
   });
 }
 
@@ -8593,7 +8728,10 @@ function createInt32RoutingRepository(
   const handlers = EntityHandlers.define(
     Int32RoutingAggregate,
     Int32AggregateStateSchema,
-    (builder) => [builder.assign(Int32AggregateStateSchema, "assign")],
+    (builder) => [
+      builder.assign(Int32AggregateStateSchema, "assign"),
+      builder.react(Int32AggregateStateSchema, "react"),
+    ],
   );
   return new Repository({
     entityType: Int32RoutingAggregate,
@@ -8607,7 +8745,10 @@ function createInt64RoutingRepository(): Repository<typeof Int64RoutingProcessMa
   const handlers = EntityHandlers.define(
     Int64RoutingProcessManager,
     Int64ProcessManagerStateSchema,
-    (builder) => [builder.assign(Int64ProcessManagerStateSchema, "assign")],
+    (builder) => [
+      builder.assign(Int64ProcessManagerStateSchema, "assign"),
+      builder.react(Int64ProcessManagerStateSchema, "react"),
+    ],
   );
   return new Repository({
     entityType: Int64RoutingProcessManager,
@@ -8805,7 +8946,9 @@ function createGeneratedReactorRepository(
   });
 }
 
-function createGuardedAggregateRepository(): Repository<typeof GuardedAggregate> {
+function createGuardedAggregateRepository(
+  eventRouting?: EventRouting<string>,
+): Repository<typeof GuardedAggregate> {
   const handlers = HandlerMetadataValues.defineArity(
     GuardedAggregate,
     AggregateStateSchema,
@@ -8825,6 +8968,7 @@ function createGuardedAggregateRepository(): Repository<typeof GuardedAggregate>
     schema: AggregateStateSchema,
     handlers,
     doubleDispatchGuard: { depth: 1 },
+    ...(eventRouting === undefined ? {} : { eventRouting }),
   });
 }
 
@@ -9092,7 +9236,9 @@ function createProcessManagerAssignRepository(
   });
 }
 
-function createProcessManagerReactRepository(): Repository<typeof RoutingProcessManager> {
+function createProcessManagerReactRepository(
+  eventRouting?: EventRouting<string>,
+): Repository<typeof RoutingProcessManager> {
   const handlers = EntityHandlers.define(
     RoutingProcessManager,
     ProcessManagerStateSchema,
@@ -9103,6 +9249,7 @@ function createProcessManagerReactRepository(): Repository<typeof RoutingProcess
     entityType: RoutingProcessManager,
     schema: ProcessManagerStateSchema,
     handlers,
+    ...(eventRouting === undefined ? {} : { eventRouting }),
   });
 }
 
@@ -9238,7 +9385,9 @@ function createSplitPmRepo(): Repository<typeof SplitRouteProcessManager> {
   });
 }
 
-function createGuardedSplitPmRepo(): Repository<typeof SplitRouteProcessManager> {
+function createGuardedSplitPmRepo(
+  eventRouting?: EventRouting<string>,
+): Repository<typeof SplitRouteProcessManager> {
   const handlers = EntityHandlers.define(
     SplitRouteProcessManager,
     ProcessManagerStateSchema,
@@ -9250,6 +9399,7 @@ function createGuardedSplitPmRepo(): Repository<typeof SplitRouteProcessManager>
     handlers,
     processManagerEventHistory: true,
     doubleDispatchGuard: true,
+    ...(eventRouting === undefined ? {} : { eventRouting }),
   });
 }
 
