@@ -3202,7 +3202,6 @@ const RepositoryIdentity = {
       setOnceFields: Object.freeze(
         metadata.setOnceFields.map((field) => RepositoryIdentity.cloneFieldMetadata(field)),
       ),
-      semanticTags: Object.freeze([...metadata.semanticTags]),
     });
   },
 

@@ -344,7 +344,7 @@ describe("command registration readiness", () => {
     });
   });
 
-  it("rejects malformed caller-supplied entity semantic tags before routing", () => {
+  it("ignores caller-supplied entity semantic tags", () => {
     const handler: CommandAssignmentHandlerMetadata = {
       kind: "command-assignment",
       schema: CommandSchema,
@@ -375,7 +375,7 @@ describe("command registration readiness", () => {
       CommandRegistrationReadiness.fromRegistry(
         createRegistryLookupForAssignments([registeredHandler]),
       ),
-    ).toThrow(/Registration readiness entity semanticTags must be a dense array/);
+    ).not.toThrow();
   });
 
   it("preserves entity field metadata identity in returned assignee metadata", () => {

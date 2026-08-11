@@ -598,30 +598,15 @@ describe("@spine-event-engine/core type registry", () => {
     expect(metadata.getFileOption(type_url_prefix)).toBe("type.spine.io");
   });
 
-  it("indexes caller-provided semantic tags", () => {
+  it("does not expose semantic registry metadata or lookup APIs", () => {
     const registry = new TypeRegistry();
-    const metadata = registry.register(FieldPathSchema, {
-      semanticTags: ["io.spine.FieldSelector"],
-    });
-
-    expect(registry.findBySemanticTag("io.spine.FieldSelector")).toEqual([metadata]);
-    expect(registry.findByIs("io.spine.FieldSelector")).toEqual([]);
-    expect(metadata.isTypes).toEqual([]);
-    expect(metadata.everyIsTypes).toEqual([]);
-  });
-
-  it("identifies the code-bearing malformed descriptor semantic-option error", () => {
-    let error: unknown;
-    try {
-      new TypeRegistry().register(InvalidSemanticOptionSchema);
-    } catch (caught) {
-      error = caught;
-    }
-
-    expect(SemanticOptionErrors.isInvalid(error)).toBe(true);
-    if (SemanticOptionErrors.isInvalid(error)) {
-      expect(error.code).toBe("INVALID_SEMANTIC_OPTION");
-    }
+    const metadata = registry.register(FieldPathSchema);
+    expect(metadata).not.toHaveProperty("semanticTags");
+    expect(metadata).not.toHaveProperty("isTypes");
+    expect(metadata).not.toHaveProperty("everyIsTypes");
+    expect(registry).not.toHaveProperty("findBySemanticTag");
+    expect(registry).not.toHaveProperty("findByIs");
+    expect(registry).not.toHaveProperty("findByEveryIs");
   });
 
   it("registers the current curated Spine schemas in the default registry", () => {
@@ -673,20 +658,14 @@ describe("@spine-event-engine/core type registry", () => {
       FieldPathSchema,
     );
     expect(spineCoreRegistry.findBySchema(FieldPathSchema)?.schema).toBe(FieldPathSchema);
-    expect(spineCoreRegistry.findBySemanticTag("io.spine.SomeMarker")).toEqual([]);
-    expect(spineCoreRegistry.findByIs("io.spine.SomeMarker")).toEqual([]);
-    expect(spineCoreRegistry.findByEveryIs("io.spine.SomeMarker")).toEqual([]);
+    expect(spineCoreRegistry).not.toHaveProperty("findBySemanticTag");
+    expect(spineCoreRegistry).not.toHaveProperty("findByIs");
+    expect(spineCoreRegistry).not.toHaveProperty("findByEveryIs");
     expect(spineCoreRegistry.list().map((metadata) => metadata.fullTypeName)).toContain(
       "spine.validation.ValidationError",
     );
   });
 
-  it("keeps semantic tag lookup future-compatible without inventing tags", () => {
-    const registry = TypeRegistry.spineCore();
-
-    expect(registry.findBySemanticTag("io.spine.SomeMarker")).toEqual([]);
-    expect(registry.getBySchema(FieldPathSchema).semanticTags).toEqual([]);
-  });
 });
 
 describe("@spine-event-engine/core validation facade", () => {

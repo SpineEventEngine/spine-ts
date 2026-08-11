@@ -3491,23 +3491,10 @@ describe("repository signal routing", () => {
     });
   });
 
-  it("applies exact, direct semantic, file semantic, and replacement precedence", () => {
+  it("applies exact routes before replacement defaults", () => {
     const exact = createRoutingRepository(
       CommandRouting.create<string>()
         .route(AggregateStateSchema, () => "exact")
-        .routeSemantic("example.tags.AggregateTag", () => "direct")
-        .routeSemantic("example.tags.ASharedTag", () => "file")
-        .replaceDefault(() => "replacement"),
-    );
-    const direct = createRoutingRepository(
-      CommandRouting.create<string>()
-        .routeSemantic("example.tags.AggregateTag", () => "direct")
-        .routeSemantic("example.tags.ASharedTag", () => "file")
-        .replaceDefault(() => "replacement"),
-    );
-    const file = createRoutingRepository(
-      CommandRouting.create<string>()
-        .routeSemantic("example.tags.ASharedTag", () => "file")
         .replaceDefault(() => "replacement"),
     );
     const replacement = createRoutingRepository(
@@ -3516,8 +3503,6 @@ describe("repository signal routing", () => {
     const command = createAggregateCommand("command-precedence", "declaration");
 
     expect(exact.routeCommand(command).entityId).toBe("exact");
-    expect(direct.routeCommand(command).entityId).toBe("direct");
-    expect(file.routeCommand(command).entityId).toBe("file");
     expect(replacement.routeCommand(command).entityId).toBe("replacement");
   });
 
@@ -3537,11 +3522,6 @@ describe("repository signal routing", () => {
         CommandRouting.create<string>().route(ProjectionStateSchema, () => "target"),
       ),
     ).toThrow(/unregistered exact route/);
-    expect(() =>
-      createRoutingRepository(
-        CommandRouting.create<string>().routeSemantic("example.tags.Unknown", () => "target"),
-      ),
-    ).toThrow(/unregistered semantic route/);
   });
 
   it("rejects missing and incompatible custom Command route results", () => {
@@ -3581,20 +3561,6 @@ describe("repository signal routing", () => {
     repository.routeCommand(createContextlessAggregateCommand("command-context-route", "task"));
 
     expect(observed).toEqual(create(CommandContextSchema));
-  });
-
-  it("prefers descriptor direct semantic Command routes over file semantic routes", () => {
-    const repository = createRoutingRepository(
-      CommandRouting.create<string>()
-        .routeSemantic("example.tags.ASharedTag", () => "file-task")
-        .routeSemantic("example.tags.AggregateTag", () => "direct-task"),
-    );
-
-    expect(
-      repository.routeCommand(createAggregateCommand("command-semantic", "first-task")),
-    ).toMatchObject({
-      entityId: "direct-task",
-    });
   });
 
   it("rejects blank first-field command IDs before handler invocation", () => {
@@ -3735,26 +3701,11 @@ describe("repository signal routing", () => {
     }
   });
 
-  it("applies exact, direct semantic, file semantic, and replacement Event precedence", () => {
+  it("applies exact Event routes before replacement defaults", () => {
     const exact = createRoutingRepository(
       undefined,
       EventRouting.create<string>()
         .route(ProjectionEventSchema, () => ["exact"])
-        .routeSemantic("example.tags.ZProjectionTag", () => ["direct"])
-        .routeSemantic("example.tags.ASharedTag", () => ["file"])
-        .replaceDefault(() => ["replacement"]),
-    );
-    const direct = createRoutingRepository(
-      undefined,
-      EventRouting.create<string>()
-        .routeSemantic("example.tags.ZProjectionTag", () => ["direct"])
-        .routeSemantic("example.tags.ASharedTag", () => ["file"])
-        .replaceDefault(() => ["replacement"]),
-    );
-    const file = createRoutingRepository(
-      undefined,
-      EventRouting.create<string>()
-        .routeSemantic("example.tags.ASharedTag", () => ["file"])
         .replaceDefault(() => ["replacement"]),
     );
     const replacement = createRoutingRepository(
@@ -3764,8 +3715,6 @@ describe("repository signal routing", () => {
     const event = createProjectionEvent("event-precedence", "declaration");
 
     expect(exact.routeEvent(event).entityIds).toEqual(["exact"]);
-    expect(direct.routeEvent(event).entityIds).toEqual(["direct"]);
-    expect(file.routeEvent(event).entityIds).toEqual(["file"]);
     expect(replacement.routeEvent(event).entityIds).toEqual(["replacement"]);
   });
 
@@ -3839,12 +3788,6 @@ describe("repository signal routing", () => {
         EventRouting.create<string>().route(TaskCreatedSchema, () => ["target"]),
       ),
     ).toThrow(/unregistered exact route/);
-    expect(() =>
-      createRoutingRepository(
-        undefined,
-        EventRouting.create<string>().routeSemantic("example.tags.Unknown", () => ["target"]),
-      ),
-    ).toThrow(/unregistered semantic route/);
   });
 
   it("validates the complete custom Event target plan before returning it", () => {
@@ -11569,7 +11512,7 @@ describe("Projection state-update routing", () => {
     expect(Object.isFrozen(result?.entityIds)).toBe(true);
   });
 
-  it("selects exact, direct semantic, file semantic, and replacement routes in order", () => {
+  it("selects exact state routes before replacement defaults", () => {
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectionStateSchema,
@@ -11579,15 +11522,6 @@ describe("Projection state-update routing", () => {
     const cases = [
       StateUpdateRouting.create<string>()
         .route(AggregateStateSchema, () => ["exact"])
-        .routeSemantic("example.tags.AggregateTag", () => ["direct"])
-        .routeSemantic("example.tags.ASharedTag", () => ["file"])
-        .replaceDefault(() => ["replacement"]),
-      StateUpdateRouting.create<string>()
-        .routeSemantic("example.tags.AggregateTag", () => ["direct"])
-        .routeSemantic("example.tags.ASharedTag", () => ["file"])
-        .replaceDefault(() => ["replacement"]),
-      StateUpdateRouting.create<string>()
-        .routeSemantic("example.tags.ASharedTag", () => ["file"])
         .replaceDefault(() => ["replacement"]),
       StateUpdateRouting.create<string>().replaceDefault(() => ["replacement"]),
     ];
@@ -11605,28 +11539,15 @@ describe("Projection state-update routing", () => {
             event,
           )?.entityIds,
       ),
-    ).toEqual([["exact"], ["direct"], ["file"], ["replacement"]]);
+    ).toEqual([["exact"], ["replacement"]]);
   });
 
-  it("fails closed for unregistered semantic routes and malformed System events", () => {
+  it("fails closed for malformed System events", () => {
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectionStateSchema,
       (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
     );
-    expect(
-      () =>
-        new Repository({
-          entityType: StateObservingProjection,
-          schema: ProjectionStateSchema,
-          handlers,
-          stateUpdateRouting: StateUpdateRouting.create<string>().routeSemantic(
-            "example.tags.Unknown",
-            () => ["target"],
-          ),
-        }),
-    ).toThrow(/unregistered semantic route/);
-
     const repository = new Repository({
       entityType: StateObservingProjection,
       schema: ProjectionStateSchema,

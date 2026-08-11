@@ -263,15 +263,8 @@ interface EventRouteDraft {
 }
 
 type EventHandlerKind = "event-application" | "event-reaction" | "event-subscription";
-type SemanticTaggedReadinessMetadata =
-  | CommandRegistrationAssigneeMetadata
-  | EventRegistrationApplicationMetadata
-  | EventRegistrationReactorMetadata
-  | EventRegistrationSubscriberMetadata;
-
 interface RoutedMessageDraft {
   readonly message: RouteMessage;
-  readonly semanticTags: readonly string[];
 }
 
 const commandWorkerId = "command-worker-1";
@@ -410,7 +403,6 @@ const RuntimeRoutingPlans = Object.freeze({
     const topic = TransportTopics.create({
       signalKind: "command",
       messageTypeUrl: message.typeUrl,
-      semanticTags: [],
     });
     const subscription = TransportSubscriptions.create({
       subscriberId: commandWorkerId,
@@ -457,7 +449,6 @@ const RuntimeRoutingPlans = Object.freeze({
     const topic = TransportTopics.create({
       signalKind: "command",
       messageTypeUrl: routedMessage.message.typeUrl,
-      semanticTags: routedMessage.semanticTags,
     });
     const subscription = TransportSubscriptions.create({
       subscriberId: commandWorkerId,
@@ -527,11 +518,6 @@ const RuntimeRoutingPlans = Object.freeze({
       const topic = TransportTopics.create({
         signalKind: "event",
         messageTypeUrl: firstMessage.message.typeUrl,
-        semanticTags: RuntimeRoutingPlans.collectTopicSemanticTags(
-          subscribers,
-          reactors,
-          applications,
-        ),
       });
 
       topicByEventName.set(eventFullTypeName, topic);
@@ -621,7 +607,6 @@ const RuntimeRoutingPlans = Object.freeze({
     const topic = TransportTopics.create({
       signalKind: "event",
       messageTypeUrl: message.typeUrl,
-      semanticTags: [],
     });
     const subscription = TransportSubscriptions.create({
       subscriberId: workerId,
@@ -856,17 +841,12 @@ const RuntimeRoutingPlans = Object.freeze({
           `${label} must expose a command-assignment handler.`,
           `${label} must preserve the requested command message type.`,
         );
-        const semanticTags = RuntimeRoutingPlans.copySemanticTags(
-          candidate as CommandRegistrationAssigneeMetadata,
-        );
-
         return Object.freeze({
           message: RuntimeRoutingPlans.createMessageDescriptor(
             commandFullTypeName,
             handler.schema,
             label,
           ),
-          semanticTags,
         });
       },
     );
@@ -913,52 +893,17 @@ const RuntimeRoutingPlans = Object.freeze({
               `${receiverLabel} must expose an ${expectedHandlerKind} handler.`,
               `${receiverLabel} must preserve the requested event message type.`,
             );
-            const semanticTags = RuntimeRoutingPlans.copySemanticTags(
-              candidate as SemanticTaggedReadinessMetadata,
-            );
-
             return Object.freeze({
               message: RuntimeRoutingPlans.createMessageDescriptor(
                 eventFullTypeName,
                 handler.schema,
                 receiverLabel,
               ),
-              semanticTags,
             });
           },
         ),
       ),
     );
-  },
-
-  collectTopicSemanticTags(
-    ...groups: readonly (readonly RoutedMessageDraft[])[]
-  ): readonly string[] {
-    const semanticTags = new Set<string>();
-
-    for (const group of groups) {
-      for (const entry of group) {
-        for (const tag of entry.semanticTags) {
-          semanticTags.add(tag);
-        }
-      }
-    }
-
-    return Object.freeze(
-      [...semanticTags].sort((left, right) => RuntimeRoutingPlans.compareSemanticTags(left, right)),
-    );
-  },
-
-  compareSemanticTags(left: string, right: string): number {
-    if (left < right) {
-      return -1;
-    }
-
-    if (left > right) {
-      return 1;
-    }
-
-    return 0;
   },
 
   validateHandlerShape(
@@ -1010,10 +955,6 @@ const RuntimeRoutingPlans = Object.freeze({
       fullTypeName,
       typeUrl,
     });
-  },
-
-  copySemanticTags(metadata: SemanticTaggedReadinessMetadata): readonly string[] {
-    return Object.freeze([...metadata.entity.semanticTags]);
   },
 
   withDeterministicValidation<Value>(fallbackMessage: string, operation: () => Value): Value {

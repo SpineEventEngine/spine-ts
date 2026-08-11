@@ -170,10 +170,9 @@ describe("server runtime routing", () => {
       { signalKind: "command", messageTypeUrl: TypeUrls.derive(AggregateStateSchema) },
       { signalKind: "command", messageTypeUrl: TypeUrls.derive(CommandSchema) },
     ]);
-    expect(plan.commands.topics.map(({ semanticTags }) => semanticTags)).toEqual([
-      ["example.tags.ASharedTag", "example.tags.ZProjectionTag"],
-      ["example.tags.ASharedTag", "example.tags.ZProjectionTag"],
-    ]);
+    expect(plan.commands.topics.every((topic) => !Object.hasOwn(topic, "semanticTags"))).toBe(
+      true,
+    );
     expect(
       plan.commands.subscriptions.map(({ subscriberId, mode }) => ({ subscriberId, mode })),
     ).toEqual([
@@ -239,9 +238,7 @@ describe("server runtime routing", () => {
     expect(
       plan.events.topics.map(({ signalKind, messageTypeUrl }) => ({ signalKind, messageTypeUrl })),
     ).toEqual([{ signalKind: "event", messageTypeUrl: TypeUrls.derive(EventSchema) }]);
-    expect(plan.events.topics.map(({ semanticTags }) => semanticTags)).toEqual([
-      ["example.tags.ASharedTag", "example.tags.AggregateTag", "example.tags.ZProjectionTag"],
-    ]);
+    expect(plan.events.topics.every((topic) => !Object.hasOwn(topic, "semanticTags"))).toBe(true);
     expect(plan.events.subscriberRoutes).toHaveLength(2);
     expect(plan.events.reactorRoutes).toHaveLength(1);
     expect(plan.events.applicationRoutes).toHaveLength(1);

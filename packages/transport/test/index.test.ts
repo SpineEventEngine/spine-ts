@@ -37,46 +37,29 @@ describe("@spine-event-engine/transport", () => {
   });
 
   it("creates copy-safe topics with deterministic routing keys", () => {
-    const semanticTags = ["tenant", "event", "tenant"] as const;
     const topic = TransportTopics.create({
       signalKind: "event",
       messageTypeUrl: " type.spine.io/example.TaskCreated ",
-      semanticTags,
     });
     const sameTopic = TransportTopics.create({
       signalKind: "event",
       messageTypeUrl: "type.spine.io/example.TaskCreated",
-      semanticTags: ["event", "tenant"],
-    });
-    const reorderedTopic = TransportTopics.create({
-      signalKind: "event",
-      messageTypeUrl: "type.spine.io/example.TaskCreated",
-      semanticTags: ["event.alpha", "event0", "event_Alpha"],
-    });
-    const reorderedSameTopic = TransportTopics.create({
-      signalKind: "event",
-      messageTypeUrl: "type.spine.io/example.TaskCreated",
-      semanticTags: ["event_Alpha", "event.alpha", "event0"],
     });
 
     expect(topic).toEqual({
       signalKind: "event",
       messageTypeUrl: "type.spine.io/example.TaskCreated",
-      semanticTags: ["event", "tenant"],
       routing: {
         signalKind: "event",
         messageTypeUrl: "type.spine.io/example.TaskCreated",
-        semanticTags: ["event", "tenant"],
-        routingKey: "event:type.spine.io%2Fexample.TaskCreated:event,tenant",
+        routingKey: "event:type.spine.io%2Fexample.TaskCreated",
       },
     });
     expect(topic.routing.routingKey).toBe(sameTopic.routing.routingKey);
-    expect(topic.semanticTags).not.toBe(semanticTags);
-    expect(topic.semanticTags).toEqual(["event", "tenant"]);
+    expect(topic).not.toHaveProperty("semanticTags");
+    expect(topic.routing).not.toHaveProperty("semanticTags");
     expect(Object.isFrozen(topic)).toBe(true);
     expect(Object.isFrozen(topic.routing)).toBe(true);
-    expect(reorderedTopic.semanticTags).toEqual(["event.alpha", "event0", "event_Alpha"]);
-    expect(reorderedTopic.routing.routingKey).toBe(reorderedSameTopic.routing.routingKey);
   });
 
   it("creates copy-safe subscription descriptors with deterministic keys", () => {
@@ -85,7 +68,6 @@ describe("@spine-event-engine/transport", () => {
       topic: {
         signalKind: "event",
         messageTypeUrl: "type.spine.io/example.TaskArchived",
-        semanticTags: ["archived", "projection"],
       },
     });
 
@@ -95,16 +77,14 @@ describe("@spine-event-engine/transport", () => {
       topic: {
         signalKind: "event",
         messageTypeUrl: "type.spine.io/example.TaskArchived",
-        semanticTags: ["archived", "projection"],
         routing: {
           signalKind: "event",
           messageTypeUrl: "type.spine.io/example.TaskArchived",
-          semanticTags: ["archived", "projection"],
-          routingKey: "event:type.spine.io%2Fexample.TaskArchived:archived,projection",
+          routingKey: "event:type.spine.io%2Fexample.TaskArchived",
         },
       },
       descriptorKey:
-        "event:type.spine.io%2Fexample.TaskArchived:archived,projection#fan-out#projection-worker",
+        "event:type.spine.io%2Fexample.TaskArchived#fan-out#projection-worker",
     });
     expect(subscription.topic).not.toHaveProperty("socketType");
     expect(subscription.topic).not.toHaveProperty("endpoint");
@@ -449,12 +429,10 @@ describe("@spine-event-engine/transport", () => {
       Object.freeze({
         signalKind: "command",
         messageTypeUrl: "type.spine.io/spine.core.Command",
-        semanticTags: Object.freeze([]),
         routing: Object.freeze({
           signalKind: "event",
           messageTypeUrl: "type.spine.io/spine.core.Event",
-          semanticTags: Object.freeze([]),
-          routingKey: "event:type.spine.io%2Fspine.core.Event:",
+          routingKey: "event:type.spine.io%2Fspine.core.Event",
         }),
       }),
     );

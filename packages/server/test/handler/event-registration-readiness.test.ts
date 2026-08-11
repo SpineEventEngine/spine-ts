@@ -425,7 +425,7 @@ describe("event registration readiness", () => {
     });
   });
 
-  it("rejects malformed caller-supplied entity semantic tags before routing", () => {
+  it("ignores caller-supplied entity semantic tags", () => {
     const handler: EventSubscriptionHandlerMetadata = {
       kind: "event-subscription",
       schema: EventSchema,
@@ -456,7 +456,7 @@ describe("event registration readiness", () => {
       EventRegistrationReadiness.fromRegistry(
         createRegistryLookupForEventHandlers([registeredHandler]),
       ),
-    ).toThrow(/Registration readiness entity semanticTags must be a dense array/);
+    ).not.toThrow();
   });
 
   it("preserves entity field metadata identity in returned event metadata", () => {

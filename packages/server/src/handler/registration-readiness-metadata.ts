@@ -11,8 +11,6 @@ import type {
 } from "./handler-metadata.js";
 import { HandlerMetadataValues } from "./handler-metadata.js";
 
-const semanticTagError =
-  "Registration readiness entity semanticTags must be a dense array of non-empty strings.";
 
 /**
  * Frozen fields shared by a readiness entry and its registered handler.
@@ -244,26 +242,7 @@ class ReadinessMetadataOwner {
       setOnceFields: Object.freeze(
         entity.setOnceFields.map((field) => this.#cloneField(field, clonedFields)),
       ),
-      semanticTags: this.#copyTags(entity.semanticTags),
     });
-  }
-
-  #copyTags(value: unknown): readonly string[] {
-    if (!Array.isArray(value)) {
-      throw new TypeError(semanticTagError);
-    }
-    const tags: string[] = [];
-    for (let index = 0; index < value.length; index += 1) {
-      if (!Object.hasOwn(value, index)) {
-        throw new TypeError(semanticTagError);
-      }
-      const tag = value[index] as unknown;
-      if (typeof tag !== "string" || tag.trim().length === 0 || tag !== tag.trim()) {
-        throw new TypeError(semanticTagError);
-      }
-      tags.push(tag);
-    }
-    return Object.freeze(tags);
   }
 
   #cloneSchema<Schema extends DescriptorMessageSchema>(

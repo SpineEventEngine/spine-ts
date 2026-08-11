@@ -14,11 +14,6 @@ export type TransportSignalEnvelope<
 > = Kind extends "command" ? Command : Kind extends "event" ? Event : OtherEnvelope;
 
 /**
- * Defines a semantic tag copied from descriptor metadata.
- */
-export type TransportSemanticTag = string;
-
-/**
  * Defines an immutable routing descriptor owned by transport.
  */
 export interface TransportRoutingDescriptor<
@@ -35,11 +30,6 @@ export interface TransportRoutingDescriptor<
    * Identifies the canonical payload type URL.
    */
   readonly messageTypeUrl: string;
-
-  /**
-   * Lists deterministic sorted semantic tags.
-   */
-  readonly semanticTags: readonly TransportSemanticTag[];
 
   /**
    * Identifies the deterministic adapter-agnostic routing key.
@@ -63,24 +53,14 @@ export interface TransportTopicInput<Kind extends TransportSignalKind = Transpor
    */
   readonly messageTypeUrl: string;
 
-  /**
-   * Lists optional semantic tags copied from descriptor metadata.
-   */
-  readonly semanticTags?: readonly TransportSemanticTag[];
 }
 
 /**
  * Defines an immutable transport topic and routing descriptor.
  */
-export interface TransportTopic<
-  Kind extends TransportSignalKind = TransportSignalKind,
-> extends TransportTopicInput<Kind> {
+export interface TransportTopic<Kind extends TransportSignalKind = TransportSignalKind>
+  extends TransportTopicInput<Kind> {
   // prettier-ignore
-
-  /**
-   * Lists deterministic sorted semantic tags.
-   */
-  readonly semanticTags: readonly TransportSemanticTag[];
 
   /**
    * Provides transport-owned routing for adapter mapping.
@@ -280,14 +260,12 @@ const transportTopics = {
   create<Kind extends TransportSignalKind>(input: TransportTopicInput<Kind>): TransportTopic<Kind> {
     const signalKind = TransportTopicParts.normalizeKind(input.signalKind);
     const messageTypeUrl = TransportTopicParts.normalizeTypeUrl(input.messageTypeUrl);
-    const semanticTags = TransportTopicParts.normalizeTags(input.semanticTags);
     const routing = Object.freeze({
       signalKind,
       messageTypeUrl,
-      semanticTags,
-      routingKey: TransportTopicParts.routingKey(signalKind, messageTypeUrl, semanticTags),
+      routingKey: TransportTopicParts.routingKey(signalKind, messageTypeUrl),
     });
-    return Object.freeze({ signalKind, messageTypeUrl, semanticTags, routing });
+    return Object.freeze({ signalKind, messageTypeUrl, routing });
   },
 
   /**
@@ -331,26 +309,11 @@ const TransportTopicParts = {
       throw new Error("Transport messageTypeUrl must use canonical 'prefix/type.name' format.");
     return typeUrl;
   },
-  normalizeTags(
-    tags: readonly TransportSemanticTag[] | undefined,
-  ): readonly TransportSemanticTag[] {
-    if (tags === undefined || tags.length === 0) return Object.freeze([]);
-    return Object.freeze(
-      [...new Set(tags.map((tag) => TransportTopicParts.requiredText(tag, "semanticTag")))].sort(
-        (left, right) => TransportTopicParts.compare(left, right),
-      ),
-    );
-  },
   routingKey(
     kind: TransportSignalKind,
     typeUrl: string,
-    tags: readonly TransportSemanticTag[],
   ): string {
-    const topic = `${kind}:${encodeURIComponent(typeUrl)}`;
-    return tags.length === 0 ? topic : `${topic}:${tags.map(encodeURIComponent).join(",")}`;
-  },
-  compare(left: string, right: string): number {
-    return left < right ? -1 : left > right ? 1 : 0;
+    return `${kind}:${encodeURIComponent(typeUrl)}`;
   },
 };
 

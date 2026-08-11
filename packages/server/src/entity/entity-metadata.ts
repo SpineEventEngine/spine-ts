@@ -1,7 +1,6 @@
 import { getOption, hasOption } from "@bufbuild/protobuf";
 import type { DescField, DescFile, Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { SemanticOptionErrors, TypeRegistry } from "@spine-event-engine/core";
 import type { Entity } from "./entity.js";
 import {
   column,
@@ -89,8 +88,7 @@ export type DescriptorMetadataErrorCode =
   | "UNSUPPORTED_ENTITY_KIND"
   | "UNSUPPORTED_ENTITY_VISIBILITY"
   | "MISSING_ENTITY_ID_FIELD"
-  | "INVALID_COLUMN_FIELD"
-  | "INVALID_SEMANTIC_TAG";
+  | "INVALID_COLUMN_FIELD";
 
 /**
  * Descriptor-derived metadata for one Protobuf field.
@@ -214,10 +212,6 @@ export interface EntityMetadata<Schema extends DescriptorMessageSchema = Descrip
    */
   readonly setOnceFields: readonly DescriptorFieldMetadata[];
 
-  /**
-   * Semantic tags from `(is)` and `(every_is)`, deduplicated and sorted.
-   */
-  readonly semanticTags: readonly string[];
 }
 
 /**
@@ -295,18 +289,6 @@ export function describeEntityMetadata<Schema extends DescriptorMessageSchema>(
       .filter((field) => hasOption(field, set_once) && getOption(field, set_once))
       .map(EntityDescriptors.field),
   );
-  let registered: ReturnType<TypeRegistry["register"]>;
-  try {
-    registered = new TypeRegistry().register(schema as never);
-  } catch (error) {
-    if (SemanticOptionErrors.isInvalid(error)) {
-      throw new DescriptorMetadataError("INVALID_SEMANTIC_TAG", error.message);
-    }
-    throw error;
-  }
-  const semanticTags = Object.freeze(
-    [...new Set([...registered.isTypes, ...registered.everyIsTypes])].sort(),
-  );
   const metadata: EntityMetadata<Schema> = {
     schema,
     descriptor: schema,
@@ -321,7 +303,6 @@ export function describeEntityMetadata<Schema extends DescriptorMessageSchema>(
     firstFieldRoutingHint,
     columns,
     setOnceFields,
-    semanticTags,
   };
 
   return Object.freeze(metadata);
