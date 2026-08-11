@@ -1,6 +1,6 @@
 # T-0160 Review Record
 
-Status: Accepted behavior; packaging correction re-review pending
+Status: Accepted; final verification pending
 
 ## Assignments
 
@@ -82,3 +82,9 @@ explicit immutable configured role/profile is then the durable evidence.
   generated build, 135 focused tests, and all cheap mechanical gates pass.
   Reliability and style/maintainability require narrow confirmation of this
   packaging-only correction before the verifier is retried.
+- Packaging reliability confirmation: CLEAN. The existing direct-then-package-
+  root resolver preserves deterministic failure when neither location is
+  available; the analyzer suite passes 28/28 independently.
+- Packaging style/maintainability confirmation: CLEAN. The type-only contract,
+  runtime resolver, and evidence records are coherent; `git diff --check`
+  passes.
