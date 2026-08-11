@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { create } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { Int32ValueSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyMessages, Identifiers } from "@spine-event-engine/core";
+import { UserIdSchema } from "@spine-event-engine/proto";
 
 import { InboxRecords } from "../../src/delivery/inbox-records.js";
 import { InboxMessageError, ShardIndex } from "../../src/index.js";
@@ -28,6 +29,27 @@ describe("InboxRecords", () => {
 
     expect(wire.inboxId?.entityId?.id).toEqual(targetId);
     expect(InboxRecords.read(wire).inboxId.targetId).toEqual(targetId);
+  });
+
+  it("round-trips JVM identifier goldens without collapsing their packed identity", () => {
+    const targets = [
+      Identifiers.pack("string", "42"),
+      Identifiers.pack("int32", 42),
+      Identifiers.pack("int64", 42n),
+      Identifiers.pack(UserIdSchema, create(UserIdSchema, { value: "42" })),
+    ];
+
+    const restored = targets.map((targetId, index) =>
+      InboxRecords.read(
+        InboxRecords.write({
+          ...createMessage(`golden-${String(index)}`, `signal-${String(index)}`, 1n),
+          inboxId: { targetId, targetTypeUrl: "type.example.dev/TypedEntity" },
+        } as never),
+      ).inboxId.targetId,
+    );
+
+    expect(restored).toEqual(targets);
+    expect(new Set(restored.map((target) => `${target.typeUrl}:${Buffer.from(target.value).toString("base64")}`)).size).toBe(4);
   });
 
   it("rejects an invalid shard before serialization", () => {
