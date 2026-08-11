@@ -467,10 +467,15 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
   },
 
   isEventInputSchema(schema: DescriptorMessageSchema): boolean {
-    const fileName = schema.file.name;
+    const fileName = schema.file.name.split(/[\\/]/u).at(-1);
     return (
-      fileName.endsWith("events.proto") ||
-      RejectionSources.matches(fileName) ||
+      fileName === "events" ||
+      fileName === "events.proto" ||
+      fileName?.endsWith("_events") === true ||
+      fileName?.endsWith("_events.proto") === true ||
+      fileName === "rejections" ||
+      fileName?.endsWith("_rejections") === true ||
+      RejectionSources.matches(schema.file.name) ||
       schema.typeName === "spine.core.Event"
     );
   },
