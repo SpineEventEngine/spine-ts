@@ -10745,6 +10745,42 @@ describe("Projection state-update routing", () => {
     expect(Object.isFrozen(result?.entityIds)).toBe(true);
   });
 
+  it("selects exact, direct semantic, file semantic, and replacement routes in order", () => {
+    const handlers = EntityHandlers.define(
+      StateObservingProjection,
+      ProjectionStateSchema,
+      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
+    );
+    const event = createStateChangedEvent("built-in");
+    const cases = [
+      StateUpdateRouting.create<string>()
+        .route(ProjectionStateSchema, () => ["exact"])
+        .routeSemantic("example.tags.ZProjectionTag", () => ["direct"])
+        .routeSemantic("example.tags.ASharedTag", () => ["file"])
+        .replaceDefault(() => ["replacement"]),
+      StateUpdateRouting.create<string>()
+        .routeSemantic("example.tags.ZProjectionTag", () => ["direct"])
+        .routeSemantic("example.tags.ASharedTag", () => ["file"])
+        .replaceDefault(() => ["replacement"]),
+      StateUpdateRouting.create<string>()
+        .routeSemantic("example.tags.ASharedTag", () => ["file"])
+        .replaceDefault(() => ["replacement"]),
+      StateUpdateRouting.create<string>().replaceDefault(() => ["replacement"]),
+    ];
+
+    expect(
+      cases.map(
+        (stateUpdateRouting) =>
+          new Repository({
+            entityType: StateObservingProjection,
+            schema: ProjectionStateSchema,
+            handlers,
+            stateUpdateRouting,
+          }).routeStateUpdate(event)?.entityIds,
+      ),
+    ).toEqual([["exact"], ["direct"], ["file"], ["replacement"]]);
+  });
+
   it("admits one durable projection row per selected target and replays it without rerouting", async () => {
     StateObservingProjection.reset();
     const route = vi.fn(() => ["second", "first", "second"]);
@@ -10813,11 +10849,111 @@ describe("Projection state-update routing", () => {
       await context.close();
     }
   });
+
+  it("rejects invalid route collections before invoking a subscriber", async () => {
+    const handlers = EntityHandlers.define(
+      StateObservingProjection,
+      ProjectionStateSchema,
+      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
+    );
+    const event = createStateChangedEvent("source");
+
+    for (const route of [
+      (() => new Set(["target"])) as never,
+      () => Array.from({ length: 1_001 }, (_, index) => `target-${String(index)}`),
+      () => ["valid", "   "],
+    ]) {
+      StateObservingProjection.reset();
+      const repository = new Repository({
+        entityType: StateObservingProjection,
+        schema: ProjectionStateSchema,
+        handlers,
+        stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectionStateSchema, route),
+      });
+      const context = BoundedContext.singleTenant("Invalid state route").add(repository).build();
+      try {
+        await expect(boundedContextAccess.postSystemEvent(context, event)).rejects.toThrow(
+          /array of Entity IDs|at most 1,000 Entity IDs|compatible with the Entity state/,
+        );
+        expect(StateObservingProjection.subscriberCalls).toBe(0);
+        await expect(context.stand().read(ProjectionStateSchema, "valid")).resolves.toBeUndefined();
+      } finally {
+        await context.close();
+      }
+    }
+  });
+
+  it("rejects exact routes for state schemas without a subscriber", () => {
+    const handlers = EntityHandlers.define(
+      StateObservingProjection,
+      ProjectionStateSchema,
+      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
+    );
+
+    expect(
+      () =>
+        new Repository({
+          entityType: StateObservingProjection,
+          schema: ProjectionStateSchema,
+          handlers,
+          stateUpdateRouting: StateUpdateRouting.create<string>().route(
+            AggregateStateSchema,
+            () => ["target"],
+          ),
+        }),
+    ).toThrow(/unregistered exact route/);
+  });
+
+  it("keeps durable state updates within the originating tenant", async () => {
+    StateObservingProjection.reset();
+    const handlers = EntityHandlers.define(
+      StateObservingProjection,
+      ProjectionStateSchema,
+      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
+    );
+    const context = BoundedContext.multitenant("Tenant state updates")
+      .add(
+        new Repository({
+          entityType: StateObservingProjection,
+          schema: ProjectionStateSchema,
+          handlers,
+        }),
+      )
+      .withStorageFactory(new InMemoryStorageFactory())
+      .build();
+
+    try {
+      await boundedContextAccess.postSystemEvent(
+        context,
+        createStateChangedEvent(
+          "shared",
+          create(ProjectionStateSchema, { id: "shared", name: "Tenant A", priority: 1 }),
+          "tenant-a",
+        ),
+      );
+      await expect(
+        context
+          .stand()
+          .read(ProjectionStateSchema, "shared", { tenantId: createTenantId("tenant-a") }),
+      ).resolves.toMatchObject({ name: "Tenant A (projected)" });
+      await expect(
+        context
+          .stand()
+          .read(ProjectionStateSchema, "shared", { tenantId: createTenantId("tenant-b") }),
+      ).resolves.toBeUndefined();
+      await expect(
+        boundedContextAccess.postSystemEvent(context, createStateChangedEvent("missing-tenant")),
+      ).rejects.toThrow(/requires tenantId/);
+    } finally {
+      await context.close();
+    }
+  });
 });
 
 function createStateChangedEvent(
   id: string,
   state: Message = create(ProjectionStateSchema, { id }),
+  tenantId?: string,
 ) {
   const stateSchema =
     state.$typeName === ProjectionStateSchema.typeName
@@ -10844,6 +10980,12 @@ function createStateChangedEvent(
         ],
       }),
     ),
-    context: create(EventContextSchema),
+    context: create(EventContextSchema, {
+      ...(tenantId === undefined
+        ? {}
+        : {
+            origin: projectionEventOrigin({ pastMessageTenantId: tenantId }),
+          }),
+    }),
   });
 }
