@@ -1,6 +1,6 @@
 # T-0159: Event Routing
 
-Status: Complete; merge-ready
+Status: Complete; integrated and post-merge verified
 
 ## Objective
 

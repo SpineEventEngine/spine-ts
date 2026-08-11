@@ -1,6 +1,6 @@
 # T-0158: Command Routing
 
-Status: Complete
+Status: Complete; integrated and post-merge verified
 
 ## Objective
 

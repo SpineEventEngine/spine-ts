@@ -1,6 +1,6 @@
 # T-0156 Review Record
 
-Status: Complete, reviewed, and verified; pending integration
+Status: Complete; integrated and post-merge verified
 
 Final verification PASS: `verify:task -- --no-coverage` with nine supplied paths discovered 8 files / 390 tests and exited 0. Generated Proto, build/tooling, cleanup, TSDoc, containment, format, documentation audience/API, Buf, generated-clean, and release-readiness gates all passed.
 

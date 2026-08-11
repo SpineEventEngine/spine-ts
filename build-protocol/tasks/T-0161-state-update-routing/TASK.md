@@ -1,6 +1,6 @@
 # T-0161: State-update routing and delivery
 
-Status: Complete
+Status: Complete; integrated and post-merge verified
 
 ## Objective
 

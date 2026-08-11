@@ -1,6 +1,6 @@
 # T-0163: Event handler `@Where`
 
-Status: Complete; post-integration correction accepted
+Status: Complete; integrated and post-merge verified
 
 ## Objective
 

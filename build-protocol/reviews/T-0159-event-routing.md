@@ -1,6 +1,6 @@
 # T-0159 Review Record
 
-Status: Accepted; merge-ready
+Status: Complete; integrated and post-merge verified
 
 ## Assignments
 

@@ -1,6 +1,6 @@
 # T-0167 Review Record
 
-Status: Deterministic preflight pending
+Status: Clean; final release verification pending
 
 ## Review boundary
 
@@ -18,8 +18,56 @@ unavailable.
 
 ## Mechanical evidence
 
-Pending cheap preflight and deterministic cross-wave audits.
+- Exact `e30c2aa4..HEAD` Markdown audit finds only canonical
+  `build-protocol` records; no product/example Markdown changed. The same range
+  adds or removes no copyright/SPDX header.
+- T-0155 through T-0166 task and review statuses now consistently say complete,
+  integrated, and post-merge verified.
+- The containment checker passes 5/5 adversarial fixtures and the live manifest.
+- Proto generation validates 47 source checksums, authored/example quality,
+  rejection naming, and 52 frozen descriptors. Generated build, tooling
+  typecheck, cleanup/TSDoc, TypeDoc/API inventory, Proto lint/current-output,
+  release-readiness (82 imports, 51 assets, 320 links), repository formatting,
+  documentation audience, and diff checks pass.
+- Focused logging/security evidence passes 11 files / 374 tests. Focused
+  routing/model evidence passes 18 files / 178 tests.
+- The first build attempt in this fresh worktree ran before ignored Proto output
+  generation and failed only on missing generated modules. Reordering to the
+  release profile's required `proto:generate` first step resolved it; no source
+  correction or waiver was required.
 
 ## Concern review
 
-Pending mechanical convergence.
+The active system policy prohibited subagent dispatch. The primary orchestrator
+applied each existing concern directly using the recorded configured profile as
+the review standard; runtime metadata remains unavailable.
+
+- **Style/maintainability (`gpt-5.6-terra` / high): clean.** Routing declarations
+  are focused factory-built objects, generated registration stays behind the
+  Bounded Context builder, examples use no framework-internal assembly, and no
+  duplicate public compatibility facade or cross-package logger helper exists.
+- **TypeScript/API (`gpt-5.6-terra` / high): clean.** Public Command, Event,
+  state-update, `@Where`, Stringifier, implicit-ID, and generated-repository
+  contracts retain inferred schema/ID types. Root export and TypeDoc inventories
+  pass, and public TSDoc states validation, precedence, bounds, replay, and
+  lifecycle behavior.
+- **Documentation/TSDoc (`gpt-5.6-luna` / medium): clean.** Wave 9 changed public
+  TSDoc and canonical execution records only. Product READMEs, guides, examples,
+  copyright headers, and multiple-Gateway material remain the explicit T-0168
+  handoff.
+- **Performance/reliability (`gpt-5.6-terra` / high): clean.** Route results are
+  validated before handoff, capped at 1,000, copied/deduplicated/frozen, and
+  durable replay uses stored typed targets without re-invoking application
+  routes. Logger state is bounded by component lifecycles/WeakMaps; logging
+  failures are contained; no retry loop, retained receipt, or unbounded cache
+  was introduced.
+- **Final security (`gpt-5.6-terra` / high): clean.** Server logging positively
+  allowlists bounded stable IDs, operation/reason codes, and counts; it drops
+  unknown fields and never records error objects/messages/stacks, payloads,
+  headers, credentials, tokens, passwords, cookies, signing/session/CSRF/OIDC
+  secrets, or environment dumps. Delivery/deployment helpers emit fixed
+  operation/reason metadata only. Google Cloud composition is application-owned
+  and the fake integration performs no network write.
+
+No finding requires a correction batch. The single converged
+`pnpm verify:release` is authorized next.

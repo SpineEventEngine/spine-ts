@@ -1,6 +1,6 @@
 # T-0165 Review Record
 
-Status: Accepted; integration pending
+Status: Complete; integrated and post-merge verified
 
 ## Assignments
 

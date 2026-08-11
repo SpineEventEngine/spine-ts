@@ -1,6 +1,6 @@
 # T-0161 Review Record
 
-Status: Accepted
+Status: Complete; integrated and post-merge verified
 
 ## Assignments
 

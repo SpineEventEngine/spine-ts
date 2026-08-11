@@ -1,6 +1,6 @@
 # T-0162: Field stringifiers
 
-Status: Complete
+Status: Complete; integrated and post-merge verified
 
 ## Objective
 

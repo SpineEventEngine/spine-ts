@@ -1,6 +1,6 @@
 # T-0164: Implicit required IDs
 
-Status: Complete
+Status: Complete; integrated and post-merge verified
 
 ## Objective
 

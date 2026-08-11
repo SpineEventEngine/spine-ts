@@ -1,6 +1,6 @@
 # T-0167: Wave 9 Closure
 
-Status: Closure in progress
+Status: Reviews complete; final release verification pending
 
 ## Objective
 
