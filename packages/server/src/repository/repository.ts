@@ -4188,9 +4188,16 @@ const RepositoryRoutes = {
       throw new Error(`Repository ${signalKind} routing requires a readable first field.`);
     }
 
+    if (firstField.fieldKind === "list" || firstField.fieldKind === "map") {
+      throw new Error(`Repository ${signalKind} routing requires a singular non-map first field.`);
+    }
+
     const value = (unpacked as Record<string, unknown>)[firstField.localName];
     if (value === undefined || value === null || RepositoryRoutes.isBlankRouteId(value)) {
       throw new Error(`Repository ${signalKind} routing requires a non-empty first field.`);
+    }
+    if (signalKind === "command" && (value === 0 || value === false)) {
+      throw new Error("Repository command routing requires a non-default first field.");
     }
 
     return value;
