@@ -1,5 +1,13 @@
 import { clone, create, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
-import { AnySchema, TimestampSchema, type Any, type Timestamp } from "@bufbuild/protobuf/wkt";
+import {
+  AnySchema,
+  Int32ValueSchema,
+  Int64ValueSchema,
+  StringValueSchema,
+  TimestampSchema,
+  type Any,
+  type Timestamp,
+} from "@bufbuild/protobuf/wkt";
 import {
   ValidationException,
   type MessageSchema,
@@ -4039,7 +4047,6 @@ const RepositoryRoutes = {
           commandReactions,
           eventSchemas,
           metadata.idField,
-          entityFamily,
           eventRoutes,
         ),
     });
@@ -4154,7 +4161,6 @@ const RepositoryRoutes = {
     >,
     schemas: readonly MessageSchema[],
     targetIdField: DescriptorFieldMetadata,
-    entityFamily: EntityFamily,
     eventRoutes: ReadonlyMap<MessageSchema, EventRoute<Id>>,
   ): RepositoryEventRoute<Id> {
     const message = event.message;
@@ -4187,14 +4193,7 @@ const RepositoryRoutes = {
       });
     }
 
-    const targetId =
-      entityFamily === "process-manager"
-        ? RepositoryRoutes.readRouteId(
-            RepositoryRoutes.readFirstFieldId(message, schema, "event"),
-            targetIdField,
-            "event",
-          ).id
-        : RepositoryRoutes.readEventEntityId(event, message, schema, targetIdField);
+    const targetId = RepositoryRoutes.readEventEntityId(event, message, schema, targetIdField);
 
     return Object.freeze({
       entityIds: Object.freeze([targetId as Id]),
@@ -4333,85 +4332,78 @@ const RepositoryRoutes = {
     return typeof id === "string" && id.trim().length === 0;
   },
 
-  readProducerId(event: Event): string | number | bigint | boolean | undefined {
-    const producerId = event.context?.producerId;
-    if (producerId === undefined) {
-      return undefined;
-    }
-
-    const unpacked = PrimitiveIds.unpack(producerId);
-    if (PrimitiveIds.readFinite(unpacked) !== undefined) {
-      return unpacked;
-    }
-    if (unpacked !== undefined) {
-      throw new Error("Repository event routing requires a finite producer ID.");
-    }
-    throw new Error("Repository event routing requires a readable producer ID.");
-  },
-
   readEventEntityId(
     event: Event,
     message: NonNullable<Event["message"]>,
     schema: MessageSchema,
     targetIdField: DescriptorFieldMetadata,
   ): unknown {
-    const fieldId = RepositoryRoutes.readRouteId(
+    const producerId = event.context?.producerId;
+    if (producerId === undefined || producerId.typeUrl.trim().length === 0) {
+      throw new Error("Repository event routing requires a producer ID.");
+    }
+    const compatibleProducer = RepositoryRoutes.compatibleProducerId(producerId, targetIdField);
+    if (compatibleProducer.compatible) {
+      return RepositoryRoutes.readRouteId(compatibleProducer.id, targetIdField, "event").id;
+    }
+    return RepositoryRoutes.readRouteId(
       RepositoryRoutes.readFirstFieldId(message, schema, "event"),
       targetIdField,
       "event",
-    );
-    const producerId = event.context?.producerId;
-
-    const eventIdField = schema.fields[0];
-    if (eventIdField?.fieldKind === "message" && producerId !== undefined) {
-      const producer = AnyMessages.unpack(producerId, eventIdField.message as MessageSchema);
-      if (producer !== undefined) {
-        if (
-          targetIdField.descriptor.fieldKind === "message"
-            ? !RepositoryRoutes.sameMessageId(
-                targetIdField.descriptor.message as MessageSchema,
-                producer,
-                fieldId.id,
-              )
-            : MessageIds.readValue(producer) !== fieldId.value
-        ) {
-          throw new Error(
-            "Repository event routing requires producer ID and first field to identify the same entity.",
-          );
-        }
-        return fieldId.id;
-      }
-    }
-
-    const primitiveProducerId = RepositoryRoutes.readProducerId(event);
-    const routedProducerId =
-      event.context?.rejection !== undefined &&
-      schema.fields[0]?.fieldKind === "message" &&
-      primitiveProducerId === "Unknown"
-        ? undefined
-        : primitiveProducerId;
-
-    if (routedProducerId !== undefined && routedProducerId !== fieldId.value) {
-      throw new Error(
-        "Repository event routing requires producer ID and first field to identify the same entity.",
-      );
-    }
-
-    return routedProducerId === undefined || targetIdField.descriptor.fieldKind === "message"
-      ? fieldId.id
-      : routedProducerId;
+    ).id;
   },
 
-  sameMessageId(schema: MessageSchema, left: Message, right: unknown): boolean {
-    try {
-      const leftBytes = toBinary(schema, left as never);
-      const rightBytes = toBinary(schema, right as never);
-      return (
-        leftBytes.length === rightBytes.length &&
-        leftBytes.every((value, index) => value === rightBytes[index])
-      );
-    } catch {
-      return false;
+  compatibleProducerId(
+    producerId: Any,
+    targetIdField: DescriptorFieldMetadata,
+  ): { readonly compatible: false } | { readonly compatible: true; readonly id: unknown } {
+    const descriptor = targetIdField.descriptor;
+    if (descriptor.fieldKind === "message") {
+      const schema = descriptor.message as MessageSchema;
+      if (producerId.typeUrl !== TypeUrls.derive(schema)) return { compatible: false };
+      const id = Identifiers.unpack(schema, producerId);
+      if (id === undefined) {
+        throw new Error("Repository event routing requires a readable compatible producer ID.");
+      }
+      return { compatible: true, id };
+    }
+    if (descriptor.fieldKind !== "scalar") {
+      throw new Error("Repository event routing requires a scalar or message-valued ID.");
+    }
+    const type = RepositoryRoutes.primitiveIdentifierType(descriptor.scalar);
+    const schema =
+      type === "string"
+        ? StringValueSchema
+        : type === "int32"
+          ? Int32ValueSchema
+          : Int64ValueSchema;
+    if (producerId.typeUrl !== TypeUrls.derive(schema)) return { compatible: false };
+    const id =
+      type === "string"
+        ? Identifiers.unpack("string", producerId)
+        : type === "int32"
+          ? Identifiers.unpack("int32", producerId)
+          : Identifiers.unpack("int64", producerId);
+    if (id === undefined) {
+      throw new Error("Repository event routing requires a readable compatible producer ID.");
+    }
+    return { compatible: true, id };
+  },
+
+  primitiveIdentifierType(type: ScalarType): "string" | "int32" | "int64" {
+    switch (type) {
+      case ScalarType.STRING:
+        return "string";
+      case ScalarType.INT32:
+      case ScalarType.SINT32:
+      case ScalarType.SFIXED32:
+        return "int32";
+      case ScalarType.INT64:
+      case ScalarType.SINT64:
+      case ScalarType.SFIXED64:
+        return "int64";
+      default:
+        throw new Error("Repository event routing requires a supported Entity ID type.");
     }
   },
 

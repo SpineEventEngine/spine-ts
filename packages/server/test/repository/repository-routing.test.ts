@@ -3289,18 +3289,30 @@ describe("repository signal routing", () => {
     expect(() => repository.routeCommand(command)).toThrow(/non-default first field/);
   });
 
-  it("routes events by matching producer ID or by the first event field", async () => {
+  it("prefers a compatible producer ID and falls back for an incompatible producer type", async () => {
     const repository = createRoutingRepository();
 
     const producerRoute = repository.routeEvent(
-      createProjectionEvent("event-1", "task-1", {
-        producerId: "task-1",
+      SignalEnvelopes.event({
+        id: create(EventIdSchema, { value: "event-1" }),
+        context: create(EventContextSchema, {
+          producerId: Identifiers.pack("string", "producer-task"),
+          version: create(VersionSchema, { number: 1 }),
+        }),
+        schema: ProjectionStateSchema,
+        message: create(ProjectionStateSchema, {
+          id: "field-task",
+          name: "Task",
+          priority: 1,
+        }),
       }),
     );
-    const firstFieldRoute = repository.routeEvent(createProjectionEvent("event-2", "field-task"));
+    const firstFieldRoute = repository.routeEvent(
+      createProjectionEvent("event-2", "field-task", { producerId: "other-kind" }),
+    );
 
     expect(producerRoute).toMatchObject({
-      entityIds: ["task-1"],
+      entityIds: ["producer-task"],
       messageFullTypeName: ProjectionStateSchema.typeName,
       invocation: "deferred",
     });
@@ -3416,7 +3428,7 @@ describe("repository signal routing", () => {
     ).toThrow(/at most 1,000/);
   });
 
-  it("keeps a primitive Unknown producer subject to first-field equality", () => {
+  it("uses a compatible producer without requiring first-field equality", () => {
     const repository = createRoutingRepository();
     const event = SignalEnvelopes.event({
       id: create(EventIdSchema, { value: "event-primitive-unknown" }),
@@ -3433,9 +3445,7 @@ describe("repository signal routing", () => {
       }),
     });
 
-    expect(() => repository.routeEvent(event)).toThrow(
-      "Repository event routing requires producer ID and first field to identify the same entity.",
-    );
+    expect(repository.routeEvent(event).entityIds).toEqual(["Unknown"]);
   });
 
   it("routes message-valued event IDs by their primitive value field", () => {
@@ -3444,6 +3454,7 @@ describe("repository signal routing", () => {
       SignalEnvelopes.event({
         id: create(EventIdSchema, { value: "event-user-id" }),
         context: create(EventContextSchema, {
+          producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "producer" })),
           version: create(VersionSchema, { number: 1 }),
         }),
         schema: UserIdSchema,
@@ -3465,6 +3476,7 @@ describe("repository signal routing", () => {
       SignalEnvelopes.event({
         id: create(EventIdSchema, { value: "event-message-id-task" }),
         context: create(EventContextSchema, {
+          producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "producer" })),
           version: create(VersionSchema, { number: 1 }),
         }),
         schema: TaskCreatedSchema,
@@ -3504,12 +3516,12 @@ describe("repository signal routing", () => {
     expect(route.entityIds).toEqual([taskId]);
   });
 
-  it("rejects a message-valued producer ID that differs from a message target ID", () => {
+  it("uses a compatible message-valued producer even when the first field differs", () => {
     const repository = createMessageIdTaskRepository();
     const targetId = create(TaskIdSchema, { value: "message-target-task" });
     const producerId = create(TaskIdSchema, { value: "different-message-producer" });
 
-    expect(() =>
+    expect(
       repository.routeEvent(
         SignalEnvelopes.event({
           id: create(EventIdSchema, { value: "event-message-producer-mismatch" }),
@@ -3523,17 +3535,15 @@ describe("repository signal routing", () => {
             title: "Mismatched message producer task",
           }),
         }),
-      ),
-    ).toThrow(
-      "Repository event routing requires producer ID and first field to identify the same entity.",
-    );
+      ).entityIds,
+    ).toEqual([producerId]);
   });
 
-  it("rejects a message-valued producer ID that differs from a scalar target ID", () => {
+  it("falls back to a scalar first field for an incompatible message producer type", () => {
     const repository = createTaskCreatedScalarProjectionRepository();
     const targetId = create(TaskIdSchema, { value: "scalar-target" });
 
-    expect(() =>
+    expect(
       repository.routeEvent(
         SignalEnvelopes.event({
           id: create(EventIdSchema, { value: "event-scalar-producer-mismatch" }),
@@ -3550,13 +3560,11 @@ describe("repository signal routing", () => {
             title: "Mismatched scalar producer task",
           }),
         }),
-      ),
-    ).toThrow(
-      "Repository event routing requires producer ID and first field to identify the same entity.",
-    );
+      ).entityIds,
+    ).toEqual([targetId.value]);
   });
 
-  it("routes a message-valued producer ID to a matching scalar target ID", () => {
+  it("falls back from a message producer to its matching scalar first field", () => {
     const repository = createTaskCreatedScalarProjectionRepository();
     const id = create(TaskIdSchema, { value: "matching-scalar-target" });
 
@@ -3583,6 +3591,7 @@ describe("repository signal routing", () => {
         SignalEnvelopes.event({
           id: create(EventIdSchema, { value: "event-wrong-message-id-type" }),
           context: create(EventContextSchema, {
+            producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "producer" })),
             version: create(VersionSchema, { number: 1 }),
           }),
           schema: WrongIdRouteEventSchema,
@@ -6001,7 +6010,7 @@ describe("repository signal routing", () => {
     }
   });
 
-  it("does not emit subscriber diagnostics when event routing refuses before invocation", async () => {
+  it("does not emit subscriber diagnostics when a default Event has no producer", async () => {
     ExecutingTaskProjection.reset();
     const diagnostics: SpineEvent[] = [];
     const context = BoundedContext.singleTenant("Tasks")
@@ -6018,12 +6027,10 @@ describe("repository signal routing", () => {
 
     try {
       await expect(
-        context.eventBus().post(
-          createProjectionEvent("subscriber-routing-refusal", "first-field-task", {
-            producerId: "producer-task",
-          }),
-        ),
-      ).rejects.toThrow(/same entity/i);
+        context
+          .eventBus()
+          .post(createContextlessProjectionEvent("subscriber-routing-refusal", "first-field-task")),
+      ).rejects.toThrow(/producer ID/i);
       await context.close();
 
       expect(diagnostics).toEqual([]);
@@ -7514,10 +7521,14 @@ describe("repository signal routing", () => {
     ManagedTaskAggregate.reset();
   });
 
-  it("passes empty EventContext to generated two-argument subscribers when the envelope has none", async () => {
+  it("passes empty EventContext to a custom-routed two-argument subscriber", async () => {
     GeneratedTwoArgProjection.reset();
     const context = BoundedContext.singleTenant("Tasks")
-      .add(createGeneratedTwoArgProjectionRepository())
+      .add(
+        createGeneratedTwoArgProjectionRepository(
+          EventRouting.create<string>().route(ProjectionStateSchema, () => ["task-empty"]),
+        ),
+      )
       .build();
 
     await context.eventBus().post(createContextlessProjectionEvent("event-empty", "task-empty"));
@@ -8224,44 +8235,36 @@ describe("repository signal routing", () => {
     ).resolves.not.toHaveProperty("version");
   });
 
-  it("rejects contradictory producer and first-field event IDs", () => {
+  it("rejects a default-routed Event without a producer ID", () => {
     const repository = createRoutingRepository();
 
     expect(() =>
-      repository.routeEvent(
-        createProjectionEvent("event-contradictory", "first-field-task", {
-          producerId: "producer-task",
-        }),
-      ),
-    ).toThrow(/same entity/);
+      repository.routeEvent(createContextlessProjectionEvent("event-no-producer", "field-task")),
+    ).toThrow(/producer ID/);
   });
 
-  it("rejects unreadable producer IDs", () => {
+  it("rejects a malformed producer that claims the compatible target type", () => {
     const repository = createRoutingRepository();
+    const event = createProjectionEvent("event-unreadable-producer", "first-field-task");
+    if (event.context === undefined) throw new Error("Expected Event context.");
+    event.context.producerId = create(AnySchema, {
+      typeUrl: TypeUrls.derive(StringValueSchema),
+      value: new Uint8Array([255]),
+    });
 
-    expect(() =>
-      repository.routeEvent(
-        createProjectionEvent("event-unreadable-producer", "first-field-task", {
-          producerMessage: create(AggregateStateSchema, {
-            id: "producer-task",
-            name: "producer",
-            archived: false,
-          }),
-        }),
-      ),
-    ).toThrow(/readable producer ID/);
+    expect(() => repository.routeEvent(event)).toThrow(/readable compatible producer ID/);
   });
 
-  it("rejects non-finite producer IDs", () => {
+  it("falls back from an incompatible non-finite numeric producer", () => {
     const repository = createRoutingRepository();
 
-    expect(() =>
+    expect(
       repository.routeEvent(
         createProjectionEvent("event-non-finite-producer", "first-field-task", {
           producerNumber: Number.NaN,
         }),
-      ),
-    ).toThrow(/finite producer ID/);
+      ).entityIds,
+    ).toEqual(["first-field-task"]);
   });
 
   it("rejects non-finite first-field event IDs", () => {
@@ -8272,6 +8275,7 @@ describe("repository signal routing", () => {
         SignalEnvelopes.event({
           id: create(EventIdSchema, { value: "event-non-finite-field" }),
           context: create(EventContextSchema, {
+            producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "source" })),
             version: create(VersionSchema, { number: 1 }),
           }),
           schema: NumberRouteEventSchema,
@@ -8291,12 +8295,10 @@ describe("repository signal routing", () => {
     const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expect(
-      context.eventBus().post(
-        createProjectionEvent("event-not-stored", "first-field-task", {
-          producerId: "producer-task",
-        }),
-      ),
-    ).rejects.toThrow(/same entity/);
+      context
+        .eventBus()
+        .post(createContextlessProjectionEvent("event-not-stored", "first-field-task")),
+    ).rejects.toThrow(/producer ID/);
     await expect(eventStore.read()).resolves.toEqual([]);
   });
 
@@ -8318,12 +8320,10 @@ describe("repository signal routing", () => {
       .build();
 
     await expect(
-      context.eventBus().post(
-        createProjectionEvent("event-rejected-before-custom", "first-field-task", {
-          producerId: "producer-task",
-        }),
-      ),
-    ).rejects.toThrow(/same entity/);
+      context
+        .eventBus()
+        .post(createContextlessProjectionEvent("event-rejected-before-custom", "first-field-task")),
+    ).rejects.toThrow(/producer ID/);
     expect(observed).toEqual([]);
   });
 
@@ -8448,7 +8448,9 @@ function createBlockingCatchUpProjectionRepository(): Repository<typeof Blocking
   });
 }
 
-function createGeneratedTwoArgProjectionRepository(): Repository<typeof GeneratedTwoArgProjection> {
+function createGeneratedTwoArgProjectionRepository(
+  eventRouting?: EventRouting<string>,
+): Repository<typeof GeneratedTwoArgProjection> {
   const handlers = new HandlerRegistryIngestor().ingest({
     version: 1,
     entities: [
@@ -8472,6 +8474,7 @@ function createGeneratedTwoArgProjectionRepository(): Repository<typeof Generate
     entityType: GeneratedTwoArgProjection,
     schema: ProjectionStateSchema,
     handlers,
+    eventRouting,
   });
 }
 
