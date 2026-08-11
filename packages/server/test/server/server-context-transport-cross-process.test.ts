@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import { fileDesc, messageDesc, type GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { TypeUrls, SignalEnvelopes } from "@spine-event-engine/core";
+import { Identifiers, TypeUrls, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -731,6 +731,7 @@ function createInboundEvent(): Event {
   return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: "fixed-cross-process-inbound-event" }),
     context: create(EventContextSchema, {
+      producerId: Identifiers.pack("string", inboundEventEntityId),
       version: create(VersionSchema, { number: 1 }),
     }),
     schema: ProjectionStateSchema,

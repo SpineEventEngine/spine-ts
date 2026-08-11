@@ -4392,7 +4392,7 @@ function createAggregateEvent(
 ) {
   return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: id }),
-    context: createEventContext(tenantId),
+    context: createEventContext(aggregateId, tenantId),
     schema: AggregateStateSchema,
     message: create(AggregateStateSchema, {
       id: aggregateId,
@@ -4452,8 +4452,13 @@ function createRejectionEvent(
   });
 }
 
-function createEventContext(tenantId?: TenantInput) {
-  const context = create(EventContextSchema);
+function createEventContext(producerId: string, tenantId?: TenantInput) {
+  const context = create(EventContextSchema, {
+    producerId: AnyMessages.pack(
+      StringValueSchema,
+      create(StringValueSchema, { value: producerId }),
+    ),
+  });
 
   if (tenantId !== undefined) {
     context.origin = {
@@ -4468,7 +4473,12 @@ function createEventContext(tenantId?: TenantInput) {
 function createValidatedEvent(id: string, aggregateId: string, name: string) {
   return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: id }),
-    context: create(EventContextSchema),
+    context: create(EventContextSchema, {
+      producerId: AnyMessages.pack(
+        StringValueSchema,
+        create(StringValueSchema, { value: aggregateId }),
+      ),
+    }),
     schema: ValidatedAggregateStateSchema,
     message: create(ValidatedAggregateStateSchema, {
       id: aggregateId,
@@ -4481,6 +4491,10 @@ function createProjectionEvent(id: string, entityId: string) {
   return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
+      producerId: AnyMessages.pack(
+        StringValueSchema,
+        create(StringValueSchema, { value: entityId }),
+      ),
       version: create(VersionSchema, { number: 1 }),
     }),
     schema: ProjectionStateSchema,
