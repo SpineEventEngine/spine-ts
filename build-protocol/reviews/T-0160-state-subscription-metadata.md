@@ -1,6 +1,6 @@
 # T-0160 Review Record
 
-Status: Correction-complete; targeted re-review ready
+Status: Accepted behavior; packaging correction re-review pending
 
 ## Assignments
 
@@ -73,3 +73,12 @@ explicit immutable configured role/profile is then the durable evidence.
   correction is CLEAN. Both reported the same P2 wording-only residual: the
   bare decorator overload's method parameter still mentioned an Event schema.
   That stale alternative is removed; only these two lanes need confirmation.
+- TypeScript/API documentation confirmation: CLEAN; no new API or TSDoc issue.
+- Style/maintainability confirmation: CLEAN; overload documentation and records
+  are consistent, and `git diff --check` passes.
+- Final verification exposed a standalone-analyzer package-resolution defect,
+  not a behavioral finding. The correction reuses the analyzer's established
+  `requirePackage()` seam for `@spine-event-engine/proto`; Proto generation,
+  generated build, 135 focused tests, and all cheap mechanical gates pass.
+  Reliability and style/maintainability require narrow confirmation of this
+  packaging-only correction before the verifier is retried.
