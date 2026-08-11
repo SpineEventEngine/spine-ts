@@ -1,6 +1,6 @@
 # T-0160: State-subscription metadata
 
-Status: In progress
+Status: Complete; merge-ready
 
 ## Objective
 
