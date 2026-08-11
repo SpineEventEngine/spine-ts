@@ -7,6 +7,7 @@ import {
   Projection,
   Server,
   Subscribe,
+  Where,
   type RunningServer,
 } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
@@ -15,7 +16,11 @@ import type { StorageFactory } from "@spine-event-engine/storage";
 import {
   BoardMessageSchema,
   BoardMessageViewSchema,
+  AnnouncementBoardViewSchema,
+  BoardIdSchema,
   MessageIdSchema,
+  type AnnouncementBoardView,
+  type BoardId,
   type BoardMessage,
   type BoardMessageView,
   type MessageId,
@@ -30,6 +35,7 @@ import { MessageAlreadyPosted } from "@spine-event-engine/example-message-board-
 import { BoardAccessPolicy, BoardContextResolver } from "./board-access.js";
 import { LocalBoardSession } from "./local-session.js";
 import { typeRegistry } from "./model-registry.js";
+import { MessageBoardRepositories } from "./repositories.js";
 
 export { typeRegistry } from "./model-registry.js";
 export { messageBoardProtoModule } from "@spine-event-engine/example-message-board-model";
@@ -38,7 +44,7 @@ export { BoardAccessPolicy, BoardContextResolver } from "./board-access.js";
 /**
  * Applies commands to one message identified by `MessageId`.
  */
-export class BoardMessageAggregate extends Aggregate<MessageId, typeof BoardMessageSchema> {
+export class BoardMessageAggregate extends Aggregate<MessageId, typeof BoardMessageSchema, bigint> {
   // prettier-ignore
 
   /**
@@ -82,7 +88,11 @@ export class BoardMessageAggregate extends Aggregate<MessageId, typeof BoardMess
 /**
  * Builds the messages displayed on a board.
  */
-export class BoardViewProjection extends Projection<MessageId, typeof BoardMessageViewSchema> {
+export class BoardViewProjection extends Projection<
+  MessageId,
+  typeof BoardMessageViewSchema,
+  number
+> {
   // prettier-ignore
 
   /**
@@ -102,6 +112,37 @@ export class BoardViewProjection extends Projection<MessageId, typeof BoardMessa
           username: event.username,
           text: event.text,
           postedAt: event.postedAt,
+        }),
+      ),
+    );
+  }
+}
+
+/**
+ * Keeps the latest message for the public announcements board.
+ */
+export class AnnouncementBoardProjection extends Projection<
+  BoardId,
+  typeof AnnouncementBoardViewSchema,
+  number
+> {
+  // prettier-ignore
+
+  /**
+   * Updates the board-wide announcement view from matching posted-message Events.
+   *
+   * @param event The announcement selected by generated Event-field metadata.
+   */
+  @Where({ eventField: "board", equals: '{"value":"announcements"}' })
+  @Subscribe
+  onAnnouncement(event: MessagePosted): void {
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AnnouncementBoardViewSchema, {
+          id: clone(BoardIdSchema, event.board ?? this.id),
+          message: event.id,
+          text: event.text,
         }),
       ),
     );
@@ -161,11 +202,16 @@ export class MessageBoardApplication {
   async createContext(
     storageFactory: StorageFactory = new InMemoryStorageFactory(),
   ): Promise<BoundedContext> {
+    const repositories = await MessageBoardRepositories.load(new URL("..", import.meta.url), {
+      aggregate: BoardMessageAggregate,
+      messages: BoardViewProjection,
+      announcements: AnnouncementBoardProjection,
+    });
     return BoundedContext.singleTenant("MessageBoard")
       .withStorageFactory(storageFactory)
-      .withGeneratedRegistryRoot(new URL("..", import.meta.url))
-      .add(BoardMessageAggregate)
-      .add(BoardViewProjection)
+      .add(repositories.aggregate)
+      .add(repositories.messages)
+      .add(repositories.announcements)
       .buildAsync();
   }
 
@@ -244,4 +290,4 @@ export class MessageBoardApplication {
   }
 }
 
-export type { BoardMessage, BoardMessageView };
+export type { AnnouncementBoardView, BoardMessage, BoardMessageView };

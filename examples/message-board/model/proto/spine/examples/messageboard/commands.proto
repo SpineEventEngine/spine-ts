@@ -12,7 +12,7 @@ option (type_url_prefix) = "type.spine.examples.messageboard";
 message PostMessage {
 
   // The identifier assigned to the new message.
-  MessageId id = 1 [(required) = true, (validate) = true];
+  MessageId id = 1 [(validate) = true];
 
   // The board that receives the message.
   BoardId board = 2 [(required) = true, (validate) = true];

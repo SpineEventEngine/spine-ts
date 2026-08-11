@@ -29,8 +29,9 @@ describe("MessageBoard deployment entrypoints", () => {
     for (const entrypoint of ["application-entry.ts", "combined-entry.ts", "gateway-entry.ts"]) {
       const source = readFileSync(join(sourceRoot, entrypoint), "utf8");
       expect(source).toContain(
-        "MessageBoardDeployment.configureServer(config, client, process.env)",
+        "MessageBoardDeployment.configureServer(config, client, process.env, logger)",
       );
+      expect(source).toContain("MessageBoardDeployment.logger(");
     }
     expect(deployment).toContain("ServerEnvironment.when(EnvironmentType.Production)");
     expect(deployment).toContain('"SPINE_IPC_DIRECTORY"');
@@ -50,11 +51,15 @@ describe("MessageBoard deployment entrypoints", () => {
 
     await import("../src/application-entry.js");
     expect(calls.datastore).toHaveBeenCalledWith({ projectId: "project" });
+    expect(calls.logging).toHaveBeenCalledWith({ projectId: "project" });
+    expect(calls.loggingLog).toHaveBeenCalledWith("message-board");
+    expect(calls.createLogger).toHaveBeenCalledWith(calls.googleLog);
     expect(calls.storage).toHaveBeenCalledWith(calls.client);
     expect(calls.configureServer).toHaveBeenCalledWith(
       calls.applicationConfig,
       calls.client,
       process.env,
+      calls.logger,
     );
     expect(calls.runApplication).toHaveBeenCalledWith(calls.applicationConfig, calls.storageResult);
 
@@ -66,6 +71,7 @@ describe("MessageBoard deployment entrypoints", () => {
       calls.combinedConfig,
       calls.client,
       process.env,
+      calls.logger,
     );
     expect(calls.runCombined).toHaveBeenCalledWith(
       expect.objectContaining({ bindings: calls.bindings, sessions: calls.sessions }),
@@ -84,6 +90,7 @@ describe("MessageBoard deployment entrypoints", () => {
       calls.gatewayConfig,
       calls.client,
       process.env,
+      calls.logger,
     );
 
     expect(calls.serverAtPort).toHaveBeenCalledWith(
@@ -102,6 +109,10 @@ describe("MessageBoard deployment entrypoints", () => {
     await import("../src/gateway-entry.js");
 
     expect(calls.serverAtPort).toHaveBeenCalledOnce();
+    expect(calls.gkeNodeDiscovery).toHaveBeenCalledWith({
+      namespace: "boards",
+      logger: calls.logger,
+    });
   });
 });
 
@@ -131,13 +142,25 @@ function startupMocks() {
   });
   const storageFactory = vi.fn(() => storage);
   const configureServer = vi.fn(() => undefined);
+  const logger = {};
+  const googleLog = {};
+  const createLogger = vi.fn(() => logger);
+  const loggingLog = vi.fn(() => googleLog);
+  const logging = vi.fn(function Logging() {
+    return { log: loggingLog };
+  });
+  const gkeNodeDiscovery = vi.fn(function GkeNodeDiscovery(options: unknown) {
+    void options;
+  });
   vi.doMock("@google-cloud/datastore", () => ({ Datastore: datastore }));
+  vi.doMock("@google-cloud/logging", () => ({ Logging: logging }));
   vi.doMock("../src/deployment-config.js", () => ({
     MessageBoardDeployment: {
       application: () => applicationConfig,
       combined: () => combinedConfig,
       gateway: () => gatewayConfig,
       configureServer,
+      logger: createLogger,
       storage: storageFactory,
       bindings: () => bindings,
       sessions: () => sessions,
@@ -152,7 +175,7 @@ function startupMocks() {
   vi.doMock("@spine-event-engine/server", () => ({ Server: { atPort: serverAtPort } }));
   // These constructable boundary doubles have no behavior beyond import-time startup.
   /* eslint-disable @typescript-eslint/no-extraneous-class, @typescript-eslint/no-empty-function */
-  vi.doMock("@spine-event-engine/deployment-gke", () => ({ GkeNodeDiscovery: class {} }));
+  vi.doMock("@spine-event-engine/deployment-gke", () => ({ GkeNodeDiscovery: gkeNodeDiscovery }));
   vi.doMock("../src/board-access.js", () => ({
     BoardAccessPolicy: class {
       authorize() {}
@@ -169,8 +192,14 @@ function startupMocks() {
     client,
     combinedConfig,
     configureServer,
+    createLogger,
     datastore,
     gatewayConfig,
+    gkeNodeDiscovery,
+    googleLog,
+    logger,
+    logging,
+    loggingLog,
     runApplication,
     runCombined,
     serverAtPort,

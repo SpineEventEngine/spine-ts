@@ -9,8 +9,10 @@ import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
 import {
   BoardMessageSchema,
   BoardMessageViewSchema,
+  AnnouncementBoardViewSchema,
   BoardIdSchema,
   MessageIdSchema,
+  type BoardId,
   type BoardMessageView,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
 import { PostMessageSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/commands_pb.js";
@@ -34,7 +36,7 @@ import {
   TopicSchema,
   type Query,
 } from "@spine-event-engine/proto/client";
-import { Server } from "@spine-event-engine/server";
+import { BoundedContext, Server } from "@spine-event-engine/server";
 import { EventStore, InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it, vi } from "vitest";
 
@@ -145,6 +147,43 @@ describe("MessageBoard Projection backend", () => {
       ]);
     }
   }, 15_000);
+
+  it("routes only matching announcements to the board-wide Projection", async () => {
+    const context = await application.createContext();
+    const server = await Server.atPort(0, { host: "127.0.0.1" }).add(context).start();
+    const client = Client.connectTo(server.baseUrl);
+    const author = create(UserIdSchema, { value: "ada" });
+    try {
+      await expect(
+        client.asGuest().post(PostMessageSchema, post("general-1", "general", author, "hello")),
+      ).resolves.toEqual({ kind: "ok" });
+      await expect(
+        client
+          .asGuest()
+          .post(
+            PostMessageSchema,
+            post("announcement-1", "announcements", author, "System maintenance"),
+          ),
+      ).resolves.toEqual({ kind: "ok" });
+
+      await expect(
+        waitForAnnouncement(context, create(BoardIdSchema, { value: "announcements" })),
+      ).resolves.toMatchObject({
+        state: {
+          id: { value: "announcements" },
+          message: { value: "announcement-1" },
+          text: "System maintenance",
+        },
+      });
+      await expect(
+        context
+          .stand()
+          .readVersioned(AnnouncementBoardViewSchema, create(BoardIdSchema, { value: "general" })),
+      ).resolves.toBeUndefined();
+    } finally {
+      await closeResources([() => client.close(), () => server.close()]);
+    }
+  });
 
   it("rejects a reused MessageId without overwriting its Projection", async () => {
     const storageFactory = new InMemoryStorageFactory();
@@ -444,6 +483,16 @@ async function waitForStoredEvents(
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   return eventStore.read();
+}
+
+async function waitForAnnouncement(context: BoundedContext, id: BoardId) {
+  const deadline = Date.now() + 1_000;
+  while (Date.now() < deadline) {
+    const record = await context.stand().readVersioned(AnnouncementBoardViewSchema, id);
+    if (record !== undefined) return record;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  return context.stand().readVersioned(AnnouncementBoardViewSchema, id);
 }
 
 async function closeResources(operations: readonly (() => unknown)[]): Promise<void> {

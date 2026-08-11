@@ -26,7 +26,7 @@ message BoardMessage {
   option (entity).kind = AGGREGATE;
 
   // The identifier assigned to this message.
-  MessageId id = 1 [(required) = true, (validate) = true, (set_once) = true];
+  MessageId id = 1 [(validate) = true, (set_once) = true];
 
   // The board that contains the message.
   BoardId board = 2 [(required) = true, (validate) = true];
@@ -50,7 +50,7 @@ message BoardMessageView {
   option (entity).visibility = FULL;
 
   // The identifier assigned to this message.
-  MessageId id = 1 [(required) = true, (validate) = true, (set_once) = true];
+  MessageId id = 1 [(validate) = true, (set_once) = true];
 
   // The board that contains the message.
   BoardId board = 2 [(required) = true, (validate) = true, (column) = true];
@@ -66,4 +66,19 @@ message BoardMessageView {
 
   // The time at which the message was posted.
   google.protobuf.Timestamp posted_at = 6 [(required) = true, (column) = true];
+}
+
+// The most recent message posted to the announcements board.
+message AnnouncementBoardView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // The board whose latest announcement is displayed.
+  BoardId id = 1 [(validate) = true, (set_once) = true];
+
+  // The identifier assigned to the latest announcement.
+  MessageId message = 2 [(required) = true, (validate) = true];
+
+  // The text of the latest announcement.
+  string text = 3 [(required) = true];
 }

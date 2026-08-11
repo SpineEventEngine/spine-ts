@@ -17,4 +17,22 @@ describe("MessageBoard PostMessage contract", () => {
       'string text = 5 [(required) = true, (if_missing).error_msg = "Enter a message."];',
     );
   });
+
+  it("relies on implicit required declaration-first Command and Entity IDs", async () => {
+    const commands = await readFile(
+      new URL("../proto/spine/examples/messageboard/commands.proto", import.meta.url),
+      "utf8",
+    );
+    const entities = await readFile(
+      new URL("../proto/spine/examples/messageboard/message_board.proto", import.meta.url),
+      "utf8",
+    );
+
+    expect(commands).toContain("MessageId id = 1 [(validate) = true];");
+    expect(commands).not.toMatch(/MessageId id = 1 \[[^\]]*\(required\)/u);
+    expect(
+      entities.match(/MessageId id = 1 \[\(validate\) = true, \(set_once\) = true\];/gu),
+    ).toHaveLength(2);
+    expect(entities).toContain("BoardId id = 1 [(validate) = true, (set_once) = true];");
+  });
 });

@@ -9,6 +9,9 @@ import {
 import type { StorageFactory } from "@spine-event-engine/storage";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import type { Datastore } from "@google-cloud/datastore";
+import type { Log } from "@google-cloud/logging";
+import { GoogleCloudLoggingTransport } from "@loglayer/transport-google-cloud-logging";
+import { LogLayer, type ILogLayer } from "loglayer";
 import { ZeroMqConfig, createZeroMqTransport } from "@spine-event-engine/transport/zeromq";
 import { randomUUID } from "node:crypto";
 import { createPrivateKey } from "node:crypto";
@@ -38,6 +41,7 @@ interface DeploymentContract {
   gateway(environment: NodeJS.ProcessEnv): GatewayConfig;
   storage(client: Datastore): StorageFactory;
   bindings(config: CombinedConfig, storageFactory: StorageFactory): DurableSubscriptionBindings;
+  logger(log: Log): ILogLayer;
 
   /**
    * Creates production browser sessions from shared signing configuration.
@@ -50,6 +54,7 @@ interface DeploymentContract {
     config: DeploymentConfig,
     client: Datastore,
     environment: NodeJS.ProcessEnv,
+    logger?: ILogLayer,
   ): StorageFactory | undefined;
 }
 
@@ -112,6 +117,12 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     });
   },
 
+  logger(log: Log): ILogLayer {
+    return new LogLayer({
+      transport: new GoogleCloudLoggingTransport({ logger: log }),
+    });
+  },
+
   sessions(environment: NodeJS.ProcessEnv): SignedSessions {
     if (environment.NODE_ENV !== "production")
       throw new Error("Signed MessageBoard sessions require production configuration.");
@@ -131,11 +142,13 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     config: DeploymentConfig,
     client: Datastore,
     environment: NodeJS.ProcessEnv,
+    logger?: ILogLayer,
   ): StorageFactory | undefined {
     if (environment.NODE_ENV !== "production") return undefined;
     const storageFactory = MessageBoardDeployment.storage(client);
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory,
+      ...(logger === undefined ? {} : { logger }),
       transport: createZeroMqTransport(
         ZeroMqConfig.create({
           ipcDirectory: DeploymentValues.required(environment, "SPINE_IPC_DIRECTORY"),

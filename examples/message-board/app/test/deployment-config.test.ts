@@ -1,7 +1,7 @@
 import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import type { Datastore } from "@google-cloud/datastore";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MessageBoardDeployment } from "../src/deployment-config.js";
 
@@ -21,6 +21,29 @@ afterEach(async () => {
 });
 
 describe("MessageBoard deployment configuration", () => {
+  it("composes an application logger with the official Google Cloud transport", () => {
+    const entry = vi.fn((_metadata: unknown, data: unknown) => data);
+    const write = vi.fn();
+    const logger = MessageBoardDeployment.logger({ entry, write } as never);
+
+    logger.withMetadata({ entityId: "message-1" }).warn("Message delivery was delayed.");
+
+    expect(entry).toHaveBeenCalledOnce();
+    const call = entry.mock.calls[0];
+    if (call === undefined) throw new Error("Expected one Google Log entry.");
+    const metadata = call[0] as { readonly severity?: unknown; readonly timestamp?: unknown };
+    expect(metadata.severity).toBe("WARNING");
+    expect(metadata.timestamp).toBeInstanceOf(Date);
+    expect(call[1]).toEqual({
+      entityId: "message-1",
+      message: "Message delivery was delayed.",
+    });
+    expect(write).toHaveBeenCalledWith({
+      entityId: "message-1",
+      message: "Message delivery was delayed.",
+    });
+  });
+
   it("reads application, combined, and gateway settings from one environment", () => {
     expect(MessageBoardDeployment.application(completeEnvironment)).toMatchObject({
       host: "127.0.0.1",
