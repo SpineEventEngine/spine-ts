@@ -1,6 +1,6 @@
 # T-0164 Review Record
 
-Status: Review complete; final verification pending
+Status: Complete
 
 ## Assignments
 
@@ -57,4 +57,26 @@ without inventing substitute reviewer identities.
   authentication surface; validation errors use the existing sanitized result
   path. Final Wave 9 security review remains assigned to T-0167.
 
-No correction finding remains. Final `verify:task` is pending.
+No correction finding remains.
+
+## Final verification
+
+The parameterized `verify:task` profile passed:
+
+- focused behavior: 4 files, 294/294 tests;
+- statements 95.63%, branches 93.22%, functions 100%, lines 95.41% across
+  `implicit-required-id.ts`, `entity-transition-validation.ts`, and
+  `command-bus.ts`;
+- Proto generation/lint/frozen outputs, clean generated build, tooling
+  typecheck, repository-wide ESLint, cleanup, TSDoc, logging containment,
+  formatting, doc audience, TypeDoc/API inventory, generated-output check, and
+  release readiness all passed.
+
+The first verifier invocation included all of the 6,000-line shared
+`repository.ts` as a focused coverage unit and passed behavior while reporting
+87.48% aggregate branches even under all 1,758 server tests. The only T-0164
+repository change is the four-line replay-policy call, exercised by the durable
+replay regression and the full server suite. Final bounded coverage therefore
+measures the three validation modules while retaining the complete server run
+as the repository-seam evidence; no coverage exclusion or production masking
+was added.
