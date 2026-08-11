@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ILogLayer } from "loglayer";
 
 import { clone, getOption, hasOption, type Message } from "@bufbuild/protobuf";
+import type { Any } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   EventSchema,
@@ -79,6 +80,7 @@ import {
 } from "../stand/subscription-registry.js";
 import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
 import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
+import { InboxTargets } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import { emitServerError } from "../server/server-log.js";
 
@@ -1780,8 +1782,8 @@ const ContextParts = Object.freeze({
     const shardCount = strategy.shardCount;
     return Object.freeze({
       shardCount,
-      shardFor(targetId: string, targetType: string): ShardIndex {
-        const shard = strategy.shardFor(targetId, targetType);
+      shardFor(targetId: Any, targetType: string): ShardIndex {
+        const shard = strategy.shardFor(InboxTargets.clone(targetId), targetType);
         if (shard.ofTotal !== shardCount) {
           throw new Error("Delivery strategy shard total must equal its resolved shard count.");
         }

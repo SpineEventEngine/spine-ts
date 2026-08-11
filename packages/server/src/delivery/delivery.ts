@@ -13,7 +13,7 @@ import {
   type DeliveryStatistics,
 } from "./delivery-monitor.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "./delivery-ports.js";
-import { Inbox, type InboxMessage } from "./inbox.js";
+import { Inbox, InboxTargets, type InboxMessage } from "./inbox.js";
 import { InboxStorage } from "./inbox-storage.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry } from "./sharded-work-registry.js";
@@ -297,7 +297,7 @@ export class Delivery {
         for (const message of messages) {
           if (options.operation?.signal?.aborted) return result("STOPPED", statistics);
           if (!isEndpointMessage(message)) continue;
-          const target = `${message.inboxId.targetTypeUrl}:${message.inboxId.targetId}`;
+          const target = `${message.inboxId.targetTypeUrl}:${InboxTargets.key(message.inboxId.targetId)}`;
           if (blockedTargets.has(target)) continue;
           statistics.processed += 1;
           if (!(await safelyBoolean(() => this.#monitor.shouldContinueAfter("PAGE"))))

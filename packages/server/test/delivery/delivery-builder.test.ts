@@ -2,7 +2,10 @@
 
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { create } from "@bufbuild/protobuf";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { TenantIdSchema } from "@spine-event-engine/proto";
+import { Identifiers } from "@spine-event-engine/core";
+import { UserIdSchema } from "@spine-event-engine/proto";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { describe, expect, it } from "vitest";
 
@@ -17,6 +20,8 @@ import {
   UniformAcrossAllShards,
 } from "../../src/index.js";
 import { Delivery as CoreDelivery } from "../../src/delivery/delivery.js";
+import { InboxRecords } from "../../src/delivery/inbox-records.js";
+import { createMessage } from "./inbox-message-fixture.js";
 
 describe("DeliveryMonitor delivery", () => {
   it("is instantiable and permits direct or promised hook results", async () => {
@@ -132,12 +137,39 @@ describe("DeliveryMonitor delivery", () => {
   });
 
   it.each([
-    ["", "type.example/Task", "Delivery target ID must be a non-empty string."],
-    ["task-1", "", "Delivery target type must be a non-empty string."],
+    [create(AnySchema), "type.example/Task", "Delivery target ID must be a non-default Any."],
+    [Identifiers.pack("string", "task-1"), "", "Delivery target type must be a non-empty string."],
   ])("rejects incomplete shard coordinates", (targetId, targetType, message) => {
     expect(() => UniformAcrossAllShards.singleShard().shardFor(targetId, targetType)).toThrow(
       message,
     );
+  });
+
+  it("keeps typed target shards stable across records and a fresh strategy", () => {
+    const targetType = "type.example.dev/Typed";
+    const first = UniformAcrossAllShards.forNumber(17);
+    const second = UniformAcrossAllShards.forNumber(17);
+    const targets = [
+      Identifiers.pack("string", "42"),
+      Identifiers.pack("int32", 42),
+      Identifiers.pack("int64", 42n),
+      Identifiers.pack(UserIdSchema, create(UserIdSchema, { value: "42" })),
+    ];
+    const shards = targets.map((targetId, index) => {
+      const before = first.shardFor(targetId, targetType);
+      const restored = InboxRecords.read(
+        InboxRecords.write({
+          ...createMessage(`shard-${String(index)}`, `signal-${String(index)}`, 1n),
+          inboxId: { targetId, targetTypeUrl: targetType },
+          id: { value: `shard-${String(index)}`, shard: before },
+          shard: before,
+        }),
+      );
+      return [before, second.shardFor(restored.inboxId.targetId, targetType)] as const;
+    });
+
+    expect(shards.every(([before, after]) => before.key() === after.key())).toBe(true);
+    expect(shards[0]?.[0]).toEqual(first.shardFor(Identifiers.pack("string", "42"), targetType));
   });
 
   it.each([
@@ -155,9 +187,26 @@ describe("DeliveryMonitor delivery", () => {
       })
       .build();
 
-    expect(() => delivery.strategy.shardFor("task-1", "type.example/Task")).toThrow(
-      "Delivery strategy shard total must equal its resolved shard count.",
-    );
+    expect(() =>
+      delivery.strategy.shardFor(Identifiers.pack("string", "task-1"), "type.example/Task"),
+    ).toThrow("Delivery strategy shard total must equal its resolved shard count.");
+  });
+
+  it("does not expose caller target bytes to a custom strategy", () => {
+    const targetId = Identifiers.pack("int32", 42);
+    const expected = new Uint8Array(targetId.value);
+    const delivery = build()
+      .withStrategy({
+        shardCount: 1,
+        shardFor: (candidate) => {
+          candidate.value.fill(0);
+          return ShardIndex.single();
+        },
+      })
+      .build();
+
+    expect(delivery.strategy.shardFor(targetId, "type.example/Task")).toEqual(ShardIndex.single());
+    expect(targetId.value).toEqual(expected);
   });
 
   it.each([
@@ -492,7 +541,7 @@ function build(): DeliveryBuilder {
 function message(signalId: string, targetId: string, shard: ShardIndex) {
   return {
     id: { value: signalId, shard },
-    inboxId: { targetId, targetTypeUrl: "type" },
+    inboxId: { targetId: Identifiers.pack("string", targetId), targetTypeUrl: "type" },
     signalId,
     label: "UPDATE_SUBSCRIBER" as const,
     status: "TO_DELIVER" as const,

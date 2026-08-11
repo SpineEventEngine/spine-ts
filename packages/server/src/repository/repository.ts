@@ -1,4 +1,4 @@
-import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
+import { clone, create, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema, type Any, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   ValidationException,
@@ -8,6 +8,7 @@ import {
   TypeUrls,
   TypeRegistry,
   AnyMessages,
+  Identifiers,
 } from "@spine-event-engine/core";
 import {
   CommandContextSchema,
@@ -55,7 +56,7 @@ import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { Delivery } from "../delivery/delivery.js";
 import { commitFenced } from "./commit-fence.js";
-import type { InboxMessage, InboxMessageInput } from "../delivery/inbox.js";
+import { InboxTargets, type InboxMessage, type InboxMessageInput } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import {
   Aggregate,
@@ -4073,19 +4074,26 @@ const RepositoryRoutes = {
 
     for (const [schema, route] of routing.exact) {
       if (!schemaSet.has(schema)) {
-        throw new Error(`Repository command routing has an unregistered exact route for "${schema.typeName}".`);
+        throw new Error(
+          `Repository command routing has an unregistered exact route for "${schema.typeName}".`,
+        );
       }
       routes.set(schema, route);
     }
 
-    const registered = schemas.map((schema) => ({ schema, metadata: new TypeRegistry().register(schema) }));
+    const registered = schemas.map((schema) => ({
+      schema,
+      metadata: new TypeRegistry().register(schema),
+    }));
     for (const javaType of routing.semantic.keys()) {
       const registeredRoute = registered.some(
         ({ metadata }) =>
           metadata.isTypes.includes(javaType) || metadata.everyIsTypes.includes(javaType),
       );
       if (!registeredRoute) {
-        throw new Error(`Repository command routing has an unregistered semantic route for "${javaType}".`);
+        throw new Error(
+          `Repository command routing has an unregistered semantic route for "${javaType}".`,
+        );
       }
     }
 
@@ -4099,7 +4107,9 @@ const RepositoryRoutes = {
         .filter((route): route is CommandRoute<Id> => route !== undefined);
       const candidates = direct.length > 0 ? direct : file;
       if (candidates.length > 1) {
-        throw new Error(`Repository command routing has ambiguous semantic routes for "${schema.typeName}".`);
+        throw new Error(
+          `Repository command routing has ambiguous semantic routes for "${schema.typeName}".`,
+        );
       }
       if (candidates[0] !== undefined) routes.set(schema, candidates[0]);
       else if (routing.defaultRoute !== undefined) routes.set(schema, routing.defaultRoute);
@@ -4735,14 +4745,46 @@ Object.freeze(DispatchGuards);
  * Internal inbox messages operations.
  */
 const InboxMessages = {
-  inboxTargetId(entityId: unknown): string {
-    const primitive = PrimitiveIds.readFinite(entityId) ?? MessageIds.readValue(entityId);
-
-    if (primitive === undefined) {
-      throw new Error("Repository Entity Inbox handoff requires a readable target ID.");
+  inboxTargetId(entityId: unknown, idField: DescriptorFieldMetadata): Any {
+    if (idField.descriptor.fieldKind === "message") {
+      return Identifiers.pack(idField.descriptor.message as MessageSchema, entityId as never);
     }
+    if (typeof entityId === "string") return Identifiers.pack("string", entityId);
+    if (typeof entityId === "number") return Identifiers.pack("int32", entityId);
+    if (typeof entityId === "bigint") return Identifiers.pack("int64", entityId);
+    throw new Error("Repository Entity Inbox handoff requires a supported target ID.");
+  },
 
-    return String(primitive);
+  sameTargetId(left: Any, right: Any): boolean {
+    return InboxTargets.equal(left, right);
+  },
+
+  targetEntityId(targetId: Any, idField: DescriptorFieldMetadata): unknown {
+    const descriptor = idField.descriptor;
+    let entityId: unknown;
+    if (descriptor.fieldKind === "message") {
+      entityId = Identifiers.unpack(descriptor.message as MessageSchema, targetId);
+    } else if (descriptor.fieldKind === "scalar") {
+      switch (descriptor.scalar) {
+        case ScalarType.STRING:
+          entityId = Identifiers.unpack("string", targetId);
+          break;
+        case ScalarType.INT32:
+        case ScalarType.SINT32:
+        case ScalarType.SFIXED32:
+          entityId = Identifiers.unpack("int32", targetId);
+          break;
+        case ScalarType.INT64:
+        case ScalarType.SINT64:
+        case ScalarType.SFIXED64:
+          entityId = Identifiers.unpack("int64", targetId);
+          break;
+      }
+    }
+    if (entityId === undefined) {
+      throw new Error("Entity Inbox replay stored target ID is incompatible with the repository.");
+    }
+    return RepositoryRoutes.readRouteId(entityId, idField, "command").id;
   },
 
   readInboxCommand(message: InboxMessage): Command {
@@ -5060,15 +5102,14 @@ const InboxReplay = {
     }
 
     const commandMessage = EntityInvocation.requireSignalMessage(command.message, "command");
-    const schema = RepositoryRoutes.schemaForTypeUrl(routing.commandSchemas, commandMessage.typeUrl, "command");
-    const field = repository.idField.descriptor;
-    const storedId =
-      field.fieldKind === "message"
-        ? create(field.message as MessageSchema, { value: message.inboxId.targetId } as never)
-        : message.inboxId.targetId;
+    const schema = RepositoryRoutes.schemaForTypeUrl(
+      routing.commandSchemas,
+      commandMessage.typeUrl,
+      "command",
+    );
 
     return Object.freeze({
-      entityId: RepositoryRoutes.readRouteId(storedId, repository.idField, "command").id,
+      entityId: InboxMessages.targetEntityId(message.inboxId.targetId, repository.idField),
       messageFullTypeName: schema.typeName,
       invocation: "deferred",
     });
@@ -5090,8 +5131,11 @@ const InboxReplay = {
     }
 
     const route = repository.routeEvent(event);
-    const entityId = route.entityIds.find(
-      (id) => InboxMessages.inboxTargetId(id) === message.inboxId.targetId,
+    const entityId = route.entityIds.find((id) =>
+      InboxMessages.sameTargetId(
+        InboxMessages.inboxTargetId(id, repository.idField),
+        message.inboxId.targetId,
+      ),
     );
 
     if (entityId === undefined) {
@@ -5117,8 +5161,11 @@ const InboxReplay = {
     }
 
     const route = repository.routeEvent(event);
-    const entityId = route.entityIds.find(
-      (id) => InboxMessages.inboxTargetId(id) === message.inboxId.targetId,
+    const entityId = route.entityIds.find((id) =>
+      InboxMessages.sameTargetId(
+        InboxMessages.inboxTargetId(id, repository.idField),
+        message.inboxId.targetId,
+      ),
     );
 
     if (entityId === undefined) {
@@ -5156,7 +5203,7 @@ const InboxHandoff = {
       delivery,
       {
         inboxId: {
-          targetId: InboxMessages.inboxTargetId(route.entityId),
+          targetId: InboxMessages.inboxTargetId(route.entityId, repository.idField),
           targetTypeUrl: TypeUrls.derive(repository.stateSchema),
         },
         signalId: commandId.uuid,
@@ -5188,7 +5235,7 @@ const InboxHandoff = {
       delivery,
       {
         inboxId: {
-          targetId: InboxMessages.inboxTargetId(entityId),
+          targetId: InboxMessages.inboxTargetId(entityId, repository.idField),
           targetTypeUrl: TypeUrls.derive(repository.stateSchema),
         },
         signalId: eventId.value,
@@ -5256,7 +5303,7 @@ const InboxHandoff = {
   ): EntityInboxInput {
     return {
       inboxId: {
-        targetId: InboxMessages.inboxTargetId(entityId),
+        targetId: InboxMessages.inboxTargetId(entityId, repository.idField),
         targetTypeUrl: TypeUrls.derive(repository.stateSchema),
       },
       signalId,

@@ -1,5 +1,6 @@
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { Identifiers } from "@spine-event-engine/core";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -55,8 +56,8 @@ describe("LocalProjectionInbox", () => {
     inbox.register({
       targetTypeUrl,
       async replay(message) {
-        replayed.push(message.inboxId.targetId);
-        if (message.inboxId.targetId === "admitted") {
+        replayed.push(targetValue(message));
+        if (targetValue(message) === "admitted") {
           replayStarted.resolve(undefined);
           await releaseReplay.promise;
         }
@@ -99,7 +100,7 @@ describe("LocalProjectionInbox", () => {
     const delivered = await delivery.inbox.read(ShardIndex.single(), {
       statuses: ["DELIVERED"],
     });
-    expect(delivered.map(({ inboxId }) => inboxId.targetId)).toContain("buffered");
+    expect(delivered.map(targetValue)).toContain("buffered");
 
     await expect(
       inbox.receive(delivery, projectionInput(targetTypeUrl, "routed"), tenant("tenant-a")),
@@ -123,7 +124,7 @@ describe("LocalProjectionInbox", () => {
     expect(routed).toEqual([]);
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
-    ).resolves.toMatchObject([{ inboxId: { targetId: "routed" } }]);
+    ).resolves.toMatchObject([{ inboxId: { targetId: Identifiers.pack("string", "routed") } }]);
 
     const recovery = await new DeliveryLoop({
       delivery,
@@ -151,7 +152,7 @@ describe("LocalProjectionInbox", () => {
     await inbox.receive(
       delivery,
       {
-        inboxId: { targetId: "projection-ready", targetTypeUrl },
+        inboxId: { targetId: Identifiers.pack("string", "projection-ready"), targetTypeUrl },
         signalId: "event-ready",
         signal: eventSignal(),
         label: "UPDATE_SUBSCRIBER",
@@ -193,7 +194,7 @@ describe("LocalProjectionInbox", () => {
 
     const result = await inbox
       .receive(delivery, {
-        inboxId: { targetId: "projection-ready", targetTypeUrl },
+        inboxId: { targetId: Identifiers.pack("string", "projection-ready"), targetTypeUrl },
         signalId: "event-ready",
         signal: eventSignal(),
         label: "UPDATE_SUBSCRIBER",
@@ -236,7 +237,7 @@ describe("LocalProjectionInbox", () => {
     });
 
     await delivery.inbox.receive({
-      inboxId: { targetId: "projection-1", targetTypeUrl },
+      inboxId: { targetId: Identifiers.pack("string", "projection-1"), targetTypeUrl },
       signalId: "event-1",
       signal: eventSignal(),
       label: "UPDATE_SUBSCRIBER",
@@ -294,7 +295,7 @@ describe("LocalProjectionInbox", () => {
     });
 
     const delivered = await inbox.receive(delivery, {
-      inboxId: { targetId: "projection-1", targetTypeUrl },
+      inboxId: { targetId: Identifiers.pack("string", "projection-1"), targetTypeUrl },
       signalId: "event-1",
       signal,
       label: "UPDATE_SUBSCRIBER",
@@ -340,7 +341,7 @@ describe("LocalProjectionInbox", () => {
             shard: ShardIndex.single(),
           },
           inboxId: {
-            targetId: `projection-${status}`,
+            targetId: Identifiers.pack("string", `projection-${status}`),
             targetTypeUrl,
           },
           signalId: `event-${status}`,
@@ -377,7 +378,7 @@ describe("LocalProjectionInbox", () => {
       releaseReplay = resolve;
     });
     const input = {
-      inboxId: { targetId: "projection-duplicate", targetTypeUrl },
+      inboxId: { targetId: Identifiers.pack("string", "projection-duplicate"), targetTypeUrl },
       signalId: "event-duplicate",
       signal: eventSignal(),
       label: "UPDATE_SUBSCRIBER" as const,
@@ -437,7 +438,10 @@ describe("LocalProjectionInbox", () => {
       releaseReplay = resolve;
     });
     const input = {
-      inboxId: { targetId: "projection-failing-duplicate", targetTypeUrl },
+      inboxId: {
+        targetId: Identifiers.pack("string", "projection-failing-duplicate"),
+        targetTypeUrl,
+      },
       signalId: "event-failing-duplicate",
       signal: eventSignal(),
       label: "UPDATE_SUBSCRIBER" as const,
@@ -500,7 +504,7 @@ describe("LocalProjectionInbox", () => {
       inbox.receive(
         delivery,
         asRuntimeInvalidProjectionInput({
-          inboxId: { targetId: "projection-2", targetTypeUrl },
+          inboxId: { targetId: Identifiers.pack("string", "projection-2"), targetTypeUrl },
           signalId: "event-2",
           signal: commandSignal(),
           label: "HANDLE_COMMAND",
@@ -538,7 +542,7 @@ describe("LocalProjectionInbox", () => {
       inbox.receive(
         delivery,
         asRuntimeInvalidProjectionInput({
-          inboxId: { targetId: "projection-scheduled", targetTypeUrl },
+          inboxId: { targetId: Identifiers.pack("string", "projection-scheduled"), targetTypeUrl },
           signalId: "event-scheduled",
           signal: eventSignal(),
           label: "UPDATE_SUBSCRIBER",
@@ -572,7 +576,7 @@ describe("LocalProjectionInbox", () => {
 
     await expect(
       inbox.receive(delivery, {
-        inboxId: { targetId: "projection-missing", targetTypeUrl },
+        inboxId: { targetId: Identifiers.pack("string", "projection-missing"), targetTypeUrl },
         signalId: "event-missing",
         signal: eventSignal(),
         label: "UPDATE_SUBSCRIBER",
@@ -609,7 +613,10 @@ describe("LocalProjectionInbox", () => {
 
     await expect(
       inbox.receive(delivery, {
-        inboxId: { targetId: "projection-shard-mismatch", targetTypeUrl },
+        inboxId: {
+          targetId: Identifiers.pack("string", "projection-shard-mismatch"),
+          targetTypeUrl,
+        },
         signalId: "event-shard-mismatch",
         signal: eventSignal(),
         label: "UPDATE_SUBSCRIBER",
@@ -656,7 +663,7 @@ describe("LocalProjectionInbox", () => {
 
     await delivery.inbox.receive({
       inboxId: {
-        targetId: "pm-0",
+        targetId: Identifiers.pack("string", "pm-0"),
         targetTypeUrl: "type.example.dev/Tasks.ProcessManager",
       },
       signalId: "signal-0",
@@ -669,7 +676,7 @@ describe("LocalProjectionInbox", () => {
     });
     await delivery.inbox.receive({
       inboxId: {
-        targetId: "projection-0",
+        targetId: Identifiers.pack("string", "projection-0"),
         targetTypeUrl: unrelatedProjectionTypeUrl,
       },
       signalId: "event-0",
@@ -682,7 +689,7 @@ describe("LocalProjectionInbox", () => {
     });
 
     await inbox.receive(delivery, {
-      inboxId: { targetId: "projection-1", targetTypeUrl },
+      inboxId: { targetId: Identifiers.pack("string", "projection-1"), targetTypeUrl },
       signalId: "event-1",
       signal: eventSignal(),
       label: "UPDATE_SUBSCRIBER",
@@ -719,13 +726,19 @@ describe("LocalProjectionInbox", () => {
 
 function projectionInput(targetTypeUrl: string, targetId: string) {
   return {
-    inboxId: { targetId, targetTypeUrl },
+    inboxId: { targetId: Identifiers.pack("string", targetId), targetTypeUrl },
     signalId: `event-${targetId}`,
     signal: eventSignal(),
     label: "UPDATE_SUBSCRIBER" as const,
     status: "TO_DELIVER" as const,
     shard: ShardIndex.single(),
   };
+}
+
+function targetValue(message: Pick<InboxMessage, "inboxId">): string {
+  const value = Identifiers.unpack("string", message.inboxId.targetId);
+  if (value === undefined) throw new Error("Expected a string Inbox target fixture.");
+  return value;
 }
 
 function eventSignal() {

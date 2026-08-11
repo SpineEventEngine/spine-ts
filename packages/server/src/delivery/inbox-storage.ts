@@ -9,6 +9,7 @@ import type { RecordStorage, StorageContext, StorageFactory } from "@spine-event
 
 import {
   InboxMessageError,
+  InboxTargets,
   type DeliveryStatus,
   type InboxMessage,
   type InboxMessageId,
@@ -184,7 +185,7 @@ export class InboxStorage {
           rows.some(
             (row) =>
               row.signalId === pending.signalId &&
-              row.inboxId.targetId === pending.inboxId.targetId &&
+              InboxTargets.equal(row.inboxId.targetId, pending.inboxId.targetId) &&
               row.inboxId.targetTypeUrl === pending.inboxId.targetTypeUrl &&
               (row.keepUntil === undefined || row.keepUntil.getTime() > Values.now(this.#now)),
           )
