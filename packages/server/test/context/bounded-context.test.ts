@@ -9,7 +9,7 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
-import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
+import { Identifiers, TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -619,7 +619,7 @@ describe("BoundedContext assembly", () => {
         signalId: "aggregate-row",
         label: "HANDLE_COMMAND",
         signal: AnyMessages.pack(CommandSchema, aggregateCommand, { validate: false }),
-        shard: strategy.shardFor(aggregateId, aggregateType),
+        shard: strategy.shardFor(Identifiers.pack("string", aggregateId), aggregateType),
       });
       const processManagerCommandRow = await persistDescriptorRow({
         descriptor,
@@ -629,7 +629,7 @@ describe("BoundedContext assembly", () => {
         signalId: "pm-command-row",
         label: "HANDLE_COMMAND",
         signal: AnyMessages.pack(CommandSchema, processManagerCommand, { validate: false }),
-        shard: strategy.shardFor(commandId, processManagerType),
+        shard: strategy.shardFor(Identifiers.pack("string", commandId), processManagerType),
       });
       const processManagerEventRow = await persistDescriptorRow({
         descriptor,
@@ -639,7 +639,7 @@ describe("BoundedContext assembly", () => {
         signalId: "pm-event-row",
         label: "REACT_UPON_EVENT",
         signal: AnyMessages.pack(EventSchema, processManagerEvent, { validate: false }),
-        shard: strategy.shardFor(eventId, processManagerType),
+        shard: strategy.shardFor(Identifiers.pack("string", eventId), processManagerType),
       });
 
       await descriptor.replay(aggregateRow);
@@ -785,7 +785,7 @@ describe("BoundedContext assembly", () => {
               signalId,
               label,
               signal,
-              shard: strategy.shardFor(targetId, targetTypeUrl),
+              shard: strategy.shardFor(Identifiers.pack("string", targetId), targetTypeUrl),
             }),
           );
         }
@@ -820,7 +820,10 @@ describe("BoundedContext assembly", () => {
             (
               await Promise.all(
                 rows.map((row) =>
-                  recoveryContext.stand().read(ProcessManagerStateSchema, row.inboxId.targetId),
+                  recoveryContext.stand().read(
+                    ProcessManagerStateSchema,
+                    Identifiers.unpack("string", row.inboxId.targetId),
+                  ),
                 ),
               )
             ).every((state) => state !== undefined),
@@ -880,7 +883,7 @@ describe("BoundedContext assembly", () => {
       });
       expect(delivered).toHaveLength(1);
       expect(delivered[0]).toMatchObject({
-        inboxId: { targetId: "dynamic-task" },
+        inboxId: { targetId: Identifiers.pack("string", "dynamic-task") },
         signalId: "dynamic-command",
         version: 1n,
       });
@@ -909,7 +912,7 @@ describe("BoundedContext assembly", () => {
         }).inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
       ).resolves.toMatchObject([
         {
-          inboxId: { targetId: "dynamic-task" },
+          inboxId: { targetId: Identifiers.pack("string", "dynamic-task") },
           signalId: "dynamic-command",
           version: 1n,
         },
@@ -2464,7 +2467,8 @@ function targetForShard(
 ): string {
   for (let suffix = 0; suffix < 1_000; suffix += 1) {
     const targetId = `${prefix}-${String(suffix)}`;
-    if (strategy.shardFor(targetId, targetTypeUrl).index === index) return targetId;
+    if (strategy.shardFor(Identifiers.pack("string", targetId), targetTypeUrl).index === index)
+      return targetId;
   }
   throw new Error(`Could not find target for shard ${String(index)}.`);
 }
@@ -2483,7 +2487,7 @@ async function persistDescriptorRow(input: {
     context: input.descriptor.storageContext({}),
     storageFactory: input.storageFactory,
   }).inbox.receive({
-    inboxId: { targetTypeUrl: input.targetTypeUrl, targetId: input.targetId },
+    inboxId: { targetTypeUrl: input.targetTypeUrl, targetId: Identifiers.pack("string", input.targetId) },
     signalId: input.signalId,
     label: input.label,
     signal: input.signal,
