@@ -930,8 +930,9 @@ const FieldStringifiers = Object.freeze({
       case ScalarType.BYTES:
         return this.bytes;
       case ScalarType.DOUBLE:
-      case ScalarType.FLOAT:
         return this.number;
+      case ScalarType.FLOAT:
+        return this.float;
       case ScalarType.INT32:
       case ScalarType.SFIXED32:
       case ScalarType.SINT32:
@@ -996,16 +997,52 @@ const FieldStringifiers = Object.freeze({
     fromString(value: string): unknown {
       const parsed = Number(value);
       if (!Number.isFinite(parsed)) throw new Error("Field value must be a finite number.");
-      if (String(parsed) !== value) throw new Error("Field value must be a canonical number.");
+      const canonical = Object.is(parsed, -0) ? "-0" : String(parsed);
+      if (canonical !== value) throw new Error("Field value must be a canonical number.");
       return parsed;
     },
     toString(value: unknown): string {
       if (typeof value !== "number" || !Number.isFinite(value)) {
         throw new TypeError("Field value must be a finite number.");
       }
-      return String(value);
+      return Object.is(value, -0) ? "-0" : String(value);
     },
   }),
+
+  float: Object.freeze({
+    fromString(value: string): unknown {
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed)) throw new Error("Field value must be a finite number.");
+      const restored = Math.fround(parsed);
+      if (!Number.isFinite(restored)) {
+        throw new Error("Field value is outside the float32 range.");
+      }
+      if (FieldStringifiers.floatText(restored) !== value) {
+        throw new Error("Field value must be a canonical float32 number.");
+      }
+      return restored;
+    },
+    toString(value: unknown): string {
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        throw new TypeError("Field value must be a finite number.");
+      }
+      const normalized = Math.fround(value);
+      if (!Number.isFinite(normalized)) {
+        throw new Error("Field value is outside the float32 range.");
+      }
+      return FieldStringifiers.floatText(normalized);
+    },
+  }),
+
+  floatText(value: number): string {
+    if (Object.is(value, -0)) return "-0";
+    if (value === 0) return "0";
+    for (let precision = 1; precision <= 9; precision += 1) {
+      const candidate = String(Number(value.toPrecision(precision)));
+      if (Object.is(Math.fround(Number(candidate)), value)) return candidate;
+    }
+    throw new Error("Unable to format the float32 field value.");
+  },
 
   integer(
     min: bigint,
@@ -1104,6 +1141,10 @@ export const Stringifiers = {
   /**
    * Creates a reversible stringifier for one supported singular field.
    *
+   * Scalar, bytes, enum, and message fields are supported. Numeric text is
+   * canonical, finite, and range-checked; `float` values are normalized to
+   * binary32. Repeated and map fields are rejected.
+   *
    * @param field The Protobuf field descriptor.
    * @param types The optional generated-type registry used by message fields.
    * @returns A stringifier for the field's runtime value.
@@ -1175,6 +1216,11 @@ export class StringifierRegistry {
 
   /**
    * Returns the configured reversible mapping for one supported singular field.
+   *
+   * Scalar, bytes, enum, and message fields are supported. Numeric text is
+   * canonical, finite, and range-checked; `float` values are normalized to
+   * binary32. Repeated and map fields are rejected. Registered message mappings
+   * take precedence over compact Proto JSON defaults.
    *
    * @param field The Protobuf field descriptor.
    * @returns A stringifier for the field's runtime value.

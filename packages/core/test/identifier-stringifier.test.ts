@@ -345,6 +345,24 @@ describe("JVM-compatible identifier and stringifier contracts", () => {
     ).toThrow("finite number");
   });
 
+  it("preserves signed zero for float and double fields", () => {
+    for (const field of [FieldValuesSchema.field.floatValue, FieldValuesSchema.field.doubleValue]) {
+      const stringifier = Stringifiers.forField(field);
+
+      expect(stringifier.toString(-0)).toBe("-0");
+      expect(Object.is(stringifier.fromString("-0"), -0)).toBe(true);
+    }
+  });
+
+  it("normalizes float fields to binary32 and rejects overflow", () => {
+    const stringifier = Stringifiers.forField(FieldValuesSchema.field.floatValue);
+
+    expect(stringifier.toString(0.1)).toBe("0.1");
+    expect(stringifier.fromString("0.1")).toBe(Math.fround(0.1));
+    expect(() => stringifier.toString(1e300)).toThrow("float32 range");
+    expect(() => stringifier.fromString("1e+300")).toThrow("float32 range");
+  });
+
   it("rejects repeated and map fields", () => {
     expect(() => Stringifiers.forField(FieldValuesSchema.field.tags)).toThrow(
       "singular Protobuf fields",

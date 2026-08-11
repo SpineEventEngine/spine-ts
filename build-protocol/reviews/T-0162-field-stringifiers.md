@@ -1,6 +1,6 @@
 # T-0162 Review Record
 
-Status: Ready for review
+Status: Review corrections complete; targeted re-review pending
 
 ## Assignments
 
@@ -25,4 +25,29 @@ configured profiles are recorded as acceptance evidence.
 
 ## Specialist review wave
 
-Ready for the single specialist review wave.
+- Performance/reliability and style found that `String(-0)` lost the sign of a
+  valid floating-point value. Float and double mappings now use `-0` as the
+  canonical signed-zero spelling and restore it exactly.
+- Performance/reliability also found that float fields accepted values outside
+  IEEE-754 binary32. Float conversion now normalizes finite inputs through
+  binary32 and rejects overflow.
+- Documentation/TSDoc found that the public comments omitted the supported-kind
+  and fail-closed constraints. Both field APIs now name supported singular
+  scalar/bytes/enum/message fields, canonical numeric rules, float32
+  normalization, repeated/map rejection, and custom message precedence.
+- TypeScript/API: no independent contract defect found; the public signatures
+  remain exactly the frozen `Stringifier<unknown>` declarations and TypeDoc/API
+  inventory passes.
+- Security remains N/A for this pure in-process conversion contract.
+
+## Correction evidence
+
+- Focused core tests pass 89/89.
+- Whole changed-production-file coverage passes: statements 390/410 (95.12%),
+  branches 243/267 (91.01%), functions 110/112 (98.21%), and lines 364/377
+  (96.55%).
+- Generated build, changed-source ESLint, TSDoc, TypeDoc/API inventory,
+  formatting, and diff checks pass.
+
+Targeted documentation/TSDoc, style/maintainability, and
+performance/reliability re-review is pending.
