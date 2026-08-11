@@ -259,7 +259,7 @@ describe("SpecScanner", () => {
     expect(EntityRecords.unpack(ProjectionStateSchema, record).versionMessage).toEqual(version);
   });
 
-  it("keeps descriptor ID decoding fail-closed and canonicalizes structured IDs", () => {
+  it("keeps descriptor ID decoding and keying fail-closed", () => {
     register(TaskProjection, ProjectionStateSchema);
     const descriptor = entityStorageDescriptor(
       { name: "Tasks", multitenant: false },
@@ -271,8 +271,8 @@ describe("SpecScanner", () => {
         AnyMessages.pack(ProjectionStateSchema, create(ProjectionStateSchema, { id: "wrong" })),
       ),
     ).toBeUndefined();
-    expect(descriptor.id.key(null as never)).toBe("null");
-    expect(descriptor.id.key({ value: "task-1" } as never)).toBe('json:{"value":"task-1"}');
+    expect(() => descriptor.id.key(null as never)).toThrow(/string/i);
+    expect(() => descriptor.id.key({ value: "task-1" } as never)).toThrow(/string/i);
   });
 
   it("round-trips scalar Entity IDs through the storage codec packer", () => {

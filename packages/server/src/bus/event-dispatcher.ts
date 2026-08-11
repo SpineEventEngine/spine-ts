@@ -19,7 +19,12 @@ export interface EventDispatcher {
   messageSchemas(): readonly MessageSchema[];
 
   /**
-   * Performs dispatcher-specific acceptance before the bus stores an event.
+   * Performs dispatcher-specific acceptance before dispatch.
+   *
+   * The bus gives each dispatcher its own Event snapshot. After successful
+   * acceptance, the same snapshot is passed to this dispatcher's `dispatch()`.
+   * For a newly posted Event on a storing bus, acceptance occurs before Event
+   * Store append. Already-stored and forgetting buses perform no new append.
    *
    * @param event the event envelope to validate.
    * @returns A promise that resolves after validation completes.
@@ -28,6 +33,9 @@ export interface EventDispatcher {
 
   /**
    * Dispatches one generated Spine event envelope.
+   *
+   * When `accept()` is present, this receives the dispatcher-local snapshot
+   * that acceptance validated.
    *
    * @param event the event envelope to dispatch.
    * @returns A promise that resolves after the event is dispatched.

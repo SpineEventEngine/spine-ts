@@ -584,6 +584,8 @@ const expectedServerExports = [
   "EventEndpoint",
   "EventDispatcher",
   "EventContextInput",
+  "EventRoute",
+  "EventRouting",
   "FixedClock",
   "Inbox",
   "InboxId",

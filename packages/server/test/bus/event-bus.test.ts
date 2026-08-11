@@ -443,14 +443,17 @@ describe("EventBus", () => {
       new InMemoryStorageFactory(),
     );
     const observed: string[] = [];
+    let acceptedSnapshot: Event | undefined;
     const bus = new EventBus(store, [
       {
         messageSchemas: () => [ProjectionStateSchema],
         accept: (event) => {
+          acceptedSnapshot = event;
           observed.push(`accept:${event.id?.value ?? "missing"}`);
           return Promise.resolve();
         },
         dispatch: (event) => {
+          expect(event).toBe(acceptedSnapshot);
           observed.push(`dispatch:${event.id?.value ?? "missing"}`);
           return Promise.resolve();
         },

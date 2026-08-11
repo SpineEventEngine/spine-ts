@@ -1,4 +1,5 @@
 import { create, type MessageInitShape } from "@bufbuild/protobuf";
+import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import {
   AnyMessages,
   SignalEnvelopes,
@@ -286,6 +287,7 @@ function createProjectionEvent(id: string, name: string) {
     id: create(EventIdSchema, { value: `event-${id}` }),
     context: create(EventContextSchema, {
       origin: { case: "importContext", value: createActorContext() },
+      producerId: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
     }),
     schema: NativeProjectionStateSchema,
     message: create(NativeProjectionStateSchema, { id, name, priority: 1 }),
@@ -297,6 +299,7 @@ function createAggregateEvent(id: string, name: string) {
     id: create(EventIdSchema, { value: `event-${id}` }),
     context: create(EventContextSchema, {
       origin: { case: "importContext", value: createActorContext() },
+      producerId: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
     }),
     schema: NativeAggregateStateSchema,
     message: create(NativeAggregateStateSchema, { id, name, archived: false }),

@@ -236,6 +236,7 @@ describe("@spine-event-engine/server", () => {
         "Command",
         "EventBus",
         "EventRegistrationReadiness",
+        "EventRouting",
         "FailedPickUp",
         "FailedReception",
         "FixedClock",

@@ -1,5 +1,13 @@
 import { clone, create, ScalarType, toBinary, type Message } from "@bufbuild/protobuf";
-import { AnySchema, TimestampSchema, type Any, type Timestamp } from "@bufbuild/protobuf/wkt";
+import {
+  AnySchema,
+  Int32ValueSchema,
+  Int64ValueSchema,
+  StringValueSchema,
+  TimestampSchema,
+  type Any,
+  type Timestamp,
+} from "@bufbuild/protobuf/wkt";
 import {
   ValidationException,
   type MessageSchema,
@@ -52,6 +60,7 @@ import {
   type CommandRoute,
   type CommandRouting,
 } from "./command-routing.js";
+import { EventRoutingInternals, type EventRoute, type EventRouting } from "./event-routing.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { Delivery } from "../delivery/delivery.js";
@@ -257,6 +266,11 @@ export interface RepositoryOptions<
    * Mutable Command route declarations snapshotted when this repository is constructed.
    */
   readonly commandRouting?: CommandRouting<RepositoryEntityId<EntityType>>;
+
+  /**
+   * Mutable Event route declarations snapshotted when this repository is constructed.
+   */
+  readonly eventRouting?: EventRouting<RepositoryEntityId<EntityType>>;
 
   /**
    * Generated event schemas that aggregate or process-manager handlers may emit.
@@ -498,6 +512,7 @@ export class Repository<
       options.handlers,
       options.events ?? [],
       CommandRoutingInternals.snapshot(options.commandRouting),
+      EventRoutingInternals.snapshot(options.eventRouting),
     );
     repositoryProducedEventSchemas.set(
       this,
@@ -639,12 +654,13 @@ export class Repository<
   }
 
   /**
-   * Routes an event to one or more entity IDs without invoking a handler.
+   * Routes an Event without invoking a handler.
    *
-   * A packed message-valued `EventContext.producerId` is decoded using the event
-   * message's first-field schema. It must identify the same entity as that first
-   * field: message targets compare the complete ID message, while scalar targets
-   * compare the message ID's scalar value. A mismatch is rejected.
+   * The default route uses a readable producer whose typed ID is compatible
+   * with the Entity ID. A valid producer of another type falls back to the
+   * Event's declaration-first field. A producer that claims the compatible type
+   * but cannot be decoded is rejected. Custom routes may select zero, one, or
+   * many targets.
    *
    * @param event The event envelope to route.
    * @returns The calculated event route.
@@ -1601,24 +1617,8 @@ class AggregateEventExecution {
     );
   }
 
-  async run(): Promise<void> {
-    const intake = this.#readIntake();
-
-    if (intake.reactors.length === 0 && intake.commanders.length === 0) {
-      return;
-    }
-
-    const commands: Command[] = [];
-
-    for (const entityId of intake.route.entityIds) {
-      commands.push(...(await this.#executeEntity(entityId, intake)));
-    }
-
-    await this.#postCommands(commands);
-  }
-
-  async runTarget(entityId: unknown): Promise<void> {
-    const intake = this.#readIntake();
+  async runTarget(entityId: unknown, acceptedRoute: RepositoryEventRoute): Promise<void> {
+    const intake = this.#readIntake(acceptedRoute);
 
     if (intake.reactors.length === 0 && intake.commanders.length === 0) {
       return;
@@ -1627,7 +1627,7 @@ class AggregateEventExecution {
     await this.#postCommands(await this.#executeEntity(entityId, intake));
   }
 
-  #readIntake(): {
+  #readIntake(acceptedRoute: RepositoryEventRoute): {
     readonly message: unknown;
     readonly route: RepositoryEventRoute;
     readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
@@ -1640,7 +1640,7 @@ class AggregateEventExecution {
       "event",
     );
     const message = EntityInvocation.unpackRequired(eventMessage, eventSchema, "event");
-    const route = this.#repository.routeEvent(this.#event);
+    const route = acceptedRoute;
     const reactors = this.#routing.eventReadiness
       ?.findEventReactors(route.messageFullTypeName)
       .filter((reactor) => RepositoryHandlers.handlerEmittedSchemas(reactor.handler).length > 0);
@@ -1709,7 +1709,7 @@ class AggregateEventExecution {
     await this.#support.appendDiagnosticEvent(
       loaded,
       entityId,
-      DispatchGuards.guardedJournalEvent(this.#event, entityId),
+      DispatchGuards.guardedJournalEvent(this.#repository, this.#event, entityId),
     );
 
     return Object.freeze(commands);
@@ -1830,7 +1830,7 @@ class AggregateEventExecution {
         ? create(EventIdSchema, {
             value:
               `${metadata.id.value}.target.` +
-              encodeURIComponent(DispatchGuards.canonicalEntityIdKey(entityId)),
+              encodeURIComponent(DispatchGuards.canonicalEntityIdKey(this.#repository, entityId)),
           })
         : metadata.id,
       message: AnyMessages.pack(schema, signal as never),
@@ -1898,8 +1898,8 @@ class ProjectionEventExecution {
     this.#rebuild = rebuild;
   }
 
-  async run(): Promise<void> {
-    const intake = this.#readIntake();
+  async run(acceptedRoute: RepositoryEventRoute): Promise<void> {
+    const intake = this.#readIntake(acceptedRoute);
 
     if (intake.subscribers.length === 0) {
       return;
@@ -1915,8 +1915,8 @@ class ProjectionEventExecution {
     }
   }
 
-  async runTarget(entityId: unknown): Promise<void> {
-    const intake = this.#readIntake();
+  async runTarget(entityId: unknown, acceptedRoute: RepositoryEventRoute): Promise<void> {
+    const intake = this.#readIntake(acceptedRoute);
 
     if (intake.subscribers.length === 0) {
       return;
@@ -1925,8 +1925,8 @@ class ProjectionEventExecution {
     await this.#executeTarget(entityId, intake.subscribers);
   }
 
-  async runDirect(): Promise<void> {
-    const intake = this.#readIntake();
+  async runDirect(acceptedRoute?: RepositoryEventRoute): Promise<void> {
+    const intake = this.#readIntake(acceptedRoute);
 
     if (intake.subscribers.length === 0) {
       return;
@@ -1955,11 +1955,11 @@ class ProjectionEventExecution {
     );
   }
 
-  #readIntake(): {
+  #readIntake(acceptedRoute?: RepositoryEventRoute): {
     readonly route: RepositoryEventRoute;
     readonly subscribers: RepositoryEventSubscribers;
   } {
-    const route = this.#repository.routeEvent(this.#event);
+    const route = acceptedRoute ?? this.#repository.routeEvent(this.#event);
     const subscribers = this.#routing.eventReadiness?.findEventSubscribers(
       route.messageFullTypeName,
     );
@@ -2515,8 +2515,8 @@ class ProcessManagerEventExecution {
     this.#support = new ProcessManagerExecutionSupport(repository, runtime);
   }
 
-  async run(): Promise<void> {
-    const intake = this.#readIntake();
+  async run(acceptedRoute: RepositoryEventRoute): Promise<void> {
+    const intake = this.#readIntake(acceptedRoute);
 
     if (intake.reactors.length === 0 && intake.commanders.length === 0) {
       return;
@@ -2542,8 +2542,8 @@ class ProcessManagerEventExecution {
     );
   }
 
-  async runTarget(entityId: unknown): Promise<void> {
-    const intake = this.#readIntake();
+  async runTarget(entityId: unknown, acceptedRoute: RepositoryEventRoute): Promise<void> {
+    const intake = this.#readIntake(acceptedRoute);
 
     if (intake.reactors.length === 0 && intake.commanders.length === 0) {
       return;
@@ -2561,7 +2561,7 @@ class ProcessManagerEventExecution {
     );
   }
 
-  #readIntake(): {
+  #readIntake(acceptedRoute: RepositoryEventRoute): {
     readonly message: unknown;
     readonly route: RepositoryEventRoute;
     readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
@@ -2574,7 +2574,7 @@ class ProcessManagerEventExecution {
       "event",
     );
     const message = EntityInvocation.unpackRequired(eventMessage, eventSchema, "event");
-    const route = this.#repository.routeEvent(this.#event);
+    const route = acceptedRoute;
     const reactors = this.#routing.eventReadiness?.findEventReactors(route.messageFullTypeName);
     const commanders = this.#routing.commandReactions(route.messageFullTypeName);
 
@@ -2599,7 +2599,10 @@ class ProcessManagerEventExecution {
     const produced = await this.#invokeHandlers(entityId, loaded.entity, intake);
 
     const events = this.#bindProducedEvents(produced.events, entityId);
-    const diagnostics = [DispatchGuards.guardedJournalEvent(this.#event, entityId), ...events];
+    const diagnostics = [
+      DispatchGuards.guardedJournalEvent(this.#repository, this.#event, entityId),
+      ...events,
+    ];
     const committed = await this.#support.commit(
       loaded,
       tenantOptions,
@@ -3959,6 +3962,11 @@ const RepositoryRoutes = {
       semantic: ReadonlyMap<string, CommandRoute<RepositoryEntityId<EntityType>>>;
       defaultRoute: CommandRoute<RepositoryEntityId<EntityType>> | undefined;
     }>,
+    eventRouting: Readonly<{
+      exact: ReadonlyMap<MessageSchema, EventRoute<RepositoryEntityId<EntityType>>>;
+      semantic: ReadonlyMap<string, EventRoute<RepositoryEntityId<EntityType>>>;
+      defaultRoute: EventRoute<RepositoryEntityId<EntityType>> | undefined;
+    }>,
   ): RepositoryRouting<RepositoryEntityId<EntityType>> {
     const handlers = RepositoryHandlers.normalizeHandlers(handlersOption);
     RepositoryHandlers.validateHandlers(entityType, metadata, handlers);
@@ -4001,6 +4009,7 @@ const RepositoryRoutes = {
     );
     const commandReactions = RepositoryHandlers.createCommandReactionMap(handlers);
     const commandRoutes = RepositoryRoutes.resolveCommandRoutes(commandSchemas, commandRouting);
+    const eventRoutes = RepositoryRoutes.resolveEventRoutes(eventSchemas, eventRouting);
 
     return Object.freeze({
       commandSchemas,
@@ -4026,7 +4035,7 @@ const RepositoryRoutes = {
           commandReactions,
           eventSchemas,
           metadata.idField,
-          entityFamily,
+          eventRoutes,
         ),
     });
   },
@@ -4140,7 +4149,7 @@ const RepositoryRoutes = {
     >,
     schemas: readonly MessageSchema[],
     targetIdField: DescriptorFieldMetadata,
-    entityFamily: EntityFamily,
+    eventRoutes: ReadonlyMap<MessageSchema, EventRoute<Id>>,
   ): RepositoryEventRoute<Id> {
     const message = event.message;
     if (message === undefined || message.typeUrl === "") {
@@ -4157,20 +4166,111 @@ const RepositoryRoutes = {
       throw new Error(`Repository event routing has no receiver for "${schema.typeName}".`);
     }
 
-    const targetId =
-      entityFamily === "process-manager"
-        ? RepositoryRoutes.readRouteId(
-            RepositoryRoutes.readFirstFieldId(message, schema, "event"),
-            targetIdField,
-            "event",
-          ).id
-        : RepositoryRoutes.readEventEntityId(event, message, schema, targetIdField);
+    const customRoute = eventRoutes.get(schema);
+    if (customRoute !== undefined) {
+      return Object.freeze({
+        entityIds: RepositoryRoutes.callEventRoute(
+          customRoute,
+          message,
+          schema,
+          event.context,
+          targetIdField,
+        ),
+        messageFullTypeName: schema.typeName,
+        invocation: "deferred",
+      });
+    }
+
+    const targetId = RepositoryRoutes.readEventEntityId(event, message, schema, targetIdField);
 
     return Object.freeze({
       entityIds: Object.freeze([targetId as Id]),
       messageFullTypeName: schema.typeName,
       invocation: "deferred",
     });
+  },
+
+  resolveEventRoutes<Id>(
+    schemas: readonly MessageSchema[],
+    routing: Readonly<{
+      exact: ReadonlyMap<MessageSchema, EventRoute<Id>>;
+      semantic: ReadonlyMap<string, EventRoute<Id>>;
+      defaultRoute: EventRoute<Id> | undefined;
+    }>,
+  ): ReadonlyMap<MessageSchema, EventRoute<Id>> {
+    const routes = new Map<MessageSchema, EventRoute<Id>>();
+    const schemaSet = new Set(schemas);
+    for (const [schema, route] of routing.exact) {
+      if (!schemaSet.has(schema)) {
+        throw new Error(
+          `Repository event routing has an unregistered exact route for "${schema.typeName}".`,
+        );
+      }
+      routes.set(schema, route);
+    }
+
+    const registered = schemas.map((schema) => ({
+      schema,
+      metadata: new TypeRegistry().register(schema),
+    }));
+    for (const javaType of routing.semantic.keys()) {
+      const registeredRoute = registered.some(
+        ({ metadata }) =>
+          metadata.isTypes.includes(javaType) || metadata.everyIsTypes.includes(javaType),
+      );
+      if (!registeredRoute) {
+        throw new Error(
+          `Repository event routing has an unregistered semantic route for "${javaType}".`,
+        );
+      }
+    }
+
+    for (const { schema, metadata } of registered) {
+      if (routes.has(schema)) continue;
+      const direct = metadata.isTypes
+        .map((javaType) => routing.semantic.get(javaType))
+        .filter((route): route is EventRoute<Id> => route !== undefined);
+      const file = metadata.everyIsTypes
+        .map((javaType) => routing.semantic.get(javaType))
+        .filter((route): route is EventRoute<Id> => route !== undefined);
+      const candidates = direct.length > 0 ? direct : file;
+      if (candidates.length > 1) {
+        throw new Error(
+          `Repository event routing has ambiguous semantic routes for "${schema.typeName}".`,
+        );
+      }
+      if (candidates[0] !== undefined) routes.set(schema, candidates[0]);
+      else if (routing.defaultRoute !== undefined) routes.set(schema, routing.defaultRoute);
+    }
+    return routes;
+  },
+
+  callEventRoute<Id>(
+    route: EventRoute<Id>,
+    message: NonNullable<Event["message"]>,
+    schema: MessageSchema,
+    context: Event["context"] | undefined,
+    targetIdField: DescriptorFieldMetadata,
+  ): readonly Id[] {
+    const unpacked = AnyMessages.unpack(message, schema);
+    if (unpacked === undefined) {
+      throw new Error("Repository event routing requires a readable Event message.");
+    }
+    const candidates = route(unpacked, context ?? create(EventContextSchema));
+    if (!Array.isArray(candidates)) {
+      throw new Error("Repository event routing requires an array of Entity IDs.");
+    }
+    if (candidates.length > 1_000) {
+      throw new Error("Repository event routing accepts at most 1,000 Entity IDs.");
+    }
+
+    const unique = new Map<string, Id>();
+    for (const candidate of candidates) {
+      const id = RepositoryRoutes.readRouteId(candidate, targetIdField, "event").id as Id;
+      const key = InboxTargets.key(InboxMessages.inboxTargetId(id, targetIdField));
+      if (!unique.has(key)) unique.set(key, structuredClone(id));
+    }
+    return Object.freeze([...unique.values()]);
   },
 
   schemaForTypeUrl(
@@ -4220,85 +4320,78 @@ const RepositoryRoutes = {
     return typeof id === "string" && id.trim().length === 0;
   },
 
-  readProducerId(event: Event): string | number | bigint | boolean | undefined {
-    const producerId = event.context?.producerId;
-    if (producerId === undefined) {
-      return undefined;
-    }
-
-    const unpacked = PrimitiveIds.unpack(producerId);
-    if (PrimitiveIds.readFinite(unpacked) !== undefined) {
-      return unpacked;
-    }
-    if (unpacked !== undefined) {
-      throw new Error("Repository event routing requires a finite producer ID.");
-    }
-    throw new Error("Repository event routing requires a readable producer ID.");
-  },
-
   readEventEntityId(
     event: Event,
     message: NonNullable<Event["message"]>,
     schema: MessageSchema,
     targetIdField: DescriptorFieldMetadata,
   ): unknown {
-    const fieldId = RepositoryRoutes.readRouteId(
+    const producerId = event.context?.producerId;
+    if (producerId === undefined || producerId.typeUrl.trim().length === 0) {
+      throw new Error("Repository event routing requires a producer ID.");
+    }
+    const compatibleProducer = RepositoryRoutes.compatibleProducerId(producerId, targetIdField);
+    if (compatibleProducer.compatible) {
+      return RepositoryRoutes.readRouteId(compatibleProducer.id, targetIdField, "event").id;
+    }
+    return RepositoryRoutes.readRouteId(
       RepositoryRoutes.readFirstFieldId(message, schema, "event"),
       targetIdField,
       "event",
-    );
-    const producerId = event.context?.producerId;
-
-    const eventIdField = schema.fields[0];
-    if (eventIdField?.fieldKind === "message" && producerId !== undefined) {
-      const producer = AnyMessages.unpack(producerId, eventIdField.message as MessageSchema);
-      if (producer !== undefined) {
-        if (
-          targetIdField.descriptor.fieldKind === "message"
-            ? !RepositoryRoutes.sameMessageId(
-                targetIdField.descriptor.message as MessageSchema,
-                producer,
-                fieldId.id,
-              )
-            : MessageIds.readValue(producer) !== fieldId.value
-        ) {
-          throw new Error(
-            "Repository event routing requires producer ID and first field to identify the same entity.",
-          );
-        }
-        return fieldId.id;
-      }
-    }
-
-    const primitiveProducerId = RepositoryRoutes.readProducerId(event);
-    const routedProducerId =
-      event.context?.rejection !== undefined &&
-      schema.fields[0]?.fieldKind === "message" &&
-      primitiveProducerId === "Unknown"
-        ? undefined
-        : primitiveProducerId;
-
-    if (routedProducerId !== undefined && routedProducerId !== fieldId.value) {
-      throw new Error(
-        "Repository event routing requires producer ID and first field to identify the same entity.",
-      );
-    }
-
-    return routedProducerId === undefined || targetIdField.descriptor.fieldKind === "message"
-      ? fieldId.id
-      : routedProducerId;
+    ).id;
   },
 
-  sameMessageId(schema: MessageSchema, left: Message, right: unknown): boolean {
-    try {
-      const leftBytes = toBinary(schema, left as never);
-      const rightBytes = toBinary(schema, right as never);
-      return (
-        leftBytes.length === rightBytes.length &&
-        leftBytes.every((value, index) => value === rightBytes[index])
-      );
-    } catch {
-      return false;
+  compatibleProducerId(
+    producerId: Any,
+    targetIdField: DescriptorFieldMetadata,
+  ): { readonly compatible: false } | { readonly compatible: true; readonly id: unknown } {
+    const descriptor = targetIdField.descriptor;
+    if (descriptor.fieldKind === "message") {
+      const schema = descriptor.message as MessageSchema;
+      if (producerId.typeUrl !== TypeUrls.derive(schema)) return { compatible: false };
+      const id = Identifiers.unpack(schema, producerId);
+      if (id === undefined) {
+        throw new Error("Repository event routing requires a readable compatible producer ID.");
+      }
+      return { compatible: true, id };
+    }
+    if (descriptor.fieldKind !== "scalar") {
+      throw new Error("Repository event routing requires a scalar or message-valued ID.");
+    }
+    const type = RepositoryRoutes.primitiveIdentifierType(descriptor.scalar);
+    const schema =
+      type === "string"
+        ? StringValueSchema
+        : type === "int32"
+          ? Int32ValueSchema
+          : Int64ValueSchema;
+    if (producerId.typeUrl !== TypeUrls.derive(schema)) return { compatible: false };
+    const id =
+      type === "string"
+        ? Identifiers.unpack("string", producerId)
+        : type === "int32"
+          ? Identifiers.unpack("int32", producerId)
+          : Identifiers.unpack("int64", producerId);
+    if (id === undefined) {
+      throw new Error("Repository event routing requires a readable compatible producer ID.");
+    }
+    return { compatible: true, id };
+  },
+
+  primitiveIdentifierType(type: ScalarType): "string" | "int32" | "int64" {
+    switch (type) {
+      case ScalarType.STRING:
+        return "string";
+      case ScalarType.INT32:
+      case ScalarType.SINT32:
+      case ScalarType.SFIXED32:
+        return "int32";
+      case ScalarType.INT64:
+      case ScalarType.SINT64:
+      case ScalarType.SFIXED64:
+        return "int64";
+      default:
+        throw new Error("Repository event routing requires a supported Entity ID type.");
     }
   },
 
@@ -4668,7 +4761,7 @@ const DispatchGuards = {
     const eventId = event.id?.value;
     if (depth === undefined || eventId === undefined || eventId.length === 0) return dispatch();
     if (entityId === undefined) return dispatch();
-    const key = DispatchGuards.canonicalEntityIdKey(entityId);
+    const key = DispatchGuards.canonicalEntityIdKey(repository, entityId);
     const journalEventId = DispatchGuards.guardedJournalEventId(eventId, key);
     let guards = repositoryDispatchGuards.get(repository);
     if (guards === undefined) {
@@ -4744,7 +4837,7 @@ const DispatchGuards = {
     }
   },
 
-  guardedJournalEvent(event: Event, entityId: unknown): Event {
+  guardedJournalEvent(repository: RepositoryView, event: Event, entityId: unknown): Event {
     const sourceId = event.id?.value;
     if (sourceId === undefined) return event;
     return create(EventSchema, {
@@ -4752,7 +4845,7 @@ const DispatchGuards = {
       id: create(EventIdSchema, {
         value: DispatchGuards.guardedJournalEventId(
           sourceId,
-          DispatchGuards.canonicalEntityIdKey(entityId),
+          DispatchGuards.canonicalEntityIdKey(repository, entityId),
         ),
       }),
     });
@@ -4762,17 +4855,8 @@ const DispatchGuards = {
     return `${sourceId}.guard.${encodeURIComponent(entityKey)}`;
   },
 
-  canonicalEntityIdKey(id: unknown): string {
-    if (id === null) return "null";
-    switch (typeof id) {
-      case "string":
-      case "number":
-      case "boolean":
-      case "bigint":
-        return `${typeof id}:${String(id)}`;
-      default:
-        return `json:${JSON.stringify(id)}`;
-    }
+  canonicalEntityIdKey(repository: RepositoryView, id: unknown): string {
+    return InboxTargets.key(InboxMessages.inboxTargetId(id, repository.idField));
   },
 };
 Object.freeze(DispatchGuards);
@@ -4789,10 +4873,6 @@ const InboxMessages = {
     if (typeof entityId === "number") return Identifiers.pack("int32", entityId);
     if (typeof entityId === "bigint") return Identifiers.pack("int64", entityId);
     throw new Error("Repository Entity Inbox handoff requires a supported target ID.");
-  },
-
-  sameTargetId(left: Any, right: Any): boolean {
-    return InboxTargets.equal(left, right);
   },
 
   targetEntityId(targetId: Any, idField: DescriptorFieldMetadata): unknown {
@@ -4980,9 +5060,19 @@ const InboxReplay = {
       "Entity Inbox replay requires a readable event payload.",
     );
 
-    const entityId = InboxReplay.replayProcessManagerId(repository, message, event);
+    const route = InboxReplay.replayEventRoute(
+      repository,
+      routing,
+      message,
+      event,
+      "Entity Inbox replay",
+    );
+    const [entityId] = route.entityIds;
 
-    await new ProcessManagerEventExecution(repository, routing, runtime, event).runTarget(entityId);
+    await new ProcessManagerEventExecution(repository, routing, runtime, event).runTarget(
+      entityId,
+      route,
+    );
   },
 
   async replayProjectionEvent(
@@ -5004,9 +5094,19 @@ const InboxReplay = {
     InboxReplay.validateProjectionReplayTenant(runtime.context, deliveryTenantId, event);
     InboxReplay.validateReplayedEventPayload(routing, event);
 
-    const entityId = InboxReplay.replayProjectionId(repository, message, event);
+    const route = InboxReplay.replayEventRoute(
+      repository,
+      routing,
+      message,
+      event,
+      "Projection inbox replay",
+    );
+    const [entityId] = route.entityIds;
 
-    await new ProjectionEventExecution(repository, routing, runtime, event).runTarget(entityId);
+    await new ProjectionEventExecution(repository, routing, runtime, event).runTarget(
+      entityId,
+      route,
+    );
   },
 
   validateReplayedCommandPayload(routing: RepositoryRouting, command: Command): void {
@@ -5151,64 +5251,32 @@ const InboxReplay = {
     });
   },
 
-  replayProcessManagerId(
-    repository: RepositoryView & {
-      routeEvent(event: Event): RepositoryEventRoute;
-    },
+  replayEventRoute(
+    repository: RepositoryView,
+    routing: RepositoryRouting,
     message: InboxMessage,
     event: Event,
-  ): unknown {
+    replayName: string,
+  ): RepositoryEventRoute & { readonly entityIds: readonly [unknown] } {
     const expectedTargetTypeUrl = TypeUrls.derive(repository.stateSchema);
 
     if (message.inboxId.targetTypeUrl !== expectedTargetTypeUrl) {
-      throw new Error(
-        "Entity Inbox replay stored target type does not match the routed repository.",
-      );
+      throw new Error(`${replayName} stored target type does not match the routed repository.`);
     }
 
-    const route = repository.routeEvent(event);
-    const entityId = route.entityIds.find((id) =>
-      InboxMessages.sameTargetId(
-        InboxMessages.inboxTargetId(id, repository.idField),
-        message.inboxId.targetId,
-      ),
+    const eventMessage = EntityInvocation.requireSignalMessage(event.message, "event");
+    const schema = RepositoryRoutes.schemaForTypeUrl(
+      routing.eventSchemas,
+      eventMessage.typeUrl,
+      "event",
     );
-
-    if (entityId === undefined) {
-      throw new Error("Entity Inbox replay stored target ID does not match the routed event.");
-    }
-
-    return entityId;
-  },
-
-  replayProjectionId(
-    repository: RepositoryView & {
-      routeEvent(event: Event): RepositoryEventRoute;
-    },
-    message: InboxMessage,
-    event: Event,
-  ): unknown {
-    const expectedTargetTypeUrl = TypeUrls.derive(repository.stateSchema);
-
-    if (message.inboxId.targetTypeUrl !== expectedTargetTypeUrl) {
-      throw new Error(
-        "Projection inbox replay stored target type does not match the routed repository.",
-      );
-    }
-
-    const route = repository.routeEvent(event);
-    const entityId = route.entityIds.find((id) =>
-      InboxMessages.sameTargetId(
-        InboxMessages.inboxTargetId(id, repository.idField),
-        message.inboxId.targetId,
-      ),
-    );
-
-    if (entityId === undefined) {
-      throw new Error("Projection inbox replay stored target ID does not match the routed event.");
-    }
-
-    return entityId;
+    const entityId = InboxMessages.targetEntityId(message.inboxId.targetId, repository.idField);
+    const entityIds: readonly [unknown] = Object.freeze([entityId]);
+    return Object.freeze({
+      entityIds,
+      messageFullTypeName: schema.typeName,
+      invocation: "deferred",
+    });
   },
 };
 Object.freeze(InboxReplay);
@@ -5363,6 +5431,7 @@ const RepositoryDispatch = {
     },
     routing: RepositoryRouting,
   ): RepositoryDispatchers {
+    const acceptedEventRoutes = new WeakMap<Event, RepositoryEventRoute>();
     return Object.freeze({
       command:
         routing.commandSchemas.length === 0
@@ -5377,10 +5446,20 @@ const RepositoryDispatch = {
           ? undefined
           : Object.freeze({
               messageSchemas: () => routing.eventSchemas,
-              accept: (event: Event): Promise<void> =>
-                RepositoryDispatch.routeRepositoryEvent(repository, event),
-              dispatch: (event: Event): Promise<void> =>
-                RepositoryDispatch.dispatchRepositoryEvent(repository, routing, event),
+              accept: (event: Event): Promise<void> => {
+                acceptedEventRoutes.set(event, repository.routeEvent(event));
+                return Promise.resolve();
+              },
+              dispatch: (event: Event): Promise<void> => {
+                const acceptedRoute = acceptedEventRoutes.get(event);
+                acceptedEventRoutes.delete(event);
+                return RepositoryDispatch.dispatchRepositoryEvent(
+                  repository,
+                  routing,
+                  event,
+                  acceptedRoute,
+                );
+              },
             }),
     });
   },
@@ -5449,49 +5528,42 @@ const RepositoryDispatch = {
     };
   },
 
-  routeRepositoryEvent(
-    repository: RepositoryView & {
-      routeEvent(event: Event): RepositoryEventRoute;
-    },
-    event: Event,
-  ): Promise<void> {
-    void repository.routeEvent(event);
-    return Promise.resolve();
-  },
-
   async dispatchRepositoryEvent(
     repository: RepositoryView & {
       routeEvent(event: Event): RepositoryEventRoute;
     },
     routing: RepositoryRouting,
     event: Event,
+    acceptedRoute?: RepositoryEventRoute,
   ): Promise<void> {
     const runtime = repositoryRuntimes.get(repository);
 
     if (runtime === undefined) {
-      void repository.routeEvent(event);
+      if (acceptedRoute === undefined) void repository.routeEvent(event);
       return;
     }
+
+    const route = acceptedRoute ?? repository.routeEvent(event);
 
     switch (repository.entityFamily) {
       case "aggregate": {
         const execution = new AggregateEventExecution(repository, routing, runtime, event);
-        for (const entityId of repository.routeEvent(event).entityIds) {
+        for (const entityId of route.entityIds) {
           await DispatchGuards.guardedEntityEventDispatch(
             repository,
             runtime,
             event,
             entityId,
-            () => execution.runTarget(entityId),
+            () => execution.runTarget(entityId, route),
           );
         }
         return;
       }
       case "process-manager":
-        await new ProcessManagerEventExecution(repository, routing, runtime, event).run();
+        await new ProcessManagerEventExecution(repository, routing, runtime, event).run(route);
         return;
       case "projection":
-        await new ProjectionEventExecution(repository, routing, runtime, event).run();
+        await new ProjectionEventExecution(repository, routing, runtime, event).run(route);
         return;
     }
   },

@@ -38,6 +38,11 @@ const eventBusLoggers = new WeakMap<EventBus, ILogLayer>();
 
 type EventBusRole = "domain" | "system";
 
+interface AcceptedEventDispatcher {
+  readonly dispatcher: EventDispatcher;
+  readonly event: Event;
+}
+
 interface EventBusAccess {
   // prettier-ignore
 
@@ -211,10 +216,10 @@ export class EventBus {
 
     if (forgettingBuses.has(this)) {
       this.#validate(event, typeUrl);
-      await this.#accept(event, dispatchers);
+      const accepted = await this.#accept(event, dispatchers);
 
-      for (const dispatcher of dispatchers) {
-        await dispatcher.dispatch(clone(EventSchema, event));
+      for (const { dispatcher, event: acceptedEvent } of accepted) {
+        await dispatcher.dispatch(acceptedEvent);
       }
       this.#notify(event);
       return;
@@ -225,13 +230,14 @@ export class EventBus {
       throw new Error("EventBus requires an EventStore.");
     }
 
+    let acceptedDispatchers: readonly AcceptedEventDispatcher[] = [];
     const stored = await eventStore.acceptThenAppend(event, async (accepted) => {
       this.#validate(accepted, typeUrl);
-      await this.#accept(accepted, dispatchers);
+      acceptedDispatchers = await this.#accept(accepted, dispatchers);
     });
 
-    for (const dispatcher of dispatchers) {
-      await dispatcher.dispatch(clone(EventSchema, stored));
+    for (const { dispatcher, event: acceptedEvent } of acceptedDispatchers) {
+      await dispatcher.dispatch(acceptedEvent);
     }
     this.#notify(stored);
   }
@@ -281,18 +287,25 @@ export class EventBus {
 
     const dispatchers = this.#registry.find(typeUrl);
     this.#validate(event, typeUrl);
-    await this.#accept(event, dispatchers);
+    const accepted = await this.#accept(event, dispatchers);
 
-    for (const dispatcher of dispatchers) {
-      await dispatcher.dispatch(clone(EventSchema, event));
+    for (const { dispatcher, event: acceptedEvent } of accepted) {
+      await dispatcher.dispatch(acceptedEvent);
     }
     this.#notify(event);
   }
 
-  async #accept(event: Event, dispatchers: readonly EventDispatcher[]): Promise<void> {
+  async #accept(
+    event: Event,
+    dispatchers: readonly EventDispatcher[],
+  ): Promise<readonly AcceptedEventDispatcher[]> {
+    const accepted: AcceptedEventDispatcher[] = [];
     for (const dispatcher of dispatchers) {
-      await dispatcher.accept?.(clone(EventSchema, event));
+      const acceptedEvent = clone(EventSchema, event);
+      await dispatcher.accept?.(acceptedEvent);
+      accepted.push(Object.freeze({ dispatcher, event: acceptedEvent }));
     }
+    return Object.freeze(accepted);
   }
 
   #validate(event: Event, typeUrl: string): void {
