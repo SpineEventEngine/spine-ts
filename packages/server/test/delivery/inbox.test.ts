@@ -1,7 +1,10 @@
+import { create } from "@bufbuild/protobuf";
+import { Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { AnyMessages } from "@spine-event-engine/core";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
-import { Inbox } from "../../src/delivery/inbox.js";
+import { Inbox, InboxTargets } from "../../src/delivery/inbox.js";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { InboxMessageError, ShardIndex } from "../../src/index.js";
 import { createMessage } from "./inbox-message-fixture.js";
@@ -49,11 +52,22 @@ describe("Inbox", () => {
     const inbox = open("Tasks");
     const value = {
       ...input(createMessage("ignored", "stable", 1n)),
-      inboxId: { targetId: "projection-1", targetTypeUrl: "type.example.dev/tasks.Projection" },
+      inboxId: {
+        targetId: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: "projection-1" })),
+        targetTypeUrl: "type.example.dev/tasks.Projection",
+      },
     };
     await inbox.receive(value);
-    (value.inboxId as { targetId: string }).targetId = "mutated";
-    expect((await inbox.read(ShardIndex.single()))[0]?.inboxId.targetId).toBe("projection-1");
+    value.inboxId.targetId.value[0] = 0;
+    expect(InboxTargets.equal((await inbox.read(ShardIndex.single()))[0]?.inboxId.targetId as never, value.inboxId.targetId)).toBe(false);
+  });
+
+  it("distinguishes same printable IDs across typed Any kinds", () => {
+    const text = AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: "7" }));
+    const integer = AnyMessages.pack(Int32ValueSchema, create(Int32ValueSchema, { value: 7 }));
+
+    expect(InboxTargets.equal(text, integer)).toBe(false);
+    expect(InboxTargets.key(text)).not.toBe(InboxTargets.key(integer));
   });
 });
 

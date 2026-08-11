@@ -5,7 +5,7 @@ import { TenantBoundary } from "@spine-event-engine/storage";
 import { Delivery, type DeliveryEndpointMessage } from "../delivery/delivery.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
 import type { DeliverySource } from "../delivery/delivery-supervisor.js";
-import type { InboxMessage } from "../delivery/inbox.js";
+import { InboxTargets, type InboxMessage } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 
 /**
@@ -531,7 +531,7 @@ export const InboxHandoff: Readonly<{
       input.label,
       input.signalId,
       input.inboxId.targetTypeUrl,
-      input.inboxId.targetId,
+      InboxTargets.key(input.inboxId.targetId),
       input.shard.index,
       input.shard.ofTotal,
     ]);

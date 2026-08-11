@@ -1,11 +1,11 @@
-import { fromBinary, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
+import type { Any } from "@bufbuild/protobuf/wkt";
 import type { StorageContext, StorageFactory } from "@spine-event-engine/storage";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
 
 import { ServerEnvironment } from "../server/server-environment.js";
 import { Delivery as CoreDelivery, type OnDeliveryMessage } from "./delivery.js";
 import { DeliveryMonitor } from "./delivery-monitor.js";
+import { InboxTargets } from "./inbox.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "./delivery-ports.js";
 import type { DeliveryControlledRun } from "./delivery-run-control.js";
 import { ShardIndex } from "./shard-index.js";
@@ -128,24 +128,12 @@ export class UniformAcrossAllShards implements DeliveryStrategy {
       throw new Error("Delivery target type must be a non-empty string.");
     }
     return new ShardIndex(
-      DeliveryValues.hash(`${targetType}:${DeliveryTargets.key(targetId)}`) % this.shardCount,
+      DeliveryValues.hash(`${targetType}:${InboxTargets.shardKey(targetId)}`) % this.shardCount,
       this.shardCount,
     );
   }
 }
 
-const DeliveryTargets = Object.freeze({
-  key(targetId: Any): string {
-    if (targetId.typeUrl === "type.googleapis.com/google.protobuf.StringValue") {
-      try {
-        return fromBinary(StringValueSchema, targetId.value).value;
-      } catch {
-        throw new Error("Delivery target ID must be a valid StringValue.");
-      }
-    }
-    return `${targetId.typeUrl}:${Buffer.from(toBinary(AnySchema, targetId)).toString("base64")}`;
-  },
-});
 
 export { DeliveryMonitor, type DeliveryStatistics } from "./delivery-monitor.js";
 

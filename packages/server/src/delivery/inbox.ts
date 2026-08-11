@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-import type { Any } from "@bufbuild/protobuf/wkt";
+import { clone, toBinary } from "@bufbuild/protobuf";
+import { AnySchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
+import { fromBinary } from "@bufbuild/protobuf";
 
 import type { InboxStorage } from "./inbox-storage.js";
 import type { ShardIndex } from "./shard-index.js";
@@ -127,6 +129,36 @@ export interface InboxId {
    */
   readonly targetTypeUrl: string;
 }
+
+/**
+ * Provides canonical typed Inbox target identity operations.
+ */
+export const InboxTargets: Readonly<{
+  clone(value: Any): Any;
+  key(value: Any): string;
+  shardKey(value: Any): string;
+  equal(left: Any, right: Any): boolean;
+}> = Object.freeze({
+  clone(value: Any): Any {
+    return clone(AnySchema, value);
+  },
+  key(value: Any): string {
+    return Buffer.from(toBinary(AnySchema, value)).toString("base64");
+  },
+  shardKey(value: Any): string {
+    if (value.typeUrl === "type.googleapis.com/google.protobuf.StringValue") {
+      try {
+        return fromBinary(StringValueSchema, value.value).value;
+      } catch {
+        throw new TypeError("Inbox target ID must be a valid StringValue.");
+      }
+    }
+    return this.key(value);
+  },
+  equal(left: Any, right: Any): boolean {
+    return this.key(left) === this.key(right);
+  },
+});
 
 /**
  * Durable inbox message identity.
