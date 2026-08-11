@@ -95,6 +95,7 @@ import {
   type EventDispatcher,
   type InboxMessage,
   SpecScanner,
+  StateUpdateRouting,
 } from "../../src/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
@@ -10671,3 +10672,14 @@ class ObservingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     return this.delegate.write(record.record);
   }
 }
+
+it("rejects state-update routing for Aggregate repositories", () => {
+  expect(
+    () =>
+      new Repository({
+        entityType: TaskAggregate,
+        schema: AggregateStateSchema,
+        stateUpdateRouting: StateUpdateRouting.create<string>(),
+      } as never),
+  ).toThrow(/State-update routing is supported only by Projection repositories/);
+});

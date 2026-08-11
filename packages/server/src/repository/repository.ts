@@ -61,6 +61,7 @@ import {
   type CommandRouting,
 } from "./command-routing.js";
 import { EventRoutingInternals, type EventRoute, type EventRouting } from "./event-routing.js";
+import type { StateUpdateRouting } from "./state-update-routing.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { Delivery } from "../delivery/delivery.js";
@@ -239,7 +240,6 @@ export interface RepositoryOptions<
   EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
 > {
   // prettier-ignore
-
   /**
    * Entity constructor owned by this repository identity.
    */
@@ -271,6 +271,10 @@ export interface RepositoryOptions<
    * Mutable Event route declarations snapshotted when this repository is constructed.
    */
   readonly eventRouting?: EventRouting<RepositoryEntityId<EntityType>>;
+
+  /** Mutable state-update declarations allowed only for Projections. */
+  readonly stateUpdateRouting?: StateUpdateRouting<RepositoryEntityId<EntityType>>;
+
 
   /**
    * Generated event schemas that aggregate or process-manager handlers may emit.
@@ -497,6 +501,12 @@ export class Repository<
         "ENTITY_SCHEMA_KIND_MISMATCH",
         `Repository entity type "${entityTypeDisplayName}" does not match ` +
           "the supplied state schema.",
+      );
+    }
+    if (options.stateUpdateRouting !== undefined && entityFamily !== "projection") {
+      throw new RepositoryIdentityError(
+        "UNSUPPORTED_ENTITY_TYPE",
+        "State-update routing is supported only by Projection repositories.",
       );
     }
 
