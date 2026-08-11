@@ -1,6 +1,6 @@
 # T-0167 Review Record
 
-Status: Clean and release-verified; integration pending
+Status: Clean, integrated, and post-merge verified
 
 ## Review boundary
 
@@ -86,4 +86,9 @@ release-readiness, and diff gate. The corrected release profile is authorized.
 The corrected release profile passes 244 files / 3,888 tests, with 3 files and
 14 tests skipped. Repository coverage is 94.19% statements, 90.43% branches,
 94.13% functions, and 95.19% lines. The review boundary is clean and ready for
+fast-forward integration.
+
+`origin/main@e09472b2` contains the reviewed train. Post-main Proto generation,
+generated build, corrected integration tests (3 files / 23 tests), containment,
+release-readiness, and diff checks pass. No concern was reopened by the
 fast-forward integration.

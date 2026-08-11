@@ -1,6 +1,6 @@
 # Spine TS Project Completion Plan
 
-Status: Initial release, post-release JVM parity Waves 1 through 7, and T-0080
+Status: Initial release, post-release JVM parity Waves 1 through 9, and T-0080
 authored-API/example quality correction complete
 
 Plan date: 2026-07-12
@@ -194,13 +194,12 @@ removes the invented physical scope and revision fields, adopts native provider
 tenancy and JVM-compatible typed value mapping, and closes the shared-runtime
 cutover.
 
-Wave 9 planning is complete under T-0153. Its approved scope and preliminary
-Wave 10 beginner-guide structure are frozen in
+Wave 9 is complete under T-0153 through T-0167. Its approved scope and
+preliminary Wave 10 beginner-guide structure are frozen in
 `build-protocol/planning/WAVE_9_LOGGING_ROUTING_PLAN.md`. The dependency-ordered
-T-0154 through T-0166 implementation train is reviewed, integrated, and
-post-merge verified. T-0167 has completed cross-wave audits, specialist and
-security concern review, fixture convergence, and the release profile;
-fast-forward integration and post-main proof remain.
+implementation train, cross-wave audits, specialist and security concern
+review, fixture convergence, release profile, fast-forward integration, and
+post-main proof are complete and remotely synchronized.
 
 ## Authored API And Example Quality Correction
 
