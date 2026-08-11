@@ -55,3 +55,27 @@ pending.
   `git diff --check`. Targeted re-review remains for
   performance/reliability, style/maintainability, and TypeScript/API
   documentation; security remains N/A and `verify:task` remains pending.
+
+## Typed Discriminator Residual Correction
+
+- Accepted style P2: core now exposes the documented
+  `isInvalidSemanticOptionError()` discriminator while retaining its
+  code-bearing error implementation internally. Server code translates only
+  that exact error; an unrelated plain `Error` with the former message prefix
+  is propagated unchanged. The guard is a required supported core contract for
+  the built server package, so TypeScript/API documentation remains in scope.
+- Focused RED failed for the missing guard and the same-prefix false positive;
+  after the minimal shared-core implementation, `pnpm typecheck:build:generated`
+  and focused tests passed 2 files / 69 tests. Fresh
+  `/tmp/t0157-cov-typed-final-20260811/lcov.info` intersected with production
+  lines added relative to `origin/main` gives statements/lines 29/29 (100%),
+  branches 14/14 (100%), and functions 8/8 (100%).
+- Documentation reviewer P3: restored the historical work-log coverage command
+  to one complete bullet line, eliminating its unindented continuation.
+  Documentation/TSDoc is otherwise CLEAN and this formatting-only correction
+  does not reopen that lane.
+- Final mechanical gates pass: `pnpm typecheck:tooling`, `pnpm lint:tsdoc`,
+  `pnpm docs:api:check`, exact changed-TypeScript ESLint, Prettier, and
+  `git diff --check`.
+- Targeted re-review: style/maintainability and TypeScript/API documentation;
+  performance/reliability is affected by the error-boundary behavior change.

@@ -1,7 +1,7 @@
 import { getOption, hasOption } from "@bufbuild/protobuf";
 import type { DescField, DescFile, Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { TypeRegistry } from "@spine-event-engine/core";
+import { isInvalidSemanticOptionError, TypeRegistry } from "@spine-event-engine/core";
 import type { Entity } from "./entity.js";
 import {
   column,
@@ -299,7 +299,7 @@ export function describeEntityMetadata<Schema extends DescriptorMessageSchema>(
   try {
     registered = new TypeRegistry().register(schema as never);
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith("semantic tag option ")) {
+    if (isInvalidSemanticOptionError(error)) {
       throw new DescriptorMetadataError("INVALID_SEMANTIC_TAG", error.message);
     }
     throw error;

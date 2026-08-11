@@ -2,7 +2,7 @@ import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { TypeRegistry, TypeUrls } from "@spine-event-engine/core";
+import { isInvalidSemanticOptionError, TypeRegistry, TypeUrls } from "@spine-event-engine/core";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { CommandSchema, file_spine_options } from "@spine-event-engine/proto";
@@ -651,7 +651,7 @@ describe("@spine-event-engine/server", () => {
   });
 
   it("preserves unrelated core registry errors at the descriptor boundary", () => {
-    const cause = new Error("unrelated registry failure");
+    const cause = new Error('semantic tag option "unrelated" must declare a non-empty java_type.');
     const register = vi.spyOn(TypeRegistry.prototype, "register").mockImplementationOnce(() => {
       throw cause;
     });
@@ -661,6 +661,22 @@ describe("@spine-event-engine/server", () => {
     } finally {
       register.mockRestore();
     }
+  });
+
+  it("discriminates only typed core semantic-option errors", () => {
+    let malformedOptionError: unknown;
+    try {
+      new TypeRegistry().register(InvalidTagStateSchema);
+    } catch (error) {
+      malformedOptionError = error;
+    }
+
+    expect(isInvalidSemanticOptionError(malformedOptionError)).toBe(true);
+    expect(
+      isInvalidSemanticOptionError(
+        new Error('semantic tag option "unrelated" must declare a non-empty java_type.'),
+      ),
+    ).toBe(false);
   });
 
   it("rejects malformed descriptor semantic values without indexing the schema", () => {

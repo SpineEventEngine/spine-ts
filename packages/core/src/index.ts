@@ -76,6 +76,17 @@ const VALIDATION_RUNTIME_FAILURE_MESSAGE = "Validation runtime failed.";
 const TRANSITION_RULE_FAILURE_MESSAGE = "Transition validation rule failed.";
 const REJECTION_CONSTRUCTOR = Symbol("RejectionThrowable");
 const REJECTION_THROWABLES = new WeakSet<object>();
+const INVALID_SEMANTIC_OPTION_ERROR = "INVALID_SEMANTIC_OPTION";
+
+class InvalidSemanticOptionError extends Error {
+  readonly code: string = INVALID_SEMANTIC_OPTION_ERROR;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidSemanticOptionError";
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
 
 /**
  * Standard Protobuf `Any` prefix used when a file has no Spine type URL option.
@@ -86,6 +97,20 @@ export const DEFAULT_TYPE_URL_PREFIX = "type.googleapis.com";
  * Protobuf-ES schema shape accepted by the Spine TS type registry.
  */
 export type MessageSchema = GenMessage<Message>;
+
+/**
+ * Checks whether an error identifies a malformed descriptor semantic option.
+ *
+ * @param error Value thrown while registering descriptor metadata.
+ * @returns Whether the error is the core invalid-semantic-option failure.
+ */
+export function isInvalidSemanticOptionError(
+  error: unknown,
+): error is Error & { readonly code: "INVALID_SEMANTIC_OPTION" } {
+  return (
+    error instanceof InvalidSemanticOptionError && error.code === INVALID_SEMANTIC_OPTION_ERROR
+  );
+}
 
 /**
  * Structured result returned by {@link Validate.message}.
@@ -1546,7 +1571,9 @@ const RegistryLookups = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const value = (getOption(owner as any, option as any) as { javaType: string }).javaType.trim();
     if (value.length === 0)
-      throw new Error(`semantic tag option "${name}" must declare a non-empty java_type.`);
+      throw new InvalidSemanticOptionError(
+        `semantic tag option "${name}" must declare a non-empty java_type.`,
+      );
     return Object.freeze([value]);
   },
 

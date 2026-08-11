@@ -3,7 +3,11 @@ import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import {
+  AnySchema,
+  FileDescriptorProtoSchema,
+  FileDescriptorSetSchema,
+} from "@bufbuild/protobuf/wkt";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -28,6 +32,7 @@ import {
 
 import {
   DEFAULT_TYPE_URL_PREFIX,
+  isInvalidSemanticOptionError,
   type MessageValidationResult,
   type TypeMetadata,
   TypeRegistry,
@@ -44,6 +49,8 @@ type RequiredName = Message<"example.validation.RequiredName"> & {
   name: string;
 };
 
+type InvalidSemanticOption = Message<"InvalidTagState"> & { id: string };
+
 // Descriptor fixture compiled from:
 // syntax = "proto3"; package example.validation;
 // message RequiredName { string name = 1 [(required) = true]; }
@@ -53,6 +60,29 @@ const fileExampleValidationFixture = fileDesc(
   [file_spine_options],
 );
 const RequiredNameSchema = messageDesc(fileExampleValidationFixture, 0) as GenMessage<RequiredName>;
+
+// Descriptor fixture compiled from an `(is).java_type = ""` message option.
+const invalidSemanticOptionDescriptorSet = fromBinary(
+  FileDescriptorSetSchema,
+  Buffer.from(
+    "CpYCCiFlbnRpdHktbWV0YWRhdGEvaW52YWxpZC10YWcucHJvdG8aE3NwaW5lL29wdGlvbnMucHJvdG8iLQoPSW52YWxpZFRhZ1N0YXRlEg4KAmlkGAEgASgJUgJpZDoK+ookAggE2oskAEqkAQoGEgQAAAkBCggKAQwSAwAAEgoJCgIDABIDAgAdCgoKAgQAEgQEAAkBCgoKAwQAARIDBAgXCgoKAwQABxIDBQIgCg4KBwQAB6/BBAESAwUCIAoKCgMEAAcSAwYCHQoOCgcEAAe7wQQBEgMGAh0KDAoFBAACAAUSAwgCCAoLCgQEAAIAEgMIAhAKDAoFBAACAAESAwgJCwoMCgUEAAIAAxIDCA4PYgZwcm90bzM=",
+    "base64",
+  ),
+);
+const invalidSemanticOptionDescriptor = invalidSemanticOptionDescriptorSet.file[0];
+if (invalidSemanticOptionDescriptor === undefined) {
+  throw new Error("Invalid semantic option fixture is empty.");
+}
+const fileInvalidSemanticOptionFixture = fileDesc(
+  Buffer.from(toBinary(FileDescriptorProtoSchema, invalidSemanticOptionDescriptor)).toString(
+    "base64",
+  ),
+  [file_spine_options],
+);
+const InvalidSemanticOptionSchema = messageDesc(
+  fileInvalidSemanticOptionFixture,
+  0,
+) as GenMessage<InvalidSemanticOption>;
 
 const fileRequiredRejectionsFixture = fileDesc(
   "CiFleGFtcGxlL3JlcXVpcmVkX3JlamVjdGlvbnMucHJvdG8SEmV4YW1wbGUudmFsaWRhdGlvbiIi" +
@@ -547,6 +577,20 @@ describe("@spine-event-engine/core type registry", () => {
     expect(registry.findByIs("io.spine.FieldSelector")).toEqual([]);
     expect(metadata.isTypes).toEqual([]);
     expect(metadata.everyIsTypes).toEqual([]);
+  });
+
+  it("identifies the code-bearing malformed descriptor semantic-option error", () => {
+    let error: unknown;
+    try {
+      new TypeRegistry().register(InvalidSemanticOptionSchema);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(isInvalidSemanticOptionError(error)).toBe(true);
+    if (isInvalidSemanticOptionError(error)) {
+      expect(error.code).toBe("INVALID_SEMANTIC_OPTION");
+    }
   });
 
   it("registers the current curated Spine schemas in the default registry", () => {
