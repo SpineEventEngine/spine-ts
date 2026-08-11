@@ -1,5 +1,11 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import {
+  AnySchema,
+  Int32ValueSchema,
+  Int64ValueSchema,
+  StringValueSchema,
+  type Any,
+} from "@bufbuild/protobuf/wkt";
 
 import type { InboxMessage, InboxMessageId } from "@spine-event-engine/server";
 import { ShardIndex } from "@spine-event-engine/server";
@@ -105,7 +111,22 @@ const DeliveryValues = Object.freeze({
   },
 });
 
-const stringTargetTypeUrl = "type.googleapis.com/google.protobuf.StringValue";
+const DeliveryTargetIds = Object.freeze({
+  validate(typeUrl: string, value: Uint8Array): void {
+    switch (typeUrl) {
+      case "type.googleapis.com/google.protobuf.StringValue":
+        if (!DeliveryValues.hasText(fromBinary(StringValueSchema, value).value))
+          throw new TypeError("String target ID is blank.");
+        break;
+      case "type.googleapis.com/google.protobuf.Int32Value":
+        fromBinary(Int32ValueSchema, value);
+        break;
+      case "type.googleapis.com/google.protobuf.Int64Value":
+        fromBinary(Int64ValueSchema, value);
+        break;
+    }
+  },
+});
 
 type DeliveryMessageCodecApi = Readonly<{
   encodeBatch(messages: readonly InboxMessage[]): {
@@ -118,7 +139,7 @@ type DeliveryMessageCodecApi = Readonly<{
   encodeId(id: InboxMessageId): string;
   snapshot(value: InboxMessage): InboxMessage;
   target(inbox: InboxMessage["inboxId"]): { typeUrl: string; value: Uint8Array };
-  decodeTarget(typeUrl: string, value: Uint8Array): string;
+  decodeTarget(typeUrl: string, value: Uint8Array): Any;
   payload(signal: InboxMessage["signal"]): WireInboxMessage["payload"];
   label(value: InboxMessage["label"]): InboxLabel;
   status(value: InboxMessage["status"]): InboxMessageStatus;
@@ -282,7 +303,12 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
         shard: DeliveryShardCodec.snapshot(value.id.shard),
       }),
       inboxId: DeliveryValues.freeze({
-        targetId: value.inboxId.targetId,
+        targetId: DeliveryValues.freeze(
+          create(AnySchema, {
+            typeUrl: value.inboxId.targetId.typeUrl,
+            value: new Uint8Array(value.inboxId.targetId.value),
+          }),
+        ),
         targetTypeUrl: value.inboxId.targetTypeUrl,
       }),
       signalId: value.signalId,
@@ -313,17 +339,22 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
    */
   target(inbox: InboxMessage["inboxId"]): { typeUrl: string; value: Uint8Array } {
     if (
-      typeof inbox.targetId !== "string" ||
+      typeof inbox.targetId.typeUrl !== "string" ||
+      !DeliveryValues.hasText(inbox.targetId.typeUrl) ||
+      !(inbox.targetId.value instanceof Uint8Array) ||
       typeof inbox.targetTypeUrl !== "string" ||
       !DeliveryValues.hasText(inbox.targetTypeUrl)
     )
       throw new TypeError("Delivery inbox ID is invalid.");
-    if (!DeliveryValues.hasText(inbox.targetId))
-      throw new TypeError("Delivery inbox ID is invalid.");
-    return {
-      typeUrl: stringTargetTypeUrl,
-      value: toBinary(StringValueSchema, create(StringValueSchema, { value: inbox.targetId })),
-    };
+    try {
+      DeliveryTargetIds.validate(inbox.targetId.typeUrl, inbox.targetId.value);
+      return {
+        typeUrl: inbox.targetId.typeUrl,
+        value: new Uint8Array(inbox.targetId.value),
+      };
+    } catch (error) {
+      throw new TypeError("Delivery inbox ID is invalid.", { cause: error });
+    }
   },
 
   /**
@@ -333,17 +364,14 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
    * @param value Contains the serialized entity-ID message.
    * @returns The framework target identifier.
    */
-  decodeTarget(typeUrl: string, value: Uint8Array): string {
-    if (typeUrl !== stringTargetTypeUrl)
-      return `${typeUrl}:${Buffer.from(value).toString("base64")}`;
-    let decoded: string;
+  decodeTarget(typeUrl: string, value: Uint8Array): Any {
+    if (!DeliveryValues.hasText(typeUrl)) throw DeliveryRequestCodec.protocol();
     try {
-      decoded = fromBinary(StringValueSchema, value).value;
+      DeliveryTargetIds.validate(typeUrl, value);
     } catch {
       throw DeliveryRequestCodec.protocol();
     }
-    if (!DeliveryValues.hasText(decoded)) throw DeliveryRequestCodec.protocol();
-    return decoded;
+    return create(AnySchema, { typeUrl, value: new Uint8Array(value) });
   },
 
   /**

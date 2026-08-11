@@ -12,7 +12,7 @@ import {
   StringValueSchema,
   TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
-import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages, Identifiers, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   type Command as SpineCommand,
@@ -1329,7 +1329,7 @@ class InboxCheckingProcessManager extends ProcessManager<
       (message) =>
         message.signalId === "event-pm-inbox-first" &&
         message.label === "REACT_UPON_EVENT" &&
-        message.inboxId.targetId === event.id,
+        Identifiers.unpack("string", message.inboxId.targetId) === event.id,
     );
     InboxCheckingProcessManager.eventCalls++;
     this.update((draft) =>
@@ -3587,7 +3587,7 @@ describe("repository signal routing", () => {
         label: "HANDLE_COMMAND",
         status: "DELIVERED",
         inboxId: {
-          targetId: "pm-inbox",
+          targetId: Identifiers.pack("string", "pm-inbox"),
           targetTypeUrl: TypeUrls.derive(ProcessManagerStateSchema),
         },
       },
@@ -3870,7 +3870,7 @@ describe("repository signal routing", () => {
           shard: ShardIndex.single(),
         },
         inboxId: {
-          targetId: "pm-unbound",
+          targetId: Identifiers.pack("string", "pm-unbound"),
           targetTypeUrl: TypeUrls.derive(ProcessManagerStateSchema),
         },
         signalId: "command-pm-unbound",
@@ -4263,7 +4263,7 @@ describe("repository signal routing", () => {
 
     await delivery.inbox.receive({
       inboxId: {
-        targetId: "pm-older",
+        targetId: Identifiers.pack("string", "pm-older"),
         targetTypeUrl: TypeUrls.derive(ProcessManagerStateSchema),
       },
       signalId: "event-older",
@@ -4399,17 +4399,21 @@ describe("repository signal routing", () => {
         message.signalId === "event-pm-split" &&
         message.label === "REACT_UPON_EVENT" &&
         message.status === "DELIVERED" &&
-        message.inboxId.targetId === "pm-fail",
+        Identifiers.unpack("string", message.inboxId.targetId) === "pm-fail",
     );
     expect(failed?.inboxId.targetTypeUrl).toBe(TypeUrls.derive(ProcessManagerStateSchema));
-    expect(delivered.some((message) => message.inboxId.targetId === "pm-later")).toBe(true);
+    expect(
+      delivered.some(
+        (message) => Identifiers.unpack("string", message.inboxId.targetId) === "pm-later",
+      ),
+    ).toBe(true);
 
     const later = delivered.find(
       (message) =>
         message.signalId === "event-pm-split" &&
         message.label === "REACT_UPON_EVENT" &&
         message.status === "DELIVERED" &&
-        message.inboxId.targetId === "pm-later",
+        Identifiers.unpack("string", message.inboxId.targetId) === "pm-later",
     );
     expect(later?.inboxId.targetTypeUrl).toBe(TypeUrls.derive(ProcessManagerStateSchema));
   });
@@ -7026,7 +7030,7 @@ describe("repository signal routing", () => {
     expect(delivered).toHaveLength(1);
     expect(delivered[0]).toMatchObject({
       inboxId: {
-        targetId: "task-inbox",
+        targetId: Identifiers.pack("string", "task-inbox"),
         targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
       },
       signalId: "event-inbox",
@@ -9025,7 +9029,7 @@ async function storeEntityInboxCommand(
 ) {
   const message = await delivery.inbox.receive({
     inboxId: {
-      targetId: overrides.targetId ?? readAggregateId(command),
+      targetId: Identifiers.pack("string", overrides.targetId ?? readAggregateId(command)),
       targetTypeUrl: overrides.targetTypeUrl ?? TypeUrls.derive(ProcessManagerStateSchema),
     },
     signalId: overrides.signalId ?? command.id?.uuid ?? "missing-command-id",
@@ -9055,7 +9059,7 @@ async function storePmInboxEvent(
 ) {
   const message = await delivery.inbox.receive({
     inboxId: {
-      targetId: overrides.targetId ?? readProjectionId(event),
+      targetId: Identifiers.pack("string", overrides.targetId ?? readProjectionId(event)),
       targetTypeUrl: overrides.targetTypeUrl ?? TypeUrls.derive(ProcessManagerStateSchema),
     },
     signalId: overrides.signalId ?? event.id?.value ?? "missing-event-id",

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-import type { Any } from "@bufbuild/protobuf/wkt";
+import { clone, toBinary } from "@bufbuild/protobuf";
+import { AnySchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
+import { fromBinary } from "@bufbuild/protobuf";
 
 import type { InboxStorage } from "./inbox-storage.js";
 import type { ShardIndex } from "./shard-index.js";
@@ -118,15 +120,51 @@ export interface InboxId {
   // prettier-ignore
 
   /**
-   * Target entity ID routed to one inbox.
+   * Target Entity ID packed as canonical `Any` type URL and bytes.
+   *
+   * Durable boundaries snapshot this value. Callers and custom delivery
+   * strategies must treat it as typed identity, not as a display string.
    */
-  readonly targetId: string;
+  readonly targetId: Any;
 
   /**
    * Target entity state type URL.
    */
   readonly targetTypeUrl: string;
 }
+
+/**
+ * Provides canonical typed Inbox target identity operations.
+ */
+export const InboxTargets: Readonly<{
+  clone(value: Any): Any;
+  key(value: Any): string;
+  shardKey(value: Any): string;
+  equal(left: Any, right: Any): boolean;
+}> = Object.freeze({
+  clone(value: Any): Any {
+    if (value.typeUrl.trim().length === 0) throw new TypeError("Inbox target ID is invalid.");
+    return clone(AnySchema, value);
+  },
+  key(value: Any): string {
+    return Buffer.from(toBinary(AnySchema, value)).toString("base64");
+  },
+  shardKey(value: Any): string {
+    if (value.typeUrl === "type.googleapis.com/google.protobuf.StringValue") {
+      try {
+        const text = fromBinary(StringValueSchema, value.value).value;
+        if (text.trim().length === 0) throw new TypeError("String target ID is blank.");
+        return text;
+      } catch {
+        throw new TypeError("Inbox target ID must be a valid StringValue.");
+      }
+    }
+    return this.key(value);
+  },
+  equal(left: Any, right: Any): boolean {
+    return this.key(left) === this.key(right);
+  },
+});
 
 /**
  * Durable inbox message identity.

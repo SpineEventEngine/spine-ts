@@ -1,9 +1,11 @@
+import type { Any } from "@bufbuild/protobuf/wkt";
 import type { StorageContext, StorageFactory } from "@spine-event-engine/storage";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";
 
 import { ServerEnvironment } from "../server/server-environment.js";
 import { Delivery as CoreDelivery, type OnDeliveryMessage } from "./delivery.js";
 import { DeliveryMonitor } from "./delivery-monitor.js";
+import { InboxTargets } from "./inbox.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "./delivery-ports.js";
 import type { DeliveryControlledRun } from "./delivery-run-control.js";
 import { ShardIndex } from "./shard-index.js";
@@ -64,13 +66,16 @@ export interface DeliveryStrategy {
   readonly shardCount: number;
 
   /**
-   * Returns the shard for one target identity and type.
+   * Returns the shard for one canonical packed Entity ID and target type.
+   *
+   * The supplied `Any` contains the typed ID's type URL and bytes. Treat it as
+   * immutable typed identity, not as a display string.
    *
    * @param targetId The target identity.
    * @param targetType The target type URL.
    * @returns The durable shard for the target.
    */
-  shardFor(targetId: string, targetType: string): ShardIndex;
+  shardFor(targetId: Any, targetType: string): ShardIndex;
 }
 
 /**
@@ -118,15 +123,15 @@ export class UniformAcrossAllShards implements DeliveryStrategy {
    * @param targetType The target type URL.
    * @returns The stable shard for the target.
    */
-  shardFor(targetId: string, targetType: string): ShardIndex {
-    if (typeof targetId !== "string" || targetId.length === 0) {
-      throw new Error("Delivery target ID must be a non-empty string.");
+  shardFor(targetId: Any, targetType: string): ShardIndex {
+    if (typeof targetId.typeUrl !== "string" || targetId.typeUrl.length === 0) {
+      throw new Error("Delivery target ID must be a non-default Any.");
     }
     if (typeof targetType !== "string" || targetType.length === 0) {
       throw new Error("Delivery target type must be a non-empty string.");
     }
     return new ShardIndex(
-      DeliveryValues.hash(`${targetType}:${targetId}`) % this.shardCount,
+      DeliveryValues.hash(`${targetType}:${InboxTargets.shardKey(targetId)}`) % this.shardCount,
       this.shardCount,
     );
   }
@@ -427,8 +432,8 @@ const DeliveryValues = Object.freeze({
     const shardCount = this.requireStrategy(strategy).shardCount;
     return Object.freeze({
       shardCount,
-      shardFor(targetId: string, targetType: string): ShardIndex {
-        const shard = strategy.shardFor(targetId, targetType);
+      shardFor(targetId: Any, targetType: string): ShardIndex {
+        const shard = strategy.shardFor(InboxTargets.clone(targetId), targetType);
         if (shard.ofTotal !== shardCount) {
           throw new Error("Delivery strategy shard total must equal its resolved shard count.");
         }

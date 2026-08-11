@@ -3,6 +3,7 @@
 
 import { create } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { Identifiers } from "@spine-event-engine/core";
 import { WorkerIdSchema, type WorkerId } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
@@ -246,7 +247,10 @@ describe("Delivery direct worker", () => {
     mutable.keepUntil.setTime(30_000);
     mutable.signal.value[0] = 9;
     const fact = run.failures[0]!.message;
-    expect(fact).toMatchObject({ id: { value: "failed" }, inboxId: { targetId: "target" } });
+    expect(fact).toMatchObject({
+      id: { value: "failed" },
+      inboxId: { targetId: Identifiers.pack("string", "target") },
+    });
     expect(fact.shard).toMatchObject({ index: 0, ofTotal: 1 });
     expect(fact.whenReceived.getTime()).not.toBe(20_000);
     expect(fact.keepUntil?.getTime()).toBe(10_000);
@@ -501,7 +505,7 @@ function message(
 ): DeliveryEndpointMessage {
   return {
     id: { value: signalId, shard },
-    inboxId: { targetId, targetTypeUrl: "type" },
+    inboxId: { targetId: Identifiers.pack("string", targetId), targetTypeUrl: "type" },
     signalId,
     label,
     status: "TO_DELIVER",

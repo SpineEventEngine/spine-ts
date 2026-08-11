@@ -7,6 +7,7 @@ import {
   Validate,
   TypeUrls,
   AnyMessages,
+  Identifiers,
 } from "@spine-event-engine/core";
 import {
   CommandContextSchema,
@@ -49,7 +50,7 @@ import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { Delivery } from "../delivery/delivery.js";
 import { commitFenced } from "./commit-fence.js";
-import type { InboxMessage, InboxMessageInput } from "../delivery/inbox.js";
+import { InboxTargets, type InboxMessage, type InboxMessageInput } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import {
   Aggregate,
@@ -4646,14 +4647,18 @@ Object.freeze(DispatchGuards);
  * Internal inbox messages operations.
  */
 const InboxMessages = {
-  inboxTargetId(entityId: unknown): string {
-    const primitive = PrimitiveIds.readFinite(entityId) ?? MessageIds.readValue(entityId);
-
-    if (primitive === undefined) {
-      throw new Error("Repository Entity Inbox handoff requires a readable target ID.");
+  inboxTargetId(entityId: unknown, idField: DescriptorFieldMetadata): Any {
+    if (idField.descriptor.fieldKind === "message") {
+      return Identifiers.pack(idField.descriptor.message as MessageSchema, entityId as never);
     }
+    if (typeof entityId === "string") return Identifiers.pack("string", entityId);
+    if (typeof entityId === "number") return Identifiers.pack("int32", entityId);
+    if (typeof entityId === "bigint") return Identifiers.pack("int64", entityId);
+    throw new Error("Repository Entity Inbox handoff requires a supported target ID.");
+  },
 
-    return String(primitive);
+  sameTargetId(left: Any, right: Any): boolean {
+    return InboxTargets.equal(left, right);
   },
 
   readInboxCommand(message: InboxMessage): Command {
@@ -4972,9 +4977,9 @@ const InboxReplay = {
     }
 
     const route = repository.routeCommand(command);
-    const expectedTargetId = InboxMessages.inboxTargetId(route.entityId);
+    const expectedTargetId = InboxMessages.inboxTargetId(route.entityId, repository.idField);
 
-    if (message.inboxId.targetId !== expectedTargetId) {
+    if (!InboxMessages.sameTargetId(message.inboxId.targetId, expectedTargetId)) {
       throw new Error("Entity Inbox replay stored target ID does not match the routed command.");
     }
   },
@@ -4995,8 +5000,11 @@ const InboxReplay = {
     }
 
     const route = repository.routeEvent(event);
-    const entityId = route.entityIds.find(
-      (id) => InboxMessages.inboxTargetId(id) === message.inboxId.targetId,
+    const entityId = route.entityIds.find((id) =>
+      InboxMessages.sameTargetId(
+        InboxMessages.inboxTargetId(id, repository.idField),
+        message.inboxId.targetId,
+      ),
     );
 
     if (entityId === undefined) {
@@ -5022,8 +5030,11 @@ const InboxReplay = {
     }
 
     const route = repository.routeEvent(event);
-    const entityId = route.entityIds.find(
-      (id) => InboxMessages.inboxTargetId(id) === message.inboxId.targetId,
+    const entityId = route.entityIds.find((id) =>
+      InboxMessages.sameTargetId(
+        InboxMessages.inboxTargetId(id, repository.idField),
+        message.inboxId.targetId,
+      ),
     );
 
     if (entityId === undefined) {
@@ -5061,7 +5072,7 @@ const InboxHandoff = {
       delivery,
       {
         inboxId: {
-          targetId: InboxMessages.inboxTargetId(route.entityId),
+          targetId: InboxMessages.inboxTargetId(route.entityId, repository.idField),
           targetTypeUrl: TypeUrls.derive(repository.stateSchema),
         },
         signalId: commandId.uuid,
@@ -5093,7 +5104,7 @@ const InboxHandoff = {
       delivery,
       {
         inboxId: {
-          targetId: InboxMessages.inboxTargetId(entityId),
+          targetId: InboxMessages.inboxTargetId(entityId, repository.idField),
           targetTypeUrl: TypeUrls.derive(repository.stateSchema),
         },
         signalId: eventId.value,
@@ -5161,7 +5172,7 @@ const InboxHandoff = {
   ): EntityInboxInput {
     return {
       inboxId: {
-        targetId: InboxMessages.inboxTargetId(entityId),
+        targetId: InboxMessages.inboxTargetId(entityId, repository.idField),
         targetTypeUrl: TypeUrls.derive(repository.stateSchema),
       },
       signalId,
