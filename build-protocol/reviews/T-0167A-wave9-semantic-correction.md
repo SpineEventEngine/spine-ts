@@ -1,6 +1,6 @@
 # T-0167A Review Record
 
-Status: Clean; release verification pending
+Status: Clean and release verified; integration pending
 
 ## Review boundary
 
@@ -85,3 +85,17 @@ configured role/profile is the acceptance evidence.
   reopened by the record/test-only correction.
 
 All relevant concerns are clean. The release profile is authorized.
+
+## Release verification
+
+- `pnpm verify:release` passed every Node, Proto, generated-build, tooling,
+  ESLint, cleanup, TSDoc, formatting, TypeDoc/API, documentation-audience,
+  generated-clean, containment, package/import/link, and coverage gate.
+- Vitest passed 244 files with 3 skipped files; 3,880 tests passed and 14 were
+  skipped.
+- Coverage passed at 94.18% statements (20,433/21,695), 90.41% branches
+  (11,910/13,173), 94.09% functions (5,000/5,314), and 95.19% lines
+  (19,060/20,023).
+
+The reviewed endpoint is release-verified and ready for fast-forward
+integration to `origin/main`.
