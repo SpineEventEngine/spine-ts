@@ -740,6 +740,8 @@ const expectedServerExports = [
   "RegisteredHandlerMetadata",
   "RegistryIngestionErrorCode",
   "Subscribe",
+  "Where",
+  "WhereOptions",
   "SpecScanner",
   "SystemClock",
   "acceptSignalIntake",

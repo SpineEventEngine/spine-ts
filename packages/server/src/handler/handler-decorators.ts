@@ -18,6 +18,12 @@ interface DecoratedHandlerRecord {
   readonly allowImport?: boolean;
 }
 
+interface HandlerDecoratorContext {
+  readonly static: boolean;
+  readonly private: boolean;
+  readonly name: string | symbol;
+}
+
 /**
  * Describes the standard TypeScript method decorator accepted by Spine handler declarations.
  *
@@ -51,6 +57,23 @@ export type HandlerMethodValue<
   Parameters extends readonly unknown[] = readonly unknown[],
   Return = unknown,
 > = (this: This, ...parameters: Parameters) => Return;
+
+/**
+ * Declares one equality filter for an Event-consuming handler.
+ */
+export interface WhereOptions {
+  // prettier-ignore
+
+  /**
+   * Proto source-name path of the Event field to compare.
+   */
+  readonly eventField: string;
+
+  /**
+   * Expected field value in its canonical Stringifier representation.
+   */
+  readonly equals: string;
+}
 
 const handlerDecoratorMetadataKey = Symbol("@spine-event-engine/server.handlerDecorators");
 
@@ -191,6 +214,28 @@ export function React(
 }
 
 /**
+ * Filters an Event-consuming handler by one Event field value.
+ *
+ * Generated handler analysis validates the declaration and carries it into
+ * immutable repository metadata. The decorator itself does not inspect or
+ * invoke the handler.
+ *
+ * @param options Event source field and canonical expected value.
+ * @returns Decorator for a public instance handler method.
+ */
+export function Where(options: WhereOptions): HandlerMethodDecorator {
+  const snapshot = WhereValues.snapshot(options);
+
+  return <This extends object, Parameters extends readonly unknown[], Return>(
+    _value: HandlerMethodValue<This, Parameters, Return>,
+    context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
+  ): void => {
+    void snapshot;
+    DecoratorMetadata.methodName(context);
+  };
+}
+
+/**
  * Creates legacy framework event-application metadata.
  *
  * New application aggregates must not use `@Apply`; managed aggregates are no
@@ -265,6 +310,17 @@ export function materializeDecoratedEntityHandlers<
 }
 
 const DecoratorMetadata = Object.freeze({
+  methodName(context: HandlerDecoratorContext): string {
+    if (context.static || context.private) {
+      throw new TypeError("Spine handler decorators must be applied to public instance methods.");
+    }
+
+    if (typeof context.name !== "string") {
+      throw new TypeError("Spine handler decorators require string-named methods.");
+    }
+    return context.name;
+  },
+
   decorateOrCreate(
     kind: DecoratedHandlerKind,
     schemaOrValue: DescriptorMessageSchema | HandlerMethodValue,
@@ -287,18 +343,12 @@ const DecoratorMetadata = Object.freeze({
       _value: HandlerMethodValue<This, Parameters, Return>,
       context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
     ): void => {
-      if (context.static || context.private) {
-        throw new TypeError("Spine handler decorators must be applied to public instance methods.");
-      }
-
-      if (typeof context.name !== "string") {
-        throw new TypeError("Spine handler decorators require string-named methods.");
-      }
+      const methodName = DecoratorMetadata.methodName(context);
 
       const record: DecoratedHandlerRecord = Object.freeze({
         kind,
         ...(schema === undefined ? {} : { schema }),
-        methodName: context.name,
+        methodName,
         ...(kind === "event-application" ? { allowImport: options.allowImport ?? false } : {}),
       });
 
@@ -393,6 +443,27 @@ const DecoratorMetadata = Object.freeze({
     const value = metadata[handlerDecoratorMetadataKey];
 
     return Array.isArray(value) ? (value as readonly DecoratedHandlerRecord[]) : [];
+  },
+});
+
+const WhereValues = Object.freeze({
+  snapshot(options: WhereOptions): WhereOptions {
+    const value: unknown = options;
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      throw new TypeError("Where options must be an object.");
+    }
+    const keys = Object.keys(value);
+    if (
+      keys.length !== 2 ||
+      !keys.includes("eventField") ||
+      !keys.includes("equals") ||
+      typeof options.eventField !== "string" ||
+      options.eventField.trim().length === 0 ||
+      typeof options.equals !== "string"
+    ) {
+      throw new TypeError("Where options require exactly non-empty eventField and string equals.");
+    }
+    return Object.freeze({ eventField: options.eventField, equals: options.equals });
   },
 });
 

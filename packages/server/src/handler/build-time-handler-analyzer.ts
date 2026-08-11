@@ -103,6 +103,19 @@ export interface BuildHandlerRecord {
    * Public method arity: `handler(signal)` or `handler(signal, context)`.
    */
   readonly parameterCount: GeneratedHandlerParameterCount;
+
+  /**
+   * Optional statically declared Event field filter.
+   */
+  readonly where?: BuildWhereOptions;
+}
+
+/**
+ * Build-time representation of one `@Where` declaration.
+ */
+export interface BuildWhereOptions {
+  readonly eventField: string;
+  readonly equals: string;
 }
 
 /**
@@ -117,6 +130,7 @@ export type BuildHandlerDiagnosticCode =
   | "INVALID_PARAMETER_COUNT"
   | "INVALID_SIGNAL_TYPE"
   | "INVALID_SUBSCRIBE_RETURN"
+  | "INVALID_WHERE"
   | "MISSING_EMITTED_SCHEMAS"
   | "MISSING_ENTITY_STATE_SCHEMA"
   | "MISSING_RETURN_TYPE"
@@ -301,7 +315,7 @@ interface TypeWalk {
 }
 
 type HandlerDecorator = "Assign" | "Command" | "React" | "Subscribe";
-type ServerDecorator = HandlerDecorator | "Apply";
+type ServerDecorator = HandlerDecorator | "Apply" | "Where";
 type SignalKind = "command" | "event" | "rejection" | "state";
 
 interface DecoratorUse {
@@ -388,6 +402,7 @@ const HandlerSources = Object.freeze({
     const decorators = HandlerSources.methodDecorators(node, scope.imports);
     const apply = decorators.find((decorator) => decorator.name === "Apply");
     const handler = decorators.find(HandlerSources.isHandlerUse);
+    const whereUses = decorators.filter((decorator) => decorator.name === "Where");
 
     if (apply !== undefined) {
       HandlerTypes.pushDiagnostic(
@@ -400,6 +415,16 @@ const HandlerSources = Object.freeze({
       );
     }
     if (handler === undefined) {
+      if (whereUses.length > 0) {
+        HandlerTypes.pushDiagnostic(
+          scope,
+          "INVALID_WHERE",
+          whereUses[0]?.node ?? node,
+          "@Where requires an Event-consuming @Subscribe, @React, or @Command handler.",
+          className,
+          HandlerTypes.methodName(node),
+        );
+      }
       return undefined;
     }
 
@@ -437,6 +462,17 @@ const HandlerSources = Object.freeze({
     if (signalSchema === undefined || emittedSchemas === undefined || method === undefined) {
       return undefined;
     }
+    const where = HandlerSources.whereDeclaration(
+      whereUses,
+      handler,
+      signal?.kind,
+      scope,
+      className,
+      method,
+    );
+    if (whereUses.length > 0 && where === undefined) {
+      return undefined;
+    }
 
     return {
       kind: HandlerSources.handlerKind(handler.name, signal?.kind),
@@ -444,7 +480,106 @@ const HandlerSources = Object.freeze({
       signalSchema,
       emittedSchemas,
       parameterCount: node.parameters.length as GeneratedHandlerParameterCount,
+      ...(where === undefined ? {} : { where }),
     };
+  },
+
+  whereDeclaration(
+    uses: readonly DecoratorUse[],
+    handler: HandlerDecoratorUse,
+    signalKind: SignalKind | undefined,
+    scope: AnalyzerScope,
+    className: string,
+    methodName: string,
+  ): BuildWhereOptions | undefined {
+    if (uses.length === 0) return undefined;
+    const use = uses[0];
+    if (
+      uses.length !== 1 ||
+      (handler.name !== "Subscribe" && handler.name !== "React" && handler.name !== "Command") ||
+      (signalKind !== "event" && signalKind !== "rejection") ||
+      use === undefined
+    ) {
+      HandlerTypes.pushDiagnostic(
+        scope,
+        "INVALID_WHERE",
+        use?.node ?? handler.node,
+        "@Where is allowed once on an Event-consuming @Subscribe, @React, or @Command handler.",
+        className,
+        methodName,
+      );
+      return undefined;
+    }
+    const expression = use.node.expression;
+    if (!ts.isCallExpression(expression) || expression.arguments.length !== 1) {
+      HandlerTypes.pushDiagnostic(
+        scope,
+        "INVALID_WHERE",
+        use.node,
+        "@Where requires one object literal.",
+        className,
+        methodName,
+      );
+      return undefined;
+    }
+    const options = expression.arguments[0];
+    if (options === undefined || !ts.isObjectLiteralExpression(options)) {
+      HandlerTypes.pushDiagnostic(
+        scope,
+        "INVALID_WHERE",
+        expression,
+        "@Where options must be an object literal.",
+        className,
+        methodName,
+      );
+      return undefined;
+    }
+    const values = new Map<string, string>();
+    for (const property of options.properties) {
+      if (
+        !ts.isPropertyAssignment(property) ||
+        (property.name.kind !== ts.SyntaxKind.Identifier &&
+          !ts.isStringLiteralLike(property.name)) ||
+        !ts.isStringLiteralLike(property.initializer)
+      ) {
+        HandlerTypes.pushDiagnostic(
+          scope,
+          "INVALID_WHERE",
+          property,
+          "@Where accepts only eventField and equals string literals.",
+          className,
+          methodName,
+        );
+        return undefined;
+      }
+      const name = property.name.text;
+      if ((name !== "eventField" && name !== "equals") || values.has(name)) {
+        HandlerTypes.pushDiagnostic(
+          scope,
+          "INVALID_WHERE",
+          property,
+          "@Where accepts each of eventField and equals exactly once.",
+          className,
+          methodName,
+        );
+        return undefined;
+      }
+      values.set(name, property.initializer.text);
+    }
+    const eventField = values.get("eventField");
+    const equals = values.get("equals");
+    if (eventField === undefined || eventField.trim().length === 0 || equals === undefined) {
+      HandlerTypes.pushDiagnostic(
+        scope,
+        "INVALID_WHERE",
+        options,
+        "@Where requires non-empty eventField and string equals.",
+        className,
+        methodName,
+      );
+      return undefined;
+    }
+    return Object.freeze({ eventField, equals });
   },
 
   hasDecoratedMethod(node: ts.ClassDeclaration, imports: ImportState): boolean {
@@ -1624,7 +1759,8 @@ const HandlerTypes = Object.freeze({
       name === "Command" ||
       name === "React" ||
       name === "Subscribe" ||
-      name === "Apply"
+      name === "Apply" ||
+      name === "Where"
       ? name
       : undefined;
   },

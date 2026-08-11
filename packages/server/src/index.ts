@@ -275,6 +275,8 @@ export {
   type HandlerMethodValue,
   React,
   Subscribe,
+  Where,
+  type WhereOptions,
   materializeDecoratedEntityHandlers,
 } from "./handler/handler-decorators.js";
 

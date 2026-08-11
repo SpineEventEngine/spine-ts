@@ -223,6 +223,46 @@ describe("build-time handler analyzer", () => {
     );
   });
 
+  it("records Where declarations for all Event-consuming handler kinds", () => {
+    const methods = `
+      @Where({ eventField: "board", equals: "announcements" })
+      @Subscribe
+      observe(event: TaskCreated): void { void event; }
+
+      @Where({ eventField: "board", equals: "archive" })
+      @React
+      react(event: TaskCreated): TaskCreated { return event; }
+
+      @Where({ eventField: "board", equals: "commands" })
+      @Command
+      command(event: TaskCreated): RenameTask { throw new Error(String(event)); }
+    `;
+    const result = analyzeBuildHandlers(
+      programWithSource(
+        "src/where-handlers.ts",
+        handlerFixtureSource(
+          "Projection",
+          "TaskListSchema",
+          methods,
+          `
+            import { type RenameTask } from "../generated/commands_pb.js";
+            import { type TaskCreated } from "../generated/events_pb.js";
+          `,
+        ),
+      ),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.entities[0]?.handlers.map(({ kind, where }) => ({ kind, where }))).toEqual([
+      {
+        kind: "event-subscription",
+        where: { eventField: "board", equals: "announcements" },
+      },
+      { kind: "event-reaction", where: { eventField: "board", equals: "archive" } },
+      { kind: "command-reaction", where: { eventField: "board", equals: "commands" } },
+    ]);
+  });
+
   it("rejects rejection messages as assignment inputs and normal handler outputs", () => {
     const roles = [
       ["Assign", "assignRejection", "TaskAlreadyDone", "TaskCreated", "INVALID_SIGNAL_TYPE"],
@@ -816,7 +856,7 @@ function handlerFixtureSource(
   const stateModule = stateSchema === "TaskSchema" ? "task_pb" : "task_list_pb";
   const versionType = entityBase === "Aggregate" ? "bigint" : "number";
   return `
-    import { Aggregate, Assign, Command, Projection, React, Subscribe } from "@spine-event-engine/server";
+    import { Aggregate, Assign, Command, Projection, React, Subscribe, Where } from "@spine-event-engine/server";
     import { ${stateSchema} } from "../generated/${stateModule}.js";
     ${imports}
 

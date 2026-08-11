@@ -32,6 +32,7 @@ import {
   HandlerMetadataRegistryError,
   React,
   Subscribe,
+  Where,
   EntityHandlers,
   materializeDecoratedEntityHandlers,
 } from "../../src/index.js";
@@ -47,6 +48,12 @@ type AggregateState = Message<"AggregateState"> & {
   name: string;
   archived: boolean;
 };
+
+it("creates a public Where method decorator", () => {
+  const decorator = Where({ eventField: "board", equals: '{"value":"announcements"}' });
+
+  expect(decorator).toBeTypeOf("function");
+});
 
 function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
   const descriptorSet = fromBinary(
