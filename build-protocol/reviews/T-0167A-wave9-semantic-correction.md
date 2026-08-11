@@ -1,6 +1,6 @@
 # T-0167A Review Record
 
-Status: Clean, release verified, and integrated; post-main proof pending
+Status: Clean, integrated, and post-merge verified
 
 ## Review boundary
 
@@ -99,3 +99,16 @@ All relevant concerns are clean. The release profile is authorized.
 
 The reviewed endpoint is release-verified and ready for fast-forward
 integration to `origin/main`.
+
+## Integration and post-main proof
+
+- Fast-forwarded the reviewed endpoint to `origin/main`; no upstream remote or
+  package registry was touched.
+- Post-main proof passed 47 Proto source checksums, 52 frozen descriptors,
+  generated build, 10 focused files / 360 tests, TypeDoc/API inventory,
+  documentation audience, release readiness (82 imports, 51 assets, 320
+  links), formatting, and diff checks.
+- The proof confirmed the tested checkout exactly matched `origin/main` before
+  this record-only closure commit.
+
+T-0167A and the reopened Wave 9 boundary are complete.
