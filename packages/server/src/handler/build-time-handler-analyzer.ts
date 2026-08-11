@@ -1079,11 +1079,11 @@ const HandlerSources = Object.freeze({
   },
 
   sameSchema(left: SchemaReference, right: SchemaReference | undefined): boolean {
-    return (
-      right !== undefined &&
-      left.moduleSpecifier === right.moduleSpecifier &&
-      left.exportName === right.exportName
-    );
+    if (right === undefined) {
+      return false;
+    }
+
+    return left.moduleSpecifier === right.moduleSpecifier && left.exportName === right.exportName;
   },
 
   acceptsSignalKind(decorator: HandlerDecorator, kind: SignalKind | undefined): boolean {

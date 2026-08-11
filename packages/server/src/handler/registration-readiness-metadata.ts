@@ -180,7 +180,7 @@ class ReadinessMetadataOwner {
         clonedSchemas,
       ),
       stateSubscriptions: this.#cloneHandlers(
-        entityHandlers.stateSubscriptions ?? [],
+        entityHandlers.stateSubscriptions,
         clonedHandlers,
         clonedSchemas,
       ),

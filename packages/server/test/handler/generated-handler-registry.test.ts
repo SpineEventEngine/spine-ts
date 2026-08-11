@@ -108,7 +108,7 @@ describe("generated handler registry ingestion", () => {
           ],
         },
       ],
-    } as unknown);
+    });
     const entity = metadata[0] as (typeof metadata)[number] & {
       readonly stateSubscriptions: readonly { readonly kind: string }[];
     };
