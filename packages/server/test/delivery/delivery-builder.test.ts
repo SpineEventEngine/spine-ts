@@ -192,6 +192,23 @@ describe("DeliveryMonitor delivery", () => {
     ).toThrow("Delivery strategy shard total must equal its resolved shard count.");
   });
 
+  it("does not expose caller target bytes to a custom strategy", () => {
+    const targetId = Identifiers.pack("int32", 42);
+    const expected = new Uint8Array(targetId.value);
+    const delivery = build()
+      .withStrategy({
+        shardCount: 1,
+        shardFor: (candidate) => {
+          candidate.value.fill(0);
+          return ShardIndex.single();
+        },
+      })
+      .build();
+
+    expect(delivery.strategy.shardFor(targetId, "type.example/Task")).toEqual(ShardIndex.single());
+    expect(targetId.value).toEqual(expected);
+  });
+
   it.each([
     [
       () => UniformAcrossAllShards.forNumber(0),

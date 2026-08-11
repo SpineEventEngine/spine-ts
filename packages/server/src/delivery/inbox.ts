@@ -120,7 +120,10 @@ export interface InboxId {
   // prettier-ignore
 
   /**
-   * Target entity ID routed to one inbox.
+   * Target Entity ID packed as canonical `Any` type URL and bytes.
+   *
+   * Durable boundaries snapshot this value. Callers and custom delivery
+   * strategies must treat it as typed identity, not as a display string.
    */
   readonly targetId: Any;
 
@@ -148,7 +151,9 @@ export const InboxTargets: Readonly<{
   shardKey(value: Any): string {
     if (value.typeUrl === "type.googleapis.com/google.protobuf.StringValue") {
       try {
-        return fromBinary(StringValueSchema, value.value).value;
+        const text = fromBinary(StringValueSchema, value.value).value;
+        if (text.trim().length === 0) throw new TypeError("String target ID is blank.");
+        return text;
       } catch {
         throw new TypeError("Inbox target ID must be a valid StringValue.");
       }

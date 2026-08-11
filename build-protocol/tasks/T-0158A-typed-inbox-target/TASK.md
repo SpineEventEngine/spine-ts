@@ -1,6 +1,6 @@
 # T-0158A: Typed Inbox Target Identity
 
-Status: Pre-review ready
+Status: Correction-complete; re-review ready
 
 ## Objective
 

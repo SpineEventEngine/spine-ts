@@ -1,5 +1,11 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
+import {
+  AnySchema,
+  Int32ValueSchema,
+  Int64ValueSchema,
+  StringValueSchema,
+  type Any,
+} from "@bufbuild/protobuf/wkt";
 
 import type { InboxMessage, InboxMessageId } from "@spine-event-engine/server";
 import { ShardIndex } from "@spine-event-engine/server";
@@ -102,6 +108,23 @@ const DeliveryValues = Object.freeze({
     if (!Number.isFinite(value) || value < minimum || value > maximum)
       throw new TypeError(`${name} is invalid.`);
     return value;
+  },
+});
+
+const DeliveryTargetIds = Object.freeze({
+  validate(typeUrl: string, value: Uint8Array): void {
+    switch (typeUrl) {
+      case "type.googleapis.com/google.protobuf.StringValue":
+        if (!DeliveryValues.hasText(fromBinary(StringValueSchema, value).value))
+          throw new TypeError("String target ID is blank.");
+        break;
+      case "type.googleapis.com/google.protobuf.Int32Value":
+        fromBinary(Int32ValueSchema, value);
+        break;
+      case "type.googleapis.com/google.protobuf.Int64Value":
+        fromBinary(Int64ValueSchema, value);
+        break;
+    }
   },
 });
 
@@ -280,7 +303,12 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
         shard: DeliveryShardCodec.snapshot(value.id.shard),
       }),
       inboxId: DeliveryValues.freeze({
-        targetId: value.inboxId.targetId,
+        targetId: DeliveryValues.freeze(
+          create(AnySchema, {
+            typeUrl: value.inboxId.targetId.typeUrl,
+            value: new Uint8Array(value.inboxId.targetId.value),
+          }),
+        ),
         targetTypeUrl: value.inboxId.targetTypeUrl,
       }),
       signalId: value.signalId,
@@ -314,15 +342,19 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
       typeof inbox.targetId.typeUrl !== "string" ||
       !DeliveryValues.hasText(inbox.targetId.typeUrl) ||
       !(inbox.targetId.value instanceof Uint8Array) ||
-      inbox.targetId.value.length === 0 ||
       typeof inbox.targetTypeUrl !== "string" ||
       !DeliveryValues.hasText(inbox.targetTypeUrl)
     )
       throw new TypeError("Delivery inbox ID is invalid.");
-    return {
-      typeUrl: inbox.targetId.typeUrl,
-      value: new Uint8Array(inbox.targetId.value),
-    };
+    try {
+      DeliveryTargetIds.validate(inbox.targetId.typeUrl, inbox.targetId.value);
+      return {
+        typeUrl: inbox.targetId.typeUrl,
+        value: new Uint8Array(inbox.targetId.value),
+      };
+    } catch (error) {
+      throw new TypeError("Delivery inbox ID is invalid.", { cause: error });
+    }
   },
 
   /**
@@ -333,16 +365,11 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
    * @returns The framework target identifier.
    */
   decodeTarget(typeUrl: string, value: Uint8Array): Any {
-    if (!DeliveryValues.hasText(typeUrl) || value.length === 0)
+    if (!DeliveryValues.hasText(typeUrl)) throw DeliveryRequestCodec.protocol();
+    try {
+      DeliveryTargetIds.validate(typeUrl, value);
+    } catch {
       throw DeliveryRequestCodec.protocol();
-    if (typeUrl === "type.googleapis.com/google.protobuf.StringValue") {
-      try {
-        if (!DeliveryValues.hasText(fromBinary(StringValueSchema, value).value))
-          throw DeliveryRequestCodec.protocol();
-      } catch (error) {
-        if (error instanceof DeliveryProtocolError) throw error;
-        throw DeliveryRequestCodec.protocol();
-      }
     }
     return create(AnySchema, { typeUrl, value: new Uint8Array(value) });
   },

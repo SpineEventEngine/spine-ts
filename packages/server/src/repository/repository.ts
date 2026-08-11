@@ -50,7 +50,7 @@ import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { Delivery } from "../delivery/delivery.js";
 import { commitFenced } from "./commit-fence.js";
-import type { InboxMessage, InboxMessageInput } from "../delivery/inbox.js";
+import { InboxTargets, type InboxMessage, type InboxMessageInput } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import {
   Aggregate,
@@ -951,6 +951,15 @@ export interface RepositoryAccess {
   projectionInboxTarget(repository: RepositoryView): ProjectionInboxTarget | undefined;
 
   /**
+   * Packs one routed Entity Inbox target using repository identifier rules.
+   *
+   * @param entityId The routed Entity ID.
+   * @param idField The repository state identifier field.
+   * @returns The canonical packed target identity.
+   */
+  inboxTargetId(entityId: unknown, idField: DescriptorFieldMetadata): Any;
+
+  /**
    * Dispatches an event directly to a projection repository.
    *
    * @param repository The projection repository to dispatch to.
@@ -1024,6 +1033,10 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
 
   projectionInboxTarget(repository: RepositoryView): ProjectionInboxTarget | undefined {
     return repositoryProjectionInboxTargets.get(repository);
+  },
+
+  inboxTargetId(entityId: unknown, idField: DescriptorFieldMetadata): Any {
+    return InboxMessages.inboxTargetId(entityId, idField);
   },
 
   dispatchProjectionDirect(
@@ -4658,12 +4671,7 @@ const InboxMessages = {
   },
 
   sameTargetId(left: Any, right: Any): boolean {
-    const leftBytes = toBinary(AnySchema, left);
-    const rightBytes = toBinary(AnySchema, right);
-    return (
-      leftBytes.length === rightBytes.length &&
-      leftBytes.every((value, index) => value === rightBytes[index])
-    );
+    return InboxTargets.equal(left, right);
   },
 
   readInboxCommand(message: InboxMessage): Command {

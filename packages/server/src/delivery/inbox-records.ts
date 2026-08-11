@@ -234,7 +234,8 @@ const Values = Object.freeze({
     try {
       switch (value.typeUrl) {
         case "type.googleapis.com/google.protobuf.StringValue":
-          fromBinary(StringValueSchema, value.value);
+          if (fromBinary(StringValueSchema, value.value).value.trim().length === 0)
+            throw new TypeError("String target ID is blank.");
           break;
         case "type.googleapis.com/google.protobuf.Int32Value":
           fromBinary(Int32ValueSchema, value.value);

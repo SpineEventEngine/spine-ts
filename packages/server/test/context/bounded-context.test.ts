@@ -585,6 +585,52 @@ describe("BoundedContext assembly", () => {
     ]);
   });
 
+  it("protects durable target bytes from a custom delivery strategy", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const registryRoot = createGeneratedRegistryRoot([
+      {
+        entityType: GeneratedTaskProcessManager,
+        stateSchema: ProcessManagerStateSchema,
+        handlers: [
+          {
+            kind: "command-assignment",
+            methodName: "assignTask",
+            signalSchema: AggregateStateSchema,
+            emittedSchemas: [ProjectionStateSchema],
+            parameterCount: 1,
+          },
+        ],
+      },
+    ]);
+    const context = await BoundedContext.singleTenant("StrategyClone")
+      .withStorageFactory(storageFactory)
+      .withDeliveryStrategy({
+        shardCount: 1,
+        shardFor: (targetId) => {
+          targetId.value.fill(0);
+          return ShardIndex.single();
+        },
+      })
+      .withGeneratedRegistryRoot(registryRoot)
+      .add(GeneratedTaskProcessManager)
+      .buildAsync();
+
+    try {
+      await context.commandBus().post(createAggregateCommand("strategy-clone", "original-id"));
+      const descriptor = internalDeliveryDescriptor(context);
+      const rows = await new Delivery({
+        context: descriptor.storageContext({}),
+        storageFactory,
+      }).inbox.read(ShardIndex.single());
+
+      expect(rows.map((row) => Identifiers.unpack("string", row.inboxId.targetId))).toContain(
+        "original-id",
+      );
+    } finally {
+      await context.close();
+    }
+  });
+
   it("replays nonzero-shard Aggregate and Process Manager descriptor rows", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const strategy = UniformAcrossAllShards.forNumber(3);

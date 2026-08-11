@@ -1,5 +1,10 @@
 import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import {
+  AnySchema,
+  Int32ValueSchema,
+  Int64ValueSchema,
+  StringValueSchema,
+} from "@bufbuild/protobuf/wkt";
 import { ShardIndex } from "@spine-event-engine/server";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import {
@@ -81,6 +86,49 @@ describe("delivery codec and immutable snapshots", () => {
     expect(Array.from(second.signal?.value ?? [])).toEqual(expectedPayload);
   });
 
+  it("detaches target identity bytes in every immutable snapshot", () => {
+    const source = domainMessage();
+    const first = DeliveryMessageCodec.snapshot(source);
+    const second = DeliveryMessageCodec.snapshot(source);
+    const expected = Array.from(second.inboxId.targetId.value);
+
+    source.inboxId.targetId.value.fill(7);
+    expect(Array.from(first.inboxId.targetId.value)).toEqual(expected);
+    first.inboxId.targetId.value.fill(9);
+    expect(Array.from(second.inboxId.targetId.value)).toEqual(expected);
+  });
+
+  it("round-trips zero-valued numeric target identities", () => {
+    for (const [schema, typeUrl] of [
+      [Int32ValueSchema, "type.googleapis.com/google.protobuf.Int32Value"],
+      [Int64ValueSchema, "type.googleapis.com/google.protobuf.Int64Value"],
+    ] as const) {
+      const targetId = create(AnySchema, {
+        typeUrl,
+        value: toBinary(schema, create(schema)),
+      });
+      const source = domainMessage();
+      const messageWithZero = { ...source, inboxId: { ...source.inboxId, targetId } };
+
+      expect(
+        DeliveryMessageCodec.decode(
+          DeliveryMessageCodec.encode(messageWithZero),
+          ShardIndex.single(),
+        ).inboxId.targetId,
+      ).toEqual(targetId);
+    }
+  });
+
+  it("rejects blank string targets before remote persistence", () => {
+    const source = domainMessage();
+    expect(() =>
+      DeliveryMessageCodec.encode({
+        ...source,
+        inboxId: { ...source.inboxId, targetId: stringTarget(" ") },
+      }),
+    ).toThrow(TypeError);
+  });
+
   it("preserves plain framework target IDs across the frozen wire EntityId", () => {
     const source = domainMessage();
     const plain = {
@@ -116,9 +164,9 @@ describe("delivery codec and immutable snapshots", () => {
     expect(() => DeliveryMessageCodec.decodeTarget("", Uint8Array.of(1))).toThrow(
       DeliveryProtocolError,
     );
-    expect(() =>
+    expect(
       DeliveryMessageCodec.decodeTarget("type.spine.io/test.EntityId", new Uint8Array()),
-    ).toThrow(DeliveryProtocolError);
+    ).toEqual(create(AnySchema, { typeUrl: "type.spine.io/test.EntityId" }));
     expect(() =>
       DeliveryMessageCodec.decodeTarget(
         "type.googleapis.com/google.protobuf.StringValue",

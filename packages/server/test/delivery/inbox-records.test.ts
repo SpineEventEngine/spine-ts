@@ -111,6 +111,30 @@ describe("InboxRecords", () => {
         },
       } as never),
     ).toThrow(DeliveryStorageCorruptionError);
+
+    for (const text of ["", " "]) {
+      const targetId = Identifiers.pack("string", text);
+      expect(() =>
+        InboxRecords.write({ ...source, inboxId: { ...source.inboxId, targetId } }),
+      ).toThrow(InboxMessageError);
+      expect(() =>
+        InboxRecords.read({
+          ...wire,
+          inboxId: { ...wire.inboxId, entityId: { id: targetId } },
+        } as never),
+      ).toThrow(DeliveryStorageCorruptionError);
+    }
+  });
+
+  it("accepts zero-valued numeric target identities", () => {
+    for (const targetId of [Identifiers.pack("int32", 0), Identifiers.pack("int64", 0n)]) {
+      const source = createMessage("zero", "signal", 1n);
+      expect(
+        InboxRecords.read(
+          InboxRecords.write({ ...source, inboxId: { ...source.inboxId, targetId } }),
+        ).inboxId.targetId,
+      ).toEqual(targetId);
+    }
   });
 
   it("preserves generated shard coordinates", () => {

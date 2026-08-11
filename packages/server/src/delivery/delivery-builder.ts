@@ -66,7 +66,10 @@ export interface DeliveryStrategy {
   readonly shardCount: number;
 
   /**
-   * Returns the shard for one target identity and type.
+   * Returns the shard for one canonical packed Entity ID and target type.
+   *
+   * The supplied `Any` contains the typed ID's type URL and bytes. Treat it as
+   * immutable typed identity, not as a display string.
    *
    * @param targetId The target identity.
    * @param targetType The target type URL.
@@ -430,7 +433,7 @@ const DeliveryValues = Object.freeze({
     return Object.freeze({
       shardCount,
       shardFor(targetId: Any, targetType: string): ShardIndex {
-        const shard = strategy.shardFor(targetId, targetType);
+        const shard = strategy.shardFor(InboxTargets.clone(targetId), targetType);
         if (shard.ofTotal !== shardCount) {
           throw new Error("Delivery strategy shard total must equal its resolved shard count.");
         }

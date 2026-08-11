@@ -80,6 +80,7 @@ import {
 } from "../stand/subscription-registry.js";
 import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
 import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
+import { InboxTargets } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import { emitServerError } from "../server/server-log.js";
 
@@ -1782,7 +1783,7 @@ const ContextParts = Object.freeze({
     return Object.freeze({
       shardCount,
       shardFor(targetId: Any, targetType: string): ShardIndex {
-        const shard = strategy.shardFor(targetId, targetType);
+        const shard = strategy.shardFor(InboxTargets.clone(targetId), targetType);
         if (shard.ofTotal !== shardCount) {
           throw new Error("Delivery strategy shard total must equal its resolved shard count.");
         }

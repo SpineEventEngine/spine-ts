@@ -90,6 +90,7 @@ describe("Inbox", () => {
         value: Uint8Array.of(0xff),
       } as never),
     ).toThrow(TypeError);
+    expect(() => InboxTargets.shardKey(Identifiers.pack("string", " "))).toThrow(TypeError);
   });
 
   it("deduplicates equal typed targets but not printable values from another identifier kind", async () => {
