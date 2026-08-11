@@ -1,6 +1,6 @@
 # T-0158: Command Routing
 
-Status: In progress
+Status: Complete
 
 ## Objective
 

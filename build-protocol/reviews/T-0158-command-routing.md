@@ -1,6 +1,6 @@
 # T-0158 Review Record
 
-Status: Review-complete; final verification pending
+Status: Complete
 
 ## Assignments
 
@@ -86,3 +86,5 @@ explicit immutable configured role/profile is then the durable evidence.
   unrelated pre-existing branch in `repository.ts`. Exact changed-range LCOV is
   the acceptance metric above. The final verifier uses the supported
   `--no-coverage` profile with the same tests and retains the exact LCOV result.
+- Final `pnpm verify:task -- --no-coverage` passed every shared deterministic
+  gate and 5 focused files / 234 tests.
