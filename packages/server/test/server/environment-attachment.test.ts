@@ -2,6 +2,7 @@ import { InMemoryStorageFactory, type StorageContext } from "@spine-event-engine
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { EventSchema, type TenantId } from "@spine-event-engine/proto";
+import { Identifiers } from "@spine-event-engine/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -1112,8 +1113,8 @@ describe("ServerEnvironment attachment", () => {
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toMatchObject([
-      { inboxId: { targetId: "startup-row" } },
-      { inboxId: { targetId: "after-failure" } },
+      { inboxId: { targetId: Identifiers.pack("string", "startup-row") } },
+      { inboxId: { targetId: Identifiers.pack("string", "after-failure") } },
     ]);
   });
 
@@ -3408,7 +3409,10 @@ function descriptor(
 
 function message(ready: DeliveryReady, signalId: string) {
   return {
-    inboxId: { targetId: signalId, targetTypeUrl: ready.targetTypeUrl },
+    inboxId: {
+      targetId: Identifiers.pack("string", signalId),
+      targetTypeUrl: ready.targetTypeUrl,
+    },
     signalId,
     label: ready.label,
     status: "TO_DELIVER" as const,

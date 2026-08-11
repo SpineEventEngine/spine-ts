@@ -438,7 +438,7 @@ const RemoteValues = Object.freeze({
       left.id.value === right.id.value &&
       RemoteValues.sameShard(left.id.shard, right.id.shard) &&
       RemoteValues.sameShard(left.shard, right.shard) &&
-      left.inboxId.targetId === right.inboxId.targetId &&
+      RemoteValues.sameAny(left.inboxId.targetId, right.inboxId.targetId) &&
       left.inboxId.targetTypeUrl === right.inboxId.targetTypeUrl &&
       left.signalId === right.signalId &&
       RemoteValues.sameAny(left.signal, right.signal) &&

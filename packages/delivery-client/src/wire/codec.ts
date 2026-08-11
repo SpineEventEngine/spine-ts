@@ -1,5 +1,5 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
+import { AnySchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
 
 import type { InboxMessage, InboxMessageId } from "@spine-event-engine/server";
 import { ShardIndex } from "@spine-event-engine/server";
@@ -312,7 +312,9 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
   target(inbox: InboxMessage["inboxId"]): { typeUrl: string; value: Uint8Array } {
     if (
       typeof inbox.targetId?.typeUrl !== "string" ||
+      !DeliveryValues.hasText(inbox.targetId.typeUrl) ||
       !(inbox.targetId.value instanceof Uint8Array) ||
+      inbox.targetId.value.length === 0 ||
       typeof inbox.targetTypeUrl !== "string" ||
       !DeliveryValues.hasText(inbox.targetTypeUrl)
     )
@@ -331,7 +333,17 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
    * @returns The framework target identifier.
    */
   decodeTarget(typeUrl: string, value: Uint8Array): Any {
-    if (!DeliveryValues.hasText(typeUrl)) throw DeliveryRequestCodec.protocol();
+    if (!DeliveryValues.hasText(typeUrl) || value.length === 0)
+      throw DeliveryRequestCodec.protocol();
+    if (typeUrl === "type.googleapis.com/google.protobuf.StringValue") {
+      try {
+        if (!DeliveryValues.hasText(fromBinary(StringValueSchema, value).value))
+          throw DeliveryRequestCodec.protocol();
+      } catch (error) {
+        if (error instanceof DeliveryProtocolError) throw error;
+        throw DeliveryRequestCodec.protocol();
+      }
+    }
     return create(AnySchema, { typeUrl, value: new Uint8Array(value) });
   },
 

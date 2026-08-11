@@ -157,7 +157,9 @@ describe("DeliveryMonitor delivery", () => {
       })
       .build();
 
-    expect(() => delivery.strategy.shardFor("task-1", "type.example/Task")).toThrow(
+    expect(() =>
+      delivery.strategy.shardFor(Identifiers.pack("string", "task-1"), "type.example/Task"),
+    ).toThrow(
       "Delivery strategy shard total must equal its resolved shard count.",
     );
   });

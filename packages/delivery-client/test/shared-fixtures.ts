@@ -1,5 +1,5 @@
-import { create, type Message } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { create, toBinary, type Message } from "@bufbuild/protobuf";
+import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import type { Transport } from "@connectrpc/connect";
 import { type InboxMessage, ShardIndex } from "@spine-event-engine/server";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
@@ -212,7 +212,7 @@ export function message(kind: "command" | "event", id = "message-1", payloadByte
     }),
     signalId: create(InboxSignalIdSchema, { value: "signal-1" }),
     inboxId: create(InboxIdSchema, {
-      entityId: { id: { typeUrl: "type.spine.io/test.EntityId", value: new Uint8Array() } },
+      entityId: { id: { typeUrl: "type.spine.io/test.EntityId", value: new Uint8Array([1]) } },
       typeUrl: "type.spine.io/test.Entity",
     }),
     payload:
@@ -240,7 +240,7 @@ export function domainMessage(id = "message-1"): InboxMessage {
   return Object.freeze({
     id: { value: id, shard: ShardIndex.single() },
     inboxId: {
-      targetId: "type.spine.io/test.EntityId:",
+      targetId: stringTarget("type.spine.io/test.EntityId:"),
       targetTypeUrl: "type.spine.io/test.Entity",
     },
     signalId: "signal-1",
@@ -253,5 +253,12 @@ export function domainMessage(id = "message-1"): InboxMessage {
     shard: ShardIndex.single(),
     whenReceived: new Date(1_000),
     version: 2n,
+  });
+}
+
+export function stringTarget(value: string) {
+  return create(AnySchema, {
+    typeUrl: "type.googleapis.com/google.protobuf.StringValue",
+    value: toBinary(StringValueSchema, create(StringValueSchema, { value })),
   });
 }
