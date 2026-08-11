@@ -25,3 +25,15 @@ Reviewer assignments will name the existing role plus explicit configured
 model/reasoning before dispatch. Runtime metadata will be recorded when the
 surface exposes it; otherwise the immutable role profile and limitation will
 be recorded.
+
+## Implementation handoff
+
+- Review-ready endpoint: `bd7fa642` plus the pending record checkpoint.
+- Preflight evidence: generated build, 360 focused behavior tests, focused
+  lint, formatting, diff, TypeDoc/API inventory, audience, and generated-clean
+  gates passed.
+- The correction removes public APIs; `TransportSemanticTag` was also removed
+  from the API inventory. Exact/default routing, Event/state zero-targets, and
+  durable no-reroute replay retain focused coverage.
+- Changed-range inspection is recorded in the work log. Deletion-only paths
+  require no added coverage; no uncovered added runtime branch was identified.
