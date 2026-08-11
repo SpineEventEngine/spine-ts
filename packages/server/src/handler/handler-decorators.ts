@@ -123,12 +123,13 @@ export function Command(
 }
 
 /**
- * Creates an event-subscriber declaration.
+ * Creates an Event/rejection or Entity-state subscriber declaration.
  *
- * Bare `@Subscribe` accepts generated event or rejection inputs and returns
- * `void`; rejections are not returned as normal signals. Subscribers are
- * metadata-only declarations bridged by generated registry and runtime
- * metadata.
+ * Bare `@Subscribe` accepts generated Event/rejection or descriptor-marked
+ * Entity-state inputs and returns `void`. Event/rejection inputs produce
+ * event-subscription metadata; Entity state inputs produce state-subscription
+ * metadata. Subscribers are metadata-only declarations bridged by generated
+ * registry and runtime metadata.
  *
  * @typeParam This - Entity instance that owns the method.
  * @typeParam Parameters - Parameters accepted by the method.
@@ -142,9 +143,10 @@ export function Subscribe<This extends object, Parameters extends readonly unkno
 ): void;
 
 /**
- * Creates event-subscription decorator metadata or a schema-bearing decorator.
+ * Creates subscriber decorator metadata or a schema-bearing decorator.
  *
- * @param schemaOrValue Event schema or decorated method implementation.
+ * @param schemaOrValue Event, rejection, or descriptor-marked Entity state
+ * schema, or the decorated method implementation.
  * @param context Standard decorator context for bare usage.
  * @returns A decorator for schema-bearing usage, or `undefined` after bare usage.
  */

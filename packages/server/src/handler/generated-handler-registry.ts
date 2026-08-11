@@ -362,6 +362,12 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
           `Generated state subscription handler "${handler.methodName}" must declare an entity state schema.`,
         );
       }
+      if (handler.kind === "event-subscription" && isEntitySchema(handler.signalSchema)) {
+        throw new HandlerRegistryIngestionError(
+          "INVALID_SCHEMA",
+          `Generated event subscription handler "${handler.methodName}" must not declare an entity state schema.`,
+        );
+      }
       return;
     }
 

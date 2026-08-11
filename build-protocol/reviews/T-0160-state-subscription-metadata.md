@@ -1,6 +1,6 @@
 # T-0160 Review Record
 
-Status: Mechanically converged; review-ready
+Status: Correction-complete; targeted re-review ready
 
 ## Assignments
 
@@ -19,10 +19,15 @@ explicit immutable configured role/profile is then the durable evidence.
 
 ## Canonical Review Disposition
 
-- Style/maintainability: pending specialist review.
-- TypeScript/API documentation: pending specialist review.
-- Documentation/TSDoc: pending specialist review.
-- Performance/reliability: pending specialist review.
+- Style/maintainability: accepted the descriptor-provenance and symmetric-kind
+  validation finding plus stale public TSDoc.
+- TypeScript/API documentation: accepted inverse generated-kind validation and
+  public state/Event subscriber contract findings.
+- Documentation/TSDoc: accepted the stale Event-only `subscribe()` and
+  `@Subscribe` wording.
+- Performance/reliability: accepted the cross-Entity state classification
+  finding; the analyzer must use the parameter descriptor, not the receiving
+  Entity's state reference.
 - Security: N/A; no authentication, authorization, secret, persistence, or
   external trust-boundary behavior changes.
 
@@ -39,3 +44,20 @@ explicit immutable configured role/profile is then the durable evidence.
   metadata type.
 - The production/fixture compatibility scan contains no version-1 contract.
   Its sole version-1 token is the intentional ingestion-rejection regression.
+
+## Review Correction
+
+- The analyzer now retains the decoded message descriptor's actual `(entity)`
+  option and carries `state` through its existing schema-role map. It no longer
+  compares module specifiers/export names with the receiving Entity state.
+- A real descriptor fixture proves a Projection can subscribe to another
+  Entity's state from a different neutral generated module. A neutral
+  non-Entity message rejects with `INVALID_SIGNAL_TYPE`.
+- Generated v2 ingestion validates both directions before materialization:
+  state kinds require Entity state and Event kinds reject Entity state. Public
+  builder/decorator TSDoc describes Event/rejection and Entity-state forms.
+- Generated build and eight focused files / 135 tests pass. Tooling, changed
+  ESLint, cleanup, TSDoc, API docs, Prettier, and diff checks pass.
+- Fresh exact changed-production LCOV from
+  `/tmp/t0160-correction-cov/lcov.info` is 9 / 9 statements and lines (100%)
+  and 18 / 18 branches (100%). No executable function point was added.

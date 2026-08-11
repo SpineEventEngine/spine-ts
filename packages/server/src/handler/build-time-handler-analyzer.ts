@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 
 import type * as Protobuf from "@bufbuild/protobuf";
 import type * as ProtobufWkt from "@bufbuild/protobuf/wkt";
+import { entity } from "@spine-event-engine/proto";
 import ts from "typescript";
 
 import type {
@@ -286,7 +287,13 @@ interface GeneratedFile {
 
 interface DescriptorMessage {
   readonly name: string;
+  readonly isEntityState: boolean;
   readonly nested: readonly DescriptorMessage[];
+}
+
+interface DescriptorMessageSelection {
+  readonly descriptor: DescriptorMessage;
+  readonly exportName: string;
 }
 
 interface TypeWalk {
@@ -419,10 +426,8 @@ const HandlerSources = Object.freeze({
       return undefined;
     }
 
-    const signalSchema = HandlerSources.schemaUseFromType(
-      node.parameters[0]?.type,
-      scope.imports,
-    )?.reference;
+    const signal = HandlerSources.schemaUseFromType(node.parameters[0]?.type, scope.imports);
+    const signalSchema = signal?.reference;
     const emittedSchemas = HandlerSources.emittedSchemaUses(
       node.type,
       handler.name,
@@ -433,7 +438,7 @@ const HandlerSources = Object.freeze({
     }
 
     return {
-      kind: HandlerSources.handlerKind(handler.name, signalSchema, stateSchema),
+      kind: HandlerSources.handlerKind(handler.name, signal?.kind),
       methodName: method,
       signalSchema,
       emittedSchemas,
@@ -505,7 +510,7 @@ const HandlerSources = Object.freeze({
       HandlerSources.validateEntityState(node, stateSchema, scope, className, method),
       HandlerSources.validateName(node, scope, className),
       HandlerSources.validateVisibility(node, scope, className, method),
-      HandlerSources.validateParameters(node, decorator, stateSchema, scope, className, method),
+      HandlerSources.validateParameters(node, decorator, scope, className, method),
       HandlerSources.validateReturn(node, decorator, scope, className, method),
     ].some(Boolean);
   },
@@ -575,7 +580,6 @@ const HandlerSources = Object.freeze({
   validateParameters(
     node: ts.MethodDeclaration,
     decorator: HandlerDecorator,
-    stateSchema: SchemaReference | undefined,
     scope: AnalyzerScope,
     className: string,
     method: string | undefined,
@@ -604,11 +608,7 @@ const HandlerSources = Object.freeze({
     }
 
     const signal = HandlerSources.schemaUseFromType(node.parameters[0].type, scope.imports);
-    if (
-      signal !== undefined &&
-      (HandlerSources.acceptsSignalKind(decorator, signal.kind) ||
-        (decorator === "Subscribe" && HandlerSources.sameSchema(signal.reference, stateSchema)))
-    ) {
+    if (signal !== undefined && HandlerSources.acceptsSignalKind(decorator, signal.kind)) {
       return false;
     }
 
@@ -1061,8 +1061,7 @@ const HandlerSources = Object.freeze({
 
   handlerKind(
     decorator: HandlerDecorator,
-    signalSchema: SchemaReference,
-    stateSchema: SchemaReference | undefined,
+    signalKind: SignalKind | undefined,
   ): GeneratedHandlerKind {
     switch (decorator) {
       case "Assign":
@@ -1072,18 +1071,8 @@ const HandlerSources = Object.freeze({
       case "React":
         return "event-reaction";
       case "Subscribe":
-        return HandlerSources.sameSchema(signalSchema, stateSchema)
-          ? "state-subscription"
-          : "event-subscription";
+        return signalKind === "state" ? "state-subscription" : "event-subscription";
     }
-  },
-
-  sameSchema(left: SchemaReference, right: SchemaReference | undefined): boolean {
-    if (right === undefined) {
-      return false;
-    }
-
-    return left.moduleSpecifier === right.moduleSpecifier && left.exportName === right.exportName;
   },
 
   acceptsSignalKind(decorator: HandlerDecorator, kind: SignalKind | undefined): boolean {
@@ -1094,7 +1083,9 @@ const HandlerSources = Object.freeze({
       return kind === "command";
     }
 
-    return kind === "event" || kind === "rejection";
+    return (
+      kind === "event" || kind === "rejection" || (decorator === "Subscribe" && kind === "state")
+    );
   },
 
   signalMessage(decorator: HandlerDecorator): string {
@@ -1105,7 +1096,9 @@ const HandlerSources = Object.freeze({
       return "a generated command type";
     }
 
-    return "a generated event or rejection type";
+    return decorator === "Subscribe"
+      ? "a generated event, rejection, or Entity state type"
+      : "a generated event or rejection type";
   },
 
   emittedSignalKind(decorator: HandlerDecorator): SignalKind | undefined {
@@ -1455,13 +1448,19 @@ const HandlerSources = Object.freeze({
       return { found: true, kind: undefined };
     }
     const indexes = HandlerSources.messageDescIndexes(call);
-    const messageName = HandlerSources.descriptorMessageName(file, indexes);
+    const message = HandlerSources.descriptorMessageAt(file, indexes);
+    const messageName = message?.exportName;
     const expectedName = schemaExportName.replace(/Schema$/, "");
     if (messageName === undefined || messageName !== expectedName) {
       return { found: true, kind: undefined };
     }
 
-    return { found: true, kind: HandlerSources.signalKindFromProto(file.sourceFile, indexes) };
+    return {
+      found: true,
+      kind: message?.descriptor.isEntityState
+        ? "state"
+        : HandlerSources.signalKindFromProto(file.sourceFile, indexes),
+    };
   },
 
   messageDescIndexes(call: ts.CallExpression): readonly number[] | undefined {
@@ -1480,18 +1479,19 @@ const HandlerSources = Object.freeze({
     return indexes.length === 0 ? undefined : indexes;
   },
 
-  descriptorMessageName(
+  descriptorMessageAt(
     file: GeneratedFile,
     indexes: readonly number[] | undefined,
-  ): string | undefined {
+  ): DescriptorMessageSelection | undefined {
     if (indexes === undefined) {
       return undefined;
     }
-    const path: string[] = [];
     let messages = file.messages;
+    let message: DescriptorMessage | undefined;
+    const path: string[] = [];
 
     for (const index of indexes) {
-      const message = messages[index];
+      message = messages[index];
       if (message === undefined) {
         return undefined;
       }
@@ -1499,7 +1499,7 @@ const HandlerSources = Object.freeze({
       messages = message.nested;
     }
 
-    return path.join("_");
+    return message === undefined ? undefined : { descriptor: message, exportName: path.join("_") };
   },
 
   fileDescriptor(initializer: ts.Expression | undefined): GeneratedFile | undefined {
@@ -1568,14 +1568,12 @@ const HandlerSources = Object.freeze({
     return undefined;
   },
 
-  descriptorMessage(message: { name: string; nestedType: readonly unknown[] }): DescriptorMessage {
+  descriptorMessage(message: ProtobufWkt.DescriptorProto): DescriptorMessage {
     return {
       name: message.name,
-      nested: message.nestedType.map((nested) =>
-        HandlerSources.descriptorMessage(
-          nested as { name: string; nestedType: readonly unknown[] },
-        ),
-      ),
+      isEntityState:
+        message.options !== undefined && protobuf.hasExtension(message.options, entity),
+      nested: message.nestedType.map(HandlerSources.descriptorMessage),
     };
   },
 });

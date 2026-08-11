@@ -235,11 +235,13 @@ export interface HandlerRegistrationBuilder<Instance extends object> {
   ): CommandReactionHandlerMetadata<Schema, HandlerMethodName<Instance>>;
 
   /**
-   * Registers an event subscriber method.
+   * Registers an Event/rejection or Entity-state subscriber method.
    *
-   * @param schema Event schema accepted by the method.
+   * @param schema Event, rejection, or descriptor-marked Entity state schema
+   * accepted by the method.
    * @param methodName Entity method name.
-   * @returns The registered event-subscription metadata.
+   * @returns Event-subscription metadata for signals, or state-subscription
+   * metadata for descriptor-marked Entity state schemas.
    */
   subscribe<Schema extends DescriptorMessageSchema>(
     schema: Schema,

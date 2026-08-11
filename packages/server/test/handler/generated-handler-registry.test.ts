@@ -127,6 +127,29 @@ describe("generated handler registry ingestion", () => {
     );
   });
 
+  it("rejects an Event subscription record that declares an Entity-state schema", () => {
+    expect(() =>
+      new HandlerRegistryIngestor().ingest({
+        version: 2,
+        entities: [
+          {
+            entityType: GeneratedProjection,
+            stateSchema: ProjectionStateSchema,
+            handlers: [
+              {
+                kind: "event-subscription",
+                methodName: "subscribeCreated",
+                signalSchema: ProjectionStateSchema,
+                emittedSchemas: [],
+                parameterCount: 1,
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(/must not declare an entity state schema/);
+  });
+
   it("rejects a state subscription whose signal is not an Entity state", () => {
     expect(() =>
       new HandlerRegistryIngestor().ingest({
