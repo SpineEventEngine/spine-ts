@@ -143,6 +143,7 @@ export const InboxTargets: Readonly<{
   equal(left: Any, right: Any): boolean;
 }> = Object.freeze({
   clone(value: Any): Any {
+    if (value.typeUrl.trim().length === 0) throw new TypeError("Inbox target ID is invalid.");
     return clone(AnySchema, value);
   },
   key(value: Any): string {

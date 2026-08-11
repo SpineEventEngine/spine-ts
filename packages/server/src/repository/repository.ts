@@ -951,15 +951,6 @@ export interface RepositoryAccess {
   projectionInboxTarget(repository: RepositoryView): ProjectionInboxTarget | undefined;
 
   /**
-   * Packs one routed Entity Inbox target using repository identifier rules.
-   *
-   * @param entityId The routed Entity ID.
-   * @param idField The repository state identifier field.
-   * @returns The canonical packed target identity.
-   */
-  inboxTargetId(entityId: unknown, idField: DescriptorFieldMetadata): Any;
-
-  /**
    * Dispatches an event directly to a projection repository.
    *
    * @param repository The projection repository to dispatch to.
@@ -1033,10 +1024,6 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
 
   projectionInboxTarget(repository: RepositoryView): ProjectionInboxTarget | undefined {
     return repositoryProjectionInboxTargets.get(repository);
-  },
-
-  inboxTargetId(entityId: unknown, idField: DescriptorFieldMetadata): Any {
-    return InboxMessages.inboxTargetId(entityId, idField);
   },
 
   dispatchProjectionDirect(

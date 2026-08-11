@@ -1420,12 +1420,6 @@ class SplitRouteProcessManager extends ProcessManager<
 }
 
 describe("repository signal routing", () => {
-  it("packs numeric Entity Inbox targets with their JVM identifier kinds", () => {
-    const scalarField = { descriptor: { fieldKind: "scalar" } } as never;
-
-    expect(Identifiers.unpack("int32", repositoryAccess.inboxTargetId(42, scalarField))).toBe(42);
-    expect(Identifiers.unpack("int64", repositoryAccess.inboxTargetId(42n, scalarField))).toBe(42n);
-  });
   it("uses the current Todo descriptor type names in routing fixtures", () => {
     expect(TaskIdSchema.typeName).toBe("spine.examples.todo.TaskId");
     expect(TaskSchema.typeName).toBe("spine.examples.todo.Task");

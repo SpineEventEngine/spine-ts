@@ -1,5 +1,5 @@
 import { create } from "@bufbuild/protobuf";
-import { Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, Identifiers } from "@spine-event-engine/core";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
@@ -83,6 +83,7 @@ describe("Inbox", () => {
     const snapshot = InboxTargets.clone(source);
     source.value.fill(0);
     expect(snapshot).toEqual(Identifiers.pack("int32", 7));
+    expect(() => InboxTargets.clone(create(AnySchema))).toThrow(TypeError);
 
     expect(() =>
       InboxTargets.shardKey({

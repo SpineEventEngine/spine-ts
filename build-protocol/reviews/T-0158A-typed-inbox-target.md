@@ -69,8 +69,20 @@ Configured reviewer: `gpt-5.6-terra` / high; runtime metadata unavailable.
 
 ## Correction Evidence
 
-- Affected execution: 13 files / 532 tests passed.
-- Changed-range LCOV: statements/lines 58/59 (98.31%), branches 48/49 (97.96%),
-  functions 15/15 (100%).
+- Affected execution: 13 files / 531 tests passed.
+- Changed-range LCOV: statements/lines 56/59 (94.92%), branches 46/51 (90.20%),
+  functions 14/14 (100%).
 - Targeted re-review required: TypeScript/API, performance/reliability, and
   style/maintainability. Documentation and security remain closed.
+
+## Targeted Re-review
+
+- TypeScript/API: CLEAN. Snapshot/strategy clone boundaries, typed-identity
+  TSDoc, and absence of a root public expansion were confirmed.
+- Performance/reliability: CLEAN. Independent focused execution passed 6 files
+  / 310 tests and confirmed zero/empty typed IDs, blank-string rejection,
+  cloning, and unchanged exact acknowledgement/provider behavior.
+- Style/maintainability: one residual P2 found a test-only
+  `repositoryAccess.inboxTargetId()` expansion. The accessor and fabricated
+  metadata test were removed; default-identity clone validation supplies
+  meaningful branch coverage instead. Targeted style confirmation remains.
