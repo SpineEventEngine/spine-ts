@@ -1247,6 +1247,22 @@ class AccumulatingTaskProjection extends Projection<string, typeof ProjectionSta
   }
 }
 
+class StateObservingProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  static subscriberCalls = 0;
+
+  static reset(): void {
+    this.subscriberCalls = 0;
+  }
+
+  subscribeState(state: ProjectionState): void {
+    StateObservingProjection.subscriberCalls++;
+    this.update((draft) => {
+      draft.name = `${state.name} (projected)`;
+      draft.priority = state.priority + 1;
+    });
+  }
+}
+
 class ReactingTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
   reactTask(event: ProjectionState): void {
     void event;
@@ -10728,6 +10744,75 @@ describe("Projection state-update routing", () => {
     expect(result?.entityIds).toEqual(["second", "first"]);
     expect(Object.isFrozen(result?.entityIds)).toBe(true);
   });
+
+  it("admits one durable projection row per selected target and replays it without rerouting", async () => {
+    StateObservingProjection.reset();
+    const route = vi.fn(() => ["second", "first", "second"]);
+    const handlers = EntityHandlers.define(
+      StateObservingProjection,
+      ProjectionStateSchema,
+      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
+    );
+    const repository = new Repository({
+      entityType: StateObservingProjection,
+      schema: ProjectionStateSchema,
+      handlers,
+      stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectionStateSchema, route),
+    });
+    const context = BoundedContext.singleTenant("State updates").add(repository).build();
+
+    try {
+      await boundedContextAccess.postSystemEvent(
+        context,
+        createStateChangedEvent(
+          "source",
+          create(ProjectionStateSchema, { id: "source", name: "Source", priority: 1 }),
+        ),
+      );
+
+      expect(route).toHaveBeenCalledOnce();
+      expect(StateObservingProjection.subscriberCalls).toBe(2);
+      await expect(context.stand().read(ProjectionStateSchema, "first")).resolves.toMatchObject({
+        id: "first",
+        name: "Source (projected)",
+        priority: 2,
+      });
+      await expect(context.stand().read(ProjectionStateSchema, "second")).resolves.toMatchObject({
+        id: "second",
+        name: "Source (projected)",
+        priority: 2,
+      });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("does not persist or invoke state subscribers when the route has no targets", async () => {
+    StateObservingProjection.reset();
+    const route = vi.fn(() => []);
+    const handlers = EntityHandlers.define(
+      StateObservingProjection,
+      ProjectionStateSchema,
+      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
+    );
+    const repository = new Repository({
+      entityType: StateObservingProjection,
+      schema: ProjectionStateSchema,
+      handlers,
+      stateUpdateRouting: StateUpdateRouting.create<string>().route(ProjectionStateSchema, route),
+    });
+    const context = BoundedContext.singleTenant("Empty state updates").add(repository).build();
+
+    try {
+      await boundedContextAccess.postSystemEvent(context, createStateChangedEvent("source"));
+
+      expect(route).toHaveBeenCalledOnce();
+      expect(StateObservingProjection.subscriberCalls).toBe(0);
+      await expect(context.stand().read(ProjectionStateSchema, "source")).resolves.toBeUndefined();
+    } finally {
+      await context.close();
+    }
+  });
 });
 
 function createStateChangedEvent(
@@ -10743,9 +10828,21 @@ function createStateChangedEvent(
     message: AnyMessages.pack(
       EntityStateChangedSchema,
       create(EntityStateChangedSchema, {
+        entity: create(MessageIdSchema, {
+          id: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
+          typeUrl: TypeUrls.derive(stateSchema),
+        }),
         newState: AnyMessages.pack(stateSchema, state as never, { validate: false }),
+        signalId: [
+          create(MessageIdSchema, {
+            id: AnyMessages.pack(
+              StringValueSchema,
+              create(StringValueSchema, { value: `signal-${id}` }),
+            ),
+            typeUrl: TypeUrls.derive(StringValueSchema),
+          }),
+        ],
       }),
-      { validate: false },
     ),
     context: create(EventContextSchema),
   });
