@@ -42,7 +42,10 @@ describe("delivery codec and immutable snapshots", () => {
       DeliveryPagingError,
     );
 
-    const currentWire = DeliveryMessageCodec.encode({ ...source, id: { ...source.id, value: "work" } });
+    const currentWire = DeliveryMessageCodec.encode({
+      ...source,
+      id: { ...source.id, value: "work" },
+    });
     fake.reply(create(OptionalInboxMessageSchema, { message: currentWire }));
     const current = await client.findOne({ value: "work", shard: ShardIndex.single() });
     if (current === undefined) throw new Error("Expected remote message.");
@@ -80,7 +83,10 @@ describe("delivery codec and immutable snapshots", () => {
 
   it("preserves plain framework target IDs across the frozen wire EntityId", () => {
     const source = domainMessage();
-    const plain = { ...source, inboxId: { ...source.inboxId, targetId: stringTarget("message-1") } };
+    const plain = {
+      ...source,
+      inboxId: { ...source.inboxId, targetId: stringTarget("message-1") },
+    };
 
     const decoded = DeliveryMessageCodec.decode(
       DeliveryMessageCodec.encode(plain),
@@ -107,10 +113,22 @@ describe("delivery codec and immutable snapshots", () => {
   });
 
   it("normalizes malformed StringValue target bytes to the delivery protocol error", () => {
+    expect(() => DeliveryMessageCodec.decodeTarget("", Uint8Array.of(1))).toThrow(
+      DeliveryProtocolError,
+    );
+    expect(() =>
+      DeliveryMessageCodec.decodeTarget("type.spine.io/test.EntityId", new Uint8Array()),
+    ).toThrow(DeliveryProtocolError);
     expect(() =>
       DeliveryMessageCodec.decodeTarget(
         "type.googleapis.com/google.protobuf.StringValue",
         new Uint8Array([0xff]),
+      ),
+    ).toThrow(DeliveryProtocolError);
+    expect(() =>
+      DeliveryMessageCodec.decodeTarget(
+        "type.googleapis.com/google.protobuf.StringValue",
+        toBinary(StringValueSchema, create(StringValueSchema, { value: " " })),
       ),
     ).toThrow(DeliveryProtocolError);
 

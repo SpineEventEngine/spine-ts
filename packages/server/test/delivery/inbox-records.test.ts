@@ -102,6 +102,15 @@ describe("InboxRecords", () => {
       },
     };
     expect(() => InboxRecords.read(corrupt as never)).toThrow(DeliveryStorageCorruptionError);
+    expect(() =>
+      InboxRecords.read({
+        ...wire,
+        inboxId: {
+          ...wire.inboxId,
+          entityId: { id: { typeUrl: "type.example.dev/Id", value: "not-bytes" } },
+        },
+      } as never),
+    ).toThrow(DeliveryStorageCorruptionError);
   });
 
   it("preserves generated shard coordinates", () => {
