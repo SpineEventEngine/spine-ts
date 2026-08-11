@@ -13,15 +13,27 @@ export type CommandRoute<Id, Schema extends MessageSchema = MessageSchema> = (
   context: CommandContext,
 ) => Id;
 
+interface CommandRoutingState<Id> {
+  readonly exact: Map<MessageSchema, CommandRoute<Id>>;
+  readonly semantic: Map<string, CommandRoute<Id>>;
+  defaultRoute: CommandRoute<Id> | undefined;
+}
+
+const routingStates = new WeakMap<object, CommandRoutingState<unknown>>();
+
 /**
  * Mutable Command route declarations that repositories snapshot at construction.
  *
  * @typeParam Id Entity ID type owned by the receiving repository.
  */
 export class CommandRouting<Id> {
-  readonly #exact = new Map<MessageSchema, CommandRoute<Id>>();
-  readonly #semantic = new Map<string, CommandRoute<Id>>();
-  #default: CommandRoute<Id> | undefined;
+  constructor() {
+    routingStates.set(this, {
+      exact: new Map<MessageSchema, CommandRoute<Id>>(),
+      semantic: new Map<string, CommandRoute<Id>>(),
+      defaultRoute: undefined,
+    });
+  }
 
   /**
    * Creates empty Command route declarations.
@@ -42,8 +54,9 @@ export class CommandRouting<Id> {
    */
   route<Schema extends MessageSchema>(schema: Schema, via: CommandRoute<Id, Schema>): this {
     if (typeof via !== "function") throw new TypeError("Command routing requires a route function.");
-    if (this.#exact.has(schema)) throw new Error("Command routing has a duplicate exact command route.");
-    this.#exact.set(schema, via as CommandRoute<Id>);
+    const state = CommandRoutingInternals.state(this);
+    if (state.exact.has(schema)) throw new Error("Command routing has a duplicate exact command route.");
+    state.exact.set(schema, via as CommandRoute<Id>);
     return this;
   }
 
@@ -58,8 +71,10 @@ export class CommandRouting<Id> {
     if (typeof javaType !== "string" || javaType.trim().length === 0)
       throw new TypeError("Command semantic routing requires a non-empty Java type.");
     if (typeof via !== "function") throw new TypeError("Command routing requires a route function.");
-    if (this.#semantic.has(javaType)) throw new Error("Command routing has a duplicate semantic command route.");
-    this.#semantic.set(javaType, via);
+    const state = CommandRoutingInternals.state(this);
+    if (state.semantic.has(javaType))
+      throw new Error("Command routing has a duplicate semantic command route.");
+    state.semantic.set(javaType, via);
     return this;
   }
 
@@ -71,7 +86,44 @@ export class CommandRouting<Id> {
    */
   replaceDefault(via: CommandRoute<Id>): this {
     if (typeof via !== "function") throw new TypeError("Command routing requires a route function.");
-    this.#default = via;
+    CommandRoutingInternals.state(this).defaultRoute = via;
     return this;
   }
 }
+
+/**
+ * Internal access to Command-routing declaration state.
+ *
+ * @internal
+ */
+export const CommandRoutingInternals: Readonly<{
+  state<Id>(routing: CommandRouting<Id>): CommandRoutingState<Id>;
+  snapshot<Id>(routing: CommandRouting<Id> | undefined): Readonly<{
+    exact: ReadonlyMap<MessageSchema, CommandRoute<Id>>;
+    semantic: ReadonlyMap<string, CommandRoute<Id>>;
+    defaultRoute: CommandRoute<Id> | undefined;
+  }>;
+}> = Object.freeze({
+  state<Id>(routing: CommandRouting<Id>): CommandRoutingState<Id> {
+    return routingStates.get(routing) as CommandRoutingState<Id>;
+  },
+  snapshot<Id>(routing: CommandRouting<Id> | undefined): Readonly<{
+    exact: ReadonlyMap<MessageSchema, CommandRoute<Id>>;
+    semantic: ReadonlyMap<string, CommandRoute<Id>>;
+    defaultRoute: CommandRoute<Id> | undefined;
+  }> {
+    if (routing === undefined) {
+      return Object.freeze({
+        exact: new Map<MessageSchema, CommandRoute<Id>>(),
+        semantic: new Map<string, CommandRoute<Id>>(),
+        defaultRoute: undefined,
+      });
+    }
+    const state = CommandRoutingInternals.state(routing);
+    return Object.freeze({
+      exact: new Map(state.exact),
+      semantic: new Map(state.semantic),
+      defaultRoute: state.defaultRoute,
+    });
+  },
+});

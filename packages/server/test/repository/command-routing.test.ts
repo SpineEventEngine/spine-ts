@@ -3,6 +3,7 @@ import { CommandContextSchema, CommandSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
 import { CommandRouting } from "../../src/index.js";
+import { CommandRoutingInternals } from "../../src/repository/command-routing.js";
 
 describe("CommandRouting", () => {
   it("rejects duplicate and malformed exact and semantic registrations", () => {
@@ -30,5 +31,18 @@ describe("CommandRouting", () => {
         })
         .replaceDefault(route),
     ).toBeInstanceOf(CommandRouting);
+  });
+
+  it("copies route declarations into an immutable construction snapshot", () => {
+    const first = () => "first";
+    const second = () => "second";
+    const routing = CommandRouting.create<string>().route(CommandSchema, first);
+
+    const snapshot = CommandRoutingInternals.snapshot(routing);
+    routing.routeSemantic("example.Command", second).replaceDefault(second);
+
+    expect(snapshot.exact.get(CommandSchema)).toBe(first);
+    expect(snapshot.semantic).toEqual(new Map());
+    expect(snapshot.defaultRoute).toBeUndefined();
   });
 });
