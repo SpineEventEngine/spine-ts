@@ -4,6 +4,7 @@ import { clone, create } from "@bufbuild/protobuf";
 import {
   BoolValueSchema,
   DoubleValueSchema,
+  Int64ValueSchema,
   StringValueSchema,
   type Any,
   TimestampSchema,
@@ -183,7 +184,7 @@ export interface EventContextInput {
   /**
    * Identifies the event producer with a supported scalar identifier.
    */
-  readonly producerId?: string | number | boolean;
+  readonly producerId?: string | number | bigint | boolean;
 
   /**
    * Declares the signed 32-bit event version.
@@ -352,7 +353,7 @@ export class SignalMetadata {
    * @param value Candidate producer identifier.
    * @returns Packed value, or `undefined` when it is unsupported.
    */
-  producerId(value: string | number | boolean | undefined): Any | undefined {
+  producerId(value: string | number | bigint | boolean | undefined): Any | undefined {
     switch (typeof value) {
       case "string":
         return AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value }));
@@ -362,6 +363,8 @@ export class SignalMetadata {
         return Number.isFinite(value)
           ? AnyMessages.pack(DoubleValueSchema, create(DoubleValueSchema, { value }))
           : undefined;
+      case "bigint":
+        return AnyMessages.pack(Int64ValueSchema, create(Int64ValueSchema, { value }));
       default:
         return undefined;
     }

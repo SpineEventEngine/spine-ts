@@ -2,6 +2,7 @@ import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/pro
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
+  type Any,
   AnySchema,
   BoolValueSchema,
   DoubleValueSchema,
@@ -120,6 +121,24 @@ type AggregateState = Message<"AggregateState"> & {
   archived: boolean;
 };
 
+type Int32AggregateState = Message<"Int32AggregateState"> & {
+  id: number;
+  name: string;
+};
+
+type Int64ProcessManagerState = Message<"Int64ProcessManagerState"> & {
+  id: bigint;
+  queue: string;
+};
+
+type RepeatedIdCommand = Message<"RepeatedIdCommand"> & {
+  id: string[];
+};
+
+type MapIdCommand = Message<"MapIdCommand"> & {
+  id: Record<string, string>;
+};
+
 type ProcessManagerState = Message<"ProcessManagerState"> & {
   id: string;
   queue: string;
@@ -186,6 +205,19 @@ const AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   1,
 ) as GenMessage<AggregateState>;
+const Int32AggregateStateSchema = messageDesc(
+  fileEntityMetadataFixture,
+  10,
+) as GenMessage<Int32AggregateState>;
+const Int64ProcessManagerStateSchema = messageDesc(
+  fileEntityMetadataFixture,
+  11,
+) as GenMessage<Int64ProcessManagerState>;
+const RepeatedIdCommandSchema = messageDesc(
+  fileEntityMetadataFixture,
+  12,
+) as GenMessage<RepeatedIdCommand>;
+const MapIdCommandSchema = messageDesc(fileEntityMetadataFixture, 13) as GenMessage<MapIdCommand>;
 const fileEntityVisibilityFixture = createFixtureFileDescriptor(
   serverEntityMetadataTestFixtures.visibility.descriptorSetBase64,
 );
@@ -285,6 +317,36 @@ class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigin
 
   reactToProjection(event: ProjectionState): void {
     void event;
+  }
+}
+
+class Int32RoutingAggregate extends ProcessManager<
+  number,
+  typeof Int32AggregateStateSchema,
+  number
+> {
+  assign(command: Int32AggregateState): void {
+    this.update((draft) => Object.assign(draft, command));
+  }
+}
+
+class Int64RoutingProcessManager extends ProcessManager<
+  bigint,
+  typeof Int64ProcessManagerStateSchema,
+  number
+> {
+  assign(command: Int64ProcessManagerState): void {
+    this.update((draft) => Object.assign(draft, command));
+  }
+}
+
+class MalformedFirstFieldAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  assignRepeated(command: RepeatedIdCommand): void {
+    void command;
+  }
+
+  assignMap(command: MapIdCommand): void {
+    void command;
   }
 }
 
@@ -1451,7 +1513,7 @@ describe("repository signal routing", () => {
     expect(descriptor.id.key("task-1")).toBe("string:task-1");
     expect(descriptor.id.key(1)).toBe("number:1");
     expect(descriptor.id.key(false)).toBe("boolean:false");
-    expect(descriptor.id.key(1n as never)).toBe("bigint:1");
+    expect(descriptor.id.key(1n)).toBe("bigint:1");
     expect(descriptor.id.key(structured as never)).toBe('json:{"value":"task-1"}');
     expect(descriptor.id.clone(structured as never)).toEqual(structured);
     expect(descriptor.id.clone(structured as never)).not.toBe(structured);
@@ -3070,9 +3132,103 @@ describe("repository signal routing", () => {
       CommandRouting.create<string>().route(AggregateStateSchema, () => "custom-task"),
     );
 
-    expect(repository.routeCommand(createAggregateCommand("command-custom", "first-task"))).toMatchObject({
+    expect(
+      repository.routeCommand(createAggregateCommand("command-custom", "first-task")),
+    ).toMatchObject({
       entityId: "custom-task",
     });
+  });
+
+  it("applies exact, direct semantic, file semantic, and replacement precedence", () => {
+    const exact = createRoutingRepository(
+      CommandRouting.create<string>()
+        .route(AggregateStateSchema, () => "exact")
+        .routeSemantic("example.tags.AggregateTag", () => "direct")
+        .routeSemantic("example.tags.ASharedTag", () => "file")
+        .replaceDefault(() => "replacement"),
+    );
+    const direct = createRoutingRepository(
+      CommandRouting.create<string>()
+        .routeSemantic("example.tags.AggregateTag", () => "direct")
+        .routeSemantic("example.tags.ASharedTag", () => "file")
+        .replaceDefault(() => "replacement"),
+    );
+    const file = createRoutingRepository(
+      CommandRouting.create<string>()
+        .routeSemantic("example.tags.ASharedTag", () => "file")
+        .replaceDefault(() => "replacement"),
+    );
+    const replacement = createRoutingRepository(
+      CommandRouting.create<string>().replaceDefault(() => "replacement"),
+    );
+    const command = createAggregateCommand("command-precedence", "declaration");
+
+    expect(exact.routeCommand(command).entityId).toBe("exact");
+    expect(direct.routeCommand(command).entityId).toBe("direct");
+    expect(file.routeCommand(command).entityId).toBe("file");
+    expect(replacement.routeCommand(command).entityId).toBe("replacement");
+  });
+
+  it("keeps the Command routing snapshot captured by repository construction", () => {
+    const routing = CommandRouting.create<string>().replaceDefault(() => "first");
+    const repository = createRoutingRepository(routing);
+    routing.replaceDefault(() => "second");
+
+    expect(
+      repository.routeCommand(createAggregateCommand("command-snapshot", "declaration")).entityId,
+    ).toBe("first");
+  });
+
+  it("rejects routes that cannot apply to a registered Command", () => {
+    expect(() =>
+      createRoutingRepository(
+        CommandRouting.create<string>().route(ProjectionStateSchema, () => "target"),
+      ),
+    ).toThrow(/unregistered exact route/);
+    expect(() =>
+      createRoutingRepository(
+        CommandRouting.create<string>().routeSemantic("example.tags.Unknown", () => "target"),
+      ),
+    ).toThrow(/unregistered semantic route/);
+  });
+
+  it("rejects missing and incompatible custom Command route results", () => {
+    expect(() =>
+      createRoutingRepository(
+        CommandRouting.create<string>().route(AggregateStateSchema, () => "   "),
+      ).routeCommand(createAggregateCommand("command-blank-custom", "first")),
+    ).toThrow(/ID compatible with the Entity state/);
+    expect(() =>
+      createRoutingRepository(
+        CommandRouting.create<string>().route(AggregateStateSchema, () => 42 as never),
+      ).routeCommand(createAggregateCommand("command-number-custom", "first")),
+    ).toThrow(/ID compatible with the Entity state/);
+    expect(() =>
+      createInt32RoutingRepository(
+        CommandRouting.create<number>().route(Int32AggregateStateSchema, () => 2 ** 31),
+      ).routeCommand(
+        SignalEnvelopes.command({
+          id: create(CommandIdSchema, { uuid: "command-range-custom" }),
+          context: create(CommandContextSchema),
+          schema: Int32AggregateStateSchema,
+          message: create(Int32AggregateStateSchema, { id: 1, name: "Range" }),
+        }),
+      ),
+    ).toThrow(/ID compatible with the Entity state/);
+  });
+
+  it("supplies a default Command context to custom routing", () => {
+    let observed: CommandContext | undefined;
+    const repository = createRoutingRepository(
+      CommandRouting.create<string>().route(AggregateStateSchema, (message, context) => {
+        observed = context;
+        return message.id;
+      }),
+    );
+
+    repository.routeCommand(createContextlessAggregateCommand("command-context-route", "task"));
+
+    expect(observed).toEqual(create(CommandContextSchema));
   });
 
   it("prefers descriptor direct semantic Command routes over file semantic routes", () => {
@@ -3082,7 +3238,9 @@ describe("repository signal routing", () => {
         .routeSemantic("example.tags.AggregateTag", () => "direct-task"),
     );
 
-    expect(repository.routeCommand(createAggregateCommand("command-semantic", "first-task"))).toMatchObject({
+    expect(
+      repository.routeCommand(createAggregateCommand("command-semantic", "first-task")),
+    ).toMatchObject({
       entityId: "direct-task",
     });
   });
@@ -3093,6 +3251,37 @@ describe("repository signal routing", () => {
     expect(() => repository.routeCommand(createAggregateCommand("command-blank", ""))).toThrow(
       "Repository command routing requires a non-empty first field.",
     );
+  });
+
+  it("rejects repeated and map declaration-first Command IDs", () => {
+    const repository = createMalformedFirstFieldRepository();
+    const repeated = SignalEnvelopes.command({
+      id: create(CommandIdSchema, { uuid: "command-repeated-id" }),
+      context: create(CommandContextSchema),
+      schema: RepeatedIdCommandSchema,
+      message: create(RepeatedIdCommandSchema, { id: ["one"] }),
+    });
+    const mapped = SignalEnvelopes.command({
+      id: create(CommandIdSchema, { uuid: "command-map-id" }),
+      context: create(CommandContextSchema),
+      schema: MapIdCommandSchema,
+      message: create(MapIdCommandSchema, { id: { one: "one" } }),
+    });
+
+    expect(() => repository.routeCommand(repeated)).toThrow(/singular non-map first field/);
+    expect(() => repository.routeCommand(mapped)).toThrow(/singular non-map first field/);
+  });
+
+  it("rejects a default-valued declaration-first numeric Command ID", () => {
+    const repository = createInt32RoutingRepository();
+    const command = SignalEnvelopes.command({
+      id: create(CommandIdSchema, { uuid: "command-default-int32" }),
+      context: create(CommandContextSchema),
+      schema: Int32AggregateStateSchema,
+      message: create(Int32AggregateStateSchema, { id: 0, name: "Default" }),
+    });
+
+    expect(() => repository.routeCommand(command)).toThrow(/non-default first field/);
   });
 
   it("routes events by matching producer ID or by the first event field", async () => {
@@ -3863,7 +4052,7 @@ describe("repository signal routing", () => {
       new Date("2026-07-08T09:01:00.000Z"),
       1n,
       {
-        targetId: "pm-forged",
+        targetId: Identifiers.pack("string", "pm-forged"),
       },
     );
     const wrongType = await storeEntityInboxCommand(
@@ -3875,11 +4064,151 @@ describe("repository signal routing", () => {
         targetTypeUrl: "type.example.dev/forged.ProcessManager",
       },
     );
+    const incompatibleId = await storeEntityInboxCommand(
+      delivery,
+      command,
+      new Date("2026-07-08T09:02:30.000Z"),
+      3n,
+      {
+        targetId: Identifiers.pack("int32", 1),
+      },
+    );
 
     await expect(target.replay(wrongId)).resolves.toBeUndefined();
     await expect(target.replay(wrongType)).rejects.toThrow(/target/i);
+    await expect(target.replay(incompatibleId)).rejects.toThrow(/target ID is incompatible/);
 
     expect(RoutingProcessManager.commandCalls).toBe(1);
+  });
+
+  it("does not call custom Process Manager routing again during replay", async () => {
+    RoutingProcessManager.reset();
+    let routeCalls = 0;
+    const routing = CommandRouting.create<string>().route(AggregateStateSchema, (message) => {
+      routeCalls += 1;
+      return message.id;
+    });
+    const factory = new InMemoryStorageFactory();
+    const repository = createProcessManagerAssignRepository(routing);
+    BoundedContext.singleTenant("Tasks").add(repository).withStorageFactory(factory).build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+    const target = requireEntityInboxTarget(repository);
+    const command = createAggregateCommand("command-pm-count", "pm-count", "Counted");
+    const route = repository.routeCommand(command);
+    const received = await storeEntityInboxCommand(
+      delivery,
+      command,
+      new Date("2026-07-08T09:02:15.000Z"),
+      1n,
+      { targetId: Identifiers.pack("string", route.entityId) },
+    );
+
+    expect(routeCalls).toBe(1);
+    await expect(target.replay(received)).resolves.toBeUndefined();
+
+    expect(routeCalls).toBe(1);
+    expect(RoutingProcessManager.commandCalls).toBe(1);
+  });
+
+  it("does not call custom Aggregate routing again for a stored message ID", async () => {
+    let routeCalls = 0;
+    const routing = CommandRouting.create<TaskId>().route(TaskSchema, (message) => {
+      routeCalls += 1;
+      if (message.id === undefined) throw new Error("Expected a Task ID.");
+      return message.id;
+    });
+    const factory = new InMemoryStorageFactory();
+    const repository = createMessageIdProducingRepository(routing);
+    BoundedContext.singleTenant("Tasks").add(repository).withStorageFactory(factory).build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+    const target = requireEntityInboxTarget(repository);
+    const command = createTaskCommand("command-message-count", "message-count", "Counted");
+    const route = repository.routeCommand(command);
+    const received = await storeEntityInboxCommand(
+      delivery,
+      command,
+      new Date("2026-07-08T09:02:20.000Z"),
+      1n,
+      {
+        targetId: Identifiers.pack(TaskIdSchema, route.entityId),
+        targetTypeUrl: TypeUrls.derive(TaskSchema),
+      },
+    );
+
+    expect(routeCalls).toBe(1);
+    await expect(target.replay(received)).resolves.toBeDefined();
+
+    expect(routeCalls).toBe(1);
+  });
+
+  it("reconstructs stored int32 and int64 targets without rerouting", async () => {
+    const int32Factory = new InMemoryStorageFactory();
+    const int32Repository = createInt32RoutingRepository();
+    BoundedContext.singleTenant("Numeric int32")
+      .add(int32Repository)
+      .withStorageFactory(int32Factory)
+      .build();
+    const int32Command = SignalEnvelopes.command({
+      id: create(CommandIdSchema, { uuid: "command-numeric-int32" }),
+      context: create(CommandContextSchema),
+      schema: Int32AggregateStateSchema,
+      message: create(Int32AggregateStateSchema, { id: 42, name: "Int32" }),
+    });
+    const int32Message = await storeEntityInboxCommand(
+      new Delivery({
+        context: { name: "Numeric int32", multitenant: false },
+        storageFactory: int32Factory,
+      }),
+      int32Command,
+      new Date("2026-07-08T09:02:21.000Z"),
+      1n,
+      {
+        targetId: Identifiers.pack("int32", 42),
+        targetTypeUrl: TypeUrls.derive(Int32AggregateStateSchema),
+      },
+    );
+
+    expect(int32Repository.routeCommand(int32Command).entityId).toBe(42);
+    await expect(
+      requireEntityInboxTarget(int32Repository).replay(int32Message),
+    ).resolves.toBeUndefined();
+
+    const int64Factory = new InMemoryStorageFactory();
+    const int64Repository = createInt64RoutingRepository();
+    BoundedContext.singleTenant("Numeric int64")
+      .add(int64Repository)
+      .withStorageFactory(int64Factory)
+      .build();
+    const int64Command = SignalEnvelopes.command({
+      id: create(CommandIdSchema, { uuid: "command-numeric-int64" }),
+      context: create(CommandContextSchema),
+      schema: Int64ProcessManagerStateSchema,
+      message: create(Int64ProcessManagerStateSchema, { id: 42n, queue: "Int64" }),
+    });
+    const int64Message = await storeEntityInboxCommand(
+      new Delivery({
+        context: { name: "Numeric int64", multitenant: false },
+        storageFactory: int64Factory,
+      }),
+      int64Command,
+      new Date("2026-07-08T09:02:22.000Z"),
+      1n,
+      {
+        targetId: Identifiers.pack("int64", 42n),
+        targetTypeUrl: TypeUrls.derive(Int64ProcessManagerStateSchema),
+      },
+    );
+
+    expect(int64Repository.routeCommand(int64Command).entityId).toBe(42n);
+    await expect(
+      requireEntityInboxTarget(int64Repository).replay(int64Message),
+    ).resolves.toBeUndefined();
   });
 
   it("rejects Entity Inbox replay before the repository is bound to a runtime", async () => {
@@ -7751,7 +8080,7 @@ describe("repository signal routing", () => {
           message: create(NumberRouteEventSchema, { id: Number.POSITIVE_INFINITY }),
         }),
       ),
-    ).toThrow(/finite primitive or single-field message ID/);
+    ).toThrow(/ID compatible with the Entity state/);
   });
 
   it("rejects invalid repository events before context event storage", async () => {
@@ -7858,7 +8187,7 @@ function createRoutingRepository(
     entityType: TaskAggregate,
     schema: AggregateStateSchema,
     handlers,
-    commandRouting,
+    ...(commandRouting === undefined ? {} : { commandRouting }),
   });
 }
 
@@ -8055,7 +8384,54 @@ function createMessageIdTaskRepository(): Repository<typeof MessageIdTaskAggrega
   });
 }
 
-function createMessageIdProducingRepository(): Repository<typeof MessageIdProducingAggregate> {
+function createInt32RoutingRepository(
+  commandRouting?: CommandRouting<number>,
+): Repository<typeof Int32RoutingAggregate> {
+  const handlers = EntityHandlers.define(
+    Int32RoutingAggregate,
+    Int32AggregateStateSchema,
+    (builder) => [builder.assign(Int32AggregateStateSchema, "assign")],
+  );
+  return new Repository({
+    entityType: Int32RoutingAggregate,
+    schema: Int32AggregateStateSchema,
+    handlers,
+    ...(commandRouting === undefined ? {} : { commandRouting }),
+  });
+}
+
+function createInt64RoutingRepository(): Repository<typeof Int64RoutingProcessManager> {
+  const handlers = EntityHandlers.define(
+    Int64RoutingProcessManager,
+    Int64ProcessManagerStateSchema,
+    (builder) => [builder.assign(Int64ProcessManagerStateSchema, "assign")],
+  );
+  return new Repository({
+    entityType: Int64RoutingProcessManager,
+    schema: Int64ProcessManagerStateSchema,
+    handlers,
+  });
+}
+
+function createMalformedFirstFieldRepository(): Repository<typeof MalformedFirstFieldAggregate> {
+  const handlers = EntityHandlers.define(
+    MalformedFirstFieldAggregate,
+    AggregateStateSchema,
+    (builder) => [
+      builder.assign(RepeatedIdCommandSchema, "assignRepeated"),
+      builder.assign(MapIdCommandSchema, "assignMap"),
+    ],
+  );
+  return new Repository({
+    entityType: MalformedFirstFieldAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createMessageIdProducingRepository(
+  commandRouting?: CommandRouting<TaskId>,
+): Repository<typeof MessageIdProducingAggregate> {
   const handlers = EntityHandlers.define(MessageIdProducingAggregate, TaskSchema, (builder) => [
     builder.assign(TaskSchema, "assignTask"),
   ]);
@@ -8065,6 +8441,7 @@ function createMessageIdProducingRepository(): Repository<typeof MessageIdProduc
     schema: TaskSchema,
     handlers,
     events: [TaskCreatedSchema],
+    ...(commandRouting === undefined ? {} : { commandRouting }),
   });
 }
 
@@ -8486,7 +8863,9 @@ function createTenantProjectionRepo(): Repository<
   });
 }
 
-function createProcessManagerAssignRepository(): Repository<typeof RoutingProcessManager> {
+function createProcessManagerAssignRepository(
+  commandRouting?: CommandRouting<string>,
+): Repository<typeof RoutingProcessManager> {
   const handlers = HandlerMetadataValues.defineArity(
     RoutingProcessManager,
     ProcessManagerStateSchema,
@@ -8506,6 +8885,7 @@ function createProcessManagerAssignRepository(): Repository<typeof RoutingProces
     schema: ProcessManagerStateSchema,
     handlers,
     events: [ProjectionStateSchema, TaskAlreadyDoneSchema],
+    ...(commandRouting === undefined ? {} : { commandRouting }),
   });
 }
 
@@ -9049,13 +9429,13 @@ async function storeEntityInboxCommand(
   version: bigint,
   overrides: {
     readonly signalId?: string;
-    readonly targetId?: string;
+    readonly targetId?: Any;
     readonly targetTypeUrl?: string;
   } = {},
 ) {
   const message = await delivery.inbox.receive({
     inboxId: {
-      targetId: Identifiers.pack("string", overrides.targetId ?? readAggregateId(command)),
+      targetId: overrides.targetId ?? Identifiers.pack("string", readAggregateId(command)),
       targetTypeUrl: overrides.targetTypeUrl ?? TypeUrls.derive(ProcessManagerStateSchema),
     },
     signalId: overrides.signalId ?? command.id?.uuid ?? "missing-command-id",

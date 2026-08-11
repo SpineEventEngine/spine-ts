@@ -1,5 +1,5 @@
 import { clone, create, ScalarType, type Message } from "@bufbuild/protobuf";
-import { AnyMessages } from "@spine-event-engine/core";
+import { AnyMessages, Identifiers } from "@spine-event-engine/core";
 import { VersionSchema } from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
@@ -15,7 +15,7 @@ import {
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
 
 import { describeEntityMetadata, type DescriptorMessageSchema } from "./entity-metadata.js";
-import { PrimitiveIds, type PrimitiveId } from "../repository/primitive-id.js";
+import type { PrimitiveId } from "../repository/primitive-id.js";
 
 /**
  * Converts repository current state to and from the JVM EntityRecord envelope.
@@ -46,11 +46,7 @@ export const EntityRecords: EntityRecordConverter = Object.freeze({
     if (versionNumber < 0n || versionNumber > 2_147_483_647n) {
       throw new RangeError("EntityRecord version must fit the non-negative JVM int32 range.");
     }
-    const idField = describeEntityMetadata(schema).idField.descriptor;
-    const packedId =
-      idField.fieldKind === "message"
-        ? AnyMessages.pack(idField.message as DescriptorMessageSchema, entityId as never)
-        : PrimitiveIds.pack(entityId as never);
+    const packedId = EntityIds.pack(schema, entityId);
     return create(EntityRecordSchema, {
       entityId: packedId,
       state: AnyMessages.pack(schema, state),
@@ -130,9 +126,20 @@ export function entityStorageDescriptor<I>(
 const EntityIds = Object.freeze({
   pack(schema: DescriptorMessageSchema, entityId: unknown) {
     const idField = describeEntityMetadata(schema).idField.descriptor;
-    return idField.fieldKind === "message"
-      ? AnyMessages.pack(idField.message as DescriptorMessageSchema, entityId as never)
-      : PrimitiveIds.pack(entityId as never);
+    if (idField.fieldKind === "message") {
+      return Identifiers.pack(idField.message as DescriptorMessageSchema, entityId as never);
+    }
+    if (idField.fieldKind === "scalar") {
+      switch (primitiveIdKind(idField.scalar)) {
+        case "string":
+          return Identifiers.pack("string", entityId as string);
+        case "int32":
+          return Identifiers.pack("int32", entityId as number);
+        case "int64":
+          return Identifiers.pack("int64", entityId as bigint);
+      }
+    }
+    throw new Error("Entity ID field must be scalar or message-valued.");
   },
 });
 
@@ -206,7 +213,7 @@ export function entityRecordSpec(
     return new RecordSpec<PrimitiveId, EntityRecord>({
       ...input,
       idKind: primitiveIdKind(idField.scalar),
-      extractId: unpackPrimitiveId,
+      extractId: (record) => unpackPrimitiveId(record, primitiveIdKind(idField.scalar)),
     });
   throw new Error(`Entity ID field "${idField.name}" must be scalar or message-valued.`);
 }
@@ -235,8 +242,15 @@ function unpackMessageId(record: EntityRecord, schema: DescriptorMessageSchema):
   return id;
 }
 
-function unpackPrimitiveId(record: EntityRecord): PrimitiveId {
-  const id = PrimitiveIds.unpack(record.entityId);
+function unpackPrimitiveId(record: EntityRecord, kind: "string" | "int32" | "int64"): PrimitiveId {
+  const id =
+    record.entityId === undefined
+      ? undefined
+      : kind === "string"
+        ? Identifiers.unpack("string", record.entityId)
+        : kind === "int32"
+          ? Identifiers.unpack("int32", record.entityId)
+          : Identifiers.unpack("int64", record.entityId);
   if (id === undefined) throw new Error("EntityRecord ID does not match the Entity ID schema.");
   return id;
 }

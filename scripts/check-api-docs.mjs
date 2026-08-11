@@ -524,6 +524,8 @@ const expectedServerExports = [
   "CommandRegistrationReadiness",
   "CommandRegistrationReadinessLookup",
   "CommandReactionHandlerMetadata",
+  "CommandRoute",
+  "CommandRouting",
   "CommandContextInput",
   "Clock",
   "ContextSpec",

@@ -6,6 +6,7 @@ describe("primitive aggregate IDs", () => {
   it("packs and unpacks primitive ID values directly", () => {
     expect(PrimitiveIds.unpack(PrimitiveIds.pack("task-primitive"))).toBe("task-primitive");
     expect(PrimitiveIds.unpack(PrimitiveIds.pack(42))).toBe(42);
+    expect(PrimitiveIds.unpack(PrimitiveIds.pack(42n))).toBe(42n);
     expect(PrimitiveIds.unpack(PrimitiveIds.pack(true))).toBe(true);
     expect(PrimitiveIds.unpack(undefined)).toBeUndefined();
   });

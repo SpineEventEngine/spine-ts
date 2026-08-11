@@ -7,6 +7,9 @@ import type { CommandContext } from "@spine-event-engine/proto";
  *
  * @typeParam Id Entity ID type owned by the receiving repository.
  * @typeParam Schema Generated Command message schema.
+ * @param message Unpacked Command message.
+ * @param context Command context supplied with the signal.
+ * @returns Target Entity ID.
  */
 export type CommandRoute<Id, Schema extends MessageSchema = MessageSchema> = (
   message: MessageShape<Schema>,
@@ -27,6 +30,11 @@ const routingStates = new WeakMap<object, CommandRoutingState<unknown>>();
  * @typeParam Id Entity ID type owned by the receiving repository.
  */
 export class CommandRouting<Id> {
+  // prettier-ignore
+
+  /**
+   * Creates empty mutable Command route declarations.
+   */
   constructor() {
     routingStates.set(this, {
       exact: new Map<MessageSchema, CommandRoute<Id>>(),
@@ -53,10 +61,12 @@ export class CommandRouting<Id> {
    * @returns These mutable route declarations.
    */
   route<Schema extends MessageSchema>(schema: Schema, via: CommandRoute<Id, Schema>): this {
-    if (typeof via !== "function") throw new TypeError("Command routing requires a route function.");
+    if (typeof via !== "function")
+      throw new TypeError("Command routing requires a route function.");
     const state = CommandRoutingInternals.state(this);
-    if (state.exact.has(schema)) throw new Error("Command routing has a duplicate exact command route.");
-    state.exact.set(schema, via as CommandRoute<Id>);
+    if (state.exact.has(schema))
+      throw new Error("Command routing has a duplicate exact command route.");
+    state.exact.set(schema, via);
     return this;
   }
 
@@ -70,7 +80,8 @@ export class CommandRouting<Id> {
   routeSemantic(javaType: string, via: CommandRoute<Id>): this {
     if (typeof javaType !== "string" || javaType.trim().length === 0)
       throw new TypeError("Command semantic routing requires a non-empty Java type.");
-    if (typeof via !== "function") throw new TypeError("Command routing requires a route function.");
+    if (typeof via !== "function")
+      throw new TypeError("Command routing requires a route function.");
     const state = CommandRoutingInternals.state(this);
     if (state.semantic.has(javaType))
       throw new Error("Command routing has a duplicate semantic command route.");
@@ -85,7 +96,8 @@ export class CommandRouting<Id> {
    * @returns These mutable route declarations.
    */
   replaceDefault(via: CommandRoute<Id>): this {
-    if (typeof via !== "function") throw new TypeError("Command routing requires a route function.");
+    if (typeof via !== "function")
+      throw new TypeError("Command routing requires a route function.");
     CommandRoutingInternals.state(this).defaultRoute = via;
     return this;
   }

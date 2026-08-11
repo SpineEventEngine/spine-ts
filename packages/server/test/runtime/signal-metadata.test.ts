@@ -2,6 +2,7 @@ import { create } from "@bufbuild/protobuf";
 import {
   BoolValueSchema,
   DoubleValueSchema,
+  Int64ValueSchema,
   StringValueSchema,
   TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
@@ -182,6 +183,7 @@ describe("SignalMetadata", () => {
 
     const booleanProducer = metadata.eventContext({ producerId: true });
     const numericProducer = metadata.eventContext({ producerId: 42 });
+    const int64Producer = metadata.eventContext({ producerId: 42n });
 
     expect(
       booleanProducer.producerId === undefined
@@ -193,6 +195,11 @@ describe("SignalMetadata", () => {
         ? undefined
         : AnyMessages.unpack(numericProducer.producerId, DoubleValueSchema)?.value,
     ).toBe(42);
+    expect(
+      int64Producer.producerId === undefined
+        ? undefined
+        : AnyMessages.unpack(int64Producer.producerId, Int64ValueSchema)?.value,
+    ).toBe(42n);
     expect(metadata.producerId(undefined)).toBeUndefined();
   });
 

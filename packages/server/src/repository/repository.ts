@@ -2791,7 +2791,7 @@ interface RepositoryEntityStorage<I, S extends Message> {
 
 interface RoutableId {
   readonly id: unknown;
-  readonly value: string | number | boolean;
+  readonly value: string | number | bigint | boolean;
 }
 
 /**
@@ -3138,7 +3138,7 @@ const RepositorySignals = {
     return Number(version);
   },
 
-  runtimeProducerId(entityId: unknown): string | number | boolean | undefined {
+  runtimeProducerId(entityId: unknown): string | number | bigint | boolean | undefined {
     return PrimitiveIds.readFinite(entityId);
   },
 
@@ -4219,7 +4219,7 @@ const RepositoryRoutes = {
     return typeof id === "string" && id.trim().length === 0;
   },
 
-  readProducerId(event: Event): string | number | boolean | undefined {
+  readProducerId(event: Event): string | number | bigint | boolean | undefined {
     const producerId = event.context?.producerId;
     if (producerId === undefined) {
       return undefined;
@@ -4310,7 +4310,10 @@ const RepositoryRoutes = {
     if (descriptor.fieldKind === "message") {
       return RepositoryRoutes.readMessageRouteId(value, descriptor.message.typeName, signalKind);
     }
-    return RepositoryRoutes.readPrimitiveRouteId(value, signalKind);
+    if (descriptor.fieldKind === "scalar") {
+      return RepositoryRoutes.readPrimitiveRouteId(value, descriptor.scalar, signalKind);
+    }
+    throw new Error(`Repository ${signalKind} routing requires a scalar or message-valued ID.`);
   },
 
   readMessageRouteId(
@@ -4332,12 +4335,17 @@ const RepositoryRoutes = {
     });
   },
 
-  readPrimitiveRouteId(value: unknown, signalKind: "command" | "event"): RoutableId {
+  readPrimitiveRouteId(
+    value: unknown,
+    targetType: ScalarType,
+    signalKind: "command" | "event",
+  ): RoutableId {
     const messageValue = MessageIds.readValue(value);
-    const id = PrimitiveIds.readFinite(messageValue ?? value);
+    const candidate = messageValue ?? value;
+    const id = RepositoryRoutes.readCompatiblePrimitiveId(candidate, targetType);
     if (id === undefined) {
       throw new Error(
-        `Repository ${signalKind} routing requires a finite primitive or single-field message ID.`,
+        `Repository ${signalKind} routing requires an ID compatible with the Entity state.`,
       );
     }
 
@@ -4345,6 +4353,33 @@ const RepositoryRoutes = {
       id,
       value: id,
     });
+  },
+
+  readCompatiblePrimitiveId(
+    value: unknown,
+    targetType: ScalarType,
+  ): string | number | bigint | undefined {
+    switch (targetType) {
+      case ScalarType.STRING:
+        return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+      case ScalarType.INT32:
+      case ScalarType.SINT32:
+      case ScalarType.SFIXED32:
+        return typeof value === "number" &&
+          Number.isInteger(value) &&
+          value >= -(2 ** 31) &&
+          value < 2 ** 31
+          ? value
+          : undefined;
+      case ScalarType.INT64:
+      case ScalarType.SINT64:
+      case ScalarType.SFIXED64:
+        return typeof value === "bigint" && value >= -(1n << 63n) && value < 1n << 63n
+          ? value
+          : undefined;
+      default:
+        return undefined;
+    }
   },
 };
 Object.freeze(RepositoryRoutes);

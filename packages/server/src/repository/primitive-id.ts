@@ -2,6 +2,7 @@ import { create } from "@bufbuild/protobuf";
 import {
   BoolValueSchema,
   DoubleValueSchema,
+  Int64ValueSchema,
   StringValueSchema,
   type Any,
 } from "@bufbuild/protobuf/wkt";
@@ -11,7 +12,7 @@ import { UserIdSchema } from "@spine-event-engine/proto";
 /**
  * Represents a scalar value that may identify an entity.
  */
-export type PrimitiveId = string | number | boolean;
+export type PrimitiveId = string | number | bigint | boolean;
 
 /**
  * Packs and reads scalar entity identifiers.
@@ -112,6 +113,8 @@ export const PrimitiveIds: PrimitiveIdCodec = Object.freeze({
         return AnyMessages.pack(DoubleValueSchema, create(DoubleValueSchema, { value: id }));
       case "boolean":
         return AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value: id }));
+      case "bigint":
+        return AnyMessages.pack(Int64ValueSchema, create(Int64ValueSchema, { value: id }));
     }
   },
 
@@ -133,6 +136,7 @@ export const PrimitiveIds: PrimitiveIdCodec = Object.freeze({
     return (
       AnyMessages.unpack(id, StringValueSchema)?.value ??
       AnyMessages.unpack(id, DoubleValueSchema)?.value ??
+      AnyMessages.unpack(id, Int64ValueSchema)?.value ??
       AnyMessages.unpack(id, BoolValueSchema)?.value ??
       AnyMessages.unpack(id, UserIdSchema)?.value
     );
@@ -168,7 +172,12 @@ export const MessageIds: MessageIdCodec = Object.freeze({
  */
 const IdValues = Object.freeze({
   primitive(value: unknown): PrimitiveId | undefined {
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "bigint" ||
+      typeof value === "boolean"
+    ) {
       return value;
     }
 
