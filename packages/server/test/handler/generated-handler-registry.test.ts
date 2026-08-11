@@ -173,6 +173,26 @@ describe("generated handler registry ingestion", () => {
     ).toThrow(expect.objectContaining({ code: "INVALID_SCHEMA" }));
   });
 
+  it("rejects a filter on a command-input command reactor", () => {
+    expect(() =>
+      new HandlerRegistryIngestor().ingest({
+        version: 2,
+        entities: [
+          {
+            entityType: GeneratedProjection,
+            stateSchema: ProjectionStateSchema,
+            handlers: [
+              {
+                ...record("command-reaction", "commandFromCommand", CommandSchema, [CommandSchema]),
+                where: { eventField: "id.value", equals: "command" },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(expect.objectContaining({ code: "INVALID_SCHEMA" }));
+  });
+
   it("ingests generated records into canonical frozen handler metadata", () => {
     const metadata = new HandlerRegistryIngestor().ingest({
       version: 2,

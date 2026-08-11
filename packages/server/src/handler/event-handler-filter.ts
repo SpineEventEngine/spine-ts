@@ -1,5 +1,5 @@
 import type { DescField, DescMessage } from "@bufbuild/protobuf";
-import { Stringifiers, type Stringifier } from "@spine-event-engine/core";
+import { StringifierRegistry, type Stringifier } from "@spine-event-engine/core";
 import type { DescriptorMessageSchema } from "../entity/entity-metadata.js";
 import type { WhereOptions } from "./handler-metadata.js";
 
@@ -53,6 +53,7 @@ interface FilteredCandidate<Value> {
 interface EventHandlerFilterCompiler {
   compile<Value>(
     candidates: readonly EventHandlerFilterCandidate<Value>[],
+    stringifiers?: StringifierRegistry,
   ): EventHandlerFilterPlan<Value>;
 }
 
@@ -64,6 +65,7 @@ interface EventHandlerFilterCompiler {
 export const EventHandlerFilters: Readonly<EventHandlerFilterCompiler> = Object.freeze({
   compile<Value>(
     candidates: readonly EventHandlerFilterCandidate<Value>[],
+    stringifiers: StringifierRegistry = new StringifierRegistry(),
   ): EventHandlerFilterPlan<Value> {
     const [first] = candidates;
     if (first === undefined) return EmptyFilterPlan;
@@ -91,7 +93,7 @@ export const EventHandlerFilters: Readonly<EventHandlerFilterCompiler> = Object.
     if (candidates.some((candidate) => candidate.schema.typeName !== schema.typeName)) {
       throw new Error("Event handler filtering candidates must consume the same Event type.");
     }
-    const resolved = FilterPaths.resolve(schema, path);
+    const resolved = FilterPaths.resolve(schema, path, new StringifierRegistry(stringifiers));
     const values = new Map<string, FilteredCandidate<Value>>();
     for (const candidate of filtered) {
       const parsed = resolved.stringifier.fromString(candidate.where.equals);
@@ -123,7 +125,7 @@ const EmptyFilterPlan: EventHandlerFilterPlan<never> = Object.freeze({
 });
 
 const FilterPaths = Object.freeze({
-  resolve(schema: DescMessage, path: string): ResolvedPath {
+  resolve(schema: DescMessage, path: string, stringifiers: StringifierRegistry): ResolvedPath {
     const names = path.split(".");
     if (names.some((name) => name.length === 0)) {
       throw new Error(`Event handler filter path ${JSON.stringify(path)} is malformed.`);
@@ -158,7 +160,7 @@ const FilterPaths = Object.freeze({
     }
     return Object.freeze({
       fields: Object.freeze(fields),
-      stringifier: Stringifiers.forField(terminal),
+      stringifier: stringifiers.forField(terminal),
     });
   },
 

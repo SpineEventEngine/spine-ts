@@ -17,6 +17,7 @@ import {
   TypeRegistry,
   AnyMessages,
   Identifiers,
+  StringifierRegistry,
 } from "@spine-event-engine/core";
 import {
   CommandContextSchema,
@@ -294,6 +295,15 @@ export interface RepositoryOptions<
   readonly stateUpdateRouting?: StateRoutingOption<EntityType>;
 
   /**
+   * Reversible field mappings used by generated Event handler filters.
+   *
+   * Pass the same source registry configured for storage/query mappings when
+   * message-valued fields use application-defined string representations. The
+   * repository snapshots the registry during construction.
+   */
+  readonly stringifierRegistry?: StringifierRegistry;
+
+  /**
    * Generated event schemas that aggregate or process-manager handlers may emit.
    */
   readonly events?: readonly MessageSchema[];
@@ -541,6 +551,7 @@ export class Repository<
       CommandRoutingInternals.snapshot(options.commandRouting),
       EventRoutingInternals.snapshot(options.eventRouting),
       StateUpdateRoutingInternals.snapshot(options.stateUpdateRouting),
+      new StringifierRegistry(options.stringifierRegistry),
     );
     repositoryRoutings.set(this, this.#routing);
     repositoryProducedEventSchemas.set(
@@ -4077,6 +4088,7 @@ const RepositoryHandlers = {
     },
   >(
     byEvent: ReadonlyMap<string, readonly Value[]>,
+    stringifiers: StringifierRegistry,
   ): ReadonlyMap<string, EventHandlerFilterPlan<Value>> {
     const plans = new Map<string, EventHandlerFilterPlan<Value>>();
     for (const [eventType, values] of byEvent) {
@@ -4088,6 +4100,7 @@ const RepositoryHandlers = {
             schema: value.handler.schema,
             ...(value.handler.where === undefined ? {} : { where: value.handler.where }),
           })),
+          stringifiers,
         ),
       );
     }
@@ -4179,6 +4192,7 @@ const RepositoryRoutes = {
       semantic: ReadonlyMap<string, StateUpdateRoute<RepositoryEntityId<EntityType>>>;
       defaultRoute: StateUpdateRoute<RepositoryEntityId<EntityType>> | undefined;
     }>,
+    stringifiers: StringifierRegistry,
   ): RepositoryRouting<RepositoryEntityId<EntityType>> {
     const handlers = RepositoryHandlers.normalizeHandlers(handlersOption);
     RepositoryHandlers.validateHandlers(entityType, metadata, handlers);
@@ -4243,9 +4257,18 @@ const RepositoryRoutes = {
       eventSchemas,
       (typeName) => eventReadiness?.findEventReactors(typeName) ?? [],
     );
-    const commandReactionFilters = RepositoryHandlers.createEventFilterPlans(commandReactions);
-    const eventSubscriberFilters = RepositoryHandlers.createEventFilterPlans(eventSubscribers);
-    const eventReactorFilters = RepositoryHandlers.createEventFilterPlans(eventReactors);
+    const commandReactionFilters = RepositoryHandlers.createEventFilterPlans(
+      commandReactions,
+      stringifiers,
+    );
+    const eventSubscriberFilters = RepositoryHandlers.createEventFilterPlans(
+      eventSubscribers,
+      stringifiers,
+    );
+    const eventReactorFilters = RepositoryHandlers.createEventFilterPlans(
+      eventReactors,
+      stringifiers,
+    );
     const commandRoutes = RepositoryRoutes.resolveCommandRoutes(commandSchemas, commandRouting);
     const eventRoutes = RepositoryRoutes.resolveEventRoutes(eventSchemas, eventRouting);
     const stateRoutes = RepositoryRoutes.resolveStateRoutes(

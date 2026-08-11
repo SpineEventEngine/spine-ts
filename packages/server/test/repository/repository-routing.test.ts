@@ -15,7 +15,13 @@ import {
   StringValueSchema,
   TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
-import { TypeUrls, AnyMessages, Identifiers, SignalEnvelopes } from "@spine-event-engine/core";
+import {
+  TypeUrls,
+  AnyMessages,
+  Identifiers,
+  SignalEnvelopes,
+  StringifierRegistry,
+} from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   type Command as SpineCommand,
@@ -6332,6 +6338,38 @@ describe("repository signal routing", () => {
     } finally {
       await context.close();
     }
+  });
+
+  it("constructs Event filters with a snapshotted custom message stringifier", () => {
+    const stringifiers = new StringifierRegistry();
+    stringifiers.register(Int64ProjectionIdSchema, {
+      fromString: (value) =>
+        create(Int64ProjectionIdSchema, { value: BigInt(value.replace(/^id:/, "")) }),
+      toString: (value) => `id:${String(value.value)}`,
+    });
+    const handlers = HandlerMetadataValues.defineArity(
+      Int64MessageIdProjection,
+      Int64MessageIdProjectionStateSchema,
+      (builder) => [builder.subscribe(Int64MessageIdProjectionEventSchema, "subscribeState")],
+      [
+        {
+          kind: "event-subscription",
+          methodName: "subscribeState",
+          parameterCount: 1,
+          where: { eventField: "id", equals: "id:42" },
+        },
+      ],
+    );
+
+    expect(
+      () =>
+        new Repository({
+          entityType: Int64MessageIdProjection,
+          schema: Int64MessageIdProjectionStateSchema,
+          handlers,
+          stringifierRegistry: stringifiers,
+        }),
+    ).not.toThrow();
   });
 
   it("selects one filtered Aggregate Event reactor before its fallback", async () => {

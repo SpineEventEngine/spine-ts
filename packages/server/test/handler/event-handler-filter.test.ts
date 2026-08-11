@@ -1,5 +1,6 @@
 import { create } from "@bufbuild/protobuf";
-import { CommandContextSchema, EventSchema } from "@spine-event-engine/proto";
+import { StringifierRegistry } from "@spine-event-engine/core";
+import { CommandContextSchema, EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { CompositeFilterSchema } from "@spine-event-engine/proto/client";
 import { describe, expect, it } from "vitest";
 
@@ -30,6 +31,30 @@ describe("Event handler field filtering", () => {
     const plan = EventHandlerFilters.compile([
       candidate("announcements", "id", '{"value":"announcements"}'),
     ]);
+
+    expect(plan.select(create(EventSchema, { id: { value: "announcements" } }))).toEqual([
+      "announcements",
+    ]);
+  });
+
+  it("uses a configured message stringifier for literals and Event values", () => {
+    const stringifiers = new StringifierRegistry();
+    stringifiers.register(EventIdSchema, {
+      fromString: (value) => create(EventIdSchema, { value: value.replace(/^message:/, "") }),
+      toString: (value) => `message:${value.value}`,
+    });
+    const plan = EventHandlerFilters.compile(
+      [candidate("announcements", "id", "message:announcements")],
+      stringifiers,
+    );
+    stringifiers.register(EventIdSchema, {
+      fromString: () => {
+        throw new Error("mutated registry");
+      },
+      toString: () => {
+        throw new Error("mutated registry");
+      },
+    });
 
     expect(plan.select(create(EventSchema, { id: { value: "announcements" } }))).toEqual([
       "announcements",

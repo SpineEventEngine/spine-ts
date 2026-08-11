@@ -247,6 +247,7 @@ interface GeneratedRegistryOperations {
   validateEmits(handler: GeneratedHandlerRecordInput): void;
   validateSubscription(handler: GeneratedHandlerRecordInput): void;
   validateWhere(handler: GeneratedHandlerRecordInput): void;
+  isEventInputSchema(schema: DescriptorMessageSchema): boolean;
   isKind(kind: string): kind is GeneratedHandlerKind;
 }
 
@@ -452,6 +453,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
       typeof filter.eventField !== "string" ||
       filter.eventField.trim().length === 0 ||
       typeof filter.equals !== "string" ||
+      !GeneratedRegistry.isEventInputSchema(handler.signalSchema) ||
       (handler.kind !== "event-subscription" &&
         handler.kind !== "event-reaction" &&
         handler.kind !== "command-reaction")
@@ -461,6 +463,15 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
         `Generated handler "${handler.methodName}" declares an invalid Event field filter.`,
       );
     }
+  },
+
+  isEventInputSchema(schema: DescriptorMessageSchema): boolean {
+    const fileName = schema.file.name;
+    return (
+      fileName.endsWith("events.proto") ||
+      fileName.endsWith("rejections.proto") ||
+      schema.typeName === "spine.core.Event"
+    );
   },
 
   isKind(kind: string): kind is GeneratedHandlerKind {
