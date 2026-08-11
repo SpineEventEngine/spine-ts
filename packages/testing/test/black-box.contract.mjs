@@ -4,6 +4,7 @@ import { BoundedContext } from "@spine-event-engine/server";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
+  DescriptorProtoSchema,
   FileDescriptorProtoSchema,
   FileDescriptorSetSchema,
   StringValueSchema,
@@ -39,14 +40,23 @@ const fixtureFile = descriptor(testingDescriptorSetBase64);
 const ProjectionStateSchema = messageDesc(fixtureFile, 0);
 const AggregateStateSchema = messageDesc(fixtureFile, 1);
 const EventStateSchema = messageDesc(fixtureFile, 2);
+const projectionEventIndex = fixtureFile.messages.findIndex(
+  ({ typeName }) => typeName === "ProjectionEvent",
+);
+if (projectionEventIndex < 0) throw new Error("projection Event fixture missing");
+const ProjectionEventSchema = messageDesc(fixtureFile, projectionEventIndex);
 
 class TaskAggregate extends Aggregate {
   assignTask(command) {
     return SignalEnvelopes.event({
       id: create(EventIdSchema, { value: `event-${command.id}` }),
       context: create(EventContextSchema),
-      schema: ProjectionStateSchema,
-      message: state(command.id, command.name),
+      schema: ProjectionEventSchema,
+      message: create(ProjectionEventSchema, {
+        id: command.id,
+        name: command.name,
+        priority: 1,
+      }),
     });
   }
   applyTask(event) {
@@ -516,7 +526,7 @@ function taskContext() {
         schema: AggregateStateSchema,
         handlers: EntityHandlers.define(TaskAggregate, AggregateStateSchema, (builder) => [
           builder.assign(AggregateStateSchema, "assignTask"),
-          builder.apply(ProjectionStateSchema, "applyTask"),
+          builder.apply(ProjectionEventSchema, "applyTask"),
         ]),
       }),
     )
@@ -525,7 +535,7 @@ function taskContext() {
         entityType: TaskProjection,
         schema: ProjectionStateSchema,
         handlers: EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
-          builder.subscribe(ProjectionStateSchema, "subscribeTask"),
+          builder.subscribe(ProjectionEventSchema, "subscribeTask"),
         ]),
       }),
     )
@@ -593,6 +603,15 @@ function descriptor(base64) {
   const set = fromBinary(FileDescriptorSetSchema, Buffer.from(base64, "base64"));
   const file = set.file[0];
   if (file === undefined) throw new Error("fixture missing");
+  const projection = file.messageType[0];
+  if (projection === undefined) throw new Error("projection fixture missing");
+  file.messageType.push(
+    create(DescriptorProtoSchema, {
+      ...projection,
+      name: "ProjectionEvent",
+      options: undefined,
+    }),
+  );
   return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, file)).toString("base64"), [
     file_spine_options,
   ]);

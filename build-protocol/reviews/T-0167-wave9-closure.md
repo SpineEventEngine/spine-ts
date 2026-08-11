@@ -1,6 +1,6 @@
 # T-0167 Review Record
 
-Status: Clean; final release verification pending
+Status: Fixture correction clean; renewed preflight pending
 
 ## Review boundary
 
@@ -69,5 +69,12 @@ the review standard; runtime metadata remains unavailable.
   operation/reason metadata only. Google Cloud composition is application-owned
   and the fake integration performs no network write.
 
-No finding requires a correction batch. The single converged
-`pnpm verify:release` is authorized next.
+The first release run exposed stale test fixtures rather than a production
+finding. The correction retains the recursive Projection-state guard, uses a
+distinct descriptor-backed Event for the BlackBox flow, and migrates both child
+process fixtures to packed `StringValue` Inbox identities. The affected
+style/maintainability, API-contract, and performance/reliability concerns are
+clean: no production or public contract changed, descriptor provenance is
+explicit, and typed identity is preserved across the process boundary. The
+three corrected files pass together (3 files / 23 tests). A renewed cheap
+preflight is required before the next release-profile run.

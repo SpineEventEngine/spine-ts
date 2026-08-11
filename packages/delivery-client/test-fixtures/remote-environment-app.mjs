@@ -1,5 +1,5 @@
 import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import { CommandSchema } from "@spine-event-engine/proto";
 import { EnvironmentType, ServerEnvironment, ShardIndex } from "@spine-event-engine/server";
@@ -110,7 +110,10 @@ process.on("message", async (frame) => {
   try {
     await delivery.inbox.receive({
       inboxId: {
-        targetId: `type.spine.io/test.Id:${frame.signalId}`,
+        targetId: create(AnySchema, {
+          typeUrl: "type.googleapis.com/google.protobuf.StringValue",
+          value: toBinary(StringValueSchema, create(StringValueSchema, { value: frame.signalId })),
+        }),
         targetTypeUrl: "type.spine.io/test.Target",
       },
       signalId: frame.signalId,

@@ -1,6 +1,6 @@
 # T-0167: Wave 9 Closure
 
-Status: Reviews complete; final release verification pending
+Status: Release-fixture corrections complete; renewed preflight pending
 
 ## Objective
 
@@ -79,8 +79,10 @@ contracts, package/API shape, examples, and repository-wide release state.
 4. Make no new production implementation in this task. Any substantive defect
    returns to the affected contract and receives focused evidence before the
    release profile.
-5. Run the mandatory cheap preflight, then exactly one converged
-   `pnpm verify:release`.
+5. Run the mandatory cheap preflight, then a converged `pnpm verify:release`.
+   If release verification exposes a deterministic defect, correct it, repeat
+   the cheap preflight, and run the release profile again only after
+   convergence.
 6. Integrate by fast-forward to `origin/main`, run post-merge proof, push the
    Wave 9 tag if the repository's tag policy defines one, and remove the merged
    task branch/worktree locally and remotely.

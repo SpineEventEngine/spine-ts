@@ -1,5 +1,5 @@
 import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import {
   DeliveryClient,
   RemoteInbox,
@@ -72,7 +72,10 @@ export function createMultiMachineApplication({ baseUrl, node }) {
     async write(signalId) {
       await inbox.receive({
         inboxId: {
-          targetId: `type.spine.io/test.Id:${signalId}`,
+          targetId: create(AnySchema, {
+            typeUrl: "type.googleapis.com/google.protobuf.StringValue",
+            value: toBinary(StringValueSchema, create(StringValueSchema, { value: signalId })),
+          }),
           targetTypeUrl: "type.spine.io/test.Target",
         },
         signalId,
