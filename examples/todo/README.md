@@ -46,15 +46,21 @@ flowchart LR
 ```
 
 The command handler manages one task's write-side state and returns the domain
-event that describes a successful creation. The complete checked implementation
-is [`TaskAggregate`](src/index.ts); this typed view keeps the introduction small
-while linking to the real handler:
+event that describes a successful creation. Here is the event-producing part of
+[`TaskAggregate.createTask()`](src/index.ts); the aggregate applies the same
+ID, title, and initial completion state to its stored state before returning it:
 
 ```ts
-import { TaskAggregate } from "./src/index.js";
+import { create } from "@bufbuild/protobuf";
+import {
+  TaskCreatedSchema,
+  type TaskCreated,
+} from "./generated/spine/examples/todo/task_events_pb.js";
+import { type TaskId } from "./generated/spine/examples/todo/task_id_pb.js";
 
-type CreateTaskHandler = TaskAggregate["createTask"];
-void (undefined as unknown as CreateTaskHandler);
+function createTask(id: TaskId, title: string): TaskCreated {
+  return create(TaskCreatedSchema, { id, title });
+}
 ```
 
 `TaskListProjection.onTaskCreated()` adds that task to the list and increments

@@ -82,6 +82,17 @@ describe("TypeScript documentation snippets", () => {
     }
   });
 
+  it("keeps the Todo introduction fence as executable domain behavior", () => {
+    const source = readFileSync(resolve(root, "examples/todo/README.md"), "utf8");
+    const snippet = extractTypeScriptSnippets(source).find((entry) =>
+      entry[1].includes("TaskCreatedSchema"),
+    );
+
+    expect(snippet?.[1]).toContain("function createTask");
+    expect(snippet?.[1]).not.toContain("unknown as");
+    expect(snippet?.[1]).not.toContain("undefined as");
+  });
+
   it("keeps the Todo rejection companion in its stated source context", () => {
     const source = readFileSync(resolve(root, "packages/core/README.md"), "utf8");
     const rejectionSnippet = extractTypeScriptSnippets(source).find((snippet) =>

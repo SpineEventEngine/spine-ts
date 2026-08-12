@@ -10,12 +10,15 @@ there is no exact route. This is TypeScript routing; it does not consume
 `(is).java_type` or `(every_is).java_type`, and it has no decorator-based
 route registration API.
 
-`@Where` narrows an event subscription by fields on the event message. It is a
-data predicate after event-type routing, not an alternative routing mechanism.
-The server installs configured logging into runtime components; warnings and
-failures carry operation context there, while durable facts belong in events or
-storage. Entity Inbox replay sends persisted accepted work through the normal
-handler path, so handler effects must be replay-safe.
+`@Where({ eventField, equals })` narrows an event subscription after event-type
+routing. `eventField` names an event field and `equals` is its typed string
+comparison value; it is not an alternative routing mechanism.
+
+Configure logging through `ServerEnvironment` when assembling the server. The
+server installs that logger into its runtime components, where warnings and
+failures carry operation context. Durable facts belong in events or storage.
+Entity Inbox replay sends persisted accepted work through the normal handler
+path, so handler effects must be replay-safe.
 
 ## Context assembly and entities
 

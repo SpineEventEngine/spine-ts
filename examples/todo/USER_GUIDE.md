@@ -87,19 +87,18 @@ generated command schema/message.
 
 An OK acknowledgement confirms the immediate command path, not that an
 asynchronous projection is visible. Query or subscribe for that observable
-effect. Invalid accepted payloads return `COMMAND_VALIDATION_ERROR` with packed
-`spine.validation.ValidationError` details. Completing an already completed
-task throws the generated `TaskAlreadyDone` rejection; reopening an open task
-throws generated `TaskNotDone`. Both return an OK acceptance acknowledgement,
-leave task-list state unchanged after rollback, and schedule a best-effort typed
-rejection event post. When that post succeeds, an already-active rejection
-subscription with queue capacity may receive the typed payload and ordinary
-event metadata; the client envelope redacts rejected-command payload forms and
-throwable stack. Internal generated subscribers still receive the full defensive
-rejection context. Saturation or closure can prevent client observation. A post
-failure is recorded internally, does not change the OK `Ack`, and has no current
-retry guarantee. Invalid payloads and technical failures remain non-OK
-acknowledgements.
+effect.
+
+- Invalid payloads return `COMMAND_VALIDATION_ERROR` with packed validation
+  details.
+- `TaskAlreadyDone` and `TaskNotDone` are domain rejections. They roll back the
+  task-list change but return an OK acceptance acknowledgement.
+- A rejection also schedules a best-effort typed event. An active unsaturated
+  subscription may receive it; saturation, closure, or post failure can prevent
+  observation and does not change the OK acknowledgement.
+
+Client envelopes redact rejected-command payloads and throwable stacks.
+Technical failures remain non-OK acknowledgements.
 
 ## Query task lists
 
@@ -334,17 +333,16 @@ pnpm --filter @spine-event-engine/example-todo exec node scripts/subscription-cl
 ```
 
 It starts the iterator read before posting the command, applies the delivery
-deadline after that post, and decodes one exact-ID projection update. When
-subscription creation succeeds, the returned `Subscription` is an opaque,
-server-generated handle; the module explicitly cancels it and immediately
-aborts the stream signal, returns the iterator, and aborts the HTTP/2 session.
-If the one-second creation deadline expires before that handle reaches the
-client, the client has no subscription ID it can cancel. Session abort still
-closes the client transport, while any server record created but never
-activated remains a pending Stand registry definition. Pending definitions are
-cleaned after 30 seconds; active definitions have no framework TTL. The default
-registry uses application storage, while its live stream and queue remain
-process-local. Cancel physically deletes the definition.
+deadline after that post, and decodes one exact-ID projection update.
+
+On success, the `Subscription` is an opaque server-generated handle. The module
+cancels it, aborts the stream signal, returns the iterator, and aborts HTTP/2.
+
+If the one-second creation deadline expires first, the client has no ID to
+cancel. Session abort still closes transport. A created but inactive definition
+remains pending for 30 seconds; active definitions have no framework TTL. The
+default registry uses application storage, while streams and queues are local.
+Cancel physically deletes the definition.
 
 ```js
 import { log } from "node:console";

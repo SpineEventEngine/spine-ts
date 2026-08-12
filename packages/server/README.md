@@ -293,19 +293,20 @@ provider. Combined browser mode may omit bindings to use an in-memory registry;
 standalone mode must always supply them explicitly.
 
 Each durable binding stores one approved `GatewayAuthenticatedSubscription`:
-its public subscription ID, complete subscription, and expiry. The Topic keeps
-the trusted Actor and Tenant resolved for the request, so later Activate and
-Cancel requests must match that trusted context. Cancellation runs backend
-cleanup before exact record deletion; a failed cleanup leaves the record for a
-retry. Expired records are cleaned in finite batches when requests call the
-registry; applications may also call `purgeExpired(nowMs)` from a maintenance
-loop. This is a single-Gateway persistence model: it does not coordinate
-multiple Gateway processes, quotas, reservations, or durable fingerprints.
-On restart, unexpired definitions are rehydrated and expired definitions are
-removed only after cleanup succeeds. Configure MySQL with
-`setTableName(GatewayAuthenticatedSubscriptionSchema, table)` or Datastore with
-`useRecordStorage(GatewayAuthenticatedSubscriptionSchema, creator)` to target
-this record family.
+its public ID, complete subscription, and expiry. The stored Topic retains the
+trusted Actor and Tenant, so Activate and Cancel must match that context.
+
+- Cancellation cleans up the backend before deleting the record; a failure
+  leaves it available for retry.
+- Request-time cleanup is finite; a maintenance loop may call
+  `purgeExpired(nowMs)`.
+- Restart rehydrates unexpired definitions. An expired definition is removed
+  only after cleanup succeeds.
+
+This is a single-Gateway persistence model. It has no multi-process
+coordination, quotas, reservations, or durable fingerprints. Configure MySQL
+with `setTableName(GatewayAuthenticatedSubscriptionSchema, table)` or Datastore
+with `useRecordStorage(GatewayAuthenticatedSubscriptionSchema, creator)`.
 
 The server validates commands before handler code runs. Invalid payloads are
 returned as `COMMAND_VALIDATION_ERROR`; invalid state transitions are returned
