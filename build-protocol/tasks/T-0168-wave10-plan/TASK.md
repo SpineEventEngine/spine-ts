@@ -1,6 +1,6 @@
 # T-0168: Wave 10 Beginner Documentation And Copyright Plan
 
-Status: Reviewed and verified; human approval pending
+Status: Complete, integrated, and post-merge verified
 
 ## Objective
 
@@ -148,8 +148,8 @@ verification boundaries before implementation begins.
   owned by T-0170 so every journey can use it; T-0174 uses `verify:release`
   when later shared-tooling changes are needed.
 - No unresolved architecture, licensing-policy, or reader-scope decision
-  remains. Implementation still requires human approval of this plan and an
-  explicit Wave 10 start after integration.
+  remains. The human approved the plan and explicitly started Wave 10 after
+  integration.
 
 ## Verification Profile
 
