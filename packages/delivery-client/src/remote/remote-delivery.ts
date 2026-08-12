@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { type ServerEnvironmentDelivery, type DeliverySource } from "@spine-event-engine/server";
 
 import { DeliveryClient, deliveryClientAccess } from "../client/client.js";

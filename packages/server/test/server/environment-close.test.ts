@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { InMemoryStorageFactory, type StorageFactory } from "@spine-event-engine/storage";
 import type { SignalTransport } from "@spine-event-engine/transport";
 import { afterEach, describe, expect, it, vi } from "vitest";

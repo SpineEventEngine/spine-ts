@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 /* eslint-disable @typescript-eslint/require-await */
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";

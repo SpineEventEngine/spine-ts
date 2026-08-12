@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InMemoryStorageFactory, type StorageContext } from "@spine-event-engine/storage";
 

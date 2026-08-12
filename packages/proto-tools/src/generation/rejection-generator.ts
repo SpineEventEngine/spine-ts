@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { createEcmaScriptPlugin, getComments, runNodeJs, type Schema } from "@bufbuild/protoplugin";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";

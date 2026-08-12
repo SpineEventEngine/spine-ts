@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import type { Any } from "@bufbuild/protobuf/wkt";
 import type { StorageContext, StorageFactory } from "@spine-event-engine/storage";
 import type { WorkerId } from "@spine-event-engine/proto/delivery";

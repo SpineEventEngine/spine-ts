@@ -1,6 +1,6 @@
 # T-0177: Copyright Header Spacing Correction
 
-Status: Audit and test-first implementation starting
+Status: Implementation converged; cheap preflight pending
 
 ## Objective
 
@@ -68,3 +68,15 @@ fallback is visible.
   generated-clean, and diff hygiene.
 - Because shared release tooling and hundreds of tracked source files change,
   run one converged `pnpm verify:release` after review corrections.
+
+## Implementation Evidence (2026-08-12)
+
+- TDD RED: the focused suite failed 3/81 tests before implementation because
+  the normalizer left zero spacing, the checker accepted zero/multiple spacing,
+  and the MessageBoard producer emitted no empty line.
+- TDD GREEN: the same focused suite passed 81/81 after the minimal shared
+  normalizer/checker change.
+- After canonical Proto generation and the server-fixture generator, the exact
+  tracked inventory reports 502 eligible TS/TSX files: 0 zero-spacing, 502
+  one-spacing, 0 multiple-spacing, 0 missing headers; all 3 shebang files have
+  exactly one empty line. `pnpm lint:copyright` passes.

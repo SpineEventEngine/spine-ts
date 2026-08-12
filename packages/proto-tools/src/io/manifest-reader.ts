@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { ProtoManifest, type ProtoManifest as Manifest } from "../index.js";
 
 type ManifestReader = (packageRoot: string, manifestPath: string) => Manifest;

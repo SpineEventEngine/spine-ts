@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { create } from "@bufbuild/protobuf";
 import { SubscriptionIdSchema } from "@spine-event-engine/proto/client";
 import { describe, expect, it, vi } from "vitest";

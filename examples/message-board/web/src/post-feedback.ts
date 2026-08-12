@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import type { ClientOutcome } from "@spine-event-engine/client-web";
 import { AnyMessages } from "@spine-event-engine/core";
 import { ErrorSchema, ValidationErrorSchema } from "@spine-event-engine/proto";

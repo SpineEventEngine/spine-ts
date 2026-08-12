@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 /* eslint-disable @typescript-eslint/no-empty-function, @typescript-eslint/require-await */
 
 import * as http2 from "node:http2";

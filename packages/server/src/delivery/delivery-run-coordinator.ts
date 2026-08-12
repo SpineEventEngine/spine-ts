@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import type { DeliveryReady } from "../context/local-inbox-handoff.js";
 import type { DeliveryLoopProgress, DeliveryLoopStatus } from "./delivery-loop.js";
 import {

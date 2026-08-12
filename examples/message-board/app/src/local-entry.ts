@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { MessageBoardApplication } from "./index.js";
 
 const server = await new MessageBoardApplication().run({ port: 8090 });

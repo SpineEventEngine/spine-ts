@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { create, toJsonString } from "@bufbuild/protobuf";
 import { UserIdSchema } from "@spine-event-engine/proto";
 import { readFileSync } from "node:fs";

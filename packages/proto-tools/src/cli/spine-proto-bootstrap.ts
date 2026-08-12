@@ -12,6 +12,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { resolve } from "node:path";
 
 import { ProtoGeneration } from "../generation/generator.js";

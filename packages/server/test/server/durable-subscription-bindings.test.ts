@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/auth";
 import { SubscriptionSchema, TopicSchema } from "@spine-event-engine/proto/client";

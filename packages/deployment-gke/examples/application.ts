@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { Server, type ServerOptions } from "@spine-event-engine/server";
 
 import { DeploymentSettings, type DeploymentEnvironment } from "./deployment-settings.js";

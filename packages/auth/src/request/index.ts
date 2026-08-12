@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { create, fromBinary } from "@bufbuild/protobuf";
 import { ActorContextSchema, CommandSchema } from "@spine-event-engine/proto";
 import {

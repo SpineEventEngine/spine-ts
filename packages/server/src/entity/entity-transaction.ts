@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { clone, create, fromBinary, toBinary, type MessageShape } from "@bufbuild/protobuf";
 import { ConstraintViolationSchema, type ConstraintViolation } from "@spine-event-engine/proto";
 

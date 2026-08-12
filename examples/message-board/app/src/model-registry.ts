@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { TypeRegistry } from "@spine-event-engine/core";
 import { messageBoardProtoModule as model0 } from "@spine-event-engine/example-message-board-model";
 

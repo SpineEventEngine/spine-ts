@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import type { MessageShape } from "@bufbuild/protobuf";
 import type { MessageSchema } from "@spine-event-engine/core";
 import type { EventContext } from "@spine-event-engine/proto";

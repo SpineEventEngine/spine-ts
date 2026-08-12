@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { LeasedNodeRegistry } from "@spine-event-engine/deployment";
 import { GceRegistrar } from "@spine-event-engine/deployment-gce";
 import { Server, type ServerOptions } from "@spine-event-engine/server";

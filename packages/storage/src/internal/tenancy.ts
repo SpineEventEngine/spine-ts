@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { clone, toBinary } from "@bufbuild/protobuf";
 import { TenantIdSchema, type TenantId } from "@spine-event-engine/proto";
 import type { StorageContext } from "../storage/storage.js";

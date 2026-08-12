@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { expect, test } from "@playwright/test";
 
 test("posts and reads a real MessageBoard Projection through the local gateway", async ({

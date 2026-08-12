@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { EntityColumn, type EntityColumns } from "@spine-event-engine/client-node";
 
 import { TaskListColumnDefinition } from "../generated/spine/examples/todo/task_list_columns.js";

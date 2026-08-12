@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { SpineClientProvider } from "@spine-event-engine/client-react";
 import type { ClientRequest, SubscriptionLifecycle } from "@spine-event-engine/client-web";
 import { CircleCheck, MessageCircle, WifiOff } from "lucide-react";

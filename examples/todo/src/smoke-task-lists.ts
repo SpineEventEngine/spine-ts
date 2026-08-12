@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { AnyMessages } from "@spine-event-engine/core";
 import type { QueryResponse } from "@spine-event-engine/proto/client";
 

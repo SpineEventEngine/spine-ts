@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { MessageBoardDeployment } from "./deployment-config.js";
 import { MessageBoardApplication } from "./index.js";
 import { Datastore } from "@google-cloud/datastore";

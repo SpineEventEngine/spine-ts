@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { create, fromBinary, ScalarType, toBinary, type MessageShape } from "@bufbuild/protobuf";
 import {
   type TransitionValidationResult,

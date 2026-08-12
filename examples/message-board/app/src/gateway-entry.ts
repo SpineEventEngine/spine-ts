@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { Server } from "@spine-event-engine/server";
 import { GkeNodeDiscovery } from "@spine-event-engine/deployment-gke";
 import { Datastore } from "@google-cloud/datastore";

@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { create, ScalarType } from "@bufbuild/protobuf";
 import { EventIdSchema, type EventId } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";

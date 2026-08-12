@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { Client, BrowserSession } from "@spine-event-engine/client-web";
 import { createRoot } from "react-dom/client";
 

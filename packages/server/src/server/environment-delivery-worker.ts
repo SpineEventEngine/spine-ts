@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import type { StorageContext, StorageFactory } from "@spine-event-engine/storage";
 import type { ILogLayer } from "loglayer";
 

@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
