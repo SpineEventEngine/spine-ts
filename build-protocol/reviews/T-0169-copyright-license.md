@@ -44,6 +44,10 @@ the immutable dispatched role/profile as the available evidence.
   injected Git/base seams, normalized-content comparison, and fail-closed
   enumeration/base lookup behavior. Focused fixture and live-inventory evidence
   is recorded in the work log; specialist review remains pending.
+- 2026-08-12: AC9 fixture audit added explicit Git parsing and failure-path
+  coverage. One duplicate rename across Git comparison scopes was a genuine
+  false ambiguity; it was corrected test-first. Specialist review remains
+  pending.
 
 ## Findings
 

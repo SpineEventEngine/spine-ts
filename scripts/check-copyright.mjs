@@ -146,7 +146,7 @@ function renameMap(runGit, base) {
     for (const line of gitOutput(runGit, args, "rename detection").split("\n")) {
       const [status, from, to] = line.split("\t");
       if (status?.startsWith("R") && from !== undefined && to !== undefined) {
-        renames.set(to, [...(renames.get(to) ?? []), from]);
+        renames.set(to, [...new Set([...(renames.get(to) ?? []), from])]);
       }
     }
   }

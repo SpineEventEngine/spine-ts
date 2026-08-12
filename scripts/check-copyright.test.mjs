@@ -148,4 +148,63 @@ describe("copyright checker", () => {
     expect(() => gitFiles(() => ({ status: 1, stdout: "" }))).toThrow("copyright enumeration failed");
     expect(() => gitComparison(() => ({ status: 1, stdout: "" }))).toThrow("copyright merge-base failed");
   });
+
+  it("checks authored TSX files and distinguishes malformed CodeMatters notices", () => {
+    const tsx = "packages/client-react/src/view.tsx";
+    expect(checkCopyright(options([tsx], { [tsx]: `${COPYRIGHT_HEADER}export const View = () => null;\n` }, { year: 2026 }))).toEqual([]);
+    expect(checkCopyright(options([tsx], { [tsx]: "/* Copyright 2026, CodeMatters. */\nexport {};\n" }, { year: 2026 }))).toEqual([
+      `${tsx}: malformed CodeMatters header`,
+    ]);
+  });
+
+  it("combines committed, staged, and unstaged rename/deletion Git inputs", () => {
+    const old = `${COPYRIGHT_HEADER}${body}`;
+    const responses = new Map([
+      ["merge-base origin/main HEAD", "base\n"],
+      ["diff --name-status -M base...HEAD", "R100\told-committed.ts\tnew-committed.ts\n"],
+      ["diff --name-status -M", "R100\told-unstaged.ts\tnew-unstaged.ts\n"],
+      ["diff --cached --name-status -M", "R100\told-staged.ts\tnew-staged.ts\n"],
+      ["diff --name-only --diff-filter=D base...HEAD", "deleted-untracked.ts\n"],
+      ["diff --name-only --diff-filter=D", "old-unstaged.ts\n"],
+      ["diff --cached --name-only --diff-filter=D", "old-staged.ts\n"],
+    ]);
+    const comparison = gitComparison((args) => {
+      const key = args.join(" ");
+      if (key.startsWith("show base:")) return { status: 0, stdout: old };
+      return { status: 0, stdout: responses.get(key) ?? "" };
+    });
+    const files = ["new-committed.ts", "new-staged.ts", "new-unstaged.ts", "new-untracked.ts"];
+    expect(
+      checkCopyright({
+        ...options(files, Object.fromEntries(files.map((file) => [file, old])), { year: 2027 }),
+        ...comparison,
+      }),
+    ).toEqual([]);
+  });
+
+  it("does not make a single rename ambiguous when Git reports it in multiple comparisons", () => {
+    const old = `${COPYRIGHT_HEADER}${body}`;
+    const comparison = gitComparison((args) => {
+      if (args[0] === "merge-base") return { status: 0, stdout: "base\n" };
+      if (args.join(" ").includes("--name-status")) return { status: 0, stdout: "R100\told.ts\trenamed.ts\n" };
+      if (args.join(" ") === "show base:renamed.ts") return { status: 128, stdout: "" };
+      if (args[0] === "show") return { status: 0, stdout: old };
+      return { status: 0, stdout: "" };
+    });
+    expect(checkCopyright({ ...options(["renamed.ts"], { "renamed.ts": old }, { year: 2027 }), ...comparison })).toEqual([]);
+  });
+
+  it("fails closed when rename, deletion, or base lookup Git operations fail", () => {
+    expect(() => gitComparison((args) => (args[0] === "merge-base" ? { status: 0, stdout: "base\n" } : { status: 1, stdout: "" }))).toThrow(
+      "copyright rename detection failed",
+    );
+    const comparison = gitComparison((args) => {
+      if (args[0] === "merge-base") return { status: 0, stdout: "base\n" };
+      if (args[0] === "show") return { status: 1, stdout: "" };
+      return { status: 0, stdout: "" };
+    });
+    expect(checkCopyright({ ...options([path], { [path]: `${COPYRIGHT_HEADER}${body}` }, { year: 2027 }), ...comparison })).toEqual([
+      `${path}: base content lookup failed`,
+    ]);
+  });
 });
