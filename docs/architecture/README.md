@@ -24,10 +24,14 @@ runtime and Bounded Context boundaries.
 | Question                                                               | Continue with                                                            |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | How do I assemble handlers, routing, `@Where`, logging, or rejections? | [Server reference](../../packages/server/REFERENCE.md)                   |
-| How do clients reconnect and recover state?                            | [Node client reference](../../packages/client-node/REFERENCE.md)         |
+| How does a Node client reconnect and recover state?                    | [Node client reference](../../packages/client-node/REFERENCE.md)         |
+| How does a browser client reconnect and recover state?                 | [Browser client reference](../../packages/client-web/REFERENCE.md)       |
+| How does a React client consume client state?                          | [React client reference](../../packages/client-react/REFERENCE.md)       |
 | How are storage, queries, and tenant layouts selected?                 | [Storage reference](../../packages/storage/REFERENCE.md)                 |
 | What does local or remote delivery guarantee?                          | [Delivery client reference](../../packages/delivery-client/REFERENCE.md) |
-| Which deployment and discovery topology is supported?                  | [Deployment reference](../../packages/deployment/REFERENCE.md)           |
+| What common deployment and discovery contract applies?                 | [Deployment reference](../../packages/deployment/REFERENCE.md)           |
+| How does the GCE deployment operate?                                   | [GCE deployment reference](../../packages/deployment-gce/REFERENCE.md)   |
+| How does the GKE deployment operate?                                   | [GKE deployment reference](../../packages/deployment-gke/REFERENCE.md)   |
 
 ## Distributed command, delivery, query, and subscription path
 
@@ -98,7 +102,10 @@ The copied `(is).java_type` and `(every_is).java_type` definitions are preserved
 wire definitions only. TypeScript routing does not consume them, and it has no
 `@Route` decorator or `routeSemantic()` API. Semantic tags can still describe
 metadata used by runtime transport topics; they do not select repository routes.
-`@Where` filters an event subscription only after event-type routing. The
+One `@Where({ eventField, equals })` equality filter may be used after type
+routing on an event- or rejection-consuming `@Subscribe`, `@React`, or
+`@Command` handler. Its two values must be typed string literals; invalid or
+repeated declarations fail closed. It is not another routing mechanism. The
 [server reference](../../packages/server/REFERENCE.md) contains the complete
 handler and routing contract.
 

@@ -53,3 +53,28 @@ the surface reports a mismatch or fallback.
 - Documentation, TypeScript/API, and performance/reliability remain pending
   the recorded specialist review wave. Style and security retain their concrete
   N/A dispositions above.
+
+## Accepted review batch and correction disposition
+
+- Documentation/API P2, accepted and corrected: client and deployment handoff
+  rows now have one canonical reference per subject rather than directing a
+  combined subject to one incomplete reference.
+- Documentation/API P2, accepted and corrected: `@Where` now states its
+  event/rejection-consuming handler scope, one-filter limit, literal input
+  requirements, and fail-closed behavior. The build-time analyzer is the
+  source-backed evidence.
+- Performance/reliability: CLEAN; the correction changes only navigational and
+  API documentation claims. Style and security remain N/A for the previously
+  recorded concrete reasons.
+- The configured roles/profiles remain the available metadata; this surface
+  exposes no runtime self-introspection and reports no mismatch or fallback.
+
+## Correction evidence
+
+- Passed explicit snippets for both documents, API/audience, canonical-link and
+  retired-routing scans, copyright, release-readiness links, format/diff, and
+  `pnpm verify:task -- --no-tests`.
+- Documentation and TypeScript/API P2 findings are CLEAN after correction;
+  performance/reliability remains CLEAN. Style and security retain their N/A
+  dispositions. No reviewer dispatch or runtime/test classification change was
+  required.

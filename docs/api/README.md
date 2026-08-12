@@ -21,10 +21,14 @@ tutorial:
 | -------------------------------------------------------- | ------------------------------------------------------------------------ |
 | Runtime and Bounded Context boundaries                   | [Architecture notes](../architecture/README.md)                          |
 | Server assembly, handlers, routing, filters, and logging | [Server reference](../../packages/server/REFERENCE.md)                   |
-| Node, browser, and React client contracts                | [Client references](../../packages/client-node/REFERENCE.md)             |
+| Node client contract                                     | [Node client reference](../../packages/client-node/REFERENCE.md)         |
+| Browser client contract                                  | [Browser client reference](../../packages/client-web/REFERENCE.md)       |
+| React client contract                                    | [React client reference](../../packages/client-react/REFERENCE.md)       |
 | Storage, queries, provider layouts, and tenancy          | [Storage reference](../../packages/storage/REFERENCE.md)                 |
 | Local and remote delivery limits                         | [Delivery client reference](../../packages/delivery-client/REFERENCE.md) |
-| Deployment, discovery, GKE, and GCE                      | [Deployment reference](../../packages/deployment/REFERENCE.md)           |
+| Common deployment and discovery contract                 | [Deployment reference](../../packages/deployment/REFERENCE.md)           |
+| GCE deployment operation                                 | [GCE deployment reference](../../packages/deployment-gce/REFERENCE.md)   |
+| GKE deployment operation                                 | [GKE deployment reference](../../packages/deployment-gke/REFERENCE.md)   |
 
 For the end-to-end browser/authentication extension contract, including the
 exact trust-boundary limitations that TypeDoc declarations cannot convey, see
@@ -68,7 +72,10 @@ uses the stored target rather than calculating it again.
 This is not Java semantic routing. TypeScript does not consume
 `(is).java_type` or `(every_is).java_type`, and it has no `@Route` decorator or
 `routeSemantic()` API. Frozen Proto options remain preserved wire definitions.
-`@Where` is an event-subscription filter after event-type routing, not another
+One `@Where({ eventField, equals })` equality filter may be used after type
+routing on an event- or rejection-consuming `@Subscribe`, `@React`, or
+`@Command` handler. `eventField` and `equals` are required typed string
+literals; invalid or repeated declarations fail closed. It is not another
 routing mechanism. See the [server reference](../../packages/server/REFERENCE.md)
 for handler and default-route details.
 

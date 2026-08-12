@@ -51,3 +51,14 @@ snippet policy changes require `verify:release`. Review documentation,
 TypeScript/API documentation, and performance/reliability. Style is required
 only if shared checker code changes. Security is N/A unless a trust-boundary
 claim or implementation changes.
+
+## Accepted review correction batch
+
+Documentation and TypeScript/API returned P2 canonical-handoff findings:
+client rows must distinguish Node, browser, and React reference targets; and
+deployment rows must distinguish common deployment, GCE, and GKE reference
+targets. The earlier `@Where` wording is also P2: one equality filter applies
+after type routing to event- or rejection-consuming `@Subscribe`, `@React`, or
+`@Command`, with typed string-literal `eventField`/`equals` inputs and
+fail-closed validation. Performance/reliability is clean. Correct only the two
+documents and records; no runtime or shared checker change is authorized.
