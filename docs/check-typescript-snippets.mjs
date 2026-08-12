@@ -9,7 +9,7 @@ import ts from "typescript";
 
 const root = resolve(import.meta.dirname, "..");
 
-/** Documents that Wave 10 has explicitly admitted to the strict snippet gate. */
+// Documents that Wave 10 has explicitly admitted to the strict snippet gate.
 export const documentedTypeScriptPaths = [
   "README.md",
   "REFERENCE.md",
@@ -43,12 +43,12 @@ const compilerOptions = {
   types: ["node"],
 };
 
-/** Extracts TypeScript fences from one Markdown source in source order. */
+// Extracts TypeScript fences from one Markdown source in source order.
 export function extractTypeScriptSnippets(source) {
   return [...source.matchAll(fence)];
 }
 
-/** Resolves a declared source context, rejecting paths outside this repository. */
+// Resolves a declared source context, rejecting paths outside this repository.
 export function documentationSnippetFile(document, declaredPath) {
   const file = resolve(root, declaredPath);
   if (!file.startsWith(`${root}/`) || (!file.endsWith(".ts") && !file.endsWith(".tsx")))
@@ -58,7 +58,7 @@ export function documentationSnippetFile(document, declaredPath) {
   return file;
 }
 
-/** Runs this checker for focused fixture tests. */
+// Runs this checker for focused fixture tests.
 export function runSnippetChecker(documentsToCheck) {
   return spawnSync(process.execPath, [fileURLToPath(import.meta.url), ...documentsToCheck], {
     cwd: root,
