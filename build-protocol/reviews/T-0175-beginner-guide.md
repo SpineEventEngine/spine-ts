@@ -1,6 +1,6 @@
 # T-0175 Beginner Guide Review
 
-Status: Accepted review corrections verified; ready for orchestrator continuation
+Status: Review complete; integration ready
 
 The task Human-Imposed Requirements Ledger is binding.
 
