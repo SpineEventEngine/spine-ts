@@ -162,6 +162,21 @@ function withWorkspaceFixture(callback) {
 }
 
 describe("package metadata", () => {
+  it("declares Apache-2.0 for every framework package without classifying examples as publishable", () => {
+    const frameworkPackages = productionPackagePaths(repoRoot);
+
+    expect(frameworkPackages).toHaveLength(18);
+    expect(frameworkPackages.every((path) => readJson(`${path}/package.json`).license === "Apache-2.0")).toBe(
+      true,
+    );
+    expect(readJson("package.json").license).toBeUndefined();
+    expect(
+      readWorkspacePackages(repoRoot)
+        .filter((workspacePackage) => workspacePackage.path.startsWith("examples/"))
+        .every((workspacePackage) => workspacePackage.manifest.license === undefined),
+    ).toBe(true);
+  });
+
   it("derives every workspace version from the root package version", () => {
     const rootPackage = readJson("package.json");
     const workspacePackages = readWorkspacePackages(repoRoot);

@@ -1,6 +1,7 @@
 {
   "name": "@spine-event-engine/storage-datastore",
   "version": "2.0.0-snapshot.1",
+  "license": "Apache-2.0",
   "private": true,
   "type": "module",
   "description": "Google Cloud Datastore adapter for Spine TS storage.",
