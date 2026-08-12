@@ -1,2019 +1,320 @@
 # Spine TS User Guide
 
-This guide takes a new application from Protobuf schemas to a local Spine
-server. It uses one `Tasks` bounded context and generated domain messages.
-`@example/tasks-proto` is a consumer substitution: replace it with the package
-name that publishes your generated Protobuf-ES output.
+This guide takes a small idea—a message board where people post messages—and
+turns it into a tested, observable Spine TS application. It explains the next
+useful step, then links to the detailed contract when you need more precision.
 
-## Before you start: writes, reads, and live updates
+```mermaid
+flowchart LR
+  Idea[Domain idea] --> Model[Proto model]
+  Model --> Behavior[Aggregates and Projections]
+  Behavior --> Client[Commands, queries, subscriptions]
+  Client --> Storage[Storage and tests]
+  Storage --> Run[Observe and deploy]
+```
 
-A command changes domain state. Its domain events are stored in the domain
-EventStore and travel on the domain EventBus. The framework also has an internal
-paired System Context for operational events such as a committed entity-state
-change. Those system events use a different EventBus and never enter the domain
-EventStore. They are normally transient; `persistSystemEvents()` makes their
-separate system storage optional and explicit.
+## 1. Begin with the domain
 
-`Stand` is the read side. It answers queries from current entity state and
-publishes best-effort subscription updates. Start a screen with a query. Apply
-a normal complete update locally. Query again only to recover after reconnect,
-a possible gap, or an unusable payload.
+Before writing TypeScript, describe what happens in the business. An
+EventStorming session is a practical way to do this: put domain events in time
+order, name the commands that cause them, and identify the people or systems
+that send those commands.
 
-## 1. Set up model packages and an application
+For Message Board, a first pass can be small:
 
-Spine TS is ESM-first and targets Node 24 LTS or newer. A Spine application has
-two kinds of package:
+| Domain question                   | Initial answer                       |
+| --------------------------------- | ------------------------------------ |
+| What changes?                     | A board receives a message.          |
+| What command asks for it?         | `PostMessage`.                       |
+| What fact happened?               | `MessagePosted`.                     |
+| What must be remembered?          | A posted message and a board view.   |
+| What can fail as a business rule? | The same message ID is posted twice. |
 
-- A **model package** contains `.proto` sources, generated Protobuf-ES code, and one
-  exported `ProtoModule`.
-- An **application package** contains decorated handlers and composes one or more
-  installed model packages into its generated `TypeRegistry` source.
+Group related language and behavior into a **Bounded Context**: a boundary where
+one model has one meaning. The Message Board context can accept messages and
+maintain a readable board without becoming the place to model authentication,
+deployment, or another product's rules.
 
-For a small application, one combined `app-model` package is fine. For bounded
-contexts that evolve independently, use one model package per context, for
-example `@acme/users-model` and `@acme/chat-model`. A model package can import
-canonical Proto source from another installed model package; it must not copy
-that dependency's Proto source or generated output.
+Use an Aggregate for a consistency boundary, a Projection for a query-side view,
+and a Process Manager when a long-running reaction coordinates work across
+entities. Start with the smallest boundary that makes the command and event
+names unambiguous.
 
-The repository Message Board example uses one `@spine-event-engine/example-message-board-model`
-package that defines `UserId` alongside the rest of its Message Board messages.
+Continue with the [architecture notes](architecture/README.md) for the runtime
+and Bounded Context boundary.
 
-The packages in this source repository are currently private and use the root
-package version. They are not published to npm. Tarball tests pack and extract local artifacts
-to verify the external-consumer shape. While developing in this repository,
-install workspace dependencies and generate before building:
+## 2. Create a project
 
-```bash
-pnpm install
-pnpm proto:generate
+Create a Node.js TypeScript application with separate model and application
+code. The repository examples use this shape:
+
+```text
+message-board/
+├── model/       # Proto source and generated schemas
+├── app/         # bounded context and handlers
+└── web/         # optional React browser client
+```
+
+Build generated Proto and TypeScript before starting an application:
+
+```sh
+pnpm install --frozen-lockfile
 pnpm typecheck:build
 ```
 
-An installed application follows the same sequence with its package manager
-scripts. Run every generation step from a clean checkout in CI. Generated source
-is intentionally ignored; do not hand-edit it.
+The build generates Protobuf-ES schemas and the handler registry used by
+bare-decorated application classes. Generated directories are build output; do
+not hand-edit or commit them.
 
-### Model-package layout
-
-This is the complete shape of a separately published Users model. `generated/`
-is created by the tool, while `dist/` is compiled by TypeScript and shipped.
-
-```text
-users-model/
-  package.json
-  spine-proto.json
-  spine-proto-manifest.json       # generated by spine-proto generate
-  proto/acme/users/users.proto
-  generated/                      # generated, ignored
-  dist/generated/                 # compiled package output
-  tsconfig.json
-```
-
-`spine-proto.json` selects model mode. Its fields are exact: `protoRoot` points
-to the package's canonical Proto files; `generatedRoot` is the local generation
-directory; `exportRoot` is the package subpath prefix for generated schemas;
-`dependencies` names direct model dependencies; and `moduleExport` is the
-package-root `ProtoModule` export.
-
-```json
-{
-  "formatVersion": 1,
-  "mode": "model",
-  "packageName": "@acme/users-model",
-  "protoRoot": "proto",
-  "generatedRoot": "generated",
-  "exportRoot": "generated",
-  "dependencies": ["@spine-event-engine/proto"],
-  "moduleExport": "usersProtoModule"
-}
-```
-
-The package must export its root module, manifest, canonical Proto files, and
-compiled generated schema subpaths. It must ship the matching files. The
-versions below are illustrative future registry versions; this repository uses
-local workspace equivalents until publication.
-
-```json
-{
-  "name": "@acme/users-model",
-  "version": "1.0.0",
-  "type": "module",
-  "files": ["dist", "proto", "spine-proto.json", "spine-proto-manifest.json"],
-  "exports": {
-    ".": {
-      "types": "./dist/generated/proto-module.d.ts",
-      "default": "./dist/generated/proto-module.js"
-    },
-    "./spine-proto-manifest.json": "./spine-proto-manifest.json",
-    "./proto/*": "./proto/*",
-    "./generated/*.js": {
-      "types": "./dist/generated/*.d.ts",
-      "default": "./dist/generated/*.js"
-    }
-  },
-  "dependencies": {
-    "@bufbuild/protobuf": "2.12.1",
-    "@spine-event-engine/proto": "<published-version>"
-  },
-  "devDependencies": {
-    "@spine-event-engine/proto-tools": "<published-version>"
-  }
-}
-```
-
-Compile generated source into the exported paths:
-
-```json
-{
-  "compilerOptions": {
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "target": "ES2024",
-    "declaration": true,
-    "rootDir": ".",
-    "outDir": "dist",
-    "strict": true
-  },
-  "include": ["generated/**/*.ts"]
-}
-```
-
-The actual build commands are deliberately small:
-
-```bash
-spine-proto generate
-tsc -b
-```
-
-`spine-proto generate` produces Protobuf-ES files, the root
-`generated/proto-module.ts`, and `spine-proto-manifest.json` atomically. The
-manifest contains `formatVersion`, `packageName`, `packageVersion`, sorted
-`protoFiles`, a one-for-one `generatedExports` mapping, sorted direct
-`dependencies`, and `moduleExport`. It is not an application-authored cache:
-the tool rejects malformed config, a package-name/version mismatch, missing
-manifest export, undeclared imports, unowned imports, graph cycles, unsafe or
-symlinked paths, duplicate message types, and incompatible generated output.
-Those failures leave previous generated output and manifest intact.
-
-### Cross-model Proto imports
-
-The Tasks model declares Users as both an npm dependency and a
-`spine-proto.json` dependency. Its Proto imports the Users package's canonical
-source path. Generation rewrites the generated TypeScript import to the Users
-package's exported generated schema subpath; it does not generate a second
-copy of `users_pb.ts` inside Tasks.
-
-```json
-{
-  "formatVersion": 1,
-  "mode": "model",
-  "packageName": "@acme/tasks-model",
-  "protoRoot": "proto",
-  "generatedRoot": "generated",
-  "exportRoot": "generated",
-  "dependencies": ["@spine-event-engine/proto", "@acme/users-model"],
-  "moduleExport": "tasksProtoModule"
-}
-```
-
-```proto
-syntax = "proto3";
-
-package acme.chat;
-
-import "acme/users/users.proto";
-
-message Chat {
-  acme.users.UserId author = 1;
-  string text = 2;
-}
-```
-
-The relevant package dependency is ordinary package metadata, never a
-repository-relative `file:` or `workspace:` publication dependency:
-
-```json
-{
-  "dependencies": {
-    "@bufbuild/protobuf": "2.12.1",
-    "@spine-event-engine/proto": "<published-version>",
-    "@acme/users-model": "1.0.0"
-  }
-}
-```
-
-### Application composition and handler metadata
-
-An application declares its direct model roots. `spine-proto compose` resolves
-their manifests transitively, but writes imports for the direct model packages
-only; their `ProtoModule.dependencies` retain the transitive graph. The
-generated registry must be compiled with the application.
-
-```json
-{
-  "formatVersion": 1,
-  "mode": "application",
-  "modelPackages": ["@acme/chat-model"],
-  "registryOutput": "src/model-registry.ts"
-}
-```
-
-```bash
-spine-proto compose
-spine-proto handlers
-tsc -b
-```
-
-`compose` writes the registry source named by `registryOutput`.
-`handlers` scans the application's decorated handlers and writes
-`generated/handler/generated-handler-registry.ts`. Run it after changing
-handler classes or their generated message types. Both commands are build-time
-tools, not server runtime APIs. Package `generated/handler/` is ignored, but
-its compiled `dist/generated/handler/` output is needed before application
-startup.
-
-The resulting application code can compose models, use schema-directed
-packing for known boundaries, and dynamically unpack only through the composed
-registry:
+Your application assembles a `BoundedContext`, selects storage, and starts a
+`Server`. For a process managed by Spine TS, use `run()`; an embedded
+application uses `start()` and closes the server itself.
 
 ```ts
-import { create } from "@bufbuild/protobuf";
-import { TypeRegistry, AnyMessages } from "@spine-event-engine/core";
-import { CommandIdSchema, spineProtoModule } from "@spine-event-engine/proto";
-import { usersProtoModule } from "@acme/users-model";
-import { UserIdSchema } from "@acme/users-model/generated/acme/users/users_pb.js";
-import { chatProtoModule } from "@acme/chat-model";
-import { ChatSchema } from "@acme/chat-model/generated/acme/chat/chat_pb.js";
-
-const registry = TypeRegistry.from(spineProtoModule, usersProtoModule, chatProtoModule);
-const user = create(UserIdSchema, { value: "author-1" });
-const chat = create(ChatSchema, { author: user, text: "Hello" });
-const commandId = create(CommandIdSchema, { uuid: "command-1" });
-
-const packedChat = AnyMessages.pack(ChatSchema, chat);
-const knownChat = AnyMessages.unpack(packedChat, ChatSchema);
-const dynamicUser = AnyMessages.unpackUsing(registry, AnyMessages.pack(UserIdSchema, user));
-const dynamicSpine = AnyMessages.unpackUsing(
-  registry,
-  AnyMessages.pack(CommandIdSchema, commandId),
-);
-
-void knownChat;
-void dynamicUser;
-void dynamicSpine;
-```
-
-`AnyMessages.pack` and `AnyMessages.unpack` require the expected schema and are the normal choice
-at typed boundaries. `AnyMessages.unpackUsing` is for a value whose schema is selected
-at runtime; it returns `undefined` for a type URL absent from the registry.
-The generated Message Board application is the runnable in-repository example of this
-layout: it composes the single `@spine-event-engine/example-message-board-model`, which
-defines `UserId` directly, and runs an in-memory Message Board server.
-
-## 2. Model domain messages
-
-Use a stable package and `type_url_prefix`; model IDs as generated messages;
-and make each aggregate, process-manager, or projection state an entity. Put
-the route ID first in command and event messages. Apply Spine validation
-options to required fields, and mark immutable entity fields `set_once`.
-Entity query fields need the `column` option.
-
-`task_state.proto` — IDs and entity states:
-
-```proto
-syntax = "proto3";
-
-package acme.tasks;
-
-import "spine/options.proto";
-
-option (type_url_prefix) = "type.acme.tasks";
-
-message TaskId {
-  string value = 1 [(required) = true];
-}
-
-message Task {
-  option (entity).kind = AGGREGATE;
-
-  TaskId id = 1 [(required) = true, (validate) = true, (set_once) = true];
-  string title = 2 [(required) = true];
-}
-
-message TaskWorkflow {
-  option (entity).kind = PROCESS_MANAGER;
-
-  TaskId id = 1 [(required) = true, (validate) = true, (set_once) = true];
-  bool owner_notification_requested = 2;
-}
-
-message TaskList {
-  option (entity).kind = PROJECTION;
-
-  TaskId id = 1 [(required) = true, (validate) = true, (set_once) = true];
-  string title = 2 [(required) = true];
-  int32 open_task_count = 3 [(column) = true];
-}
-```
-
-### Entity columns
-
-`(column) = true` is a storage and query declaration. When Spine TS writes an
-entity state, it materializes that field as a named value beside the Protobuf
-payload. A query can then filter or sort by the generated column. For example,
-the `open_task_count` field above becomes `TaskListColumns.openTaskCount`, which
-the query in section 8 uses in both `gt(...)` and `orderBy(...)`. Fields without
-the option remain part of the state message, but are not query columns. Mark
-only fields that the application needs to filter or sort.
-
-There are two related layers. The `(column)` option belongs in your state Proto
-and tells the generated client Query API which state fields are available.
-Framework code then turns those declared state fields into `RecordColumn`
-values on its internal `EntityRecord` envelope before storage writes. You use
-the generated Entity columns in application queries; `RecordColumn` is the
-lower-level storage contract that providers materialize.
-
-Entity code generation emits a descriptor-backed definition next to the
-state schema. Register that value once and reuse the returned immutable column
-collection. The imports and exported declaration below come from
-`examples/todo/src/entity-columns.ts`, so their relative paths resolve from
-that application source file. The final property-access lines illustrate the
-inferred column API and are not part of that source file:
-
-```ts
-import { EntityColumn } from "@spine-event-engine/client-node";
-import { TaskListColumnDefinition } from "../generated/spine/examples/todo/task_list_columns.js";
-import { TaskListSchema } from "../generated/spine/examples/todo/task_list_pb.js";
-
-export const TaskListColumns = EntityColumn.register(TaskListSchema, TaskListColumnDefinition);
-
-TaskListColumns.openTaskCount; // number, ordering operators
-TaskListColumns.version; // spine.core.Version, ordering operators
-TaskListColumns.archived; // boolean, equality only
-TaskListColumns.deleted; // boolean, equality only
-```
-
-| Protobuf column value                                | Comparison operators  |
-| ---------------------------------------------------- | --------------------- |
-| string and numeric scalar                            | equality and ordering |
-| `google.protobuf.Timestamp` and `spine.core.Version` | equality and ordering |
-| boolean, bytes, enum, and other message              | equality only         |
-
-Repeated, map, and oneof fields are rejected. The root API does not let
-application code construct arbitrary string columns or authored definitions.
-The high-level Entity Query API targets the current state of Aggregates,
-Projections, and Process Managers. The low-level ID query paths are unchanged.
-The repository's `proto:generate` workflow runs the
-`protoc-gen-spine-entity-columns` executable shipped by `@spine-event-engine/client-node`
-after Protobuf-ES for every example target. Installed projects can add that bin
-as a local plugin in their Buf generation template.
-
-`task_commands.proto` — commands (the filename ends in `commands.proto`):
-
-```proto
-syntax = "proto3";
-
-package acme.tasks;
-
-import "acme/tasks/task_state.proto";
-import "spine/options.proto";
-
-option (type_url_prefix) = "type.acme.tasks";
-
-message CreateTask {
-  TaskId id = 1 [(required) = true, (validate) = true];
-  string title = 2 [(required) = true];
-}
-
-message NotifyOwner {
-  TaskId id = 1 [(required) = true, (validate) = true];
-}
-```
-
-`task_events.proto` — events (the filename ends in `events.proto`):
-
-```proto
-syntax = "proto3";
-
-package acme.tasks;
-
-import "acme/tasks/task_state.proto";
-import "spine/options.proto";
-
-option (type_url_prefix) = "type.acme.tasks";
-
-message TaskCreated {
-  TaskId id = 1 [(required) = true, (validate) = true];
-  string title = 2 [(required) = true];
-}
-
-message OwnerNotificationRequested {
-  TaskId id = 1 [(required) = true, (validate) = true];
-}
-```
-
-The framework derives message roles and routing from generated descriptors. An
-application supplies domain messages and field data; it does not supply
-framework routing metadata.
-
-## 3. Write domain handlers
-
-Handlers are public instance methods with bare decorators, an explicit generated
-domain-message type for their first parameter, and an explicit return type.
-The registry generator uses those types. `@Assign` accepts a generated command
-and returns generated events; `@Command` accepts an event and returns generated
-commands; `@React` accepts an event and returns generated events or `void`; and
-`@Subscribe` accepts an event and returns `void`.
-
-This is an illustrative but typeable consumer fragment: it needs the shown
-generated package from section 2. `@example/tasks-proto` is a substitution, not
-a package provided by Spine TS.
-
-```ts
-import { clone, create } from "@bufbuild/protobuf";
-import {
-  Aggregate,
-  Assign,
-  Command,
-  ProcessManager,
-  Projection,
-  React,
-  Subscribe,
-} from "@spine-event-engine/server";
-import {
-  NotifyOwnerSchema,
-  OwnerNotificationRequestedSchema,
-  TaskCreatedSchema,
-  TaskIdSchema,
-  TaskListSchema,
-  TaskSchema,
-  TaskWorkflowSchema,
-  type CreateTask,
-  type NotifyOwner,
-  type OwnerNotificationRequested,
-  type TaskCreated,
-  type TaskId,
-} from "@example/tasks-proto";
-
-export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
-  @Assign
-  create(command: CreateTask): TaskCreated {
-    const id = clone(TaskIdSchema, this.id);
-
-    this.update((draft) =>
-      Object.assign(
-        draft,
-        create(TaskSchema, {
-          id,
-          title: command.title,
-        }),
-      ),
-    );
-    return create(TaskCreatedSchema, { id, title: command.title });
-  }
-}
-
-export class TaskWorkflowProcess extends ProcessManager<TaskId, typeof TaskWorkflowSchema, number> {
-  @React
-  requestOwnerNotification(event: TaskCreated): OwnerNotificationRequested {
-    void event;
-    const id = clone(TaskIdSchema, this.id);
-
-    this.update((draft) =>
-      Object.assign(
-        draft,
-        create(TaskWorkflowSchema, {
-          id,
-          ownerNotificationRequested: true,
-        }),
-      ),
-    );
-    return create(OwnerNotificationRequestedSchema, { id });
-  }
-
-  @Command
-  notifyOwner(event: OwnerNotificationRequested): NotifyOwner {
-    void event;
-    const id = clone(TaskIdSchema, this.id);
-
-    this.update((draft) =>
-      Object.assign(
-        draft,
-        create(TaskWorkflowSchema, {
-          id,
-          ownerNotificationRequested: false,
-        }),
-      ),
-    );
-    return create(NotifyOwnerSchema, { id });
-  }
-}
-
-export class TaskListProjection extends Projection<TaskId, typeof TaskListSchema, number> {
-  @Subscribe
-  include(event: TaskCreated): void {
-    const id = clone(TaskIdSchema, this.id);
-
-    this.update((draft) =>
-      Object.assign(
-        draft,
-        create(TaskListSchema, {
-          id,
-          title: event.title,
-          openTaskCount: 1,
-        }),
-      ),
-    );
-  }
-}
-```
-
-The repository invokes each handler inside a transaction managed by the framework.
-`update()` synchronously mutates the live active draft and returns its resulting
-state; use it when the handler has already decided the transition is valid. A
-throw after a partial `update()` mutation propagates and does not roll that
-partial mutation back. Use `tryUpdate()`
-when a proposed mutation must be checked before it is applied: it mutates a
-deeply independent scratch draft, returns an immutable empty array on success
-or immutable constraint violations on failure, and leaves the live draft
-unchanged on validation failure or a thrown error. Mutators must be synchronous;
-async/thenable results are rejected. Unrelated errors are not converted to
-validation results. Accepted framework work commits the
-draft to the entity and storage. `this.id` is the framework-provided routed
-entity identity, so handlers do not extract or validate a target for routing.
-Keep business decisions in these methods, but do not open, commit, or roll back
-transactions yourself. Application handlers return only generated domain messages.
-
-```ts
-import { clone, create } from "@bufbuild/protobuf";
-import { Assign, Aggregate } from "@spine-event-engine/server";
-import {
-  RenameTaskRejectedSchema,
-  TaskIdSchema,
-  TaskRenamedSchema,
-  TaskSchema,
-  type RenameTask,
-  type RenameTaskRejected,
-  type TaskId,
-  type TaskRenamed,
-} from "@example/tasks-proto";
-
-class ValidatingTaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
-  @Assign
-  rename(command: RenameTask): TaskRenamed | RenameTaskRejected {
-    const id = clone(TaskIdSchema, this.id);
-    const violations = this.tryUpdate((draft) => {
-      draft.title = command.title;
-    });
-
-    return violations.length === 0
-      ? create(TaskRenamedSchema, { id, title: command.title })
-      : create(RenameTaskRejectedSchema, { id, violation: [...violations] });
-  }
-}
-```
-
-## 4. Generate and load the handler registry
-
-The generated registry bridges the bare decorator declarations to repository
-assembly. Do not hand-write it or load it yourself. Compile it with the rest of
-the application, then point the context at the trusted compiled application or
-package root that contains `generated/handler/generated-handler-registry.js`.
-
-```ts
+// docs-snippet-path: packages/server/test/context/bounded-context.test.ts
 import { BoundedContext } from "@spine-event-engine/server";
-import { TaskAggregate, TaskListProjection, TaskWorkflowProcess } from "@example/tasks-domain";
 
-export const tasksBuilder = BoundedContext.singleTenant("Tasks")
-  .add(TaskAggregate)
-  .add(TaskWorkflowProcess)
-  .add(TaskListProjection)
-  .withGeneratedRegistryRoot(new URL("..", import.meta.url));
+const context = await BoundedContext.singleTenant("MessageBoard").buildAsync();
+await context.close();
 ```
 
-This practical fragment requires `@example/tasks-domain` to be the consumer's
-compiled domain package and `import.meta.url` to be in its `dist/` output.
-Call `buildAsync()` during server assembly; it imports the registry, checks its
-metadata, and creates the default repositories. A missing, unreadable, or stale
-registry stops assembly before the listener opens.
+Continue with the [server introduction](../packages/server/README.md) for
+application assembly and lifecycle.
 
-## 5. Assemble storage, contexts, and an environment
+## 3. Describe the model in Proto
 
-`ServerEnvironment` is a process singleton. Local Node environments use
-in-memory storage and same-process transport by default. Configure a deployment
-before the first server is constructed with `when(...).use(...)`. Production
-selection requires `NODE_ENV=production` to be set before the first
-`Environment` or `ServerEnvironment` resolution (including `Server.atPort()`),
-and then requires both storage and transport.
+Proto is the shared language between your server and clients. Define identifiers,
+commands, events, and entity state there. A command says what a caller wants;
+an event records a fact that happened; entity state is the current readable
+form of an Aggregate, Projection, or Process Manager.
 
-```ts
-import type { StorageFactory } from "@spine-event-engine/storage";
-import type { SignalTransport } from "@spine-event-engine/transport";
-import { EnvironmentType, Server, ServerEnvironment } from "@spine-event-engine/server";
-import { tasksBuilder } from "@example/tasks-domain";
+Keep the identifier as the first field of a command and the entity state. That
+is the implicit default target ID for Spine TS: it needs no extra routing
+annotation. A missing or invalid default command ID is rejected before a
+handler runs.
 
-// Start this process with NODE_ENV=production.
-declare const storageFactory: StorageFactory;
-declare const transport: SignalTransport;
+```proto
+message PostMessage {
+  MessageId id = 1;
+  string board = 2;
+  string text = 3;
+}
 
-ServerEnvironment.when(EnvironmentType.Production).use({ storageFactory, transport });
-const server = Server.atPort(0).add(tasksBuilder);
-```
-
-The server gives the singleton storage factory to added builders unless a
-builder explicitly selected a storage factory. Closing a caller-managed
-`start()` server never closes process facilities; call
-`await ServerEnvironment.instance().close()` during explicit process shutdown.
-The environment manages its configured delivery, transport, tracing, and storage
-facilities and closes them after server intake and attachments have retired.
-
-## 6. Start and close the server
-
-Use `run()` for a standalone application. It starts the server, reports
-readiness only after the TCP listener binds (not after an application health
-check), and closes it on `SIGINT` or
-`SIGTERM`. Run-managed siblings share one generation; the final run-managed
-server permanently closes its environment, with a failed final close retryable
-through a later signal or `close()`:
-
-```ts
-const running = await server.run();
-console.log(`Spine server ready at ${running.baseUrl}`);
-```
-
-Use `start()` when a test runner, desktop host, or another framework handles
-process signals. It never closes the shared environment. Caller-managed siblings
-share one generation, while mixed active `start()`/`run()` admission rejects
-before listener open. `start()` builds contexts, completes finite startup recovery, opens context
-transport intake, and only then opens the HTTP/2 listener. The default host is
-`127.0.0.1`; port `0` asks the OS for a free port.
-
-```ts
-const running = await server.start();
-
-try {
-  console.log(running.baseUrl);
-  // Run clients while the listener is open.
-} finally {
-  await running.close();
+message MessagePosted {
+  MessageId id = 1;
+  string board = 2;
+  string text = 3;
 }
 ```
 
-`close()` stops listener intake and sessions, closes context transport intake,
-drains accepted work, detaches delivery, then closes contexts and added
-resources. Caller-managed `start()` close does not close shared process
-facilities; after every caller-managed server has detached, call
-`await ServerEnvironment.instance().close()` during process
-shutdown. Concurrent closes share work; a successful close is idempotent. If
-close fails, call `close()` again to retry unfinished server or final
-run-managed environment cleanup. A
-failed start is terminal for that `Server` instance after its cleanup completes;
-create a new server instance for a new attempt.
+Declare a domain rejection in a `rejections.proto` file when a valid command
+breaks a business rule. For example, `MessageAlreadyPosted` communicates a
+duplicate message ID. This differs from invalid input: validation failures are
+non-OK command responses, while a handled domain rejection rolls back the
+state change and is published independently on a best-effort event path.
 
-## 7. Post commands and read acknowledgements
+Mark only fields that must be queried or sorted with `(column)`. The complete
+Proto record remains authoritative bytes; a field does not become a physical
+provider column simply because it appears in a message.
 
-Use `Client` with the application's generated command schema. `post()` returns
-an outcome after command intake, validation, and the command
-handler's immediate work; it is not proof that every resulting projection,
-process-manager reaction, or subscription update has completed. Wait for the
-specific observable consequence through a query, subscription, or test poll.
+Continue with the [Proto model reference](../packages/proto/REFERENCE.md) for
+the complete generated-contract and source-provenance rules.
 
-The `@example/*` imports below are placeholders for the application's generated
-Protobuf-ES modules.
+## 4. Implement behavior
 
-```ts
-import { create } from "@bufbuild/protobuf";
-import { Client } from "@spine-event-engine/client-node";
-import { CreateTaskSchema } from "@example/tasks-proto/task_commands_pb";
+Put behavior in entity classes. An Aggregate accepts a command and returns a
+generated event. A Projection subscribes to that event and builds queryable
+state. Handlers use bare `@Assign`, `@Command`, `@React`, and `@Subscribe`
+decorators; generated registry tooling discovers their schemas and signatures.
 
-const abortController = new AbortController();
-const client = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
-const outcome = await client
-  .onBehalfOf("alice")
-  .post(CreateTaskSchema, create(CreateTaskSchema, { title: "First task" }), {
-    signal: abortController.signal,
-  });
-if (outcome.kind === "ok") {
-  console.log("command accepted");
-}
-await client.close();
+```mermaid
+flowchart LR
+  Post[PostMessage] --> Aggregate[Message Aggregate]
+  Aggregate --> Event[MessagePosted]
+  Event --> Projection[Board View Projection]
+  Projection --> Query[Board query]
 ```
 
-Commands are never retried by this client. Caller abort and client close abort
-admitted work; network and deadline failures remain Connect errors.
+Use an exact route when the first field is not the correct target. `CommandRouting`,
+`EventRouting`, and `StateUpdateRouting` register exact generated schemas with
+`route(schema, via)`. `replaceDefault(via)` replaces the matching declaration's
+default route. Exact routes win, and route functions run deterministically only
+during admission; durable replay uses the stored target.
 
-### Browser client protocol and metadata
+TypeScript does not use `(is).java_type` or `(every_is).java_type` to route,
+and it has no `@Route` decorator or `routeSemantic()` API. Those copied Proto
+definitions are preserved wire definitions, not TypeScript routing behavior.
 
-Browser applications choose a protocol explicitly when composing the client:
-`Client.forGrpcWeb()` is the universal gRPC-Web route, while
-`Client.forConnect()` is an optimization only for an endpoint known to support
-Connect. Neither factory probes or falls back to the other protocol.
+Use one `@Where({ eventField, equals })` equality filter after type routing on
+an event- or rejection-consuming `@Subscribe`, `@React`, or `@Command` handler.
+Both values are typed string literals; invalid or repeated declarations fail
+closed. A filter narrows an already routed event—it is not another routing
+system.
 
-`forConnect()` uses binary Connect (`application/proto`). Configure that
-gateway to allow binary Connect and packed `Any` command/query bodies; choose
-it explicitly because the client does not probe or fall back to gRPC-Web.
+Do not manually start or commit transactions in application handlers. Return
+generated domain messages, let the framework wrap them, and throw the generated
+rejection when the domain rule fails. The framework rolls back the rejected
+transition before the typed rejection event is scheduled.
 
-```ts
-import { create } from "@bufbuild/protobuf";
-import { Client, type BrowserClientOptions } from "@spine-event-engine/client-web";
-import { QuerySchema } from "@spine-event-engine/proto/client";
+Continue with the [server reference](../packages/server/REFERENCE.md) for
+handlers, routing, filters, logging, and rejection contracts.
 
-const browserOptions: BrowserClientOptions = {
-  tenant: "tasks",
-  onRequestMetadata: () => ({ "x-application-version": "web-1" }),
-};
-const createGrpcWebClient = (baseUrl: string) => Client.forGrpcWeb(baseUrl, browserOptions);
-const createConnectClient = (baseUrl: string) => Client.forConnect(baseUrl, browserOptions);
-const browserClient = createGrpcWebClient("https://api.example.test");
-const result = await browserClient.onBehalfOf("alice").send(create(QuerySchema));
-await browserClient.close();
+## 5. Send Commands and read state
 
-// Use this only for a separately configured Connect-compatible endpoint:
-const connectClient = createConnectClient("https://connect.example.test");
-await connectClient.close();
-void result;
-```
+Commands change the model. Queries read current Projection state. Subscriptions
+deliver later state or event updates. Treat a command acknowledgement as the
+immediate result of acceptance, not proof that an asynchronous Projection is
+already visible.
 
-`onRequestMetadata` runs synchronously for every outbound call and returns
-fresh application-supplied headers. It can add a credential header, but it is not
-a session, cookie, or identity-provider implementation; compose those pieces
-at the application gateway.
-The client never logs these header values or uses them in request IDs. Request
-IDs require Web Crypto: it prefers `crypto.randomUUID()`, falls back to
-`crypto.getRandomValues()`, and rejects before transport invocation when
-neither secure API is available.
+Message Board's React UI posts `PostMessage`, queries the board for its initial
+rows, then listens for complete Projection payloads. A valid complete payload
+updates the browser locally. The UI uses an authoritative query for initial
+state, a reconnect, a possible gap, malformed data, or recovery after posting
+while disconnected.
 
-Browser subscriptions have independent, single-consumer update and lifecycle
-queues. Their defaults are 64 updates, 1,048,576 update bytes, and 32 lifecycle
-notices; every supplied capacity must be a positive safe integer. Overflow is
-terminal for both streams with the same overflow error and triggers bounded
-cleanup rather than silently dropping data; it does not enqueue a `failed`
-lifecycle notice. Retries begin only after the initial attempt. The default
-policy permits five retry attempts within 30,000 ms, using a 250 ms exponential
-base, ±20% jitter, and a 5,000 ms cap (minimum 1 ms); supplied retry counts,
-elapsed time, and returned delays must be positive safe integers. `connecting`
-carries a monotonic reconnect generation and retry attempt. The caller composes
-signals and, when it needs deterministic timing, supplies the injected
-scheduler; neither provides a cursor, cache, replay log, or cross-stream
-ordering guarantee. Browser factories select/create their transport, while
-`Client.close()` closes subscription work; an injected source closes a platform
-transport only when it supplies `close()`.
+For a browser, put native services behind one authenticated Gateway. The
+Gateway resolves credentials into trusted context and forwards approved browser
+traffic; private backends do not receive browser credentials directly. Browser
+clients choose gRPC-Web or an explicitly configured Connect endpoint—there is
+no probing or fallback.
 
-## 8. Query and subscribe to state
+Make client effects idempotent. A reconnect or an uncertain response can repeat
+work, and subscription delivery is best effort rather than an ordered replay
+log. Keep a query path that can restore authoritative state.
 
-Use `EntityQuery` to compile descriptor-backed columns to the frozen
-`spine.client.Query`, then pass that message to an immutable `Client` request
-scope. `Client.connectTo()` creates and closes its Node HTTP/2 session; use
-`Client.usingTransport()` when the caller supplies the Connect transport.
+Continue with the [Node client reference](../packages/client-node/REFERENCE.md)
+for the complete command, query, and subscription contract.
 
-### Browser gateway / Envoy reference
+## 6. Persist application data
 
-For ordinary local browser applications, configure `Server` with its `browser`
-option and call `run()`. The framework keeps the native backend loopback-private
-and serves authenticated Connect and gRPC-Web requests with exact allowed
-origins. Your application supplies sessions, authorization, trusted actor and
-tenant resolution, and allowed origins; it does not create listener, router,
-CORS, or signal machinery.
+Begin locally with in-memory storage. It is fast and useful for tests, but its
+state disappears when the process stops. Move to MySQL or Google Cloud
+Datastore when the application needs durable provider storage.
 
-```ts
-import type {
-  AuthorizationPolicy,
-  Clock,
-  ContextResolver,
-  SessionResolver,
-} from "@spine-event-engine/auth";
-import { Server } from "@spine-event-engine/server";
+Storage uses typed mappings. A generated message ID or message column uses a
+reversible `Stringifier`; primitive values use a provider-native form. Use the
+same mapping for stored values, query operands, and continuation values. Supply
+a `TypeRegistry` when compact Proto JSON must expand `Any` values.
 
-declare const sessions: SessionResolver;
-declare const authorize: AuthorizationPolicy["authorize"];
-declare const contexts: ContextResolver;
-declare const clock: Clock;
-declare const tasksContext: import("@spine-event-engine/server").BoundedContext;
+| Concern           | What to choose deliberately                                                                |
+| ----------------- | ------------------------------------------------------------------------------------------ |
+| Querying          | Mark query/sort fields with `(column)` and use declared columns.                           |
+| MySQL tenancy     | Select a configured database per tenant.                                                   |
+| Datastore tenancy | Select a native namespace per tenant.                                                      |
+| Physical layout   | Configure provider record families; a Bounded Context name is diagnostic, not a partition. |
+| Migration         | Plan it with the provider; Spine TS does not migrate layouts automatically.                |
 
-const browserServer = await new Server({
-  contexts: [tasksContext],
-  port: 8090,
-  browser: {
-    origins: ["http://127.0.0.1:5173"],
-    sessions,
-    authorize,
-    contexts,
-    clock,
-  },
-}).run();
+Queries can push supported filters, sort order, IDs, limits, and continuations
+to the provider. Keep a bounded query and use the provider's documented
+continuation behavior rather than treating a query as an unbounded scan.
 
-console.log(browserServer.baseUrl);
-```
+Continue with the [storage reference](../packages/storage/REFERENCE.md) for
+storage, query, mapping, and tenancy contracts.
 
-The framework accepts only exact, canonical HTTP or HTTPS origins. If the
-application uses CSRF-protected opaque cookies, also pass its configured
-`OpaqueSessionCookies` instance as `browser.cookies`. Otherwise the listener
-accepts one well-formed bearer credential per request.
+## 7. Test the application
 
-The framework browser route terminates at its authentication boundary; native
-Spine backend listeners are not public browser endpoints. The repository
-provides a customizable Envoy reference that accepts only `ResolveContext`,
-`Post`, `Read`, `Subscribe`, `Activate`, and `Cancel`, sends upstream requests
-over HTTP/2, and supports gRPC-Web plus explicitly selected binary Connect.
-It is a template, not a deployment policy or managed service.
+Test domain behavior first, then the application path around it. Message Board
+tests can prove that a message becomes board state; To-Do is a compact example
+of command, rejection, and Projection tests. Add provider integration tests
+only when the selected provider behavior is part of the feature.
 
-The gateway manages its listener lifecycle, credential resolution, and trusted
-context. The application deployment supplies TLS files and network controls. Do
-not add a browser-to-backend bypass. See
-[the Envoy reference](../interop/envoy/README.md) for its required render inputs,
-TLS mount, exact pinned-image validation command, and customization boundaries.
-The DSL supports IDs, nested `all()` / `either()`, equality and range helpers,
-state masks, repeated ordering, and positive limits:
+`BlackBox` starts a bounded context through the same local server and client
+boundary that an application uses. It is useful for posting commands, reading a
+Projection, and waiting for genuinely asynchronous visibility.
 
 ```ts
-import { create } from "@bufbuild/protobuf";
-import type { Any } from "@bufbuild/protobuf/wkt";
-import { AnyMessages } from "@spine-event-engine/core";
-import { Client, EntityQuery } from "@spine-event-engine/client-node";
-import { ActorContextSchema } from "@spine-event-engine/proto";
-import type { QueryResponse } from "@spine-event-engine/proto/client";
-import { TaskListColumns } from "@example/tasks-proto/task_list_columns";
-import { TaskListSchema } from "@example/tasks-proto/task_list_pb";
-
-const client = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
-
-const taskListQuery = EntityQuery.select({
-  schema: TaskListSchema,
-  columns: TaskListColumns,
-  context: create(ActorContextSchema),
-})
-  .byId("list-1", "list-2")
-  .where(
-    EntityQuery.all(
-      EntityQuery.eq(TaskListColumns.archived, false),
-      EntityQuery.gt(TaskListColumns.openTaskCount, 0),
-      EntityQuery.lt(TaskListColumns.openTaskCount, 100),
-      EntityQuery.ge(TaskListColumns.openTaskCount, 1),
-      EntityQuery.le(TaskListColumns.openTaskCount, 20),
-      EntityQuery.either(
-        EntityQuery.eq(TaskListColumns.deleted, false),
-        EntityQuery.eq(TaskListColumns.archived, false),
-      ),
-    ),
-  )
-  .mask("id", "openTaskCount")
-  .orderBy(TaskListColumns.openTaskCount, "desc")
-  .orderBy(TaskListColumns.version, "asc")
-  .limit(20)
-  .build();
-
-const result = await client.onBehalfOf("alice").send(taskListQuery);
-const packedState = firstState(result);
-if (packedState !== undefined) console.log(AnyMessages.unpack(packedState, TaskListSchema));
-await client.close();
-
-function firstState(response: QueryResponse): Any | undefined {
-  return response.message[0]?.state;
-}
-```
-
-Here `TaskListSchema` comes from the consumer's generated Protobuf-ES module,
-and `TaskListColumns` comes from its generated `*_columns.ts` companion. The
-`@example/*` paths used elsewhere in this guide are placeholders for those
-modules supplied by the consuming application, not Spine TS packages.
-
-Repeated ordering preserves caller order and uses entity ID as the final stable
-tie-breaker. Missing values are first ascending and last descending. A positive
-limit from `1` through `1000` requires ordering. Invalid columns, masks,
-operators, and packed value types fail before state storage is read.
-Every query applies a 1,000-record storage safety bound. A missing format or
-wire limit of zero does not require ordering. Providers fetch at most one
-sentinel record beyond the bound; overflow fails the read before any
-explicit result limit can silently truncate the semantic result. Tenant
-selection is applied before this bound.
-
-Use `SubscriptionService.Subscribe`, then `Activate`. `Cancel` accepts the
-returned `Subscription` message, not its opaque ID alone; pass that message
-when the client is finished. State topics support ID and equality filters;
-event topics currently support `include_all`. Client rejection updates redact
-rejected-command payload forms and throwable stack; internal generated
-subscribers retain full defensive context. Subscription definitions are
-reconciled from the configured Stand registry;
-the default durable registry uses the application's storage factory, pending
-definitions expire after 30 seconds, active definitions have no framework TTL,
-and cancel physically deletes the definition. Reconciliation reads a bounded
-complete snapshot every 10 seconds. Active streams and queued updates are
-process-local, with a default queue cap of 100 updates. Exceeding that cap
-closes the stream and discards its queued updates. Active streams and queues
-are not recovered or replayed after
-disconnection or process restart, so clients must query current state when they
-need a fresh view.
-
-Use the public client facade for application subscriptions. It applies the
-frozen actor/tenant context to the caller-provided `Topic`. Its bounded,
-single-consumer `updates` stream delivers validated raw `SubscriptionUpdate`
-messages as `{ kind: "update", update }` deliveries, while its separate
-single-consumer `lifecycle` stream reports local lifecycle notifications. State topics permit IDs, equality predicates, nested
-`all()` / `either()` groups, and masks; ordered comparisons, ordering, and
-limits are not subscription criteria. Event topics currently take only an
-explicit `{ kind: "event" }` option (and an optional `AbortSignal`) because
-the server accepts neither event criteria nor masks.
-Creation returns an inactive local handle without sending `Subscribe`.
-`activate()` sends `Subscribe`, then opens the activation stream; it does not
-claim a remote activation acknowledgement.
-Asynchronous activation failures reject pending and future iterator reads.
-
-```ts
-import { create } from "@bufbuild/protobuf";
-import { Client } from "@spine-event-engine/client-web";
-import { TypeUrls } from "@spine-event-engine/core";
-import {
-  QueryIdSchema,
-  QuerySchema,
-  type QueryResponse,
-  TargetSchema,
-  TopicIdSchema,
-  TopicSchema,
-  type SubscriptionUpdate,
-} from "@spine-event-engine/proto/client";
-import { TaskListSchema } from "@example/tasks-proto/task_list_pb";
-
-const subscriptionClient = Client.forGrpcWeb("https://api.example.test", { tenant: "tasks" });
-const query = create(QuerySchema, {
-  id: create(QueryIdSchema, { value: "task-list-query" }),
-  target: create(TargetSchema, {
-    type: TypeUrls.derive(TaskListSchema),
-    criterion: { case: "includeAll", value: true },
-  }),
-});
-const topic = create(TopicSchema, {
-  id: create(TopicIdSchema, { value: "task-list-topic" }),
-  target: create(TargetSchema, {
-    type: TypeUrls.derive(TaskListSchema),
-    criterion: { case: "includeAll", value: true },
-  }),
-});
-const subscription = await subscriptionClient.onBehalfOf("alice").createSubscription(topic, {
-  kind: "entity",
-  // A raw Query or an object with build(): Query is accepted. It is evaluated only on recovery.
-  authoritativeQuery: () => query,
-});
-await subscription.activate();
-for await (const delivery of subscription.updates) {
-  if (delivery.kind === "resynchronization") handleResynchronization(delivery.response);
-  if (delivery.kind === "update") handleUpdate(delivery.update);
-}
-await subscription.cancel();
-await subscriptionClient.close();
-
-function handleUpdate(update: SubscriptionUpdate): void {
-  if (update.update.case === "entityUpdates") console.log(update.update.value);
-}
-
-function handleResynchronization(response: QueryResponse): void {
-  console.log(response.message.length);
-}
-```
-
-Await `cancel()` when the application needs bounded remote cleanup
-confirmation. A caller-provided signal can stop an individual `post`, `send`,
-or `activate` operation. Updates and lifecycle notices have independent bounded
-queues and no cross-stream ordering guarantee. An invalid recovery response or
-exhausted retry bounds emits exactly one `{ state: "failed", generation, error
-}` lifecycle notice before both streams fail. Queue overflow instead fails both
-streams directly with one shared overflow error and no `failed` notice. Before
-another terminal state, explicit
-cancellation or client close emits exactly one `{ state: "closed", generation
-}` before lifecycle completion. Every accepted wire gets at most one remote
-Cancel bounded to 1,000 ms; reconnect can accept and clean more than one wire.
-Each reconnect begins a new generation. An Event reconnect emits `connecting`,
-`gapPossible`, then `connected` and continues; `gapPossible` only notifies of a
-possible gap and makes no cluster-complete or replay-completeness promise.
-An Entity reconnect evaluates its raw/builder `authoritativeQuery`, requires a
-byte-equivalent Topic target, replaces only request context, emits
-`resynchronizing`, delivers the authoritative raw `QueryResponse` before held
-wire updates, then emits `connected`. Re-query Entity state after recovery;
-commands are never retried. Browser factories select/create their transport;
-`Client.close()` closes its subscription work, while `usingTransport()` invokes
-an injected source's platform close hook only when supplied.
-
-This client setup is illustrative: supply generated `Query` and `Topic`
-fixtures targeting a registered state schema, then use the three clients.
-
-```ts
-import { createClient } from "@connectrpc/connect";
-import { createGrpcTransport } from "@connectrpc/connect-node";
-import { QueryService, SubscriptionService } from "@spine-event-engine/proto/client";
-
-const transport = createGrpcTransport({ baseUrl: "http://127.0.0.1:8080" });
-const queries = createClient(QueryService, transport);
-const subscriptions = createClient(SubscriptionService, transport);
-declare const query: Parameters<typeof queries.read>[0];
-declare const topic: Parameters<typeof subscriptions.subscribe>[0];
-
-const response = await queries.read(query);
-const subscription = await subscriptions.subscribe(topic);
-const updates = subscriptions.activate(subscription);
-try {
-  // Consume `updates` while this client needs the live view.
-  void updates;
-} finally {
-  await subscriptions.cancel(subscription);
-}
-```
-
-## 9. Handle invalid input and domain rejection
-
-Send domain commands through the command service and inspect the returned
-`Ack`. Invalid accepted payloads return `COMMAND_VALIDATION_ERROR` with packed
-`spine.validation.ValidationError` details before dispatcher execution.
-Framework-controlled state-transition validation returns
-`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with validation details.
-
-For a domain rule failure, throw the generated companion for a top-level message
-declared in a `rejections.proto` file. Repository execution rolls back before
-scheduling the typed rejection event independently. `CommandService.Post`
-returns an OK acceptance acknowledgement. If the independently scheduled post
-succeeds, an already-active `SubscriptionService` stream with queue capacity
-may receive the rejection asynchronously; saturation or closure can prevent
-observation. Its client event envelope preserves the typed rejection and
-ordinary event metadata, but redacts rejected-command payload forms and
-throwable stack.
-Framework-generated internal subscribers still receive the full defensive
-`EventContext`. A post failure is recorded internally, is not reflected in the
-`Ack`, and is not currently retried. Do not return rejection or service
-envelope values from handlers.
-
-After the consumer project's pnpm Proto generation step, a handler saved as
-`src/handlers/task.ts` can use the generated project-root paths below:
-
-```ts
-import { create } from "@bufbuild/protobuf";
-
-import { TaskAlreadyDone } from "../../generated/spine/examples/todo/task_rejections.js";
-import { TaskIdSchema } from "../../generated/spine/examples/todo/task_id_pb.js";
-
-throw TaskAlreadyDone.create({
-  id: create(TaskIdSchema, { value: "task-42" }),
-});
-```
-
-Invalid payloads, transition-validation failures, and unexpected technical
-errors remain non-OK acknowledgements with their existing error contracts.
-
-## 10. Test the real paths
-
-`@spine-event-engine/testing` provides `BlackBox`, a runner-neutral local test boundary.
-`await BlackBox.from(contextOrBuilder, options)` starts an ephemeral server and
-uses the public client API, so the same test works under Node's test runner or
-Vitest. It creates and closes the client, server, and subscriptions used by its scopes;
-always close it in `finally`. Tenant and zone are fixed for its whole lifetime:
-a multitenant context requires `tenant`, a single-tenant context rejects it,
-and `zoneId` is fixed once. Scopes are immutable: use `asGuest()` or
-`onBehalfOf("actor-id")`.
-
-This practical test shape requires a built `tasksContext` and generated service
-message fixtures from the consumer test-support package.
-
-```ts
-import { create } from "@bufbuild/protobuf";
+// docs-snippet-path: packages/testing/src/black-box/black-box.ts
 import { BlackBox } from "@spine-event-engine/testing";
-import { TypeUrls } from "@spine-event-engine/core";
-import { TargetSchema, TopicSchema } from "@spine-event-engine/proto/client";
-import { taskListQuery, tasksContext } from "@example/tasks-test-support";
-import { CreateTaskSchema } from "../generated/acme/tasks/task_commands_pb.js";
-import { TaskCreatedSchema } from "../generated/acme/tasks/task_events_pb.js";
-import { TaskIdSchema } from "../generated/acme/tasks/task_id_pb.js";
-import { TaskListSchema } from "../generated/acme/tasks/task_list_pb.js";
-
-const blackBox = await BlackBox.from(tasksContext, { zoneId: "Europe/Lisbon" });
-try {
-  const actor = blackBox.onBehalfOf("test-user");
-  const outcome = await actor.post(
-    CreateTaskSchema,
-    create(CreateTaskSchema, {
-      id: create(TaskIdSchema, { value: "task-1" }),
-      title: "Write docs",
-    }),
-  );
-  if (outcome.kind !== "ok") throw new Error(`CreateTask failed: ${outcome.kind}`);
-  const observed = await blackBox.eventually(
-    () => actor.send(taskListQuery),
-    () => true,
-  );
-  console.log(observed.message);
-  const taskListTopic = create(TopicSchema, {
-    target: create(TargetSchema, {
-      type: TypeUrls.derive(TaskListSchema),
-      criterion: { case: "includeAll", value: true },
-    }),
-  });
-  const subscription = await actor.createSubscription(taskListTopic, {
-    kind: "entity",
-    authoritativeQuery: () => taskListQuery,
-  });
-  await subscription.activate();
-  await actor.postEvent(
-    TaskCreatedSchema,
-    create(TaskCreatedSchema, {
-      id: create(TaskIdSchema, { value: "imported-task" }),
-      title: "Imported task",
-    }),
-  );
-  await subscription.cancel();
-} finally {
-  await blackBox.close();
-}
-```
-
-`eventually()` has a bounded timeout (`BlackBoxTimeoutError` on expiry) and is
-the correct assertion boundary for asynchronous projections. State and event
-subscriptions expose the same bounded `updates` and `lifecycle` streams as the
-client; update deliveries wrap raw validated `SubscriptionUpdate` messages, so
-tests should not depend on private server types. Event reconnect may notify
-`gapPossible` and continue with gaps; Entity reconnect delivers authoritative
-resynchronization before held updates. Neither stream pair promises cross-stream
-ordering or cluster-complete delivery.
-`postEvent(EventSchema, message)` injects a generated domain event directly
-with the calling scope's fixed actor, tenant, and zone; use it for test setup
-when a command is not the behavior under test.
-`timeoutMs` and `intervalMs`, including per-call overrides, must be positive
-integers. Construction options are rejected before a context builder is built
-or any server/client resource is acquired; per-call overrides are rejected
-before the first read.
-
-Network request and response messages default to a 4,194,304-byte uncompressed
-limit. Configure `Server.atPort(port, { readMaxBytes, writeMaxBytes })` only when
-the application needs a different finite bound; both values must be integers
-from 1 through 4,294,967,295. These framework bounds complement, rather than
-replace, deployment ingress and rate limits.
-
-## 11. Delivery, IPC, and release limits
-
-Process-manager reactions and projection `@Subscribe` handler delivery use
-the framework's durable handoff. This server-side entity-handler delivery is
-separate from the client-facing `SubscriptionService` streams in section 8;
-those active client streams and their queues are process-local. A handler can
-be invoked more than once when ownership changes or a prior invocation cannot
-be conclusively finalized, so handlers must make side effects replay-safe and
-tolerate at-least-once delivery.
-
-When a supported delivery callback fails, the default `DeliveryMonitor` action
-is `markDelivered()`: it records the row as delivered so independent targets
-can continue. A custom monitor may choose `repeatDispatching()` instead, which
-repeats that one callback immediately once and then acknowledges it; it does
-not create a retry schedule. If that chosen action and the fallback durable
-acknowledgement both fail, the row remains pending and blocks its target for
-this drain. The callback effect and the delivered-row compare-and-set are not
-one transaction, so a lost acknowledgement after a successful callback can
-redeliver the row after restart. Make callback side effects idempotent. Durable
-handoff records the work, but it is not an autonomous eventual-delivery
-guarantee.
-
-For a finite local drain, use environment storage and node defaults:
-
-```ts
-import { DeliveryBuilder } from "@spine-event-engine/server";
-
-const delivery = new DeliveryBuilder().build();
-
-const result = await delivery.run({
-  onMessage(message) {
-    // Dispatch through the framework's endpoint wiring.
-  },
-});
-```
-
-Or supply a fully explicit local configuration. The registry context and
-factory must match delivery storage, and a multi-shard run names its shard:
-
-```ts
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import {
-  DeliveryBuilder,
-  DeliveryMonitor,
-  FailedReception,
-  ShardedWorkRegistry,
-  UniformAcrossAllShards,
-} from "@spine-event-engine/server";
-
-const context = { name: "Tasks", multitenant: false };
-const storageFactory = new InMemoryStorageFactory();
-const strategy = UniformAcrossAllShards.forNumber(4);
-
-class MarkFailedReceptionDelivered extends DeliveryMonitor {
-  override onReceptionFailure(reception: FailedReception) {
-    // This is the default action. Naming it makes the failure policy visible.
-    return reception.markDelivered();
-  }
-}
-
-const delivery = new DeliveryBuilder()
-  .withContext(context)
-  .withStorageFactory(storageFactory)
-  .withWorkRegistry(new ShardedWorkRegistry({ context, storageFactory }))
-  .withStrategy(strategy)
-  .withMonitor(new MarkFailedReceptionDelivered())
-  .withPageSize(250)
-  .withNode("worker-a")
-  .build();
-
-await delivery.run({
-  shard: strategy.shardFor("task-42", "type.example.dev/Task"),
-  onMessage(message) {
-    // Dispatch through the framework's endpoint wiring.
-  },
-});
-```
-
-`run()` returns only a terminal status: `COMPLETED`, `SKIPPED`, `FAILED`, or
-`STOPPED`. `pageSize` bounds one Inbox read and is at most 1,000; there is no
-separate batch-size setting or page callback. A `DeliveryMonitor` is the place
-to observe a delivery and choose its failure action. It receives shard pickup
-events, `onDeliveryStarted`, `onDeliveryCompleted(statistics)`, and one failed
-reception at a time. Statistics contain immutable `processed`, `delivered`, and
-`failed` counts. To stop a finite drain, override
-`shouldContinueAfter("DELIVERY")` or `shouldContinueAfter("PAGE")` and return
-`false`. Monitor failures are contained so the shard can be released. The
-monitor itself is not a scheduler, retry policy, catch-up facility, or remote
-topology. A `DeliverySupervisor` can run repeated finite drains, but it does not
-add persistent retry attempts, delayed jobs, or exactly-once effects.
-
-### Standalone in-memory delivery server and two-machine topology
-
-Run one standalone `DeliveryServer` where both application machines can reach
-it on a trusted private network. It provides the in-memory Inbox, Shard, Admin,
-and health services; each application machine runs a `DeliveryClient`,
-`DeliveryBuilder`, and `DeliverySupervisor`. This is coordination for
-at-least-once local endpoint delivery, not shared application-state storage.
-The [Distributed Message Board](../examples/distributed-message-board/README.md)
-is the runnable two-application-machine example of this arrangement.
-
-```ts
-import { DeliveryServer } from "@spine-event-engine/delivery-server";
-
-const server = new DeliveryServer({
-  host: "10.0.0.5",
-  port: 8484,
-  maxInboundMessageBytes: 4 * 1024 * 1024,
-  processingTimeoutSeconds: 60,
-  maxRetainedMessages: 10_000,
-  maxRetainedBytes: 32 * 1024 * 1024,
-  maxTrackedShards: 1_000,
-});
-await server.start();
-try {
-  console.log(server.baseUrl); // http://10.0.0.5:8484
-  // Keep the trusted-network coordinator available to both application machines.
-} finally {
-  await server.close();
-}
-```
-
-Options override `HOST`, `PORT`, `MAX_INBOUND_MESSAGE_SIZE`,
-`SHARD_PROCESSING_TIMEOUT`, `MAX_RETAINED_MESSAGES`, `MAX_RETAINED_BYTES`, and
-`MAX_TRACKED_SHARDS`; values are read and validated once at construction. The
-defaults are `127.0.0.1:8484`, 4 MiB inbound messages, a zero/off shard
-processing timeout, 10,000 retained messages, 32 MiB of serialized retained
-message data, and 1,000 tracked shards. Retained message/byte options accept
-integers from 1 through 2,147,483,647; tracked shards accept 1 through 1,000.
-Invalid explicit or environment values fail synchronously during construction.
-Write and remove batches contain 1 through 100 records. A write batch is
-admitted atomically and is rejected without partial persistence when a
-retained-state budget would be exceeded; removes do not consume retained-state
-capacity. Every persisted record is a canonical client-decodable Command or
-Event payload no larger than 1 MiB, and the full record fits the 4 MiB RPC
-boundary. A requested page over 4 MiB fails with `RESOURCE_EXHAUSTED`; request a
-smaller page size. The server never silently shortens it. Admin snapshots and
-one expired-session release response are capped at 1,000 shard observations, below
-the 4 MiB RPC ceiling; worker and node IDs together are limited to 128 UTF-8
-bytes so expiration responses stay within it too. `DeliveryClient` applies the
-same identity limit before pickup or release RPCs. `spine-delivery-server` starts the same listener from
-those environment variables and handles `SIGINT`/`SIGTERM`; embedded use calls
-`close()` as part of its process lifecycle. Shutdown becomes non-serving,
-rejects not-yet-admitted mutations, completes Admin streams, then closes the
-listener. The server is terminal and loses all state when it stops.
-
-Admin is machine-facing: an observer receives its creation acknowledgement
-before bounded shard updates. Health `Check` reports the registered services
-while serving and `NOT_SERVING` for an unknown name; health `Watch` is
-unimplemented. The coordinator is unauthenticated cleartext infrastructure.
-Bind a non-loopback address only inside a trusted network; do not expose it to
-the public Internet. The service excludes TLS, authentication/authorization,
-durable delivery-server persistence, Redis, Hazelcast, clustering, deployment
-packaging, a human Admin UI/TUI, and live TypeScript/JVM operation.
-
-```ts
-import {
-  DeliveryClient,
-  RemoteInbox,
-  RemoteWorkRegistry,
-} from "@spine-event-engine/delivery-client";
-import { DeliveryBuilder, DeliverySupervisor } from "@spine-event-engine/server";
-
-// Run this independently on application machine A and application machine B.
-const source = DeliveryClient.connectTo("http://10.0.0.5:8484");
-const delivery = new DeliveryBuilder()
-  .withNode(process.env.HOSTNAME ?? "worker-a")
-  .withInbox(new RemoteInbox(source))
-  .withWorkRegistry(new RemoteWorkRegistry(source))
-  .build();
-const supervisor = new DeliverySupervisor({
-  source,
-  delivery,
-  onMessage(message) {
-    // Route to this machine's framework endpoint wiring.
-    void message;
-    return Promise.resolve();
-  },
-});
-await supervisor.start();
-try {
-  // Keep this machine ready while it competes for shared shards.
-} finally {
-  await supervisor.close({ graceMs: 5_000 });
-  source.close();
-}
-```
-
-The two machines compete for shared shards and can recover stale ownership
-through the shared service. Remote removal rereads the exact pending row and
-calls `removeOne()` directly; it keeps no local removal state. A completed
-endpoint may still be retried after a lost acknowledgement, so endpoint effects
-must be idempotent. This topology does not prove live compatibility with a JVM
-server.
-
-### Production delivery supervision
-
-`DeliverySupervisor` provides bounded process-local admission for a
-`DeliveryBuilder`-created `Delivery`. Pair one supervisor with one component
-that manages its lifecycle. Start it after its local delivery endpoints are
-ready, and close it
-before closing the source client or storage it uses. Any forged delivery
-lookalike is rejected, even if it copies an internal method shape, because only
-builder-created identities carry the private controlled capability.
-`DeliveryClient` is structurally compatible with the supervisor source;
-`@spine-event-engine/server` does not depend on `@spine-event-engine/delivery-client`.
-
-Built context environments create and start one supervisor for each exact
-storage/context/tenant runtime. Initial attachment recovery remains in the
-existing startup coordinator so it produces the established evidence once;
-after readiness transfer, notifications and periodic local recovery belong to
-that runtime supervisor. Environment stop and retirement close those
-supervisors before their storage lifecycle ends.
-
-```ts
-import {
-  DeliveryClient,
-  RemoteInbox,
-  RemoteWorkRegistry,
-} from "@spine-event-engine/delivery-client";
-import { DeliveryBuilder, DeliverySupervisor } from "@spine-event-engine/server";
-
-const client = DeliveryClient.connectTo("http://127.0.0.1:8080");
-const delivery = new DeliveryBuilder()
-  .withNode("worker-a")
-  .withInbox(new RemoteInbox(client))
-  .withWorkRegistry(new RemoteWorkRegistry(client))
-  .build();
-const supervisor = new DeliverySupervisor({
-  source: client,
-  delivery,
-  onMessage(message) {
-    // Dispatch through the framework's endpoint wiring.
-    void message;
-    return Promise.resolve();
-  },
-  concurrency: 4,
-  pendingLimit: 100,
-  recoveryMs: 30_000,
-  staleMs: 60_000,
-});
-
-await supervisor.start();
-try {
-  // Keep the process running while notifications and periodic recovery drain work.
-} finally {
-  await supervisor.close({ graceMs: 5_000 });
-  client.close();
-}
-```
-
-One shard has at most one active drain. Notifications for that shard coalesce
-to one follow-up drain; active and pending distinct shards are bounded by
-`concurrency` and `pendingLimit`. An unseen shard that arrives after pending
-capacity is full is not retained. It instead requests one bounded rescan, so a
-later capacity/recovery pass can rediscover it from `shardSnapshot()`.
-
-The supervisor cancels its Admin watch and recovery activity during close. It
-first gives active delivery up to `graceMs` to settle, then fences late delivery
-outcomes. It separately gives stale-session release cleanup up to `graceMs`;
-these are two bounded phases, not one combined deadline. A cleanup rejection
-takes precedence over an active-work timeout, while unfinished cleanup is
-retained for a later `close()` retry. Therefore
-`DeliveryShutdownTimeoutError` identifies a bounded shutdown-step timeout only when no
-cleanup failure takes precedence. The supervisor does not make endpoint effects
-exactly once: an endpoint may have run before a lease or shutdown fence takes
-effect, so endpoint side effects must remain at-least-once/replay-safe. Abort
-and deadline handling is cooperative between durable checkpoints; JavaScript
-cannot preempt a synchronous endpoint.
-
-The remote delivery service and client are for a trusted network only. Read
-operations may use their configured bounded retries, but mutable delivery RPCs
-(including pickup, release, and stale-session release) are never retried
-automatically after an unknown result. Reconcile a `DeliveryOutcomeUnknownError`
-with the client’s prescribed observation/read operation instead.
-
-The in-memory delivery-server provides the state/services, standalone
-configuration, and two-application-machine topology described above. It still
-excludes Redis, Hazelcast, durable delivery-server persistence, and live
-TypeScript/JVM compatibility. It exposes no public scheduler or internal
-run-control API.
-
-The ZeroMQ adapter is available only at `@spine-event-engine/transport/zeromq` for local
-IPC on one host. Treat its IPC directory and every frame as trusted runtime
-data: share it only with same-host peers that already trust each other, and
-keep the canonical directory beneath a non-attacker-writable parent. POSIX
-directories must belong to the effective user and have exact mode `0700`; final
-links are rejected, while immutable root-owned macOS `/tmp` and `/var` aliases
-are canonicalized. The adapter rechecks the directory immediately before
-native bind/connect, but pathname ZeroMQ cannot eliminate substitution after
-that check. The transport adapter has no internal retry loops and
-provides no retry or restart guarantee. It also does not provide remote
-transport, durable redelivery, exactly-once delivery, process supervision,
-broad health checks, or production topology.
-
-Initial-release exclusions include deployment/authentication/tracing hardening,
-retained update replay policy, and broad production verification. Local IPC has
-child-process test coverage, but the runnable to-do application is not a public
-production multi-process topology.
-
-## 12. Develop with Google Cloud Datastore
-
-### First: how a record family gets a physical name
-
-A record family is the durable home for one kind of Protobuf record. Its
-identity has three parts: the source Proto type, the stored record Proto type,
-and an optional `StorageGroup`. The source names an ungrouped family. A group
-separates related stored records, such as Entity history, from the current
-record family.
-
-```text
-ungrouped: source                    -> MySQL source_with_underscores
-                                     -> Datastore source.with.dots
-grouped:   source + group + record   -> MySQL group_with_underscores_Record
-                                     -> Datastore group.with.dots_Record
-```
-
-For example, imagine source type `acme.tasks.Task`, stored record type
-`spine.server.entity.EntityRecord`, and
-`new StorageGroup("acme.tasks.Task")`. The default grouped names are
-`acme_tasks_Task_EntityRecord` in MySQL and
-`acme.tasks.Task_EntityRecord` in Datastore. Without the group, the source type
-alone produces `acme_tasks_Task` in MySQL and `acme.tasks.Task` in Datastore.
-The adapters keep the original Protobuf payload in each row; the name decides
-which table or kind contains that record family, not how the message is
-decoded.
-
-Here is the same idea in the Message Board example. Its
-`spine.examples.messageboard.BoardMessageView` Projection declares
-`board`, `author`, and `posted_at` with `(column) = true`; `username` and
-`text` are ordinary message fields. The current Entity record family is
-therefore stored by default in MySQL table
-`spine_examples_messageboard_BoardMessageView` or Datastore kind
-`spine.examples.messageboard.BoardMessageView`. The marked values are
-materialized beside the authoritative bytes, while `username` and `text` stay
-only in those bytes.
-
-When the Message Board web client asks for one board, its
-[Query source](../examples/message-board/web/src/board-view.ts) filters the
-`board` column and orders by `posted_at`. `QueryService` validates those
-declared column names, then reads the current `EntityRecord` family for the
-Projection. A legal provider plan is one the provider can execute while
-preserving the requested filter, ordering, and limit semantics. Providers push
-down legal filters and sorts: MySQL uses parameterized predicates, while
-Datastore may perform bounded reconciliation when it cannot execute a whole
-plan. This describes the storage/query path; it does not mean that the Message
-Board example configures MySQL.
-
-Use a factory mapping when an application needs a shorter or existing physical
-name. MySQL has separate registrations:
-`setTableName(TaskStateSchema, "tasks")` names the ungrouped current Entity
-family by its source state type, while
-`setTableName(TaskStateSchema, EntityRecordSchema, "task_history")` names its
-grouped state-history family. Datastore's
-`organizeRecords(recordType, { kind: "Tasks" })`
-is a record-only fallback; its three-argument source/record registration is
-also used by a default Entity history when that history group has the same name
-as the source. It therefore cannot rename only current Entity records while
-leaving default history kinds unchanged. Use `useEntityStorage(...)` when an
-application needs a distinct coherent Entity layout. Set mappings while
-building the factory, before creating storage handles. Changing a table or kind
-name does not change the stored Protobuf record.
-
-`RecordSpec` can also declare `RecordColumn` values. On every write, providers
-materialize those named values beside the authoritative Protobuf bytes. A
-`RecordQuery` filters with `{ filters: [{ column: "state", value: "OPEN" }] }`
-and sorts with `{ sort: [{ field: "state", direction: "asc" }] }`. In other
-words, declare a column for a value that you plan to look up or order by; do
-not try to filter an undeclared payload path. Entity `(column)` options follow
-the same idea: generated Entity columns become materialized storage values for
-their supported query filters and sorts.
-
-`@spine-event-engine/storage-datastore` is an optional implementation of the public
-`@spine-event-engine/storage` port. It uses the official Google Cloud Datastore client
-against Google Cloud Datastore or Firestore in Datastore mode; it does not use
-Firestore Native APIs. The adapter belongs at server/context composition. Keep
-domain handlers, aggregates, process managers, and projections dependent on
-the provider-neutral `StorageFactory` boundary.
-
-The package is a private workspace package in this repository, not a registry
-installation target. Build the workspace first, then use the current package
-roots in a workspace application:
-
-```bash
-pnpm install
-pnpm typecheck:build
-```
-
-### Configure the factory and credentials
-
-Inject a configured Google client when the application creates and manages it.
-This is appropriate when you need explicit project, emulator,
-credential, or transport configuration. The factory and storage handles never
-invoke teardown or close on an injected client; the caller retains any
-applicable client or resource lifecycle during shutdown.
-
-```ts
-import { Datastore } from "@google-cloud/datastore";
-import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-
-const client = new Datastore({ projectId: "orders-development" });
-const storageFactory = DatastoreStorageFactory.newBuilder().setClient(client).build();
-```
-
-The builder requires a client supplied by the caller and makes no network request.
-Application Default Credentials are supported only to the extent supported by
-the Google client. Pass `credentials` or `keyFilename` to the `Datastore`
-constructor when that is the selected deployment configuration. Never log
-credentials, private keys, or stored payload bytes. Provider failures cross a
-short, sanitized adapter error boundary; do not treat that redaction as a
-complete application logging policy.
-
-Compose the factory through `withStorageFactory()` or an environment, not in a
-handler. The complete runnable repository example is
-[orders](../examples/orders/README.md); it keeps domain topology
-provider-neutral and introduces the adapter only at composition. Do not call
-storage-provider APIs from a domain handler.
-
-### Tenant slices, IDs, records, and indexes
-
-For a multitenant `StorageContext`, a complete generated `TenantId` selects the
-Datastore native namespace. The safe default supports Spine JVM's reversible
-`Dexample.org` domain form and `Vtenant-a` plain-value form. JVM's email form
-changes `@` to `-at-`, so different emails can collide. Spine TS rejects that
-unsafe default. Applications using email tenant IDs must configure the same
-injective, reversible namespace converter in both TS and JVM. Empty,
-non-round-tripping, and colliding mappings fail before provider work. A
-single-tenant context preserves any default namespace configured on the Google
-client. The Bounded Context name is diagnostic only; it never changes a
-namespace, kind, key, transaction, or query.
-
-Each record family has a separate Datastore kind. By default, an ungrouped family
-uses the source Proto type name. A grouped family, such as retained Entity
-history, uses the storage-group name followed by the short stored-record type.
-Applications can select another kind with `organizeRecords(...)` before
-building the factory.
-
-The two-argument `organizeRecords(recordType, { kind })` registration is a
-record-only fallback. The three-argument source/record registration also
-matches default Entity history when the history group equals the source type,
-so it cannot give current records a kind while retaining default history kinds.
-When Entity current and history families need distinct custom layouts, provide
-one coherent `useEntityStorage(...)` implementation instead. Use the
-application's generated schemas; this guide does not invent a package import
-that cannot compile in the repository.
-
-Each stored entity contains the deterministic Protobuf `bytes` and the record's
-declared indexed columns. Current Entity rows also materialize the generated
-`EntityRecord` lifecycle/version columns: `archived`, `deleted`, and `version`.
-These are domain Entity facts, not a provider revision. Its Datastore key
-contains only the resolved kind and mapped record ID. Message-valued IDs use
-compact Proto JSON by default; string, int32, and int64 IDs use their direct
-text form. IDs are not copied into another property, and the adapter stores no
-`_scope`, storage revision, schema fingerprint, or layout metadata. Use a clean
-namespace or let the application perform an offline migration from an older
-experimental layout.
-
-Before the upgraded application can use an existing Datastore project, stop
-its writers and inspect every namespace for the retired layout:
-
-```bash
-pnpm --dir packages/storage-datastore inventory:legacy -- --project my-project
-```
-
-The command exits unsuccessfully if discovery is incomplete or it finds an old
-`_scope` property or scope-derived key. Migrate those records offline into the
-direct kind/key layout, resolve conflicts explicitly, and run the inventory
-again. Do not start old and new binaries against the same data.
-
-Declared columns follow Spine JVM mapping. Strings and booleans stay native;
-integer types use Datastore integers; float/double use Datastore doubles; bytes
-use blobs; enums use their numeric value; Timestamp uses a native timestamp;
-Version uses its number; ordinary message values use compact Proto JSON; and
-null stays null. A registered custom message `Stringifier` replaces compact
-Proto JSON symmetrically for writes and queries. Configure the application type
-registry when default Proto JSON must expand `Any` values.
-
-For a production application, create a `StringifierRegistry`, call
-`setTypeRegistry()` with the generated application `TypeRegistry`, and pass it
-to `DatastoreStorageFactoryBuilder.setStringifierRegistry()`. This is required
-when framework record columns contain an `Any` carrying an application ID. See
-the runnable [Message Board deployment](../examples/message-board/app/src/deployment-config.ts).
-
-For example, a `BoardId board = 2 [(column) = true]` field holding
-`{"value":"board-7"}` is stored as the `board` property text
-`{"value":"board-7"}`. A later Query for that generated `BoardId` is converted
-with the same stringifier and pushed down as equality on the `board` property.
-Datastore uses its property index to find matching keys, and Spine decodes the
-authoritative `bytes` payloads. Define only the columns your queries need and
-deploy composite indexes for each production filter-and-sort combination.
-
-### Queries have pushdown and a finite reconciliation bound
-
-`RecordQuery` ID constraints, provider-legal declared-column filters, and
-ordering are pushed to Datastore. Public offsets and mixed limits are applied
-locally after that provider row query. The adapter adds a stable key
-tie-breaker when Datastore permits it. A query shape that Datastore cannot execute in full
-uses finite reconciliation: it fetches at most `1,001` rows, then applies
-the shared query semantics locally. The extra row is a sentinel. If it is
-returned, `DatastoreQueryLimitError(1_000)` is thrown before any partial result
-can escape.
-
-The `1,000`-row reconciliation bound is fixed. There is no unlimited setting and no
-Datastore-specific public cursor API. Keep provider filters selective and
-create the composite indexes required by the application's filter-and-order
-combinations.
-
-### Writes, batches, compare-and-set, and closure
-
-Normal `write()` replaces one record. `writeAll()` materializes all records
-before persistence and sends them in order in groups of at most 500 mutations.
-It is not an all-or-nothing multi-group transaction: if a later group fails,
-earlier groups can already be stored, and the application must use an explicit
-recovery strategy appropriate to its workflow.
-
-`compareAndSet(id, expected, next)` is transactional for one storage slot
-across independently opened handles sharing the backing store. It returns
-`false` when the current payload does not match `expected`; `next: undefined`
-performs a conditional delete.
-
-Retriable Datastore transaction conflicts (`ABORTED`, code 10) receive at most
-three total attempts. Other failures are not retried. This is a single-slot
-primitive, not a general public transaction API.
-
-Closing a `StorageFactory` prevents new storage creation; it does not close
-existing storage handles. Closing a storage handle prevents future operations
-on that handle, while independently opened handles remain separately closeable.
-Neither operation invokes teardown or close on the injected Google client.
-Arrange application shutdown so servers and contexts finish closing
-before the caller tears down any shared client resource.
-
-### Entity-history provider seam
-
-`createEntityStorage()` is a framework/provider seam, not an application-facing
-history API. Its handle groups current records, retained state history,
-diagnostic event history, and Entity commits for one state type. Current state
-uses `EntityRecord`; retained states use `EntityStateKey` and `EntityRecord`;
-diagnostic history and the Bounded Context Event Store use generated `Event`
-records in separate families. Disabled histories open no family and issue no
-request.
-
-A repository commit preflights every record, reads the required keys, and then
-writes current state, enabled histories, and Event Store events in one
-Datastore transaction. It accepts at most 25 entity groups, 500 mutations, and
-a conservative payload below Datastore's 10 MiB transaction limit. A failure
-rolls back the whole unit. An identical retry after an uncertain response
-converges without a receipt or marker; a different immutable record at the same
-identity fails.
-
-History reads use explicit value-plus-physical-key finite pages. Trimming or
-truncating a long history can require several bounded delete chunks, so earlier
-completed chunks remain durable if a later chunk fails. Retrying the same
-maintenance operation is safe; appends newer than the page continuation are
-not deleted, while deliberately backdated concurrent appends are handled by a
-later maintenance run. The application must deploy any composite indexes
-required by its actual queries; the adapter does not create indexes
-automatically.
-
-### Emulator-first verification and limited cloud smoke
-
-Use the emulator for adapter development. Start Firestore in Datastore mode,
-then point the official client at it:
-
-```sh
-gcloud emulators firestore start --database-mode=datastore-mode --host-port=127.0.0.1:8081
-DATASTORE_EMULATOR_HOST=127.0.0.1:8081 \
-  DATASTORE_PROJECT_ID=orders-emulator \
-  pnpm --filter @spine-event-engine/storage-datastore test:emulator
-```
-
-The adapter's emulator suite uses unique kinds and removes only the data it created;
-it does not reset a shared emulator. The package's ordinary tests use an
-injected narrow client fake, so emulator tests are opt-in. For a deliberately
-credential-gated cloud smoke check, select a disposable configured project:
-
-```sh
-DATASTORE_CLOUD_TEST=1 DATASTORE_PROJECT_ID=orders-smoke \
-  pnpm --filter @spine-event-engine/storage-datastore test:cloud
-```
-
-The smoke test creates one unique kind and removes its record in `finally`.
-It is evidence for that credential/project combination only. Emulator and cloud
-smoke execution do not prove production composite-index deployment, all
-transaction limits, all cloud consistency behavior, resilience under provider
-outages, or a Firestore Native integration. See the
-[`@spine-event-engine/storage-datastore` README](../packages/storage-datastore/README.md)
-for the adapter contract and its current verification commands.
-
-## 13. Develop with MySQL RDBMS storage
-
-`@spine-event-engine/storage-rdbms` is the workspace's MySQL-first durable
-`StorageFactory` adapter (tested with MySQL 8.4.10/mysql2 3.23.1). PostgreSQL
-is not supported.
-
-### Configuration and TLS
-
-The URL names a MySQL database and rejects unsupported URL options. The public
-options are `url`, `connectionLimit`, `connectTimeoutMs`, and TLS `ca`, `cert`,
-`key`, and `rejectUnauthorized`. Create the pool through the factory and always close it:
-
-```ts
-import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
-
-const url = process.env.MYSQL_URL;
-if (url === undefined || url.trim().length === 0) throw new Error("MYSQL_URL is required.");
-const factory = await MysqlStorageFactory.newBuilder()
-  .setOptions({
-    url,
-    connectionLimit: 8,
-    connectTimeoutMs: 5_000,
-    tls: { rejectUnauthorized: true },
-  })
-  .build();
-try {
-  // Supply factory to the provider-neutral context composition below.
-} finally {
-  factory.close();
-}
-```
-
-It is composed through the provider-neutral factory/`ServerEnvironment` seam,
-not mysql2. A single-tenant factory uses one database. For multitenancy, call
-`setTenantOptions()` with one complete generated `TenantId` and one different
-database URL per tenant. Spine selects that tenant's pool before it opens a
-table, runs a query, starts a transaction, or takes a lock. The Bounded Context
-name helps diagnostics, but it never partitions stored data. Each record family
-lazily creates and verifies a private table on first use. No shared table
-or compatibility fingerprint is stored.
-The account therefore always needs that DDL permission plus normal DML
-privileges. Use a dedicated database/account.
-
-InnoDB makes `writeAll` and payload CAS transactional. MyISAM and Aria use
-deterministic ordered writes and keyed serialization instead; a failed batch
-does not roll back earlier rows. IDs are declared as `string`, `int32`, `int64`,
-or a generated message type. Primitive IDs use native MySQL values; message IDs
-use compact Proto JSON unless the application supplies a reversible
-stringifier. Each lazy family table has `ID`, serialized `bytes`, framework
-record columns, and only the Proto fields explicitly marked `(column)`, with
-primary key `(ID)`. Current Entity tables include `archived`, `deleted`, and `version` from
-the generated `EntityRecord`; that `version` is the Entity version, not a
-provider revision. There is no context, tenant, or storage-revision column.
-Existing layouts are inspected, never migrated; the adapter creates no foreign
-keys or user-column indexes.
-Provider errors are sanitized; `factory.close()` returns `void` and starts pool
-draining. Accounts need table creation, metadata reads, and ordinary DML
-permissions.
-
-One query accepts at most 256 `ids`, 32 filters, 64 values per filter, eight
-sort fields, and 2,048 total bound values. The adapter rejects these fixed,
-non-configurable structure limits before it acquires a pool connection.
-
-For example, this state declaration:
-
-```proto
-package spine.examples.messageboard;
-
-message MessageView {
-  MessageId id = 1 [(required) = true, (set_once) = true];
-  BoardId board = 2 [(column) = true];
-  UserId author = 3 [(column) = true];
-  string text = 4;
-}
-```
-
-produces a current table named like
-`spine_examples_messageboard_MessageView`. It has an `ID VARCHAR(512)` primary
-key, authoritative `bytes BLOB`, Entity `archived`/`deleted`/`version` columns,
-and `board`/`author` text columns. The three Entity columns are non-null and
-default to `false`, `false`, and `0`. It has no `text` column because that field
-is not marked `(column)`: ordinary Proto fields stay only in the authoritative
-`bytes` record. A Query for `board == BoardId("board-7")` stringifies the
-generated `BoardId` exactly as the write did and binds
-`{"value":"board-7"}` to parameterized `WHERE board = ?` SQL. MySQL selects
-matching rows; Spine then decodes the complete state from `bytes`. The adapter
-does not create an index for `board`; the application must add one when needed.
-
-### Composition, tenancy, schema, and privileges
-
-The domain stays provider-neutral. Supply the factory at context/environment
-assembly, never from a handler:
-
-```ts
 import { BoundedContext } from "@spine-event-engine/server";
-import type { StorageFactory } from "@spine-event-engine/storage";
 
-function orders(storage: StorageFactory) {
-  return BoundedContext.singleTenant("Orders").withStorageFactory(storage);
+const box = await BlackBox.from(BoundedContext.singleTenant("MessageBoard"));
+try {
+  const guest = box.asGuest();
+  void guest;
+} finally {
+  await box.close();
 }
 ```
 
-`ServerEnvironment` can supply this factory to server/context assembly. A
-single-tenant factory uses its one configured database. A multitenant factory
-requires a complete generated `TenantId` and selects the database configured
-for that exact tenant. The Bounded Context name is diagnostic only; it never
-changes the database, table, row key, lock, or query. Startup creates or verifies
-each record-family table lazily and fails closed on incompatible metadata; it
-has no migrations or automatic foreign keys/indexes. A dedicated account needs
-CREATE TABLE, information-schema reads, and ordinary DML.
+Test an immediate command result directly. Use bounded polling only for a
+Projection or other result that becomes visible later. Browser, cross-process
+delivery, authentication infrastructure, and durable-provider behavior need
+their own focused tests.
 
-Before the upgraded application can use existing MySQL databases, stop their
-writers and inspect every tenant database for the retired layout:
+Continue with the [testing reference](../packages/testing/REFERENCE.md) for
+the complete BlackBox contract and limits.
 
-```bash
-pnpm --dir packages/storage-rdbms inventory:legacy -- \
-  --url mysql://user:password@host/tenant_a \
-  --url mysql://user:password@host/tenant_b
+## 8. Run and observe it
+
+Start a local Message Board server and UI in separate terminals after the
+workspace build:
+
+```sh
+pnpm --dir examples/message-board/app start
+pnpm --dir examples/message-board/web start
 ```
 
-The command exits unsuccessfully if a database cannot be inspected or it finds
-an old `_scope` column, `_revision` column, or scope-based primary key. Migrate
-those rows offline into the direct ID/bytes/declared-column tables, resolve
-conflicts explicitly, and run the inventory again. Do not start old and new
-binaries against the same data. Factory construction repeats the inspection for
-every configured database and closes all opened pools if any one target fails.
+Use the framework's configured LogLayer logger for operational context. Log
+records help diagnose lifecycle, warnings, and failures; they are not a durable
+record of a domain fact. Put business facts in events or storage, and keep
+secrets and credential values out of application logs.
 
-### Shared entity storage foundation
+Durable delivery stores pending and delivered Inbox rows. A shard lease prevents
+concurrent delivery, but a handler effect and the delivered transition are not
+one transaction. A lost acknowledgement can redeliver after restart, so make
+downstream effects idempotent. The framework does not add attempt history,
+quarantine records, scheduled retry policy, or exactly-once side effects.
 
-The storage package defines adapter-facing current-record and history
-contracts. `EntityRecord` carries the canonical entity ID, state, version, and
-lifecycle flags for Aggregates, Projections, and Process Managers. A provider
-resolves a record family from the source Proto type and an optional external
-`StorageGroup`, inside the already selected tenant boundary. Bounded Context
-names do not participate in this physical identity. The provider resolves one
-current record family before rows are read or written.
+Continue with the [server reference](../packages/server/REFERENCE.md) for
+framework and server contracts.
 
-In-memory factories are isolated by default. To deliberately share compatible
-record or adapter entity scopes across independently constructed factories,
-pass the same root-exported `InMemoryStorageBackend` token; a mismatched
-configuration still fails before access, and closing one factory leaves the
-backend available to its siblings.
+## 9. Package and deploy it
 
-State and diagnostic event history are asynchronous immutable journals. They
-read newest first; `startingFromVersion` is an exclusive read continuation
-boundary, not an append constraint. State history has `stateAt`, per-entity
-`trim`, and time-based `truncate`; event history has time-based `truncate`.
-Retries must be byte-for-byte equivalent for the existing identity or they fail
-rather than rewriting history. Retention work is bounded, resumable, and
-close-aware. In the MySQL adapter, trim serializes with same-entity appends by
-using a database-specific `GET_LOCK` on one connection in the supported
-single-server topology. MySQL truncate captures its monotonic `write_order`
-cutoff before it starts deleting 128-row chunks, so it does not chase rows
-appended after that capture—even if their timestamp is eligible. Each truncate chunk is
-transactional, but a failed/unknown commit or partial invocation requires the
-caller to retry; completed chunks remain durable. Current-record and history
-operations are not one cross-storage transaction.
+A combined deployment can keep application and Gateway concerns close together.
+A distributed deployment runs identical application nodes, a single Gateway,
+application-selected storage, and the appropriate delivery component. Start
+with the local Distributed Message Board topology before taking on cloud
+operations.
 
-This is a provider/repository storage seam, not a client API. Repository configuration, protected entity
-history methods, and repository execution now use this provider seam. State
-history is opt-in; Aggregate diagnostic event history is always retained, while
-Process Manager event history is opt-in and Projections have no event-history
-API. These are repository-bound diagnostic methods, not remote APIs. The
-diagnostic event journal is not used to reconstruct Aggregate state; loading
-continues to use the current entity record.
-
-#### Repository history and duplicate-dispatch configuration
-
-Configure history when the repository is constructed. `stateHistory` is off by
-default. Aggregate diagnostic events are retained unconditionally; Process
-Manager diagnostic events require `processManagerEventHistory: true`. A
-Projection has no event-history methods.
-
-```ts
-const orders = new Repository({
-  entityType: Order,
-  schema: OrderStateSchema,
-  handlers: orderHandlers,
-  stateHistory: true,
-  doubleDispatchGuard: { depth: 100 },
-});
+```mermaid
+flowchart LR
+  Edge[Operator TLS and authentication edge] --> Gateway[One Gateway]
+  Gateway --> Nodes[Ready application nodes]
+  Nodes --> Storage[(Application storage)]
+  Nodes --> Delivery[Delivery component]
 ```
 
-Inside an entity handler, the repository binding provides `stateAt(time)` and
-`stateHistoryBackward(depth)`. Aggregates and enabled Process Managers also
-provide `eventHistoryBackward(depth)`, `eventHistoryContains(depth, predicate)`,
-and the protected maintenance accessors `stateHistoryStorage()` and
-`eventStorage()`. Depth is a positive safe integer. Results are fresh frozen
-snapshots; the continuation cache adds only complete version groups, uses an
-exclusive version continuation, and clears on a discontinuous append. A short
-provider read marks the retained history exhausted.
+The supported GKE and GCE templates use one standalone Gateway. GKE discovers
+ready application Pods through headless-Service DNS; GCE uses a durable leased
+node registry. The Gateway is not a Multiple-Gateway topology. Cloud Run is
+outside the initial offering.
 
-`repository.setStateHistoryEnabled(boolean)` changes future append attempts.
-It exists for JVM parity and is not intended for routine request-time use.
-Writes are deliberately non-atomic. Aggregate stores write current state, then
-optional state history, then their diagnostic journal, framework event store,
-and asynchronous delivery. Process Managers write their Stand current state,
-then optional state history and diagnostic journal before follow-up delivery;
-Projections have no diagnostic event journal. Rejection events are excluded.
-A failure stops later writes, so callers must decide how to repair or retry a
-partial sequence.
+The simple Delivery server is in-memory, single-replica, and not highly
+available. Choose an operationally suitable delivery design before depending
+on it for a critical workload. Shut down orderly: stop new listener work, let
+the application release its resources, and use the template's rollout or
+replacement steps rather than terminating a process without its lifecycle
+close path.
 
-The optional guard is unavailable to Projections and Process Managers require
-`processManagerEventHistory: true`. It checks retained diagnostic events before
-dispatch and keeps a per-entity in-process completion window (100 by default).
-It is best effort: separate machines do not coordinate, failures before journal
-append remain retryable, and a later failure after journal append can make a
-retry appear duplicate. Do not use it as an exactly-once or cross-machine
-delivery protocol.
+Continue with the [deployment reference](../packages/deployment/REFERENCE.md)
+for the common packaging and discovery contract.
 
-### IDs, columns, transactions, and errors
+## 10. Continue from examples
 
-Only materialized column names and `id` are queryable. A name not materialized
-for a record matches no rows. On InnoDB, `writeAll` uses one transaction. On
-MyISAM and Aria, it writes in deterministic input order and an identical retry
-can complete a partial prefix. Later duplicate slots win; CAS compares
-deterministic Protobuf payload bytes and addresses the supplied slot even when
-the body has another logical ID.
+Use the examples to choose the next narrow learning step:
 
-```ts
-import { create } from "@bufbuild/protobuf";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
+| Example                                                                      | Best next question                                                       |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| [Message Board](../examples/message-board/README.md)                         | How do a browser, Aggregate, and Projection work together?               |
+| [Distributed Message Board](../examples/distributed-message-board/README.md) | How do two equal nodes, delivery, and one Gateway run locally?           |
+| [To-Do](../examples/todo/README.md)                                          | What is the smallest server-side command/query application?              |
+| [Orders](../examples/orders/README.md)                                       | How do provider-oriented records and durable storage fit an application? |
+| [Projects](../examples/projects/README.md)                                   | How do queries and data-oriented views shape a larger model?             |
 
-const spec = new RecordSpec({
-  sourceType: StringValueSchema,
-  recordType: StringValueSchema,
-  idKind: "string",
-  extractId: (record) => record.value.slice(0, 1),
-  columns: [new RecordColumn("state", (record) => record.value, "string")],
-});
-const records = factory.createRecordStorage({ name: "Orders", multitenant: false }, spec);
-await records.write(create(StringValueSchema, { value: "a-open" }));
-await records.writeAll([create(StringValueSchema, { value: "a-paid" })]);
-await records.compareAndSet("a", create(StringValueSchema, { value: "a-paid" }), undefined);
-```
+Keep the loop small: model one command and event, implement one visible
+behavior, test it, observe it, and only then add another boundary. The detailed
+references remain the source for limits and operational contracts; the examples
+show how those contracts feel in a running application.
 
-```ts
-await records.queryEntries({
-  filters: [{ column: "state", value: ["a-open", "a-paid"] }],
-  sort: [{ field: "state", direction: "asc" }],
-  offset: 0,
-  limit: 20,
-  after: { values: [{ field: "state", value: "a-open" }], id: "a" },
-});
-```
-
-Filters are ANDed; value arrays are OR/IN. `ids` and returned entries use
-actual slots. Missing columns match no rows. Keysets require the complete sort
-tuple; unspecified ordering uses a binary slot tie-break. MySQL can filesort
-some orderings and large offsets are costly.
-
-`MysqlStorageConfigurationError`, `MysqlStorageConnectionError`,
-`MysqlStorageSchemaError`, `MysqlStorageDataError`, and
-`MysqlStorageOperationError` are sanitized public error classes. Query LIMIT
-uses mysql2's parameterized `query()` route because server-prepared JS-number
-LIMIT binds are rejected; it never interpolates values. `factory.close()` is a
-void, idempotent signal that starts draining the pool; it does not return a
-promise for observing pool-close failures.
-
-### Lifecycle, verification, and future engines
-
-Run the opt-in disposable-database proof with
-`SPINE_TS_MYSQL_URL='mysql://user:password@127.0.0.1:3306/spine_test' pnpm --filter @spine-event-engine/storage-rdbms test:mysql`.
-It creates and removes only the adapter tables; do not log credentials.
-
-## Further reading
-
-- [Root README](../README.md) for workspace commands and package boundaries.
-- [Server package README](../packages/server/README.md) for supported public
-  server APIs.
-- [Testing package README](../packages/testing/README.md) for fixture details.
-- [Transport package README](../packages/transport/README.md) for local IPC
-  constraints.
-- [Datastore adapter README](../packages/storage-datastore/README.md) for
-  provider configuration, query bounds, and emulator/cloud test limits.
-- [MySQL RDBMS adapter README](../packages/storage-rdbms/README.md) for the
-  durable adapter's exact limits, lifecycle, and local MySQL proof.
-- [Datastore orders example](../examples/orders/README.md) for a
-  provider-neutral application composition and loopback load specimen.
-- [To-do application guide](../examples/todo/USER_GUIDE.md) for the runnable
-  local application workflow and its distinct topology limits.
-- [API documentation](api/README.md) for public API semantics.
-- [Browser client, authentication, and gateway extension guide](BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
-  for browser protocol selection, sessions, provider flows, gateway policy,
-  subscription recovery, Envoy, and browser-client limits.
+Continue with the [Message Board example](../examples/message-board/README.md)
+for the primary runnable flow.
