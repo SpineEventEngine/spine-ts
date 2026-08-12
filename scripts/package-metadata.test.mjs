@@ -363,8 +363,14 @@ describe("package metadata", () => {
     expect(release).not.toContain("pnpm verify:generated");
     expect(rootPackage.scripts["docs:api:check"]).toBe("node scripts/check-api-docs.mjs");
     expect(rootPackage.scripts["docs:audience:check"]).toBe("node scripts/check-doc-audience.mjs");
+    expect(rootPackage.scripts["docs:snippets:check"]).toBe(
+      "pnpm typecheck:build && pnpm docs:snippets:check:generated",
+    );
+    expect(rootPackage.scripts["docs:snippets:check:generated"]).toBe(
+      "node docs/check-typescript-snippets.mjs",
+    );
     expect(rootPackage.scripts["docs:check:generated"]).toBe(
-      "pnpm docs:api:check && pnpm docs:audience:check",
+      "pnpm docs:api:check && pnpm docs:audience:check && pnpm docs:snippets:check:generated",
     );
     expect(rootPackage.scripts["proto:lint:generated"]).toBe("pnpm exec buf lint");
     expect(rootPackage.scripts["proto:check-generated:current"]).toBe(
