@@ -109,11 +109,8 @@ function readWorkspacePackages(repoRoot) {
   return packages.sort((left, right) => left.path.localeCompare(right.path));
 }
 
-function hasAgentReferenceLink(readme) {
-  return [...readme.matchAll(/\[([^\]]+)\]\(REFERENCE\.md\)/gu)].some((match) => {
-    const label = match[1] ?? "";
-    return /agent/iu.test(label) && /(?:documentation|reference)/iu.test(label);
-  });
+function hasReferenceLink(readme) {
+  return /\[[^\]]+\]\(REFERENCE\.md\)/u.test(readme);
 }
 
 function versionProblems(repoRoot) {
@@ -291,7 +288,7 @@ describe("package metadata", () => {
     expect(lockfile).not.toContain("  examples/project-management:\n");
   });
 
-  it("ships human and agent documentation for the completed package documentation group", () => {
+  it("ships reader and reference documentation for the completed package documentation group", () => {
     const documentedPackages = productionPackagePaths(repoRoot);
 
     expect(documentationProblems(repoRoot, documentedPackages)).toEqual([]);
@@ -302,7 +299,7 @@ describe("package metadata", () => {
       expect(existsSync(join(repoRoot, packagePath, "README.md"))).toBe(true);
       expect(existsSync(join(repoRoot, packagePath, "REFERENCE.md"))).toBe(true);
       const readme = readFileSync(join(repoRoot, packagePath, "README.md"), "utf8");
-      expect(hasAgentReferenceLink(readme), packagePath).toBe(true);
+      expect(hasReferenceLink(readme), packagePath).toBe(true);
     }
   });
 
@@ -319,13 +316,10 @@ describe("package metadata", () => {
     });
   });
 
-  it("rejects a neutral reference link accompanied by unrelated agent prose", () => {
-    const readme = [
-      "Read [REFERENCE.md](REFERENCE.md) for details.",
-      "Agents may use this package.",
-    ].join("\n");
+  it("rejects prose that names the reference without linking to it", () => {
+    const readme = "Read REFERENCE.md for details.";
 
-    expect(hasAgentReferenceLink(readme)).toBe(false);
+    expect(hasReferenceLink(readme)).toBe(false);
   });
 
   it("keeps standalone commands self-sufficient while task verification classifies generated work", () => {

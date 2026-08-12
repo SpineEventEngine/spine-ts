@@ -20,6 +20,17 @@ Wave 10 result, not individual historical checkpoints.
 One complete finding batch is returned before a consolidated correction. Only
 substantively affected concerns receive targeted re-review.
 
+## Release-profile disposition
+
+The single final release profile passed all generated/mechanical gates and
+3,908 tests, with one stale metadata assertion failing. The assertion required
+package README reference-link labels to say “agent”, although Wave 10 approved
+reader-facing labels and the linked `REFERENCE.md` artifact is present. The
+correction checks the durable contract—the README links to its shipped
+`REFERENCE.md`—without prescribing audience wording. This deterministic
+test-only correction does not reopen runtime, API, reliability, or security
+review lanes; style/maintainability receives a narrow confirmation.
+
 ## Accepted Review Batch
 
 - Documentation: accepted the five-location semantic-tag correction. Reader
