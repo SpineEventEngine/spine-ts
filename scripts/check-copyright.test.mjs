@@ -204,6 +204,14 @@ describe("copyright checker", () => {
     ).toEqual([`${tsx}: malformed CodeMatters header`]);
   });
 
+  it("reports an altered approved-header body as malformed rather than stale-year", () => {
+    expect(
+      checkCopyright(
+        options([path], { [path]: `${COPYRIGHT_HEADER.replace("AS IS", "AS-IS")}${body}` }, { year: 2027 }),
+      ),
+    ).toEqual([`${path}: malformed CodeMatters header`]);
+  });
+
   it("combines committed, staged, and unstaged rename/deletion Git inputs", () => {
     const old = `${COPYRIGHT_HEADER}${body}`;
     const responses = new Map([

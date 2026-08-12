@@ -15,30 +15,15 @@ import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { copyrightHeader, recognizedCopyrightHeader } from "./copyright-header.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const manifestPath = "packages/proto/proto/spine-sources.json";
 
-export const COPYRIGHT_HEADER = `/*
- * Copyright 2026, CodeMatters. All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
- * in compliance with the License. You may obtain a copy of the License at
- *
- * https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software distributed under the License
- * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
- * or implied. See the License for the specific language governing permissions and limitations under
- * the License.
- */
-`;
-
-const codeMattersHeader =
-  /\/\*\n \* Copyright \d{4}, CodeMatters\. All rights reserved\.\n(?:.|\n)*? \*\/\n/u;
+export const COPYRIGHT_HEADER = copyrightHeader(2026);
 
 function expectedHeader(year) {
-  return COPYRIGHT_HEADER.replace("Copyright 2026", `Copyright ${year}`);
+  return copyrightHeader(year);
 }
 
 function placement(content) {
@@ -52,7 +37,9 @@ function isEligible(path, excluded) {
 function normalizedContents(contents) {
   const at = placement(contents);
   const before = contents.slice(0, at);
-  return `${before}${contents.slice(at).replace(codeMattersHeader, "")}`;
+  const after = contents.slice(at);
+  const header = recognizedCopyrightHeader(after);
+  return `${before}${header === undefined ? after : after.slice(header.length)}`;
 }
 
 function contentChanged(path, contents, options) {
@@ -105,20 +92,18 @@ export function checkCopyright({
     if (!isEligible(path, excluded)) continue;
     const at = placement(content);
     const actual = content.slice(at);
-    const match = actual.match(codeMattersHeader);
-    if (match === null) {
+    const match = recognizedCopyrightHeader(actual);
+    if (match === undefined) {
       problems.push(
-        content.includes("CodeMatters")
-          ? `${path}: malformed CodeMatters header`
-          : `${path}: missing CodeMatters header`,
+        recognizedCopyrightHeader(actual.slice(Math.max(0, actual.indexOf("/*")))) !== undefined
+          ? `${path}: misplaced CodeMatters header`
+          : content.includes("CodeMatters")
+            ? `${path}: malformed CodeMatters header`
+            : `${path}: missing CodeMatters header`,
       );
       continue;
     }
-    if (match.index !== 0) {
-      problems.push(`${path}: misplaced CodeMatters header`);
-      continue;
-    }
-    if (year === 2026 && match[0] !== COPYRIGHT_HEADER) {
+    if (year === 2026 && match !== COPYRIGHT_HEADER) {
       problems.push(`${path}: stale-year CodeMatters header`);
       continue;
     }
@@ -132,7 +117,7 @@ export function checkCopyright({
       }
       if (change.problem !== undefined) {
         problems.push(`${path}: ${change.problem}`);
-      } else if (change.changed && match[0] !== expectedHeader(year)) {
+      } else if (change.changed && match !== expectedHeader(year)) {
         problems.push(`${path}: stale-year CodeMatters header`);
       }
     }

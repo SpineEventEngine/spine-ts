@@ -56,8 +56,8 @@ function workflowClaimOperations(claims, liveness) {
 
 describe("MessageBoard registry copyright", () => {
   it("adds the approved header to the generated tracked registry", () => {
-    expect(withCopyrightHeader("export const registry = true;\n")).toMatch(
-      /^\/\*\n \* Copyright 2026, CodeMatters\. All rights reserved\./u,
+    expect(withCopyrightHeader("export const registry = true;\n", 2027)).toBe(
+      "/*\n * Copyright 2027, CodeMatters. All rights reserved.\n *\n * Licensed under the Apache License, Version 2.0 (the \"License\"); you may not use this file except\n * in compliance with the License. You may obtain a copy of the License at\n *\n * https://www.apache.org/licenses/LICENSE-2.0\n *\n * Unless required by applicable law or agreed to in writing, software distributed under the License\n * is distributed on an \"AS IS\" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express\n * or implied. See the License for the specific language governing permissions and limitations under\n * the License.\n */\nexport const registry = true;\n",
     );
   });
 });
