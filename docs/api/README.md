@@ -1,9 +1,10 @@
 # API Reference
 
-This is the detailed contract index for framework maintainers and coding
-agents. Application developers should begin with the
-[end-user guide](../USER_GUIDE.md) and individual [package guides](../../README.md).
-TypeDoc is the canonical declaration generator for this repository.
+This is the detailed public-API index for framework maintainers and coding
+agents. Application developers should begin with the [end-user guide](../USER_GUIDE.md)
+and individual [package guides](../../README.md). TypeDoc is the canonical
+declaration generator for this repository; this page explains how its entry
+points fit together and records cross-package API limits.
 
 ## 🧭 Start here
 
@@ -11,7 +12,24 @@ TypeDoc is the canonical declaration generator for this repository.
 - Connecting a client: [Node](../../packages/client-node/README.md) or
   [browser](../../packages/client-web/README.md)
 - Choosing storage: [`@spine-event-engine/storage`](../../packages/storage/README.md)
-- Agent-level package contracts: each package's `REFERENCE.md`
+- Package-level limits: each package's `REFERENCE.md`
+
+Use one detailed source for each subject rather than treating this page as a
+tutorial:
+
+| Need                                                     | Canonical detail                                                         |
+| -------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Runtime and Bounded Context boundaries                   | [Architecture notes](../architecture/README.md)                          |
+| Server assembly, handlers, routing, filters, and logging | [Server reference](../../packages/server/REFERENCE.md)                   |
+| Node client contract                                     | [Node client reference](../../packages/client-node/REFERENCE.md)         |
+| Browser client contract                                  | [Browser client reference](../../packages/client-web/REFERENCE.md)       |
+| React client contract                                    | [React client reference](../../packages/client-react/REFERENCE.md)       |
+| Storage, queries, provider layouts, and tenancy          | [Storage reference](../../packages/storage/REFERENCE.md)                 |
+| Remote delivery client and coordination contract         | [Delivery client reference](../../packages/delivery-client/REFERENCE.md) |
+| Local in-memory Delivery server limits and lifecycle     | [Delivery server reference](../../packages/delivery-server/REFERENCE.md) |
+| Common deployment and discovery contract                 | [Deployment reference](../../packages/deployment/REFERENCE.md)           |
+| GCE deployment operation                                 | [GCE deployment reference](../../packages/deployment-gce/REFERENCE.md)   |
+| GKE deployment operation                                 | [GKE deployment reference](../../packages/deployment-gke/REFERENCE.md)   |
 
 For the end-to-end browser/authentication extension contract, including the
 exact trust-boundary limitations that TypeDoc declarations cannot convey, see
@@ -42,6 +60,25 @@ The reference has 15 entry points, including `@spine-event-engine/client-web`,
 server core; constructing a replacement core intentionally loses its state.
 The delivery client facade provides curated delivery-server Inbox/Shard/Admin operations and remote
 delivery ports; generated delivery RPC clients remain internal.
+
+## Exact repository routing
+
+`CommandRouting`, `EventRouting`, and `StateUpdateRouting` are the TypeScript
+routing declarations. Each `route(schema, via)` registers one exact generated
+message or state schema. Use `replaceDefault(via)` only when the declaration's
+default route must be replaced; an exact route takes precedence. Route functions
+are deterministic and side-effect-free during admission, while durable replay
+uses the stored target rather than calculating it again.
+
+This is not Java semantic routing. TypeScript does not consume
+`(is).java_type` or `(every_is).java_type`, and it has no `@Route` decorator or
+`routeSemantic()` API. Frozen Proto options remain preserved wire definitions.
+One `@Where({ eventField, equals })` equality filter may be used after type
+routing on an event- or rejection-consuming `@Subscribe`, `@React`, or
+`@Command` handler. `eventField` and `equals` are required typed string
+literals; invalid or repeated declarations fail closed. It is not another
+routing mechanism. See the [server reference](../../packages/server/REFERENCE.md)
+for handler and default-route details.
 
 ## Browser client lifecycle contract
 
