@@ -34,7 +34,8 @@ export const COPYRIGHT_HEADER = `/*
  */
 `;
 
-const codeMattersHeader = /\/\*\n \* Copyright \d{4}, CodeMatters\. All rights reserved\.\n(?:.|\n)*? \*\/\n/u;
+const codeMattersHeader =
+  /\/\*\n \* Copyright \d{4}, CodeMatters\. All rights reserved\.\n(?:.|\n)*? \*\/\n/u;
 
 function expectedHeader(year) {
   return COPYRIGHT_HEADER.replace("Copyright 2026", `Copyright ${year}`);
@@ -56,24 +57,38 @@ function normalizedContents(contents) {
 
 function contentChanged(path, contents, options) {
   const base = options.baseContent?.(path);
-  if (base !== undefined) return { changed: normalizedContents(contents) !== normalizedContents(base) };
+  if (base !== undefined)
+    return { changed: normalizedContents(contents) !== normalizedContents(base) };
 
   const renamed = options.renamedFrom?.(path) ?? [];
   if (renamed.length === 1) {
     const renamedBase = options.baseContentAt?.(renamed[0]);
-    return { changed: renamedBase === undefined || normalizedContents(contents) !== normalizedContents(renamedBase) };
+    return {
+      changed:
+        renamedBase === undefined ||
+        normalizedContents(contents) !== normalizedContents(renamedBase),
+    };
   }
   if (renamed.length > 1) return { problem: "ambiguous header-normalized rename match" };
 
   const matches = (options.deletedBasePaths?.() ?? []).filter((candidate) => {
     const candidateBase = options.baseContentAt?.(candidate);
-    return candidateBase !== undefined && normalizedContents(contents) === normalizedContents(candidateBase);
+    return (
+      candidateBase !== undefined &&
+      normalizedContents(contents) === normalizedContents(candidateBase)
+    );
   });
   if (matches.length > 1) return { problem: "ambiguous header-normalized rename match" };
   return { changed: matches.length === 0 };
 }
 
-export function checkCopyright({ files, readFile, readManifest, year = new Date().getFullYear(), ...options }) {
+export function checkCopyright({
+  files,
+  readFile,
+  readManifest,
+  year = new Date().getFullYear(),
+  ...options
+}) {
   const manifest = readManifest();
   const excluded = new Set((manifest.sources ?? []).map((source) => source.localPath ?? source));
   const problems = [];
@@ -83,7 +98,8 @@ export function checkCopyright({ files, readFile, readManifest, year = new Date(
     const content = readFile(path);
     if (excluded.has(path)) {
       if (content.includes("CodeMatters")) problems.push(`${path}: forbidden CodeMatters header`);
-      else if (!/[Cc]opyright/u.test(content)) problems.push(`${path}: missing upstream copyright notice`);
+      else if (!/[Cc]opyright/u.test(content))
+        problems.push(`${path}: missing upstream copyright notice`);
       continue;
     }
     if (!isEligible(path, excluded)) continue;
@@ -174,7 +190,12 @@ export function gitComparison(runGit = git) {
     if (result.status === 128) return undefined;
     throw new Error("copyright base content lookup failed");
   };
-  return { baseContent: atBase, baseContentAt: atBase, renamedFrom: (path) => renames.get(path) ?? [], deletedBasePaths: () => [...deleted] };
+  return {
+    baseContent: atBase,
+    baseContentAt: atBase,
+    renamedFrom: (path) => renames.get(path) ?? [],
+    deletedBasePaths: () => [...deleted],
+  };
 }
 
 function git(args) {

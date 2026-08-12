@@ -179,9 +179,9 @@ describe("package metadata", () => {
     const frameworkPackages = productionPackagePaths(repoRoot);
 
     expect(frameworkPackages).toHaveLength(18);
-    expect(frameworkPackages.every((path) => readJson(`${path}/package.json`).license === "Apache-2.0")).toBe(
-      true,
-    );
+    expect(
+      frameworkPackages.every((path) => readJson(`${path}/package.json`).license === "Apache-2.0"),
+    ).toBe(true);
     expect(readJson("package.json").license).toBeUndefined();
     expect(
       readWorkspacePackages(repoRoot)

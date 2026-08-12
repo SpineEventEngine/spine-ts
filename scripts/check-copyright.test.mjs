@@ -84,18 +84,30 @@ describe("copyright checker", () => {
 
   it("requires the current year only for new or content-changed future files", () => {
     const old = `${COPYRIGHT_HEADER}${body}`;
-    expect(checkCopyright(options([path], { [path]: old }, { year: 2027, baseContent: () => old }))).toEqual([]);
     expect(
-      checkCopyright(options([path], { [path]: old }, { year: 2027, baseContent: () => undefined })),
-    ).toEqual([`${path}: stale-year CodeMatters header`]);
+      checkCopyright(options([path], { [path]: old }, { year: 2027, baseContent: () => old })),
+    ).toEqual([]);
     expect(
       checkCopyright(
-        options([path], { [path]: `${COPYRIGHT_HEADER}export const example = false;\n` }, { year: 2027, baseContent: () => old }),
+        options([path], { [path]: old }, { year: 2027, baseContent: () => undefined }),
       ),
     ).toEqual([`${path}: stale-year CodeMatters header`]);
     expect(
       checkCopyright(
-        options([path], { [path]: `${currentHeader(2027)}${body}` }, { year: 2027, baseContent: () => old }),
+        options(
+          [path],
+          { [path]: `${COPYRIGHT_HEADER}export const example = false;\n` },
+          { year: 2027, baseContent: () => old },
+        ),
+      ),
+    ).toEqual([`${path}: stale-year CodeMatters header`]);
+    expect(
+      checkCopyright(
+        options(
+          [path],
+          { [path]: `${currentHeader(2027)}${body}` },
+          { year: 2027, baseContent: () => old },
+        ),
       ),
     ).toEqual([]);
   });
@@ -103,16 +115,26 @@ describe("copyright checker", () => {
   it("does not advance the year for a header-only edit or a unique renamed match", () => {
     const old = `${COPYRIGHT_HEADER}${body}`;
     expect(
-      checkCopyright(options([path], { [path]: `${currentHeader(2027)}${body}` }, { year: 2027, baseContent: () => old })),
+      checkCopyright(
+        options(
+          [path],
+          { [path]: `${currentHeader(2027)}${body}` },
+          { year: 2027, baseContent: () => old },
+        ),
+      ),
     ).toEqual([]);
     expect(
       checkCopyright(
-        options(["packages/core/src/renamed.ts"], { "packages/core/src/renamed.ts": old }, {
-          year: 2027,
-          baseContent: () => undefined,
-          renamedFrom: () => [path],
-          baseContentAt: (oldPath) => (oldPath === path ? old : undefined),
-        }),
+        options(
+          ["packages/core/src/renamed.ts"],
+          { "packages/core/src/renamed.ts": old },
+          {
+            year: 2027,
+            baseContent: () => undefined,
+            renamedFrom: () => [path],
+            baseContentAt: (oldPath) => (oldPath === path ? old : undefined),
+          },
+        ),
       ),
     ).toEqual([]);
   });
@@ -120,24 +142,31 @@ describe("copyright checker", () => {
   it("uses the deleted-base fallback for an unstaged untracked rename and fails closed when ambiguous", () => {
     const old = `${COPYRIGHT_HEADER}${body}`;
     const renamed = "packages/core/src/renamed.ts";
-    const unique = options([renamed], { [renamed]: old }, {
-      year: 2027,
-      baseContent: () => undefined,
-      renamedFrom: () => [],
-      deletedBasePaths: () => [path],
-      baseContentAt: () => old,
-    });
+    const unique = options(
+      [renamed],
+      { [renamed]: old },
+      {
+        year: 2027,
+        baseContent: () => undefined,
+        renamedFrom: () => [],
+        deletedBasePaths: () => [path],
+        baseContentAt: () => old,
+      },
+    );
     expect(checkCopyright(unique)).toEqual([]);
-    expect(checkCopyright({ ...unique, deletedBasePaths: () => [path, "packages/core/src/copy.ts"] })).toEqual([
-      `${renamed}: ambiguous header-normalized rename match`,
-    ]);
+    expect(
+      checkCopyright({ ...unique, deletedBasePaths: () => [path, "packages/core/src/copy.ts"] }),
+    ).toEqual([`${renamed}: ambiguous header-normalized rename match`]);
   });
 
   it("sorts diagnostic classes and fails closed when Git enumeration fails", () => {
     const proto = "packages/proto/proto/upstream.proto";
     expect(
       checkCopyright({
-        ...options([path, proto], { [path]: `x${COPYRIGHT_HEADER}${body}`, [proto]: "syntax = \"proto3\";\n" }),
+        ...options([path, proto], {
+          [path]: `x${COPYRIGHT_HEADER}${body}`,
+          [proto]: 'syntax = "proto3";\n',
+        }),
         readManifest: () => ({ sources: [proto], ownedSources: [] }),
         year: 2026,
       }),
@@ -145,16 +174,34 @@ describe("copyright checker", () => {
       `${path}: misplaced CodeMatters header`,
       `${proto}: missing upstream copyright notice`,
     ]);
-    expect(() => gitFiles(() => ({ status: 1, stdout: "" }))).toThrow("copyright enumeration failed");
-    expect(() => gitComparison(() => ({ status: 1, stdout: "" }))).toThrow("copyright merge-base failed");
+    expect(() => gitFiles(() => ({ status: 1, stdout: "" }))).toThrow(
+      "copyright enumeration failed",
+    );
+    expect(() => gitComparison(() => ({ status: 1, stdout: "" }))).toThrow(
+      "copyright merge-base failed",
+    );
   });
 
   it("checks authored TSX files and distinguishes malformed CodeMatters notices", () => {
     const tsx = "packages/client-react/src/view.tsx";
-    expect(checkCopyright(options([tsx], { [tsx]: `${COPYRIGHT_HEADER}export const View = () => null;\n` }, { year: 2026 }))).toEqual([]);
-    expect(checkCopyright(options([tsx], { [tsx]: "/* Copyright 2026, CodeMatters. */\nexport {};\n" }, { year: 2026 }))).toEqual([
-      `${tsx}: malformed CodeMatters header`,
-    ]);
+    expect(
+      checkCopyright(
+        options(
+          [tsx],
+          { [tsx]: `${COPYRIGHT_HEADER}export const View = () => null;\n` },
+          { year: 2026 },
+        ),
+      ),
+    ).toEqual([]);
+    expect(
+      checkCopyright(
+        options(
+          [tsx],
+          { [tsx]: "/* Copyright 2026, CodeMatters. */\nexport {};\n" },
+          { year: 2026 },
+        ),
+      ),
+    ).toEqual([`${tsx}: malformed CodeMatters header`]);
   });
 
   it("combines committed, staged, and unstaged rename/deletion Git inputs", () => {
@@ -186,25 +233,36 @@ describe("copyright checker", () => {
     const old = `${COPYRIGHT_HEADER}${body}`;
     const comparison = gitComparison((args) => {
       if (args[0] === "merge-base") return { status: 0, stdout: "base\n" };
-      if (args.join(" ").includes("--name-status")) return { status: 0, stdout: "R100\told.ts\trenamed.ts\n" };
+      if (args.join(" ").includes("--name-status"))
+        return { status: 0, stdout: "R100\told.ts\trenamed.ts\n" };
       if (args.join(" ") === "show base:renamed.ts") return { status: 128, stdout: "" };
       if (args[0] === "show") return { status: 0, stdout: old };
       return { status: 0, stdout: "" };
     });
-    expect(checkCopyright({ ...options(["renamed.ts"], { "renamed.ts": old }, { year: 2027 }), ...comparison })).toEqual([]);
+    expect(
+      checkCopyright({
+        ...options(["renamed.ts"], { "renamed.ts": old }, { year: 2027 }),
+        ...comparison,
+      }),
+    ).toEqual([]);
   });
 
   it("fails closed when rename, deletion, or base lookup Git operations fail", () => {
-    expect(() => gitComparison((args) => (args[0] === "merge-base" ? { status: 0, stdout: "base\n" } : { status: 1, stdout: "" }))).toThrow(
-      "copyright rename detection failed",
-    );
+    expect(() =>
+      gitComparison((args) =>
+        args[0] === "merge-base" ? { status: 0, stdout: "base\n" } : { status: 1, stdout: "" },
+      ),
+    ).toThrow("copyright rename detection failed");
     const comparison = gitComparison((args) => {
       if (args[0] === "merge-base") return { status: 0, stdout: "base\n" };
       if (args[0] === "show") return { status: 1, stdout: "" };
       return { status: 0, stdout: "" };
     });
-    expect(checkCopyright({ ...options([path], { [path]: `${COPYRIGHT_HEADER}${body}` }, { year: 2027 }), ...comparison })).toEqual([
-      `${path}: base content lookup failed`,
-    ]);
+    expect(
+      checkCopyright({
+        ...options([path], { [path]: `${COPYRIGHT_HEADER}${body}` }, { year: 2027 }),
+        ...comparison,
+      }),
+    ).toEqual([`${path}: base content lookup failed`]);
   });
 });
