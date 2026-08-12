@@ -102,7 +102,9 @@ For generated records, start by marking the few Proto fields that a query needs
 with `(column)`. Those declarations, not a field-name convention, select the
 native MySQL columns. `Identifiers` determine the storage ID, and `Stringifiers`
 turn message-valued IDs and declared message columns into the same stable text
-for a write, lookup, filter, sort continuation, and read.
+for a write, lookup, filter, sort continuation, and read. `RecordQuery<I>`
+statically types IDs only: MySQL validates filter names and values at runtime
+against the record descriptor and its declared column mappings.
 
 ## 🧭 See a Proto model become a table
 

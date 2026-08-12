@@ -84,9 +84,10 @@ const users = await records.query({
 `InMemoryStorageFactory` creates a fresh backend by default. Pass the same
 `InMemoryStorageBackend` to separate factories only when they intentionally
 need to share rows. Query named columns, sort them, and limit the result; the
-column names come from the declared `RecordSpec`/Proto mapping. A provider can
-push down only the ID and declared-column parts of that typed query; it must
-preserve the common result semantics.
+column names come from the declared `RecordSpec`/Proto mapping. `RecordQuery<I>`
+types its IDs, while filter names and values are validated at runtime against
+that mapping. A provider can push down supported ID and declared-column query
+parts while preserving the common result semantics.
 
 The storage API clones data at its boundaries. For the base factory and the
 in-memory implementation, closing a factory prevents new record handles while

@@ -23,9 +23,11 @@ message-valued IDs and ordinary message columns; the builder snapshots the
 registry so later caller changes do not alter stored or queried values.
 `Identifiers` choose the storage ID representation; the configured
 `StringifierRegistry` supplies the matching reversible representation for
-message-valued IDs and declared message columns. Consequently a typed query
-operand uses the same mapping as the stored column rather than an application
-constructed string.
+message-valued IDs and declared message columns. `RecordQuery<I>` statically
+types IDs only. Filter names and values are runtime inputs: MySQL checks the
+name against the declared columns and maps each value through the corresponding
+descriptor/column mapping, rather than accepting an application-constructed
+provider string.
 Per-family tables are created and verified lazily on first use. Options support
 `connectionLimit`, `connectTimeoutMs`, and TLS material. Failure to validate
 configuration throws `MysqlStorageConfigurationError`; inaccessible connections
@@ -84,10 +86,11 @@ nanoseconds and `Version` uses its number. Floating-point record columns are
 not supported by Spine JVM JDBC and are rejected here.
 
 Queries execute ID filters, ANDed column filters, materialized-column sorts,
-keyset continuations, offsets, and limits in MySQL. They accept at most 256
-IDs, 32 filters, 64 values per filter, eight sort fields, and 2,048 total bound
-values. These limits are fixed. Missing materialized columns do not match;
-dotted payload paths are rejected. Large offsets can be expensive.
+keyset continuations, offsets, and limits in MySQL. Before executing, MySQL
+validates each ID encoding, requires every filter and sort name to be `ID` or a
+declared materialized column, and maps each filter/continuation value through
+that column's descriptor. Missing materialized columns do not match; dotted
+payload paths are rejected. Large offsets can be expensive.
 
 Normalized projection plans compile supported nested predicates and comparisons
 to parameterized SQL. The configured plan bound is sent as a sentinel SQL limit so

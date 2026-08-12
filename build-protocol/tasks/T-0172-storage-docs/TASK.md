@@ -64,3 +64,19 @@ N/A absent tooling or security-boundary changes.
 - No runtime, public TypeScript/Proto contract, generated output, shared
   checker, package, or test file changed. Behavior-focused TDD is N/A because
   this is a documentation-only milestone.
+
+## Accepted Review Corrections
+
+- Documentation: CLEAN. The documentation review accepted the beginner journey,
+  README/reference layering, and canonical handoffs.
+- TypeScript/API documentation found two P2 claim defects: the MySQL reference
+  advertised nonexistent query-cardinality caps, and several documents implied
+  statically typed query operands. The correction removes the caps and states
+  the actual `RecordQuery<I>`/runtime descriptor-and-column-mapping contract.
+- Performance/reliability: CLEAN on the corrected worktree. The correction
+  retains provider finite-query, tenancy, migration, and fail-closed claims
+  without adding runtime behavior.
+- Review configuration: documentation reviewer `gpt-5.6-luna` / medium;
+  TypeScript/API and performance/reliability reviewers `gpt-5.6-terra` / high.
+  Runtime metadata is not exposed by this execution surface, so configured
+  profiles are the durable evidence; no mismatch was visible.

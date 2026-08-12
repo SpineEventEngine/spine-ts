@@ -58,8 +58,11 @@ local materialization can return a partial semantic result.
 
 `StorageQueryPolicy` validates normalized plans and
 `StorageQueryEvaluator` applies the portable query semantics. Provider packages
-can push down supported typed ID, declared-column, and sort parts of a plan, but must preserve these semantics and
-enforce their documented bounds.
+can push down supported ID, declared-column, and sort parts of a plan, but must
+preserve these semantics and enforce their documented bounds. `RecordQuery<I>`
+statically types IDs only; filter and sort names are strings and filter values
+are `unknown`. The record descriptor and column mapping validate those names
+and values before a provider uses them.
 
 ## Lifecycle
 

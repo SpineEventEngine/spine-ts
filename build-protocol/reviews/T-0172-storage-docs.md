@@ -42,3 +42,26 @@ Reviewer assignments are recorded before dispatch.
   and tooling typecheck. The only failed attempt was the pre-generation build,
   which reported missing generated Proto outputs and passed after canonical
   generation; it is not a documentation defect.
+
+## Accepted Review Batch And Resolution
+
+- Documentation reviewer: CLEAN. Configured profile `gpt-5.6-luna` / medium.
+  It accepted the reader pacing, README/reference layering, and handoffs.
+- TypeScript/API documentation reviewer: two P2 findings. Configured profile
+  `gpt-5.6-terra` / high. P2-1: the MySQL reference claimed fixed 256-ID,
+  32-filter, 64-values-per-filter, eight-sort, and 2,048-parameter caps that
+  `validateQuery()` does not enforce. Resolved by removing those caps and
+  documenting actual ID, declared-column, and descriptor value validation.
+  P2-2: documents overstated static typing of query operands. Resolved by
+  stating that `RecordQuery<I>` statically types IDs only; filter/sort names and
+  `RecordFilter.value: unknown` are checked through runtime descriptor and
+  column mappings, including identifier/stringifier conversion.
+- Performance/reliability reviewer: CLEAN after the corrections. Configured
+  profile `gpt-5.6-terra` / high. It confirmed the corrected worktree retains
+  finite query, provider-native tenancy, migration, and fail-closed claims.
+- Runtime metadata is not exposed on this surface. The immutable configured
+  profiles above are therefore the acceptance evidence; no fallback or mismatch
+  was visible.
+- Style/maintainability and security remain N/A: the correction changes only
+  owned documentation and records, with no shared tooling or security-boundary
+  behavior.

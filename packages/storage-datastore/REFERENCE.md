@@ -30,8 +30,9 @@ remain behaviorally immutable for the factory lifetime. `organizeRecords(...)`
 changes a kind. `useRecordStorage(...)` replaces a record-family provider.
 `Identifiers` select the key representation, and the same configured
 stringifier maps a message-valued ID or declared column on write, direct lookup,
-filter, ordering continuation, and read. Typed callers pass the message value;
-they do not construct a provider string themselves.
+filter, ordering continuation, and read. `RecordQuery<I>` statically types IDs
+only; the descriptor and column mapping validate string filter/sort names and
+`unknown` values at runtime. Callers do not construct a provider string.
 `useEntityStorage(...)` replaces the complete coherent Entity handle, including
 its commit capability. Custom providers receive the storage context, record or
 Entity contract, and caller-supplied client, but not the built-in converter or
@@ -91,8 +92,9 @@ reconcile a maximum of 1,000 rows; the 1,001st row throws
 `writeAll()` uses batches of at most 500 mutations and is not atomic across
 batches.
 
-Provider-legal typed ID predicates, declared-property comparisons, and ordering are
-pushed only when Datastore can execute the whole selected conjunction. Local
+Provider-legal ID predicates, declared-property comparisons, and ordering are
+pushed only when Datastore can execute the whole selected conjunction. Runtime
+descriptor/column validation happens before that decision. Local
 reconciliation preserves shared query semantics and never becomes an unlimited
 scan. A smaller caller-supplied reconciliation bound retains a sentinel and
 `QueryCandidateLimitError` behavior. There is no public Datastore cursor API.

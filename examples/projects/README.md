@@ -70,7 +70,9 @@ storage factory at composition time; domain handlers continue to work with
 typed IDs and messages, not MySQL rows or Datastore entities. Mark a Proto
 field `(column)` only when a read model needs it for filtering or sorting. The
 [storage guide](../../packages/storage/README.md) explains the shared query
-contract, and the provider guides explain the physical layout and migration.
+contract: `RecordQuery<I>` statically types IDs, while descriptor and column
+mappings validate filter names and values at runtime. The provider guides
+explain the physical layout and migration.
 
 ## 🧪 Run the example tests
 
