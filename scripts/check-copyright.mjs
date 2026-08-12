@@ -48,7 +48,32 @@ function isEligible(path, excluded) {
   return /\.(?:ts|tsx|proto)$/u.test(path) && !excluded.has(path);
 }
 
-export function checkCopyright({ files, readFile, readManifest, year = new Date().getFullYear() }) {
+function normalizedContents(contents) {
+  const at = placement(contents);
+  const before = contents.slice(0, at);
+  return `${before}${contents.slice(at).replace(codeMattersHeader, "")}`;
+}
+
+function contentChanged(path, contents, options) {
+  const base = options.baseContent?.(path);
+  if (base !== undefined) return { changed: normalizedContents(contents) !== normalizedContents(base) };
+
+  const renamed = options.renamedFrom?.(path) ?? [];
+  if (renamed.length === 1) {
+    const renamedBase = options.baseContentAt?.(renamed[0]);
+    return { changed: renamedBase === undefined || normalizedContents(contents) !== normalizedContents(renamedBase) };
+  }
+  if (renamed.length > 1) return { problem: "ambiguous header-normalized rename match" };
+
+  const matches = (options.deletedBasePaths?.() ?? []).filter((candidate) => {
+    const candidateBase = options.baseContentAt?.(candidate);
+    return candidateBase !== undefined && normalizedContents(contents) === normalizedContents(candidateBase);
+  });
+  if (matches.length > 1) return { problem: "ambiguous header-normalized rename match" };
+  return { changed: matches.length === 0 };
+}
+
+export function checkCopyright({ files, readFile, readManifest, year = new Date().getFullYear(), ...options }) {
   const manifest = readManifest();
   const excluded = new Set((manifest.sources ?? []).map((source) => source.localPath ?? source));
   const problems = [];
@@ -77,8 +102,23 @@ export function checkCopyright({ files, readFile, readManifest, year = new Date(
       problems.push(`${path}: misplaced CodeMatters header`);
       continue;
     }
-    if (match[0] !== expectedHeader(year)) {
+    if (year === 2026 && match[0] !== COPYRIGHT_HEADER) {
       problems.push(`${path}: stale-year CodeMatters header`);
+      continue;
+    }
+    if (year > 2026) {
+      let change;
+      try {
+        change = contentChanged(path, content, options);
+      } catch {
+        problems.push(`${path}: base content lookup failed`);
+        continue;
+      }
+      if (change.problem !== undefined) {
+        problems.push(`${path}: ${change.problem}`);
+      } else if (change.changed && match[0] !== expectedHeader(year)) {
+        problems.push(`${path}: stale-year CodeMatters header`);
+      }
     }
   }
   return problems;
@@ -90,15 +130,64 @@ export function gitFiles(runGit = git) {
   return result.stdout.split("\n").filter((path) => path !== "");
 }
 
+function gitOutput(runGit, args, failure) {
+  const result = runGit(args);
+  if (result.status !== 0) throw new Error(`copyright ${failure} failed`);
+  return result.stdout;
+}
+
+function renameMap(runGit, base) {
+  const renames = new Map();
+  for (const args of [
+    ["diff", "--name-status", "-M", `${base}...HEAD`],
+    ["diff", "--name-status", "-M"],
+    ["diff", "--cached", "--name-status", "-M"],
+  ]) {
+    for (const line of gitOutput(runGit, args, "rename detection").split("\n")) {
+      const [status, from, to] = line.split("\t");
+      if (status?.startsWith("R") && from !== undefined && to !== undefined) {
+        renames.set(to, [...(renames.get(to) ?? []), from]);
+      }
+    }
+  }
+  return renames;
+}
+
+/** Creates deterministic Git-backed current-year comparison operations. */
+export function gitComparison(runGit = git) {
+  const base = gitOutput(runGit, ["merge-base", "origin/main", "HEAD"], "merge-base").trim();
+  if (base === "") throw new Error("copyright merge-base failed");
+  const renames = renameMap(runGit, base);
+  const deleted = new Set();
+  for (const args of [
+    ["diff", "--name-only", "--diff-filter=D", `${base}...HEAD`],
+    ["diff", "--name-only", "--diff-filter=D"],
+    ["diff", "--cached", "--name-only", "--diff-filter=D"],
+  ]) {
+    for (const path of gitOutput(runGit, args, "deleted-base enumeration").split("\n")) {
+      if (path !== "") deleted.add(path);
+    }
+  }
+  const atBase = (path) => {
+    const result = runGit(["show", `${base}:${path}`]);
+    if (result.status === 0) return result.stdout;
+    if (result.status === 128) return undefined;
+    throw new Error("copyright base content lookup failed");
+  };
+  return { baseContent: atBase, baseContentAt: atBase, renamedFrom: (path) => renames.get(path) ?? [], deletedBasePaths: () => [...deleted] };
+}
+
 function git(args) {
   return spawnSync("git", args, { cwd: repoRoot, encoding: "utf8" });
 }
 
 export function main() {
+  const comparison = gitComparison();
   const problems = checkCopyright({
     files: gitFiles(),
     readFile: (path) => readFileSync(resolve(repoRoot, path), "utf8"),
     readManifest: () => JSON.parse(readFileSync(resolve(repoRoot, manifestPath), "utf8")),
+    ...comparison,
   });
   if (problems.length > 0) throw new Error(problems.join("\n"));
 }

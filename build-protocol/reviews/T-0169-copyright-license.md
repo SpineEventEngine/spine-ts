@@ -39,6 +39,11 @@ the immutable dispatched role/profile as the available evidence.
   its focused test only. A RED test observed no `withCopyrightHeader` helper;
   GREEN was `pnpm exec vitest run scripts/proto-workflow.test.mjs` (57 passed),
   followed by `pnpm proto:generate` and `pnpm lint:copyright` (both passed).
+- 2026-08-12: Before the checker correction, future-year and rename adversarial
+  tests produced three expected failures. The converged checker now uses
+  injected Git/base seams, normalized-content comparison, and fail-closed
+  enumeration/base lookup behavior. Focused fixture and live-inventory evidence
+  is recorded in the work log; specialist review remains pending.
 
 ## Findings
 
