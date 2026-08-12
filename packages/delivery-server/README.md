@@ -6,7 +6,7 @@ the supported examples. Its Inbox rows, leases, and delivered facts disappear
 when the process stops.
 
 The [reference](REFERENCE.md) records finite limits, shutdown order, and the
-complete protocol contract.
+complete protocol contract, including API detail for coding agents.
 
 ## 💡 Why use it?
 
@@ -94,4 +94,4 @@ belongs only on an application-managed trusted network.
 
 - [Delivery client](../delivery-client/README.md)
 - [Server](../server/README.md)
-- [Reference for coding agents](REFERENCE.md)
+- [Detailed delivery reference](REFERENCE.md)

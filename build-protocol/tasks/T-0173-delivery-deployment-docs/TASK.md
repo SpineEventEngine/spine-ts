@@ -43,3 +43,14 @@ Run strict snippets on all 13 paths, links, topology/limit/deferral scans,
 audience/API, format/copyright/diff, and `verify:task -- --no-tests`. Review
 documentation, TypeScript/API, and performance/reliability. Style/security are
 N/A absent tooling or security-boundary changes.
+
+## Accepted review correction batch
+
+The complete review wave returned one documentation low-priority finding, two
+TypeScript/API P2 findings, and performance/reliability P1 and P2 findings.
+Correct the reader claims only: worker-matched release semantics with no
+separate pickup-time fence; local application of valid complete subscription
+payloads and bounded authoritative recovery; Envoy's uppercase-method input
+and GET/POST/OPTIONS CORS boundary; and reader-facing reference labels. No
+runtime or test change is authorized because source and existing test coverage
+confirm the reviewed contracts. Rerun the documentation-only task profile.

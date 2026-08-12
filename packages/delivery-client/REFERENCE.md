@@ -44,9 +44,11 @@ reconnects only within configured limits. A slow consumer can receive
 `DeliveryShardObservationError`. Observation is a hint: reconcile a known
 mutation with `shardSnapshot()` before a later action.
 
-The remote protocol has no renewable fence or worker-conditional release. A
-`PICKED` observation does not clear uncertainty; only `NOT_PICKED` invalidates
-a stale local session and permits a new pickup. Do not release a stale session.
+The remote protocol has no renewable lease fence or separate per-pickup-time
+fence. Release is conditional on the supplied worker matching the current
+owner, so a stale worker cannot release a newer worker's session. A `PICKED`
+observation does not clear uncertainty; only `NOT_PICKED` invalidates a stale
+local session and permits a new pickup. Do not release a stale session.
 
 `RemoteInbox` and `RemoteWorkRegistry` satisfy the server delivery-builder
 ports. `RemoteInbox` rereads the exact pending remote row before acknowledgement

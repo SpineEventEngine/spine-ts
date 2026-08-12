@@ -6,7 +6,7 @@ developing; use the same client to connect separate application nodes to a
 remote Delivery server.
 
 The [reference](REFERENCE.md) records the complete protocol, retry, and limit
-contract.
+contract, including API detail for coding agents.
 
 ## 💡 Why use it?
 
@@ -127,4 +127,4 @@ attempt history or quarantine records.
 
 - [Delivery server](../delivery-server/README.md)
 - [Server delivery APIs](../server/README.md#delivery-and-environment)
-- [Reference for coding agents](REFERENCE.md)
+- [Detailed delivery reference](REFERENCE.md)

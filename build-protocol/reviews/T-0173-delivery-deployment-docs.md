@@ -47,3 +47,33 @@ the surface reports a mismatch or fallback.
 - Pending reviewer dispositions remain documentation, TypeScript/API, and
   performance/reliability. These are not represented as clean until the
   orchestrator returns the review wave.
+
+## Accepted review batch and correction disposition
+
+- Documentation — low priority, accepted and corrected: the two README links
+  now use a reader-facing reference label.
+- TypeScript/API — P2, accepted and corrected: the client and server references
+  now state worker-matched release and the absence of a separate pickup-time
+  fence. This is source-verified in `ShardService.releaseSession()` and the
+  client release request.
+- Performance/reliability — P1, accepted and corrected: Distributed Message
+  Board now distinguishes local valid-complete updates from authoritative gap,
+  unusable-payload, and disconnected-post recovery; reconnect resynchronization
+  may directly carry authoritative state.
+- Performance/reliability — P2, accepted and corrected: Envoy now documents
+  uppercase auth-route methods and the default GET/POST/OPTIONS CORS boundary.
+- Documentation, TypeScript/API, and performance/reliability are CLEAN after
+  correction validation. Style and security remain N/A for the recorded
+  reasons. No test classification changed: all corrections align with existing
+  source and tests.
+
+## Correction evidence
+
+- Passed explicit 13-document strict snippets, API documentation, audience,
+  copyright, formatting, diff, release-readiness links, topology/wording scans,
+  and `pnpm verify:task -- --no-tests`.
+- The selected profile rebuilt generated output and tooling typecheck. Runtime
+  tests are N/A because the review batch changes documentation and durable
+  records only.
+- Profile metadata remains limited to configured roles because the surface does
+  not expose runtime self-introspection; no mismatch or fallback was reported.

@@ -52,8 +52,9 @@ Inbox pages are strict after the supplied timestamp and ordered by full wire
 timestamp, version, and UUID. Automatic pickup takeover requires elapsed time
 strictly greater than `processingTimeoutMs`; manual expiration accepts elapsed
 time greater than or equal to the supplied interval. Release is not
-worker-conditional. This in-memory server stores neither attempt history nor a
-quarantine state.
+pickup-time-conditional, but the supplied worker must match the current owner;
+a stale worker cannot release a newer worker's session. This in-memory server
+stores neither attempt history nor a quarantine state.
 
 Admin observation acknowledges first and then streams updates through a bounded
 queue. Health `Check` reports registered names while the listener serves;
