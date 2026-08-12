@@ -171,6 +171,14 @@ describe("copyright checker", () => {
     ).toEqual([`${path}: misplaced CodeMatters header`]);
   });
 
+  it("reports a recognized header after a leading block comment as misplaced", () => {
+    expect(
+      checkCopyright(
+        options([path], { [path]: `/* generated */\n${COPYRIGHT_HEADER}${body}` }, { year: 2026 }),
+      ),
+    ).toEqual([`${path}: misplaced CodeMatters header`]);
+  });
+
   it("sorts diagnostic classes and fails closed when Git enumeration fails", () => {
     const proto = "packages/proto/proto/upstream.proto";
     expect(

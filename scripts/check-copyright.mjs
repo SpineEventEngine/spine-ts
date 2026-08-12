@@ -42,6 +42,17 @@ function normalizedContents(contents) {
   return `${before}${header === undefined ? after : after.slice(header.length)}`;
 }
 
+function hasMisplacedRecognizedHeader(contents) {
+  for (const comment of contents.matchAll(/\/\*/gu)) {
+    if (
+      !contents.slice(0, comment.index).includes("CodeMatters") &&
+      recognizedCopyrightHeader(contents.slice(comment.index)) !== undefined
+    )
+      return true;
+  }
+  return false;
+}
+
 function contentChanged(path, contents, options) {
   const base = options.baseContent?.(path);
   if (base !== undefined)
@@ -95,7 +106,7 @@ export function checkCopyright({
     const match = recognizedCopyrightHeader(actual);
     if (match === undefined) {
       problems.push(
-        recognizedCopyrightHeader(actual.slice(Math.max(0, actual.indexOf("/*")))) !== undefined
+        hasMisplacedRecognizedHeader(actual)
           ? `${path}: misplaced CodeMatters header`
           : content.includes("CodeMatters")
             ? `${path}: malformed CodeMatters header`

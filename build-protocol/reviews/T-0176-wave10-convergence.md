@@ -72,3 +72,16 @@ passed. The orchestrator retains the single final `verify:release` run.
 Final residual validation passed: strict 64-document snippets, API inventory and
 audience, copyright, release-readiness links, exact transport-export and
 semantic-error scans, formatting, and diff hygiene. No release profile was run.
+
+## Final Tooling Residual
+
+- Style/maintainability accepted a focused copyright-classification correction:
+  an exact approved header following `/* generated */` was incorrectly
+  `malformed`. It is now `misplaced`, matching the existing leading-line-comment
+  case. The search only accepts a later exact recognized header when preceding
+  content has no CodeMatters text; malformed and duplicate-header treatment, the
+  shebang prefix, and the exact approved template remain unchanged.
+- Documentation, TypeScript/API, and performance/reliability are N/A for this
+  classifier-only change. Security remains N/A because no trust boundary or
+  runtime behavior changed. The implementation profile and metadata limitation
+  above remain applicable; the orchestrator retains the final release profile.
