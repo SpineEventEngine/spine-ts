@@ -1,7 +1,7 @@
 # Message Board deployment reference
 
-This reference records the deployment contract. Beginners should start with the
-[deployment guide](README.md).
+This reference records the deployment contract. Start with the
+[deployment guide](README.md) to choose and run a supported shape.
 
 Compose and Kubernetes use `DELIVERY_SERVER_URL` as the only delivery-client
 setting. Compose resolves `delivery:8484`; Kubernetes resolves

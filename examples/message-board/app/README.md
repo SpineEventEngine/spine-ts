@@ -30,6 +30,9 @@ browser listener is ready. Stop it with `Ctrl-C`.
 The complete entry point is intentionally small:
 
 ```ts
+// docs-snippet-path: examples/message-board/app/src/local-entry.ts
+import { MessageBoardApplication } from "./index.js";
+
 const server = await new MessageBoardApplication().run({ port: 8090 });
 console.log(`MessageBoard local server ready at ${server.baseUrl}`);
 ```
@@ -37,6 +40,9 @@ console.log(`MessageBoard local server ready at ${server.baseUrl}`);
 Use `start()` instead of `run()` when another host handles process signals:
 
 ```ts
+// docs-snippet-path: examples/message-board/app/src/local-entry.ts
+import { MessageBoardApplication } from "./index.js";
+
 const server = await new MessageBoardApplication().start({ port: 0 });
 try {
   console.log(server.baseUrl);
@@ -91,4 +97,4 @@ commands, fixed image tags, and runtime values.
 - [Complete Message Board example](../README.md)
 - [Server package](../../../packages/server/README.md)
 - [Authentication package](../../../packages/auth/README.md)
-- [Reference for coding agents](REFERENCE.md)
+- [Detailed coding-agent reference](REFERENCE.md)

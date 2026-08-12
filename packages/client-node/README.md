@@ -4,8 +4,7 @@ Use this package from a Node.js application to post commands, send queries, or
 create subscriptions for query-side views. It creates the Node HTTP/2 transport;
 the same request and subscription API is shared with the browser client.
 
-For detailed public contracts and limits, read the [reference for
-agents](REFERENCE.md).
+For detailed public contracts and limits, read the [reference](REFERENCE.md).
 
 The [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 explains the gateway boundary shared by Node and browser clients.
@@ -24,6 +23,7 @@ connection. A client created with `connectTo()` creates and closes its HTTP/2
 session.
 
 ```ts
+// docs-snippet-path: examples/message-board/app/src/index.ts
 import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Client } from "@spine-event-engine/client-node";
@@ -74,6 +74,7 @@ protoc --spine-entity-columns_out=generated proto/spine/examples/messageboard/me
 ```
 
 ```ts
+// docs-snippet-path: examples/todo/src/index.ts
 import { Client, EntityColumn, EntityQuery } from "@spine-event-engine/client-node";
 import { create } from "@bufbuild/protobuf";
 import { ActorContextSchema } from "@spine-event-engine/proto";
@@ -106,4 +107,4 @@ application re-reads current entity state.
 
 - [Browser client](../client-web/README.md)
 - [Server](../server/README.md)
-- [Reference for coding agents](REFERENCE.md)
+- [Detailed coding-agent reference](REFERENCE.md)

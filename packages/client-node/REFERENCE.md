@@ -1,6 +1,7 @@
 # @spine-event-engine/client-node reference
 
-This reference is for agents and other automated tools that need the exact public contract of `@spine-event-engine/client-node`.
+This reference records the exact public contract of `@spine-event-engine/client-node`.
+Start with the [Node client overview](README.md) for the shortest connection path.
 
 ## Client construction
 

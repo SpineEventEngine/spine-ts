@@ -83,6 +83,21 @@ changes state. This is the `postMessage()` handler excerpt from
 are omitted to focus on the handler. Its return value feeds the read model:
 
 ```ts
+// docs-snippet-path: examples/message-board/app/src/index.ts
+import { clone, create } from "@bufbuild/protobuf";
+import { Aggregate, Assign } from "@spine-event-engine/server";
+import {
+  BoardMessageSchema,
+  MessageIdSchema,
+  type MessageId,
+} from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
+import { type PostMessage } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/commands_pb.js";
+import {
+  MessagePostedSchema,
+  type MessagePosted,
+} from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
+import { MessageAlreadyPosted } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/rejections.js";
+
 class BoardMessageAggregate extends Aggregate<MessageId, typeof BoardMessageSchema> {
   @Assign
   postMessage(command: PostMessage): MessagePosted {
@@ -154,7 +169,7 @@ replica-oriented standalone application modes.
 - [Message Board model](model/README.md)
 - [Message Board web UI](web/README.md)
 - [Browser client, authentication, and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
-- [Reference for coding agents](REFERENCE.md)
+- [Detailed coding-agent reference](REFERENCE.md)
 
 ## Deployment
 

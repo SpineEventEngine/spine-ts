@@ -4,8 +4,8 @@ Use this package to build an application gateway that authenticates a request,
 authorizes it, resolves a trusted actor context, and forwards approved Spine
 traffic. Spine bounded contexts do not perform these routines themselves.
 
-For detailed gateway, session, OIDC, subscription, and native-transport
-contracts, read the [reference for agents](REFERENCE.md).
+For gateway, session, OIDC, subscription, and native-transport details, read
+the [reference](REFERENCE.md).
 
 ## 💡 Why use it?
 
@@ -104,4 +104,4 @@ deploy the gateway at the appropriate trust boundary.
 
 - [Browser authentication and extension guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 - [Server package](../server/README.md)
-- [Reference for coding agents](REFERENCE.md)
+- [Detailed coding-agent reference](REFERENCE.md)

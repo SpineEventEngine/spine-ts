@@ -1,8 +1,8 @@
 # Message Board container images
 
-These local images demonstrate how a Spine TS application can be built once
-and started without generating Protobuf code or compiling TypeScript at
-runtime. They are examples for deployment work, not published images.
+Use these local images to run a Spine TS application built once, without
+generating Protobuf code or compiling TypeScript at runtime. They are examples
+for deployment work, not published images.
 
 ## 🚀 Build the images
 

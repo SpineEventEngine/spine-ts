@@ -1,6 +1,6 @@
 # Message Board app reference
 
-This reference is for coding agents and maintainers. Beginners should start
+This reference records the Message Board app contract. Beginners should start
 with the [Message Board app README](README.md).
 
 ## Assembly

@@ -4,8 +4,8 @@ Use this browser-safe package to post commands, send queries, and create Spine
 subscriptions for query-side views. It is framework-neutral: React support is
 in `@spine-event-engine/client-react`.
 
-For detailed protocol, browser-session, reconnect, and security limits, read
-the [reference for agents](REFERENCE.md).
+For protocol, browser-session, reconnect, and security limits, read the
+[reference](REFERENCE.md).
 
 The [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 explains application sign-in and gateway composition.
@@ -24,6 +24,7 @@ Connect is an optional binary optimization for a gateway already configured to
 accept it; the client does not probe or fall back between protocols.
 
 ```ts
+// docs-snippet-path: examples/message-board/web/src/index.tsx
 import { BrowserSession, Client } from "@spine-event-engine/client-web";
 
 const session = BrowserSession.cookie({ maxRequestMs: 10_000 });
@@ -46,6 +47,7 @@ Use an actor or guest request scope. Commands return an application outcome;
 queries return the raw Spine response.
 
 ```ts
+// docs-snippet-path: examples/message-board/web/src/index.tsx
 import { create } from "@bufbuild/protobuf";
 import { TypeUrls } from "@spine-event-engine/core";
 import { Client } from "@spine-event-engine/client-web";
@@ -110,4 +112,4 @@ may be duplicated, reordered, or missed while disconnected.
 - [React adapter](../client-react/README.md)
 - [Authentication package](../auth/README.md)
 - [Browser authentication and extension guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
-- [Reference for coding agents](REFERENCE.md)
+- [Detailed coding-agent reference](REFERENCE.md)

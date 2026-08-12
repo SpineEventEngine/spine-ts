@@ -1,7 +1,7 @@
 # Message Board model reference
 
-This reference is for coding agents and maintainers. Beginners should start
-with the [Message Board model README](README.md).
+This reference records the Message Board model contract. Beginners should
+start with the [Message Board model README](README.md).
 
 The package contains every Message Board Proto type, including `UserId`. Do not create a
 second users-model package. Proto packages use `spine.examples.messageboard`, and type
