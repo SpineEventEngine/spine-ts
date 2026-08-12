@@ -28,7 +28,8 @@ runtime and Bounded Context boundaries.
 | How does a browser client reconnect and recover state?                 | [Browser client reference](../../packages/client-web/REFERENCE.md)       |
 | How does a React client consume client state?                          | [React client reference](../../packages/client-react/REFERENCE.md)       |
 | How are storage, queries, and tenant layouts selected?                 | [Storage reference](../../packages/storage/REFERENCE.md)                 |
-| What does local or remote delivery guarantee?                          | [Delivery client reference](../../packages/delivery-client/REFERENCE.md) |
+| What does remote delivery coordination guarantee?                      | [Delivery client reference](../../packages/delivery-client/REFERENCE.md) |
+| What are the local in-memory Delivery server limits and lifecycle?     | [Delivery server reference](../../packages/delivery-server/REFERENCE.md) |
 | What common deployment and discovery contract applies?                 | [Deployment reference](../../packages/deployment/REFERENCE.md)           |
 | How does the GCE deployment operate?                                   | [GCE deployment reference](../../packages/deployment-gce/REFERENCE.md)   |
 | How does the GKE deployment operate?                                   | [GKE deployment reference](../../packages/deployment-gke/REFERENCE.md)   |

@@ -78,3 +78,15 @@ the surface reports a mismatch or fallback.
   performance/reliability remains CLEAN. Style and security retain their N/A
   dispositions. No reviewer dispatch or runtime/test classification change was
   required.
+
+## Final closure correction
+
+- The former combined local/remote delivery mapping was split into distinct
+  canonical client/remote and local in-memory server targets in both documents.
+- Documentation and TypeScript/API remain CLEAN after this deterministic
+  mapping correction; performance/reliability remains CLEAN. No new review
+  dispatch is required.
+- Final mapping evidence: strict snippets, API/audience, exact mapping scan,
+  release-readiness links, copyright, formatting, and diff checks pass. This
+  narrow record/doc correction does not require another task verification
+  profile.

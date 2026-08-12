@@ -25,7 +25,8 @@ tutorial:
 | Browser client contract                                  | [Browser client reference](../../packages/client-web/REFERENCE.md)       |
 | React client contract                                    | [React client reference](../../packages/client-react/REFERENCE.md)       |
 | Storage, queries, provider layouts, and tenancy          | [Storage reference](../../packages/storage/REFERENCE.md)                 |
-| Local and remote delivery limits                         | [Delivery client reference](../../packages/delivery-client/REFERENCE.md) |
+| Remote delivery client and coordination contract         | [Delivery client reference](../../packages/delivery-client/REFERENCE.md) |
+| Local in-memory Delivery server limits and lifecycle     | [Delivery server reference](../../packages/delivery-server/REFERENCE.md) |
 | Common deployment and discovery contract                 | [Deployment reference](../../packages/deployment/REFERENCE.md)           |
 | GCE deployment operation                                 | [GCE deployment reference](../../packages/deployment-gce/REFERENCE.md)   |
 | GKE deployment operation                                 | [GKE deployment reference](../../packages/deployment-gke/REFERENCE.md)   |
