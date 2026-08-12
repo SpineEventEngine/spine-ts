@@ -24,6 +24,7 @@ Connect is an optional binary optimization for a gateway already configured to
 accept it; the client does not probe or fall back between protocols.
 
 ```ts
+// docs-snippet-path: examples/message-board/web/src/index.tsx
 import { BrowserSession, Client } from "@spine-event-engine/client-web";
 
 const session = BrowserSession.cookie({ maxRequestMs: 10_000 });
@@ -46,6 +47,7 @@ Use an actor or guest request scope. Commands return an application outcome;
 queries return the raw Spine response.
 
 ```ts
+// docs-snippet-path: examples/message-board/web/src/index.tsx
 import { create } from "@bufbuild/protobuf";
 import { TypeUrls } from "@spine-event-engine/core";
 import { Client } from "@spine-event-engine/client-web";

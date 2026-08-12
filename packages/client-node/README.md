@@ -23,6 +23,7 @@ connection. A client created with `connectTo()` creates and closes its HTTP/2
 session.
 
 ```ts
+// docs-snippet-path: examples/message-board/app/src/index.ts
 import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Client } from "@spine-event-engine/client-node";
@@ -73,6 +74,7 @@ protoc --spine-entity-columns_out=generated proto/spine/examples/messageboard/me
 ```
 
 ```ts
+// docs-snippet-path: examples/todo/src/index.ts
 import { Client, EntityColumn, EntityQuery } from "@spine-event-engine/client-node";
 import { create } from "@bufbuild/protobuf";
 import { ActorContextSchema } from "@spine-event-engine/proto";

@@ -55,3 +55,30 @@ shared tooling is owned. Reviewer assignments are recorded before dispatch.
 The execution surface does not expose separate runtime-profile metadata. The
 immutable configured reviewer roles and explicit dispatch profiles are the
 accepted evidence unless the surface reports a mismatch or fallback.
+
+## Accepted correction batch
+
+| Concern                 | Finding                                                                                                        | Disposition                                                                                                                                   |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Documentation           | Present-tense multi-Gateway session guidance contradicted the supported one-Gateway scope.                     | Resolved: removed the guidance and retained the explicit deferred/out-of-offering boundary.                                                   |
+| TypeScript/API          | P2: the strict inventory omitted all 20 T-0171 paths, so the prior explicit-path run was not the default gate. | Resolved: registered all 20 paths, added a failing-first inventory test, and bound every fence to real source context and built declarations. |
+| Performance/reliability | No behavior, resource, lifecycle, or delivery-contract defect.                                                 | CLEAN.                                                                                                                                        |
+| Security                | No trust-boundary implementation change.                                                                       | N/A; secret-safe wording and source-backed gateway facts remain checked.                                                                      |
+| Style/maintainability   | Shared checker changed only to register the approved paths and retain deterministic tests.                     | N/A to specialist review; focused checker test and formatting evidence required.                                                              |
+
+Correction profile remains existing `implementer`, explicitly
+`gpt-5.6-terra` / medium. The execution surface still exposes no separate
+runtime-profile field; the configured role/profile is the available metadata.
+
+## Correction evidence
+
+- Focused checker test: 11/11 passed. Its complete inventory assertion was
+  observed failing before registration and passing after it; invalid-export and
+  missing-context tests remain deterministic failure coverage.
+- Full `pnpm docs:snippets:check` passed after generated build, followed by
+  TypeDoc API, audience, and repository-relative link checks.
+- Changed checker/test lint, cleanup, TSDoc, logging containment, copyright,
+  formatting, and whitespace checks passed.
+
+Status: accepted correction batch implemented; no additional review dispatch
+is authorized in this context.

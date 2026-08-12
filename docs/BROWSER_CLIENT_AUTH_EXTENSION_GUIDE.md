@@ -42,6 +42,7 @@ is separately configured for it. `Client.forConnect()` sends binary
 `application/proto`; it never probes a server and never falls back to gRPC-Web.
 
 ```ts
+// docs-snippet-path: examples/message-board/web/src/index.tsx
 import { Client, BrowserSession } from "@spine-event-engine/client-web";
 
 const session = BrowserSession.cookie({ maxRequestMs: 10_000 });
@@ -110,6 +111,7 @@ updates, and emits `resynchronizing`. An event subscription emits
 or an observed gap when its UI needs authoritative state.
 
 ```ts
+// docs-snippet-path: examples/message-board/web/src/index.tsx
 import type { ClientRequest } from "@spine-event-engine/client-web";
 
 declare const request: ClientRequest;
@@ -176,6 +178,7 @@ informational, not a credential. An application may request hints, but it may
 not establish actor, tenant, timestamp, zone, or language by presenting them.
 
 ```ts
+// docs-snippet-path: packages/auth/src/index.ts
 import type {
   AuthenticatedPrincipal,
   AuthorizationPolicy,
@@ -243,6 +246,7 @@ client-provided context become trusted. See the generated
 [auth declarations](api/README.md) for the complete exported inventory.
 
 ```ts
+// docs-snippet-path: packages/auth/src/index.ts
 import type {
   ApplicationSessionIssuer,
   AuthenticatedPrincipal,
@@ -326,11 +330,11 @@ extraction points. `SubscriptionBindings` is trusted infrastructure: it retains
 the public Subscription derived from the resolved Topic and provides a fresh
 copy only to gateway-controlled callbacks.
 
-## Sessions, cookies, and multi-node choices
+## Sessions and cookies
 
 | Choice                                                    | Use when                                      | Benefit                                                  | Mandatory caveat                                                                                                                       |
 | --------------------------------------------------------- | --------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Opaque cookie (`OpaqueSessions` + `OpaqueSessionCookies`) | Browser-first application                     | Server can revoke immediately                            | The reference store is process-local; production/multiple gateway nodes need an application-selected durable/shared `SessionResolver`. |
+| Opaque cookie (`OpaqueSessions` + `OpaqueSessionCookies`) | Browser-first application                     | Server can revoke immediately                            | The reference store is process-local; choose storage and restart handling suitable for the one supported Gateway.                      |
 | Signed bearer (`SignedSessions`)                          | A bearer client needs local verification      | No session lookup on normal validation                   | Signed sessions trade local validation for delayed revocation. Revocation exists only with an explicit shared `SignedTokenRevocation`. |
 | Cookie transport                                          | Browser can use an application session cookie | `HttpOnly`, host-only, `Secure`, `SameSite=Lax` defaults | Require exact Origin plus `X-Spine-CSRF`; install serialized cookies in your HTTP adapter.                                             |
 | Bearer transport                                          | Non-cookie/browser-memory client              | Explicit Authorization header                            | Never persist the token with `BrowserSession`; do not put it in URLs or logs.                                                          |
@@ -440,7 +444,7 @@ Use this test matrix before changing an extension:
 | Concern            | Exercise                                                                                                                     |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
 | Policy/context     | Verify every `IncomingRequest` kind, stale/fabricated actor and tenant, target/message rules, and sanitized transport facts. |
-| Sessions           | Expiry, rotation, logout/revocation, duplicate headers/cookies, CSRF/origin failure, shared-store/node behavior.             |
+| Sessions           | Expiry, rotation, logout/revocation, duplicate headers/cookies, CSRF/origin failure, and Gateway restart behavior.           |
 | Provider callbacks | PKCE/state/nonce, one-time callback/exchange, redirect allowlist, provider/JWKS failure, token redaction.                    |
 | Browser client     | Chromium, Firefox, WebKit; reconnect/entity re-query, event `gapPossible`, cancellation and Strict Mode cleanup.             |
 | Gateway/Envoy      | Browser → TLS Envoy → standalone gateway → real backend; unauthorized rooms, forged context, relay/queue cleanup.            |

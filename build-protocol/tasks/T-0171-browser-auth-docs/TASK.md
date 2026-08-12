@@ -1,6 +1,6 @@
 # T-0171: Browser, Authentication, And Message Board Journey
 
-Status: Implementation complete; specialist review in progress
+Status: Review corrections in progress
 
 ## Objective
 
@@ -43,3 +43,15 @@ format/copyright/diff, and `verify:task -- --no-tests`. Review documentation,
 TypeScript/API, and reliability; security facts are cross-checked against
 canonical sources but no new security review is needed unless a boundary claim
 changes. Style is N/A unless shared tooling changes.
+
+## Accepted Review Corrections
+
+- Documentation scope finding: removed present-tense multi-Gateway session
+  guidance. The current offering documents one Gateway only; multiple-Gateway
+  behavior remains deferred and Cloud Run remains outside scope.
+- TypeScript/API P2: the strict checker now inventories all 20 owned paths.
+  Every TypeScript fence compiles in a real package or example source context
+  against generated declarations; omission and invalid-export diagnostics stay
+  covered by focused deterministic tests.
+- Reliability: CLEAN. The corrections do not change runtime behavior, retry,
+  session, or subscription contracts.

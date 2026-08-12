@@ -35,7 +35,7 @@ ResolveContext validates the current session and returns informational actor, te
 
 ## Sessions and sign-in
 
-`OpaqueSessions` implements a bounded, process-local `SessionResolver` with random cookie credentials. Defaults are an eight-hour lifetime, 10,000 retained sessions, and three identifier attempts. It lazily removes expired entries and is terminal after `close()`. Use a durable or shared `SessionResolver` when multiple gateway processes must recognize the same session.
+`OpaqueSessions` implements a bounded, process-local `SessionResolver` with random cookie credentials. Defaults are an eight-hour lifetime, 10,000 retained sessions, and three identifier attempts. It lazily removes expired entries and is terminal after `close()`. It suits local development and the supported single-Gateway shape; choose an application session strategy that meets that gateway's restart and revocation requirements.
 
 `SignedSessions` provides signed application session tokens. Local signature validation can delay revocation; shared revocation requires an explicit `SignedTokenRevocation` implementation. `OpaqueSessionCookies` supplies strict cookie parsing and serialization helpers. Neither strategy provisions users nor grants permissions.
 
