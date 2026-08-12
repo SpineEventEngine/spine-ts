@@ -264,6 +264,22 @@ describe("copyright checker", () => {
     expect(gitFiles(() => ({ status: 0, stdout: `${hostile.join("\0")}\0` }))).toEqual(hostile);
   });
 
+  it("parses mixed ordinary and renamed NUL name-status records", () => {
+    const renamed = 'new\tline\n"日本語.ts';
+    const prior = 'old\tline\n"日本語.ts';
+    const deleted = "deleted\nfile.ts";
+    const comparison = gitComparison((args) => {
+      if (args[0] === "merge-base") return { status: 0, stdout: "base\n" };
+      if (args.join(" ").includes("--name-status"))
+        return { status: 0, stdout: `M\0ordinary.ts\0R100\0${prior}\0${renamed}\0` };
+      if (args.join(" ").includes("--diff-filter=D")) return { status: 0, stdout: `${deleted}\0` };
+      if (args[0] === "show") return { status: 0, stdout: `${COPYRIGHT_HEADER}${body}` };
+      return { status: 0, stdout: "" };
+    });
+    expect(comparison.renamedFrom(renamed)).toEqual([prior]);
+    expect(comparison.deletedBasePaths()).toEqual([deleted]);
+  });
+
   it("fails closed when rename, deletion, or base lookup Git operations fail", () => {
     expect(() =>
       gitComparison((args) =>

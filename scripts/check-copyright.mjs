@@ -148,8 +148,10 @@ function renameMap(runGit, base) {
     for (let index = 0; index < fields.length - 1;) {
       const status = fields[index++];
       const from = fields[index++];
-      const to = fields[index++];
-      if (status?.startsWith("R") && from !== undefined && to !== undefined) {
+      if (status === undefined || status === "") break;
+      if (status.startsWith("R") || status.startsWith("C")) {
+        const to = fields[index++];
+        if (from === undefined || to === undefined) break;
         renames.set(to, [...new Set([...(renames.get(to) ?? []), from])]);
       }
     }

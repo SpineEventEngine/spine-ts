@@ -70,3 +70,5 @@ clean. The style/maintainability reviewer accepted the correction batch after
 requiring exact-template recognition, current-year generated output, and
 NUL-safe Git path handling. Both reviewer profiles were explicitly dispatched
 under the project review matrix; runtime profile metadata was unavailable.
+Residual style feedback found one mixed NUL name-status parser defect; the
+test-first correction is complete and awaits orchestrated re-review.
