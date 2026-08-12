@@ -27,3 +27,25 @@ fallback is reported.
 - Default strict snippets, API/audience, links, retired-routing/current-scope
   scans, natural-prose checks, formatting, licensing, diff, and task profile.
 - Complete specialist review wave and one consolidated correction batch.
+
+## Implementation disposition
+
+- `docs/USER_GUIDE.md` is changed and follows all ten approved sections in
+  order. Its primary handoffs are architecture, server README, Proto reference,
+  server reference, Node client reference, storage reference, testing
+  reference, server reference logging, deployment reference, and Message Board.
+- Documentation, TypeScript/API, and performance/reliability remain pending
+  the recorded review wave. Style is N/A for prose-only work; security is N/A
+  because no trust-boundary implementation changed, while existing Gateway and
+  secret-safe behavior remains in scope for factual review.
+
+## Deterministic preflight
+
+- Passed generated build, strict guide and default snippets, API/audience,
+  ten-section/primary-handoff/routing/current-scope scans, copyright,
+  release-readiness links, format, and diff checks.
+- Passed `pnpm verify:task -- --no-tests`. Runtime tests and coverage are N/A
+  because the task changes the guide and durable records only.
+- Documentation, TypeScript/API, and performance/reliability remain pending
+  the recorded review wave; style and security retain the concrete N/A
+  dispositions above.
