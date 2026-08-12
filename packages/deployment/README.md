@@ -1,6 +1,9 @@
 # Deployment
 
-For operators assembling a Spine Gateway with application-node discovery. For implementation contracts, read the [reference for agents](REFERENCE.md).
+Use this package when a single Gateway must learn which application nodes are
+ready. Start with a fixed list for a combined or local distributed deployment;
+move to a leased registry when nodes can be replaced independently. The
+[reference](REFERENCE.md) holds the exact discovery and lease contract.
 
 This package is currently private to this workspace rather than published for npm installation. Workspace consumers create `ApplicationNode` values and publish initial and replacement complete sets with `StaticNodeDiscovery`. Each snapshot is authoritative membership input; the consumer reconciler compares stable IDs, canonical HTTP(S) origins, and HTTPS TLS names. The expected 32 nodes is an operational expectation, never a routing cap.
 
@@ -20,7 +23,9 @@ namespace. The registry is a discovery directory, not a domain repository or
 Stand subscription registry. It persists the approved application-node lease
 record with a typed node identity, registration fence, and exact millisecond
 expiry. Read its [reference contract](REFERENCE.md) before assembling a
-registrar or selecting a MySQL or Datastore layout.
+registrar or selecting a MySQL or Datastore layout. A registration identity is
+a fence: an old process cannot renew or remove a newer process's lease after a
+node ID is reused.
 
 ```ts
 import { ApplicationNode, LeasedNodeRegistry } from "@spine-event-engine/deployment";

@@ -23,4 +23,5 @@ non-interactive stop, run `docker compose --file deploy/compose.yaml down`.
 
 The in-memory simple delivery server has no durable or highly available mode.
 This example intentionally adds neither discovery/redeployment behavior nor a
-new authentication boundary.
+new authentication boundary. It supports one fixed Gateway only; Multiple-
+Gateway behavior and Cloud Run are outside this example.

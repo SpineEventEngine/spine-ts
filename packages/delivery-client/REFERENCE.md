@@ -1,6 +1,7 @@
 # @spine-event-engine/delivery-client reference
 
-This reference describes the public Node Delivery client API for coding agents.
+This reference gives the exact public Node Delivery client contract. Read the
+[package guide](README.md) first for the local-to-remote delivery path.
 
 ## Construction and lifecycle
 
@@ -49,8 +50,8 @@ a stale local session and permits a new pickup. Do not release a stale session.
 
 `RemoteInbox` and `RemoteWorkRegistry` satisfy the server delivery-builder
 ports. `RemoteInbox` rereads the exact pending remote row before acknowledgement
-and calls the authoritative removal operation directly, without a local
-receipt, fingerprint, or quarantine record. Shard ownership excludes concurrent
+and calls the authoritative removal operation directly. It creates no local
+attempt history, receipt, fingerprint, or quarantine record. Shard ownership excludes concurrent
 delivery and delivered rows are the deduplication fact. Handler effects and the
 delivered transition are not transactional: a lost acknowledgement can
 redeliver after restart, so downstream handling must be idempotent. This

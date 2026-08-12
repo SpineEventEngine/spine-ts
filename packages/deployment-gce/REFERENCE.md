@@ -1,4 +1,8 @@
-# Reference
+# GCE deployment reference
+
+Read the [deployment guide](README.md) before using this exact template
+contract. It supports one Gateway; Multiple-Gateway routing and Cloud Run are
+outside this offering.
 
 ## Deployment template
 

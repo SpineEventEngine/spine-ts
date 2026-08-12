@@ -1,9 +1,10 @@
 # Envoy template for a Spine browser gateway
 
-`renderEnvoy()` creates a narrow browser-facing Envoy template. It is a
-starting point, not a managed deployment product: applications manage the gateway
-listener, TLS material, identity-provider flow, network policy, and any
-template changes.
+`renderEnvoy()` creates a narrow browser-facing Envoy template for one Gateway.
+It is a starting point, not a managed deployment product: applications manage
+the Gateway listener, TLS material, identity-provider flow, network policy, and
+any template changes. Multiple-Gateway routing and Cloud Run are outside this
+template's scope.
 
 Read the [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 before adapting this template: it documents the gateway trust boundary,
@@ -22,7 +23,7 @@ session/provider responsibilities, delivery limits, and verification matrix.
 Pass an HTTPS browser origin, the Envoy listen address and port, the application
 gateway address and port, and paths to PEM certificate and key files:
 
-```ts
+```js
 import { writeFile } from "node:fs/promises";
 import { renderEnvoy } from "./interop/envoy/render.mjs";
 

@@ -7,7 +7,7 @@ deployment. It is deliberately storage-neutral: your application chooses the
 storage and supplies its configuration.
 
 This is a guide for people deploying an application. For exact discovery API
-and lifecycle behavior, see the [reference for agents](REFERENCE.md).
+and lifecycle behavior, see the [deployment reference](REFERENCE.md).
 
 ## Before you begin
 
@@ -62,6 +62,9 @@ The simple delivery server is useful for this supported topology, but it is
 in-memory, single-replica, and not highly available. It loses its state when
 it restarts. Choose an operationally suitable delivery design before depending
 on it for a critical production workload.
+
+This template has one Gateway and a fixed deployment shape. Multiple-Gateway
+behavior and Cloud Run are outside the supported offering.
 
 ## Configure the template
 

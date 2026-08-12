@@ -1,11 +1,12 @@
 # In-memory Spine Delivery server
 
-This package provides the in-memory implementation of the Delivery simple
-server. Use it for local development, tests, and a deliberately ephemeral
-multi-node topology. Its state disappears when the process stops.
+This package provides the in-memory Delivery server. Use it to develop and test
+the local delivery path, or as the deliberately ephemeral delivery component in
+the supported examples. Its Inbox rows, leases, and delivered facts disappear
+when the process stops.
 
-For detailed contracts intended for coding agents, see the
-[REFERENCE.md documentation for agents](REFERENCE.md).
+The [reference](REFERENCE.md) records finite limits, shutdown order, and the
+complete protocol contract.
 
 ## 💡 Why use it?
 
@@ -85,8 +86,9 @@ directly to the public Internet.
 
 State disappears when the process stops. The server has no durable mode, TLS,
 authentication, authorization, configuration reload, health watch stream, or
-administration UI. Its default loopback listener is for development; a wider
-listener belongs only on an application-managed trusted network.
+administration UI. A pending row is not an attempt-history or quarantine
+record. Its default loopback listener is for development; a wider listener
+belongs only on an application-managed trusted network.
 
 ## 🔗 Learn more
 

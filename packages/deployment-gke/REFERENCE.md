@@ -1,7 +1,7 @@
-# Reference
+# GKE deployment reference
 
 The [deployment guide](README.md) is for people deploying an application. This
-reference records the exact package and Terraform-template contract for agents.
+reference records the exact package and Terraform-template contract.
 
 ## Discovery package
 
@@ -36,8 +36,9 @@ replica. The delivery server is in-memory and not highly available.
 The module creates no Kubernetes Secret and accepts only the names of
 operator-created application and Gateway Secrets. It selects no storage engine,
 identity provider, public load balancer, TLS certificate, Cloud Run service, or
-application command. Application code configures `GkeNodeDiscovery`, storage,
-identity, and public-edge integration.
+application command. The topology has exactly one Gateway; Multiple-Gateway
+behavior is outside its contract. Application code configures
+`GkeNodeDiscovery`, storage, identity, and public-edge integration.
 
 `autoscaling_enabled` defaults to `false`. When true, the module creates one
 external-metric HPA with a minimum of one and the operator's metric, target,

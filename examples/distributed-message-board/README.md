@@ -1,7 +1,7 @@
 # Distributed Message Board
 
-This example runs the existing Message Board model, application package, and
-React UI in a distributed development topology. It adds no copied domain or UI
+This example lets you run the existing Message Board model, application package,
+and React UI as a local distributed topology. It adds no copied domain or UI
 code: use the packages under `../message-board/` for both.
 
 ```mermaid
@@ -45,7 +45,8 @@ delivery endpoint. The simple delivery server coordinates which application
 node drains command work. The Gateway separately fans in subscription updates
 from both equal application nodes; it is not part of command delivery
 coordination. Normal complete payloads update the browser locally, while
-queries supply initial and recovery state.
+queries supply initial and recovery state. This is a fixed Compose topology
+with one Gateway, not a Multiple-Gateway example.
 
 Stop the topology with `Ctrl-C`, or from the repository root run
 `docker compose --file examples/distributed-message-board/deploy/compose.yaml down`.
