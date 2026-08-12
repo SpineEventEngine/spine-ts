@@ -28,12 +28,15 @@ import {
 import { Aggregate, EntityHandlers, Projection, Repository } from "@spine-event-engine/server";
 import { readFileSync } from "node:fs";
 
-const testingDescriptorSetBase64 = [
-  ...readFileSync(
-    new URL("./fixtures/entity-metadata-fixture.ts", import.meta.url),
-    "utf8",
-  ).matchAll(/"([^"]+)"/g),
-]
+const fixtureSource = readFileSync(
+  new URL("./fixtures/entity-metadata-fixture.ts", import.meta.url),
+  "utf8",
+);
+const descriptorArray = /export const testingDescriptorSetBase64 = \[([\s\S]*?)\]\.join\(""\)/u.exec(
+  fixtureSource,
+);
+if (descriptorArray === null) throw new Error("testing descriptor fixture array is missing");
+const testingDescriptorSetBase64 = [...descriptorArray[1].matchAll(/"([^"]+)"/g)]
   .map((match) => match[1])
   .join("");
 const fixtureFile = descriptor(testingDescriptorSetBase64);
