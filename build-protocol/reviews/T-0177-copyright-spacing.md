@@ -1,6 +1,6 @@
 # T-0177 Copyright Spacing Review
 
-Status: CLEAN; release-verified; integration pending
+Status: CLEAN; release-verified and integrated
 
 The task Human-Imposed Requirements Ledger is binding. Review the actual Git
 inventory and generated outputs, not a remembered convention.
