@@ -1,6 +1,6 @@
 # T-0173: Delivery And Deployment Journey
 
-Status: Implementation complete; specialist review queued
+Status: Review complete; integration ready
 
 ## Objective
 
