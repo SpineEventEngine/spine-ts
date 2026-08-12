@@ -22,3 +22,14 @@ Reviewer assignments are recorded before dispatch.
 - Style/maintainability: N/A because no shared checker/tooling or runtime code
   changed. Security: N/A because the slice adds no security boundary or
   credential-handling behavior beyond existing provider guidance.
+
+## Deterministic Evidence Before Review
+
+- Passed canonical Proto generation, generated TypeScript build, and strict
+  TypeScript snippets over all ten owned Markdown paths.
+- Passed audience, TypeDoc/API, format, copyright, diff-whitespace, and
+  repository relative-link/release-readiness checks.
+- Passed `pnpm verify:task -- --no-tests`; the profile completed its clean build
+  and tooling typecheck. The only failed attempt was the pre-generation build,
+  which reported missing generated Proto outputs and passed after canonical
+  generation; it is not a documentation defect.
