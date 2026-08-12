@@ -1,6 +1,6 @@
 # T-0174 API/Architecture Documentation Review
 
-Status: Implementation in progress; review not started
+Status: Review complete; integration ready
 
 The task Human-Imposed Requirements Ledger is binding.
 
