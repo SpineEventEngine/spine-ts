@@ -26,12 +26,12 @@ technical failures are non-OK acknowledgements; a domain rejection is accepted
 command processing with no state transition and is published separately on a
 best-effort rejection-event path.
 
-The generated registry uses exact message types first and an explicitly declared
-default only when a handler supplies one. Command handlers, event handlers, and
-state-update handlers are distinct routes; TypeScript does not interpret Java
-Proto options for routing. An event handler can narrow an event with `@Where`
-against an event field. Keep filters about event data, not a made-up semantic
-route name.
+The generated registry uses exact message types first. A routing declaration
+can supply the fallback with `replaceDefault`; a handler does not declare its
+own default. Command, event, and state-update handlers are distinct routes;
+TypeScript does not interpret Java Proto options for routing. An event handler
+can narrow an event with `@Where` against an event field. Keep filters about
+event data, not a made-up semantic route name.
 
 Server components receive framework logging through their configured logger;
 use it for operational context, never as a substitute for a stored event or a
@@ -92,7 +92,8 @@ effect.
 - Invalid payloads return `COMMAND_VALIDATION_ERROR` with packed validation
   details.
 - `TaskAlreadyDone` and `TaskNotDone` are domain rejections. They roll back the
-  task-list change but return an OK acceptance acknowledgement.
+  Aggregate transaction and return an OK acceptance acknowledgement. No domain
+  event reaches the Projection, so the task list stays unchanged.
 - A rejection also schedules a best-effort typed event. An active unsaturated
   subscription may receive it; saturation, closure, or post failure can prevent
   observation and does not change the OK acknowledgement.

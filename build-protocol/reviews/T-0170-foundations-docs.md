@@ -1,6 +1,9 @@
 # T-0170 Foundations Documentation Review
 
-Status: Deterministic preflight complete; specialist review dispatched
+Status: Correction complete; re-review ready
+
+The task's [Human-Imposed Requirements Ledger](../tasks/T-0170-foundations-docs/TASK.md)
+is the binding disposition source for this review.
 
 ## Required Concerns
 
@@ -35,6 +38,18 @@ Security is N/A because the implementation changes no authentication,
 authorization, secret, trust, or network boundary and adds no new security
 claim; it links or preserves existing canonical material.
 
-## Findings
+## Findings And Resolutions
 
-Pending implementation and deterministic preflight.
+All reviewer profiles were explicitly configured as recorded above. This
+surface does not expose actual runtime metadata, so the immutable role/profile
+configuration is the available evidence.
+
+| Concern                      | Finding                                                                                                          | Resolution                                                                                                                                                                                      |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Style/maintainability        | The checker needed fixture proof of built-declaration resolution and stable diagnostics.                         | Added valid and invalid source-context fixtures, a deterministic ordered diagnostic assertion, and retained the no-`any`-stub assertion.                                                        |
+| Documentation                | The Todo introduction fence was an opaque type assertion; server and Todo prose contained dense sections.        | Replaced it with executable generated-message behavior; split durable-binding, rejection, and subscription prose; recorded all 18 dispositions.                                                 |
+| TypeScript/API documentation | Routing/default, `@Where`, logging, implicit-ID, rejection, and replay wording required precise API attribution. | Documented exact-first routing, routing-declaration `replaceDefault`, typed `eventField`/`equals`, ServerEnvironment logging, aggregate rollback/no projection event, and replay-safe handlers. |
+| Performance/reliability      | Durable/replay and rejection claims needed clear transaction and delivery boundaries.                            | Distinguished aggregate rollback from projection non-update and retained at-least-once replay-safe language.                                                                                    |
+| Security                     | N/A: no security boundary claim changed.                                                                         | No security change; existing canonical material remains linked.                                                                                                                                 |
+
+The correction batch has not dispatched a new review wave.

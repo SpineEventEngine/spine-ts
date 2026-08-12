@@ -1,6 +1,6 @@
 # T-0170: Foundations Documentation And Strict Snippet Gate
 
-Status: Implementation checkpoint: strict checker and foundations-reader pass complete; pre-review validation in progress.
+Status: Review correction complete; re-review ready.
 
 ## Objective
 
@@ -75,6 +75,29 @@ task's records. No other production writer may overlap these files.
 - The owner must not spawn subagents and must preserve unrelated work.
 - Runtime metadata is recorded if exposed; otherwise the immutable configured
   role/profile and surface limitation are evidence.
+
+## Human-Imposed Requirements Ledger
+
+- The scope is exactly the 18 listed reader documents, the shared snippet
+  checker/tests, copyright-preserving root gate wiring, and T-0170 records.
+  Do not edit deferred reader areas or implement deferred runtime behavior.
+- README files remain concise, retain their established look and feel, and give
+  one clear onward link. References keep dense contracts and limits; root limits
+  remain framework-level.
+- Reader prose must be beginner-paced and natural: use short paragraphs,
+  lists, tables, or small diagrams instead of mechanical or dense prose.
+- The strict checker enumerates explicit documents and compiles every TypeScript
+  fence against real built declarations and exports. It has deterministic
+  document/line diagnostics and no permissive `any` module stubs.
+- The journey accurately covers first-field implicit required IDs, generated
+  validation and rejections, exact/default command/event/state-update routing,
+  event-field `@Where`, application logging, testing, and durable replay.
+- TypeScript routing does not consume Java-only option metadata. Do not document
+  semantic routing, `routeSemantic`, or an `@Route` decorator.
+- T-0169 copyright command and gate semantics remain unchanged and enforced.
+- Browser/auth, storage/provider, delivery/deployment, Message Board, Orders,
+  Projects, root `docs/USER_GUIDE.md`, and deferred runtime behavior remain out
+  of scope.
 
 ## Verification And Review
 

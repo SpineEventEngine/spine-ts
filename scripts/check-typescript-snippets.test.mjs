@@ -134,7 +134,7 @@ describe("TypeScript documentation snippets", () => {
     ]);
   });
 
-  it("reports a snippet type error without introducing import stubs", () => {
+  it("keeps the missing-context fixture diagnostic free of import stubs", () => {
     const diagnostics = checkTypeScriptSnippets(["scripts/fixtures/missing-snippet-context.md"]);
 
     expect(diagnostics).toEqual([
@@ -148,5 +148,32 @@ describe("TypeScript documentation snippets", () => {
     expect(readFileSync(resolve(root, "docs/check-typescript-snippets.mjs"), "utf8")).not.toContain(
       "export const ${name}: any",
     );
+  });
+
+  it("accepts a source-context import from a real built declaration", () => {
+    expect(
+      checkTypeScriptSnippets(["scripts/fixtures/valid-built-declaration-snippet.md"]),
+    ).toEqual([]);
+  });
+
+  it("reports invalid built declaration exports in deterministic order", () => {
+    expect(
+      checkTypeScriptSnippets([
+        "scripts/fixtures/z-missing-snippet-document.md",
+        "scripts/fixtures/invalid-built-declaration-snippet.md",
+      ]),
+    ).toEqual([
+      {
+        document: "scripts/fixtures/invalid-built-declaration-snippet.md",
+        line: 3,
+        message:
+          "Module '\"@spine-event-engine/core\"' has no exported member 'MissingCoreExport'.",
+      },
+      {
+        document: "scripts/fixtures/z-missing-snippet-document.md",
+        line: 1,
+        message: "Missing document.",
+      },
+    ]);
   });
 });
