@@ -1,6 +1,6 @@
 # T-0175: Beginner User Guide
 
-Status: Implementation authorized and starting
+Status: Accepted review corrections verified; ready for orchestrator continuation
 
 ## Objective
 
@@ -53,3 +53,15 @@ links, format/copyright/diff, and `verify:task -- --no-tests`. Review
 documentation, TypeScript/API documentation, and performance/reliability.
 Style is N/A for prose-only changes; security is N/A unless the guide changes a
 trust-boundary claim.
+
+## Accepted Review Corrections
+
+- Documentation P2: admit `docs/USER_GUIDE.md` to the default strict snippet
+  inventory. An exact-list test must be red before registration and green after;
+  both guide fences must compile through their real source contexts without
+  stubs.
+- TypeScript/API P2: section 8 must retain its approved server-reference
+  handoff without claiming a nonexistent logging section or anchor. It may
+  describe the reference as covering framework and server contracts.
+- Performance/reliability is CLEAN. These corrections change no runtime
+  behavior or delivery contract.

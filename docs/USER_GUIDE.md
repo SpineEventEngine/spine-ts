@@ -265,8 +265,8 @@ one transaction. A lost acknowledgement can redeliver after restart, so make
 downstream effects idempotent. The framework does not add attempt history,
 quarantine records, scheduled retry policy, or exactly-once side effects.
 
-Continue with the [server reference logging section](../packages/server/REFERENCE.md)
-for logging, lifecycle, and operational details.
+Continue with the [server reference](../packages/server/REFERENCE.md) for
+framework and server contracts.
 
 ## 9. Package and deploy it
 

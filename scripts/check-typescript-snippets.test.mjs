@@ -60,6 +60,7 @@ describe("TypeScript documentation snippets", () => {
       "packages/client-web/README.md",
       "packages/client-web/REFERENCE.md",
       "docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md",
+      "docs/USER_GUIDE.md",
       "examples/message-board/README.md",
       "examples/message-board/REFERENCE.md",
       "examples/message-board/app/README.md",
