@@ -12,10 +12,12 @@ and handler registries are generated artifacts and must not be edited.
 The local topology does not select a durable provider. In a durable composition,
 providers can push down record IDs and declared `(column)` filters or sort
 fields, but `RecordQuery<I>` statically types IDs only. The descriptor and
-column mapping validate filter/sort names and `unknown` filter values at runtime;
-unmarked fields remain in authoritative bytes. MySQL routes a complete tenant to
-its configured database; Datastore routes it to a native namespace. Neither
-provider uses the Bounded Context name as a physical partition.
+column mapping behavior is provider-specific: for example, MySQL validates
+declared columns while Datastore maps filter values and preserves requested sort
+field names. Unmarked fields remain in authoritative bytes. MySQL routes a
+complete tenant to its configured database; Datastore routes it to a native
+namespace. Neither provider uses the Bounded Context name as a physical
+partition.
 
 ## Load-runner behavior
 

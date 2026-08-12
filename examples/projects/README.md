@@ -49,7 +49,7 @@ This is the `createProject()` handler excerpt from
 [`ProjectAggregate`](src/index.ts); imports and the class declaration are
 omitted to focus on the handler.
 
-```ts
+```text
 @Assign
 createProject(command: CreateProject): ProjectCreated {
   this.update((draft) =>

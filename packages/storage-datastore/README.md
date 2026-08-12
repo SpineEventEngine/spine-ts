@@ -33,22 +33,18 @@ controls Google authentication and client lifetime.
 
 ```ts
 import { Datastore } from "@google-cloud/datastore";
-import { StringifierRegistry } from "@spine-event-engine/core";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-import { typeRegistry } from "./model-registry.js";
-
-const stringifiers = new StringifierRegistry();
-stringifiers.setTypeRegistry(typeRegistry);
 
 const factory = DatastoreStorageFactory.newBuilder()
   .setClient(new Datastore({ projectId: "my-project" }))
-  .setStringifierRegistry(stringifiers)
   .build();
 ```
 
 The builder always uses a client supplied by the caller. Its fixed finite reconciliation
 bound is 1,000 records. Pass the factory to the server or create record storage
-through the normal storage API.
+through the normal storage API. When application values contain `Any`, configure
+a `StringifierRegistry` with that application's `TypeRegistry` before building;
+the layout section below explains why that mapping must remain reversible.
 
 ## 🧭 Understand tenants and kinds
 

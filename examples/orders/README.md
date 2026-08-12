@@ -49,7 +49,7 @@ This is the `createOrder()` handler excerpt from
 [`OrderAggregate`](src/index.ts); imports and the class declaration are omitted
 to focus on the handler.
 
-```ts
+```text
 @Assign createOrder(command: CreateOrder): OrderCreated {
   this.update((draft) =>
     Object.assign(draft, create(OrderSchema, { id: this.id, skuId: command.skuId })),

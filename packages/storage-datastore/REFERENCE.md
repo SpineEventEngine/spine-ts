@@ -31,8 +31,9 @@ changes a kind. `useRecordStorage(...)` replaces a record-family provider.
 `Identifiers` select the key representation, and the same configured
 stringifier maps a message-valued ID or declared column on write, direct lookup,
 filter, ordering continuation, and read. `RecordQuery<I>` statically types IDs
-only; the descriptor and column mapping validate string filter/sort names and
-`unknown` values at runtime. Callers do not construct a provider string.
+only. Datastore maps filter values through its record column mapping at runtime;
+its sort-property mapping is the requested field name. Callers do not construct
+a provider string or infer shared filter/sort-name validation.
 `useEntityStorage(...)` replaces the complete coherent Entity handle, including
 its commit capability. Custom providers receive the storage context, record or
 Entity contract, and caller-supplied client, but not the built-in converter or

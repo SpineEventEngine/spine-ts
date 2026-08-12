@@ -61,8 +61,9 @@ local materialization can return a partial semantic result.
 can push down supported ID, declared-column, and sort parts of a plan, but must
 preserve these semantics and enforce their documented bounds. `RecordQuery<I>`
 statically types IDs only; filter and sort names are strings and filter values
-are `unknown`. The record descriptor and column mapping validate those names
-and values before a provider uses them.
+are `unknown`. Each provider documents the runtime mapping and validation it
+applies before using those inputs; callers cannot infer shared filter or sort
+name validation from the common query shape.
 
 ## Lifecycle
 

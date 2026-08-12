@@ -65,3 +65,25 @@ Reviewer assignments are recorded before dispatch.
 - Style/maintainability and security remain N/A: the correction changes only
   owned documentation and records, with no shared tooling or security-boundary
   behavior.
+
+## Residual API Re-Review Resolution
+
+- TypeScript/API re-review found three remaining overbroad statements in the
+  storage reference, Datastore reference, and Projects reference. They promised
+  shared or Datastore descriptor/column validation of filter and sort names.
+- Resolved by documenting provider-specific behavior: MySQL validates declared
+  columns; Datastore maps filter values but preserves requested sort field names;
+  the in-memory provider can resolve unknown paths. The common `RecordQuery<I>`
+  shape does not promise shared filter/sort-name validation.
+- TypeScript/API: CLEAN after this correction. Performance/reliability re-review:
+  CLEAN. Review profiles remain TypeScript/API and reliability
+  `gpt-5.6-terra` / high; runtime metadata is unavailable, so configured
+  profiles remain the recorded evidence.
+
+## Residual-Correction Evidence
+
+- Passed strict snippets for all ten owned documents, audience/API, format,
+  copyright, diff-whitespace, and the focused absence/presence wording scan.
+- The strict run also repaired three owned, pre-existing fence defects: two
+  intentionally partial handler excerpts are text fences, and the Datastore
+  factory sample is standalone. No runtime or public-contract behavior changed.
