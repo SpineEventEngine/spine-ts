@@ -843,8 +843,8 @@ IDs on the local append path, and can run `OnEventAccepted` between precheck
 and append with one captured storage context. It does not dispatch events,
 manage delivery, or fan out to subscribers.
 
-Transport exports include `TransportSignalKind`, `TransportSemanticTag`,
-`TransportTopicInput`, `TransportTopic`, `TransportRoutingDescriptor`,
+Transport exports include `TransportSignalKind`, `TransportTopicInput`,
+`TransportTopic`, `TransportRoutingDescriptor`,
 `TransportSubscriptionInput`, `TransportSubscription`, `TransportSubscriptionMode`,
 `TransportSignalEnvelope`,
 `PublishTransportOperation`, `RequestTransportOperation`,

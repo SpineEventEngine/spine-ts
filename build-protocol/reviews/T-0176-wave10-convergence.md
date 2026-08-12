@@ -52,3 +52,23 @@ complete: generated build, both focused gate suites, default 64-path snippets,
 API/audience, copyright, TSDoc, cleanup, logging containment, release links,
 focused ESLint, semantic-tag/`@Where` scans, formatting, and diff hygiene all
 passed. The orchestrator retains the single final `verify:release` run.
+
+## Final Narrow Documentation Residual
+
+- Documentation first re-review missed two stale reader claims. The API export
+  list named retired `TransportSemanticTag`; the architecture entity-extractor
+  paragraph claimed an empty semantic-tag-value failure that the current public
+  contract does not expose.
+- TypeScript/API P2 accepted: removed `TransportSemanticTag` and retained the
+  actual transport exports. Performance/reliability P1 and P2 accepted: removed
+  only the stale semantic-tag error clause, retaining the current entity-metadata
+  errors and invariants. This is documentation-only and introduces no runtime
+  behavior change.
+- Security remains N/A; no trust boundary changed. The existing implementation
+  profile and metadata limitation above remain applicable. Validation is limited
+  to strict docs and deterministic documentation gates; the orchestrator still
+  owns the single final `verify:release` run.
+
+Final residual validation passed: strict 64-document snippets, API inventory and
+audience, copyright, release-readiness links, exact transport-export and
+semantic-error scans, formatting, and diff hygiene. No release profile was run.

@@ -228,10 +228,9 @@ Copied `(is)` and `(every_is)` options remain Proto wire metadata. They are not
 entity metadata or inputs to repository routing or runtime topics.
 
 The entity extractor throws typed `DescriptorMetadataError` failures for non-entity
-schemas, unknown entity kinds, repeated/map column declarations, empty semantic
-tag values, and other unsupported combinations in this implementation. Aggregate and
-generic entity column declarations are ignored to match the source option
-contract.
+schemas, unknown entity kinds, repeated/map column declarations, and other
+unsupported combinations in this implementation. Aggregate and generic entity
+column declarations are ignored to match the source option contract.
 
 Server transition validation currently compares descriptor-derived
 `(set_once)` fields through the core transition facade and Protobuf-ES
