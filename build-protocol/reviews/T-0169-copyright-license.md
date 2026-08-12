@@ -1,6 +1,6 @@
 # T-0169 Copyright And License Review
 
-Status: Correction complete; re-review ready
+Status: Specialist review complete and clean; release verification pending
 
 ## Required Concerns
 
@@ -65,10 +65,13 @@ scripts/check-copyright.test.mjs`: the test suite failed at import because
 
 ## Findings
 
-The documentation/license reviewer found the license/header claims otherwise
-clean. The style/maintainability reviewer accepted the correction batch after
-requiring exact-template recognition, current-year generated output, and
-NUL-safe Git path handling. Both reviewer profiles were explicitly dispatched
-under the project review matrix; runtime profile metadata was unavailable.
-Residual style feedback found one mixed NUL name-status parser defect; the
-test-first correction is complete and awaits orchestrated re-review.
+The documentation/license reviewer found the license/header claims clean. The
+style/maintainability reviewer requested exact-template recognition,
+current-year generated output, and NUL-safe Git path handling, then found one
+mixed NUL name-status parser defect during targeted re-review. The test-first
+parser correction now consumes one path for ordinary statuses and two for
+rename/copy statuses. Final narrow re-review found the implementation and its
+hostile-path fixtures clean; its sole P2 record-wording finding is corrected in
+this deterministic record update. Both reviewer profiles were explicitly
+dispatched under the project review matrix; runtime profile metadata was
+unavailable.
