@@ -52,10 +52,12 @@ Reviewer assignments are recorded before dispatch.
   32-filter, 64-values-per-filter, eight-sort, and 2,048-parameter caps that
   `validateQuery()` does not enforce. Resolved by removing those caps and
   documenting actual ID, declared-column, and descriptor value validation.
-  P2-2: documents overstated static typing of query operands. Resolved by
-  stating that `RecordQuery<I>` statically types IDs only; filter/sort names and
-  `RecordFilter.value: unknown` are checked through runtime descriptor and
-  column mappings, including identifier/stringifier conversion.
+  P2-2: documents overstated static typing of query operands. The intermediate
+  correction stated that `RecordQuery<I>` statically types IDs only and that
+  runtime mappings handle the remaining inputs. It was later narrowed in the
+  residual API correction: filter/sort-name and `RecordFilter.value: unknown`
+  handling is provider-specific, rather than a shared descriptor-validation
+  guarantee; see that final resolution below.
 - Performance/reliability reviewer: CLEAN after the corrections. Configured
   profile `gpt-5.6-terra` / high. It confirmed the corrected worktree retains
   finite query, provider-native tenancy, migration, and fail-closed claims.
