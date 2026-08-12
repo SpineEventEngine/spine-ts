@@ -31,6 +31,11 @@ correction checks the durable contract—the README links to its shipped
 test-only correction does not reopen runtime, API, reliability, or security
 review lanes; style/maintainability receives a narrow confirmation.
 
+Style re-review found one test-only residual: the first matcher accepted a
+Markdown image targeting `REFERENCE.md`. The final matcher excludes image
+syntax, and a dedicated negative fixture proves that only navigational links
+satisfy the package contract.
+
 ## Accepted Review Batch
 
 - Documentation: accepted the five-location semantic-tag correction. Reader

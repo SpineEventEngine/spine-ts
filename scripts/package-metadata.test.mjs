@@ -110,7 +110,7 @@ function readWorkspacePackages(repoRoot) {
 }
 
 function hasReferenceLink(readme) {
-  return /\[[^\]]+\]\(REFERENCE\.md\)/u.test(readme);
+  return /(?<!!)\[[^\]]+\]\(REFERENCE\.md\)/u.test(readme);
 }
 
 function versionProblems(repoRoot) {
@@ -318,6 +318,12 @@ describe("package metadata", () => {
 
   it("rejects prose that names the reference without linking to it", () => {
     const readme = "Read REFERENCE.md for details.";
+
+    expect(hasReferenceLink(readme)).toBe(false);
+  });
+
+  it("rejects an image that points at the reference document", () => {
+    const readme = "![Reference cover](REFERENCE.md)";
 
     expect(hasReferenceLink(readme)).toBe(false);
   });
