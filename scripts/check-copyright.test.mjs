@@ -159,6 +159,18 @@ describe("copyright checker", () => {
     ).toEqual([`${renamed}: ambiguous header-normalized rename match`]);
   });
 
+  it("reports a recognized header after a leading comment as misplaced", () => {
+    expect(
+      checkCopyright(
+        options(
+          [path],
+          { [path]: `// generated file\n${COPYRIGHT_HEADER}${body}` },
+          { year: 2026 },
+        ),
+      ),
+    ).toEqual([`${path}: misplaced CodeMatters header`]);
+  });
+
   it("sorts diagnostic classes and fails closed when Git enumeration fails", () => {
     const proto = "packages/proto/proto/upstream.proto";
     expect(
@@ -257,6 +269,31 @@ describe("copyright checker", () => {
         ...comparison,
       }),
     ).toEqual([]);
+  });
+
+  it("treats a Git copy as a new current-year file rather than historical content", () => {
+    const old = `${COPYRIGHT_HEADER}${body}`;
+    const copied = "copied.ts";
+    const comparison = gitComparison((args) => {
+      if (args[0] === "merge-base") return { status: 0, stdout: "base\n" };
+      if (args.join(" ").includes("--name-status"))
+        return {
+          status: 0,
+          stdout: "C100\0original.ts\0copied.ts\0R100\0old.ts\0renamed.ts\0",
+        };
+      if (args.join(" ") === "show base:copied.ts") return { status: 128, stdout: "" };
+      if (args[0] === "show") return { status: 0, stdout: old };
+      return { status: 0, stdout: "" };
+    });
+
+    expect(
+      checkCopyright({
+        ...options([copied], { [copied]: old }, { year: 2027 }),
+        ...comparison,
+      }),
+    ).toEqual([`${copied}: stale-year CodeMatters header`]);
+    expect(comparison.renamedFrom("renamed.ts")).toEqual(["old.ts"]);
+    expect(comparison.renamedFrom(copied)).toEqual([]);
   });
 
   it("preserves hostile legal Git paths from NUL-delimited output", () => {

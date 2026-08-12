@@ -762,11 +762,11 @@ or end-user envelope APIs.
 It does not broaden end-user APIs into framework `Command`/`Event` envelopes,
 does not reintroduce `@Apply`, and does not expose manual transaction-control
 APIs.
-Semantic tags flow into runtime routing topics in this implementation:
-command topics copy command-assignee entity tags, and event topics copy the
-deduplicated union of receiver entity tags. Broader handler materialization and
-application semantic-tag registration remain outside this runtime
-metadata surface.
+Copied Proto semantic-tag options are wire metadata only. They are not
+TypeScript `TypeRegistry` or entity metadata, repository-routing input, or
+runtime-topic input. `TransportTopics.create()` and its routing key use only a
+signal kind and payload type URL. Broader handler materialization remains
+outside this runtime metadata surface.
 The public runtime closure smoke path composes these exports with
 `BoundedContext`, `Repository`, `HandlerMetadataRegistry`,
 `CommandRegistrationReadiness`, `EventRegistrationReadiness`, and
@@ -882,6 +882,7 @@ union operations and topics can be narrowed through their fixed canonical kind
 paths:
 
 ```ts
+// docs-snippet-path: packages/transport/test/index.test.ts
 import {
   TransportOperations,
   TransportTopics,

@@ -60,13 +60,15 @@ timestamps, actor context, tenant context, storage records, or routing data.
 
 ## Registry
 
-`TypeRegistry` maintains registrations by full Protobuf name, type URL, schema
-identity, and optional semantic tag. Duplicate full names, URLs, or conflicting
-schema identities throw during `register()`. `getBy*()` throws for a missing
-registration; `findBy*()` returns `undefined`; `list()` preserves registration
-order. `TypeRegistry.from(...modules)` composes `ProtoModule` dependencies in
+`TypeRegistry` maintains registrations by full Protobuf name, type URL, and
+schema identity. Duplicate full names, URLs, or conflicting schema identities
+throw during `register()`. `getBy*()` throws for a missing registration;
+`findBy*()` returns `undefined`; `list()` preserves registration order.
+`TypeRegistry.from(...modules)` composes `ProtoModule` dependencies in
 dependency order. `spineCoreRegistry` is lookup-only; callers needing a mutable
-copy use `TypeRegistry.spineCore()`.
+copy use `TypeRegistry.spineCore()`. Copied Proto `(is)` and `(every_is)` options
+are wire metadata, not TypeRegistry data or repository-routing/runtime-topic
+input.
 
 ## Boundaries
 

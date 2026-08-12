@@ -100,10 +100,9 @@ route; exact routes win. Each route runs deterministically during admission,
 and durable replay uses the stored target instead of running the route again.
 
 The copied `(is).java_type` and `(every_is).java_type` definitions are preserved
-wire definitions only. TypeScript routing does not consume them, and it has no
-`@Route` decorator or `routeSemantic()` API. Semantic tags can still describe
-copied Proto metadata, but TypeScript does not use them for repository routing
-or runtime transport topics.
+wire definitions only. They are not TypeScript `TypeRegistry` or entity
+metadata, repository-routing input, or runtime-topic input. TypeScript routing
+does not consume them, and it has no `@Route` decorator or `routeSemantic()` API.
 One `@Where({ eventField, equals })` equality filter may be used after type
 routing on an event- or rejection-consuming `@Subscribe`, `@React`, or
 `@Command` handler. Its two values must be typed string literals; invalid or
@@ -136,11 +135,10 @@ Descriptor-backed metadata includes:
 - first declared field, preserving descriptor declaration order; and
 - file option helpers for validation and runtime code.
 
-Semantic tag lookup is available as an API shape, but this core registry still
-does not register tags. The copied proto set defines the Spine `(is)`
-and `(every_is)` options; descriptor-derived entity metadata preserves them,
-and server runtime routing copies those tags into command and event
-transport topics.
+The copied Proto set defines the Spine `(is)` and `(every_is)` options as wire
+metadata. Core `TypeRegistry` and descriptor-derived entity metadata do not
+register or expose those tags, and repository routing and runtime topics do not
+consume them.
 
 ## Core Validation Facade
 
@@ -223,11 +221,11 @@ Server metadata is pure and deterministic:
 - the first declared field becomes both the canonical entity ID field and the
   first-field routing hint for handler and repository code;
 - fields marked `(column) = true` are surfaced in descriptor order only for
-  projections and process managers, `(set_once) = true` fields are surfaced for
-  every entity kind, and
-- semantic tags from message `(is)` and file `(every_is)` options are
-  preserved in deterministic sorted order and consumed by server runtime
-  routing topics.
+  projections and process managers, and `(set_once) = true` fields are surfaced
+  for every entity kind.
+
+Copied `(is)` and `(every_is)` options remain Proto wire metadata. They are not
+entity metadata or inputs to repository routing or runtime topics.
 
 The entity extractor throws typed `DescriptorMetadataError` failures for non-entity
 schemas, unknown entity kinds, repeated/map column declarations, empty semantic
@@ -762,10 +760,10 @@ objects and interfaces that adapters can implement:
 
 - `TransportSignalKind` names framework-level signal families (`command`,
   `event`, `query`, `subscription`, and `system`);
-- `TransportTopics.create()` builds immutable topics from a signal kind, a payload
-  type URL, and optional semantic tags;
+- `TransportTopics.create()` builds immutable topics from a signal kind and a
+  payload type URL; and
 - `TransportRoutingDescriptor.routingKey` is derived deterministically from the
-  signal kind, payload type URL, and sorted unique semantic tags;
+  signal kind and payload type URL;
 - `TransportSubscriptions.create()` builds immutable logical subscription
   descriptors from a topic, a logical subscriber ID, and a transport delivery
   mode; and

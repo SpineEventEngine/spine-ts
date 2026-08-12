@@ -152,7 +152,8 @@ function renameMap(runGit, base) {
       if (status.startsWith("R") || status.startsWith("C")) {
         const to = fields[index++];
         if (from === undefined || to === undefined) break;
-        renames.set(to, [...new Set([...(renames.get(to) ?? []), from])]);
+        if (status.startsWith("R"))
+          renames.set(to, [...new Set([...(renames.get(to) ?? []), from])]);
       }
     }
   }

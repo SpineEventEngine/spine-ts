@@ -1,6 +1,6 @@
 # T-0176: Wave 10 Documentation And Release Convergence
 
-Status: Convergence starting
+Status: Accepted review corrections verified; awaiting orchestrator release profile
 
 ## Objective
 
@@ -59,3 +59,20 @@ and explicit profiles are accepted unless a mismatch or fallback is reported.
 Cheap preflight: generation/build, strict snippets, API/audience, copyright,
 TSDoc/cleanup/logging containment, links, formatting, diff, ledger and retired
 API/scope scans. After review convergence, run `pnpm verify:release` once.
+
+## Accepted Review Corrections
+
+- Documentation/API: remove the five positive copied-Proto semantic-tag claims.
+  `(is)` and `(every_is)` remain wire metadata only, not TypeRegistry/entity
+  metadata, repository-routing input, or runtime-topic input. Transport topics
+  and routing keys use only signal kind and payload type URL.
+- TypeScript/API: correct `@Where` to one typed equality filter after type
+  routing on event- or rejection-consuming `@Subscribe`, `@React`, or `@Command`
+  handlers; invalid or repeated declarations fail closed.
+- Style/maintainability: make the default strict snippet inventory exactly the
+  64 reader paths in the frozen plan, with failing-first regression coverage;
+  make copyright copies new/current-year files and recognize a valid header
+  after a leading comment as misplaced.
+- Performance/reliability: CLEAN; the accepted changes alter no runtime,
+  delivery, storage, lifecycle, or topology behavior. Security remains N/A:
+  no trust boundary changes.

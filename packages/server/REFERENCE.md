@@ -10,9 +10,10 @@ there is no exact route. This is TypeScript routing; it does not consume
 `(is).java_type` or `(every_is).java_type`, and it has no decorator-based
 route registration API.
 
-`@Where({ eventField, equals })` narrows an event subscription after event-type
-routing. `eventField` names an event field and `equals` is its typed string
-comparison value; it is not an alternative routing mechanism.
+One `@Where({ eventField, equals })` equality filter may narrow an event- or
+rejection-consuming `@Subscribe`, `@React`, or `@Command` handler after type
+routing. `eventField` and `equals` are typed string literals; invalid or
+repeated declarations fail closed. It is not an alternative routing mechanism.
 
 Configure logging through `ServerEnvironment` when assembling the server. The
 server installs that logger into its runtime components, where warnings and

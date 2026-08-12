@@ -1,6 +1,6 @@
 # T-0176 Wave 10 Convergence Review
 
-Status: Pre-review convergence in progress
+Status: Accepted review corrections verified; awaiting orchestrator release profile
 
 The task Human-Imposed Requirements Ledger is binding. Review the integrated
 Wave 10 result, not individual historical checkpoints.
@@ -19,3 +19,36 @@ Wave 10 result, not individual historical checkpoints.
 
 One complete finding batch is returned before a consolidated correction. Only
 substantively affected concerns receive targeted re-review.
+
+## Accepted Review Batch
+
+- Documentation: accepted the five-location semantic-tag correction. Reader
+  references now state that copied `(is)`/`(every_is)` options are Proto wire
+  metadata only, not TypeRegistry/entity metadata, repository-routing input, or
+  runtime-topic input. Transport topics and keys use signal kind plus payload
+  type URL only.
+- TypeScript/API: accepted the server-reference `@Where` correction and a
+  real-context binding for the API transport snippet. One equality filter may
+  follow type routing on an event- or rejection-consuming `@Subscribe`,
+  `@React`, or `@Command` handler; its typed literals and duplicate/invalid
+  fail-closed behavior are retained.
+- Performance/reliability: CLEAN. The batch has no runtime, delivery, storage,
+  lifecycle, limit, or topology change.
+- Style/maintainability: accepted deterministic gate repairs. The strict
+  inventory is the frozen exact 64-path reader list; all entries are presence
+  checked and every TypeScript fence compiles in a real context. Git `R*` alone
+  supplies historical path content; `C*` copies are new/current-year files. A
+  recognized exact header following a leading comment is misplaced, while a
+  shebang remains the allowed prefix.
+- Security: N/A with concrete reason: this documentation/tooling-only batch
+  changes no authentication, authorization, transport trust boundary, secret,
+  or runtime behavior.
+
+The existing implementation assignment is explicit `implementer` /
+`gpt-5.6-terra` / medium with no subagents. This surface does not expose runtime
+model self-introspection; the immutable configured profile is the available
+metadata, with no mismatch or fallback exposed. Correction validation is in
+complete: generated build, both focused gate suites, default 64-path snippets,
+API/audience, copyright, TSDoc, cleanup, logging containment, release links,
+focused ESLint, semantic-tag/`@Where` scans, formatting, and diff hygiene all
+passed. The orchestrator retains the single final `verify:release` run.
