@@ -22,3 +22,8 @@ export function recognizedCopyrightHeader(contents) {
     );
   return match?.[0] === copyrightHeader(Number(match?.[1])) ? match[0] : undefined;
 }
+
+/* Preserves the approved header while separating a following TSDoc block. */
+export function separateCopyrightHeader(contents) {
+  return contents.replace(/( \*\/\n)(?=\/\*\*)/u, "$1\n");
+}

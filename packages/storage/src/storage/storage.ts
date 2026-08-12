@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 /**
  * Common closeable contract shared by storage factories and concrete storages.
  */

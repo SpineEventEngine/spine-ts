@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 /**
  * Provider-only entity persistence SPI. This subpath is intentionally not part
  * of the end-user storage root; storage adapters import it directly.

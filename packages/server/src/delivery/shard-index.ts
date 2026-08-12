@@ -11,6 +11,7 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+
 /**
  * Zero-based shard index with a stable shard count.
  */

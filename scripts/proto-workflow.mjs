@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { findSymlinkedAncestors, lstatIfPresent } from "./generated-path-safety.mjs";
 import { writeSpineProtoArtifacts } from "./generate-spine-proto-artifacts.mjs";
-import { copyrightHeader } from "./copyright-header.mjs";
+import { copyrightHeader, separateCopyrightHeader } from "./copyright-header.mjs";
 
 const protoRoot = fileURLToPath(new URL("../packages/proto/proto", import.meta.url));
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -63,10 +63,10 @@ export const atomicGeneratedTargets = [
   { displayPath: "examples/message-board/app/generated" },
 ];
 
-/** Adds the required copyright notice to the one tracked generated registry. */
+/* Adds the required copyright notice to the one tracked generated registry. */
 export function withCopyrightHeader(contents, year = new Date().getFullYear()) {
   const header = copyrightHeader(year);
-  return contents.startsWith(header) ? contents : `${header}${contents}`;
+  return separateCopyrightHeader(contents.startsWith(header) ? contents : `${header}${contents}`);
 }
 
 /**

@@ -159,7 +159,7 @@ function renameMap(runGit, base) {
   return renames;
 }
 
-/** Creates deterministic Git-backed current-year comparison operations. */
+/* Creates deterministic Git-backed current-year comparison operations. */
 export function gitComparison(runGit = git) {
   const base = gitOutput(runGit, ["merge-base", "origin/main", "HEAD"], "merge-base").trim();
   if (base === "") throw new Error("copyright merge-base failed");

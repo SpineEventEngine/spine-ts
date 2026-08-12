@@ -75,3 +75,6 @@ hostile-path fixtures clean; its sole P2 record-wording finding is corrected in
 this deterministic record update. Both reviewer profiles were explicitly
 dispatched under the project review matrix; runtime profile metadata was
 unavailable.
+
+Release-verification TSDoc feedback is corrected test-first; any subsequent
+re-review remains orchestrator-owned.
