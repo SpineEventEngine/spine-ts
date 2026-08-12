@@ -26,3 +26,30 @@ the surface reports a mismatch or fallback.
 - Strict snippets, API/audience, retired-routing scan, links, formatting,
   licensing, diff, and selected task verification.
 - One complete specialist review wave and one consolidated correction batch.
+
+## Implementation disposition
+
+- `docs/api/README.md`: changed. It remains the TypeDoc/public-API index and
+  now hands each cross-package topic to one detailed source rather than adding
+  a second tutorial.
+- `docs/architecture/README.md`: changed. It remains the canonical runtime and
+  Bounded Context explanation, with deliberate onward references for server,
+  client recovery, storage/tenancy, delivery, and deployment.
+- TypeScript routing is source-verified as exact `route()` plus
+  `replaceDefault()` declarations on `CommandRouting`, `EventRouting`, and
+  `StateUpdateRouting`. Java-specific options are described only as preserved
+  wire definitions. `@Route` and `routeSemantic()` are not TypeScript APIs.
+- Style is N/A because no shared checker/tooling changes. Security is N/A
+  because no trust-boundary implementation changed; existing single-Gateway
+  and Cloud Run exclusions are retained in the architecture facts.
+
+## Deterministic preflight
+
+- Passed generated build, strict snippets for the two owned documents, API and
+  audience checks, canonical-target/retired-routing scan, copyright,
+  release-readiness links, format, and diff checks.
+- Passed `pnpm verify:task -- --no-tests`; runtime tests are N/A because the
+  milestone changes documentation and durable records only.
+- Documentation, TypeScript/API, and performance/reliability remain pending
+  the recorded specialist review wave. Style and security retain their concrete
+  N/A dispositions above.

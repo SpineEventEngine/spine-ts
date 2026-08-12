@@ -15,7 +15,19 @@ boundaries.
 
 The notes describe current code rather than a learning sequence. Use the package
 READMEs for beginner examples and the adjacent `REFERENCE.md` files for
-package-specific details.
+package-specific details. The [API reference](../api/README.md) is the canonical
+index for public declarations; this page is the canonical explanation of the
+runtime and Bounded Context boundaries.
+
+## How the detailed references fit together
+
+| Question                                                               | Continue with                                                            |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| How do I assemble handlers, routing, `@Where`, logging, or rejections? | [Server reference](../../packages/server/REFERENCE.md)                   |
+| How do clients reconnect and recover state?                            | [Node client reference](../../packages/client-node/REFERENCE.md)         |
+| How are storage, queries, and tenant layouts selected?                 | [Storage reference](../../packages/storage/REFERENCE.md)                 |
+| What does local or remote delivery guarantee?                          | [Delivery client reference](../../packages/delivery-client/REFERENCE.md) |
+| Which deployment and discovery topology is supported?                  | [Deployment reference](../../packages/deployment/REFERENCE.md)           |
 
 ## Distributed command, delivery, query, and subscription path
 
@@ -73,6 +85,22 @@ values, and custom options. This boundary is intentionally contract-only:
 - buses, transport, and entity runtime behavior remain out of scope for this
   package boundary. Runtime signal metadata belongs to the server/runtime
   layer rather than the proto package.
+
+## Repository routing boundary
+
+Repository routing is explicit TypeScript code. `CommandRouting`,
+`EventRouting`, and `StateUpdateRouting` use `route(schema, via)` for exact
+generated-schema matches. `replaceDefault(via)` replaces the applicable default
+route; exact routes win. Each route runs deterministically during admission,
+and durable replay uses the stored target instead of running the route again.
+
+The copied `(is).java_type` and `(every_is).java_type` definitions are preserved
+wire definitions only. TypeScript routing does not consume them, and it has no
+`@Route` decorator or `routeSemantic()` API. Semantic tags can still describe
+metadata used by runtime transport topics; they do not select repository routes.
+`@Where` filters an event subscription only after event-type routing. The
+[server reference](../../packages/server/REFERENCE.md) contains the complete
+handler and routing contract.
 
 ## Core Metadata Registry
 
