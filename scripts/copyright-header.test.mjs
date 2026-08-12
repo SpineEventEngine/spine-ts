@@ -14,7 +14,7 @@ describe("copyright header", () => {
     ).toBeUndefined();
   });
 
-  it("normalizes zero and multiple empty lines after the approved header", () => {
+  it("normalizes zero, multiple, and whitespace-only blank lines after the approved header", () => {
     for (const following of [
       "import { value } from './value.js';\n",
       "export const value = true;\n",
@@ -25,6 +25,12 @@ describe("copyright header", () => {
         `${copyrightHeader(2026)}\n${following}`,
       );
       expect(separateCopyrightHeader(`${copyrightHeader(2026)}\n\n${following}`)).toBe(
+        `${copyrightHeader(2026)}\n${following}`,
+      );
+      expect(separateCopyrightHeader(`${copyrightHeader(2026)} \t\n${following}`)).toBe(
+        `${copyrightHeader(2026)}\n${following}`,
+      );
+      expect(separateCopyrightHeader(`${copyrightHeader(2026)}\n \t\n${following}`)).toBe(
         `${copyrightHeader(2026)}\n${following}`,
       );
     }

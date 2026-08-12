@@ -62,7 +62,7 @@ describe("copyright checker", () => {
           [path, tsx],
           {
             [path]: `${COPYRIGHT_HEADER}export const example = true;\n`,
-            [tsx]: `${COPYRIGHT_HEADER}\n\nexport const View = () => null;\n`,
+            [tsx]: `${COPYRIGHT_HEADER}\n \t\nexport const View = () => null;\n`,
           },
           { year: 2026 },
         ),
@@ -71,6 +71,21 @@ describe("copyright checker", () => {
       `${tsx}: incorrect CodeMatters header spacing (expected exactly one empty line)`,
       `${path}: incorrect CodeMatters header spacing (expected exactly one empty line)`,
     ]);
+  });
+
+  it("does not advance the year for spacing-only future-year corrections", () => {
+    const current = `${compliantHeader}${body}`;
+    for (const spacing of ["", "\n\n", " \t\n", "\n \t\n"]) {
+      expect(
+        checkCopyright(
+          options(
+            [path],
+            { [path]: current },
+            { year: 2027, baseContent: () => `${COPYRIGHT_HEADER}${spacing}${body}` },
+          ),
+        ),
+      ).toEqual([]);
+    }
   });
 
   it("places a TypeScript header after a shebang and Proto before syntax", () => {

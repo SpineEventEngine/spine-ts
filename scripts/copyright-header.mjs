@@ -30,5 +30,5 @@ export function separateCopyrightHeader(contents) {
   const after = contents.slice(at);
   const header = recognizedCopyrightHeader(after);
   if (header === undefined) return contents;
-  return `${before}${header}\n${after.slice(header.length).replace(/^\n*/u, "")}`;
+  return `${before}${header}\n${after.slice(header.length).replace(/^(?:[ \t]*\n)*/u, "")}`;
 }

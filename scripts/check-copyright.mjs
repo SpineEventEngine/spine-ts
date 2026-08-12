@@ -15,7 +15,11 @@ import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { copyrightHeader, recognizedCopyrightHeader } from "./copyright-header.mjs";
+import {
+  copyrightHeader,
+  recognizedCopyrightHeader,
+  separateCopyrightHeader,
+} from "./copyright-header.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const manifestPath = "packages/proto/proto/spine-sources.json";
@@ -34,14 +38,17 @@ function isEligible(path, excluded) {
   return /\.(?:ts|tsx|proto)$/u.test(path) && !excluded.has(path);
 }
 
-function hasExactHeaderSpacing(contents) {
-  return /^\n(?!\n)/u.test(contents);
+function usesCopyrightSpacingPolicy(path) {
+  return /\.(?:ts|tsx)$/u.test(path);
 }
 
-function normalizedContents(contents) {
-  const at = placement(contents);
-  const before = contents.slice(0, at);
-  const after = contents.slice(at);
+function normalizedContents(path, contents) {
+  const normalized = usesCopyrightSpacingPolicy(path)
+    ? separateCopyrightHeader(contents)
+    : contents;
+  const at = placement(normalized);
+  const before = normalized.slice(0, at);
+  const after = normalized.slice(at);
   const header = recognizedCopyrightHeader(after);
   return `${before}${header === undefined ? after : after.slice(header.length)}`;
 }
@@ -60,7 +67,7 @@ function hasMisplacedRecognizedHeader(contents) {
 function contentChanged(path, contents, options) {
   const base = options.baseContent?.(path);
   if (base !== undefined)
-    return { changed: normalizedContents(contents) !== normalizedContents(base) };
+    return { changed: normalizedContents(path, contents) !== normalizedContents(path, base) };
 
   const renamed = options.renamedFrom?.(path) ?? [];
   if (renamed.length === 1) {
@@ -68,7 +75,7 @@ function contentChanged(path, contents, options) {
     return {
       changed:
         renamedBase === undefined ||
-        normalizedContents(contents) !== normalizedContents(renamedBase),
+        normalizedContents(path, contents) !== normalizedContents(path, renamedBase),
     };
   }
   if (renamed.length > 1) return { problem: "ambiguous header-normalized rename match" };
@@ -77,7 +84,7 @@ function contentChanged(path, contents, options) {
     const candidateBase = options.baseContentAt?.(candidate);
     return (
       candidateBase !== undefined &&
-      normalizedContents(contents) === normalizedContents(candidateBase)
+      normalizedContents(path, contents) === normalizedContents(path, candidateBase)
     );
   });
   if (matches.length > 1) return { problem: "ambiguous header-normalized rename match" };
@@ -118,7 +125,7 @@ export function checkCopyright({
       );
       continue;
     }
-    if (/\.(?:ts|tsx)$/u.test(path) && !hasExactHeaderSpacing(actual.slice(match.length))) {
+    if (usesCopyrightSpacingPolicy(path) && actual !== separateCopyrightHeader(actual)) {
       problems.push(
         `${path}: incorrect CodeMatters header spacing (expected exactly one empty line)`,
       );

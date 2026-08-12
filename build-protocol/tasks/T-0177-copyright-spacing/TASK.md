@@ -84,3 +84,15 @@ fallback is visible.
   formatting, documentation audience/API, generated Proto lint/cleanliness,
   logging containment, release-readiness, diff hygiene, and the 81 focused
   tests. The selected release profile remains intentionally unrun.
+
+## Review Correction Evidence (2026-08-12)
+
+- Accepted P1-1: future-year comparison now canonicalizes post-header TS/TSX
+  spacing before deciding whether content changed, so a zero/multiple/
+  whitespace-only correction to exact-one does not require a year bump.
+- Accepted P1-2: checker validation and normalization share
+  `separateCopyrightHeader()` as their boundary rule. Whitespace-only lines are
+  rejected and normalized exactly like zero or multiple blank lines.
+- Correction TDD RED had 3 expected failures; GREEN has 82/82 focused tests.
+  Post-generation inventory remains 502 eligible files with 0 zero, 502 one,
+  0 multiple, 0 whitespace-only, and 3/3 compliant shebangs.
