@@ -24,7 +24,8 @@ One complete finding batch returns to the existing implementation owner.
 - Mechanical evidence before review: focused tests 81/81 pass;
   `pnpm lint:copyright` passes; canonical Proto generation and the fixture
   generator were run before the final inventory (0 zero, 502 one, 0 multiple;
-  3/3 shebang files compliant).
+  3/3 shebang files compliant). Cheap preflight then passed all task gates;
+  `verify:release` remains intentionally unrun pending review.
 - Review still required: style/maintainability only. Reliability, public API,
   documentation, and security remain N/A for the stated reasons unless a
   review finding expands scope.

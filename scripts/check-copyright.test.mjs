@@ -18,7 +18,8 @@ import { COPYRIGHT_HEADER, checkCopyright, gitComparison, gitFiles } from "./che
 const path = "packages/core/src/example.ts";
 const body = "export const example = true;\n";
 const compliantHeader = `${COPYRIGHT_HEADER}\n`;
-const currentHeader = (year) => `${COPYRIGHT_HEADER.replace("Copyright 2026", `Copyright ${year}`)}\n`;
+const currentHeader = (year) =>
+  `${COPYRIGHT_HEADER.replace("Copyright 2026", `Copyright ${year}`)}\n`;
 const options = (files, contents, additions = {}) => ({
   files,
   readFile: (file) => contents[file],

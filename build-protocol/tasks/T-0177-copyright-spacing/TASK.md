@@ -1,6 +1,6 @@
 # T-0177: Copyright Header Spacing Correction
 
-Status: Implementation converged; cheap preflight pending
+Status: Implementation converged; cheap preflight complete; review pending
 
 ## Objective
 
@@ -80,3 +80,7 @@ fallback is visible.
   tracked inventory reports 502 eligible TS/TSX files: 0 zero-spacing, 502
   one-spacing, 0 multiple-spacing, 0 missing headers; all 3 shebang files have
   exactly one empty line. `pnpm lint:copyright` passes.
+- Cheap preflight passed: build/tooling typechecks, ESLint, cleanup, TSDoc,
+  formatting, documentation audience/API, generated Proto lint/cleanliness,
+  logging containment, release-readiness, diff hygiene, and the 81 focused
+  tests. The selected release profile remains intentionally unrun.

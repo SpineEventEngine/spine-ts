@@ -119,7 +119,9 @@ export function checkCopyright({
       continue;
     }
     if (/\.(?:ts|tsx)$/u.test(path) && !hasExactHeaderSpacing(actual.slice(match.length))) {
-      problems.push(`${path}: incorrect CodeMatters header spacing (expected exactly one empty line)`);
+      problems.push(
+        `${path}: incorrect CodeMatters header spacing (expected exactly one empty line)`,
+      );
       continue;
     }
     if (year === 2026 && match !== COPYRIGHT_HEADER) {
