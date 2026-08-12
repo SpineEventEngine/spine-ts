@@ -1,11 +1,20 @@
 # T-0172 Storage Documentation Review
 
-Status: Implementation in progress; review not started
+Status: Deterministic preflight complete; specialist review dispatched
 
 The task Human-Imposed Requirements Ledger is binding. Required concerns:
 documentation, TypeScript/API documentation, and performance/reliability.
 Style/security are N/A absent shared-tooling or security-boundary changes.
 Reviewer assignments are recorded before dispatch.
+
+- Documentation: existing immutable `documentation_reviewer`, configured
+  `gpt-5.6-luna` / medium.
+- TypeScript/API documentation: existing `typescript_api_docs_reviewer`,
+  explicitly configured `gpt-5.6-terra` / high.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicitly configured `gpt-5.6-terra` / high.
+- Runtime metadata is recorded if exposed; otherwise immutable configured
+  profiles and the surface limitation are evidence.
 
 ## Implementation Handoff
 
