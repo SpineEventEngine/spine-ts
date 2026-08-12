@@ -1,6 +1,6 @@
 # T-0169 Copyright And License Review
 
-Status: Specialist review complete and clean; release verification pending
+Status: Complete and clean; release verification passed
 
 ## Required Concerns
 
@@ -75,6 +75,16 @@ hostile-path fixtures clean; its sole P2 record-wording finding is corrected in
 this deterministic record update. Both reviewer profiles were explicitly
 dispatched under the project review matrix; runtime profile metadata was
 unavailable.
+
+## Release Verification
+
+`pnpm verify:release` passed after two release-gate defects were reproduced and
+corrected: header/TSDoc separation and generated descriptor-fixture handling.
+The converged run passed 246 test files with 3 skipped files; 3,900 tests passed
+and 14 were skipped. Coverage passed at 94.18% statements (20,433/21,695),
+90.41% branches (11,910/13,173), 94.09% functions (5,000/5,314), and 95.19%
+lines (19,060/20,023). All generated, build, lint, copyright, TSDoc, formatting,
+API, documentation, Proto, containment, and release-readiness gates passed.
 
 Release-verification TSDoc feedback is corrected test-first; any subsequent
 re-review remains orchestrator-owned.
