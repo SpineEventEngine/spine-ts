@@ -1,6 +1,6 @@
 # T-0170 Foundations Documentation Review
 
-Status: Complete and clean; release verification passed
+Status: Complete, clean, integrated, and post-merge verified
 
 The task's [Human-Imposed Requirements Ledger](../tasks/T-0170-foundations-docs/TASK.md)
 is the binding disposition source for this review.
