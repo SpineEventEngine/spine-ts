@@ -1,6 +1,6 @@
 # Wave 10 Beginner Documentation And Copyright Plan
 
-Status: Requirements split complete; specialist corrections in progress
+Status: Reviewed proposal; human approval pending
 
 ## Outcome
 
@@ -219,7 +219,11 @@ must:
 6. use Git rename detection to map a renamed path to its merge-base path, then
    compare both files after removing the recognized header; a header-only
    correction and a content-identical rename are not content changes and do not
-   advance the year;
+   advance the year. Because Git does not report an unstaged rename's untracked
+   destination, also compare a new untracked candidate's header-normalized
+   content with merge-base files deleted in the worktree. Exactly one match is
+   treated as the old path; multiple matches fail closed as ambiguous. This
+   fallback is read-only and never stages or rewrites user work;
 7. include staged, unstaged, and untracked authored work in the current-year
    decision;
 8. fail with sorted, path-specific diagnostics for missing, malformed,
@@ -251,7 +255,8 @@ publisher.
 - Copyright checker fixture tests cover eligible TS/TSX/Proto, shebang
   placement, excluded upstream notices, missing/malformed/forbidden headers,
   new content, changed content, unchanged old content, header-only edits,
-  renames, staged/unstaged/untracked inputs, deterministic year injection, and
+  staged renames, unstaged untracked-destination renames, ambiguous rename
+  candidates, staged/unstaged/untracked inputs, deterministic year injection, and
   fail-closed Git behavior.
 - The canonical Proto workflow updates the four changed `ownedSources`
   checksums and proves the normalized frozen descriptor digest is unchanged;
@@ -280,7 +285,7 @@ the final guide.
 ```mermaid
 flowchart TD
     P["T-0168 — approved plan"] --> L["T-0169 — license, headers, and checker"]
-    P --> F["T-0170 — docs gate, foundations, and To-Do journey"]
+    L --> F["T-0170 — docs gate, foundations, and To-Do journey"]
     F --> B["T-0171 — browser and Message Board journey"]
     F --> S["T-0172 — persistence and data examples"]
     F --> O["T-0173 — delivery and deployment journey"]
@@ -298,8 +303,9 @@ flowchart TD
 Own the root `LICENSE`, all 18 `packages/*/package.json` manifests, the 531
 eligible TS/TSX/Proto headers, the four changed `ownedSources` checksums and
 unchanged descriptor-digest proof through canonical regeneration, one checker
-plus fixture tests, root package-script wiring, `verify-task` wiring/tests, and
-the durable future publication-preflight requirement.
+plus fixture tests, copyright-only root package-script wiring, `verify-task`
+wiring/tests, and the durable future publication-preflight requirement.
+T-0169 must not edit the docs-snippet command or checker.
 
 This is one cohesive task rather than a checker-only task followed by a bulk
 task. Main must never contain a wired checker that fails solely because the
@@ -322,6 +328,8 @@ type-checks public package imports/calls against built package-export
 declarations; it must not replace public modules with permissive `any` stubs.
 Every Wave 10 documentation task runs it over its complete owned path list, and
 T-0176 runs it over all 64 paths.
+T-0170 exclusively owns this docs script entry and docs checker; it must not
+edit copyright commands or copyright gate wiring.
 
 Also own the root README/REFERENCE; core, Proto, Proto tooling, server, testing,
 and transport README/REFERENCE families; the Proto distribution README; and
@@ -397,8 +405,9 @@ or add deferred runtime behavior.
 
 ## Parallelism And Ownership
 
-- T-0169 and T-0170 may proceed independently from the approved T-0168
-  baseline. Header-only source changes do not block reader-document authoring.
+- T-0169 integrates before T-0170 because both add root `package.json` script
+  entries and project rules prohibit parallel writers even when they would edit
+  different JSON keys.
 - T-0171 through T-0173 wait for T-0170's strict docs-snippet command, then
   proceed in parallel with disjoint Markdown ownership.
 - T-0174 waits for all four journey families so its dense references do not

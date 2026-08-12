@@ -1,6 +1,6 @@
 # T-0168: Wave 10 Beginner Documentation And Copyright Plan
 
-Status: Review corrections applied; targeted re-review pending
+Status: Review clean; human approval pending
 
 ## Objective
 
@@ -135,7 +135,8 @@ verification boundaries before implementation begins.
   fallback was exposed.
 - No file was edited and no subagent was spawned.
 - The splitter approved the dependency graph
-  `T-0168 → T-0169 → {T-0170, T-0171, T-0172, T-0173} → T-0174 → T-0175 → T-0176`.
+  `T-0168 → T-0169 → T-0170 → {T-0171, T-0172, T-0173} → T-0174 → T-0175 → T-0176`
+  after review correction serialized the two root `package.json` writers.
 - The reader ownership sum is exact: 18 foundation/To-Do, 20 browser/Message
   Board, 10 persistence/data, and 13 delivery/deployment documents, followed
   by 2 canonical references and 1 complete guide = 64 files.
@@ -143,8 +144,9 @@ verification boundaries before implementation begins.
   authored Proto files = 531 eligible files, and exactly 43 manifest-declared
   upstream Proto exclusions.
 - It required T-0174 to own any shared snippet-checker expectation changes
-  after the parallel document families converge; that shared-tooling task uses
-  `verify:release` when such changes are needed.
+  after the parallel document families converge. The general strict command is
+  owned by T-0170 so every journey can use it; T-0174 uses `verify:release`
+  when later shared-tooling changes are needed.
 - No unresolved architecture, licensing-policy, or reader-scope decision
   remains. Implementation still requires human approval of this plan and an
   explicit Wave 10 start after integration.

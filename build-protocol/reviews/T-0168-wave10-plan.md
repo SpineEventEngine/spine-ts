@@ -1,6 +1,6 @@
 # T-0168 Review Log
 
-Status: Review corrections applied; targeted re-review pending
+Status: Clean
 
 T-0168 is a planning-only task. Specialist review begins only after the split,
 exact inventories, and deterministic pre-review checks are complete.
@@ -107,6 +107,33 @@ and spawned no subagents.
 10. Allowed disjoint T-0169 licensing and T-0170 documentation-gate/foundation
     work to proceed independently, then gated parallel reader journeys on the
     strict snippet command.
+11. Targeted style re-review required unstaged-rename handling. Added a
+    read-only header-normalized match from each untracked candidate to deleted
+    merge-base files, with ambiguity failing closed and a dedicated fixture.
+12. Targeted TypeScript/API re-review found overlapping root package-script
+    ownership and stale task graph wording. T-0169 now owns only copyright
+    command/gate wiring; T-0170 owns only the docs-snippet command/checker; the
+    task ledger now matches the active graph.
+13. Final API re-review correctly applied file-level rather than JSON-key-level
+    ownership: both tasks still edit root `package.json`. Serialized T-0169
+    before T-0170 and retained the later three-way documentation fan-out.
+
+## Re-review Outcome
+
+- Documentation: CLEAN. Verified coherent statuses, 64 unique existing owned
+  paths, one target per canonical topic, one primary handoff for every guide
+  section, and preserved beginner/style/deferral rules.
+- Style/maintainability: CLEAN. Verified manifest-only provenance, exact
+  ownership, phased atomic T-0169, and deterministic staged/unstaged rename
+  handling with ambiguity failing closed.
+- TypeScript/API documentation: CLEAN. Verified strict all-document snippet
+  checking, semantic-routing/`@Route` absence, unchanged descriptor digest,
+  current exact/default routing APIs, and serialized root-manifest ownership.
+- Performance/reliability: N/A. The plan and records change no runtime,
+  persistence, concurrency, resource, or lifecycle behavior.
+
+The reviewed proposal is ready for deterministic task verification and human
+approval. No implementation is authorized by this clean review.
 
 Documentation, TypeScript/API, and style/maintainability are substantively
 affected and receive one targeted re-review. Performance/reliability remains
