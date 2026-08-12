@@ -1,11 +1,29 @@
 # T-0173 Delivery/Deployment Documentation Review
 
-Status: Implementation ready for focused deterministic validation; review not started
+Status: Implementation complete; specialist review queued
 
 The task Human-Imposed Requirements Ledger is binding. Required concerns:
 documentation, TypeScript/API documentation, and performance/reliability.
 Style/security are N/A absent shared-tooling or security-boundary changes.
 Reviewer assignments are recorded before dispatch.
+
+## Reviewer assignments
+
+- Documentation: existing `documentation_reviewer`, explicitly configured
+  `gpt-5.6-luna` / medium.
+- TypeScript/API documentation: existing `typescript_api_docs_reviewer`,
+  explicitly configured `gpt-5.6-terra` / high.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicitly configured `gpt-5.6-terra` / high.
+- Style/maintainability: N/A because this task changes no runtime or shared
+  tooling implementation.
+- Security: N/A because this task does not change authentication, authorization,
+  secret handling, or a network trust boundary; the existing Envoy boundary is
+  only documented and cross-checked.
+
+The execution surface does not expose separate runtime-profile metadata. The
+immutable configured roles and explicit dispatch profiles are accepted unless
+the surface reports a mismatch or fallback.
 
 ## Implementation scope and dispositions
 
