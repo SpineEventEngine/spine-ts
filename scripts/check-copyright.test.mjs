@@ -207,7 +207,11 @@ describe("copyright checker", () => {
   it("reports an altered approved-header body as malformed rather than stale-year", () => {
     expect(
       checkCopyright(
-        options([path], { [path]: `${COPYRIGHT_HEADER.replace("AS IS", "AS-IS")}${body}` }, { year: 2027 }),
+        options(
+          [path],
+          { [path]: `${COPYRIGHT_HEADER.replace("AS IS", "AS-IS")}${body}` },
+          { year: 2027 },
+        ),
       ),
     ).toEqual([`${path}: malformed CodeMatters header`]);
   });
@@ -242,7 +246,7 @@ describe("copyright checker", () => {
     const comparison = gitComparison((args) => {
       if (args[0] === "merge-base") return { status: 0, stdout: "base\n" };
       if (args.join(" ").includes("--name-status"))
-        return { status: 0, stdout: "R100\told.ts\trenamed.ts\n" };
+        return { status: 0, stdout: "R100\0old.ts\0renamed.ts\0" };
       if (args.join(" ") === "show base:renamed.ts") return { status: 128, stdout: "" };
       if (args[0] === "show") return { status: 0, stdout: old };
       return { status: 0, stdout: "" };
@@ -253,6 +257,11 @@ describe("copyright checker", () => {
         ...comparison,
       }),
     ).toEqual([]);
+  });
+
+  it("preserves hostile legal Git paths from NUL-delimited output", () => {
+    const hostile = ["tab\tname.ts", "line\nbreak.ts", 'quote".tsx', "日本語.proto"];
+    expect(gitFiles(() => ({ status: 0, stdout: `${hostile.join("\0")}\0` }))).toEqual(hostile);
   });
 
   it("fails closed when rename, deletion, or base lookup Git operations fail", () => {

@@ -126,9 +126,9 @@ export function checkCopyright({
 }
 
 export function gitFiles(runGit = git) {
-  const result = runGit(["ls-files", "--cached", "--others", "--exclude-standard"]);
+  const result = runGit(["ls-files", "-z", "--cached", "--others", "--exclude-standard"]);
   if (result.status !== 0) throw new Error("copyright enumeration failed: git ls-files");
-  return result.stdout.split("\n").filter((path) => path !== "");
+  return result.stdout.split("\0").filter((path) => path !== "");
 }
 
 function gitOutput(runGit, args, failure) {
@@ -140,12 +140,15 @@ function gitOutput(runGit, args, failure) {
 function renameMap(runGit, base) {
   const renames = new Map();
   for (const args of [
-    ["diff", "--name-status", "-M", `${base}...HEAD`],
-    ["diff", "--name-status", "-M"],
-    ["diff", "--cached", "--name-status", "-M"],
+    ["diff", "-z", "--name-status", "-M", `${base}...HEAD`],
+    ["diff", "-z", "--name-status", "-M"],
+    ["diff", "--cached", "-z", "--name-status", "-M"],
   ]) {
-    for (const line of gitOutput(runGit, args, "rename detection").split("\n")) {
-      const [status, from, to] = line.split("\t");
+    const fields = gitOutput(runGit, args, "rename detection").split("\0");
+    for (let index = 0; index < fields.length - 1;) {
+      const status = fields[index++];
+      const from = fields[index++];
+      const to = fields[index++];
       if (status?.startsWith("R") && from !== undefined && to !== undefined) {
         renames.set(to, [...new Set([...(renames.get(to) ?? []), from])]);
       }
@@ -161,11 +164,11 @@ export function gitComparison(runGit = git) {
   const renames = renameMap(runGit, base);
   const deleted = new Set();
   for (const args of [
-    ["diff", "--name-only", "--diff-filter=D", `${base}...HEAD`],
-    ["diff", "--name-only", "--diff-filter=D"],
-    ["diff", "--cached", "--name-only", "--diff-filter=D"],
+    ["diff", "-z", "--name-only", "--diff-filter=D", `${base}...HEAD`],
+    ["diff", "-z", "--name-only", "--diff-filter=D"],
+    ["diff", "--cached", "-z", "--name-only", "--diff-filter=D"],
   ]) {
-    for (const path of gitOutput(runGit, args, "deleted-base enumeration").split("\n")) {
+    for (const path of gitOutput(runGit, args, "deleted-base enumeration").split("\0")) {
       if (path !== "") deleted.add(path);
     }
   }

@@ -1,6 +1,6 @@
 # T-0169 Copyright And License Review
 
-Status: Implementation in progress; review not started
+Status: Correction complete; re-review ready
 
 ## Required Concerns
 
@@ -65,4 +65,8 @@ scripts/check-copyright.test.mjs`: the test suite failed at import because
 
 ## Findings
 
-Pending deterministic preflight and the single specialist review wave.
+The documentation/license reviewer found the license/header claims otherwise
+clean. The style/maintainability reviewer accepted the correction batch after
+requiring exact-template recognition, current-year generated output, and
+NUL-safe Git path handling. Both reviewer profiles were explicitly dispatched
+under the project review matrix; runtime profile metadata was unavailable.
