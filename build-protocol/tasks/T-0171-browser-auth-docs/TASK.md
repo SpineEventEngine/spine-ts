@@ -1,6 +1,6 @@
 # T-0171: Browser, Authentication, And Message Board Journey
 
-Status: Implementation authorized and starting
+Status: Implementation complete; specialist review in progress
 
 ## Objective
 

@@ -1,6 +1,6 @@
 # T-0171 Browser/Auth Documentation Review
 
-Status: Implementation in progress; review not started
+Status: Implementation complete; specialist review in progress
 
 ## Implementation handoff
 
@@ -37,3 +37,21 @@ documentation, TypeScript/API documentation, and performance/reliability.
 Security is N/A unless implementation changes a trust/auth/secret boundary;
 canonical security facts must still be cross-checked. Style is N/A because no
 shared tooling is owned. Reviewer assignments are recorded before dispatch.
+
+## Reviewer assignments
+
+- Documentation: existing `documentation_reviewer`, explicitly configured
+  `gpt-5.6-luna` / medium.
+- TypeScript/API documentation: existing `typescript_api_docs_reviewer`,
+  explicitly configured `gpt-5.6-terra` / high.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicitly configured `gpt-5.6-terra` / high; dispatch follows when a review
+  slot is available.
+- Security: N/A because this task changes reader documentation only and does
+  not change an authentication, secret-handling, or trust boundary.
+- Style/maintainability: N/A because this task changes no production or shared
+  tooling implementation; beginner readability is part of documentation review.
+
+The execution surface does not expose separate runtime-profile metadata. The
+immutable configured reviewer roles and explicit dispatch profiles are the
+accepted evidence unless the surface reports a mismatch or fallback.
