@@ -1,6 +1,6 @@
 # T-0171 Browser/Auth Documentation Review
 
-Status: Implementation complete; specialist review in progress
+Status: Review complete; integration ready
 
 ## Implementation handoff
 
@@ -80,5 +80,15 @@ runtime-profile field; the configured role/profile is the available metadata.
 - Changed checker/test lint, cleanup, TSDoc, logging containment, copyright,
   formatting, and whitespace checks passed.
 
-Status: accepted correction batch implemented; no additional review dispatch
-is authorized in this context.
+## Targeted re-review
+
+- Documentation: CLEAN. Present-tense multi-Gateway instructions are gone;
+  only the explicit deferred/out-of-offering statement remains. The beginner
+  journey and README/reference style remain coherent.
+- TypeScript/API documentation: CLEAN. All 20 paths are in the default strict
+  inventory; 11/11 focused tests and the default snippet check pass using real
+  imports and source contexts, without permissive stubs.
+- Performance/reliability was not reopened because the correction changed only
+  documentation scope wording and deterministic snippet inventory.
+
+Status: review complete; integration ready.
