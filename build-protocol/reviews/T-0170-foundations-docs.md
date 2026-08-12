@@ -1,6 +1,6 @@
 # T-0170 Foundations Documentation Review
 
-Status: Specialist review complete and clean; release verification pending
+Status: Complete and clean; release verification passed
 
 The task's [Human-Imposed Requirements Ledger](../tasks/T-0170-foundations-docs/TASK.md)
 is the binding disposition source for this review.
@@ -57,3 +57,12 @@ fixtures, and dispositions clean. Its final record-only P2 noted four explicit
 acceptance obligations missing from the named human ledger; those exact
 obligations are now present. No technical concern is reopened by this
 deterministic record correction.
+
+## Release Verification
+
+`pnpm verify:release` passed the converged endpoint. It passed 246 test files
+with 3 skipped files; 3,906 tests passed and 14 were skipped. Coverage passed at
+94.18% statements (20,433/21,695), 90.41% branches (11,910/13,173), 94.09%
+functions (5,000/5,314), and 95.19% lines (19,060/20,023). Every generated,
+build, lint, copyright, strict-snippet, API, documentation, Proto, containment,
+formatting, and release-readiness gate passed.
