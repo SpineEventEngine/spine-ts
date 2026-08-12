@@ -1,6 +1,6 @@
 # T-0170: Foundations Documentation And Strict Snippet Gate
 
-Status: Implementation authorized and starting
+Status: Implementation checkpoint: strict checker and foundations-reader pass complete; pre-review validation in progress.
 
 ## Objective
 

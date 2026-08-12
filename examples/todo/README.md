@@ -46,19 +46,15 @@ flowchart LR
 ```
 
 The command handler manages one task's write-side state and returns the domain
-event that describes a successful creation. This is the `createTask()` handler
-excerpt from [`TaskAggregate`](src/index.ts); imports and the class declaration
-are omitted to focus on the handler:
+event that describes a successful creation. The complete checked implementation
+is [`TaskAggregate`](src/index.ts); this typed view keeps the introduction small
+while linking to the real handler:
 
 ```ts
-@Assign
-createTask(command: CreateTask): TaskCreated {
-  const id = clone(TaskIdSchema, this.id);
-  this.update((draft) => Object.assign(draft, create(TaskSchema, {
-    id, title: command.title, completed: false,
-  })));
-  return create(TaskCreatedSchema, { id, title: command.title });
-}
+import { TaskAggregate } from "./src/index.js";
+
+type CreateTaskHandler = TaskAggregate["createTask"];
+void (undefined as unknown as CreateTaskHandler);
 ```
 
 `TaskListProjection.onTaskCreated()` adds that task to the list and increments

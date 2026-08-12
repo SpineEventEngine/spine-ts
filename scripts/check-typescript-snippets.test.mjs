@@ -4,7 +4,9 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  checkTypeScriptSnippets,
   documentationSnippetFile,
+  documentedTypeScriptPaths,
   extractTypeScriptSnippets,
   runSnippetChecker,
 } from "../docs/check-typescript-snippets.mjs";
@@ -29,6 +31,29 @@ const documentedPackageReadmes = [
 ];
 
 describe("TypeScript documentation snippets", () => {
+  it("uses the complete Wave 10 document list", () => {
+    expect(documentedTypeScriptPaths).toEqual([
+      "README.md",
+      "REFERENCE.md",
+      "packages/core/README.md",
+      "packages/core/REFERENCE.md",
+      "packages/proto/README.md",
+      "packages/proto/REFERENCE.md",
+      "packages/proto-tools/README.md",
+      "packages/proto-tools/REFERENCE.md",
+      "packages/server/README.md",
+      "packages/server/REFERENCE.md",
+      "packages/testing/README.md",
+      "packages/testing/REFERENCE.md",
+      "packages/transport/README.md",
+      "packages/transport/REFERENCE.md",
+      "packages/proto/proto/README.md",
+      "examples/todo/README.md",
+      "examples/todo/REFERENCE.md",
+      "examples/todo/USER_GUIDE.md",
+    ]);
+  });
+
   it("extracts only TypeScript fences from a narrow Markdown fixture", () => {
     const source = [
       "```ts",
@@ -82,6 +107,35 @@ describe("TypeScript documentation snippets", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
       "scripts/fixtures/missing-snippet-context.md:3: Missing docs-snippet-path in scripts/fixtures/missing-snippet-context.md: examples/todo/src/missing.ts",
+    );
+  });
+
+  it("reports explicit missing documents in sorted deterministic diagnostics", () => {
+    const result = runSnippetChecker([
+      "scripts/fixtures/z-missing-snippet-document.md",
+      "scripts/fixtures/a-missing-snippet-document.md",
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr.trim().split("\n")).toEqual([
+      "scripts/fixtures/a-missing-snippet-document.md:1: Missing document.",
+      "scripts/fixtures/z-missing-snippet-document.md:1: Missing document.",
+    ]);
+  });
+
+  it("reports a snippet type error without introducing import stubs", () => {
+    const diagnostics = checkTypeScriptSnippets(["scripts/fixtures/missing-snippet-context.md"]);
+
+    expect(diagnostics).toEqual([
+      {
+        document: "scripts/fixtures/missing-snippet-context.md",
+        line: 3,
+        message:
+          "Missing docs-snippet-path in scripts/fixtures/missing-snippet-context.md: examples/todo/src/missing.ts",
+      },
+    ]);
+    expect(readFileSync(resolve(root, "docs/check-typescript-snippets.mjs"), "utf8")).not.toContain(
+      "export const ${name}: any",
     );
   });
 });

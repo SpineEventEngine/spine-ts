@@ -2,6 +2,21 @@
 
 This reference describes the public server contracts for coding agents.
 
+## Handler routing and operations
+
+Generated handler metadata routes a command, event, or state update by its
+exact generated message type. A declared default route is considered only when
+there is no exact route. This is TypeScript routing; it does not consume
+`(is).java_type` or `(every_is).java_type`, and it has no decorator-based
+route registration API.
+
+`@Where` narrows an event subscription by fields on the event message. It is a
+data predicate after event-type routing, not an alternative routing mechanism.
+The server installs configured logging into runtime components; warnings and
+failures carry operation context there, while durable facts belong in events or
+storage. Entity Inbox replay sends persisted accepted work through the normal
+handler path, so handler effects must be replay-safe.
+
 ## Context assembly and entities
 
 Create a context with `BoundedContext.singleTenant(name)` or

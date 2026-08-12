@@ -5,6 +5,41 @@ uses generated messages and a framework-generated registry for bare-decorated
 handlers. Begin with the concise [README](README.md) for prerequisites, build,
 server, and smoke commands.
 
+## The path before the server starts
+
+Start with a small domain: a task has an identifier, title, and completion
+state. The Proto files make that model portable. In this example the first
+field of every command is the required task ID, and the first field of the
+aggregate state is also its required ID. That convention gives the generated
+registry the target for a command; it is not an extra TypeScript annotation.
+
+```text
+Proto messages → spine-proto generate → generated schemas and registry
+      → Aggregate command handler → stored event → Projection state → read
+```
+
+`CreateTask` produces `TaskCreated`; the projection observes it and makes a
+`TaskList` readable. The framework validates generated message constraints
+before accepting a command. A business rule instead throws its generated
+rejection: completing a completed task throws `TaskAlreadyDone`. Validation and
+technical failures are non-OK acknowledgements; a domain rejection is accepted
+command processing with no state transition and is published separately on a
+best-effort rejection-event path.
+
+The generated registry uses exact message types first and an explicitly declared
+default only when a handler supplies one. Command handlers, event handlers, and
+state-update handlers are distinct routes; TypeScript does not interpret Java
+Proto options for routing. An event handler can narrow an event with `@Where`
+against an event field. Keep filters about event data, not a made-up semantic
+route name.
+
+Server components receive framework logging through their configured logger;
+use it for operational context, never as a substitute for a stored event or a
+rejection. Durable storage replays accepted inbox work through the same handler
+path after a restart, so handlers and downstream effects must tolerate
+at-least-once delivery. This local sample uses memory, so its state disappears
+when it stops.
+
 ## Build and server lifecycle
 
 From the repository root, run `pnpm typecheck:build`. It generates
