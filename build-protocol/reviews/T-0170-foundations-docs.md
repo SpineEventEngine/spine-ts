@@ -1,6 +1,6 @@
 # T-0170 Foundations Documentation Review
 
-Status: Implementation in progress; review not started
+Status: Deterministic preflight complete; specialist review dispatched
 
 ## Required Concerns
 
@@ -18,8 +18,22 @@ Status: Implementation in progress; review not started
 ## Assignment Evidence
 
 The implementation owner is the existing `implementer` role, explicitly
-dispatched as `gpt-5.6-terra` with medium reasoning. Reviewer profiles and
-runtime metadata limitations will be recorded before review dispatch.
+dispatched as `gpt-5.6-terra` with medium reasoning. Reviewer assignments are:
+
+- style/maintainability: existing `style_maintainability_reviewer`, explicitly
+  configured `gpt-5.6-terra` / high;
+- documentation: existing immutable `documentation_reviewer`, configured
+  `gpt-5.6-luna` / medium;
+- TypeScript/API documentation: existing `typescript_api_docs_reviewer`,
+  explicitly configured `gpt-5.6-terra` / high; and
+- performance/reliability: existing `performance_reliability_reviewer`,
+  explicitly configured `gpt-5.6-terra` / high.
+
+Runtime metadata will be recorded when the surface exposes it; otherwise the
+immutable configured role/profile and metadata limitation are evidence.
+Security is N/A because the implementation changes no authentication,
+authorization, secret, trust, or network boundary and adds no new security
+claim; it links or preserves existing canonical material.
 
 ## Findings
 
