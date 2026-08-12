@@ -116,4 +116,4 @@ informational and is never itself a credential.
 - [Browser client](../../../packages/client-web/README.md)
 - [React adapter](../../../packages/client-react/README.md)
 - [Browser authentication guide](../../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
-- [Reference for coding agents](REFERENCE.md)
+- [Detailed coding-agent reference](REFERENCE.md)

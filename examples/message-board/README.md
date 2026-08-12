@@ -154,7 +154,7 @@ replica-oriented standalone application modes.
 - [Message Board model](model/README.md)
 - [Message Board web UI](web/README.md)
 - [Browser client, authentication, and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
-- [Reference for coding agents](REFERENCE.md)
+- [Detailed coding-agent reference](REFERENCE.md)
 
 ## Deployment
 

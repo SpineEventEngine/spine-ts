@@ -91,4 +91,4 @@ commands, fixed image tags, and runtime values.
 - [Complete Message Board example](../README.md)
 - [Server package](../../../packages/server/README.md)
 - [Authentication package](../../../packages/auth/README.md)
-- [Reference for coding agents](REFERENCE.md)
+- [Detailed coding-agent reference](REFERENCE.md)

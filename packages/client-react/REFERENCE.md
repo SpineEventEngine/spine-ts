@@ -1,6 +1,7 @@
 # @spine-event-engine/client-react reference
 
-This reference is for agents and other automated tools that need the exact public contract of `@spine-event-engine/client-react`.
+This reference records the exact public contract of `@spine-event-engine/client-react`.
+Start with the [React adapter overview](README.md) for a first integration.
 
 ## Provider and hooks
 

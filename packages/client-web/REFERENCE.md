@@ -1,6 +1,7 @@
 # @spine-event-engine/client-web reference
 
-This reference is for agents and other automated tools that need the exact public contract of `@spine-event-engine/client-web`.
+This reference records the exact public contract of `@spine-event-engine/client-web`.
+Start with the [browser client overview](README.md) for a first connection.
 
 ## Transports and request scopes
 

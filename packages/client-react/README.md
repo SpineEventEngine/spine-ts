@@ -5,8 +5,7 @@ through an `@spine-event-engine/client-web` request scope supplied by the applic
 does not create clients, define queries, cache data, or provide an authentication
 system.
 
-For detailed hook lifecycles and error behavior, read the [reference for
-agents](REFERENCE.md).
+For detailed hook lifecycles and error behavior, read the [reference](REFERENCE.md).
 
 The [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 explains the subscription and authentication limits inherited from the browser client.
@@ -95,4 +94,4 @@ a possible gap.
 
 - [Browser client](../client-web/README.md)
 - [Message Board web example](../../examples/message-board/web/README.md)
-- [Reference for coding agents](REFERENCE.md)
+- [Detailed coding-agent reference](REFERENCE.md)

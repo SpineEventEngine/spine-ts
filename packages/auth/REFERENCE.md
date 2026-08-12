@@ -1,6 +1,7 @@
 # @spine-event-engine/auth reference
 
-This reference is for agents and other automated tools that need the exact public contract of `@spine-event-engine/auth`.
+This reference records the exact public contract of `@spine-event-engine/auth`.
+Start with the [authentication overview](README.md) when choosing a gateway shape.
 
 ## Purpose and trust boundary
 

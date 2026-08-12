@@ -1,10 +1,9 @@
 # Browser client, authentication, and gateway extension guide
 
-This guide explains browser access and the standalone authentication gateway.
-It is useful to both application authors and coding agents: it names the public
-seams, their invariants, and the limits that an application must preserve. For
-concise package introductions, see the linked READMEs; for declarations, use
-the [API index](api/README.md).
+This guide follows one browser action through an application gateway to a
+Spine backend. Start here after the package READMEs when you need to compose
+sign-in, Commands, Queries, and subscriptions without exposing a native
+backend. For declarations, use the [API index](api/README.md).
 
 The packages are not published to npm yet. This repository's workspace is the
 supported source for the commands and examples below.
@@ -168,8 +167,8 @@ responses remain authoritative after a reconnect or Gateway replacement. The
 expected 32 nodes is measured/recommended capacity, not a hard runtime maximum;
 the Gateway continues to use all discovered nodes with bounded connection
 starts. Infrastructure platforms scale identical application versions, while
-Spine TS only follows the resulting membership. Cloud Run and multiple-Gateway
-operation are excluded.
+Spine TS only follows the resulting membership. The supported shape has one
+Gateway; Cloud Run and multiple-Gateway operation are outside this guide's scope.
 
 The gateway authenticates and authorizes every incoming request independently,
 then resolves and injects a trusted context. Browser-visible actor/tenant is
@@ -340,10 +339,10 @@ copy only to gateway-controlled callbacks.
 malformed or duplicate bearer values do not fall back. Cookie extraction
 requires exactly one session cookie, one CSRF cookie, exact configured Origin,
 and an HMAC-SHA-256 CSRF value in `X-Spine-CSRF`. Cookie/session rotation,
-logout, expiry, cache, and persistence are application lifecycle concerns. On
-multiple gateway nodes, share the opaque store or use a compatible session
-strategy; share signing keys and a revocation store when signed logout must be
-immediate. Open subscriptions are not instantaneously revoked: authorization
+logout, expiry, cache, and persistence are application lifecycle concerns. The
+supported deployment has one Gateway, so select session storage and revocation
+behavior for that gateway's availability and restart policy. Open subscriptions
+are not instantaneously revoked: authorization
 is checked on each lifecycle request and again on reconnect/expiry.
 
 ## Verified finite gateway and Envoy limits
@@ -427,7 +426,7 @@ limits, gRPC-Web, and explicit binary Connect support. Its Activate route is a
 live stream. Copy and customize the template for hosts, certificates,
 observability, rate limits, and topology.
 
-Standalone gateways discover their application nodes dynamically: GKE uses
+The standalone Gateway discovers its application nodes dynamically: GKE uses
 service DNS and GCE uses the leased registry reader. The measured capacity
 profile exercises 32 and 40 discovered nodes with at most two concurrent
 connection starts; it is not a cloud throughput benchmark. Unary calls are

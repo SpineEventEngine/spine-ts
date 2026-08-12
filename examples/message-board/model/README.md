@@ -39,4 +39,4 @@ The package has no server, UI, storage, or process lifecycle.
 
 - [Complete Message Board example](../README.md)
 - [Protobuf tooling](../../../packages/proto-tools/README.md)
-- [Reference for coding agents](REFERENCE.md)
+- [Detailed coding-agent reference](REFERENCE.md)

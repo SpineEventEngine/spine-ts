@@ -1,7 +1,7 @@
 # Message Board example reference
 
-This reference is for coding agents and maintainers. Beginners should start
-with the [Message Board README](README.md).
+This reference records Message Board's exact runnable contract. Beginners
+should start with the [Message Board README](README.md).
 
 ## Package responsibilities
 

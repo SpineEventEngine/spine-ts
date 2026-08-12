@@ -1,7 +1,7 @@
 # Message Board deployment references
 
-This guide is for people running the local Message Board deployment examples.
-Agents should use the nearby [reference](REFERENCE.md) for exact guarantees.
+Use this guide to run the local Message Board deployment examples. The nearby
+[reference](REFERENCE.md) holds exact guarantees and environment contracts.
 
 ## 🧭 Choose a topology
 
