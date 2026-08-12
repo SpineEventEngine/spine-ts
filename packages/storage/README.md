@@ -25,6 +25,25 @@ Run this workspace-wide TypeScript build from the repository root. This private
 snapshot package is not published to an npm registry; use it from this
 workspace while developing the framework.
 
+## 🧪 Start with the Proto fields people may query
+
+Persistence begins in the Proto model. Mark only the fields that need to be
+filtered or sorted with `(column)`. The complete message is always kept as
+authoritative bytes; an unmarked field is not silently promoted to a provider
+property.
+
+```proto
+message TaskView {
+  TaskId id = 1;
+  UserId assignee = 2 [(column) = true];
+  string title = 3;
+}
+```
+
+Here `assignee` is a query column. `title` stays in the serialized record. The
+generated record specification carries that declaration into the selected
+storage adapter.
+
 ## 🧪 Store a Protobuf record in memory
 
 Create a `RecordSpec` to describe the record type, identity, and searchable
@@ -65,7 +84,11 @@ const users = await records.query({
 `InMemoryStorageFactory` creates a fresh backend by default. Pass the same
 `InMemoryStorageBackend` to separate factories only when they intentionally
 need to share rows. Query named columns, sort them, and limit the result; the
-column names come from the `RecordSpec`.
+column names come from the declared `RecordSpec`/Proto mapping. `RecordQuery<I>`
+types its IDs. Providers apply their documented runtime mapping and validation
+to filter names and values: MySQL checks declared columns, while other adapters
+can support different query shapes. A provider can push down supported ID and
+declared-column query parts while preserving the common result semantics.
 
 The storage API clones data at its boundaries. For the base factory and the
 in-memory implementation, closing a factory prevents new record handles while

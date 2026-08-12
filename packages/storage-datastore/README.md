@@ -33,22 +33,18 @@ controls Google authentication and client lifetime.
 
 ```ts
 import { Datastore } from "@google-cloud/datastore";
-import { StringifierRegistry } from "@spine-event-engine/core";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-import { typeRegistry } from "./model-registry.js";
-
-const stringifiers = new StringifierRegistry();
-stringifiers.setTypeRegistry(typeRegistry);
 
 const factory = DatastoreStorageFactory.newBuilder()
   .setClient(new Datastore({ projectId: "my-project" }))
-  .setStringifierRegistry(stringifiers)
   .build();
 ```
 
 The builder always uses a client supplied by the caller. Its fixed finite reconciliation
 bound is 1,000 records. Pass the factory to the server or create record storage
-through the normal storage API.
+through the normal storage API. When application values contain `Any`, configure
+a `StringifierRegistry` with that application's `TypeRegistry` before building;
+the layout section below explains why that mapping must remain reversible.
 
 ## 🧭 Understand tenants and kinds
 
@@ -95,6 +91,14 @@ this:
 they are Entity lifecycle/version facts, not a provider revision. `board` and
 `author` exist because the Proto fields use `(column)`. The unindexed `bytes`
 payload remains authoritative.
+
+The same identity and value mapping is used at each step: `Identifiers` turn
+the record ID into the key name, while the configured `StringifierRegistry`
+turns message-valued IDs and `(column)` values into reversible text. Do not
+pre-stringify a query value in application code. `RecordQuery<I>` statically
+types IDs only; Datastore checks the string filter name and `unknown` value
+against the record descriptor and column mapping, then applies the registry
+mapping used on write.
 
 Message-valued IDs and columns use compact Proto JSON by default. Supply the
 application `TypeRegistry` as shown above when a stored framework value contains

@@ -13,6 +13,12 @@ the Datastore-specific composition entry point: its caller supplies the `Datasto
 client and the function hands that same client to `DatastoreStorageFactory`.
 Domain handlers must not import provider types.
 
+When this example is composed with Datastore, the provider boundary is native:
+the complete tenant selects a namespace, the record family selects a kind, and
+the record ID selects the key. Persisted bytes remain authoritative; only
+Proto-declared `(column)` fields become queryable properties. Bounded Context
+names do not add a namespace, kind, key prefix, or other physical partition.
+
 Generated Protobuf and handler files are build outputs. Regenerate them through
 the workspace scripts; never edit them directly.
 

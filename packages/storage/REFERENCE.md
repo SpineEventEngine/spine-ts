@@ -27,6 +27,10 @@ source type, stored record type, identity extractor, ID schema or primitive ID
 kind, and materialized columns. `sourceType` defaults to `recordType`; Entity
 record specifications use the entity state type as their source type.
 `RecordSpecOptions` is the public constructor-input contract for those fields.
+For generated application records, Proto `(column)` declarations determine the
+materialized fields. A field without that declaration remains only in the
+authoritative serialized record; providers do not infer columns from every
+field in the message.
 
 `StorageGroup` is an optional external physical-family identity. It is not part
 of `RecordSpec`: use it only when records with an otherwise compatible layout
@@ -54,8 +58,12 @@ local materialization can return a partial semantic result.
 
 `StorageQueryPolicy` validates normalized plans and
 `StorageQueryEvaluator` applies the portable query semantics. Provider packages
-can push down supported parts of a plan, but must preserve these semantics and
-enforce their documented bounds.
+can push down supported ID, declared-column, and sort parts of a plan, but must
+preserve these semantics and enforce their documented bounds. `RecordQuery<I>`
+statically types IDs only; filter and sort names are strings and filter values
+are `unknown`. Each provider documents the runtime mapping and validation it
+applies before using those inputs; callers cannot infer shared filter or sort
+name validation from the common query shape.
 
 ## Lifecycle
 
