@@ -198,6 +198,8 @@ Header placement is deterministic:
 
 - after a shebang in the three executable TypeScript entry points;
 - otherwise at byte zero before TypeScript/TSX imports or declarations;
+- in every eligible TypeScript and TSX file, followed by exactly one empty line
+  before the next import, declaration, ordinary comment, or TSDoc block;
 - before `syntax` in an eligible Proto file.
 
 ## Copyright Checker Contract
