@@ -20,6 +20,18 @@ Status: Implementation in progress; review not started
 The implementation owner is the existing `implementer` role, explicitly
 dispatched as `gpt-5.6-terra` with medium reasoning. Reviewer dispatch and
 runtime-profile evidence will be recorded before accepting review results.
+The execution surface does not expose runtime model metadata; this record uses
+the immutable dispatched role/profile as the available evidence.
+
+## Implementation Evidence
+
+- 2026-08-12: TDD RED recorded with `pnpm exec vitest run
+  scripts/check-copyright.test.mjs`: the test suite failed at import because
+  `scripts/check-copyright.mjs` did not exist. The failure established the
+  intended checker module boundary before production code was written.
+- 2026-08-12: TDD GREEN recorded with the same command: 4 tests passed. The
+  unwired checker covers exact authored-header placement, stale years,
+  shebang/Proto placement, and canonical upstream exclusion.
 
 ## Findings
 
