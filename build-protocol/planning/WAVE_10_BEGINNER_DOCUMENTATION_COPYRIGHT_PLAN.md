@@ -1,6 +1,6 @@
 # Wave 10 Beginner Documentation And Copyright Plan
 
-Status: Reviewed proposal; human approval pending
+Status: Reviewed and verified proposal; human approval pending
 
 ## Outcome
 
