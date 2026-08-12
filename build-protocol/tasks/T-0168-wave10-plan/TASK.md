@@ -1,6 +1,6 @@
 # T-0168: Wave 10 Beginner Documentation And Copyright Plan
 
-Status: Planning in progress
+Status: Review corrections applied; targeted re-review pending
 
 ## Objective
 
@@ -108,8 +108,7 @@ verification boundaries before implementation begins.
 - `planning-with-files` is not selected because canonical build-protocol task,
   work, review, and planning records already supply durable state.
 - `verification-before-completion` and `requesting-code-review` apply at the
-  later plan-verification/review boundaries and will be read before those
-  actions.
+  plan-verification/review boundaries and were fully read before those actions.
 
 ## Requirements-Splitter Assignment
 
@@ -126,6 +125,29 @@ verification boundaries before implementation begins.
 - Expected reasoning: `high`.
 - Dispatch requirement: both fields explicit; read-only; no subagents; no file
   edits.
+
+## Requirements-Splitter Outcome
+
+- Completed read-only with the existing `requirements_splitter` role,
+  explicitly dispatched as `gpt-5.6-sol` with high reasoning.
+- Runtime self-introspection was unavailable; the immutable configured
+  role/profile and that limitation are the recorded evidence. No mismatch or
+  fallback was exposed.
+- No file was edited and no subagent was spawned.
+- The splitter approved the dependency graph
+  `T-0168 → T-0169 → {T-0170, T-0171, T-0172, T-0173} → T-0174 → T-0175 → T-0176`.
+- The reader ownership sum is exact: 18 foundation/To-Do, 20 browser/Message
+  Board, 10 persistence/data, and 13 delivery/deployment documents, followed
+  by 2 canonical references and 1 complete guide = 64 files.
+- It confirmed the corrected copyright inventory: 502 TypeScript/TSX plus 29
+  authored Proto files = 531 eligible files, and exactly 43 manifest-declared
+  upstream Proto exclusions.
+- It required T-0174 to own any shared snippet-checker expectation changes
+  after the parallel document families converge; that shared-tooling task uses
+  `verify:release` when such changes are needed.
+- No unresolved architecture, licensing-policy, or reader-scope decision
+  remains. Implementation still requires human approval of this plan and an
+  explicit Wave 10 start after integration.
 
 ## Verification Profile
 

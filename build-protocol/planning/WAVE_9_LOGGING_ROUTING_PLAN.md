@@ -16,8 +16,9 @@ set of conventions in Message Board.
 
 The Wave does not rewrite product documentation. Public API TSDoc ships with
 the corresponding runtime change; root/package READMEs,
-`docs/USER_GUIDE.md`, other product/example Markdown, repository-wide copyright
-headers, and multiple-Gateway behavior move to Wave 10. Canonical
+`docs/USER_GUIDE.md`, other product/example Markdown, and repository-wide
+copyright headers move to Wave 10. The human subsequently deferred
+multiple-Gateway behavior beyond Wave 10. Canonical
 build-protocol execution records remain permitted in Wave 9.
 
 ## Fixed Boundaries
@@ -644,9 +645,9 @@ instead of repeating it. The preliminary structure is:
 10. **Continue from working examples** — Message Board, Distributed Message
     Board, To-Do, Orders, and focused feature maps.
 
-Repository-wide Markdown rewriting, copyright-header correction, and
-multiple-Gateway behavior are Wave 10 work. Cloud Run remains outside the
-initial offering.
+Current reader-facing Markdown rewriting and copyright/license correction are
+Wave 10 work. The human subsequently moved multiple-Gateway behavior to a later
+wave. Cloud Run remains outside the initial offering.
 
 T-0168 acceptance requires a checked link inventory from every guide section to
 the canonical dense sources it relies on: root and package `README.md`/
@@ -657,8 +658,9 @@ Message Board, Distributed Message Board, To-Do, Orders, and Projects example
 guides. Every link must resolve locally and each dense topic has one canonical
 target rather than repeated guide prose.
 
-The exact deferred surfaces are root/package READMEs,
-`docs/USER_GUIDE.md`, other product and example Markdown, repository-wide
-copyright headers, and multiple-Gateway behavior. Wave 9 may edit only its
+The exact Wave 10 surfaces are root/package READMEs,
+`docs/USER_GUIDE.md`, other current product and example Markdown, and
+repository-wide copyright/license material. Multiple-Gateway behavior is a
+later-wave deferral. Wave 9 may edit only its
 canonical build-protocol plan, task, work, review, decision, and completion
 records plus public API TSDoc required by the corresponding runtime slice.
