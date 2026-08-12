@@ -20,8 +20,22 @@ Status: Implementation in progress; review not started
 The implementation owner is the existing `implementer` role, explicitly
 dispatched as `gpt-5.6-terra` with medium reasoning. Reviewer dispatch and
 runtime-profile evidence will be recorded before accepting review results.
-The execution surface does not expose runtime model metadata; this record uses
-the immutable dispatched role/profile as the available evidence.
+
+- Style/maintainability review: existing `style_maintainability_reviewer`,
+  configured `gpt-5.6-terra` / high. Both profile fields are explicit in the
+  orchestrator dispatch.
+- Documentation/license review: existing `documentation_reviewer`, immutable
+  configured `gpt-5.6-luna` / medium. The role fixes this profile; the
+  orchestrator dispatch records the role explicitly and records runtime
+  metadata when the surface exposes it.
+- TypeScript/API documentation: N/A because no public TypeScript export,
+  declaration, or TypeDoc contract changed.
+- Performance/reliability: N/A because no application runtime, persistence,
+  concurrency, resource, or lifecycle behavior changed.
+- Security: N/A because no trust, authentication, authorization, secret,
+  network, or executable application boundary changed.
+  The execution surface does not expose runtime model metadata; this record uses
+  the immutable dispatched role/profile as the available evidence.
 
 ## Implementation Evidence
 
