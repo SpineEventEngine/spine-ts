@@ -14,8 +14,10 @@ uses dynamic discovery; this example intentionally does not.
 
 Commands may be accepted by either application node. Delivery chooses one
 owner for aggregate work; the corresponding event drives one Projection result
-in shared storage. Browser notices are best effort only. The UI uses the
-Gateway to query the Projection authoritatively after any notice or reconnect.
+in shared storage. Browser notices are best effort only. The UI applies a valid,
+complete subscription payload locally. It queries the Projection authoritatively
+after a gap, unusable payload, or disconnected-post recovery; reconnect
+resynchronization can also carry authoritative state directly.
 
 Use `pnpm start` in this directory after building local images. It keeps the
 Compose processes attached so `Ctrl-C` requests their finite shutdown. For a
@@ -23,4 +25,5 @@ non-interactive stop, run `docker compose --file deploy/compose.yaml down`.
 
 The in-memory simple delivery server has no durable or highly available mode.
 This example intentionally adds neither discovery/redeployment behavior nor a
-new authentication boundary.
+new authentication boundary. It supports one fixed Gateway only; Multiple-
+Gateway behavior and Cloud Run are outside this example.

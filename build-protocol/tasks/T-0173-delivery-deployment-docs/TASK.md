@@ -1,0 +1,67 @@
+# T-0173: Delivery And Deployment Journey
+
+Status: Review complete; integration ready
+
+## Objective
+
+Rewrite delivery, deployment, GCE/GKE, distributed Message Board, and Envoy
+documentation into a beginner journey from local execution to supported
+distributed packaging, discovery, operation, and shutdown.
+
+## Classification
+
+High-risk documentation: distributed delivery, leases, acknowledgements,
+topology, finite limits, shutdown, deployment, discovery, and failure behavior.
+
+## Human-Imposed Requirements Ledger
+
+- Scope is exactly the 13 T-0173 paths in the Wave 10 ownership table.
+- Record `changed` or `reviewed-no-change` for every path; every TypeScript fence
+  passes strict checking and all local links resolve.
+- READMEs stay concise/preserve look and feel; references retain exhaustive
+  topology, finite-limit, lifecycle, and operational contracts.
+- Prose is beginner-paced, natural, and structured; avoid needless “own” forms.
+- Teach local/remote delivery, combined/distributed packaging, containers,
+  discovery, GKE/GCE operation, and orderly shutdown using current behavior.
+- Explain durable Inbox rows, shard leases/fencing, redelivery/lost-ack behavior,
+  idempotent effects, bounded reads/drains, and no attempt-history persistence.
+- Describe only supported single-Gateway/fixed topology behavior.
+  Multiple-Gateway is deferred; Cloud Run is outside the initial offering.
+- Link exact provider/topology limits to one canonical reference rather than
+  repeating dense matrices or inventing guarantees.
+- T-0169 copyright and T-0170 strict snippet gates remain intact.
+
+## Assignment
+
+Single owner: existing `implementer`, explicit `gpt-5.6-terra` / medium. The
+owner controls only the 13 T-0173 reader docs and records, uses no subagents,
+and preserves unrelated work.
+
+## Verification And Review
+
+Run strict snippets on all 13 paths, links, topology/limit/deferral scans,
+audience/API, format/copyright/diff, and `verify:task -- --no-tests`. Review
+documentation, TypeScript/API, and performance/reliability. Style/security are
+N/A absent tooling or security-boundary changes.
+
+## Accepted review correction batch
+
+The complete review wave returned one documentation low-priority finding, two
+TypeScript/API P2 findings, and performance/reliability P1 and P2 findings.
+Correct the reader claims only: worker-matched release semantics with no
+separate pickup-time fence; local application of valid complete subscription
+payloads and bounded authoritative recovery; Envoy's uppercase-method input
+and GET/POST/OPTIONS CORS boundary; and reader-facing reference labels. No
+runtime or test change is authorized because source and existing test coverage
+confirm the reviewed contracts. Rerun the documentation-only task profile.
+
+## Final residual correction
+
+The Envoy renderer's broad uppercase-method input is not the Spine Gateway
+contract. The reader documentation must state that authenticated Spine Gateway
+routes support only `GET` and `POST`. Explain the renderer behavior only as a
+mechanical option for a separately customized non-Spine upstream, which also
+requires matching CORS customization. This supersedes the earlier renderer-only
+API correction; worker-release and Distributed Message Board corrections remain
+clean. Run the Envoy unit tests and a focused wording scan; no runtime behavior
+or test change is authorized.

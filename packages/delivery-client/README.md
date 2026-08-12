@@ -1,14 +1,16 @@
 # Client for the Spine Delivery server
 
-This package is the Node client for the Delivery simple-server gRPC API. Use it
-from a trusted application network to read inbox work and coordinate shards.
+Use this Node client when an application node must coordinate delivery work with
+a Delivery server on a trusted network. Start with the local server while
+developing; use the same client to connect separate application nodes to a
+remote Delivery server.
 
-For detailed contracts intended for coding agents, see the
-[REFERENCE.md documentation for agents](REFERENCE.md).
+The [reference](REFERENCE.md) records the complete protocol, retry, and limit
+contract, including API detail for coding agents.
 
 ## 💡 Why use it?
 
-- ✅ Connects a Node process to the in-memory Delivery simple server.
+- ✅ Connects a Node process to a local or remote Delivery server.
 - ✅ Reads inbox work and current shard assignments.
 - ✅ Observes later shard changes without polling.
 - ✅ Adapts remote inbox and shard services to `DeliveryBuilder`.
@@ -63,12 +65,11 @@ for await (const update of updates) {
 ```
 
 `RemoteInbox` and `RemoteWorkRegistry` adapt a client to a server
-`DeliveryBuilder`. The exclusively held remote shard and its pending Inbox row
-are authoritative; the client stores no removal state. Shard ownership excludes
-concurrent delivery, while delivered rows are the deduplication fact. Handler
-effects and the delivered transition are not transactional, so a lost
-acknowledgement can redeliver after restart and downstream handling must remain
-idempotent.
+`DeliveryBuilder`. The authoritative delivery state is the remote Inbox row and
+the current shard lease; the client keeps no local removal record. A delivered
+row is the deduplication fact, but a handler effect and its acknowledgement are
+not one transaction. If an acknowledgement is lost, delivery can happen again
+after restart, so make downstream effects idempotent.
 
 ```ts
 // docs-snippet-path: packages/delivery-client/src/remote/adapters.ts
@@ -107,29 +108,23 @@ shard. A pre-commit ownership probe fences known stale owners, but it is not a
 linearizable distributed transaction with Entity storage.
 
 ```ts
+// docs-snippet-path: packages/delivery-client/src/remote/remote-delivery.ts
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
-import { EnvironmentType, ServerEnvironment } from "@spine-event-engine/server";
-import type { StorageFactory } from "@spine-event-engine/storage";
-import type { SignalTransport } from "@spine-event-engine/transport";
 
-declare const storageFactory: StorageFactory;
-declare const transport: SignalTransport;
-ServerEnvironment.when(EnvironmentType.Production).use({
-  storageFactory,
-  transport,
-  delivery: RemoteDelivery.connectTo({ endpoint: "https://delivery.example.test" }),
-});
+const delivery = RemoteDelivery.connectTo({ endpoint: "https://delivery.example.test" });
+void delivery;
 ```
 
-## ⚠️ Reconcile uncertain writes
+## ⚠️ Design for redelivery
 
 Read operations may use the configured bounded retry policy. Mutations do not
 retry automatically: if a response is lost, first read the named fact and
 decide what happened. The protocol is unauthenticated and offers no durable
-client state, exactly-once delivery, or renewable fencing.
+client state, exactly-once effects, or renewable fencing. It does not persist
+attempt history or quarantine records.
 
 ## 🔗 Learn more
 
 - [Delivery server](../delivery-server/README.md)
 - [Server delivery APIs](../server/README.md#delivery-and-environment)
-- [Reference for coding agents](REFERENCE.md)
+- [Detailed delivery reference](REFERENCE.md)

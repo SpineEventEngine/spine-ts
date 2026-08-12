@@ -7,8 +7,8 @@ keeps application nodes, the Gateway, and the simple delivery server private;
 you provide the public TLS, authentication, and traffic-routing edge that fits
 your organisation.
 
-For detailed contracts intended for coding agents, read the
-[reference for agents](REFERENCE.md).
+For exact discovery, lease, and lifecycle behavior, read the
+[deployment reference](REFERENCE.md).
 
 ## Before you begin
 
@@ -53,6 +53,9 @@ is easy to inspect and lets an operator move them to separate failure or
 resource boundaries. A smaller deployment may colocate the two processes, but
 the simple delivery server remains in-memory: it is neither durable nor highly
 available.
+
+This is a fixed, single-Gateway topology. Multiple Gateways and Cloud Run are
+outside the supported offering.
 
 Every listener receives only private VPC traffic and health checks. Terraform
 does not create an external IP, public load balancer, TLS certificate,
