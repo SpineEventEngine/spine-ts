@@ -102,7 +102,8 @@ and durable replay uses the stored target instead of running the route again.
 The copied `(is).java_type` and `(every_is).java_type` definitions are preserved
 wire definitions only. TypeScript routing does not consume them, and it has no
 `@Route` decorator or `routeSemantic()` API. Semantic tags can still describe
-metadata used by runtime transport topics; they do not select repository routes.
+copied Proto metadata, but TypeScript does not use them for repository routing
+or runtime transport topics.
 One `@Where({ eventField, equals })` equality filter may be used after type
 routing on an event- or rejection-consuming `@Subscribe`, `@React`, or
 `@Command` handler. Its two values must be typed string literals; invalid or
