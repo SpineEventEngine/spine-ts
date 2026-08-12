@@ -171,10 +171,10 @@ durably closed.
   state-update routing, Event-field
   `@Where` filters, implicit required Command and Entity IDs, and rejection
   conformance. T-0153 owns the frozen dependency plan.
-- **Wave 10:** the beginner-guide and repository-wide Markdown rewrite,
-  copyright-header correction, and multiple-Gateway behavior. It does not
-  promise that the framework can make an operator's Gateway replacement
-  interruption-free.
+- **Wave 10:** the beginner-guide and current reader-facing Markdown rewrite,
+  canonical reference navigation, and copyright/license correction.
+  Multiple-Gateway behavior is deferred to a later wave. Cloud Run remains
+  outside the initial offering.
 
 Wave 6 Q&A, its original implementation, review, release verification,
 integration, and documentation closure are complete. T-0113 records the
@@ -204,6 +204,12 @@ structure are frozen in
 implementation train, cross-wave audits, specialist and security concern
 review, fixture convergence, release profile, fast-forward integration, and
 post-main proof are complete and remotely synchronized.
+
+T-0168 plans Wave 10 from the subsequently approved human decisions. It is a
+planning-only milestone and must return the dependency-ordered proposal for
+approval before product documentation, copyright headers, licenses, or package
+metadata change. Multiple-Gateway behavior has been removed from Wave 10 and
+is not implicitly authorized by this documentation/licensing program.
 
 ## Authored API And Example Quality Correction
 
