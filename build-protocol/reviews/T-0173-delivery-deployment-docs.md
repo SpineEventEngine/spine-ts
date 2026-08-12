@@ -77,3 +77,28 @@ the surface reports a mismatch or fallback.
   records only.
 - Profile metadata remains limited to configured roles because the surface does
   not expose runtime self-introspection; no mismatch or fallback was reported.
+
+## Final residual disposition
+
+- TypeScript/API's earlier renderer-only Envoy correction is superseded by the
+  accepted performance/reliability boundary finding. `BrowserAuthRoute` and
+  `BrowserServer.authRoutes()` admit only `GET` and `POST` for authenticated
+  Spine Gateway routes.
+- The Envoy renderer's uppercase-method validation is mechanical, not a Spine
+  Gateway promise. The README now confines another method to a separately
+  customized non-Spine upstream and requires matching CORS customization.
+- Worker-matched release and Distributed Message Board recovery remain CLEAN.
+  No runtime or test classification change is needed; focused server/Envoy
+  tests and wording scans are the correction evidence.
+
+## Final residual evidence
+
+- Passed Envoy renderer tests (5/5) and the focused server GET/POST auth-route
+  registration test. The renderer's broad mechanical input remains tested;
+  BrowserServer's narrower authenticated-Gateway contract remains tested.
+- Passed all 13 strict snippets, API/audience, copyright, release-readiness
+  links, format/diff, residual wording scans, and `pnpm verify:task --
+--no-tests`.
+- Performance/reliability is CLEAN on the final boundary wording. TypeScript/
+  API's earlier renderer-only disposition is superseded and resolved. No
+  further review dispatch is required for this documentation-only residual.

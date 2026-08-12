@@ -54,3 +54,14 @@ payloads and bounded authoritative recovery; Envoy's uppercase-method input
 and GET/POST/OPTIONS CORS boundary; and reader-facing reference labels. No
 runtime or test change is authorized because source and existing test coverage
 confirm the reviewed contracts. Rerun the documentation-only task profile.
+
+## Final residual correction
+
+The Envoy renderer's broad uppercase-method input is not the Spine Gateway
+contract. The reader documentation must state that authenticated Spine Gateway
+routes support only `GET` and `POST`. Explain the renderer behavior only as a
+mechanical option for a separately customized non-Spine upstream, which also
+requires matching CORS customization. This supersedes the earlier renderer-only
+API correction; worker-release and Distributed Message Board corrections remain
+clean. Run the Envoy unit tests and a focused wording scan; no runtime behavior
+or test change is authorized.
