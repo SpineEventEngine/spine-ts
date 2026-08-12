@@ -22,6 +22,16 @@ Status: Implementation in progress; review not started
 - Auth/secret wording scan confirms no secret value or credential is logged;
   single-Gateway and Cloud Run/multiple-Gateway scope is stated explicitly.
 
+## Verification limitation
+
+`pnpm verify:task -- --no-tests` was invoked, but its runner currently exits
+after `typecheck:tooling` because an unset `spawnSync()` signal is compared to
+`null`. The resulting exit code is zero and later gates are skipped. This task
+does not own shared verification tooling. ESLint, cleanup, TSDoc, copyright,
+logging containment, format, audience, and release-readiness gates were run
+individually and passed; review should retain this evidence and escalate the
+runner defect only if the orchestrator opens a tooling-owned correction.
+
 The task Human-Imposed Requirements Ledger is binding. Required concerns:
 documentation, TypeScript/API documentation, and performance/reliability.
 Security is N/A unless implementation changes a trust/auth/secret boundary;
