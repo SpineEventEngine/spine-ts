@@ -64,6 +64,10 @@ The single implementation owner controls `LICENSE`, the root copyright-only
 package-script/gate wiring, all 18 framework manifests, all 531 eligible source
 headers, the four owned-source checksum entries, the copyright checker and its
 fixtures, package-metadata tests, verifier wiring/tests, and this task's records.
+The owner also narrowly owns `scripts/proto-workflow.mjs` and its focused tests
+solely to preserve the exact header on its one tracked generated registry:
+without this integration correction `pnpm proto:generate && pnpm lint:copyright`
+would remove the required notice and fail deterministically.
 
 ## Implementation Assignment
 

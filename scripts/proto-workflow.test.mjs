@@ -27,6 +27,7 @@ import {
   publishGeneratedTargets,
   stageGeneratedTargets,
   writeStagedTemplate,
+  withCopyrightHeader,
 } from "./proto-workflow.mjs";
 import { writeSpineProtoArtifacts } from "./generate-spine-proto-artifacts.mjs";
 
@@ -52,6 +53,14 @@ function workflowClaimOperations(claims, liveness) {
     liveness,
   };
 }
+
+describe("MessageBoard registry copyright", () => {
+  it("adds the approved header to the generated tracked registry", () => {
+    expect(withCopyrightHeader("export const registry = true;\n")).toMatch(
+      /^\/\*\n \* Copyright 2026, CodeMatters\. All rights reserved\./u,
+    );
+  });
+});
 
 function todoTransactionFixture() {
   const repoRoot = mkdtempSync(join(tmpdir(), "spine-todo-transaction-"));

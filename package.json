@@ -14,7 +14,7 @@
     "typecheck:build": "pnpm proto:generate && pnpm typecheck:build:generated",
     "typecheck:build:generated": "node scripts/clean-build-outputs.mjs && tsc -b",
     "typecheck:tooling": "tsc --noEmit -p tsconfig.eslint.json",
-    "lint": "pnpm proto:generate && pnpm lint:generated",
+    "lint": "pnpm proto:generate && pnpm lint:generated && pnpm lint:copyright",
     "lint:generated": "pnpm typecheck:build:generated && eslint . && node scripts/check-cleanup-rules.mjs && node scripts/check-tsdoc.mjs",
     "format:check": "node scripts/format-files.mjs --check",
     "format": "node scripts/format-files.mjs --write",
@@ -44,10 +44,11 @@
     "lint:cleanup": "node scripts/check-cleanup-rules.mjs",
     "lint:tsdoc": "node scripts/check-tsdoc.mjs",
     "check:logging-containment": "node scripts/check-log-containment.mjs",
-    "verify:generated-gates": "pnpm typecheck:build:generated && pnpm typecheck:tooling && eslint . && pnpm lint:cleanup && pnpm lint:tsdoc && pnpm format:check && pnpm docs:check:generated && pnpm proto:lint:generated && pnpm proto:check-generated:current && pnpm check:logging-containment && pnpm check:release-readiness",
+    "verify:generated-gates": "pnpm typecheck:build:generated && pnpm typecheck:tooling && eslint . && pnpm lint:cleanup && pnpm lint:tsdoc && pnpm lint:copyright && pnpm format:check && pnpm docs:check:generated && pnpm proto:lint:generated && pnpm proto:check-generated:current && pnpm check:logging-containment && pnpm check:release-readiness",
     "verify:release": "pnpm check:node && pnpm proto:generate && pnpm verify:release:generated",
     "verify:release:generated": "pnpm verify:generated-gates && vitest run --coverage --passWithNoTests",
-    "verify:generated": "pnpm verify:release:generated"
+    "verify:generated": "pnpm verify:release:generated",
+    "lint:copyright": "node scripts/check-copyright.mjs"
   },
   "devDependencies": {
     "@bufbuild/buf": "1.71.0",

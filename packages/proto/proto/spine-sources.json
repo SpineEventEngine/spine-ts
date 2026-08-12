@@ -393,19 +393,19 @@
   "ownedSources": [
     {
       "localPath": "packages/proto/proto/spine/auth/authentication_service.proto",
-      "sha256": "076c56d26a9d0d087304234d0ab040d8925ad247574c748567162c9d79c9ab81"
+      "sha256": "dcd178e057a13d4d044ac9fb1ba487b5a27203b0686191d5955ee928852822d7"
     },
     {
       "localPath": "packages/proto/proto/spine/auth/authenticated_subscription.proto",
-      "sha256": "8f051c076d3b1b07fe7260e1dcbdc59e793b1b12fb29c2b478833e29ea9f98d1"
+      "sha256": "b6436714f754e6d7c1a6bbd177c5a4f0b606d3c7c1adc4b86fa3c299210ffc76"
     },
     {
       "localPath": "packages/proto/proto/spine/client/subscription_record.proto",
-      "sha256": "12ee48213b4625ab771fc0d0546321211c3cc043ed8336f1bb21f9c25ed9c50f"
+      "sha256": "4e760681afba8d531b00ae08f09e52fb298c969e24aeb830fc72d7292afedaf5"
     },
     {
       "localPath": "packages/proto/proto/spine/deployment/node_discovery.proto",
-      "sha256": "7edb53736c468c38715889277c8e0c762024a7268814e6861459621d79b3e95d"
+      "sha256": "7c300d215a1757c17b7bd1a89cebb4825df28a58fcc119f2aa6d5535d7520073"
     }
   ]
 }

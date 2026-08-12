@@ -65,6 +65,7 @@ export function taskGateCommands(classification) {
     "eslint",
     "lint:cleanup",
     "lint:tsdoc",
+    "lint:copyright",
     "check:logging-containment",
     "format:check",
     "docs:audience:check",

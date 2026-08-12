@@ -32,6 +32,13 @@ the immutable dispatched role/profile as the available evidence.
 - 2026-08-12: TDD GREEN recorded with the same command: 4 tests passed. The
   unwired checker covers exact authored-header placement, stale years,
   shebang/Proto placement, and canonical upstream exclusion.
+- 2026-08-12: The canonical Proto generator removed the header from the tracked
+  eligible `examples/message-board/app/src/model-registry.ts`; this made the
+  required `proto:generate` then copyright-gate sequence fail. The orchestrator
+  authorized a narrow ownership expansion for `scripts/proto-workflow.mjs` and
+  its focused test only. A RED test observed no `withCopyrightHeader` helper;
+  GREEN was `pnpm exec vitest run scripts/proto-workflow.test.mjs` (57 passed),
+  followed by `pnpm proto:generate` and `pnpm lint:copyright` (both passed).
 
 ## Findings
 
