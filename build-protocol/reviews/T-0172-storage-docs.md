@@ -87,3 +87,14 @@ Reviewer assignments are recorded before dispatch.
 - The strict run also repaired three owned, pre-existing fence defects: two
   intentionally partial handler excerpts are text fences, and the Datastore
   factory sample is standalone. No runtime or public-contract behavior changed.
+
+## Final Residual Claim Correction
+
+- Removed the final two README statements that still implied shared
+  `RecordSpec`/Proto validation of filter names and values. They now defer
+  runtime mapping and validation to each provider, consistent with the corrected
+  references and actual in-memory/Datastore behavior.
+- The correction remains documentation-only. It requires no further reviewer
+  dispatch; prior TypeScript/API and reliability re-review dispositions remain
+  CLEAN, with configured-profile evidence and the runtime-metadata limitation
+  recorded above.
