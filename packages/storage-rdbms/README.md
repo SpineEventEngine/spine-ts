@@ -98,6 +98,12 @@ model. It does not get a separate SQL column for every Proto field. `ID` is the
 primary key. A Bounded Context name is useful in diagnostics, but it is never
 stored in a row and never changes a table name.
 
+For generated records, start by marking the few Proto fields that a query needs
+with `(column)`. Those declarations, not a field-name convention, select the
+native MySQL columns. `Identifiers` determine the storage ID, and `Stringifiers`
+turn message-valued IDs and declared message columns into the same stable text
+for a write, lookup, filter, sort continuation, and read.
+
 ## 🧭 See a Proto model become a table
 
 Suppose an application declares this Projection state:

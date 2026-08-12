@@ -28,6 +28,10 @@ message-valued IDs and ordinary message columns. The stringifier registry is
 snapshotted by `build()`; a custom namespace converter is retained and must
 remain behaviorally immutable for the factory lifetime. `organizeRecords(...)`
 changes a kind. `useRecordStorage(...)` replaces a record-family provider.
+`Identifiers` select the key representation, and the same configured
+stringifier maps a message-valued ID or declared column on write, direct lookup,
+filter, ordering continuation, and read. Typed callers pass the message value;
+they do not construct a provider string themselves.
 `useEntityStorage(...)` replaces the complete coherent Entity handle, including
 its commit capability. Custom providers receive the storage context, record or
 Entity contract, and caller-supplied client, but not the built-in converter or
@@ -87,7 +91,7 @@ reconcile a maximum of 1,000 rows; the 1,001st row throws
 `writeAll()` uses batches of at most 500 mutations and is not atomic across
 batches.
 
-Provider-legal ID predicates, declared-property comparisons, and ordering are
+Provider-legal typed ID predicates, declared-property comparisons, and ordering are
 pushed only when Datastore can execute the whole selected conjunction. Local
 reconciliation preserves shared query semantics and never becomes an unlimited
 scan. A smaller caller-supplied reconciliation bound retains a sentinel and

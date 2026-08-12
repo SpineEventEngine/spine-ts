@@ -1,6 +1,6 @@
 # T-0172: Persistence, Queries, And Data Examples
 
-Status: Implementation authorized and starting
+Status: Implementation complete; review pending
 
 ## Objective
 
@@ -44,3 +44,23 @@ Run strict snippets on all 10 paths, links, schema/layout/tenancy claim matrix,
 audience/API, format/copyright/diff, and `verify:task -- --no-tests`. Review
 documentation, TypeScript/API, and performance/reliability. Style/security are
 N/A absent tooling or security-boundary changes.
+
+## Implementation Disposition
+
+- Assignment: existing `implementer`, explicitly configured as
+  `gpt-5.6-terra` / medium. This execution surface does not expose runtime
+  self-introspection; the configured role/profile is the available immutable
+  evidence, and no visible inherited-profile fallback occurred.
+- Changed: `packages/storage/{README,REFERENCE}.md`,
+  `packages/storage-rdbms/{README,REFERENCE}.md`,
+  `packages/storage-datastore/{README,REFERENCE}.md`,
+  `examples/orders/{README,REFERENCE}.md`, and
+  `examples/projects/{README,REFERENCE}.md`.
+- The reader journey now starts with `(column)`, keeps unmarked fields in
+  authoritative bytes, follows typed identifiers/stringifiers through writes
+  and queries, then distinguishes MySQL databases/tables from Datastore
+  namespaces/kinds/keys. It records migration and finite-query behavior without
+  restoring `_scope`, `_revision`, or Bounded-Context physical partitioning.
+- No runtime, public TypeScript/Proto contract, generated output, shared
+  checker, package, or test file changed. Behavior-focused TDD is N/A because
+  this is a documentation-only milestone.

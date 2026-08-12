@@ -63,6 +63,15 @@ createProject(command: CreateProject): ProjectCreated {
 summary. The additional Aggregates, Process Managers, and Projections give the
 load topology realistic fan-out; they do not add a production deployment.
 
+## 🗄️ Add persistence deliberately
+
+This example keeps its local run in memory. A durable application supplies a
+storage factory at composition time; domain handlers continue to work with
+typed IDs and messages, not MySQL rows or Datastore entities. Mark a Proto
+field `(column)` only when a read model needs it for filtering or sorting. The
+[storage guide](../../packages/storage/README.md) explains the shared query
+contract, and the provider guides explain the physical layout and migration.
+
 ## 🧪 Run the example tests
 
 ```bash
@@ -83,4 +92,6 @@ multi-machine transport.
 
 - [Server](../../packages/server/README.md)
 - [Node client](../../packages/client-node/README.md)
+- [Storage API](../../packages/storage/README.md)
+- [MySQL storage](../../packages/storage-rdbms/README.md)
 - [Reference for coding agents](REFERENCE.md)

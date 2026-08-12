@@ -96,6 +96,12 @@ they are Entity lifecycle/version facts, not a provider revision. `board` and
 `author` exist because the Proto fields use `(column)`. The unindexed `bytes`
 payload remains authoritative.
 
+The same identity and value mapping is used at each step: `Identifiers` turn
+the record ID into the key name, while the configured `StringifierRegistry`
+turns message-valued IDs and `(column)` values into reversible text. Do not
+pre-stringify a typed query value in application code; pass the generated ID or
+message and let the registry apply the same mapping used on write.
+
 Message-valued IDs and columns use compact Proto JSON by default. Supply the
 application `TypeRegistry` as shown above when a stored framework value contains
 an `Any`; it tells Proto JSON how to expand the packed application type.

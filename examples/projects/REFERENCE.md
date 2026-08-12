@@ -9,6 +9,13 @@ The fixed registry contains three Aggregates (`Project`, `Task`, and `Person`),
 twenty Projections, and ten Process Managers: thirty-three repositories. Proto
 and handler registries are generated artifacts and must not be edited.
 
+The local topology does not select a durable provider. In a durable composition,
+the shared storage contract keeps query values typed: providers can push down
+record IDs and declared `(column)` filters or sort fields, but unmarked fields
+remain in authoritative bytes. MySQL routes a complete tenant to its configured
+database; Datastore routes it to a native namespace. Neither provider uses the
+Bounded Context name as a physical partition.
+
 ## Load-runner behavior
 
 Each simulated user uses one HTTP/2 session and a subscription filtered to its

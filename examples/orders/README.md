@@ -62,6 +62,16 @@ to focus on the handler.
 many Projections and Process Managers are deliberately a topology exercise,
 not a claim that every application needs that many read models.
 
+## 🗄️ Try the same model with durable storage
+
+The local scenario deliberately uses memory. Its application assembly accepts
+the common `StorageFactory`, so a deployment can provide the Datastore factory
+without teaching `OrderAggregate` or its Projections about provider APIs. Start
+by declaring `(column)` only for the Order fields that the application will
+filter or sort, then deploy the matching Datastore indexes before serving those
+queries. The [Datastore guide](../../packages/storage-datastore/README.md)
+shows the native namespace, kind, key, bytes, and declared-property layout.
+
 ## 🧪 Run the example tests
 
 ```bash
@@ -81,5 +91,6 @@ adapter.
 ## 🔗 Learn more
 
 - [Datastore storage](../../packages/storage-datastore/README.md)
+- [Storage query contract](../../packages/storage/README.md)
 - [Server](../../packages/server/README.md)
 - [Reference for coding agents](REFERENCE.md)

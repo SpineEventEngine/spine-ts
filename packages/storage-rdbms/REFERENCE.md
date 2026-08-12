@@ -21,6 +21,11 @@ the matching pool before table, query, transaction, or lock work.
 `setStringifierRegistry(registry)` configures reversible mappings for
 message-valued IDs and ordinary message columns; the builder snapshots the
 registry so later caller changes do not alter stored or queried values.
+`Identifiers` choose the storage ID representation; the configured
+`StringifierRegistry` supplies the matching reversible representation for
+message-valued IDs and declared message columns. Consequently a typed query
+operand uses the same mapping as the stored column rather than an application
+constructed string.
 Per-family tables are created and verified lazily on first use. Options support
 `connectionLimit`, `connectTimeoutMs`, and TLS material. Failure to validate
 configuration throws `MysqlStorageConfigurationError`; inaccessible connections
