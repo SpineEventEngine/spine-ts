@@ -1,6 +1,6 @@
 # T-0172 Storage Documentation Review
 
-Status: Deterministic preflight complete; specialist review dispatched
+Status: Review complete; integration ready
 
 The task Human-Imposed Requirements Ledger is binding. Required concerns:
 documentation, TypeScript/API documentation, and performance/reliability.
@@ -100,3 +100,13 @@ Reviewer assignments are recorded before dispatch.
   dispatch; prior TypeScript/API and reliability re-review dispositions remain
   CLEAN, with configured-profile evidence and the runtime-metadata limitation
   recorded above.
+
+## Final Closure Confirmation
+
+- Documentation: CLEAN.
+- Performance/reliability: CLEAN.
+- TypeScript/API documentation: CLEAN after the provider-specific wording and
+  record-history correction. The broad intermediate statement is explicitly
+  superseded by the final provider-specific contract.
+
+Status: review complete; integration ready.
