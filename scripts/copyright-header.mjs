@@ -23,7 +23,12 @@ export function recognizedCopyrightHeader(contents) {
   return match?.[0] === copyrightHeader(Number(match?.[1])) ? match[0] : undefined;
 }
 
-/* Preserves the approved header while separating a following TSDoc block. */
+/* Preserves the approved header while enforcing one following empty line. */
 export function separateCopyrightHeader(contents) {
-  return contents.replace(/( \*\/\n)(?=\/\*\*)/u, "$1\n");
+  const at = contents.startsWith("#!") ? contents.indexOf("\n") + 1 : 0;
+  const before = contents.slice(0, at);
+  const after = contents.slice(at);
+  const header = recognizedCopyrightHeader(after);
+  if (header === undefined) return contents;
+  return `${before}${header}\n${after.slice(header.length).replace(/^\n*/u, "")}`;
 }

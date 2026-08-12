@@ -34,6 +34,10 @@ function isEligible(path, excluded) {
   return /\.(?:ts|tsx|proto)$/u.test(path) && !excluded.has(path);
 }
 
+function hasExactHeaderSpacing(contents) {
+  return /^\n(?!\n)/u.test(contents);
+}
+
 function normalizedContents(contents) {
   const at = placement(contents);
   const before = contents.slice(0, at);
@@ -112,6 +116,10 @@ export function checkCopyright({
             ? `${path}: malformed CodeMatters header`
             : `${path}: missing CodeMatters header`,
       );
+      continue;
+    }
+    if (/\.(?:ts|tsx)$/u.test(path) && !hasExactHeaderSpacing(actual.slice(match.length))) {
+      problems.push(`${path}: incorrect CodeMatters header spacing (expected exactly one empty line)`);
       continue;
     }
     if (year === 2026 && match !== COPYRIGHT_HEADER) {

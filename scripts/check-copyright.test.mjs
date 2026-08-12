@@ -17,7 +17,8 @@ import { COPYRIGHT_HEADER, checkCopyright, gitComparison, gitFiles } from "./che
 
 const path = "packages/core/src/example.ts";
 const body = "export const example = true;\n";
-const currentHeader = (year) => COPYRIGHT_HEADER.replace("Copyright 2026", `Copyright ${year}`);
+const compliantHeader = `${COPYRIGHT_HEADER}\n`;
+const currentHeader = (year) => `${COPYRIGHT_HEADER.replace("Copyright 2026", `Copyright ${year}`)}\n`;
 const options = (files, contents, additions = {}) => ({
   files,
   readFile: (file) => contents[file],
@@ -38,7 +39,7 @@ describe("copyright checker", () => {
   });
 
   it("accepts the exact approved header and rejects a stale year", () => {
-    const fresh = `${COPYRIGHT_HEADER}export const example = true;\n`;
+    const fresh = `${COPYRIGHT_HEADER}\nexport const example = true;\n`;
     const stale = fresh.replace("Copyright 2026", "Copyright 2025");
     const options = {
       files: ["packages/core/src/example.ts"],
@@ -49,6 +50,25 @@ describe("copyright checker", () => {
     expect(checkCopyright({ ...options, readFile: () => fresh })).toEqual([]);
     expect(checkCopyright({ ...options, readFile: () => stale })).toEqual([
       "packages/core/src/example.ts: stale-year CodeMatters header",
+    ]);
+  });
+
+  it("requires exactly one empty line after eligible TypeScript and TSX headers", () => {
+    const tsx = "packages/client-react/src/view.tsx";
+    expect(
+      checkCopyright(
+        options(
+          [path, tsx],
+          {
+            [path]: `${COPYRIGHT_HEADER}export const example = true;\n`,
+            [tsx]: `${COPYRIGHT_HEADER}\n\nexport const View = () => null;\n`,
+          },
+          { year: 2026 },
+        ),
+      ),
+    ).toEqual([
+      `${tsx}: incorrect CodeMatters header spacing (expected exactly one empty line)`,
+      `${path}: incorrect CodeMatters header spacing (expected exactly one empty line)`,
     ]);
   });
 
@@ -64,7 +84,7 @@ describe("copyright checker", () => {
         files: ["scripts/tool.ts", "packages/proto/proto/example.proto"],
         readFile: (path) =>
           path.endsWith(".ts")
-            ? `#!/usr/bin/env node\n${COPYRIGHT_HEADER}export {};\n`
+            ? `#!/usr/bin/env node\n${compliantHeader}export {};\n`
             : `${COPYRIGHT_HEADER}syntax = "proto3";\n`,
       }),
     ).toEqual([]);
@@ -83,7 +103,7 @@ describe("copyright checker", () => {
   });
 
   it("requires the current year only for new or content-changed future files", () => {
-    const old = `${COPYRIGHT_HEADER}${body}`;
+    const old = `${compliantHeader}${body}`;
     expect(
       checkCopyright(options([path], { [path]: old }, { year: 2027, baseContent: () => old })),
     ).toEqual([]);
@@ -96,7 +116,7 @@ describe("copyright checker", () => {
       checkCopyright(
         options(
           [path],
-          { [path]: `${COPYRIGHT_HEADER}export const example = false;\n` },
+          { [path]: `${compliantHeader}export const example = false;\n` },
           { year: 2027, baseContent: () => old },
         ),
       ),
@@ -113,7 +133,7 @@ describe("copyright checker", () => {
   });
 
   it("does not advance the year for a header-only edit or a unique renamed match", () => {
-    const old = `${COPYRIGHT_HEADER}${body}`;
+    const old = `${compliantHeader}${body}`;
     expect(
       checkCopyright(
         options(
@@ -140,7 +160,7 @@ describe("copyright checker", () => {
   });
 
   it("uses the deleted-base fallback for an unstaged untracked rename and fails closed when ambiguous", () => {
-    const old = `${COPYRIGHT_HEADER}${body}`;
+    const old = `${compliantHeader}${body}`;
     const renamed = "packages/core/src/renamed.ts";
     const unique = options(
       [renamed],
@@ -208,7 +228,7 @@ describe("copyright checker", () => {
       checkCopyright(
         options(
           [tsx],
-          { [tsx]: `${COPYRIGHT_HEADER}export const View = () => null;\n` },
+          { [tsx]: `${compliantHeader}export const View = () => null;\n` },
           { year: 2026 },
         ),
       ),
@@ -237,7 +257,7 @@ describe("copyright checker", () => {
   });
 
   it("combines committed, staged, and unstaged rename/deletion Git inputs", () => {
-    const old = `${COPYRIGHT_HEADER}${body}`;
+    const old = `${compliantHeader}${body}`;
     const responses = new Map([
       ["merge-base origin/main HEAD", "base\n"],
       ["diff --name-status -M base...HEAD", "R100\told-committed.ts\tnew-committed.ts\n"],
@@ -262,7 +282,7 @@ describe("copyright checker", () => {
   });
 
   it("does not make a single rename ambiguous when Git reports it in multiple comparisons", () => {
-    const old = `${COPYRIGHT_HEADER}${body}`;
+    const old = `${compliantHeader}${body}`;
     const comparison = gitComparison((args) => {
       if (args[0] === "merge-base") return { status: 0, stdout: "base\n" };
       if (args.join(" ").includes("--name-status"))
@@ -280,7 +300,7 @@ describe("copyright checker", () => {
   });
 
   it("treats a Git copy as a new current-year file rather than historical content", () => {
-    const old = `${COPYRIGHT_HEADER}${body}`;
+    const old = `${compliantHeader}${body}`;
     const copied = "copied.ts";
     const comparison = gitComparison((args) => {
       if (args[0] === "merge-base") return { status: 0, stdout: "base\n" };
@@ -318,7 +338,7 @@ describe("copyright checker", () => {
       if (args.join(" ").includes("--name-status"))
         return { status: 0, stdout: `M\0ordinary.ts\0R100\0${prior}\0${renamed}\0` };
       if (args.join(" ").includes("--diff-filter=D")) return { status: 0, stdout: `${deleted}\0` };
-      if (args[0] === "show") return { status: 0, stdout: `${COPYRIGHT_HEADER}${body}` };
+      if (args[0] === "show") return { status: 0, stdout: `${compliantHeader}${body}` };
       return { status: 0, stdout: "" };
     });
     expect(comparison.renamedFrom(renamed)).toEqual([prior]);
@@ -338,7 +358,7 @@ describe("copyright checker", () => {
     });
     expect(
       checkCopyright({
-        ...options([path], { [path]: `${COPYRIGHT_HEADER}${body}` }, { year: 2027 }),
+        ...options([path], { [path]: `${compliantHeader}${body}` }, { year: 2027 }),
         ...comparison,
       }),
     ).toEqual([`${path}: base content lookup failed`]);

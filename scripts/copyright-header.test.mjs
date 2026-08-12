@@ -14,9 +14,19 @@ describe("copyright header", () => {
     ).toBeUndefined();
   });
 
-  it("keeps the approved header exact while separating a following TSDoc block", () => {
-    expect(separateCopyrightHeader(`${copyrightHeader(2026)}/** description */\n`)).toBe(
-      `${copyrightHeader(2026)}\n/** description */\n`,
-    );
+  it("normalizes zero and multiple empty lines after the approved header", () => {
+    for (const following of [
+      "import { value } from './value.js';\n",
+      "export const value = true;\n",
+      "// ordinary comment\n",
+      "/** description */\n",
+    ]) {
+      expect(separateCopyrightHeader(`${copyrightHeader(2026)}${following}`)).toBe(
+        `${copyrightHeader(2026)}\n${following}`,
+      );
+      expect(separateCopyrightHeader(`${copyrightHeader(2026)}\n\n${following}`)).toBe(
+        `${copyrightHeader(2026)}\n${following}`,
+      );
+    }
   });
 });
