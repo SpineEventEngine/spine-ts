@@ -1,7 +1,7 @@
 # Spine TS Project Completion Plan
 
 Status: Initial release, T-0080 authored-API/example quality correction, and
-Wave 9 T-0167A semantic-routing correction complete
+Waves 9 and 10 complete
 
 Plan date: 2026-07-12
 
@@ -210,6 +210,15 @@ planning-only milestone and must return the dependency-ordered proposal for
 approval before product documentation, copyright headers, licenses, or package
 metadata change. Multiple-Gateway behavior has been removed from Wave 10 and
 is not implicitly authorized by this documentation/licensing program.
+
+Wave 10 is complete under T-0168 through T-0176. The repository now carries the
+canonical Apache 2.0 license metadata and 2026 CodeMatters headers, deterministic
+future-year/copy/rename/header-placement enforcement, an exact 64-document
+strict TypeScript-snippet inventory, rewritten package/example journeys,
+canonical API and architecture references, and the approved ten-section
+beginner guide. The integrated review wave and final release profile are clean
+after one focused metadata-test wording correction. Multiple-Gateway behavior
+remains deferred, and Cloud Run remains outside the initial offering.
 
 ## Authored API And Example Quality Correction
 
