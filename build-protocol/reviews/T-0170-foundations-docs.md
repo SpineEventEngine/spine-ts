@@ -1,6 +1,6 @@
 # T-0170 Foundations Documentation Review
 
-Status: Correction complete; re-review ready
+Status: Specialist review complete and clean; release verification pending
 
 The task's [Human-Imposed Requirements Ledger](../tasks/T-0170-foundations-docs/TASK.md)
 is the binding disposition source for this review.
@@ -52,4 +52,8 @@ configuration is the available evidence.
 | Performance/reliability      | Durable/replay and rejection claims needed clear transaction and delivery boundaries.                            | Distinguished aggregate rollback from projection non-update and retained at-least-once replay-safe language.                                                                                    |
 | Security                     | N/A: no security boundary claim changed.                                                                         | No security change; existing canonical material remains linked.                                                                                                                                 |
 
-The correction batch has not dispatched a new review wave.
+Targeted re-review found the implementation, reader corrections, checker
+fixtures, and dispositions clean. Its final record-only P2 noted four explicit
+acceptance obligations missing from the named human ledger; those exact
+obligations are now present. No technical concern is reopened by this
+deterministic record correction.

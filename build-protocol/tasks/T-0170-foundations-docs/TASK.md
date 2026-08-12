@@ -89,6 +89,13 @@ task's records. No other production writer may overlap these files.
 - The strict checker enumerates explicit documents and compiles every TypeScript
   fence against real built declarations and exports. It has deterministic
   document/line diagnostics and no permissive `any` module stubs.
+- Record a `changed` or `reviewed-no-change` disposition for every one of the 18
+  reader documents, and require every TypeScript fence in that complete set to
+  pass the strict checker.
+- Missing documents and missing or invalid declared snippet contexts fail with
+  deterministic path-and-line diagnostics.
+- Verify locally resolving links and use one canonical explanation per topic;
+  do not duplicate competing exhaustive contracts across the owned documents.
 - The journey accurately covers first-field implicit required IDs, generated
   validation and rejections, exact/default command/event/state-update routing,
   event-field `@Where`, application logging, testing, and durable replay.
