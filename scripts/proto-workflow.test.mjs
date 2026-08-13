@@ -761,6 +761,52 @@ describe("proto-workflow", () => {
     },
   );
 
+  it("fails closed and cleans staging when per-model provenance exceeds the depth bound", () => {
+    const target = modelAtomicTargets.find((candidate) => candidate.moduleName === "Projects");
+    const root = applicationModelTransactionFixture(target);
+    try {
+      let directory = join(root, target.packagePath, "proto");
+      for (let depth = 0; depth <= 64; depth += 1) {
+        directory = join(directory, "nested");
+        mkdirSync(directory);
+      }
+      expect(
+        generateTargets({
+          repoRoot: root,
+          runCommand: rootStageCommand,
+          runModelCommand: applicationModelStageCommand(undefined),
+        }),
+      ).toBe(1);
+      expect(readdirSync(join(root, target.packagePath))).not.toContainEqual(
+        expect.stringMatching(/^\.generated-/u),
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed and cleans staging when per-model provenance exceeds the entry bound", () => {
+    const target = modelAtomicTargets.find((candidate) => candidate.moduleName === "Projects");
+    const root = applicationModelTransactionFixture(target);
+    try {
+      const protoRoot = join(root, target.packagePath, "proto");
+      for (let entry = 0; entry <= 1_000; entry += 1)
+        writeFileSync(join(protoRoot, `extra-${entry}.proto`), 'syntax = "proto3";');
+      expect(
+        generateTargets({
+          repoRoot: root,
+          runCommand: rootStageCommand,
+          runModelCommand: applicationModelStageCommand(undefined),
+        }),
+      ).toBe(1);
+      expect(readdirSync(join(root, target.packagePath))).not.toContainEqual(
+        expect.stringMatching(/^\.generated-/u),
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it.each(["Todo companion generation", "Todo handler registry post-step"])(
     "%s preserves live Todo and root artifacts when its staged post-step fails",
     (failure) => {
