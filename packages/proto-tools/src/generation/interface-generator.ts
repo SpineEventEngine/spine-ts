@@ -18,12 +18,10 @@ import { every_is, is } from "@spine-event-engine/proto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  type InterfaceDeclarationProvider,
-  unresolvedInterfaceProvider,
-} from "./interface-provider.js";
+import type { InterfaceDeclarationProvider } from "./interface-provider.js";
 
 const typescriptIdentifier = /^[A-Za-z_$][A-Za-z0-9_$]*$/u;
+const unresolvedInterfaceProvider: InterfaceDeclarationProvider = Object.freeze({ resolve: () => undefined });
 
 function companionPath(name: string): string {
   return `interfaces/${name.replace(/([a-z0-9])([A-Z])/gu, "$1-$2").toLowerCase()}.ts`;
