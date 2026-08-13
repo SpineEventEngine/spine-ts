@@ -971,9 +971,10 @@ function normalizeGeneratedTypeScriptTree(root) {
     const sources = [...source.matchAll(/@generated from file ([^\s)]+)/gu)].map(
       (match) => match[1],
     );
-    const imported = [...source.matchAll(/from "(?:\.\/|\.\.\/)+([^" ]+)_pb\.js"/gu)].map(
-      (match) => match[1].replace(/^.*?spine\//u, "spine/") + ".proto",
-    );
+    const imported = [
+      ...source.matchAll(/from "(?:\.\/|\.\.\/)+([^" ]+)_pb\.js"/gu),
+      ...source.matchAll(/from "[^" ]+\/generated\/([^" ]+)_pb\.js"/gu),
+    ].map((match) => match[1].replace(/^.*?spine\//u, "spine/") + ".proto");
     writeFileSync(
       path,
       generatedTypeScript(

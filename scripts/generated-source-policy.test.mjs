@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { generatedTypeScript } from "./generated-source-policy.mjs";
+import { generatedFileNotice, generatedTypeScript } from "./generated-source-policy.mjs";
 
 describe("generated source policy", () => {
   it("removes a copied Proto copyright notice while retaining stable provenance", () => {
@@ -29,5 +29,23 @@ describe("generated source policy", () => {
         "",
       ].join("\n"),
     );
+  });
+
+  it("rejects unstable or machine-local Proto provenance", () => {
+    for (const value of ["", "../task.proto", "/tmp/task.proto", "C:\\work\\task.proto", ".generated-stage/task.proto"]) {
+      expect(() => generatedFileNotice([value])).toThrow(/stable Proto import path/);
+    }
+  });
+
+  it("documents exported interfaces, enums, types, and constants", () => {
+    const source = [
+      "export interface Task {}",
+      "export enum State { Open }",
+      "export type TaskId = string;",
+      "export const task = true;",
+      "",
+    ].join("\n");
+    const generated = generatedTypeScript(source, ["spine/example/task.proto"]);
+    expect(generated.match(/Generated from Proto:/gu)).toHaveLength(4);
   });
 });

@@ -12,6 +12,9 @@ export function isGeneratedTypeScriptPath(path) {
 
 /* Renders the deterministic generated-file notice for one or more Proto sources. */
 export function generatedFileNotice(sourcePaths) {
+  if (!Array.isArray(sourcePaths) || !sourcePaths.every(isStableProtoImportPath)) {
+    throw new Error(`Generated TypeScript requires stable Proto import paths: ${JSON.stringify(sourcePaths)}.`);
+  }
   const paths = [...new Set(sourcePaths)].sort((left, right) => left.localeCompare(right));
   if (paths.length === 0) throw new Error("Generated TypeScript requires source Proto provenance.");
   return (
@@ -36,13 +39,24 @@ export function generatedTypeScript(source, sourcePaths) {
   const provenance = [...new Set(sourcePaths)].sort((left, right) => left.localeCompare(right));
   const provenanceLine = ` * Generated from Proto: ${provenance.join(", ")}.`;
   const documented = body.replace(
-    /(^|\n)(\/\*\*[\s\S]*?\*\/\n)?(export const )/gu,
+    /(^|\n)(\/\*\*[\s\S]*?\*\/\n)?(export (?:const|interface|enum|type|class|function) )/gu,
     (_match, prefix, documentation = "", declaration) =>
       documentation === ""
         ? `${prefix}/**\n${provenanceLine}\n */\n${declaration}`
         : `${prefix}${documentation.replace(/ \*\/\n$/u, `${provenanceLine}\n */\n`)}${declaration}`,
   );
   return `${generatedFileNotice(provenance)}${documented}`;
+}
+
+function isStableProtoImportPath(path) {
+  return (
+    typeof path === "string" &&
+    path.length > 0 &&
+    path.endsWith(".proto") &&
+    !path.includes("\\") &&
+    !path.split("/").some((part) => part === "" || part === "." || part === "..") &&
+    !/(?:^|\/)(?:\.?(?:generated|stage|backup)|tmp|temp)(?:-|\/|$)/iu.test(path)
+  );
 }
 
 /* Derives stable Proto provenance from an ordinary generated file name. */

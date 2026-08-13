@@ -20,6 +20,9 @@
  * - `packages/server/test-fixtures/proto/entity-metadata/visibility.proto`
  */
 
+/**
+ * Generated from Proto: packages/server/test-fixtures/proto/entity-metadata/empty.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-column.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-tag.proto, packages/server/test-fixtures/proto/entity-metadata/main.proto, packages/server/test-fixtures/proto/entity-metadata/unknown-kind.proto, packages/server/test-fixtures/proto/entity-metadata/visibility.proto.
+ */
 export interface ServerEntityMetadataTestFixture {
   readonly protoPath: string;
   readonly descriptorSetBase64: string;
