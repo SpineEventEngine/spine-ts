@@ -1103,6 +1103,7 @@ export function generateTargets(options = {}) {
   let staged;
   let messageBoardRegistry;
   try {
+    prepareProtoToolsBootstrap(root, options.runBootstrapCommand);
     recoverPublication(root, { ...defaultPublicationOperations, ...options.publicationOperations });
     const prepareStatus = prepareGeneratedOutput(root);
     if (prepareStatus !== 0) {
