@@ -69,6 +69,7 @@ export interface GenerationOperations {
    * @param output The temporary generated-output directory.
    * @param owned The package-relative Proto paths to generate.
    * @param packageName The owning model package name.
+   * @param sourceView The bounded authored-source and staged-output compiler view.
    * @param runner The optional subprocess runner.
    */
   readonly runInterfacePhase?: (

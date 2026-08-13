@@ -45,6 +45,7 @@ export interface InterfaceDeclarationProvider {
    *
    * @param name The requested generated TypeScript interface name.
    * @param members Concrete generated message members of that interface.
+   * @param sourceView The validated compiler input view, when generation supplies one.
    * @returns The authored declaration to alias, or `undefined` when unresolved.
    */
   resolve(

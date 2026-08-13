@@ -13,7 +13,7 @@
  */
 
 import { lstatSync, readdirSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 const maximumSourceViewDepth = 32;
 const maximumSourceViewEntries = 10_000;
@@ -29,7 +29,11 @@ export interface ModelSourceView {
    */
   readonly authoredFiles: readonly string[];
 
-  /** Absolute model package root used to resolve authored imports. */
+  // prettier-ignore
+
+  /**
+   * Absolute model package root used to resolve authored imports.
+   */
   readonly packageRoot: string;
 
   // prettier-ignore
@@ -45,7 +49,8 @@ function collectAuthored(root: string, excluded: readonly string[]): readonly st
   const pending = [{ path: root, depth: 0 }];
   let entries = 0;
   while (pending.length > 0) {
-    const current = pending.pop()!;
+    const current = pending.pop();
+    if (current === undefined) continue;
     if (current.depth > maximumSourceViewDepth)
       throw new Error("spine-proto: source view exceeds bounded traversal");
     for (const name of readdirSync(current.path).sort().reverse()) {

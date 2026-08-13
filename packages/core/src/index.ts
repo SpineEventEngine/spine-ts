@@ -151,6 +151,8 @@ export const MessageInterfaces: Readonly<{
   ) => MessageInterface<TInterface, Schemas>;
   readonly is: (value: unknown) => value is MessageInterface<object, InterfaceSchemas>;
 }> = Object.freeze({
+  // prettier-ignore
+
   /**
    * Creates a nominal token from a non-empty tuple of generated message schemas.
    *
