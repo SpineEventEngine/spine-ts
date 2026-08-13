@@ -133,14 +133,15 @@ describe("InterfaceGenerator", () => {
 
   it("hands message declarations to the authored-interface provider seam", () => {
     const resolved: string[] = [];
+    const output: string[] = [];
     const schema = {
       files: [optionFile("SignalFamily", true, "AuthoredSignal")],
-      generateFile: () => ({
+      generateFile: (path: string) => ({
         import: (name: string) => name,
         importSchema: (message: { readonly name: string }) => `${message.name}Schema`,
         preamble: () => undefined,
         export: (kind: string, name: string) => `export ${kind} ${name}`,
-        print: () => undefined,
+        print: (...parts: readonly string[]) => output.push(`${path}:${parts.join("")}`),
       }),
     } as unknown as Schema;
 
@@ -152,6 +153,10 @@ describe("InterfaceGenerator", () => {
     });
 
     expect(resolved).toEqual(["AuthoredSignal"]);
+    expect(output.join("")).toContain("interfaces/authored-signal.ts");
+    expect(output.join("")).toContain('from "../src/authored.js"');
+    expect(output.join("")).toContain("export type AuthoredSignal = AuthoredAuthoredSignal");
+    expect(output.join("")).toContain("export const AuthoredSignal");
   });
 
   it("rejects malformed message interface declarations before output", () => {
