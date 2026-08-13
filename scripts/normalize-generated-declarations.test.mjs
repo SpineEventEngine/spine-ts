@@ -64,4 +64,15 @@ describe("generated declaration normalization", () => {
 
     expect(() => normalizeGeneratedDeclarations(root, ["fixture"])).toThrow(/bounded inventory/u);
   });
+
+  it("rejects bounded traversal entry inventory", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-declaration-entries-"));
+    const dist = join(root, "fixture", "dist", "generated");
+    mkdirSync(dist, { recursive: true });
+    mkdirSync(join(root, "fixture", "generated"), { recursive: true });
+    for (let index = 0; index < 1_001; index += 1)
+      writeFileSync(join(dist, `entry-${String(index)}.d.ts`), "export {};\n");
+
+    expect(() => normalizeGeneratedDeclarations(root, ["fixture"])).toThrow(/bounded inventory/u);
+  });
 });

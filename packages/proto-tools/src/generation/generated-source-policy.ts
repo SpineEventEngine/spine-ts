@@ -81,6 +81,8 @@ const generatedPolicy = Object.freeze({
       throw new Error("spine-proto: generated source traversal exceeds bounded inventory");
     for (const entry of readdirSync(root, { withFileTypes: true })) {
       state.entries += 1;
+      if (state.entries > 1_000)
+        throw new Error("spine-proto: generated source traversal exceeds bounded inventory");
       const path = join(root, entry.name);
       if (entry.isDirectory())
         generatedPolicy.normalizeGeneratedTreeAt(path, sources, depth + 1, state);
