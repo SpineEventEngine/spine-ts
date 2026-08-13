@@ -1,6 +1,23 @@
 # T-0179 Review Log
 
-Status: Implementation in progress; review not yet requested.
+Status: Implementation and mechanical preflight complete; specialist review in progress.
+
+## Specialist Review Assignments
+
+- Documentation completeness: existing `documentation_reviewer`, immutable
+  `gpt-5.6-luna` / medium. Review generated notice/provenance wording and task,
+  review, and work-log accuracy.
+- TypeScript/API documentation: existing `typescript_api_docs_reviewer`,
+  explicitly `gpt-5.6-terra` / high. Review generated declaration TSDoc and
+  published declaration compatibility.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicitly
+  `gpt-5.6-terra` / high. Review the shared policy seam, generator-family
+  completeness, and classifier/parser maintainability.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicitly `gpt-5.6-terra` / high. Review deterministic generation,
+  publication rollback/cleanup, and fail-closed path/provenance handling.
+- Runtime metadata must be recorded when exposed. If unavailable, the immutable
+  configured role/profile and that surface limitation are the accepted record.
 
 ## Planned Concern Dispositions
 
