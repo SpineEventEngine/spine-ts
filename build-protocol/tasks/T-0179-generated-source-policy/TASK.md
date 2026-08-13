@@ -1,6 +1,6 @@
 # T-0179: Generated TypeScript Provenance And Copyright Policy
 
-Status: Implementation complete; accepted review corrections in progress
+Status: Review corrections complete; re-review ready
 
 ## Objective
 

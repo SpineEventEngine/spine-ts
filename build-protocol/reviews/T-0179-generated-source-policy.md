@@ -2,6 +2,10 @@
 
 Status: Implementation and mechanical preflight complete; specialist review in progress.
 
+Status update: accepted findings corrected; re-review ready. Direct package
+commands, fail-closed provenance, package-qualified handlers, declaration
+TSDoc, atomic fixture preservation, and records are resolved.
+
 ## Accepted Findings
 
 - Documentation, API, style, and reliability reviewer findings were accepted for
