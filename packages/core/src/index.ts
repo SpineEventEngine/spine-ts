@@ -101,6 +101,94 @@ export const DEFAULT_TYPE_URL_PREFIX = "type.googleapis.com";
  */
 export type MessageSchema = GenMessage<Message>;
 
+type InterfaceSchemas = readonly [MessageSchema, ...MessageSchema[]];
+type InterfaceMember<Schemas extends InterfaceSchemas> = MessageShape<Schemas[number]>;
+
+declare const MESSAGE_INTERFACE_BRAND: unique symbol;
+const MESSAGE_INTERFACE_TOKENS = new WeakSet<object>();
+
+/**
+ * Immutable nominal membership token for generated Protobuf message interfaces.
+ *
+ * The token preserves the concrete non-empty schema tuple used to define an
+ * interface. Use {@link MessageInterfaces.define} to create a token and
+ * {@link MessageInterfaces.is} to validate a runtime candidate.
+ *
+ * @typeParam TInterface The object shape implemented by every member message.
+ * @typeParam Schemas The concrete non-empty tuple of member schemas.
+ */
+export interface MessageInterface<TInterface extends object, Schemas extends InterfaceSchemas> {
+  /** Concrete, immutable generated message schemas that belong to this interface. */
+  readonly schemas: Schemas;
+
+  readonly [MESSAGE_INTERFACE_BRAND]: TInterface;
+}
+
+function isMessageSchema(value: unknown): value is MessageSchema {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "kind" in value &&
+    (value as { readonly kind?: unknown }).kind === "message"
+  );
+}
+
+/**
+ * Creates and validates nominal generated message-interface tokens.
+ */
+export const MessageInterfaces: Readonly<{
+  /**
+   * Creates a nominal token from a non-empty tuple of generated message schemas.
+   *
+   * Every schema's message shape must implement `TInterface`. At runtime this
+   * factory rejects empty, malformed, and duplicate membership; it copies and
+   * freezes the retained membership. Factory availability is not an authenticity
+   * boundary: use {@link is} when accepting a runtime token candidate.
+   *
+   * @typeParam TInterface The common object shape of all member messages.
+   * @typeParam Schemas The concrete non-empty member-schema tuple.
+   * @param schemas Generated message schemas belonging to the interface.
+   * @returns A frozen nominal token with concrete schema membership.
+   */
+  define<TInterface extends object, const Schemas extends InterfaceSchemas>(
+    schemas: InterfaceMember<Schemas> extends TInterface ? Schemas : never,
+  ): MessageInterface<TInterface, Schemas>;
+
+  /**
+   * Determines whether a value is the exact token instance created by this factory.
+   *
+   * Structural copies, prototype copies, serialized values, and hand-built
+   * lookalikes are rejected even when they expose matching schema membership.
+   *
+   * @param value The runtime value to inspect.
+   * @returns Whether `value` is a factory-created message-interface token.
+   */
+  is(value: unknown): value is MessageInterface<object, InterfaceSchemas>;
+}> = Object.freeze({
+  define<TInterface extends object, const Schemas extends InterfaceSchemas>(
+    schemas: InterfaceMember<Schemas> extends TInterface ? Schemas : never,
+  ): MessageInterface<TInterface, Schemas> {
+    if (schemas.length === 0) throw new Error("A message interface requires at least one schema.");
+    const uniqueSchemas: MessageSchema[] = [];
+    const seen = new Set<MessageSchema>();
+    for (const schema of schemas as readonly unknown[]) {
+      if (!isMessageSchema(schema)) {
+        throw new TypeError("A message interface requires generated message schemas.");
+      }
+      if (!seen.has(schema)) {
+        seen.add(schema);
+        uniqueSchemas.push(schema);
+      }
+    }
+    const token = Object.freeze({ schemas: Object.freeze(uniqueSchemas) });
+    MESSAGE_INTERFACE_TOKENS.add(token);
+    return token as unknown as MessageInterface<TInterface, Schemas>;
+  },
+  is(value: unknown): value is MessageInterface<object, InterfaceSchemas> {
+    return typeof value === "object" && value !== null && MESSAGE_INTERFACE_TOKENS.has(value);
+  },
+});
+
 /**
  * Structured result returned by {@link Validate.message}.
  */

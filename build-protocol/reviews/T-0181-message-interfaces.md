@@ -1,0 +1,33 @@
+# T-0181 Review Log
+
+Status: Implementation in progress; no specialist review dispatched
+
+## Scope
+
+Review the complete ledger in
+[`TASK.md`](../tasks/T-0181-message-interfaces/TASK.md): public non-empty tuple
+generics, `WeakSet` identity/copy rejection, generated same-name type/value
+exports, nested and cumulative option handling, deterministic staged publication,
+rollback, source-view ownership, generated provenance, and T-0182/3/4/5/12
+exclusions.
+
+## Planned Dispositions
+
+- Documentation completeness: relevant to generated provenance/TSDoc claims.
+- TypeScript/API docs: relevant to exported generic contracts and packed usage.
+- Style/maintainability: relevant to single orchestration/publication ownership.
+- Performance/reliability: relevant to deterministic staged generation and
+  fail-closed rollback/source-view behavior.
+- Security: N/A unless a trust boundary changes; final Wave 11 security is T-0186.
+
+Reviewer dispatch remains orchestrator-owned. Every future assignment must
+record the existing role and explicit model/reasoning; runtime metadata is
+recorded when exposed, otherwise configured role/profile and that limitation are
+the evidence.
+
+## Implementation Evidence
+
+- Core token contract is ready for later API/reliability review: focused runtime
+  coverage passes and the public factory rejects structural copies by private
+  factory-instance identity. Generated-contract review remains pending the
+  post-Buf implementation.

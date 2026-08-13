@@ -42,6 +42,7 @@ import {
 
 import {
   DEFAULT_TYPE_URL_PREFIX,
+  MessageInterfaces,
   type MessageValidationResult,
   type TypeMetadata,
   TypeRegistry,
@@ -53,6 +54,37 @@ import {
   AnyMessages,
   SignalEnvelopes,
 } from "../src/index.js";
+
+type SignalMessage = Message & {
+  readonly $typeName: string;
+};
+
+describe("MessageInterfaces", () => {
+  it("creates immutable nominal tokens with copied, deduplicated membership", () => {
+    const schemas = [CommandSchema, EventSchema, CommandSchema] as const;
+    const token = MessageInterfaces.define<SignalMessage, typeof schemas>(schemas);
+
+    expect(token.schemas).toEqual([CommandSchema, EventSchema]);
+    expect(token.schemas).not.toBe(schemas);
+    expect(Object.isFrozen(token)).toBe(true);
+    expect(Object.isFrozen(token.schemas)).toBe(true);
+    expect(MessageInterfaces.is(token)).toBe(true);
+
+    const copies = [
+      { ...token },
+      Object.assign({}, token),
+      Object.create(token),
+      JSON.parse('{"schemas":[]}'),
+      { schemas: token.schemas },
+    ];
+    for (const copy of copies) expect(MessageInterfaces.is(copy)).toBe(false);
+  });
+
+  it("rejects empty and malformed runtime membership", () => {
+    expect(() => MessageInterfaces.define([] as never)).toThrow("at least one schema");
+    expect(() => MessageInterfaces.define([{}] as never)).toThrow("generated message schema");
+  });
+});
 
 type RequiredName = Message<"example.validation.RequiredName"> & {
   name: string;
