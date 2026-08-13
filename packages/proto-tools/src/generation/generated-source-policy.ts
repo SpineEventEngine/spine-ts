@@ -37,7 +37,9 @@ export function generatedNotice(sources: readonly string[]): string {
   ].join("\n");
 }
 
-/** Renders the deterministic generated-file notice for script consumers. */
+/**
+ * Renders the deterministic generated-file notice for script consumers.
+ */
 export const generatedFileNotice: (sources: readonly string[]) => string = generatedNotice;
 
 /**
@@ -74,7 +76,9 @@ export function generatedSource(source: string, sources: readonly string[]): str
   )}`;
 }
 
-/** Applies generated provenance using the script-compatible name. */
+/**
+ * Applies generated provenance using the script-compatible name.
+ */
 export const generatedTypeScript: (source: string, sources: readonly string[]) => string =
   generatedSource;
 
