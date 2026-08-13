@@ -46,7 +46,11 @@ function collectAuthored(
     const entry = lstatSync(path);
     if (entry.isSymbolicLink()) continue;
     if (entry.isDirectory()) files.push(...collectAuthored(root, path, excluded));
-    else if (/\.(?:cts|mts|ts|tsx)$/u.test(name) && !/\.d\.ts$/u.test(name)) files.push(path);
+    else if (
+      [".cts", ".mts", ".ts", ".tsx"].some((extension) => name.endsWith(extension)) &&
+      !name.endsWith(".d.ts")
+    )
+      files.push(path);
   }
   return files;
 }

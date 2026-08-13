@@ -1,6 +1,24 @@
 [
   {
     "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/source-view.ts",
+    "kind": "function-declaration",
+    "identity": "collectAuthored()#1",
+    "name": "collectAuthored",
+    "disposition": "necessity",
+    "reason": "TypeScript compiler source boundary: collectAuthored deterministically excludes generated publication trees from authored source candidates."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/source-view.ts",
+    "kind": "function-declaration",
+    "identity": "modelSourceView()#1",
+    "name": "modelSourceView",
+    "disposition": "necessity",
+    "reason": "TypeScript compiler source boundary: modelSourceView supplies the stable live-authored and staged-generated input redirect."
+  },
+  {
+    "rule": "standalone-function",
     "file": "packages/proto-tools/src/generation/interface-generator.ts",
     "kind": "function-declaration",
     "identity": "optionExtension()#1",
