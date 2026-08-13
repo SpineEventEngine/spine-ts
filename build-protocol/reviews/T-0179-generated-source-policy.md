@@ -3,6 +3,19 @@
 Status: Accepted review findings corrected; re-review ready. No reviewer has
 yet accepted this correction batch.
 
+## Mandatory release-profile correction
+
+- The first required release profile found four stale full-suite contracts,
+  rather than a policy implementation regression. The To-Do freshness test now
+  canonicalizes writer output; Message Board stale-output fixtures include
+  required notice/provenance so they reach their intended assertions; and the
+  framework module test checks the enduring summary and generated Proto
+  declaration provenance instead of obsolete one-line TSDoc spelling.
+- RED was four failures across the three files; focused GREEN is 46/46. No
+  production policy behavior was weakened. The converged release profile is
+  rerunning after a first retry was refused solely because an earlier
+  generation command still held workflow ownership.
+
 Final CLI-level cleanup proof: the isolated failing-Buf CLI regression starts
 the real bootstrap and proves descriptor-root and bootstrap-cache cleanup. The
 sequential generated build and exact six-file suite pass 199/199; changed

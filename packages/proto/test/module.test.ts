@@ -75,9 +75,10 @@ function schemaNames(exports: object): string[] {
 
 describe("spineProtoModule", () => {
   it("retains the public descriptor documentation in generated source", () => {
-    expect(
-      readFileSync(new URL("../generated/proto-module.ts", import.meta.url), "utf8"),
-    ).toContain("/** All Spine schemas shipped by `@spine-event-engine/proto`. */");
+    const source = readFileSync(new URL("../generated/proto-module.ts", import.meta.url), "utf8");
+
+    expect(source).toContain("All Spine schemas shipped by `@spine-event-engine/proto`.");
+    expect(source).toContain("Generated from Proto: grpc/health/v1/health.proto");
   });
 
   it("publishes a deterministic manifest for every owned canonical source", () => {

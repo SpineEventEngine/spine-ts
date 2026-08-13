@@ -58,6 +58,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { BuildHandlerAnalyzer } from "../../../packages/server/src/handler/build-time-handler-analyzer.js";
 import { GeneratedRegistryWriter } from "../../../packages/server/src/handler/generated-registry-writer.js";
+import { generatedSource } from "../../../packages/proto-tools/src/generation/generated-source-policy.js";
 import {
   CompleteTaskSchema,
   CreateTaskSchema,
@@ -1397,7 +1398,11 @@ function assertGeneratedRegistryFresh(): void {
     throw new Error("Generated handler registry analysis failed.");
   }
 
-  const expected = new GeneratedRegistryWriter().render(analysis, { outputFile: registrySource });
+  const source = new GeneratedRegistryWriter().render(analysis, { outputFile: registrySource });
+  const sources = [...source.matchAll(/from "(?:[^" ]+\/generated\/)?([^" ]+)_pb\.js"/gu)].map(
+    (match) => (match[1] ?? "").replace(/^\.\//u, "").replace(/^.*?spine\//u, "spine/") + ".proto",
+  );
+  const expected = generatedSource(source, sources);
   const actual = readFileSync(registrySource, "utf8");
 
   if (actual !== expected) {

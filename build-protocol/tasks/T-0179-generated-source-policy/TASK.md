@@ -1,6 +1,13 @@
 # T-0179: Generated TypeScript Provenance And Copyright Policy
 
-Status: Review corrections complete; re-review ready
+Status: Release-contract correction complete; release verification rerun in progress
+
+Release-contract correction (2026-08-13): the first mandatory release profile
+found four stale test contracts, not generated-policy production defects. The
+To-Do freshness assertion now renders through the canonical policy, stale-output
+fixtures supply required Message Board provenance, and the framework module
+assertion checks its public summary plus declaration provenance. Focused RED
+was 4 failures; GREEN is 46/46 across the three affected files.
 
 Final CLI-cleanup evidence (2026-08-13): an isolated CLI-level failing-Buf
 regression starts the real bootstrap and proves both descriptor temporary roots
