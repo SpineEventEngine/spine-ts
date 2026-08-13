@@ -13,18 +13,19 @@
  */
 
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { generatedTypeScript } from "./generated-source-policy.mjs";
 
-const roots = [
+export const generatedDeclarationRoots = Object.freeze([
   "packages/proto",
   "examples/todo",
   "examples/projects",
   "examples/orders",
   "examples/message-board/model",
-];
+  "examples/message-board/app",
+]);
 
-function declarationFiles(root) {
+export function declarationFiles(root) {
   const pending = [root];
   const files = [];
   while (pending.length > 0) {
@@ -42,23 +43,31 @@ function declarationFiles(root) {
   return files;
 }
 
-function sources(source) {
+export function declarationSources(source) {
   return [...source.matchAll(/^ \* Source Proto: (.+)$/gmu)].map((match) => match[1]);
 }
 
-for (const root of roots) {
-  const dist = join(root, "dist", "generated");
-  const generated = join(root, "generated");
-  if (!existsSync(dist) || !existsSync(generated)) continue;
-  for (const declaration of declarationFiles(dist)) {
-    const sourcePath = join(generated, relative(dist, declaration).replace(/\.d\.ts$/u, ".ts"));
-    if (!existsSync(sourcePath)) continue;
-    const provenance = sources(readFileSync(sourcePath, "utf8"));
-    if (provenance.length > 0)
-      writeFileSync(
-        declaration,
-        generatedTypeScript(readFileSync(declaration, "utf8"), provenance),
-        "utf8",
-      );
+export function normalizeGeneratedDeclarations(
+  repoRoot = process.cwd(),
+  roots = generatedDeclarationRoots,
+) {
+  for (const root of roots) {
+    const packageRoot = resolve(repoRoot, root);
+    const dist = join(packageRoot, "dist", "generated");
+    const generated = join(packageRoot, "generated");
+    if (!existsSync(dist) || !existsSync(generated)) continue;
+    for (const declaration of declarationFiles(dist)) {
+      const sourcePath = join(generated, relative(dist, declaration).replace(/\.d\.ts$/u, ".ts"));
+      if (!existsSync(sourcePath)) continue;
+      const provenance = declarationSources(readFileSync(sourcePath, "utf8"));
+      if (provenance.length > 0)
+        writeFileSync(
+          declaration,
+          generatedTypeScript(readFileSync(declaration, "utf8"), provenance),
+          "utf8",
+        );
+    }
   }
 }
+
+normalizeGeneratedDeclarations();

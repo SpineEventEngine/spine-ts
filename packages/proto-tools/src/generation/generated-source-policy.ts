@@ -54,7 +54,7 @@ const generatedPolicy = Object.freeze({
         : withoutCopyright;
     const provenance = ` * Generated from Proto: ${[...new Set(sources)].sort().join(", ")}.`;
     return `${generatedPolicy.generatedNotice(sources)}${body.replace(
-      /(^|\n)(\/\*\*[\s\S]*?\*\/\n)?(export (?:const|interface|enum|type|class|function) )/gu,
+      /(^|\n)(\/\*\*[\s\S]*?\*\/\n)?(export (?:declare )?(?:const|interface|enum|type|class|function) )/gu,
       (_match: string, prefix: string, documentation: string | undefined, declaration: string) => {
         const cleaned = (documentation ?? "").replace(/ \* Generated from Proto: .*\.\n/gu, "");
         const oneLine = /^\/\*\*[ \t]*([^\n]*?)[ \t]*\*\/\n$/u.exec(cleaned);
