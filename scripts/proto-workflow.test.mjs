@@ -34,19 +34,29 @@ import { writeSpineProtoArtifacts } from "./generate-spine-proto-artifacts.mjs";
 describe("clean proto-tools bootstrap", () => {
   it("generates through the bootstrap when the compiled proto-tools output is absent", () => {
     const root = process.cwd();
-    const dist = join(root, "packages/proto-tools/dist");
-    const holding = mkdtempSync(join(tmpdir(), "spine-proto-tools-dist-"));
-    const parked = join(holding, "dist");
-    renameSync(dist, parked);
+    const isolated = mkdtempSync(join(tmpdir(), "spine-clean-bootstrap-"));
+    const clone = join(isolated, "repo");
+    const worktree = spawnSync("git", ["worktree", "add", "--detach", clone, "HEAD"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    if (worktree.status !== 0) throw new Error(`${worktree.stdout}${worktree.stderr}`);
     try {
-      const result = spawnSync("pnpm", ["proto:generate"], { cwd: root, encoding: "utf8" });
+      const install = spawnSync("pnpm", ["install", "--offline", "--frozen-lockfile"], {
+        cwd: clone,
+        encoding: "utf8",
+      });
+      if (install.status !== 0) throw new Error(`${install.stdout}${install.stderr}`);
+      rmSync(join(clone, "packages/proto-tools/dist"), { recursive: true, force: true });
+      const result = spawnSync("pnpm", ["proto:generate"], { cwd: clone, encoding: "utf8" });
+      if (result.status !== 0) throw new Error(`${result.stdout}${result.stderr}`);
       expect(result.status).toBe(0);
-      expect(readdirSync(join(root, "packages/proto-tools/node_modules/.cache"))).not.toContainEqual(
-        expect.stringMatching(/^spine-proto-tools-bootstrap-/u),
-      );
+      expect(
+        readdirSync(join(clone, "packages/proto-tools/node_modules/.cache")),
+      ).not.toContainEqual(expect.stringMatching(/^spine-proto-tools-bootstrap-/u));
     } finally {
-      renameSync(parked, dist);
-      rmSync(holding, { recursive: true, force: true });
+      spawnSync("git", ["worktree", "remove", "--force", clone], { cwd: root, encoding: "utf8" });
+      rmSync(isolated, { recursive: true, force: true });
     }
   }, 120_000);
 });
@@ -1805,7 +1815,7 @@ describe("proto-workflow", () => {
     const ownership = source.indexOf("lock = acquireWorkflowLock(root, options.lockOperations)");
     const preparation = source.indexOf("const prepareStatus = prepareGeneratedOutput(root);");
 
-    expect(source).toContain('prepareProtoToolsBootstrap(repoRoot);');
+    expect(source).toContain("prepareProtoToolsBootstrap(repoRoot);");
     expect(ownership).toBeGreaterThanOrEqual(0);
     expect(preparation).toBeGreaterThan(ownership);
   });
