@@ -102,3 +102,13 @@ the evidence.
   source-view branches. The direct `MessageInterfaces` namespace exposes both
   documented API members to the exact inventory. Focused 4-file/164-test and
   static gates pass; no release/review was run.
+
+- Final reliability P2 correction is complete; final targeted confirmation is
+  pending. The staged metadata includes a canonical live generated root and is
+  fail-closed for a wrong plugin output root, invalid live root, and authored
+  entries in live/stage/backup roots. Accepted metadata is copied and frozen.
+  Focused source-view/interface-generator tests pass (2 files, 14 tests), as
+  do tooling typecheck, repository ESLint, TSDoc, formatting, and diff checks.
+  Source-view coverage is 90.47% branches. No reviewer or release rerun was
+  dispatched. Reliability review remains the existing explicit Terra/high
+  concern; runtime metadata is unavailable.

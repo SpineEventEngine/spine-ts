@@ -39,6 +39,13 @@ export interface ModelSourceView {
   // prettier-ignore
 
   /**
+   * Canonical live generated root excluded from authored-interface candidates.
+   */
+  readonly liveGeneratedRoot: string;
+
+  // prettier-ignore
+
+  /**
    * Redirect root used when compiler imports address generated model sources.
    */
   readonly stagedGeneratedRoot: string;
@@ -102,9 +109,11 @@ export function modelSourceView(
   const excluded = [generated, "dist"];
   const siblingStage = join(generatedDirectory, `.${generatedName}.stage-`);
   const siblingBackup = join(generatedDirectory, `.${generatedName}.`);
+  const liveGeneratedRoot = resolve(root, generated);
   return Object.freeze({
     authoredFiles: Object.freeze(collectAuthored(root, [...excluded, siblingStage, siblingBackup])),
     packageRoot: root,
+    liveGeneratedRoot,
     stagedGeneratedRoot: resolve(stagedGeneratedRoot),
   });
 }

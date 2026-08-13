@@ -25,8 +25,12 @@ import {
   is,
 } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { mkdtempSync } from "node:fs";
 
-import { InterfaceGenerator } from "../src/generation/interface-generator.js";
+import { InterfaceGenerator, stagedSourceView } from "../src/generation/interface-generator.js";
 import type { Schema } from "@bufbuild/protoplugin";
 
 function optionFile(
@@ -271,5 +275,44 @@ describe("InterfaceGenerator", () => {
       InterfaceGenerator.generateCompanions(schema);
     }).toThrow("duplicate interface companion path");
     expect(generated).toBe(0);
+  });
+
+  it("fails closed for malformed staged source-view metadata", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-staged-source-view-"));
+    const packageRoot = join(root, "model");
+    const liveGeneratedRoot = join(packageRoot, "src/generated");
+    const stagedGeneratedRoot = join(root, "output");
+    const authored = join(packageRoot, "src/authored.ts");
+    mkdirSync(join(packageRoot, "src/generated"), { recursive: true });
+    mkdirSync(stagedGeneratedRoot);
+    writeFileSync(authored, "export interface Authored {}\n");
+    const write = (value: object) => {
+      writeFileSync(join(root, ".spine-source-view.json"), `${JSON.stringify(value)}\n`);
+    };
+    const valid = {
+      authoredFiles: [authored],
+      liveGeneratedRoot,
+      packageRoot,
+      stagedGeneratedRoot,
+    };
+    try {
+      write(valid);
+      const view = stagedSourceView(root);
+      expect(view).toEqual(valid);
+      expect(Object.isFrozen(view)).toBe(true);
+      expect(Object.isFrozen(view?.authoredFiles)).toBe(true);
+      for (const malformed of [
+        { ...valid, stagedGeneratedRoot: join(root, "wrong-output") },
+        { ...valid, liveGeneratedRoot: join(root, "outside") },
+        { ...valid, authoredFiles: [join(liveGeneratedRoot, "live.ts")] },
+        { ...valid, authoredFiles: [join(packageRoot, "src/.generated.stage-1/staged.ts")] },
+        { ...valid, authoredFiles: [join(packageRoot, "src/.generated.1.backup/old.ts")] },
+      ]) {
+        write(malformed);
+        expect(() => stagedSourceView(root)).toThrow("invalid staged source view");
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

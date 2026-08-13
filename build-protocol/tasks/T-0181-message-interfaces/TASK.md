@@ -2,6 +2,19 @@
 
 Status: Final correction complete; final targeted confirmation pending
 
+## 2026-08-14 - Final Reliability P2 Hardening
+
+- The post-Buf metadata now carries a canonical absolute `liveGeneratedRoot`.
+  The interface plugin accepts only the current staged `output` root, validates
+  canonical package/live/authored paths, rejects live generated and actual
+  sibling stage/backup entries, and copies/freezes the accepted view.
+- RED/GREEN malformed-metadata coverage includes wrong staged root, invalid
+  live root, live generated entry, stage entry, and backup entry. Focused
+  source-view/interface-generator tests pass (2 files, 14 tests); tooling
+  typecheck, repository ESLint, TSDoc, formatting, and diff integrity pass.
+  Source-view coverage is 94.73% statements and 90.47% branches. Final
+  targeted confirmation remains pending; no release or reviewer was run.
+
 ## Classification And Isolation
 
 - Classification: high-risk public/generated contract. This task introduces a

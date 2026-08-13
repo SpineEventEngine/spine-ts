@@ -14,7 +14,7 @@
 
 import { getOption, type DescExtension, type DescFile, type DescMessage } from "@bufbuild/protobuf";
 import { createEcmaScriptPlugin, runNodeJs, type Schema } from "@bufbuild/protoplugin";
-import { isAbsolute, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync } from "node:fs";
 
@@ -25,29 +25,76 @@ const typescriptIdentifier = /^[A-Za-z_$][A-Za-z0-9_$]*$/u;
 const unresolvedInterfaceProvider: InterfaceDeclarationProvider = Object.freeze({
   resolve: () => undefined,
 });
-function stagedSourceView(): ModelSourceView | undefined {
-  const path = `${process.cwd()}/.spine-source-view.json`;
+
+/**
+ * Reads the immutable source-view handoff for the post-Buf interface phase.
+ *
+ * @param cwd Plugin working directory containing its staged `output` tree.
+ * @returns A validated source view, or undefined when no handoff was supplied.
+ */
+export function stagedSourceView(cwd = process.cwd()): ModelSourceView | undefined {
+  const path = join(cwd, ".spine-source-view.json");
   if (!existsSync(path)) return undefined;
   const value: unknown = JSON.parse(readFileSync(path, "utf8"));
   if (value === null || typeof value !== "object")
     throw new Error("spine-proto: invalid staged source view");
-  const view = value as ModelSourceView;
+  const view = value as {
+    readonly authoredFiles?: unknown;
+    readonly liveGeneratedRoot?: unknown;
+    readonly packageRoot?: unknown;
+    readonly stagedGeneratedRoot?: unknown;
+  };
+  const expectedStage = resolve(cwd, "output");
+  const within = (root: string, path: string) => {
+    const pathRelative = relative(root, path);
+    return pathRelative === "" || (!pathRelative.startsWith("..") && !isAbsolute(pathRelative));
+  };
   if (
-    !isAbsolute(view.packageRoot) ||
-    resolve(view.packageRoot) !== view.packageRoot ||
-    !isAbsolute(view.stagedGeneratedRoot) ||
-    resolve(view.stagedGeneratedRoot) !== view.stagedGeneratedRoot ||
-    !Array.isArray(view.authoredFiles) ||
-    view.authoredFiles.some(
+    typeof view.packageRoot !== "string" ||
+    typeof view.stagedGeneratedRoot !== "string" ||
+    typeof view.liveGeneratedRoot !== "string" ||
+    !Array.isArray(view.authoredFiles)
+  )
+    throw new Error("spine-proto: invalid staged source view");
+  const packageRoot = view.packageRoot;
+  const stagedGeneratedRoot = view.stagedGeneratedRoot;
+  const liveGeneratedRoot = view.liveGeneratedRoot;
+  const rawAuthoredFiles = view.authoredFiles;
+  const authoredFiles = rawAuthoredFiles.filter((file): file is string => typeof file === "string");
+  const liveParent = dirname(liveGeneratedRoot);
+  const liveName = basename(liveGeneratedRoot);
+  const transactionStage = join(liveParent, `.${liveName}.stage-`);
+  const transactionBackup = join(liveParent, `.${liveName}.`);
+  const isTransactionArtifact = (file: string) =>
+    file.startsWith(transactionStage) ||
+    (file.startsWith(transactionBackup) && file.includes(".backup"));
+  if (
+    !isAbsolute(packageRoot) ||
+    resolve(packageRoot) !== packageRoot ||
+    !isAbsolute(stagedGeneratedRoot) ||
+    resolve(stagedGeneratedRoot) !== stagedGeneratedRoot ||
+    stagedGeneratedRoot !== expectedStage ||
+    !isAbsolute(liveGeneratedRoot) ||
+    resolve(liveGeneratedRoot) !== liveGeneratedRoot ||
+    !within(packageRoot, liveGeneratedRoot) ||
+    authoredFiles.length !== rawAuthoredFiles.length ||
+    authoredFiles.some(
       (file) =>
-        typeof file !== "string" ||
         !isAbsolute(file) ||
         resolve(file) !== file ||
-        relative(view.packageRoot, file).startsWith(".."),
+        !within(packageRoot, file) ||
+        within(liveGeneratedRoot, file) ||
+        within(stagedGeneratedRoot, file) ||
+        isTransactionArtifact(file),
     )
   )
     throw new Error("spine-proto: invalid staged source view");
-  return Object.freeze({ ...view, authoredFiles: Object.freeze([...view.authoredFiles]) });
+  return Object.freeze({
+    authoredFiles: Object.freeze(authoredFiles.map((file) => file)),
+    liveGeneratedRoot,
+    packageRoot,
+    stagedGeneratedRoot,
+  });
 }
 const reservedTypeScriptWords = new Set([
   "await",
