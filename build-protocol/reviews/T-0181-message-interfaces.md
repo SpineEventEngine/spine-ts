@@ -135,3 +135,9 @@ the evidence.
   `docs:api:check` confirms all 35 expected core exports, including `.define`
   and `.is`, and 71 focused core/Proto-tools tests plus tooling typecheck pass.
   No release or reviewer was dispatched here.
+
+- Third release RED was formatting-only in that TypeDoc collector. Canonical
+  Prettier changed a single ternary indentation; API-check behavior is
+  unchanged. Exact Prettier, `docs:api:check`, repository format, and diff
+  gates are GREEN. This supersedes the earlier format evidence for the file;
+  no release or reviewer was dispatched here.

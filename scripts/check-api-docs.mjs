@@ -845,7 +845,7 @@ function collectNames(value) {
               value.type.typeArguments[0]?.type === "reflection" &&
               Array.isArray(value.type.typeArguments[0].declaration?.children)
             ? value.type.typeArguments[0].declaration.children
-          : [];
+            : [];
 
     for (const member of members) {
       if (typeof member.name === "string") {

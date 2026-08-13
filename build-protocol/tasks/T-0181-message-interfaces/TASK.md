@@ -50,6 +50,16 @@ Status: Final correction complete; final targeted confirmation pending
   tests), along with tooling typecheck. Release remains reserved for the
   orchestrator's single rerun.
 
+## 2026-08-14 - Release Formatting Correction
+
+- Third release RED was formatting-only: the `Readonly<reflection>` collector
+  ternary in `scripts/check-api-docs.mjs` required one canonical Prettier
+  indentation adjustment. The prior static-gate evidence is superseded for
+  this file; no checker behavior changed.
+- GREEN: exact Prettier check, `pnpm docs:api:check`, repository
+  `pnpm format:check`, and diff integrity pass. Release remains reserved for
+  the orchestrator's rerun.
+
 ## Classification And Isolation
 
 - Classification: high-risk public/generated contract. This task introduces a
