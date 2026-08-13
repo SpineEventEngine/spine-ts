@@ -2,6 +2,13 @@
 
 Status: Review corrections complete; re-review ready
 
+Final reliability-correction verification (2026-08-13): the generated build
+passes; the exact six-file suite passes 195/195; and executable changed-range
+coverage against `origin/main...HEAD` is 180/199 (90.45%). The bootstrap now
+runs only after workflow ownership is acquired, while injected orchestration
+remains bootstrap-free. Descriptor, stage-write, and source-tree failure paths
+are covered. Reliability re-review and `verify:release` remain pending.
+
 Final review-wave correction: Documentation review (Luna/medium) and API review
 (Terra/high) were CLEAN; runtime metadata is unavailable. Accepted style
 findings are resolved: proprietary/confidential copied preambles are stripped,

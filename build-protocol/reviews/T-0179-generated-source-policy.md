@@ -3,6 +3,13 @@
 Status: Accepted review findings corrected; re-review ready. No reviewer has
 yet accepted this correction batch.
 
+Final reliability correction evidence: generated build and the exact six-file
+suite pass 195/195; changed executable coverage is 180/199 (90.45%). CLI
+bootstrap preparation occurs after lock acquisition, injected orchestration is
+bootstrap-free, fixture failures clean both temporary layers, write failures
+remove their stage, and Proto discovery is bounded iteratively. Targeted
+reliability re-review and `verify:release` remain pending.
+
 Direct package commands, fail-closed provenance, package-qualified handlers,
 declaration TSDoc, atomic fixture preservation, record chronology, and the
 Message Board notice-idempotency correction are resolved by implementation.
