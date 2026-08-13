@@ -89,6 +89,9 @@ Status: In implementation
   descriptors, so the plugin uses its installed public Proto package only as a
   fallback after schema-first lookup. The packaged external regression passes;
   release remains unrun.
+- Release-preflight correction: repository-wide ESLint exposed and removed one
+  unused workflow-test fixture parameter; focused workflow and static cheap
+  gates pass. Release remains unrun after this mechanical correction.
 
 ## Skills
 

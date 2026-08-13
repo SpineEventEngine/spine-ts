@@ -49,3 +49,7 @@ the evidence.
   back to the installed public Proto package only when the consumer's reduced
   Buf schema omits option descriptors. The exact 3-file / 107-test suite and
   generated build pass; no release or specialist review was run.
+- Release-preflight mechanical correction: full repository ESLint found one
+  unused test fixture parameter outside the earlier scoped lint command. It is
+  removed; repository ESLint, the 64-test workflow suite, cleanup, TSDoc,
+  copyright, formatting, and diff integrity pass. Release was not rerun.

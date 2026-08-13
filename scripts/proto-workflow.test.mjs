@@ -496,7 +496,7 @@ describe("proto-workflow", () => {
   it("builds and reuses a clean Proto Tools bootstrap executable", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-bootstrap-"));
     let calls = 0;
-    const run = (label, executable, args, cwd) => {
+    const run = (label, executable, args) => {
       calls += 1;
       expect(executable).toBe(process.execPath);
       expect(label).toBe("Proto Tools bootstrap build");
