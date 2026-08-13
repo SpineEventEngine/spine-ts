@@ -90,10 +90,10 @@ export function publishFixtureModule(target, source, operations = {}) {
   }
 }
 
-export function renderFixtureModule() {
+export function renderFixtureModule(operations = {}) {
   const fixtureEntries = fixtureDefinitions.map((fixture) => ({
     ...fixture,
-    descriptorSetBase64: buildDescriptorSetBase64(fixture.protoPath),
+    descriptorSetBase64: buildDescriptorSetBase64(fixture.protoPath, operations),
   }));
   const entries = fixtureEntries
     .map(
@@ -134,8 +134,8 @@ ${entries}
   );
 }
 
-function buildDescriptorSetBase64(protoPath) {
-  const tempRoot = mkdtempSync(join(tmpdir(), "spine-server-fixtures-"));
+export function buildDescriptorSetBase64(protoPath, operations = {}) {
+  const tempRoot = operations.tempRoot ?? mkdtempSync(join(tmpdir(), "spine-server-fixtures-"));
   const tempProtoRoot = join(tempRoot, "proto");
   const tempSpineRoot = join(tempProtoRoot, "spine");
   const tempFixturePath = join(
@@ -151,7 +151,7 @@ function buildDescriptorSetBase64(protoPath) {
   copyFileSync(join(repoRoot, protoPath), tempFixturePath);
   writeFileSync(join(tempRoot, "buf.yaml"), `version: v2\nmodules:\n  - path: proto\n`);
 
-  const result = spawnSync(
+  const result = (operations.spawn ?? spawnSync)(
     bufExecutable,
     [
       "build",
