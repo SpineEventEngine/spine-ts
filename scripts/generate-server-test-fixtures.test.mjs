@@ -81,4 +81,21 @@ describe("generate-server-test-fixtures", () => {
       false,
     );
   });
+
+  it("removes its stage when writing the replacement fixture fails", () => {
+    const directory = mkdtempSync(join(tmpdir(), "spine-fixture-write-failure-"));
+    try {
+      const target = join(directory, "fixture.ts");
+      expect(() =>
+        publishFixtureModule(target, "next\n", {
+          write: () => {
+            throw new Error("write failed");
+          },
+        }),
+      ).toThrow("write failed");
+      expect(readdirSync(directory)).toEqual([]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
 });

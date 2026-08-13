@@ -1900,7 +1900,7 @@ describe("proto-workflow", () => {
     const ownership = source.indexOf("lock = acquireWorkflowLock(root, options.lockOperations)");
     const preparation = source.indexOf("const prepareStatus = prepareGeneratedOutput(root);");
 
-    expect(source).toContain("prepareProtoToolsBootstrap(repoRoot);");
+    expect(source).not.toContain("prepareProtoToolsBootstrap(repoRoot);");
     expect(ownership).toBeGreaterThanOrEqual(0);
     expect(preparation).toBeGreaterThan(ownership);
   });

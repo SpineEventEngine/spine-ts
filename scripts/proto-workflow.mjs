@@ -155,7 +155,6 @@ export function main(argv = process.argv.slice(2)) {
   }
 
   if (command === "generate") {
-    prepareProtoToolsBootstrap(repoRoot);
     return generateTargets();
   }
 
@@ -253,15 +252,21 @@ function resolveBufExecutable(root = repoRoot) {
 }
 
 function findProtoFiles(directory) {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const entryPath = join(directory, entry.name);
-
-    if (entry.isDirectory()) {
-      return findProtoFiles(entryPath);
+  const files = [];
+  const pending = [[directory, 0]];
+  let entries = 0;
+  while (pending.length > 0) {
+    const [current, depth] = pending.pop();
+    if (depth > 64) throw new Error("Proto source traversal exceeds bounded inventory");
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      entries += 1;
+      if (entries > 1_000) throw new Error("Proto source traversal exceeds bounded inventory");
+      const entryPath = join(current, entry.name);
+      if (entry.isDirectory()) pending.push([entryPath, depth + 1]);
+      else if (entry.isFile() && entry.name.endsWith(".proto")) files.push(entryPath);
     }
-
-    return entry.isFile() && entry.name.endsWith(".proto") ? [entryPath] : [];
-  });
+  }
+  return files;
 }
 
 function escapeRegExp(value) {

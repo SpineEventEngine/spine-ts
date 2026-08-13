@@ -81,8 +81,8 @@ export function publishFixtureModule(target, source, operations = {}) {
   const write = operations.write ?? ((path, contents) => writeFileSync(path, contents, "utf8"));
   const rename = operations.rename ?? renameSync;
   const remove = operations.remove ?? ((path) => rmSync(path, { force: true }));
-  write(stage, source);
   try {
+    write(stage, source);
     rename(stage, target);
   } catch (error) {
     remove(stage);
@@ -171,8 +171,7 @@ function buildDescriptorSetBase64(protoPath) {
 
   try {
     if (result.status !== 0) {
-      process.stderr.write(result.stderr);
-      process.exit(result.status ?? 1);
+      throw new Error(`Server fixture descriptor build failed: ${result.stderr}`);
     }
 
     return readFileSync(tempOutputPath).toString("base64");
