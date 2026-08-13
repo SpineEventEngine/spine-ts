@@ -44,7 +44,9 @@ export const InterfaceGenerator: Readonly<{
       }
       const members = collectMessages(file.messages);
       if (members.length === 0) {
-        throw new Error(`spine-proto: ${file.proto.name}: every_is cannot target an empty message set`);
+        throw new Error(
+          `spine-proto: ${file.proto.name}: every_is cannot target an empty message set`,
+        );
       }
       const output = schema.generateFile(`interfaces/${file.name}.ts`);
       const define = output.import("MessageInterfaces", "@spine-event-engine/core");
