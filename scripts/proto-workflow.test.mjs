@@ -1591,6 +1591,36 @@ describe("proto-workflow", () => {
     expect(existsSync(join(generatedRoot, "proto-module.ts"))).toBe(false);
   });
 
+  it("writes a noticed Proto module and manifest for owned generated schemas", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-artifacts-happy-"));
+    try {
+      const packageRoot = join(repoRoot, "packages/proto");
+      const generatedRoot = join(packageRoot, "generated");
+      mkdirSync(join(packageRoot, "proto", "model"), { recursive: true });
+      mkdirSync(join(generatedRoot, "model"), { recursive: true });
+      writeFileSync(
+        join(packageRoot, "spine-proto.json"),
+        JSON.stringify({ protoRoot: "proto", dependencies: [], moduleExport: "spineProtoModule" }),
+      );
+      writeFileSync(
+        join(packageRoot, "package.json"),
+        JSON.stringify({ name: "@example/proto", version: "1.0.0" }),
+      );
+      writeFileSync(join(packageRoot, "proto", "model", "value.proto"), 'syntax = "proto3";');
+      writeFileSync(join(generatedRoot, "model", "value_pb.ts"), "export const value = true;\n");
+      const manifest = join(packageRoot, "manifest.json");
+      writeSpineProtoArtifacts(repoRoot, generatedRoot, manifest);
+      expect(readFileSync(join(generatedRoot, "proto-module.ts"), "utf8")).toContain(
+        "Generated from Proto: model/value.proto.",
+      );
+      expect(JSON.parse(readFileSync(manifest, "utf8"))).toMatchObject({
+        packageName: "@example/proto",
+      });
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("keeps live generated output when replacement output is not ready", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
     const generatedRoot = join(repoRoot, "packages/proto/generated");
