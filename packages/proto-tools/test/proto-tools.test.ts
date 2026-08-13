@@ -496,6 +496,32 @@ describe("spine proto model tooling", () => {
     }
   });
 
+  it("rejects generated source traversal beyond the depth inventory", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-generated-depth-"));
+    try {
+      let directory = root;
+      for (let depth = 0; depth <= 64; depth += 1) {
+        directory = join(directory, "nested");
+        mkdirSync(directory);
+      }
+      expect(() => {
+        normalizeGeneratedTree(root, ["example/task.proto"]);
+      }).toThrow(/bounded inventory/u);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects handler generation without application model provenance", () => {
+    const application = packageDirectory("@example/no-handler-provenance");
+    writeJson(application, "spine-proto.json", modelConfig("@example/no-handler-provenance"));
+    const registry = join(application, "generated/handler/generated-handler-registry.ts");
+    expect(() => {
+      HandlerGeneration.generate(application);
+    }).toThrow(/requires model Proto provenance/u);
+    expect(existsSync(registry)).toBe(false);
+  });
+
   it("preserves a prior handler registry when model provenance is invalid", () => {
     const application = packageDirectory("@example/invalid-handler-application");
     writeJson(application, "spine-proto.json", {
