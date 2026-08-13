@@ -688,43 +688,45 @@ const protoGeneration = Object.freeze({
       .slice()
       .sort((left, right) => left.name.localeCompare(right.name))
       .map((dependency, index) => ({ ...dependency, alias: `dependency${String(index)}` }));
-    const source = [
-      generatedNotice(
-        generated.map(({ path }) => path.replace(/^\.\//u, "").replace(/_pb\.js$/u, ".proto")),
-      ).trimEnd(),
-      "",
-      'import type { ProtoModule } from "@spine-event-engine/proto";',
-      'import type { Message } from "@bufbuild/protobuf";',
-      'import type { GenMessage } from "@bufbuild/protobuf/codegenv2";',
-      ...generated.map(({ alias, path }) => `import * as ${alias} from ${JSON.stringify(path)};`),
-      ...dependencyImports.map(
-        ({ name, moduleExport, alias }) =>
-          `import { ${moduleExport} as ${alias} } from ${JSON.stringify(name)};`,
-      ),
-      "",
-      "const schemas = Object.freeze([",
-      ...generated.map(({ alias }) =>
-        [
-          `  ...Object.values(${alias})`,
-          '    .filter((value) => typeof value === "object" && value !== null &&',
-          '      (value as { kind?: unknown }).kind === "message")',
-          "    .map((value) => value as unknown as GenMessage<Message>),",
-        ].join("\n"),
-      ),
-      "].sort((left, right) =>",
-      "  (left as { typeName: string }).typeName.localeCompare(",
-      "    (right as { typeName: string }).typeName,",
-      "  ),",
-      "));",
-      "",
-      `/** All Protobuf message schemas owned by \`${packageName}\`. */`,
-      `export const ${exportName}: ProtoModule = Object.freeze({`,
-      `  name: ${JSON.stringify(packageName)},`,
-      "  schemas,",
-      `  dependencies: Object.freeze([${dependencyImports.map(({ alias }) => alias).join(", ")}]),`,
-      "});",
-      "",
-    ].join("\n");
+    const sources = generated.map(({ path }) =>
+      path.replace(/^\.\//u, "").replace(/_pb\.js$/u, ".proto"),
+    );
+    const source = generatedSource(
+      [
+        'import type { ProtoModule } from "@spine-event-engine/proto";',
+        'import type { Message } from "@bufbuild/protobuf";',
+        'import type { GenMessage } from "@bufbuild/protobuf/codegenv2";',
+        ...generated.map(({ alias, path }) => `import * as ${alias} from ${JSON.stringify(path)};`),
+        ...dependencyImports.map(
+          ({ name, moduleExport, alias }) =>
+            `import { ${moduleExport} as ${alias} } from ${JSON.stringify(name)};`,
+        ),
+        "",
+        "const schemas = Object.freeze([",
+        ...generated.map(({ alias }) =>
+          [
+            `  ...Object.values(${alias})`,
+            '    .filter((value) => typeof value === "object" && value !== null &&',
+            '      (value as { kind?: unknown }).kind === "message")',
+            "    .map((value) => value as unknown as GenMessage<Message>),",
+          ].join("\n"),
+        ),
+        "].sort((left, right) =>",
+        "  (left as { typeName: string }).typeName.localeCompare(",
+        "    (right as { typeName: string }).typeName,",
+        "  ),",
+        "));",
+        "",
+        `/** All Protobuf message schemas owned by \`${packageName}\`. */`,
+        `export const ${exportName}: ProtoModule = Object.freeze({`,
+        `  name: ${JSON.stringify(packageName)},`,
+        "  schemas,",
+        `  dependencies: Object.freeze([${dependencyImports.map(({ alias }) => alias).join(", ")}]),`,
+        "});",
+        "",
+      ].join("\n"),
+      sources,
+    );
     writeFileSync(join(output, "proto-module.ts"), source, "utf8");
   },
 

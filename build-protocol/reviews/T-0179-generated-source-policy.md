@@ -38,6 +38,15 @@ Message Board notice-idempotency correction are resolved by implementation.
   output, TSDoc, copyright, formatting, and diff checks pass. Release and
   re-review remain intentionally unrun.
 
+## Targeted Re-review Correction
+
+- The residual style/API/reliability findings are resolved by a single
+  publishable renderer plus a root adapter, component-aware path validation,
+  and one-pass proto-module rendering. Generated module inventory and repeated
+  generation are covered; reviewer profiles and runtime metadata limitations
+  remain as recorded above. Status remains correction-complete/re-review-ready,
+  not reviewer-accepted.
+
 ## Specialist Review Assignments
 
 - Documentation completeness: existing `documentation_reviewer`, immutable
