@@ -17,7 +17,11 @@ import { fileURLToPath } from "node:url";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { findSymlinkedAncestors, lstatIfPresent } from "./generated-path-safety.mjs";
 import { writeSpineProtoArtifacts } from "./generate-spine-proto-artifacts.mjs";
-import { generatedTypeScript, sourceProtoForGeneratedFile } from "./generated-source-policy.mjs";
+import {
+  generatedTypeScript,
+  sourceProtoForGeneratedFile,
+  useGeneratedSourcePolicy,
+} from "./generated-source-policy.mjs";
 
 const protoRoot = fileURLToPath(new URL("../packages/proto/proto", import.meta.url));
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -180,7 +184,11 @@ function runCommandIn(label, executable, args, cwd) {
 
 export function prepareProtoToolsBootstrap(root = repoRoot, run = runCommandIn) {
   const existing = bootstrappedRoots.get(root);
-  if (existing !== undefined && existsSync(existing.executable)) return existing.executable;
+  if (existing !== undefined && existsSync(existing.executable)) {
+    const policy = join(existing.outputRoot, "generation/generated-source-policy.js");
+    if (existsSync(policy)) useGeneratedSourcePolicy(policy);
+    return existing.executable;
+  }
 
   const cacheRoot = join(root, "packages/proto-tools/node_modules/.cache");
   mkdirSync(cacheRoot, { recursive: true });
@@ -207,6 +215,8 @@ export function prepareProtoToolsBootstrap(root = repoRoot, run = runCommandIn) 
     );
   }
   bootstrappedRoots.set(root, { executable, outputRoot });
+  const policy = join(outputRoot, "generation/generated-source-policy.js");
+  if (existsSync(policy)) useGeneratedSourcePolicy(policy);
   return executable;
 }
 

@@ -1,9 +1,19 @@
 import { createRequire } from "node:module";
+import { existsSync } from "node:fs";
 
 const require = createRequire(import.meta.url);
+let policyModule;
+
+export function useGeneratedSourcePolicy(modulePath) {
+  policyModule = modulePath;
+}
 
 function policy() {
-  return require("../packages/proto-tools/dist/src/generation/generated-source-policy.js");
+  return require(
+    policyModule !== undefined && existsSync(policyModule)
+      ? policyModule
+      : "../packages/proto-tools/dist/src/generation/generated-source-policy.js",
+  );
 }
 
 const trackedGeneratedTypeScript = new Set([

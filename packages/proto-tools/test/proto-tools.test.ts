@@ -515,6 +515,17 @@ describe("spine proto model tooling", () => {
     const tarballs = packedHandlerTarballs();
     const app = packageDirectory("@acme/packed-handler-app");
     installTarballs(app, tarballs);
+    writeJson(app, "package.json", {
+      name: "@acme/packed-handler-app",
+      version: "1.0.0",
+      dependencies: { "@acme/handler-model": "1.0.0" },
+    });
+    writeJson(app, "spine-proto.json", {
+      formatVersion: 1,
+      mode: "application",
+      modelPackages: ["@acme/handler-model"],
+      registryOutput: "src/model-registry.ts",
+    });
     writeJson(app, "tsconfig.json", {
       compilerOptions: {
         module: "NodeNext",
