@@ -1,6 +1,6 @@
 # T-0181: Generate Interfaces And Immutable Runtime Tokens
 
-Status: In implementation
+Status: Implementation and release preflight complete; specialist review ready
 
 ## Classification And Isolation
 
@@ -62,7 +62,8 @@ Status: In implementation
 
 ## Release And Review Readiness
 
-Status: Implementation and release preflight complete; specialist review ready.
+- Current state: implementation and release preflight complete; specialist
+  review ready.
 
 - First release attempt reached repository-wide ESLint and failed only on the
   unused bootstrap-fixture parameter recorded below; the correction preceded
