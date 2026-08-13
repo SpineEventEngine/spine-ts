@@ -36,3 +36,6 @@ the evidence.
   necessity dispositions are recorded, and the focused 4-file / 162-test suite,
   ESLint, cleanup, TSDoc, formatting, and diff-integrity gates pass. No
   specialist review was dispatched; release verification remains pending.
+- Copyright preflight correction: canonical header restored in the provider
+  module. `pnpm lint:copyright`, ESLint, TSDoc, formatting, and diff-integrity
+  pass; it does not reopen behavioral review and release remains pending.

@@ -118,10 +118,14 @@ const MESSAGE_INTERFACE_TOKENS = new WeakSet<object>();
  * @typeParam Schemas The concrete non-empty tuple of member schemas.
  */
 export interface MessageInterface<TInterface extends object, Schemas extends InterfaceSchemas> {
+  // prettier-ignore
+
   /**
    * Concrete, immutable generated message schemas that belong to this interface.
    */
   readonly schemas: Schemas;
+
+  // prettier-ignore
 
   /**
    * Nominal compile-time association with the represented interface shape.
@@ -142,6 +146,8 @@ function isMessageSchema(value: unknown): value is MessageSchema {
  * Creates and validates nominal generated message-interface tokens.
  */
 export const MessageInterfaces: Readonly<{
+  // prettier-ignore
+
   /**
    * Creates a nominal token from a non-empty tuple of generated message schemas.
    *
