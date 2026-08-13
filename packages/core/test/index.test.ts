@@ -74,7 +74,9 @@ describe("MessageInterfaces", () => {
       { ...token },
       Object.assign({}, token),
       Object.create(token),
-      JSON.parse('{"schemas":[]}'),
+      JSON.parse(
+        JSON.stringify({ schemas: token.schemas.map((schema) => ({ typeName: schema.typeName })) }),
+      ),
       { schemas: token.schemas },
     ];
     for (const copy of copies) expect(MessageInterfaces.is(copy)).toBe(false);
@@ -83,6 +85,9 @@ describe("MessageInterfaces", () => {
   it("rejects empty and malformed runtime membership", () => {
     expect(() => MessageInterfaces.define([] as never)).toThrow("at least one schema");
     expect(() => MessageInterfaces.define([{}] as never)).toThrow("generated message schema");
+    const dynamic: unknown[] = [CommandSchema, CommandSchema, EventSchema];
+    const token = MessageInterfaces.define(dynamic as never);
+    expect(token.schemas).toEqual([CommandSchema, EventSchema]);
   });
 
   it("enforces non-empty compatible schema tuples at compile time", () => {
