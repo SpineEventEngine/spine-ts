@@ -39,7 +39,7 @@ import {
   type GenerationOperations,
 } from "../src/generation/generator.js";
 import { HandlerGeneration } from "../src/generation/handler-generator.js";
-import { generatedNotice } from "../src/generation/generated-source-policy.js";
+import { generatedNotice, generatedSource } from "../src/generation/generated-source-policy.js";
 import { ModelGraph } from "../src/model/model-graph.js";
 
 const readConfig = (...args: Parameters<typeof ProtoConfig.read>) => ProtoConfig.read(...args);
@@ -464,6 +464,12 @@ function linkThirdParty(app: string): void {
 }
 
 describe("spine proto model tooling", () => {
+  it("expands one-line declaration TSDoc before adding provenance", () => {
+    expect(generatedSource("/** All schemas. */\nexport const schemas = true;\n", ["example/task.proto"])).toContain(
+      "/**\n * All schemas.\n * Generated from Proto: example/task.proto.\n */\nexport const",
+    );
+  });
+
   it("accepts ordinary Proto path components while rejecting generated resource paths", () => {
     expect(generatedNotice(["template/task.proto", "attempt/task.proto"])).toContain(
       "Source Proto: template/task.proto",
