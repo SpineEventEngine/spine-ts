@@ -61,7 +61,15 @@ export interface GenerationOperations {
     runner?: SubprocessRunner,
   ) => void;
 
-  /** Runs interface companion generation after primary Buf generation succeeds. */
+  /**
+   * Executes interface companion generation after primary Buf generation succeeds.
+   *
+   * @param moduleRoot The temporary Buf module root.
+   * @param output The temporary generated-output directory.
+   * @param owned The package-relative Proto paths to generate.
+   * @param packageName The owning model package name.
+   * @param runner The optional subprocess runner.
+   */
   readonly runInterfacePhase?: (
     moduleRoot: string,
     output: string,

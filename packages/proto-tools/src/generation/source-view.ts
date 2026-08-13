@@ -19,9 +19,18 @@ import { join, relative, resolve, sep } from "node:path";
  * Stable compiler input view for authored sources and staged generated output.
  */
 export interface ModelSourceView {
-  /** Eligible authored TypeScript files, excluding generated publication trees. */
+  // prettier-ignore
+
+  /**
+   * Eligible authored TypeScript files, excluding generated publication trees.
+   */
   readonly authoredFiles: readonly string[];
-  /** Redirect root used when compiler imports address generated model sources. */
+
+  // prettier-ignore
+
+  /**
+   * Redirect root used when compiler imports address generated model sources.
+   */
   readonly stagedGeneratedRoot: string;
 }
 
