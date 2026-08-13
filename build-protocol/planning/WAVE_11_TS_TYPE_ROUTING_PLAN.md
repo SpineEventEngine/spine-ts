@@ -142,7 +142,7 @@ type InterfaceMember<Schemas extends InterfaceSchemas> = MessageShape<Schemas[nu
 
 interface MessageInterface<TInterface extends object, Schemas extends InterfaceSchemas> {
   readonly schemas: Schemas;
-  // A private unique-symbol brand prevents structural object literals/copies.
+  // A private unique-symbol brand prevents structural TypeScript construction.
   // Its covariant witness also makes every member shape assignable to TInterface.
 }
 
@@ -159,6 +159,13 @@ derived schema member implements `TInterface`. `TInterface` is object-shaped;
 `InterfaceSchemas`. Runtime construction also rejects dynamically malformed or
 empty JavaScript inputs, duplicate schemas, and malformed entries, then copies
 and freezes the tuple.
+
+Runtime identity is nominal too: core keeps factory-created frozen token objects
+in a private `WeakSet`, and `MessageInterfaces.is(value)` is the supported type
+guard used by routing. A spread, `Object.assign`, prototype copy, deserialized
+object, or hand-built lookalike is not in that registry and fails construction
+validation. This is instance identity, not a claim that only generated source
+can call the public factory.
 
 ### Routing use
 
@@ -236,11 +243,25 @@ model module, excludes the configured `generatedRoot`, staging trees, backup
 trees, declaration outputs, and symlink/realpath escapes from authored
 interface candidates, and redirects generated imports to the staged Buf tree.
 Generated files may participate in compiler conformance but never become
-authored-interface candidates. The generator records content digests for every
-authored/config input before analysis and verifies them again before publish;
-concurrent source changes fail the run rather than validating one revision and
-publishing another. A second generation therefore cannot rediscover its prior
-companions.
+authored-interface candidates. Before analysis, the generator records one
+normalized inventory digest containing every eligible authored path, its
+content, and every root or recursively extended `tsconfig` path/content. It
+recomputes the complete inventory immediately before publish. Content changes
+and added, removed, or renamed eligible/config files all fail the run rather
+than validating one revision and publishing another. A second generation
+therefore cannot rediscover its prior companions.
+
+Tree and manifest use a generation commit point rather than pretending that two
+filesystem renames are physically atomic. Each staged generated tree contains a
+generation marker, and its staged manifest carries the same unpredictable
+generation ID. Publication installs the tree first and atomically renames the
+manifest last as the commit point. Every model-module reader compares both IDs;
+while the generation lock is live it retries with a bounded policy, and
+otherwise it rejects a mismatch without consuming mixed output. On rollback
+failure the generator preserves stage/backup evidence, reports an aggregate
+failure, and readers continue to fail closed until recovery. Tests use reader
+hooks between each filesystem operation to prove that no mismatched generation
+is accepted.
 
 ## Generated-Source Contract
 
@@ -392,6 +413,8 @@ Acceptance:
 - `MessageInterfaces.define()` is a supported low-level public factory with
   complete TSDoc and runtime membership validation; generated tokens are not a
   security/authenticity boundary;
+- `MessageInterfaces.is()` validates private factory-instance identity for
+  server routing and rejects every structural copy/lookalike;
 - empty/invalid names, duplicate outputs, JVM-only options, and irreconcilable
   names fail before publication;
 - a packed external consumer imports one identifier in both type and value
@@ -408,8 +431,11 @@ deterministic output, invalid declarations, token immutability, public factory
 validation, copied-object rejection, cross-package token use, and declaration
 emit. Compile-fail fixtures reject non-schema tuple members, incompatible
 interface/member pairing, empty membership, and unsafely accessing a field
-absent from one derived member. Target at least 90% branch coverage for changed production files; run
-cheap preflight then `verify:release`. All four specialist lanes are relevant.
+absent from one derived member. Runtime tests copy a valid token with spread,
+`Object.assign`, prototype cloning, and serialization and prove each copy fails
+the identity guard. Target at least 90% branch coverage for changed production
+files; run cheap preflight then `verify:release`. All four specialist lanes are
+relevant.
 
 ### T-0182: Discover authored interfaces and prove conformance
 
@@ -440,7 +466,8 @@ Authored candidates explicitly exclude `generatedRoot`, stage/backup trees,
 declaration output, and realpath/symlink escapes. The compiler program may read
 the staged generated tree only through the T-0181 source-view redirect. Tests
 cover repeat generation and a source file changing during analysis; both must
-avoid publishing mixed-revision output.
+avoid publishing mixed-revision output. Race fixtures also add, remove, and
+rename eligible authored files and change a recursively extended `tsconfig`.
 
 Each rejection receives a RED fixture; successful fixtures cover local
 inheritance, external property types, cumulative file/message options, and
@@ -585,8 +612,10 @@ Acceptance:
 Release failure fixtures cover the complete publication transaction: semantic
 validation failure after Buf, failure around generated-tree rename, failure
 before and during manifest publication, backup restoration failure, coherent
-tree-and-manifest visibility, and cleanup of stage, backup, and claim
-resources.
+generation-ID/commit-point reader behavior, and cleanup of stage, backup, and
+claim resources. A rollback-restoration failure preserves recovery artifacts
+and leaves every reader fail-closed rather than claiming the old generation was
+restored.
 
 ## Review And Verification Policy
 

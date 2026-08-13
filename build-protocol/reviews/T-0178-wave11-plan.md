@@ -116,6 +116,13 @@ an empty tuple through `never`. The final correction introduces and consistently
 uses `InterfaceSchemas = readonly [MessageSchema, ...MessageSchema[]]`, while
 retaining runtime rejection for dynamically malformed JavaScript callers.
 
+Reliability targeted re-review accepted the per-signal replay and legacy Inbox
+proofs but found three residuals. The correction now requires private `WeakSet`
+factory-instance identity with a public guard and copy/lookalike tests; a
+generation-ID protocol with manifest-as-commit-point and fail-closed readers;
+and a normalized path/content inventory including recursively extended
+`tsconfig` files, with add/remove/rename/config race fixtures.
+
 ### Style/maintainability
 
 Profile: explicit `style_maintainability_reviewer`, `gpt-5.6-terra` / high.
