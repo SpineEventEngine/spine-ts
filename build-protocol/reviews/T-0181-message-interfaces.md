@@ -112,3 +112,12 @@ the evidence.
   Source-view coverage is 90.47% branches. No reviewer or release rerun was
   dispatched. Reliability review remains the existing explicit Terra/high
   concern; runtime metadata is unavailable.
+
+- Accepted final reliability test-only correction: malformed staged source-view
+  metadata now has explicit regressions for a non-canonical live root and an
+  authored entry beneath the actual staged output root when package containment
+  would otherwise permit it. GREEN: 2 focused files / 16 tests plus tooling
+  typecheck, repository ESLint, cleanup, copyright, TSDoc, formatting, and
+  diff checks. Existing performance/reliability reviewer is explicitly
+  configured Terra/high; runtime metadata is unavailable. Final targeted
+  confirmation remains pending; no release/re-review was dispatched.

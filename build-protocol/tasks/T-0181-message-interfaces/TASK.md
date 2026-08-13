@@ -15,6 +15,18 @@ Status: Final correction complete; final targeted confirmation pending
   Source-view coverage is 94.73% statements and 90.47% branches. Final
   targeted confirmation remains pending; no release or reviewer was run.
 
+## 2026-08-14 - Accepted Reliability Test Correction
+
+- Accepted final reliability finding: regressions now prove that a
+  non-canonical `liveGeneratedRoot` and an authored entry under the actual
+  staged `output` root fail closed, including the case where `packageRoot`
+  encompasses that staged root. This is test-only; production behavior is
+  unchanged.
+- Reviewer concern: existing performance/reliability reviewer,
+  `gpt-5.6-terra` / high, explicit orchestrator finding. Runtime metadata is
+  unavailable; the configured profile and explicit assignment are retained.
+  Final targeted confirmation remains pending; no release was run.
+
 ## Classification And Isolation
 
 - Classification: high-risk public/generated contract. This task introduces a

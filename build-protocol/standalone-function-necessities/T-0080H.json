@@ -1,6 +1,15 @@
 [
   {
     "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/interface-generator.ts",
+    "kind": "function-declaration",
+    "identity": "stagedSourceView()#1",
+    "name": "stagedSourceView",
+    "disposition": "necessity",
+    "reason": "TypeScript interface-plugin boundary: stagedSourceView validates the deterministic post-Buf source-view handoff before it reaches the authored-interface provider seam."
+  },
+  {
+    "rule": "standalone-function",
     "file": "packages/proto-tools/src/generation/source-view.ts",
     "kind": "function-declaration",
     "identity": "collectAuthored()#1",
