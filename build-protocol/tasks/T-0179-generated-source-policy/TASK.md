@@ -14,12 +14,11 @@ changed-file ESLint, cleanup, formatting, and diff checks passed. Changed-range
 coverage is 83/88 executable lines (94.32%). Status remains targeted re-review
 ready; the release profile has not run.
 
-Final accepted-batch evidence: build plus six focused files passed 176/176;
-generation repeated twice and current-output passed. Tooling, TSDoc, copyright,
-cleanup, exact ESLint, formatting, and diff checks passed. Coverage is 97.63%
-package-production lines and 91.55% branches, with declaration normalization at
-100% lines; changed executable coverage is 114/123 (92.68%). Status is
-correction-complete/final re-review-ready; `verify:release` remains unrun.
+Final accepted-batch evidence: the direct final coverage run passed six focused
+files / 180 tests. Package generation coverage is 97.38% lines / 88.69%
+branches; changed executable coverage against `origin/main...HEAD` is 140/154
+(90.91%). Status is final correction complete / re-review ready;
+`verify:release` remains unrun.
 
 ## Objective
 
@@ -164,5 +163,5 @@ proto:generate`. Cleanup is in `finally`; the shared worktree is never
   GREEN: generated-build typecheck and the six focused files pass **180/180**
   in parallel; repeat generation twice and current-output pass. The bounded
   test-only correction does not change the established executable changed-range
-  coverage of **114/123 (92.68%)**. Targeted re-review remains pending and
+  coverage of **140/154 (90.91%)**. Targeted re-review remains pending and
   `verify:release` remains unrun.

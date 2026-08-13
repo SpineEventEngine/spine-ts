@@ -66,8 +66,8 @@ Message Board notice-idempotency correction are resolved by implementation.
 - Independent final verification is build plus six focused files 176/176,
   repeated generation/current-output, and tooling/TSDoc/copyright/cleanup/exact
   ESLint/format/diff. Coverage: package production 97.63% lines/91.55%
-  branches; declaration normalizer 100% lines; changed executable 114/123
-  (92.68%).
+  branches; declaration normalizer 100% lines; this is superseded by the final
+  changed executable result below.
 - Documentation reviewer profile is Luna/medium; API, style, and reliability
   profiles are Terra/high. Runtime metadata is unavailable. Status is
   correction-complete/final re-review-ready, not reviewer-accepted; release
@@ -134,5 +134,19 @@ Message Board notice-idempotency correction are resolved by implementation.
   build typecheck plus the exact six focused files pass **180/180** in parallel;
   repeat generation/current-output and cheap mechanical gates pass. It is a
   test-only correction, so the recorded changed executable coverage remains
-  114/123 (92.68%). Status remains correction-complete/final re-review-ready;
+  140/154 (90.91%). Status remains correction-complete/final re-review-ready;
   no specialist re-review or release profile has been run.
+
+## Final correction coverage and scope
+
+- Direct final coverage passed the six focused files / **180 tests**. Package
+  generation coverage is **97.38% lines / 88.69% branches**; changed executable
+  coverage against `origin/main...HEAD` is **140/154 (90.91%)**: policy 41/42,
+  generator 11/11, handler 11/12, copyright 4/4, fixture 11/12, Spine artifacts
+  0/3, root adapter 7/9, declaration normalizer 29/30, and workflow 26/31.
+  This supersedes prior provisional coverage statements.
+- The completed correction batch comprises the parallel-safe isolated clean
+  worktree regression, handler policy application before live publication,
+  finite walker depth/entry bounds, and Message Board app `.d.ts`
+  normalization/inventory. Status: final correction complete / re-review ready.
+  `verify:release` remains intentionally unrun.
