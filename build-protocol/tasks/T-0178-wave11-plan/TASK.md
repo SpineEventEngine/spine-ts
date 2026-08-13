@@ -1,6 +1,6 @@
 # T-0178: Wave 11 Semantic Type Generation And Interface Routing Plan
 
-Status: Requirements split complete; specialist review pending
+Status: Specialist review corrections applied; targeted re-review pending
 
 ## Objective
 
@@ -123,8 +123,8 @@ IsOption and EveryIsOption`).
     Event targets.
 24. Every generated TypeScript file has **no copyright header**. Generated
     files begin with a file-level block stating that Spine TypeScript generated
-    the file, naming the stable original Proto import path, and warning that
-    the file must not be edited manually.
+    the file, naming its stable original Proto import path or sorted source
+    paths, and warning that the file must not be edited manually.
 25. Every generated interface, runtime token, and other generated declaration
     receives a concise TypeScript documentation/comment block identifying it
     as generated and referencing its original Proto source where applicable.
@@ -215,13 +215,23 @@ The splitter left only the public spelling of the generated token abstraction
 open. The plan resolves it as:
 
 - `MessageInterface<TInterface, TMessage>` for the immutable token type;
-- `MessageInterfaces.define(...)` for the generated-code-only factory.
+- `MessageInterfaces.define(...)` for the supported low-level public factory
+  used by generated modules.
 
 This vocabulary says what the token represents, follows existing plural
 utility names such as `Identifiers` and `Stringifiers`, and avoids reviving the
 generic semantic-tag vocabulary removed by T-0167A. Application code normally
-imports the same-named generated token, such as `TaskEvent`, and does not call
-the factory.
+imports the same-named generated token, such as `TaskEvent`. The public factory
+has complete validation/TSDoc; it is not described as an unforgeable or
+generator-authentication boundary because JavaScript cannot enforce that
+provenance.
+
+## Canonical Plan And Decision
+
+- Executable plan:
+  [`WAVE_11_TS_TYPE_ROUTING_PLAN.md`](../../planning/WAVE_11_TS_TYPE_ROUTING_PLAN.md).
+- Accepted decision:
+  [`D-0113`](../../DECISION_LOG.md#d-0113-generate-typescript-message-interfaces-and-route-by-their-tokens).
 
 ## Additional Selected Skills
 

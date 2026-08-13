@@ -181,7 +181,8 @@ durably closed.
   To-Do Event-routing proof, generated-source provenance with no generated
   copyright headers, and beginner documentation. T-0178 owns the pending
   approval plan in
-  `build-protocol/planning/WAVE_11_TS_TYPE_ROUTING_PLAN.md`.
+  `build-protocol/planning/WAVE_11_TS_TYPE_ROUTING_PLAN.md`; D-0113 records the
+  accepted architecture decision.
 - **Wave 12:** multiple-Gateway behavior, subject to a future human Q&A and
   planning task. Wave 11 creates no provisional Gateway API. Cloud Run remains
   outside the initial offering.
@@ -234,7 +235,8 @@ T-0178 plans Wave 11 from the subsequently approved human decisions and the
 fresh upstream `ts_type` contract. It is planning-only and must return a
 reviewed dependency-ordered proposal before frozen Proto, generator, runtime,
 To-Do, or reader-facing files change. Multiple-Gateway behavior moves wholly to
-Wave 12.
+Wave 12. See
+`build-protocol/DECISION_LOG.md#d-0113-generate-typescript-message-interfaces-and-route-by-their-tokens`.
 
 ## Authored API And Example Quality Correction
 

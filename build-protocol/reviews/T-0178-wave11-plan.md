@@ -1,6 +1,6 @@
 # T-0178 Review Log
 
-Status: Specialist review dispatch ready
+Status: Consolidated corrections applied; targeted re-review pending
 
 ## Planned Concern Dispositions
 
@@ -62,3 +62,77 @@ earlier.
 - `git diff --check`: passed.
 - `pnpm check:release-readiness`: 82 package imports, 51 package assets, and
   361 relative Markdown links passed.
+
+## Specialist Review Wave
+
+All assignments used the existing project roles and the profiles recorded
+before dispatch. The execution surface exposed no independently queryable
+runtime model/reasoning telemetry; no visible mismatch or fallback occurred.
+
+### Documentation completeness
+
+Profile: immutable `documentation_reviewer`, `gpt-5.6-luna` / medium.
+
+Accepted findings:
+
+- distinguish the authored `TaskAssignmentEvent` from its generated companion
+  instead of showing a duplicate empty interface;
+- make file-level provenance deterministic for multi-source generated files;
+- require a runnable generation/routing/replay beginner sequence;
+- narrate create, assign, reassign, unassign, and zero/one/many targets;
+- identify loopback multi-process coverage as one Gateway with multiple app
+  nodes, not Wave 12 behavior;
+- link the canonical D-0113 decision from plan/status records.
+
+All are applied in the corrected plan and status mirrors.
+
+### TypeScript/API documentation
+
+Profile: explicit `typescript_api_docs_reviewer`, `gpt-5.6-terra` / high.
+
+Accepted findings:
+
+- generated authored-interface companions now alias the actual authored type
+  and retain its fields in concrete message/callback intersections;
+- authored discovery explicitly excludes generated/stage/backup/declaration
+  trees while compiler conformance may read staged output;
+- `MessageInterfaces.define()` is honestly specified as a supported validated
+  public factory, not an impossible generator-provenance boundary.
+
+The correction also requires positive/negative declaration fixtures,
+repeat-generation coverage, public factory TSDoc, copied-object rejection, and
+cross-package external-consumer typing.
+
+### Style/maintainability
+
+Profile: explicit `style_maintainability_reviewer`, `gpt-5.6-terra` / high.
+
+Accepted findings:
+
+- T-0181 now owns the live-authored/staged-generated source-view contract;
+- T-0181 is the sole writer/orchestrator/publisher while T-0182 provides only
+  authored-interface analysis;
+- T-0183 requires one internal generic route snapshot/selection module instead
+  of triplicated token ordering and validation.
+
+### Performance/reliability
+
+Profile: explicit `performance_reliability_reviewer`, `gpt-5.6-terra` / high.
+
+Accepted findings:
+
+- remove unimplementable token-authenticity wording and test the supported
+  factory plus copied/malformed objects;
+- hash live authored/config inputs around compilation and redirect only
+  generated imports to staging, failing concurrent changes;
+- enumerate tree/manifest publication and rollback failure boundaries;
+- require separate once-at-admission/no-reroute replay tests for Command,
+  Event, and state updates, including target copy/dedupe/freeze;
+- replay a pre-Wave-11 Inbox fixture and prove no token metadata is persisted.
+
+### Security
+
+N/A for this planning review: the plan changes no network, authentication,
+tenant, or secret boundary. Compiler source containment and generated-path
+handling are covered by fail-closed tests and reliability review. T-0186 keeps
+the existing final security reviewer.

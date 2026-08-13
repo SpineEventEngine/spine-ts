@@ -5361,8 +5361,10 @@ Decision:
 - Emit generated companions under `generated/interfaces/`. The same exported
   name denotes the TypeScript interface in type position and an immutable
   runtime token in value position.
-- Name the public token type `MessageInterface` and its generated-code factory
-  `MessageInterfaces.define()`.
+- Name the public token type `MessageInterface` and its supported low-level
+  public factory `MessageInterfaces.define()`. Generated modules are its normal
+  callers. The factory validates and freezes membership but is not a source-
+  provenance authentication boundary.
 - Reuse `.route(...)` for exact schemas and interface tokens across Command,
   Event, and state-update routing. Resolve exact schema first, then the first
   matching token in registration order, then the replacement/default route.
