@@ -8,7 +8,7 @@ describe("generated source policy", () => {
       "//",
       "// Copyright 2026, CodeMatters. All rights reserved.",
       "//",
-      "// Licensed under the Apache License, Version 2.0 (the \"License\");",
+      '// Licensed under the Apache License, Version 2.0 (the "License");',
       "// @generated from file spine/example/task.proto",
       "export const Task = true;",
       "",

@@ -968,7 +968,9 @@ function normalizeGeneratedTypeScriptTree(root) {
     if (!entry.isFile() || !path.endsWith(".ts")) continue;
     const relativePath = relative(root, path).split(sep).join("/");
     const source = readFileSync(path, "utf8");
-    const sources = [...source.matchAll(/@generated from file ([^\s)]+)/gu)].map((match) => match[1]);
+    const sources = [...source.matchAll(/@generated from file ([^\s)]+)/gu)].map(
+      (match) => match[1],
+    );
     const imported = [...source.matchAll(/from "(?:\.\/|\.\.\/)+([^" ]+)_pb\.js"/gu)].map(
       (match) => match[1].replace(/^.*?spine\//u, "spine/") + ".proto",
     );

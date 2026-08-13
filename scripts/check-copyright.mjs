@@ -36,7 +36,9 @@ function placement(content) {
 }
 
 function isEligible(path, excluded) {
-  return /\.(?:ts|tsx|proto)$/u.test(path) && !excluded.has(path) && !isGeneratedTypeScriptPath(path);
+  return (
+    /\.(?:ts|tsx|proto)$/u.test(path) && !excluded.has(path) && !isGeneratedTypeScriptPath(path)
+  );
 }
 
 function usesCopyrightSpacingPolicy(path) {
