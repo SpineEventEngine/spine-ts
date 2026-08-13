@@ -27,6 +27,17 @@ Status: Final correction complete; final targeted confirmation pending
   unavailable; the configured profile and explicit assignment are retained.
   Final targeted confirmation remains pending; no release was run.
 
+## 2026-08-14 - Release Build Correction
+
+- Release verification found one generated-build RED before tests: exported
+  `stagedSourceView(cwd = process.cwd())` lacked the explicit `cwd: string`
+  annotation required by `--isolatedDeclarations` (TS9011). The signature is
+  now explicit; no runtime behavior changed.
+- GREEN: `pnpm typecheck:build:generated`, tooling typecheck, focused
+  source-view/interface-generator tests (2 files, 16 tests), repository ESLint,
+  cleanup, copyright, TSDoc, formatting, and diff integrity pass. Release is
+  intentionally not rerun here.
+
 ## Classification And Isolation
 
 - Classification: high-risk public/generated contract. This task introduces a

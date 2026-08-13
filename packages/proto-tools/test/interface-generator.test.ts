@@ -323,12 +323,15 @@ describe("InterfaceGenerator", () => {
     try {
       mkdirSync(liveGeneratedRoot, { recursive: true });
       mkdirSync(join(root, "output"));
-      writeFileSync(join(root, ".spine-source-view.json"), `${JSON.stringify({
-        authoredFiles: [join(packageRoot, "src/authored.ts")],
-        liveGeneratedRoot: `${packageRoot}/src/../src/generated`,
-        packageRoot,
-        stagedGeneratedRoot: join(root, "output"),
-      })}\n`);
+      writeFileSync(
+        join(root, ".spine-source-view.json"),
+        `${JSON.stringify({
+          authoredFiles: [join(packageRoot, "src/authored.ts")],
+          liveGeneratedRoot: `${packageRoot}/src/../src/generated`,
+          packageRoot,
+          stagedGeneratedRoot: join(root, "output"),
+        })}\n`,
+      );
       expect(() => stagedSourceView(root)).toThrow("invalid staged source view");
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -342,12 +345,15 @@ describe("InterfaceGenerator", () => {
     try {
       mkdirSync(liveGeneratedRoot, { recursive: true });
       mkdirSync(stagedGeneratedRoot);
-      writeFileSync(join(root, ".spine-source-view.json"), `${JSON.stringify({
-        authoredFiles: [join(stagedGeneratedRoot, "staged.ts")],
-        liveGeneratedRoot,
-        packageRoot: root,
-        stagedGeneratedRoot,
-      })}\n`);
+      writeFileSync(
+        join(root, ".spine-source-view.json"),
+        `${JSON.stringify({
+          authoredFiles: [join(stagedGeneratedRoot, "staged.ts")],
+          liveGeneratedRoot,
+          packageRoot: root,
+          stagedGeneratedRoot,
+        })}\n`,
+      );
       expect(() => stagedSourceView(root)).toThrow("invalid staged source view");
     } finally {
       rmSync(root, { recursive: true, force: true });

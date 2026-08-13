@@ -32,7 +32,7 @@ const unresolvedInterfaceProvider: InterfaceDeclarationProvider = Object.freeze(
  * @param cwd Plugin working directory containing its staged `output` tree.
  * @returns A validated source view, or undefined when no handoff was supplied.
  */
-export function stagedSourceView(cwd = process.cwd()): ModelSourceView | undefined {
+export function stagedSourceView(cwd: string = process.cwd()): ModelSourceView | undefined {
   const path = join(cwd, ".spine-source-view.json");
   if (!existsSync(path)) return undefined;
   const value: unknown = JSON.parse(readFileSync(path, "utf8"));

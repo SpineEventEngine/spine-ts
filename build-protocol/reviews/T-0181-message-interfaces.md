@@ -121,3 +121,9 @@ the evidence.
   diff checks. Existing performance/reliability reviewer is explicitly
   configured Terra/high; runtime metadata is unavailable. Final targeted
   confirmation remains pending; no release/re-review was dispatched.
+
+- Release-build RED was mechanically corrected before a rerun: isolated
+  declarations required an explicit `string` type on the exported source-view
+  `cwd` default parameter (TS9011). Generated build, tooling typecheck, 16
+  focused tests, repository ESLint, cleanup, copyright, TSDoc, formatting, and
+  diff checks are GREEN. No release or reviewer was dispatched here.
