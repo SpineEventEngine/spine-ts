@@ -14,7 +14,7 @@
 
 import { getOption, type DescMessage } from "@bufbuild/protobuf";
 import { createEcmaScriptPlugin, runNodeJs, type Schema } from "@bufbuild/protoplugin";
-import { every_is } from "@spine-event-engine/proto";
+import { every_is, is } from "@spine-event-engine/proto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -22,6 +22,23 @@ const typescriptIdentifier = /^[A-Za-z_$][A-Za-z0-9_$]*$/u;
 
 function collectMessages(messages: readonly DescMessage[]): readonly DescMessage[] {
   return messages.flatMap((message) => [message, ...collectMessages(message.nestedMessages)]);
+}
+
+function assertTypeName(name: string, source: string): void {
+  if (!typescriptIdentifier.test(name)) {
+    throw new Error(`spine-proto: ${source}: ts_type must be a non-empty TypeScript identifier`);
+  }
+}
+
+function validateMessageDeclarations(file: {
+  readonly proto: { readonly name: string };
+  readonly messages: readonly DescMessage[];
+}): void {
+  for (const message of collectMessages(file.messages)) {
+    const option = getOption(message, is);
+    if (option.tsType.length > 0)
+      assertTypeName(option.tsType, `${file.proto.name}:${message.name}`);
+  }
 }
 
 /**
@@ -36,12 +53,9 @@ export const InterfaceGenerator: Readonly<{
   generateCompanions(schema: Schema): void {
     for (const file of schema.files) {
       const option = getOption(file, every_is);
+      validateMessageDeclarations(file);
       if (!option.generate) continue;
-      if (!typescriptIdentifier.test(option.tsType)) {
-        throw new Error(
-          `spine-proto: ${file.proto.name}: every_is.ts_type must be a non-empty TypeScript identifier`,
-        );
-      }
+      assertTypeName(option.tsType, file.proto.name);
       const members = collectMessages(file.messages);
       if (members.length === 0) {
         throw new Error(

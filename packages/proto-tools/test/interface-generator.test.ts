@@ -17,22 +17,39 @@ import { fileDesc } from "@bufbuild/protobuf/codegenv2";
 import { base64Encode } from "@bufbuild/protobuf/wire";
 import { toBinary } from "@bufbuild/protobuf";
 import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
-import { EveryIsOptionSchema, every_is, file_spine_options } from "@spine-event-engine/proto";
+import {
+  EveryIsOptionSchema,
+  IsOptionSchema,
+  every_is,
+  file_spine_options,
+  is,
+} from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
 import { InterfaceGenerator } from "../src/generation/interface-generator.js";
 import type { Schema } from "@bufbuild/protoplugin";
 
-function optionFile(tsType: string, generate = true) {
+function optionFile(tsType: string, generate = true, messageType = "") {
   const file = create(FileDescriptorProtoSchema, {
     name: "example/signals.proto",
     package: "example",
     dependency: ["spine/options.proto"],
     options: {},
-    messageType: [{ name: "Signal", nestedType: [{ name: "Nested" }] }],
+    messageType: [
+      {
+        name: "Signal",
+        nestedType: [{ name: "Nested" }],
+        options: {},
+      },
+    ],
   });
   if (file.options === undefined) throw new Error("fixture options are missing");
   setExtension(file.options, every_is, create(EveryIsOptionSchema, { generate, tsType }));
+  if (messageType.length > 0) {
+    const message = file.messageType[0];
+    if (message?.options === undefined) throw new Error("fixture message options are missing");
+    setExtension(message.options, is, create(IsOptionSchema, { tsType: messageType }));
+  }
   return fileDesc(base64Encode(toBinary(FileDescriptorProtoSchema, file)), [file_spine_options]);
 }
 
@@ -83,5 +100,34 @@ describe("InterfaceGenerator", () => {
     } as unknown as Schema;
 
     InterfaceGenerator.generateCompanions(schema);
+  });
+
+  it("validates message declarations while retaining generated file membership", () => {
+    const printed: string[] = [];
+    const schema = {
+      files: [optionFile("SignalFamily", true, "AuthoredSignal")],
+      generateFile: () => ({
+        import: (name: string) => name,
+        importSchema: (message: { readonly name: string }) => `${message.name}Schema`,
+        preamble: () => undefined,
+        export: (kind: string, name: string) => `export ${kind} ${name}`,
+        print: (...parts: readonly string[]) => printed.push(parts.join("")),
+      }),
+    } as unknown as Schema;
+
+    InterfaceGenerator.generateCompanions(schema);
+
+    expect(printed.join("")).toContain("[SignalSchema, NestedSchema] as const");
+  });
+
+  it("rejects malformed message interface declarations before output", () => {
+    const schema = {
+      files: [optionFile("SignalFamily", true, "Outer.Inner")],
+      generateFile: () => {
+        throw new Error("invalid declaration must not emit output");
+      },
+    } as unknown as Schema;
+
+    expect(() => InterfaceGenerator.generateCompanions(schema)).toThrow("ts_type");
   });
 });
