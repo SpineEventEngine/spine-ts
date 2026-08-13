@@ -63,7 +63,7 @@ export const atomicGeneratedTargets = [
   { displayPath: "examples/message-board/app/generated" },
 ];
 
-/** Applies the shared generated-source policy to the tracked Message Board registry. */
+/* Applies the shared generated-source policy to the tracked Message Board registry. */
 export function withCopyrightHeader(contents) {
   return generatedTypeScript(contents, ["spine/examples/messageboard/message_board.proto"]);
 }

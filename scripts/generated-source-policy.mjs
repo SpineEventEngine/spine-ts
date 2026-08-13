@@ -5,12 +5,12 @@ const trackedGeneratedTypeScript = new Set([
   "packages/server/test-fixtures/entity-metadata-fixtures.ts",
 ]);
 
-/** Returns whether a repository-relative TypeScript path is owned by a generator. */
+/* Returns whether a repository-relative TypeScript path is owned by a generator. */
 export function isGeneratedTypeScriptPath(path) {
   return /(?:^|\/)generated\/.+\.tsx?$/u.test(path) || trackedGeneratedTypeScript.has(path);
 }
 
-/** Renders the deterministic generated-file notice for one or more Proto sources. */
+/* Renders the deterministic generated-file notice for one or more Proto sources. */
 export function generatedFileNotice(sourcePaths) {
   const paths = [...new Set(sourcePaths)].sort((left, right) => left.localeCompare(right));
   if (paths.length === 0) throw new Error("Generated TypeScript requires source Proto provenance.");
@@ -25,7 +25,7 @@ export function generatedFileNotice(sourcePaths) {
   );
 }
 
-/** Removes a copied CodeMatters header and prefixes a generated-file notice. */
+/* Removes a copied CodeMatters header and prefixes a generated-file notice. */
 export function generatedTypeScript(source, sourcePaths) {
   const header = recognizedCopyrightHeader(source);
   const withoutBlockHeader =
@@ -34,14 +34,18 @@ export function generatedTypeScript(source, sourcePaths) {
   const generatedAt = lines.findIndex((line) => line.startsWith("// @generated"));
   const body = generatedAt !== -1 ? lines.slice(generatedAt).join("\n") : withoutBlockHeader;
   const provenance = [...new Set(sourcePaths)].sort((left, right) => left.localeCompare(right));
+  const provenanceLine = ` * Generated from Proto: ${provenance.join(", ")}.`;
   const documented = body.replace(
-    /(^|\n)(export const )/gu,
-    `$1/** Generated from Proto: ${provenance.join(", ")}. */\n$2`,
+    /(^|\n)(\/\*\*[\s\S]*?\*\/\n)?(export const )/gu,
+    (_match, prefix, documentation = "", declaration) =>
+      documentation === ""
+        ? `${prefix}/**\n${provenanceLine}\n */\n${declaration}`
+        : `${prefix}${documentation.replace(/ \*\/\n$/u, `${provenanceLine}\n */\n`)}${declaration}`,
   );
   return `${generatedFileNotice(provenance)}${documented}`;
 }
 
-/** Derives stable Proto provenance from an ordinary generated file name. */
+/* Derives stable Proto provenance from an ordinary generated file name. */
 export function sourceProtoForGeneratedFile(path) {
   const normalized = path.replaceAll("\\", "/");
   const source = normalized

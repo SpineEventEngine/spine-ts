@@ -31,3 +31,7 @@ Status: Implementation in progress; review not yet requested.
 - Observed behavior RED and GREEN for generated-path copyright classification,
   copied Buf copyright stripping, and the tracked server-fixture header. Full
   review remains pending after convergence.
+- Pre-review mechanical correction: generated declaration provenance now uses
+  valid multiline TSDoc (merged into existing declaration documentation when
+  present); private policy helpers use ordinary block comments. The TSDoc gate
+  passes; full review remains pending.

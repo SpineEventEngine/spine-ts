@@ -25,13 +25,17 @@ export interface ServerEntityMetadataTestFixture {
   readonly descriptorSetBase64: string;
 }
 
-/** Generated from Proto: packages/server/test-fixtures/proto/entity-metadata/empty.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-column.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-tag.proto, packages/server/test-fixtures/proto/entity-metadata/main.proto, packages/server/test-fixtures/proto/entity-metadata/unknown-kind.proto, packages/server/test-fixtures/proto/entity-metadata/visibility.proto. */
+/**
+ * Generated from Proto: packages/server/test-fixtures/proto/entity-metadata/empty.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-column.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-tag.proto, packages/server/test-fixtures/proto/entity-metadata/main.proto, packages/server/test-fixtures/proto/entity-metadata/unknown-kind.proto, packages/server/test-fixtures/proto/entity-metadata/visibility.proto.
+ */
 export const serverEntityMetadataFixtureGeneration = Object.freeze({
   command: "node scripts/generate-server-test-fixtures.mjs",
   protoRoot: "packages/server/test-fixtures/proto/entity-metadata",
 });
 
-/** Generated from Proto: packages/server/test-fixtures/proto/entity-metadata/empty.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-column.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-tag.proto, packages/server/test-fixtures/proto/entity-metadata/main.proto, packages/server/test-fixtures/proto/entity-metadata/unknown-kind.proto, packages/server/test-fixtures/proto/entity-metadata/visibility.proto. */
+/**
+ * Generated from Proto: packages/server/test-fixtures/proto/entity-metadata/empty.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-column.proto, packages/server/test-fixtures/proto/entity-metadata/invalid-tag.proto, packages/server/test-fixtures/proto/entity-metadata/main.proto, packages/server/test-fixtures/proto/entity-metadata/unknown-kind.proto, packages/server/test-fixtures/proto/entity-metadata/visibility.proto.
+ */
 export const serverEntityMetadataTestFixtures = Object.freeze({
   main: Object.freeze({
     protoPath: "packages/server/test-fixtures/proto/entity-metadata/main.proto",
