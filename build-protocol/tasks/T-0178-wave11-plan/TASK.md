@@ -29,6 +29,30 @@ documentation. Requirements splitting is mandatory before implementation.
 - Branch: `task/T-0178-wave11-plan`.
 - Worktree: `.worktrees/T-0178-wave11-plan`.
 - The dirty and stale primary checkout remains untouched.
+- `pnpm install --frozen-lockfile` passed.
+- The first `verify:task --no-tests` attempt correctly exposed absent ignored
+  generated output in the fresh worktree. After canonical `pnpm proto:generate`,
+  the clean baseline passed the selected task profile.
+
+## Frozen Upstream Evidence
+
+- Repository: `SpineEventEngine/base-libraries`.
+- Pinned `master`: `51cb428771e5af8a944675fb8e26e9eb2c3d0dfe`.
+- Canonical source:
+  `base/src/main/proto/spine/options.proto`.
+- SHA-256:
+  `894468a9ee427d4805accae79ef83cbdf5aacb09e41193b4d5cc965b3ede0ad9`.
+- Introducing commit:
+  `680092af8b7d1a7a916946c58feb541d5c614034` (`Add ts_type property to
+IsOption and EveryIsOption`).
+- The upstream comments require a simple top-level TypeScript interface name,
+  reject nested interfaces, require an existing interface for `(is)` and for
+  `(every_is)` with `generate = false`, generate the named interface only for
+  `(every_is)` with `generate = true`, and apply both options when both exist.
+- The introducing commit deliberately leaves the generated TypeScript base
+  shape unspecified. The interface/token representation is therefore a Spine
+  TS implementation contract and must not be misrepresented as upstream JVM
+  behavior.
 
 ## Human-Imposed Requirements Ledger
 
@@ -70,10 +94,11 @@ documentation. Requirements splitting is mandatory before implementation.
 14. `.route(MessageSchema, callback)` continues to declare an exact-message
     route. `.route(GeneratedOrAuthoredInterfaceToken, callback)` declares an
     interface route without arbitrary string keys.
-15. Routing precedence is exact message, then the most specific matching
-    registered interface, then its parent interfaces in registration order,
-    then the replacement/default route. Ambiguity and incomplete declarations
-    fail during construction.
+15. Routing precedence is exact message, then matching interface routes in
+    explicit declaration/registration order, then the replacement/default
+    route. Duplicate exact or interface-token declarations and invalid or
+    incomplete tokens fail during construction. Do not add an automatic
+    “most-specific interface” sorter.
 16. Interface routing applies consistently to Commands, Events, and Entity
     state updates within each signal kind's existing cardinality contract.
 17. Application routing is evaluated once per accepted admission. Durable
