@@ -23,6 +23,54 @@ const typescriptIdentifier = /^[A-Za-z_$][A-Za-z0-9_$]*$/u;
 const unresolvedInterfaceProvider: InterfaceDeclarationProvider = Object.freeze({
   resolve: () => undefined,
 });
+const reservedTypeScriptWords = new Set([
+  "await",
+  "break",
+  "case",
+  "catch",
+  "class",
+  "const",
+  "continue",
+  "debugger",
+  "default",
+  "delete",
+  "do",
+  "else",
+  "enum",
+  "export",
+  "extends",
+  "false",
+  "finally",
+  "for",
+  "function",
+  "if",
+  "implements",
+  "import",
+  "in",
+  "instanceof",
+  "interface",
+  "let",
+  "new",
+  "null",
+  "package",
+  "private",
+  "protected",
+  "public",
+  "return",
+  "super",
+  "switch",
+  "static",
+  "this",
+  "throw",
+  "true",
+  "try",
+  "typeof",
+  "var",
+  "void",
+  "while",
+  "with",
+  "yield",
+]);
 const protoPackage = "@spine-event-engine/proto";
 const packagedOptions = (await import(protoPackage).catch(() => undefined)) as
   { readonly every_is: DescExtension; readonly is: DescExtension } | undefined;
@@ -56,7 +104,7 @@ function collectMessages(messages: readonly DescMessage[]): readonly DescMessage
 }
 
 function assertTypeName(name: string, source: string): void {
-  if (!typescriptIdentifier.test(name)) {
+  if (!typescriptIdentifier.test(name) || reservedTypeScriptWords.has(name)) {
     throw new Error(`spine-proto: ${source}: ts_type must be a non-empty TypeScript identifier`);
   }
 }

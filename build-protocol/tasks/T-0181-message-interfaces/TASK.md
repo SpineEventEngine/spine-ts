@@ -60,6 +60,20 @@ Status: Implementation and release preflight complete; specialist review ready
 - Security: N/A unless implementation changes a trust boundary; final Wave 11
   security review remains T-0186.
 
+## Accepted Review Correction Batch
+
+- Accepted findings are recorded before production correction from the explicit
+  orchestrator review wave: TypeScript/API `/root/t0181_api_review`,
+  `gpt-5.6-terra` / high; style `/root/t0176_style_review`,
+  `gpt-5.6-terra` / high; reliability `/root/t0171_reliability_review`,
+  `gpt-5.6-terra` / high; documentation `/root/t0172_docs_review`,
+  `gpt-5.6-luna` / medium. Runtime metadata is unavailable; configured explicit
+  profiles are the evidence.
+- Correct public deduplicated membership typing, reject reserved TypeScript
+  identifiers, create the narrow staged source-view seam, sequence the
+  interface phase after primary Buf generation, centralize the unresolved
+  provider, repair public API inventory/TSDoc links, and add behavior tests.
+
 ## Release And Review Readiness
 
 - Current state: implementation and release preflight complete; specialist

@@ -36,6 +36,7 @@ import { readManifestAt } from "../io/manifest-reader.js";
 import { ModelGraph } from "../model/model-graph.js";
 import { ManifestFile, type ManifestFileOperations } from "../io/atomic-manifest.js";
 import { generatedSource, normalizeGeneratedTree } from "./generated-source-policy.js";
+import { modelSourceView } from "./source-view.js";
 
 /**
  * Bounded seams used to test failure handling while retaining real Buf integration.
@@ -53,6 +54,15 @@ export interface GenerationOperations {
    * @param runner The optional subprocess runner.
    */
   readonly runBuf?: (
+    moduleRoot: string,
+    output: string,
+    owned: readonly string[],
+    packageName: string,
+    runner?: SubprocessRunner,
+  ) => void;
+
+  /** Runs interface companion generation after primary Buf generation succeeds. */
+  readonly runInterfacePhase?: (
     moduleRoot: string,
     output: string,
     owned: readonly string[],
@@ -270,6 +280,7 @@ const protoGeneration = Object.freeze({
       const moduleRoot = join(stage, "module");
       const output = join(moduleRoot, "output");
       try {
+        modelSourceView(packageRoot, config.generatedRoot, output);
         protoGeneration.copyOwnedSources(
           packageRoot,
           config.protoRoot,
@@ -278,6 +289,16 @@ const protoGeneration = Object.freeze({
         );
         for (const model of graph.models) protoGeneration.copyDependencySources(model, moduleRoot);
         (operations.runBuf ?? protoGeneration.runBuf)(
+          moduleRoot,
+          output,
+          manifest.protoFiles,
+          config.packageName,
+          operations.runProcess,
+        );
+        const runInterfacePhase =
+          operations.runInterfacePhase ??
+          (operations.runBuf === undefined ? protoGeneration.runInterfacePhase : () => undefined);
+        runInterfacePhase(
           moduleRoot,
           output,
           manifest.protoFiles,
@@ -553,12 +574,6 @@ const protoGeneration = Object.freeze({
         import.meta.url,
       ),
     );
-    const interfaceGenerator = fileURLToPath(
-      new URL(
-        import.meta.url.endsWith(".ts") ? "./interface-generator.ts" : "./interface-generator.js",
-        import.meta.url,
-      ),
-    );
     writeFileSync(join(moduleRoot, "buf.yaml"), "version: v2\nmodules:\n  - path: .\n", "utf8");
     writeFileSync(
       join(moduleRoot, "buf.gen.yaml"),
@@ -573,13 +588,6 @@ const protoGeneration = Object.freeze({
         "  - local:",
         `      - ${process.execPath}`,
         `      - ${rejectionGenerator}`,
-        "    out: output",
-        "    opt:",
-        "      - target=ts",
-        "      - import_extension=js",
-        "  - local:",
-        `      - ${process.execPath}`,
-        `      - ${interfaceGenerator}`,
         "    out: output",
         "    opt:",
         "      - target=ts",
@@ -611,9 +619,53 @@ const protoGeneration = Object.freeze({
       ProtoGenerationErrors.fail(packageName, "Buf generated no owned output");
   },
 
+  runInterfacePhase(
+    moduleRoot: string,
+    output: string,
+    owned: readonly string[],
+    packageName: string,
+    runner: SubprocessRunner = (command, arguments_, options) =>
+      spawnSync(command, arguments_, options),
+  ): void {
+    const interfaceGenerator = fileURLToPath(
+      new URL(
+        import.meta.url.endsWith(".ts") ? "./interface-generator.ts" : "./interface-generator.js",
+        import.meta.url,
+      ),
+    );
+    writeFileSync(
+      join(moduleRoot, "buf.interfaces.gen.yaml"),
+      [
+        "version: v2",
+        "plugins:",
+        "  - local:",
+        `      - ${process.execPath}`,
+        `      - ${interfaceGenerator}`,
+        "    out: output",
+        "    opt:",
+        "      - target=ts",
+        "      - import_extension=js",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    const buf = protoGeneration.resolveTool("@bufbuild/buf/bin/buf");
+    const generated = runner(
+      buf,
+      [
+        "generate",
+        "--template",
+        "buf.interfaces.gen.yaml",
+        ...owned.flatMap((file) => ["--path", file]),
+      ],
+      { cwd: moduleRoot, encoding: "utf8", timeout: bufTimeoutMs, maxBuffer: bufMaxBuffer },
+    );
+    protoGeneration.assertBufResult(packageName, "interface generation", generated);
+  },
+
   assertBufResult(
     packageName: string,
-    phase: "generation" | "validation",
+    phase: "generation" | "interface generation" | "validation",
     result: SpawnSyncReturns<string>,
   ): void {
     if (result.error !== undefined) {

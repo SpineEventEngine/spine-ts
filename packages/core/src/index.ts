@@ -111,8 +111,8 @@ const MESSAGE_INTERFACE_TOKENS = new WeakSet<object>();
  * Immutable nominal membership token for generated Protobuf message interfaces.
  *
  * The token preserves the concrete non-empty schema tuple used to define an
- * interface. Use {@link MessageInterfaces.define} to create a token and
- * {@link MessageInterfaces.is} to validate a runtime candidate.
+ * interface. Use {@link MessageInterfaces} to create a token with its `define`
+ * factory and validate a runtime candidate with its `is` guard.
  *
  * @typeParam TInterface The object shape implemented by every member message.
  * @typeParam Schemas The concrete non-empty tuple of member schemas.
@@ -121,9 +121,9 @@ export interface MessageInterface<TInterface extends object, Schemas extends Int
   // prettier-ignore
 
   /**
-   * Concrete, immutable generated message schemas that belong to this interface.
+   * Deduplicated immutable generated message schemas that belong to this interface.
    */
-  readonly schemas: Schemas;
+  readonly schemas: readonly [Schemas[number], ...Schemas[number][]];
 
   // prettier-ignore
 

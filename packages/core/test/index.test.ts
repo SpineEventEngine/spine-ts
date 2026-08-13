@@ -94,7 +94,17 @@ describe("MessageInterfaces", () => {
     const compatible = MessageInterfaces.define<SignalMessage, readonly [typeof CommandSchema]>([
       CommandSchema,
     ]);
-    expectTypeOf(compatible.schemas).toEqualTypeOf<readonly [typeof CommandSchema]>();
+    expectTypeOf(compatible.schemas).toEqualTypeOf<
+      readonly [typeof CommandSchema, ...(typeof CommandSchema)[]]
+    >();
+
+    const duplicate = MessageInterfaces.define<
+      SignalMessage,
+      readonly [typeof CommandSchema, typeof CommandSchema]
+    >([CommandSchema, CommandSchema]);
+    expectTypeOf(duplicate.schemas).toEqualTypeOf<
+      readonly [typeof CommandSchema, ...(typeof CommandSchema)[]]
+    >();
 
     const compileFailures = () => {
       // @ts-expect-error Interface membership cannot be empty.

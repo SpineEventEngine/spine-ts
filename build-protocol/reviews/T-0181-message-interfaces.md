@@ -40,6 +40,22 @@ the evidence.
 - Runtime model/reasoning telemetry is unavailable; configured role/profile
   and explicit dispatch are the available acceptance evidence.
 
+## Accepted Findings
+
+- API reviewer `/root/t0181_api_review`, `gpt-5.6-terra` / high: accepted P1
+  public dedupe typing and reserved-word validation; accepted P2 API inventory
+  and TypeDoc-link corrections.
+- Style reviewer `/root/t0176_style_review`, `gpt-5.6-terra` / high: accepted
+  P1 live-authored/staged-generated source-view seam and P2 provider cleanup.
+- Reliability reviewer `/root/t0171_reliability_review`, `gpt-5.6-terra` /
+  high: accepted P1 post-primary-Buf interface sequencing and rollback proof;
+  accepted P2 dedupe TSDoc correction.
+- Documentation reviewer `/root/t0172_docs_review`, `gpt-5.6-luna` / medium:
+  accepted P2 public documentation/link and API inventory corrections.
+- All profiles were explicit orchestrator assignments; runtime telemetry is
+  unavailable. One implementation correction batch is active; no re-review is
+  dispatched here.
+
 ## Implementation Evidence
 
 - Core token contract is ready for later API/reliability review: focused runtime

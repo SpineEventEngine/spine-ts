@@ -48,10 +48,3 @@ export interface InterfaceDeclarationProvider {
    */
   resolve(name: string, members: readonly DescMessage[]): AuthoredInterfaceDeclaration | undefined;
 }
-
-/**
- * Leaves authored declarations unresolved until a discovery provider is installed.
- */
-export const unresolvedInterfaceProvider: InterfaceDeclarationProvider = Object.freeze({
-  resolve: () => undefined,
-});

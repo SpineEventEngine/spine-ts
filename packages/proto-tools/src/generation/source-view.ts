@@ -1,0 +1,74 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
+import { lstatSync, readdirSync } from "node:fs";
+import { join, relative, resolve, sep } from "node:path";
+
+/**
+ * Stable compiler input view for authored sources and staged generated output.
+ */
+export interface ModelSourceView {
+  /** Eligible authored TypeScript files, excluding generated publication trees. */
+  readonly authoredFiles: readonly string[];
+  /** Redirect root used when compiler imports address generated model sources. */
+  readonly stagedGeneratedRoot: string;
+}
+
+function collectAuthored(
+  root: string,
+  current: string,
+  excluded: readonly string[],
+): readonly string[] {
+  const files: string[] = [];
+  for (const name of readdirSync(current).sort()) {
+    const path = join(current, name);
+    const relativePath = relative(root, path);
+    if (
+      excluded.some(
+        (entry) =>
+          relativePath === entry ||
+          relativePath.startsWith(`${entry}${sep}`) ||
+          relativePath.startsWith(`${entry}-`),
+      )
+    )
+      continue;
+    const entry = lstatSync(path);
+    if (entry.isSymbolicLink()) continue;
+    if (entry.isDirectory()) files.push(...collectAuthored(root, path, excluded));
+    else if (/\.(?:cts|mts|ts|tsx)$/u.test(name) && !/\.d\.ts$/u.test(name)) files.push(path);
+  }
+  return files;
+}
+
+/**
+ * Creates a live-authored/staged-generated compiler source view.
+ *
+ * @param packageRoot Model package root.
+ * @param generatedRoot Configured live generated root.
+ * @param stagedGeneratedRoot Generated tree inside the current stage.
+ * @returns Authored compiler candidates and the staged generated redirect root.
+ */
+export function modelSourceView(
+  packageRoot: string,
+  generatedRoot: string,
+  stagedGeneratedRoot: string,
+): ModelSourceView {
+  const root = resolve(packageRoot);
+  const generated = generatedRoot.replaceAll("\\", "/");
+  const excluded = [generated, `${generated}.stage`, `${generated}.backup`, "dist"];
+  return Object.freeze({
+    authoredFiles: Object.freeze(collectAuthored(root, root, excluded)),
+    stagedGeneratedRoot: resolve(stagedGeneratedRoot),
+  });
+}

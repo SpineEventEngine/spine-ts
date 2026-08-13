@@ -217,7 +217,7 @@ it("configures every model generation with the packaged rejection companion plug
 
     expect(template).toMatch(/rejection-generator\.(?:ts|js)/u);
     expect(template).toContain("@bufbuild/protoc-gen-es");
-    expect(commands).toHaveLength(2);
+    expect(commands).toHaveLength(3);
   } finally {
     rmSync(model, { force: true, recursive: true });
   }

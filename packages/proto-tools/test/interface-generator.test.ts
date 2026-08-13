@@ -89,7 +89,7 @@ describe("InterfaceGenerator", () => {
   });
 
   it("rejects empty and invalid generated TypeScript names before emitting output", () => {
-    for (const name of ["", "Outer.Inner", "not-valid"]) {
+    for (const name of ["", "Outer.Inner", "not-valid", "default", "class", "await"]) {
       const schema = {
         files: [optionFile(name)],
         generateFile: () => {
