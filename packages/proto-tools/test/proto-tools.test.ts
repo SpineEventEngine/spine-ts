@@ -476,7 +476,9 @@ describe("spine proto model tooling", () => {
     mkdirSync(dirname(registry), { recursive: true });
     writeFileSync(registry, "prior registry\n");
 
-    expect(() => HandlerGeneration.generate(application)).toThrow(/must be declared/u);
+    expect(() => {
+      HandlerGeneration.generate(application);
+    }).toThrow(/must be declared/u);
     expect(readFileSync(registry, "utf8")).toBe("prior registry\n");
     expect(readdirSync(dirname(registry))).toEqual(["generated-handler-registry.ts"]);
   });
