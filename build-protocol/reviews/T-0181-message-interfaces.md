@@ -96,3 +96,9 @@ the evidence.
   coverage is 92.10%; the focused global denominator includes the monolithic
   core index, so final release's 90.37% repository branches is retained as the
   task-level coverage disposition.
+- Final targeted correction complete/re-review-ready: the source-view is now a
+  consumed staged provider input rather than a discarded scan; bounded
+  traversal and actual transaction-root exclusions are covered at 94.11%
+  source-view branches. The direct `MessageInterfaces` namespace exposes both
+  documented API members to the exact inventory. Focused 4-file/164-test and
+  static gates pass; no release/review was run.

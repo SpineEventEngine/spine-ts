@@ -44,4 +44,33 @@ describe("modelSourceView", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("fails closed beyond the bounded source-view directory depth", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-source-view-depth-"));
+    try {
+      let current = root;
+      for (let depth = 0; depth <= 32; depth += 1) {
+        current = join(current, "nested");
+        mkdirSync(current);
+      }
+      expect(() =>
+        modelSourceView(root, "generated", join(root, ".generated.stage-x/output")),
+      ).toThrow("exceeds bounded traversal");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed beyond the bounded source-view entry count", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-source-view-entries-"));
+    try {
+      for (let entry = 0; entry <= 10_000; entry += 1)
+        writeFileSync(join(root, `entry-${String(entry)}.txt`), "x\n");
+      expect(() =>
+        modelSourceView(root, "generated", join(root, ".generated.stage-x/output")),
+      ).toThrow("exceeds bounded traversal");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

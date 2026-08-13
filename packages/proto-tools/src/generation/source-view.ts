@@ -45,8 +45,7 @@ function collectAuthored(root: string, excluded: readonly string[]): readonly st
   const pending = [{ path: root, depth: 0 }];
   let entries = 0;
   while (pending.length > 0) {
-    const current = pending.pop();
-    if (current === undefined) continue;
+    const current = pending.pop()!;
     if (current.depth > maximumSourceViewDepth)
       throw new Error("spine-proto: source view exceeds bounded traversal");
     for (const name of readdirSync(current.path).sort().reverse()) {
@@ -55,7 +54,7 @@ function collectAuthored(root: string, excluded: readonly string[]): readonly st
         throw new Error("spine-proto: source view exceeds bounded traversal");
       const path = join(current.path, name);
       const relativePath = relative(root, path);
-      const transactionRoot = `.${excluded[0] ?? "generated"}`;
+      const transactionRoot = `.${excluded[0]!}`;
       if (
         excluded.some(
           (entry) =>
