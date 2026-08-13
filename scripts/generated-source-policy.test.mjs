@@ -1,10 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { generatedFileNotice, generatedTypeScript } from "./generated-source-policy.mjs";
 
 describe("generated source policy", () => {
+  it("keeps generated TypeScript inventories free of copied copyright and license preambles", () => {
+    const roots = [
+      "packages/proto/generated",
+      "examples/todo/generated",
+      "examples/projects/generated",
+      "examples/orders/generated",
+      "examples/message-board/model/generated",
+    ];
+    const files = [];
+    for (const root of roots) {
+      const pending = [join(process.cwd(), root)];
+      while (pending.length > 0) {
+        const directory = pending.pop();
+        for (const entry of readdirSync(directory, { withFileTypes: true })) {
+          const path = join(directory, entry.name);
+          if (entry.isDirectory()) pending.push(path);
+          else if (entry.isFile() && /\.(?:d\.ts|ts)$/u.test(path)) files.push(path);
+        }
+      }
+    }
+    for (const file of files)
+      expect(readFileSync(file, "utf8")).not.toMatch(
+        /copyright|all rights reserved|proprietary and confidential|licensed under/iu,
+      );
+  });
+
   it("removes a copied Proto copyright notice while retaining stable provenance", () => {
     const source = [
       "//",

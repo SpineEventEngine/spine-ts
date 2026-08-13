@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,6 +29,41 @@ describe("generate-server-test-fixtures", () => {
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
   });
+
+  it("runs standalone from an isolated clean proto-tools build output", () => {
+    const root = process.cwd();
+    const isolated = mkdtempSync(join(tmpdir(), "spine-fixture-clean-bootstrap-"));
+    const clone = join(isolated, "repo");
+    const worktree = spawnSync("git", ["worktree", "add", "--detach", clone, "HEAD"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    if (worktree.status !== 0) throw new Error(`${worktree.stdout}${worktree.stderr}`);
+    try {
+      const install = spawnSync("pnpm", ["install", "--offline", "--frozen-lockfile"], {
+        cwd: clone,
+        encoding: "utf8",
+      });
+      if (install.status !== 0) throw new Error(`${install.stdout}${install.stderr}`);
+      rmSync(join(clone, "packages/proto-tools/dist"), { recursive: true, force: true });
+      const result = spawnSync(
+        process.execPath,
+        [join(clone, "scripts/generate-server-test-fixtures.mjs"), "--check"],
+        {
+          cwd: clone,
+          encoding: "utf8",
+        },
+      );
+      expect(result.status).toBe(0);
+      const cache = join(clone, "packages/proto-tools/node_modules/.cache");
+      expect(existsSync(cache) ? readdirSync(cache) : []).not.toContainEqual(
+        expect.stringMatching(/^spine-proto-tools-bootstrap-/u),
+      );
+    } finally {
+      spawnSync("git", ["worktree", "remove", "--force", clone], { cwd: root, encoding: "utf8" });
+      rmSync(isolated, { recursive: true, force: true });
+    }
+  }, 120_000);
 
   it("preserves the prior fixture when atomic publication fails", () => {
     const directory = mkdtempSync(join(tmpdir(), "spine-fixture-publication-"));

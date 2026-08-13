@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generatedTypeScript } from "./generated-source-policy.mjs";
+import { prepareProtoToolsBootstrap, releaseProtoToolsBootstrap } from "./proto-workflow.mjs";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = resolve(dirname(scriptPath), "..");
@@ -52,22 +53,27 @@ const fixtureDefinitions = [
 const checkMode = process.argv.includes("--check");
 
 function main() {
-  const generated = renderFixtureModule();
+  prepareProtoToolsBootstrap(repoRoot);
+  try {
+    const generated = renderFixtureModule();
 
-  if (checkMode) {
-    const current = readFileSync(outputPath, "utf8");
+    if (checkMode) {
+      const current = readFileSync(outputPath, "utf8");
 
-    if (current !== generated) {
-      console.error(
-        `Server test fixture descriptors are out of date. Run "node scripts/generate-server-test-fixtures.mjs".`,
-      );
-      process.exit(1);
+      if (current !== generated) {
+        console.error(
+          `Server test fixture descriptors are out of date. Run "node scripts/generate-server-test-fixtures.mjs".`,
+        );
+        process.exitCode = 1;
+      }
+
+      return;
     }
 
-    return;
+    publishFixtureModule(outputPath, generated);
+  } finally {
+    releaseProtoToolsBootstrap(repoRoot);
   }
-
-  publishFixtureModule(outputPath, generated);
 }
 
 export function publishFixtureModule(target, source, operations = {}) {
