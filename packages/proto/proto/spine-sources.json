@@ -257,11 +257,11 @@
     {
       "localPath": "packages/proto/proto/spine/options.proto",
       "repository": "SpineEventEngine/base",
-      "commit": "43b55858c410eaf79fc594ca6f3f3eab0daca027",
+      "commit": "51cb428771e5af8a944675fb8e26e9eb2c3d0dfe",
       "upstreamPath": "base/src/main/proto/spine/options.proto",
-      "sourceUrl": "https://github.com/SpineEventEngine/base/blob/43b55858c410eaf79fc594ca6f3f3eab0daca027/base/src/main/proto/spine/options.proto",
-      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/base/43b55858c410eaf79fc594ca6f3f3eab0daca027/base/src/main/proto/spine/options.proto",
-      "sha256": "6ac1e484d88c8ae0160436a9ca76e0d618f48a23c1343696d40b6aa0118d3793"
+      "sourceUrl": "https://github.com/SpineEventEngine/base/blob/51cb428771e5af8a944675fb8e26e9eb2c3d0dfe/base/src/main/proto/spine/options.proto",
+      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/base/51cb428771e5af8a944675fb8e26e9eb2c3d0dfe/base/src/main/proto/spine/options.proto",
+      "sha256": "894468a9ee427d4805accae79ef83cbdf5aacb09e41193b4d5cc965b3ede0ad9"
     },
     {
       "localPath": "packages/proto/proto/spine/server/catchup/catch_up.proto",

@@ -94,6 +94,28 @@ describe("@spine-event-engine/proto", () => {
     }
   });
 
+  it("pins the fresh upstream TypeScript option contract byte-for-byte", () => {
+    const manifest = JSON.parse(
+      readFileSync(resolve("packages/proto/proto/spine-sources.json"), "utf8"),
+    ) as ProtoSourceManifest;
+    const source = manifest.sources.find(
+      (candidate) => candidate.localPath === "packages/proto/proto/spine/options.proto",
+    );
+
+    expect(source).toMatchObject({
+      repository: "SpineEventEngine/base",
+      commit: "51cb428771e5af8a944675fb8e26e9eb2c3d0dfe",
+      upstreamPath: "base/src/main/proto/spine/options.proto",
+      sha256: "894468a9ee427d4805accae79ef83cbdf5aacb09e41193b4d5cc965b3ede0ad9",
+    });
+    expect(source?.sourceUrl).toBe(
+      "https://github.com/SpineEventEngine/base/blob/51cb428771e5af8a944675fb8e26e9eb2c3d0dfe/base/src/main/proto/spine/options.proto",
+    );
+    expect(source?.rawUrl).toBe(
+      "https://raw.githubusercontent.com/SpineEventEngine/base/51cb428771e5af8a944675fb8e26e9eb2c3d0dfe/base/src/main/proto/spine/options.proto",
+    );
+  });
+
   it("exports generated schemas for validation errors and their dependencies", () => {
     expect(ValidationErrorSchema.typeName).toBe("spine.validation.ValidationError");
     expect(FieldPathSchema.typeName).toBe("spine.base.FieldPath");
@@ -147,6 +169,9 @@ describe("@spine-event-engine/proto", () => {
     expect(EntityOption_VisibilitySchema.typeName).toBe("EntityOption.Visibility");
     expect(hasOption(CommandSchema, is)).toBe(true);
     expect(getOption(CommandSchema, is).javaType).toBe("CommandMixin");
+    expect(getOption(CommandSchema, is).tsType).toBe("");
+    expect(create(EveryIsOptionSchema).tsType).toBe("");
+    expect(create(IsOptionSchema).tsType).toBe("");
     expect(hasOption(file_spine_core_command, every_is)).toBe(false);
     expect(entity.extendee.typeName).toBe("google.protobuf.MessageOptions");
     expect(column.extendee.typeName).toBe("google.protobuf.FieldOptions");

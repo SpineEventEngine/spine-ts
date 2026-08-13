@@ -97,6 +97,22 @@ function commandServiceMethod(set: DescriptorSet) {
 }
 
 describe("frozen Spine descriptor compatibility", () => {
+  it("retains the Java option fields and adds TypeScript fields at their pinned numbers", () => {
+    const options = requireFile(descriptorSet, "spine/options.proto");
+    const everyIs = requireMessage(options, "EveryIsOption");
+    const is = requireMessage(options, "IsOption");
+
+    expect(everyIs.field.map((field) => [field.name, field.number, field.type])).toEqual([
+      ["generate", 1, 8],
+      ["java_type", 2, 9],
+      ["ts_type", 3, 9],
+    ]);
+    expect(is.field.map((field) => [field.name, field.number, field.type])).toEqual([
+      ["java_type", 1, 9],
+      ["ts_type", 2, 9],
+    ]);
+  });
+
   it("normalizes only source_code_info", () => {
     const withSourceInfo = clonedDescriptorSet();
     const file = requireFirst(withSourceInfo.file, "descriptor fixture file");
