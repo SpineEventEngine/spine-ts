@@ -102,9 +102,8 @@ const generatedPolicy = Object.freeze({
         generatedPolicy.normalizeGeneratedTreeAt(path, sources, depth + 1, state);
       else if (
         entry.isFile() &&
-        /(?:_pb|rejections|interfaces|_columns|proto-module|generated-handler-registry)\.ts$/u.test(
-          path,
-        )
+        (/(?:_pb|rejections|_columns|proto-module|generated-handler-registry)\.ts$/u.test(path) ||
+          /[\\/]interfaces[\\/].+\.ts$/u.test(path))
       ) {
         const source = readFileSync(path, "utf8");
         const derived = [
