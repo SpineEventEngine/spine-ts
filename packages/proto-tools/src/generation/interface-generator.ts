@@ -69,12 +69,17 @@ export const InterfaceGenerator: Readonly<{
       output.preamble(file);
       output.print(
         "/** Generated file-level message interface. */\n",
-        output.export("interface", option.tsType),
-        " {}\n\n",
-        `const memberSchemas = [${schemaImports.join(", ")}] as const;\n\n`,
+        `export interface ${option.tsType} {}\n\n`,
+        "const memberSchemas = [",
+        ...schemaImports.flatMap((member, index) => (index === 0 ? [member] : [", ", member])),
+        "] as const;\n\n",
         "/** Generated nominal runtime token for this message interface. */\n",
         output.export("const", option.tsType),
-        `: ${token}<${option.tsType}, typeof memberSchemas> = ${define}.define<${option.tsType}, typeof memberSchemas>(memberSchemas);\n`,
+        ": ",
+        token,
+        `<${option.tsType}, typeof memberSchemas> = `,
+        define,
+        `.define<${option.tsType}, typeof memberSchemas>(memberSchemas);\n`,
       );
     }
   },
