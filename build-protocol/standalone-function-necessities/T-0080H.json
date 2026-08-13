@@ -3,6 +3,15 @@
     "rule": "standalone-function",
     "file": "packages/proto-tools/src/generation/interface-generator.ts",
     "kind": "function-declaration",
+    "identity": "optionExtension()#1",
+    "name": "optionExtension",
+    "disposition": "necessity",
+    "reason": "TypeScript descriptor resolution boundary: optionExtension obtains required custom option descriptors from the Buf schema or packaged Proto dependency."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/interface-generator.ts",
+    "kind": "function-declaration",
     "identity": "companionPath()#1",
     "name": "companionPath",
     "disposition": "necessity",

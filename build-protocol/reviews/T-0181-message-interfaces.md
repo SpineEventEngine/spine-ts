@@ -45,3 +45,7 @@ the evidence.
   module in an isolated clone; GREEN has 64 workflow tests, 74 focused tests,
   real `proto:generate`, and generated-current verification passing. No
   specialist review was dispatched and release remains pending.
+- Packed external-consumer correction: schema-first option resolution now falls
+  back to the installed public Proto package only when the consumer's reduced
+  Buf schema omits option descriptors. The exact 3-file / 107-test suite and
+  generated build pass; no release or specialist review was run.

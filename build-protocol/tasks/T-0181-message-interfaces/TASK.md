@@ -85,6 +85,10 @@ Status: In implementation
   the Buf schema request; 64 workflow tests, 74 focused tests, real generation,
   and generated-current verification pass. Release remains intentionally
   unrun at this checkpoint.
+- Packed external correction: a reduced consumer schema can omit option
+  descriptors, so the plugin uses its installed public Proto package only as a
+  fallback after schema-first lookup. The packaged external regression passes;
+  release remains unrun.
 
 ## Skills
 

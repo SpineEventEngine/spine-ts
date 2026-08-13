@@ -23,6 +23,9 @@ const typescriptIdentifier = /^[A-Za-z_$][A-Za-z0-9_$]*$/u;
 const unresolvedInterfaceProvider: InterfaceDeclarationProvider = Object.freeze({
   resolve: () => undefined,
 });
+const protoPackage = "@spine-event-engine/proto";
+const packagedOptions = (await import(protoPackage).catch(() => undefined)) as
+  { readonly every_is: DescExtension; readonly is: DescExtension } | undefined;
 
 function optionExtension(files: readonly DescFile[], name: "every_is" | "is"): DescExtension {
   const visited = new Set<DescFile>();
@@ -38,8 +41,10 @@ function optionExtension(files: readonly DescFile[], name: "every_is" | "is"): D
     return undefined;
   };
   const extension = find(files);
-  if (extension === undefined) throw new Error(`spine-proto: missing (${name}) option descriptor`);
-  return extension;
+  if (extension !== undefined) return extension;
+  const packaged = name === "every_is" ? packagedOptions?.every_is : packagedOptions?.is;
+  if (packaged !== undefined) return packaged;
+  throw new Error(`spine-proto: missing (${name}) option descriptor`);
 }
 
 function companionPath(name: string): string {
@@ -85,7 +90,8 @@ export const InterfaceGenerator: Readonly<{
   },
 
   generateWithProvider(schema: Schema, provider: InterfaceDeclarationProvider): void {
-    const optionFiles = schema.allFiles ?? schema.files;
+    const optionFiles =
+      (schema as { readonly allFiles?: readonly DescFile[] }).allFiles ?? schema.files;
     const everyIs = optionExtension(optionFiles, "every_is");
     const isOption = optionExtension(optionFiles, "is");
     const authored = new Map<string, DescMessage[]>();
