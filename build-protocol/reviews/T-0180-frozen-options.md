@@ -1,6 +1,6 @@
 # T-0180 Review Log
 
-Status: Documentation correction complete; targeted documentation re-review ready
+Status: Review-complete; release-ready
 
 ## Scope And Ledger
 
@@ -13,18 +13,17 @@ unknown-option compatibility, deterministic regeneration, and the D-0113/Wave
 
 ## Planned Concern Dispositions
 
-- Documentation completeness: accepted P2 correction applied; targeted re-review
-  is ready. The canonical Wave 11 authority is `SpineEventEngine/base-libraries`;
-  the redirect alias must not appear in current T-0180 provenance claims.
+- Documentation completeness: CLEAN after the accepted P2 corrections. The
+  canonical Wave 11 authority is `SpineEventEngine/base-libraries`; the redirect
+  alias must not appear in current T-0180 provenance claims.
 - TypeScript/API documentation: CLEAN. Existing
   `typescript_api_docs_reviewer`, explicitly `gpt-5.6-terra` / high, confirmed
   the public generated option fields and curated exports. Runtime metadata is
   unavailable; configured role/profile and explicit dispatch are the evidence.
 - Style/maintainability: planned N/A unless the implementation expands beyond
   mechanical frozen-source intake; reason: no new production structure.
-- Performance/reliability: relevant after the release parallelism timeout
-  correction; targeted re-review is required. Scope: bounded test-runtime
-  reliability under the 251-file parallel release load.
+- Performance/reliability: CLEAN after targeted re-review. Scope: bounded
+  test-runtime reliability under the 251-file parallel release load.
 - Security: planned N/A; reason: no trust-boundary change; T-0186 owns the
   final Wave 11 security review.
 
@@ -72,4 +71,18 @@ tracked commits, and spawns three checkers; the focused path passes 3/3 at
 about 1.5 seconds. It now uses the established 15-second timeout already used
 by analogous multi-step TSDoc and cleanup fixtures. This test-only correction
 does not alter the frozen contract. Performance/reliability is now relevant and
-requires targeted re-review; documentation re-review remains ready.
+was re-reviewed cleanly; documentation is clean after its accepted corrections.
+
+## Targeted Reliability Re-Review
+
+- Result: CLEAN.
+- Reviewer: existing `performance_reliability_reviewer`, explicitly
+  `gpt-5.6-terra` / high. Runtime model/reasoning metadata is unavailable on
+  this surface; the explicit dispatch and immutable configured role/profile are
+  the available evidence.
+- Scope and disposition: the 15-second timeout is proportionate and confined to
+  one synchronous, Git/process-heavy fixture. It follows the existing analogous
+  TSDoc and cleanup-fixture pattern, prevents release-parallelism flakiness,
+  and changes no production, lifecycle, resource, or frozen-contract behavior.
+- The review is complete; the task is release-ready. The orchestrator owns the
+  next `verify:release` attempt.

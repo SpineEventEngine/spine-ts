@@ -110,3 +110,15 @@ load. The established 15-second timeout used by analogous multi-step fixtures
 now applies to that single test. This is test-only release reliability work, so
 targeted performance/reliability re-review is now required; the frozen contract
 and its acceptance criteria remain unchanged.
+
+## 2026-08-13 - Review Completion
+
+Targeted reliability re-review is CLEAN. The existing
+`performance_reliability_reviewer` was explicitly dispatched as
+`gpt-5.6-terra` / high; runtime metadata is unavailable, so explicit dispatch
+and immutable configured role/profile are the evidence. The reviewer confirmed
+the 15-second timeout is proportionate and limited to one synchronous,
+Git/process-heavy fixture, follows an existing analogous pattern, and changes
+no production, lifecycle/resource, or frozen-contract behavior. Documentation
+and TypeScript/API review dispositions are CLEAN; T-0180 is review-complete and
+release-ready, with the next `verify:release` owned by the orchestrator.
