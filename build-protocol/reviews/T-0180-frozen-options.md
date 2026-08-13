@@ -22,8 +22,9 @@ unknown-option compatibility, deterministic regeneration, and the D-0113/Wave
   unavailable; configured role/profile and explicit dispatch are the evidence.
 - Style/maintainability: planned N/A unless the implementation expands beyond
   mechanical frozen-source intake; reason: no new production structure.
-- Performance/reliability: planned N/A; reason: no runtime algorithm,
-  persistence, concurrency, lifecycle, or resource behavior changes.
+- Performance/reliability: relevant after the release parallelism timeout
+  correction; targeted re-review is required. Scope: bounded test-runtime
+  reliability under the 251-file parallel release load.
 - Security: planned N/A; reason: no trust-boundary change; T-0186 owns the
   final Wave 11 security review.
 
@@ -61,3 +62,14 @@ README. The reader-facing sentence now states only that later generator work
 owns marker interpretation and generation. This record-only correction does not
 alter the frozen contract or reopen specialist review; targeted documentation
 re-review remains ready.
+
+## Release Parallelism Timeout Correction
+
+The third release failure was an unchanged multi-step `check-tsdoc` fixture
+exceeding the default five-second timeout only under the 251-file parallel
+release load. It creates/commits a temporary Git repository, adds three further
+tracked commits, and spawns three checkers; the focused path passes 3/3 at
+about 1.5 seconds. It now uses the established 15-second timeout already used
+by analogous multi-step TSDoc and cleanup fixtures. This test-only correction
+does not alter the frozen contract. Performance/reliability is now relevant and
+requires targeted re-review; documentation re-review remains ready.

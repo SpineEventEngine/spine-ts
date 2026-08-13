@@ -197,7 +197,7 @@ describe("check-tsdoc", () => {
     writeSource(repoRoot, "packages/demo/src/index.ts", validSource());
     track(repoRoot);
     expect(runChecker(repoRoot).status).toBe(0);
-  });
+  }, 15_000);
 
   it("does not let template interpolation hide later invalid TSDoc", () => {
     const repoRoot = createFixture();

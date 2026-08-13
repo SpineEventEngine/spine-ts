@@ -103,3 +103,10 @@ The documentation now uses timeless reader-facing language: later generator
 work owns marker interpretation and generation. This changes neither frozen
 source bytes nor current deferred behavior; the orchestrator owns the next
 release attempt and targeted documentation re-review.
+
+The third release failure was an unchanged multi-step `check-tsdoc` fixture
+exceeding Vitest’s default timeout only under the 251-file parallel release
+load. The established 15-second timeout used by analogous multi-step fixtures
+now applies to that single test. This is test-only release reliability work, so
+targeted performance/reliability re-review is now required; the frozen contract
+and its acceptance criteria remain unchanged.
