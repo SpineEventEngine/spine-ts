@@ -1465,6 +1465,33 @@ describe("spine proto model tooling", () => {
     );
   });
 
+  it("preserves prior output and manifest when the post-Buf interface phase fails", () => {
+    const model = packageDirectory("@example/interface-phase-failure-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/interface-phase-failure-model"));
+    mkdirSync(join(model, "proto"), { recursive: true });
+    writeFileSync(join(model, "proto/model.proto"), 'syntax = "proto3"; message Model {}\n');
+    mkdirSync(join(model, "src/generated"), { recursive: true });
+    writeFileSync(join(model, "src/generated/prior.ts"), "prior output\n");
+    writeFileSync(join(model, "spine-proto-manifest.json"), "prior manifest\n");
+
+    expect(() => {
+      generateModel(model, {
+        runBuf: (_, output) => {
+          mkdirSync(output, { recursive: true });
+          writeFileSync(join(output, "model_pb.ts"), "export {};\n");
+        },
+        runInterfacePhase: () => {
+          throw new Error("interface phase failed");
+        },
+      });
+    }).toThrow("interface phase failed");
+    expect(readFileSync(join(model, "src/generated/prior.ts"), "utf8")).toBe("prior output\n");
+    expect(readFileSync(join(model, "spine-proto-manifest.json"), "utf8")).toBe("prior manifest\n");
+    expect(readdirSync(join(model, "src")).filter((name) => name.includes("generated"))).toEqual([
+      "generated",
+    ]);
+  });
+
   it("leaves no generated output, manifest, backup, or stage when first manifest publication fails", () => {
     const model = packageDirectory("@example/first-manifest-failure-model");
     writeJson(model, "spine-proto.json", modelConfig("@example/first-manifest-failure-model"));
