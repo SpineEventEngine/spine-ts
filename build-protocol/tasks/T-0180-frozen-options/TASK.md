@@ -1,6 +1,6 @@
 # T-0180: Freeze The Fresh Upstream Options Contract
 
-Status: In implementation
+Status: Complete; release-verified
 
 ## Classification And Isolation
 
@@ -122,3 +122,22 @@ Git/process-heavy fixture, follows an existing analogous pattern, and changes
 no production, lifecycle/resource, or frozen-contract behavior. Documentation
 and TypeScript/API review dispositions are CLEAN; T-0180 is review-complete and
 release-ready, with the next `verify:release` owned by the orchestrator.
+
+## 2026-08-13 - Final Acceptance
+
+- Final `pnpm verify:release` exited 0: 248 test files passed, 3 skipped;
+  3,947 tests passed, 14 skipped. Coverage: statements 94.20%
+  (20,503/21,765), branches 90.40% (11,971/13,242), functions 94.11%
+  (5,018/5,332), and lines 95.21% (19,127/20,088).
+- Release readiness verified 82 package imports, 51 package assets, and 366
+  relative Markdown links.
+- Final documentation re-review is CLEAN: existing `documentation_reviewer`,
+  immutable `gpt-5.6-luna` / medium. TypeScript/API is CLEAN: existing
+  `typescript_api_docs_reviewer`, explicitly `gpt-5.6-terra` / high.
+  Reliability correction review is CLEAN: existing
+  `performance_reliability_reviewer`, explicitly `gpt-5.6-terra` / high.
+  Runtime metadata is unavailable; explicit profiles and configured roles are
+  the available evidence.
+- Style/maintainability is N/A: exact-byte mechanical intake and release-only
+  record/test corrections created no meaningful production structure. Security
+  is N/A: no trust boundary changed; final Wave 11 security remains T-0186.
