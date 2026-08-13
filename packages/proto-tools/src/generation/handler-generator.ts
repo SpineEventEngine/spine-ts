@@ -13,7 +13,9 @@
  */
 
 import { generateHandlerRegistry } from "@spine-event-engine/server/internal/handler-codegen";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { ProtoConfig, ProtoManifest } from "../index.js";
 import { normalizeGeneratedTree } from "./generated-source-policy.js";
 
 /**
@@ -30,7 +32,15 @@ export const HandlerGeneration: Readonly<{ generate(applicationRoot: string): vo
      * @returns Nothing.
      */
     generate(applicationRoot: string): void {
+      const config = existsSync(join(applicationRoot, "spine-proto.json"))
+        ? ProtoConfig.read(applicationRoot)
+        : undefined;
+      const sources = config?.mode === "application"
+        ? config.modelPackages.flatMap((modelPackage: string) =>
+            ProtoManifest.read(join(applicationRoot, "node_modules", modelPackage)).protoFiles,
+          )
+        : [];
       generateHandlerRegistry({ appRoot: applicationRoot });
-      normalizeGeneratedTree(join(applicationRoot, "generated", "handler"), []);
+      normalizeGeneratedTree(join(applicationRoot, "generated", "handler"), sources);
     },
   });
