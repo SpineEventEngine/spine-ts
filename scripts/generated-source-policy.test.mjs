@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { generatedFileNotice, generatedTypeScript } from "./generated-source-policy.mjs";
@@ -8,14 +8,28 @@ describe("generated source policy", () => {
   it("keeps generated TypeScript inventories free of copied copyright and license preambles", () => {
     const roots = [
       "packages/proto/generated",
+      "packages/proto/dist/generated",
       "examples/todo/generated",
+      "examples/todo/dist/generated",
       "examples/projects/generated",
+      "examples/projects/dist/generated",
       "examples/orders/generated",
+      "examples/orders/dist/generated",
       "examples/message-board/model/generated",
+      "examples/message-board/model/dist/generated",
+      "examples/message-board/app/generated/handler",
+      "examples/message-board/app/dist/generated",
     ];
-    const files = [];
+    const files = [
+      "examples/message-board/app/src/model-registry.ts",
+      "examples/message-board/app/dist/src/model-registry.d.ts",
+      "packages/server/test-fixtures/entity-metadata-fixtures.ts",
+    ].map((path) => join(process.cwd(), path));
     for (const root of roots) {
-      const pending = [join(process.cwd(), root)];
+      const directoryRoot = join(process.cwd(), root);
+      if (!existsSync(directoryRoot)) continue;
+      const before = files.length;
+      const pending = [directoryRoot];
       while (pending.length > 0) {
         const directory = pending.pop();
         for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -24,6 +38,7 @@ describe("generated source policy", () => {
           else if (entry.isFile() && /\.(?:d\.ts|ts)$/u.test(path)) files.push(path);
         }
       }
+      expect(files.length).toBeGreaterThan(before);
     }
     for (const file of files)
       expect(readFileSync(file, "utf8")).not.toMatch(
