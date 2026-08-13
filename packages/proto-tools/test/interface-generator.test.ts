@@ -73,7 +73,7 @@ describe("InterfaceGenerator", () => {
 
     InterfaceGenerator.generateCompanions(schema);
 
-    expect(generated).toEqual(["interfaces/example/signals.ts"]);
+    expect(generated).toEqual(["interfaces/signal-family.ts"]);
     expect(printed.join("")).toContain("export interface SignalFamily {}");
     expect(printed.join("")).toContain("[SignalSchema, NestedSchema] as const");
     expect(printed.join("")).toContain("export const SignalFamily");

@@ -25,6 +25,10 @@ import {
 
 const typescriptIdentifier = /^[A-Za-z_$][A-Za-z0-9_$]*$/u;
 
+function companionPath(name: string): string {
+  return `interfaces/${name.replace(/([a-z0-9])([A-Z])/gu, "$1-$2").toLowerCase()}.ts`;
+}
+
 function collectMessages(messages: readonly DescMessage[]): readonly DescMessage[] {
   return messages.flatMap((message) => [message, ...collectMessages(message.nestedMessages)]);
 }
@@ -61,42 +65,90 @@ export const InterfaceGenerator: Readonly<{
   },
 
   generateWithProvider(schema: Schema, provider: InterfaceDeclarationProvider): void {
+    const authored = new Map<string, DescMessage[]>();
+    const generated = new Map<string, { readonly file: (typeof schema.files)[number]; readonly members: readonly DescMessage[] }>();
     for (const file of schema.files) {
-      const option = getOption(file, every_is);
       validateMessageDeclarations(file);
-      // T-0182 supplies resolution/conformance. T-0181 intentionally calls the
-      // provider at this boundary so generated-only output cannot silently
-      // perform authored-source discovery.
       for (const message of collectMessages(file.messages)) {
         const declaration = getOption(message, is);
-        if (declaration.tsType.length > 0) void provider.resolve(declaration.tsType, [message]);
+        if (declaration.tsType.length === 0) continue;
+        const members = authored.get(declaration.tsType) ?? [];
+        members.push(message);
+        authored.set(declaration.tsType, members);
       }
-      if (!option.generate) continue;
-      assertTypeName(option.tsType, file.proto.name);
-      const members = collectMessages(file.messages);
+      const declaration = getOption(file, every_is);
+      if (declaration.generate) {
+        assertTypeName(declaration.tsType, file.proto.name);
+        if (generated.has(declaration.tsType))
+          throw new Error(`spine-proto: ${file.proto.name}: duplicate generated interface name`);
+        generated.set(declaration.tsType, { file, members: collectMessages(file.messages) });
+      }
+    }
+    for (const name of authored.keys()) {
+      if (generated.has(name)) throw new Error(`spine-proto: generated and authored interface names conflict`);
+    }
+    const paths = new Set<string>();
+    for (const name of [...generated.keys(), ...authored.keys()]) {
+      const path = companionPath(name);
+      if (paths.has(path)) throw new Error(`spine-proto: duplicate interface companion path ${path}`);
+      paths.add(path);
+    }
+    const resolved = [...authored.entries()].map(([name, members]) => ({
+      name,
+      members,
+      declaration: provider.resolve(name, members),
+    }));
+    for (const [name, candidate] of generated) {
+      const members = candidate.members;
       if (members.length === 0) {
         throw new Error(
-          `spine-proto: ${file.proto.name}: every_is cannot target an empty message set`,
+          `spine-proto: ${candidate.file.proto.name}: every_is cannot target an empty message set`,
         );
       }
-      const output = schema.generateFile(`interfaces/${file.name}.ts`);
+      const output = schema.generateFile(companionPath(name));
       const define = output.import("MessageInterfaces", "@spine-event-engine/core");
       const token = output.import("MessageInterface", "@spine-event-engine/core", true);
       const schemaImports = members.map((member) => output.importSchema(member));
-      output.preamble(file);
+      output.preamble(candidate.file);
       output.print(
         "/** Generated file-level message interface. */\n",
-        `export interface ${option.tsType} {}\n\n`,
+        `export interface ${name} {}\n\n`,
         "const memberSchemas = [",
         ...schemaImports.flatMap((member, index) => (index === 0 ? [member] : [", ", member])),
         "] as const;\n\n",
         "/** Generated nominal runtime token for this message interface. */\n",
-        output.export("const", option.tsType),
+        output.export("const", name),
         ": ",
         token,
-        `<${option.tsType}, typeof memberSchemas> = `,
+        `<${name}, typeof memberSchemas> = `,
         define,
-        `.define<${option.tsType}, typeof memberSchemas>(memberSchemas);\n`,
+        `.define<${name}, typeof memberSchemas>(memberSchemas);\n`,
+      );
+    }
+    for (const candidate of resolved) {
+      if (candidate.declaration === undefined) continue;
+      if (
+        candidate.declaration.name !== candidate.name ||
+        candidate.declaration.importPath.length === 0
+      )
+        throw new Error("spine-proto: authored interface provider returned an irreconcilable declaration");
+      const output = schema.generateFile(companionPath(candidate.name));
+      const define = output.import("MessageInterfaces", "@spine-event-engine/core");
+      const token = output.import("MessageInterface", "@spine-event-engine/core", true);
+      const schemaImports = candidate.members.map((member) => output.importSchema(member));
+      const sourceFile = candidate.members[0]?.file;
+      if (sourceFile === undefined) throw new Error("spine-proto: authored interface has no members");
+      output.preamble(sourceFile);
+      output.print(
+        `import type { ${candidate.declaration.name} as Authored${candidate.name} } from ${JSON.stringify(candidate.declaration.importPath)};\n\n`,
+        `export type ${candidate.name} = Authored${candidate.name};\n\n`,
+        "const memberSchemas = [",
+        ...schemaImports.flatMap((member, index) => (index === 0 ? [member] : [", ", member])),
+        `] as const;\n\nexport const ${candidate.name}: `,
+        token,
+        `<Authored${candidate.name}, typeof memberSchemas> = `,
+        define,
+        `.define<Authored${candidate.name}, typeof memberSchemas>(memberSchemas);\n`,
       );
     }
   },
