@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { generatedFileNotice, generatedTypeScript } from "./generated-source-policy.mjs";
+import {
+  generatedFileNotice,
+  generatedTypeScript,
+  sourceProtoForGeneratedFile,
+} from "./generated-source-policy.mjs";
 
 describe("generated source policy", () => {
   it("keeps generated TypeScript inventories free of copied copyright and license preambles", () => {
@@ -87,6 +91,24 @@ describe("generated source policy", () => {
     const generated = generatedTypeScript(source, ["spine/example/task.proto"]);
     expect(generated).not.toMatch(/copyright|TeamDev|Upstream Authors/iu);
     expect(generated).toContain("// @generated from file spine/example/task.proto");
+  });
+
+  it("preserves generated metadata while removing a copied line copyright preamble", () => {
+    const source = [
+      "// Copyright 2024 TeamDev",
+      "// Licensed under terms",
+      "// @generated from file spine/example/task.proto",
+      "export const Task = true;",
+    ].join("\n");
+    expect(generatedTypeScript(source, ["spine/example/task.proto"])).toContain(
+      "// @generated from file spine/example/task.proto",
+    );
+  });
+
+  it("derives Proto provenance from generated file naming variants", () => {
+    expect(sourceProtoForGeneratedFile("spine\\task_pb.ts")).toBe("spine/task.proto");
+    expect(sourceProtoForGeneratedFile("spine/task_columns.ts")).toBe("spine/task.proto");
+    expect(sourceProtoForGeneratedFile("spine/registry.ts")).toBe("spine/registry.proto");
   });
 
   it("rejects unstable or machine-local Proto provenance", () => {

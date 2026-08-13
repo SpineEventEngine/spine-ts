@@ -63,6 +63,29 @@ describe("clean proto-tools bootstrap", () => {
 });
 
 describe("generated TypeScript traversal bounds", () => {
+  it("uses generated markers and Proto imports as declaration provenance", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-workflow-provenance-"));
+    try {
+      writeFileSync(
+        join(root, "marked.ts"),
+        "// @generated from file spine/owned.proto\nexport const marked = true;\n",
+      );
+      writeFileSync(
+        join(root, "imported.ts"),
+        'import { task } from "./spine/task_pb.js";\nexport const imported = task;\n',
+      );
+      normalizeGeneratedTypeScriptTree(root, ["spine/fallback.proto"]);
+      expect(readFileSync(join(root, "marked.ts"), "utf8")).toContain(
+        "Source Proto: spine/owned.proto",
+      );
+      expect(readFileSync(join(root, "imported.ts"), "utf8")).toContain(
+        "Source Proto: spine/task.proto",
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects generated output deeper than the bounded inventory", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-workflow-depth-"));
     try {
