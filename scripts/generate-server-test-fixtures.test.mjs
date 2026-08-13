@@ -1,4 +1,7 @@
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { publishFixtureModule, renderFixtureModule } from "./generate-server-test-fixtures.mjs";
@@ -28,16 +31,19 @@ describe("generate-server-test-fixtures", () => {
   });
 
   it("preserves the prior fixture when atomic publication fails", () => {
-    const writes = [];
+    const directory = mkdtempSync(join(tmpdir(), "spine-fixture-publication-"));
+    const target = join(directory, "fixture.ts");
+    writeFileSync(target, "prior\n");
     expect(() =>
-      publishFixtureModule("fixture.ts", "next", {
-        write: (path, source) => writes.push([path, source]),
+      publishFixtureModule(target, "next\n", {
         rename: () => {
           throw new Error("rename failed");
         },
-        remove: (path) => writes.push(["remove", path]),
       }),
     ).toThrow("rename failed");
-    expect(writes.at(-1)).toEqual(["remove", expect.stringContaining(".stage-")]);
+    expect(readFileSync(target, "utf8")).toBe("prior\n");
+    expect(readdirSync(directory).some((name) => name.startsWith(".fixture.ts.stage-"))).toBe(
+      false,
+    );
   });
 });

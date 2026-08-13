@@ -13,6 +13,8 @@
  */
 
 import { generateHandlerRegistry } from "@spine-event-engine/server/internal/handler-codegen";
+import { join } from "node:path";
+import { normalizeGeneratedTree } from "./generated-source-policy.js";
 
 /**
  * Generates application handler registries.
@@ -29,5 +31,6 @@ export const HandlerGeneration: Readonly<{ generate(applicationRoot: string): vo
      */
     generate(applicationRoot: string): void {
       generateHandlerRegistry({ appRoot: applicationRoot });
+      normalizeGeneratedTree(join(applicationRoot, "generated", "handler"), []);
     },
   });
