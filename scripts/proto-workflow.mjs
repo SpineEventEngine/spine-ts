@@ -154,7 +154,10 @@ export function main(argv = process.argv.slice(2)) {
     return descriptorStatus;
   }
 
-  if (command === "generate") return generateTargets();
+  if (command === "generate") {
+    prepareProtoToolsBootstrap(repoRoot);
+    return generateTargets();
+  }
 
   return runCommand("buf lint", resolveBufExecutable(), ["lint"]);
 }
