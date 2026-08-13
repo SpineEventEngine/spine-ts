@@ -18,6 +18,11 @@ import { every_is, is } from "@spine-event-engine/proto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  type InterfaceDeclarationProvider,
+  unresolvedInterfaceProvider,
+} from "./interface-provider.js";
+
 const typescriptIdentifier = /^[A-Za-z_$][A-Za-z0-9_$]*$/u;
 
 function collectMessages(messages: readonly DescMessage[]): readonly DescMessage[] {
@@ -49,11 +54,23 @@ function validateMessageDeclarations(file: {
  */
 export const InterfaceGenerator: Readonly<{
   generateCompanions(schema: Schema): void;
+  generateWithProvider(schema: Schema, provider: InterfaceDeclarationProvider): void;
 }> = Object.freeze({
   generateCompanions(schema: Schema): void {
+    InterfaceGenerator.generateWithProvider(schema, unresolvedInterfaceProvider);
+  },
+
+  generateWithProvider(schema: Schema, provider: InterfaceDeclarationProvider): void {
     for (const file of schema.files) {
       const option = getOption(file, every_is);
       validateMessageDeclarations(file);
+      // T-0182 supplies resolution/conformance. T-0181 intentionally calls the
+      // provider at this boundary so generated-only output cannot silently
+      // perform authored-source discovery.
+      for (const message of collectMessages(file.messages)) {
+        const declaration = getOption(message, is);
+        if (declaration.tsType.length > 0) void provider.resolve(declaration.tsType, [message]);
+      }
       if (!option.generate) continue;
       assertTypeName(option.tsType, file.proto.name);
       const members = collectMessages(file.messages);

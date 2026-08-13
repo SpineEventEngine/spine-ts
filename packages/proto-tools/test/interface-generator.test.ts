@@ -131,6 +131,29 @@ describe("InterfaceGenerator", () => {
     expect(printed.join("")).toContain("[SignalSchema, NestedSchema] as const");
   });
 
+  it("hands message declarations to the authored-interface provider seam", () => {
+    const resolved: string[] = [];
+    const schema = {
+      files: [optionFile("SignalFamily", true, "AuthoredSignal")],
+      generateFile: () => ({
+        import: (name: string) => name,
+        importSchema: (message: { readonly name: string }) => `${message.name}Schema`,
+        preamble: () => undefined,
+        export: (kind: string, name: string) => `export ${kind} ${name}`,
+        print: () => undefined,
+      }),
+    } as unknown as Schema;
+
+    InterfaceGenerator.generateWithProvider(schema, {
+      resolve: (name) => {
+        resolved.push(name);
+        return { name, importPath: "../src/authored.js" };
+      },
+    });
+
+    expect(resolved).toEqual(["AuthoredSignal"]);
+  });
+
   it("rejects malformed message interface declarations before output", () => {
     const schema = {
       files: [optionFile("SignalFamily", true, "Outer.Inner")],
