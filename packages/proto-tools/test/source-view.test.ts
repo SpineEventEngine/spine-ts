@@ -26,20 +26,24 @@ describe("modelSourceView", () => {
     try {
       for (const path of [
         "src",
-        "generated",
-        ".generated.stage-1",
-        ".generated.a.backup-1",
+        "src/generated",
+        "src/.generated.stage-1",
+        "src/.generated.a.backup",
         "dist",
       ])
         mkdirSync(join(root, path));
       writeFileSync(join(root, "src/authored.ts"), "export interface Authored {}\n");
-      writeFileSync(join(root, "generated/live.ts"), "export {};\n");
-      writeFileSync(join(root, ".generated.stage-1/staged.ts"), "export {};\n");
-      writeFileSync(join(root, ".generated.a.backup-1/backup.ts"), "export {};\n");
+      writeFileSync(join(root, "src/generated/live.ts"), "export {};\n");
+      writeFileSync(join(root, "src/.generated.stage-1/staged.ts"), "export {};\n");
+      writeFileSync(join(root, "src/.generated.a.backup/backup.ts"), "export {};\n");
       writeFileSync(join(root, "dist/output.d.ts"), "export {};\n");
-      const view = modelSourceView(root, "generated", join(root, ".generated.stage-x/output"));
+      const view = modelSourceView(
+        root,
+        "src/generated",
+        join(root, "src/.generated.stage-x/output"),
+      );
       expect(view.authoredFiles).toEqual([join(root, "src/authored.ts")]);
-      expect(view.stagedGeneratedRoot).toBe(join(root, ".generated.stage-x/output"));
+      expect(view.stagedGeneratedRoot).toBe(join(root, "src/.generated.stage-x/output"));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

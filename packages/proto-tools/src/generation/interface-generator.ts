@@ -14,7 +14,7 @@
 
 import { getOption, type DescExtension, type DescFile, type DescMessage } from "@bufbuild/protobuf";
 import { createEcmaScriptPlugin, runNodeJs, type Schema } from "@bufbuild/protoplugin";
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync } from "node:fs";
 
@@ -28,10 +28,26 @@ const unresolvedInterfaceProvider: InterfaceDeclarationProvider = Object.freeze(
 function stagedSourceView(): ModelSourceView | undefined {
   const path = `${process.cwd()}/.spine-source-view.json`;
   if (!existsSync(path)) return undefined;
-  const value = JSON.parse(readFileSync(path, "utf8")) as ModelSourceView;
-  if (!Array.isArray(value.authoredFiles) || typeof value.packageRoot !== "string")
+  const value: unknown = JSON.parse(readFileSync(path, "utf8"));
+  if (value === null || typeof value !== "object")
     throw new Error("spine-proto: invalid staged source view");
-  return Object.freeze({ ...value, authoredFiles: Object.freeze([...value.authoredFiles]) });
+  const view = value as ModelSourceView;
+  if (
+    !isAbsolute(view.packageRoot) ||
+    resolve(view.packageRoot) !== view.packageRoot ||
+    !isAbsolute(view.stagedGeneratedRoot) ||
+    resolve(view.stagedGeneratedRoot) !== view.stagedGeneratedRoot ||
+    !Array.isArray(view.authoredFiles) ||
+    view.authoredFiles.some(
+      (file) =>
+        typeof file !== "string" ||
+        !isAbsolute(file) ||
+        resolve(file) !== file ||
+        relative(view.packageRoot, file).startsWith(".."),
+    )
+  )
+    throw new Error("spine-proto: invalid staged source view");
+  return Object.freeze({ ...view, authoredFiles: Object.freeze([...view.authoredFiles]) });
 }
 const reservedTypeScriptWords = new Set([
   "await",

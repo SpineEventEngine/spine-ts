@@ -13,7 +13,7 @@
  */
 
 import { lstatSync, readdirSync } from "node:fs";
-import { join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const maximumSourceViewDepth = 32;
 const maximumSourceViewEntries = 10_000;
@@ -54,16 +54,14 @@ function collectAuthored(root: string, excluded: readonly string[]): readonly st
         throw new Error("spine-proto: source view exceeds bounded traversal");
       const path = join(current.path, name);
       const relativePath = relative(root, path);
-      const transactionRoot = `.${excluded[0]!}`;
       if (
         excluded.some(
           (entry) =>
             relativePath === entry ||
             relativePath.startsWith(`${entry}${sep}`) ||
-            relativePath.startsWith(`${entry}-`),
-        ) ||
-        relativePath.startsWith(`${transactionRoot}.stage-`) ||
-        /^\.generated\.[^.]+\.backup-/u.test(relativePath)
+            relativePath.startsWith(`${entry}-`) ||
+            (entry.endsWith(".") && relativePath.startsWith(entry)),
+        )
       )
         continue;
       const entry = lstatSync(path);
@@ -94,9 +92,13 @@ export function modelSourceView(
 ): ModelSourceView {
   const root = resolve(packageRoot);
   const generated = generatedRoot.replaceAll("\\", "/");
+  const generatedDirectory = dirname(generated);
+  const generatedName = basename(generated);
   const excluded = [generated, "dist"];
+  const siblingStage = join(generatedDirectory, `.${generatedName}.stage-`);
+  const siblingBackup = join(generatedDirectory, `.${generatedName}.`);
   return Object.freeze({
-    authoredFiles: Object.freeze(collectAuthored(root, excluded)),
+    authoredFiles: Object.freeze(collectAuthored(root, [...excluded, siblingStage, siblingBackup])),
     packageRoot: root,
     stagedGeneratedRoot: resolve(stagedGeneratedRoot),
   });
