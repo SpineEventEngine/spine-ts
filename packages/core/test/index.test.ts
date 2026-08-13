@@ -13,7 +13,7 @@
  */
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import type { Message } from "@bufbuild/protobuf";
+import type { Message, MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { describe, expect, expectTypeOf, it } from "vitest";
@@ -83,6 +83,34 @@ describe("MessageInterfaces", () => {
   it("rejects empty and malformed runtime membership", () => {
     expect(() => MessageInterfaces.define([] as never)).toThrow("at least one schema");
     expect(() => MessageInterfaces.define([{}] as never)).toThrow("generated message schema");
+  });
+
+  it("enforces non-empty compatible schema tuples at compile time", () => {
+    const compatible = MessageInterfaces.define<SignalMessage, readonly [typeof CommandSchema]>([
+      CommandSchema,
+    ]);
+    expectTypeOf(compatible.schemas).toEqualTypeOf<readonly [typeof CommandSchema]>();
+
+    const compileFailures = () => {
+      // @ts-expect-error Interface membership cannot be empty.
+      MessageInterfaces.define<SignalMessage, readonly []>([]);
+      // @ts-expect-error Interface membership contains generated message schemas only.
+      MessageInterfaces.define<SignalMessage, readonly [{}]>([{}]);
+      // @ts-expect-error Every member shape must implement the declared interface.
+      MessageInterfaces.define<{ readonly absent: string }, readonly [typeof CommandSchema]>([
+        CommandSchema,
+      ]);
+
+      const mixed = MessageInterfaces.define<
+        Message,
+        readonly [typeof RequiredNameSchema, typeof PayloadRejectedSchema]
+      >([RequiredNameSchema, PayloadRejectedSchema]);
+      type MixedMember = MessageShape<(typeof mixed.schemas)[number]>;
+      const mixedMember = undefined as unknown as MixedMember;
+      // @ts-expect-error `name` is absent from one concrete member of the interface tuple.
+      void mixedMember.name;
+    };
+    void compileFailures;
   });
 });
 
