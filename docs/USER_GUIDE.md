@@ -767,7 +767,6 @@ const browserServer = await new Server({
     authorize,
     contexts,
     clock,
-    fingerprint: (principal) => principal.id,
   },
 }).run();
 

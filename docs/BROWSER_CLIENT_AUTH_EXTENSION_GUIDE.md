@@ -340,7 +340,6 @@ is checked on each lifecycle request and again on reconnect/expiry.
 | Subscription request bytes                           |                         1,048,576 bytes | Rejects before retained binding/callback work.                                                  |
 | Subscription backend envelope                        |                         1,048,576 bytes | Rejects before retention.                                                                       |
 | Subscription relay                                   |           64 messages / 1,048,576 bytes | FIFO relay terminates with `ResourceExhausted`; it does not silently discard.                   |
-| Subscription binding count                           |                                     100 | Deterministic capacity rejection.                                                               |
 | Pending work per binding                             |                                       1 | One active operation plus one queued operation is permitted; a third rejects as `binding-busy`. |
 | Subscription operation / shutdown                    |                    30,000 ms / 1,000 ms | Abort-aware callbacks; cleanup failures remain observable/retryable where appropriate.          |
 | Envoy connection-manager request/stream idle timeout |                             30 s / 30 s | Finite public request/header handling.                                                          |

@@ -818,7 +818,9 @@ Storage exports include `Storage`, `StorageContext`, `StorageFactory`,
 `InMemoryStorageBackend`, `InMemoryRecordStorage`, `EventStore`,
 `OnEventAccepted`, `EntityStateHistoryStorage`, and `EntityEventStorage`.
 `StorageFactory` owns one mandatory adapter seam,
-`createRecordStorage(context, spec)`.
+`createRecordStorage(context, spec, group?)`. `StorageGroup` is an optional
+named third argument that separates otherwise equal record families without
+changing a `RecordSpec`.
 `RecordStorage` persists identified Protobuf records with deterministic
 ID/column/path queries, stable continuations after sorted row keys,
 non-negative offsets, positive limits, and simple field masks over cloned
@@ -827,7 +829,7 @@ results. The in-memory adapter is process-local, tenant-aware through
 `InMemoryStorageBackend` owns an isolated backend; independently constructed
 factories deliberately share compatible canonical scopes only when supplied
 the same backend token. Storage adapters must make repeated
-`createRecordStorage(context, spec)` calls in one logical backend observe the
+`createRecordStorage(context, spec, group?)` calls in one logical backend observe the
 same records while returning independently closeable storage handles.
 `RecordStorage.delete(id)`, `read(id)`, and
 `compareAndSet(id, expected, next)` address actual storage slot IDs.
@@ -839,8 +841,8 @@ returns logical record IDs derived from each record body through the
 `RecordSpec`.
 `RecordSpec` rejects duplicate declared `RecordColumn` names in its constructor,
 before a factory or adapter receives the specification.
-It requires a stable, nonblank `storageKey` and exactly one ID descriptor:
-either Protobuf `idSchema` or a nonblank primitive `idKind`. Every
+It requires exactly one ID descriptor: either Protobuf `idSchema` or a nonblank
+primitive `idKind`. Every
 `RecordColumn` requires a nonblank `valueType` descriptor. These declarations
 form the deterministic layout-compatibility fingerprint that adapters bind and
 check before row access.
@@ -948,10 +950,8 @@ TypeDoc output and are not broadly re-exported from the package root.
 
 ### Storage identity and maintenance
 
-`@spine-event-engine/storage` requires a stable, nonblank `RecordSpec.storageKey`
-for every physical record layout. Providers bind its length-delimited context,
-tenant-mode, and storage-key scope to a deterministic compatibility fingerprint
-before accessing rows; an incompatible reopen fails before any read or write.
+`@spine-event-engine/storage` identifies physical in-memory record families by
+context, tenant mode, source type, record type, and optional `StorageGroup`.
 `InMemoryStorageBackend` is a root-exported opaque token for deliberate
 in-memory sharing: factories constructed without one are isolated, while
 factories supplied the same token share only compatible canonical scopes.

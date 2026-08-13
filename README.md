@@ -50,7 +50,7 @@ Install the workspace dependencies:
 pnpm install --frozen-lockfile
 ```
 
-Start the MessageBoard server in one terminal:
+Start the workspace-only in-memory MessageBoard server in one terminal:
 
 ```bash
 pnpm --dir examples/message-board/app start
@@ -65,6 +65,11 @@ pnpm --dir examples/message-board/web start
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173). The example uses
 in-memory storage and a local development identity, so it is safe to explore
 without cloud credentials.
+
+For local, unpublished production-image smoke builds, run
+`pnpm images:build:local`. It creates only the fixed local tags
+`spine-ts/message-board:local`, `spine-ts/standalone-gateway:local`, and
+`spine-ts/simple-delivery-server:local`; it does not publish images.
 
 See the [MessageBoard guide](examples/message-board/README.md) for a beginner walkthrough.
 

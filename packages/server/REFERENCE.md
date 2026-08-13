@@ -142,10 +142,10 @@ and callbacks and never returns them through public subscription responses.
 
 The durable registry preserves opaque records through a process restart.
 It validates record family, version, type, storage key identity, owner
-fingerprint, tenant, expiry, lifecycle, fence, lease, canonical byte
+approved `GatewayAuthenticatedSubscription`, trusted Actor/Tenant Topic, and expiry
 accounting, and finite record size before use. Invalid data fails closed with a
 generic registry error. A namespace-global quota reserves the final public ID
-before creation; the reservation release is asynchronous and exactly once.
+directly before backend creation; no durable reservation is retained.
 Two gateways coordinate ownership with finite leases and fences. Before each
 backend effect and public update, the gateway checks its durable owner/fence
 guard. A false guard suppresses that effect or update; renewal also aborts the
