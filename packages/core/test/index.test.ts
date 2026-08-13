@@ -107,6 +107,10 @@ describe("MessageInterfaces", () => {
     >();
 
     const compileFailures = () => {
+      // @ts-expect-error Public factory members are immutable.
+      MessageInterfaces.define = () => compatible;
+      // @ts-expect-error Public guard members are immutable.
+      MessageInterfaces.is = () => true;
       // @ts-expect-error Interface membership cannot be empty.
       MessageInterfaces.define<SignalMessage, readonly []>([]);
       // @ts-expect-error Interface membership contains generated message schemas only.

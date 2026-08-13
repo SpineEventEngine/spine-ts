@@ -145,7 +145,12 @@ function isMessageSchema(value: unknown): value is MessageSchema {
 /**
  * Creates and validates nominal generated message-interface tokens.
  */
-export namespace MessageInterfaces {
+export const MessageInterfaces: Readonly<{
+  readonly define: <TInterface extends object, const Schemas extends InterfaceSchemas>(
+    schemas: InterfaceMember<Schemas> extends TInterface ? Schemas : never,
+  ) => MessageInterface<TInterface, Schemas>;
+  readonly is: (value: unknown) => value is MessageInterface<object, InterfaceSchemas>;
+}> = Object.freeze({
   /**
    * Creates a nominal token from a non-empty tuple of generated message schemas.
    *
@@ -159,7 +164,7 @@ export namespace MessageInterfaces {
    * @param schemas Generated message schemas belonging to the interface.
    * @returns A frozen nominal token with concrete schema membership.
    */
-  export function define<TInterface extends object, const Schemas extends InterfaceSchemas>(
+  define<TInterface extends object, const Schemas extends InterfaceSchemas>(
     schemas: InterfaceMember<Schemas> extends TInterface ? Schemas : never,
   ): MessageInterface<TInterface, Schemas> {
     if (schemas.length === 0) throw new Error("A message interface requires at least one schema.");
@@ -177,7 +182,7 @@ export namespace MessageInterfaces {
     const token = Object.freeze({ schemas: Object.freeze(uniqueSchemas) });
     MESSAGE_INTERFACE_TOKENS.add(token);
     return token as unknown as MessageInterface<TInterface, Schemas>;
-  }
+  },
 
   /**
    * Determines whether a value is the exact token instance created by this factory.
@@ -188,11 +193,10 @@ export namespace MessageInterfaces {
    * @param value The runtime value to inspect.
    * @returns Whether `value` is a factory-created message-interface token.
    */
-  export function is(value: unknown): value is MessageInterface<object, InterfaceSchemas> {
+  is(value: unknown): value is MessageInterface<object, InterfaceSchemas> {
     return typeof value === "object" && value !== null && MESSAGE_INTERFACE_TOKENS.has(value);
-  }
-}
-Object.freeze(MessageInterfaces);
+  },
+} as const);
 
 /**
  * Structured result returned by {@link Validate.message}.
