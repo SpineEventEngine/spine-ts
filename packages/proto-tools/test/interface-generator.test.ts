@@ -29,10 +29,17 @@ import { describe, expect, it } from "vitest";
 import { InterfaceGenerator } from "../src/generation/interface-generator.js";
 import type { Schema } from "@bufbuild/protoplugin";
 
-function optionFile(tsType: string, generate = true, messageType = "", javaType = "") {
+function optionFile(
+  tsType: string,
+  generate = true,
+  messageType = "",
+  javaType = "",
+  sourceName = "example/signals.proto",
+  packageName = "example",
+) {
   const file = create(FileDescriptorProtoSchema, {
-    name: "example/signals.proto",
-    package: "example",
+    name: sourceName,
+    package: packageName,
     dependency: ["spine/options.proto"],
     options: {},
     messageType: [
@@ -119,7 +126,8 @@ describe("InterfaceGenerator", () => {
       files: [optionFile("SignalFamily", true, "AuthoredSignal")],
       generateFile: () => ({
         import: (name: string) => name,
-        importSchema: (message: { readonly name: string }) => `${message.name}Schema`,
+        importSchema: (message: { readonly typeName: string }) =>
+          `${message.typeName.replaceAll(".", "_")}Schema`,
         preamble: () => undefined,
         export: (kind: string, name: string) => `export ${kind} ${name}`,
         print: (...parts: readonly string[]) => printed.push(parts.join("")),
@@ -128,7 +136,7 @@ describe("InterfaceGenerator", () => {
 
     InterfaceGenerator.generateCompanions(schema);
 
-    expect(printed.join("")).toContain("[SignalSchema, NestedSchema] as const");
+    expect(printed.join("")).toContain("[example_SignalSchema, example_Signal_NestedSchema] as const");
   });
 
   it("hands message declarations to the authored-interface provider seam", () => {
@@ -138,7 +146,8 @@ describe("InterfaceGenerator", () => {
       files: [optionFile("SignalFamily", true, "AuthoredSignal")],
       generateFile: (path: string) => ({
         import: (name: string) => name,
-        importSchema: (message: { readonly name: string }) => `${message.name}Schema`,
+        importSchema: (message: { readonly typeName: string }) =>
+          `${message.typeName.replaceAll(".", "_")}Schema`,
         preamble: () => undefined,
         export: (kind: string, name: string) => `export ${kind} ${name}`,
         print: (...parts: readonly string[]) => output.push(`${path}:${parts.join("")}`),
@@ -203,5 +212,46 @@ describe("InterfaceGenerator", () => {
       ).toThrow("irreconcilable");
       expect(generated).toBe(0);
     }
+  });
+
+  it("accumulates nested members across files in one authored provider call", () => {
+    const calls: readonly unknown[][] = [];
+    const output: string[] = [];
+    const schema = {
+      files: [
+        optionFile("", false, "SharedSignal"),
+        optionFile("", false, "SharedSignal", "", "other/signals.proto", "other"),
+      ],
+      generateFile: () => ({
+        import: (name: string) => name,
+        importSchema: (message: { readonly typeName: string }) =>
+          `${message.typeName.replaceAll(".", "_")}Schema`,
+        preamble: () => undefined,
+        export: (kind: string, name: string) => `export ${kind} ${name}`,
+        print: (...parts: readonly string[]) => output.push(parts.join("")),
+      }),
+    } as unknown as Schema;
+    InterfaceGenerator.generateWithProvider(schema, {
+      resolve: (name, members) => {
+        (calls as unknown[][]).push([...members]);
+        return { name, importPath: "../src/shared.js" };
+      },
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toHaveLength(2);
+    expect(output.join("")).toContain("example_SignalSchema, other_SignalSchema");
+  });
+
+  it("rejects authored companion-path collisions before output", () => {
+    let generated = 0;
+    const schema = {
+      files: [optionFile("", false, "AB"), optionFile("", false, "Ab")],
+      generateFile: () => {
+        generated++;
+        throw new Error("must not emit");
+      },
+    } as unknown as Schema;
+    expect(() => InterfaceGenerator.generateCompanions(schema)).toThrow("duplicate interface companion path");
+    expect(generated).toBe(0);
   });
 });
