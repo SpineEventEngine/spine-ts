@@ -2,6 +2,14 @@
 
 Status: Implementation and mechanical preflight complete; specialist review in progress.
 
+## Accepted Findings
+
+- Documentation, API, style, and reliability reviewers accepted corrections for
+  all direct generators, fail-closed paths, package-qualified registries,
+  generated declaration TSDoc, atomic fixtures, and durable records.
+- Security is concrete N/A: the correction narrows provenance inputs and does
+  not expand a configured trust boundary.
+
 ## Specialist Review Assignments
 
 - Documentation completeness: existing `documentation_reviewer`, immutable
