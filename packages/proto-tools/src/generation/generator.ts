@@ -35,6 +35,7 @@ import { ProtoConfig, ProtoManifest } from "../index.js";
 import { readManifestAt } from "../io/manifest-reader.js";
 import { ModelGraph } from "../model/model-graph.js";
 import { ManifestFile, type ManifestFileOperations } from "../io/atomic-manifest.js";
+import { generatedNotice, normalizeGeneratedTree } from "./generated-source-policy.js";
 
 /**
  * Bounded seams used to test failure handling while retaining real Buf integration.
@@ -296,6 +297,7 @@ const protoGeneration = Object.freeze({
           config.packageName,
           graph.models.filter((model) => config.dependencies.includes(model.name)),
         );
+        normalizeGeneratedTree(output, manifest.protoFiles);
         protoGeneration.publish(
           packageRoot,
           config.generatedRoot,
@@ -429,6 +431,8 @@ const protoGeneration = Object.freeze({
       .sort((left, right) => left.name.localeCompare(right.name));
     const aliases = imports.map((_, index) => `model${String(index)}`);
     const source = [
+      generatedNotice(imports.flatMap((model) => ProtoManifest.read(model.root).protoFiles)).trimEnd(),
+      "",
       'import { TypeRegistry } from "@spine-event-engine/core";',
       ...imports.map(
         (model, index) =>
@@ -679,6 +683,8 @@ const protoGeneration = Object.freeze({
       .sort((left, right) => left.name.localeCompare(right.name))
       .map((dependency, index) => ({ ...dependency, alias: `dependency${String(index)}` }));
     const source = [
+      generatedNotice(generated.map(({ path }) => path.replace(/^\.\//u, "").replace(/_pb\.js$/u, ".proto"))).trimEnd(),
+      "",
       'import type { ProtoModule } from "@spine-event-engine/proto";',
       'import type { Message } from "@bufbuild/protobuf";',
       'import type { GenMessage } from "@bufbuild/protobuf/codegenv2";',
