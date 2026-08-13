@@ -195,13 +195,6 @@ export function prepareProtoToolsBootstrap(root = repoRoot, run = runCommandIn) 
   const cacheRoot = join(root, "packages/proto-tools/node_modules/.cache");
   mkdirSync(cacheRoot, { recursive: true });
   const compiler = join(root, "node_modules/typescript/bin/tsc");
-  const protoBuildStatus = run(
-    "Proto package bootstrap build",
-    process.execPath,
-    [compiler, "--project", join(root, "packages/proto/tsconfig.json")],
-    root,
-  );
-  if (protoBuildStatus !== 0) throw new Error("Proto package bootstrap build failed");
   const outputRoot = mkdtempSync(join(cacheRoot, "spine-proto-tools-bootstrap-"));
   const executable = join(outputRoot, "cli/spine-proto-bootstrap.js");
   const status = run(

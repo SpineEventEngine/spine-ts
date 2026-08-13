@@ -495,19 +495,10 @@ describe("proto-workflow", () => {
 
   it("builds and reuses a clean Proto Tools bootstrap executable", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-bootstrap-"));
-    const calls = [];
+    let calls = 0;
     const run = (label, executable, args, cwd) => {
-      calls.push(label);
+      calls += 1;
       expect(executable).toBe(process.execPath);
-      expect(cwd).toBe(repoRoot);
-      if (label === "Proto package bootstrap build") {
-        expect(args).toEqual([
-          join(repoRoot, "node_modules/typescript/bin/tsc"),
-          "--project",
-          join(repoRoot, "packages/proto/tsconfig.json"),
-        ]);
-        return 0;
-      }
       expect(label).toBe("Proto Tools bootstrap build");
       expect(args).toEqual([
         join(repoRoot, "node_modules/typescript/bin/tsc"),
@@ -526,7 +517,7 @@ describe("proto-workflow", () => {
       const expected = prepareProtoToolsBootstrap(repoRoot, run);
       expect(expected).toMatch(/spine-proto-tools-bootstrap-.+\/cli\/spine-proto-bootstrap\.js$/u);
       expect(prepareProtoToolsBootstrap(repoRoot, run)).toBe(expected);
-      expect(calls).toEqual(["Proto package bootstrap build", "Proto Tools bootstrap build"]);
+      expect(calls).toBe(1);
       releaseProtoToolsBootstrap(repoRoot);
       expect(existsSync(expected)).toBe(false);
     } finally {

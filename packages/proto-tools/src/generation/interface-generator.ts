@@ -12,9 +12,8 @@
  * the License.
  */
 
-import { getOption, type DescMessage } from "@bufbuild/protobuf";
+import { getOption, type DescExtension, type DescFile, type DescMessage } from "@bufbuild/protobuf";
 import { createEcmaScriptPlugin, runNodeJs, type Schema } from "@bufbuild/protoplugin";
-import { every_is, is } from "@spine-event-engine/proto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -24,6 +23,24 @@ const typescriptIdentifier = /^[A-Za-z_$][A-Za-z0-9_$]*$/u;
 const unresolvedInterfaceProvider: InterfaceDeclarationProvider = Object.freeze({
   resolve: () => undefined,
 });
+
+function optionExtension(files: readonly DescFile[], name: "every_is" | "is"): DescExtension {
+  const visited = new Set<DescFile>();
+  const find = (candidates: readonly DescFile[]): DescExtension | undefined => {
+    for (const file of candidates) {
+      if (visited.has(file)) continue;
+      visited.add(file);
+      const extension = file.extensions.find((candidate) => candidate.name === name);
+      if (extension !== undefined) return extension;
+      const nested = find(file.dependencies);
+      if (nested !== undefined) return nested;
+    }
+    return undefined;
+  };
+  const extension = find(files);
+  if (extension === undefined) throw new Error(`spine-proto: missing (${name}) option descriptor`);
+  return extension;
+}
 
 function companionPath(name: string): string {
   return `interfaces/${name.replace(/([a-z0-9])([A-Z])/gu, "$1-$2").toLowerCase()}.ts`;
@@ -39,12 +56,15 @@ function assertTypeName(name: string, source: string): void {
   }
 }
 
-function validateMessageDeclarations(file: {
-  readonly proto: { readonly name: string };
-  readonly messages: readonly DescMessage[];
-}): void {
+function validateMessageDeclarations(
+  isOption: DescExtension,
+  file: {
+    readonly proto: { readonly name: string };
+    readonly messages: readonly DescMessage[];
+  },
+): void {
   for (const message of collectMessages(file.messages)) {
-    const option = getOption(message, is);
+    const option = getOption(message, isOption) as { readonly tsType: string };
     if (option.tsType.length > 0)
       assertTypeName(option.tsType, `${file.proto.name}:${message.name}`);
   }
@@ -65,6 +85,9 @@ export const InterfaceGenerator: Readonly<{
   },
 
   generateWithProvider(schema: Schema, provider: InterfaceDeclarationProvider): void {
+    const optionFiles = schema.allFiles ?? schema.files;
+    const everyIs = optionExtension(optionFiles, "every_is");
+    const isOption = optionExtension(optionFiles, "is");
     const authored = new Map<string, DescMessage[]>();
     const generated = new Map<
       string,
@@ -74,15 +97,18 @@ export const InterfaceGenerator: Readonly<{
       }
     >();
     for (const file of schema.files) {
-      validateMessageDeclarations(file);
+      validateMessageDeclarations(isOption, file);
       for (const message of collectMessages(file.messages)) {
-        const declaration = getOption(message, is);
+        const declaration = getOption(message, isOption) as { readonly tsType: string };
         if (declaration.tsType.length === 0) continue;
         const members = authored.get(declaration.tsType) ?? [];
         members.push(message);
         authored.set(declaration.tsType, members);
       }
-      const declaration = getOption(file, every_is);
+      const declaration = getOption(file, everyIs) as {
+        readonly generate: boolean;
+        readonly tsType: string;
+      };
       if (declaration.generate) {
         assertTypeName(declaration.tsType, file.proto.name);
         if (generated.has(declaration.tsType))
