@@ -13,6 +13,7 @@
  */
 
 import type { DescMessage } from "@bufbuild/protobuf";
+import type { ModelSourceView } from "./source-view.js";
 
 /**
  * A resolved authored interface declaration supplied by an authored-interface provider.
@@ -46,5 +47,9 @@ export interface InterfaceDeclarationProvider {
    * @param members Concrete generated message members of that interface.
    * @returns The authored declaration to alias, or `undefined` when unresolved.
    */
-  resolve(name: string, members: readonly DescMessage[]): AuthoredInterfaceDeclaration | undefined;
+  resolve(
+    name: string,
+    members: readonly DescMessage[],
+    sourceView: ModelSourceView | undefined,
+  ): AuthoredInterfaceDeclaration | undefined;
 }

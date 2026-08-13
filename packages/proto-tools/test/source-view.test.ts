@@ -24,12 +24,18 @@ describe("modelSourceView", () => {
   it("excludes live generated, stage, backup, and declaration trees while redirecting to stage", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-source-view-"));
     try {
-      for (const path of ["src", "generated", "generated.stage-1", "generated.backup-1", "dist"])
+      for (const path of [
+        "src",
+        "generated",
+        ".generated.stage-1",
+        ".generated.a.backup-1",
+        "dist",
+      ])
         mkdirSync(join(root, path));
       writeFileSync(join(root, "src/authored.ts"), "export interface Authored {}\n");
       writeFileSync(join(root, "generated/live.ts"), "export {};\n");
-      writeFileSync(join(root, "generated.stage-1/staged.ts"), "export {};\n");
-      writeFileSync(join(root, "generated.backup-1/backup.ts"), "export {};\n");
+      writeFileSync(join(root, ".generated.stage-1/staged.ts"), "export {};\n");
+      writeFileSync(join(root, ".generated.a.backup-1/backup.ts"), "export {};\n");
       writeFileSync(join(root, "dist/output.d.ts"), "export {};\n");
       const view = modelSourceView(root, "generated", join(root, ".generated.stage-x/output"));
       expect(view.authoredFiles).toEqual([join(root, "src/authored.ts")]);

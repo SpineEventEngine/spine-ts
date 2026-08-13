@@ -37,6 +37,7 @@ import { ModelGraph } from "../model/model-graph.js";
 import { ManifestFile, type ManifestFileOperations } from "../io/atomic-manifest.js";
 import { generatedSource, normalizeGeneratedTree } from "./generated-source-policy.js";
 import { modelSourceView } from "./source-view.js";
+import type { ModelSourceView } from "./source-view.js";
 
 /**
  * Bounded seams used to test failure handling while retaining real Buf integration.
@@ -75,6 +76,7 @@ export interface GenerationOperations {
     output: string,
     owned: readonly string[],
     packageName: string,
+    sourceView: ModelSourceView,
     runner?: SubprocessRunner,
   ) => void;
 
@@ -288,7 +290,7 @@ const protoGeneration = Object.freeze({
       const moduleRoot = join(stage, "module");
       const output = join(moduleRoot, "output");
       try {
-        modelSourceView(packageRoot, config.generatedRoot, output);
+        const sourceView = modelSourceView(packageRoot, config.generatedRoot, output);
         protoGeneration.copyOwnedSources(
           packageRoot,
           config.protoRoot,
@@ -311,6 +313,7 @@ const protoGeneration = Object.freeze({
           output,
           manifest.protoFiles,
           config.packageName,
+          sourceView,
           operations.runProcess,
         );
         protoGeneration.assertRejectionRuntimeDependency(packageRoot, config.packageName, output);
@@ -632,9 +635,15 @@ const protoGeneration = Object.freeze({
     output: string,
     owned: readonly string[],
     packageName: string,
+    sourceView: ModelSourceView,
     runner: SubprocessRunner = (command, arguments_, options) =>
       spawnSync(command, arguments_, options),
   ): void {
+    writeFileSync(
+      join(moduleRoot, ".spine-source-view.json"),
+      `${JSON.stringify(sourceView)}\n`,
+      "utf8",
+    );
     const interfaceGenerator = fileURLToPath(
       new URL(
         import.meta.url.endsWith(".ts") ? "./interface-generator.ts" : "./interface-generator.js",

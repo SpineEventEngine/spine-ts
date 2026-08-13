@@ -15,6 +15,9 @@
 import { lstatSync, readdirSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 
+const maximumSourceViewDepth = 32;
+const maximumSourceViewEntries = 10_000;
+
 /**
  * Stable compiler input view for authored sources and staged generated output.
  */
@@ -26,6 +29,9 @@ export interface ModelSourceView {
    */
   readonly authoredFiles: readonly string[];
 
+  /** Absolute model package root used to resolve authored imports. */
+  readonly packageRoot: string;
+
   // prettier-ignore
 
   /**
@@ -34,34 +40,44 @@ export interface ModelSourceView {
   readonly stagedGeneratedRoot: string;
 }
 
-function collectAuthored(
-  root: string,
-  current: string,
-  excluded: readonly string[],
-): readonly string[] {
+function collectAuthored(root: string, excluded: readonly string[]): readonly string[] {
   const files: string[] = [];
-  for (const name of readdirSync(current).sort()) {
-    const path = join(current, name);
-    const relativePath = relative(root, path);
-    if (
-      excluded.some(
-        (entry) =>
-          relativePath === entry ||
-          relativePath.startsWith(`${entry}${sep}`) ||
-          relativePath.startsWith(`${entry}-`),
+  const pending = [{ path: root, depth: 0 }];
+  let entries = 0;
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined) continue;
+    if (current.depth > maximumSourceViewDepth)
+      throw new Error("spine-proto: source view exceeds bounded traversal");
+    for (const name of readdirSync(current.path).sort().reverse()) {
+      entries += 1;
+      if (entries > maximumSourceViewEntries)
+        throw new Error("spine-proto: source view exceeds bounded traversal");
+      const path = join(current.path, name);
+      const relativePath = relative(root, path);
+      const transactionRoot = `.${excluded[0] ?? "generated"}`;
+      if (
+        excluded.some(
+          (entry) =>
+            relativePath === entry ||
+            relativePath.startsWith(`${entry}${sep}`) ||
+            relativePath.startsWith(`${entry}-`),
+        ) ||
+        relativePath.startsWith(`${transactionRoot}.stage-`) ||
+        /^\.generated\.[^.]+\.backup-/u.test(relativePath)
       )
-    )
-      continue;
-    const entry = lstatSync(path);
-    if (entry.isSymbolicLink()) continue;
-    if (entry.isDirectory()) files.push(...collectAuthored(root, path, excluded));
-    else if (
-      [".cts", ".mts", ".ts", ".tsx"].some((extension) => name.endsWith(extension)) &&
-      !name.endsWith(".d.ts")
-    )
-      files.push(path);
+        continue;
+      const entry = lstatSync(path);
+      if (entry.isSymbolicLink()) continue;
+      if (entry.isDirectory()) pending.push({ path, depth: current.depth + 1 });
+      else if (
+        [".cts", ".mts", ".ts", ".tsx"].some((extension) => name.endsWith(extension)) &&
+        !name.endsWith(".d.ts")
+      )
+        files.push(path);
+    }
   }
-  return files;
+  return files.sort();
 }
 
 /**
@@ -79,9 +95,10 @@ export function modelSourceView(
 ): ModelSourceView {
   const root = resolve(packageRoot);
   const generated = generatedRoot.replaceAll("\\", "/");
-  const excluded = [generated, `${generated}.stage`, `${generated}.backup`, "dist"];
+  const excluded = [generated, "dist"];
   return Object.freeze({
-    authoredFiles: Object.freeze(collectAuthored(root, root, excluded)),
+    authoredFiles: Object.freeze(collectAuthored(root, excluded)),
+    packageRoot: root,
     stagedGeneratedRoot: resolve(stagedGeneratedRoot),
   });
 }

@@ -16,13 +16,23 @@ import { getOption, type DescExtension, type DescFile, type DescMessage } from "
 import { createEcmaScriptPlugin, runNodeJs, type Schema } from "@bufbuild/protoplugin";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { existsSync, readFileSync } from "node:fs";
 
 import type { InterfaceDeclarationProvider } from "./interface-provider.js";
+import type { ModelSourceView } from "./source-view.js";
 
 const typescriptIdentifier = /^[A-Za-z_$][A-Za-z0-9_$]*$/u;
 const unresolvedInterfaceProvider: InterfaceDeclarationProvider = Object.freeze({
   resolve: () => undefined,
 });
+function stagedSourceView(): ModelSourceView | undefined {
+  const path = `${process.cwd()}/.spine-source-view.json`;
+  if (!existsSync(path)) return undefined;
+  const value = JSON.parse(readFileSync(path, "utf8")) as ModelSourceView;
+  if (!Array.isArray(value.authoredFiles) || typeof value.packageRoot !== "string")
+    throw new Error("spine-proto: invalid staged source view");
+  return Object.freeze({ ...value, authoredFiles: Object.freeze([...value.authoredFiles]) });
+}
 const reservedTypeScriptWords = new Set([
   "await",
   "break",
@@ -142,6 +152,7 @@ export const InterfaceGenerator: Readonly<{
       (schema as { readonly allFiles?: readonly DescFile[] }).allFiles ?? schema.files;
     const everyIs = optionExtension(optionFiles, "every_is");
     const isOption = optionExtension(optionFiles, "is");
+    const sourceView = stagedSourceView();
     const authored = new Map<string, DescMessage[]>();
     const generated = new Map<
       string,
@@ -184,7 +195,7 @@ export const InterfaceGenerator: Readonly<{
     const resolved = [...authored.entries()].map(([name, members]) => ({
       name,
       members,
-      declaration: provider.resolve(name, members),
+      declaration: provider.resolve(name, members, sourceView),
     }));
     for (const candidate of generated.values()) {
       if (candidate.members.length === 0)
