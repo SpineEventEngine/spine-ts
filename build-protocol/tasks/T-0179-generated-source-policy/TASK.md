@@ -14,6 +14,13 @@ changed-file ESLint, cleanup, formatting, and diff checks passed. Changed-range
 coverage is 83/88 executable lines (94.32%). Status remains targeted re-review
 ready; the release profile has not run.
 
+Final accepted-batch evidence: build plus six focused files passed 176/176;
+generation repeated twice and current-output passed. Tooling, TSDoc, copyright,
+cleanup, exact ESLint, formatting, and diff checks passed. Coverage is 97.63%
+package-production lines and 91.55% branches, with declaration normalization at
+100% lines; changed executable coverage is 114/123 (92.68%). Status is
+correction-complete/final re-review-ready; `verify:release` remains unrun.
+
 ## Objective
 
 Make every Spine-owned TypeScript generator emit deterministic generated-file

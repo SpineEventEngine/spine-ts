@@ -58,6 +58,21 @@ Message Board notice-idempotency correction are resolved by implementation.
   35/35, generator 11/11, copyright 4/4, fixture 11/12, root adapter 2/4, and
   workflow 20/22. Status remains targeted re-review ready; release is unrun.
 
+## Final Accepted-Batch Disposition
+
+- Deferred clean bootstrap, Buf-marker precedence, post-emit declaration notices
+  for framework/examples/app handler output, handler source validation before
+  publication, and framework module declaration provenance are resolved.
+- Independent final verification is build plus six focused files 176/176,
+  repeated generation/current-output, and tooling/TSDoc/copyright/cleanup/exact
+  ESLint/format/diff. Coverage: package production 97.63% lines/91.55%
+  branches; declaration normalizer 100% lines; changed executable 114/123
+  (92.68%).
+- Documentation reviewer profile is Luna/medium; API, style, and reliability
+  profiles are Terra/high. Runtime metadata is unavailable. Status is
+  correction-complete/final re-review-ready, not reviewer-accepted; release
+  remains unrun.
+
 ## Specialist Review Assignments
 
 - Documentation completeness: existing `documentation_reviewer`, immutable
