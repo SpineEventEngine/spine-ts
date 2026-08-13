@@ -33,6 +33,21 @@ describe("generated source policy", () => {
     );
   });
 
+  it("removes copied upstream block and line copyright preambles", () => {
+    const source = [
+      "/* Copyright 2024 TeamDev Ltd. Licensed under Apache-2.0. */",
+      "// Copyright 2023 Upstream Authors",
+      "// Licensed under the Apache License, Version 2.0",
+      "// @generated from file spine/example/task.proto",
+      "export const Task = true;",
+      "",
+    ].join("\n");
+
+    const generated = generatedTypeScript(source, ["spine/example/task.proto"]);
+    expect(generated).not.toMatch(/copyright|TeamDev|Upstream Authors/iu);
+    expect(generated).toContain("// @generated from file spine/example/task.proto");
+  });
+
   it("rejects unstable or machine-local Proto provenance", () => {
     for (const value of [
       "",
