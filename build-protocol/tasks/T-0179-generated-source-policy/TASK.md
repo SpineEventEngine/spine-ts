@@ -18,6 +18,9 @@ bootstrap execution. Refreshed changed executable coverage is 180/200 (90.00%).
 Reliability correction: generation bootstrap lifecycle, descriptor/fixture
 cleanup, and bounded Proto discovery are corrected; release remains unrun.
 
+Final reliability evidence: descriptor failure and per-model depth/entry
+regressions pass; changed executable coverage is **201/218 (92.20%)**.
+
 Final explicit coverage: nine-source coverage over six focused files passed
 **189/189**; changed executable coverage against `origin/main...HEAD` is
 **174/193 (90.16%)**. `verify:release` remains unrun.

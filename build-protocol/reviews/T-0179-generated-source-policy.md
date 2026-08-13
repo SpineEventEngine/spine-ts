@@ -187,3 +187,7 @@ Message Board notice-idempotency correction are resolved by implementation.
 - Reliability (existing Terra/high; runtime metadata unavailable) found and the
   implementation resolves bootstrap refusal cleanup, descriptor failure cleanup,
   fixture write-stage cleanup, and bounded iterative Proto source discovery.
+- Targeted regressions cover descriptor-build temporary/bootstrap cleanup and
+  both per-model depth and entry bounds. Exact changed executable coverage is
+  **201/218 (92.20%)** against `origin/main...HEAD`; status remains
+  correction-complete/re-review-ready and release remains unrun.
