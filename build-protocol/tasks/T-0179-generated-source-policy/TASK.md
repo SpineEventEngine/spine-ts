@@ -2,6 +2,10 @@
 
 Status: Review corrections complete; re-review ready
 
+Final explicit coverage: nine-source coverage over six focused files passed
+**189/189**; changed executable coverage against `origin/main...HEAD` is
+**174/193 (90.16%)**. `verify:release` remains unrun.
+
 Final closure correction evidence: canonical generation strips copied leading
 copyright/license preambles for every holder; generated TS/`.d.ts` inventory is
 clean. The standalone fixture generator now bootstraps the canonical policy in
