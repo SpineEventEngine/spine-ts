@@ -43,3 +43,12 @@ role/profile plus the limitation is the evidence.
   the canonical authority at the unchanged pinned commit. Exact source bytes,
   checksum, and descriptor lock were not modified.
 - Targeted documentation re-review is ready; it is not run by this implementer.
+
+## Mechanical Release-Gate Correction
+
+The initial converged release profile reported only two cleanup line-length
+violations in the canonical-provenance fixture after generated descriptor,
+build, tooling, and ESLint gates passed. The fixture now joins wrapped URL
+segments to preserve its exact assertion value. This mechanical test-only
+correction does not reopen specialist review; targeted documentation re-review
+remains ready.

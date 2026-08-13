@@ -90,3 +90,9 @@ The canonical Wave 11 authority is `SpineEventEngine/base-libraries`, not its
 `SpineEventEngine/base` redirect alias. The provenance fixture now requires the
 canonical repository and canonical source/raw URLs at the same pinned commit;
 the exact source bytes, SHA-256, and frozen descriptor digest remain unchanged.
+
+The first converged release attempt found only two cleanup line-length failures
+in that fixture after its preceding generated descriptor, build, tooling, and
+ESLint gates passed. The test now joins wrapped URL segments without changing
+the asserted values; the orchestrator retains ownership of the next release
+attempt and targeted documentation re-review.
