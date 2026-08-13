@@ -63,7 +63,7 @@ export function generatedSource(source: string, sources: readonly string[]): str
   return `${generatedNotice(sources)}${body.replace(
     /(^|\n)(\/\*\*[\s\S]*?\*\/\n)?(export (?:const|interface|enum|type|class|function) )/gu,
     (_match, prefix, documentation = "", declaration) => {
-      const cleaned = documentation.replace(/\n? \* Generated from Proto: .*\.\n/gu, "");
+      const cleaned = documentation.replace(/ \* Generated from Proto: .*\.\n/gu, "");
       const oneLine = cleaned.match(/^\/\*\*[ \t]*([^\n]*?)[ \t]*\*\/\n$/u);
       const normalized =
         oneLine === null ? cleaned : `/**\n * ${oneLine[1] ?? ""}\n */\n`;

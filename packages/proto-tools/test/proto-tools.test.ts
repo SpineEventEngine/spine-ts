@@ -465,9 +465,11 @@ function linkThirdParty(app: string): void {
 
 describe("spine proto model tooling", () => {
   it("expands one-line declaration TSDoc before adding provenance", () => {
-    expect(generatedSource("/** All schemas. */\nexport const schemas = true;\n", ["example/task.proto"])).toContain(
+    const one = generatedSource("/** All schemas. */\nexport const schemas = true;\n", ["example/task.proto"]);
+    expect(one).toContain(
       "/**\n * All schemas.\n * Generated from Proto: example/task.proto.\n */\nexport const",
     );
+    expect(generatedSource(one, ["example/task.proto"])).toBe(one);
   });
 
   it("accepts ordinary Proto path components while rejecting generated resource paths", () => {
