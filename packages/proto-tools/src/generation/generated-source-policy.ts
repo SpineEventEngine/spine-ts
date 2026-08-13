@@ -45,10 +45,16 @@ const generatedPolicy = Object.freeze({
       "",
     );
     const leadingBlock = /^\/\*[\s\S]*?\*\/\s*/u.exec(copiedPreamble)?.[0];
-    if (leadingBlock !== undefined && /copyright|licen[cs](?:ed|e)/iu.test(leadingBlock))
+    if (
+      leadingBlock !== undefined &&
+      /copyright|licen[cs](?:ed|e)|proprietary|confidential/iu.test(leadingBlock)
+    )
       copiedPreamble = copiedPreamble.slice(leadingBlock.length);
     const leadingLines = /^(?:(?:\/\/[^\n]*\n)+)/u.exec(copiedPreamble)?.[0];
-    if (leadingLines !== undefined && /copyright|licen[cs](?:ed|e)/iu.test(leadingLines))
+    if (
+      leadingLines !== undefined &&
+      /copyright|licen[cs](?:ed|e)|proprietary|confidential/iu.test(leadingLines)
+    )
       copiedPreamble = `${leadingLines
         .split("\n")
         .filter((line) => line.startsWith("// @generated"))

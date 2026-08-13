@@ -105,6 +105,18 @@ describe("generated source policy", () => {
     );
   });
 
+  it("removes a proprietary copied preamble before generated metadata", () => {
+    const source = [
+      "// TeamDev Proprietary and Confidential",
+      "// Internal distribution only.",
+      "// @generated from file spine/example/task.proto",
+      "export const Task = true;",
+    ].join("\n");
+    const rendered = generatedTypeScript(source, ["spine/example/task.proto"]);
+    expect(rendered).not.toMatch(/TeamDev|proprietary|confidential/iu);
+    expect(rendered).toContain("// @generated from file spine/example/task.proto");
+  });
+
   it("derives Proto provenance from generated file naming variants", () => {
     expect(sourceProtoForGeneratedFile("spine\\task_pb.ts")).toBe("spine/task.proto");
     expect(sourceProtoForGeneratedFile("spine/task_columns.ts")).toBe("spine/task.proto");

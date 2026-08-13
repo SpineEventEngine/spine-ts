@@ -13,6 +13,7 @@
  */
 
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { join, relative, resolve } from "node:path";
 import { generatedTypeScript } from "./generated-source-policy.mjs";
 
@@ -82,4 +83,7 @@ export function normalizeGeneratedDeclarations(
   }
 }
 
-normalizeGeneratedDeclarations();
+const isMain =
+  process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isMain) normalizeGeneratedDeclarations();
