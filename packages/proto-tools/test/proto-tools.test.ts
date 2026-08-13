@@ -38,6 +38,7 @@ import {
   type GenerationLockOperations,
   type GenerationOperations,
 } from "../src/generation/generator.js";
+import { HandlerGeneration } from "../src/generation/handler-generator.js";
 import { ModelGraph } from "../src/model/model-graph.js";
 
 const readConfig = (...args: Parameters<typeof ProtoConfig.read>) => ProtoConfig.read(...args);
@@ -526,6 +527,9 @@ describe("spine proto model tooling", () => {
     expect(require.resolve("@acme/handler-model/generated/chat/v1/message_board_pb.js")).toContain(
       "message_board_pb.js",
     );
+    const firstRegistry = readFileSync(registry, "utf8");
+    HandlerGeneration.generate(app);
+    expect(readFileSync(registry, "utf8")).toBe(firstRegistry);
   }, 120_000);
   it("runs packaged Buf to generate only a model's owned source and module", () => {
     const model = packageDirectory("@example/users-model");
@@ -1381,6 +1385,7 @@ describe("spine proto model tooling", () => {
         'import { modelProtoModule as model1 } from "@example/users-model";\n\n' +
         "/**\n" +
         " * The application type registry composed from every declared model package.\n" +
+        " * Generated from Proto: example-chat-model.proto, example-users-model.proto.\n" +
         " */\n" +
         "export const typeRegistry: TypeRegistry = TypeRegistry.from(model0, model1);\n",
     );

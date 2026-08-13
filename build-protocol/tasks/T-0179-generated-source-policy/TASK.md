@@ -2,6 +2,12 @@
 
 Status: Review corrections complete; re-review ready
 
+Correction evidence (2026-08-13): direct package generation, compose, and
+handlers are covered by the shared publishable policy; a full explicit-source
+focused run records 81/88 changed executable lines hit (92.05%). The global
+aggregate is not the acceptance metric for the legacy workflow scripts. The
+converged release profile remains intentionally unrun pending the orchestrator.
+
 ## Objective
 
 Make every Spine-owned TypeScript generator emit deterministic generated-file

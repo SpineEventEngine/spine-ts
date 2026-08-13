@@ -35,7 +35,11 @@ import { ProtoConfig, ProtoManifest } from "../index.js";
 import { readManifestAt } from "../io/manifest-reader.js";
 import { ModelGraph } from "../model/model-graph.js";
 import { ManifestFile, type ManifestFileOperations } from "../io/atomic-manifest.js";
-import { generatedNotice, normalizeGeneratedTree } from "./generated-source-policy.js";
+import {
+  generatedNotice,
+  generatedSource,
+  normalizeGeneratedTree,
+} from "./generated-source-policy.js";
 
 /**
  * Bounded seams used to test failure handling while retaining real Buf integration.
@@ -430,21 +434,23 @@ const protoGeneration = Object.freeze({
       .slice()
       .sort((left, right) => left.name.localeCompare(right.name));
     const aliases = imports.map((_, index) => `model${String(index)}`);
-    const source = [
-      generatedNotice(imports.flatMap((model) => ProtoManifest.read(model.root).protoFiles)).trimEnd(),
-      "",
-      'import { TypeRegistry } from "@spine-event-engine/core";',
-      ...imports.map(
-        (model, index) =>
-          `import { ${model.moduleExport} as ${aliases[index] ?? "model"} } from ${JSON.stringify(model.name)};`,
-      ),
-      "",
-      "/**",
-      " * The application type registry composed from every declared model package.",
-      " */",
-      `export const typeRegistry: TypeRegistry = TypeRegistry.from(${aliases.join(", ")});`,
-      "",
-    ].join("\n");
+    const sources = imports.flatMap((model) => ProtoManifest.read(model.root).protoFiles);
+    const source = generatedSource(
+      [
+        'import { TypeRegistry } from "@spine-event-engine/core";',
+        ...imports.map(
+          (model, index) =>
+            `import { ${model.moduleExport} as ${aliases[index] ?? "model"} } from ${JSON.stringify(model.name)};`,
+        ),
+        "",
+        "/**",
+        " * The application type registry composed from every declared model package.",
+        " */",
+        `export const typeRegistry: TypeRegistry = TypeRegistry.from(${aliases.join(", ")});`,
+        "",
+      ].join("\n"),
+      sources,
+    );
     const target = join(packageRoot, config.registryOutput);
     mkdirSync(dirname(target), { recursive: true });
     ManifestFile.writeAtomically(target, source, operations.registryOperations);
@@ -683,7 +689,9 @@ const protoGeneration = Object.freeze({
       .sort((left, right) => left.name.localeCompare(right.name))
       .map((dependency, index) => ({ ...dependency, alias: `dependency${String(index)}` }));
     const source = [
-      generatedNotice(generated.map(({ path }) => path.replace(/^\.\//u, "").replace(/_pb\.js$/u, ".proto"))).trimEnd(),
+      generatedNotice(
+        generated.map(({ path }) => path.replace(/^\.\//u, "").replace(/_pb\.js$/u, ".proto")),
+      ).trimEnd(),
       "",
       'import type { ProtoModule } from "@spine-event-engine/proto";',
       'import type { Message } from "@bufbuild/protobuf";',

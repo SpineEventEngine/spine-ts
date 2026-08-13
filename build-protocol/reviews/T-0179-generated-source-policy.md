@@ -1,10 +1,11 @@
 # T-0179 Review Log
 
-Status: Implementation and mechanical preflight complete; specialist review in progress.
+Status: Accepted review findings corrected; re-review ready. No reviewer has
+yet accepted this correction batch.
 
-Status update: accepted findings corrected; re-review ready. Direct package
-commands, fail-closed provenance, package-qualified handlers, declaration
-TSDoc, atomic fixture preservation, and records are resolved.
+Direct package commands, fail-closed provenance, package-qualified handlers,
+declaration TSDoc, atomic fixture preservation, record chronology, and the
+Message Board notice-idempotency correction are resolved by implementation.
 
 ## Accepted Findings
 
@@ -14,6 +15,28 @@ TSDoc, atomic fixture preservation, and records are resolved.
   generated declaration TSDoc, atomic fixtures, and durable records.
 - Security is concrete N/A: the correction narrows provenance inputs and does
   not expand a configured trust boundary.
+
+## Correction Disposition And Evidence
+
+- P1 generator entry points: the publishable package policy now owns direct
+  `generate`, `compose`, and `handlers`; direct/packed behavior is covered and
+  repeat-stable.
+- P1 provenance and package imports: the policy rejects unstable source paths,
+  derives real model Proto imports for package-qualified handler registries,
+  and never publishes machine/stage/backup paths.
+- P1 declarations and fixture publication: declaration provenance is merged
+  into valid TSDoc; fixture publication stages adjacent output and preserves
+  prior bytes on injected rename failure.
+- P1 idempotency: package compose owns the complete manifest inventory and the
+  outer workflow accepts that notice without narrowing or stacking it.
+- P2 records: task/work/review chronology, configured reviewer profiles, and
+  the unavailable-runtime-metadata limitation are recorded. Documentation is
+  `gpt-5.6-luna` / medium; API, style, and reliability are `gpt-5.6-terra` /
+  high; their findings were accepted for correction, not re-accepted.
+- Mechanical evidence: final explicit-source focused coverage is 171/171 tests
+  and 81/88 changed executable lines hit (92.05%). `proto:generate`, current
+  output, TSDoc, copyright, formatting, and diff checks pass. Release and
+  re-review remain intentionally unrun.
 
 ## Specialist Review Assignments
 

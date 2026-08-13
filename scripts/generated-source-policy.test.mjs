@@ -32,7 +32,13 @@ describe("generated source policy", () => {
   });
 
   it("rejects unstable or machine-local Proto provenance", () => {
-    for (const value of ["", "../task.proto", "/tmp/task.proto", "C:\\work\\task.proto", ".generated-stage/task.proto"]) {
+    for (const value of [
+      "",
+      "../task.proto",
+      "/tmp/task.proto",
+      "C:\\work\\task.proto",
+      ".generated-stage/task.proto",
+    ]) {
       expect(() => generatedFileNotice([value])).toThrow(/stable Proto import path/);
     }
   });

@@ -13,7 +13,9 @@ export function isGeneratedTypeScriptPath(path) {
 /* Renders the deterministic generated-file notice for one or more Proto sources. */
 export function generatedFileNotice(sourcePaths) {
   if (!Array.isArray(sourcePaths) || !sourcePaths.every(isStableProtoImportPath)) {
-    throw new Error(`Generated TypeScript requires stable Proto import paths: ${JSON.stringify(sourcePaths)}.`);
+    throw new Error(
+      `Generated TypeScript requires stable Proto import paths: ${JSON.stringify(sourcePaths)}.`,
+    );
   }
   const paths = [...new Set(sourcePaths)].sort((left, right) => left.localeCompare(right));
   if (paths.length === 0) throw new Error("Generated TypeScript requires source Proto provenance.");
