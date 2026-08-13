@@ -489,6 +489,15 @@ describe("packed external model consumer", () => {
           "",
         ].join("\n"),
       );
+      run(
+        process.execPath,
+        [join(chat, "node_modules/@spine-event-engine/proto-tools/bin/spine-proto.mjs"), "generate"],
+        chat,
+      );
+      const firstInterfaceOutput = readFileSync(
+        join(chat, "generated/interfaces/external/chat/v1/message_board.ts"),
+        "utf8",
+      );
       const chatTarballs = join(root, "chat-tarballs");
       mkdirSync(chatTarballs);
       const chatPacked = generateBuildAndPack(chat, chatTarballs);
@@ -509,6 +518,7 @@ describe("packed external model consumer", () => {
         chat,
         "generated/interfaces/external/chat/v1/message_board.ts",
       );
+      expect(readFileSync(interfaceCompanion, "utf8")).toBe(firstInterfaceOutput);
       const interfaceDeclaration = join(
         chat,
         "dist/generated/interfaces/external/chat/v1/message_board.d.ts",
