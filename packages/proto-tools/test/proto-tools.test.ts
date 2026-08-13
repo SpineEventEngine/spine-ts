@@ -464,6 +464,23 @@ function linkThirdParty(app: string): void {
 }
 
 describe("spine proto model tooling", () => {
+  it("preserves a prior handler registry when model provenance is invalid", () => {
+    const application = packageDirectory("@example/invalid-handler-application");
+    writeJson(application, "spine-proto.json", {
+      formatVersion: 1,
+      mode: "application",
+      modelPackages: ["@example/invalid-handler-model"],
+      registryOutput: "src/model-registry.ts",
+    });
+    const registry = join(application, "generated/handler/generated-handler-registry.ts");
+    mkdirSync(dirname(registry), { recursive: true });
+    writeFileSync(registry, "prior registry\n");
+
+    expect(() => HandlerGeneration.generate(application)).toThrow(/must be declared/u);
+    expect(readFileSync(registry, "utf8")).toBe("prior registry\n");
+    expect(readdirSync(dirname(registry))).toEqual(["generated-handler-registry.ts"]);
+  });
+
   it("expands one-line declaration TSDoc before adding provenance", () => {
     const one = generatedSource("/** All schemas. */\nexport const schemas = true;\n", [
       "example/task.proto",
