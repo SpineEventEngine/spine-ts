@@ -31,6 +31,26 @@ import {
 } from "./proto-workflow.mjs";
 import { writeSpineProtoArtifacts } from "./generate-spine-proto-artifacts.mjs";
 
+describe("clean proto-tools bootstrap", () => {
+  it("generates through the bootstrap when the compiled proto-tools output is absent", () => {
+    const root = process.cwd();
+    const dist = join(root, "packages/proto-tools/dist");
+    const holding = mkdtempSync(join(tmpdir(), "spine-proto-tools-dist-"));
+    const parked = join(holding, "dist");
+    renameSync(dist, parked);
+    try {
+      const result = spawnSync("pnpm", ["proto:generate"], { cwd: root, encoding: "utf8" });
+      expect(result.status).toBe(0);
+      expect(readdirSync(join(root, "packages/proto-tools/node_modules/.cache"))).not.toContainEqual(
+        expect.stringMatching(/^spine-proto-tools-bootstrap-/u),
+      );
+    } finally {
+      renameSync(parked, dist);
+      rmSync(holding, { recursive: true, force: true });
+    }
+  }, 120_000);
+});
+
 function workflowClaimOperations(claims, liveness) {
   return {
     create(path, content) {
@@ -1785,7 +1805,7 @@ describe("proto-workflow", () => {
     const ownership = source.indexOf("lock = acquireWorkflowLock(root, options.lockOperations)");
     const preparation = source.indexOf("const prepareStatus = prepareGeneratedOutput(root);");
 
-    expect(source).toContain('if (command === "generate") return generateTargets();');
+    expect(source).toContain('prepareProtoToolsBootstrap(repoRoot);');
     expect(ownership).toBeGreaterThanOrEqual(0);
     expect(preparation).toBeGreaterThan(ownership);
   });
