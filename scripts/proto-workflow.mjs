@@ -926,9 +926,11 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
           );
     if (handlerStatus !== 0)
       throw new Error(`${target.moduleName} handler registry post-step failed`);
-    normalizeGeneratedTypeScriptTree(output);
+    const modelSources = findProtoFiles(join(livePackageRoot, "proto"))
+      .map((path) => relative(join(livePackageRoot, "proto"), path).split(sep).join("/"));
+    normalizeGeneratedTypeScriptTree(output, modelSources);
     if (handlerStagedTarget !== undefined)
-      normalizeGeneratedTypeScriptTree(handlerStagedTarget.stagedOutputRoot);
+      normalizeGeneratedTypeScriptTree(handlerStagedTarget.stagedOutputRoot, modelSources);
     if (!existsSync(join(packageRoot, "spine-proto-manifest.json")))
       throw new Error(`${target.moduleName} staged manifest is missing`);
     return {
@@ -958,11 +960,11 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
   }
 }
 
-function normalizeGeneratedTypeScriptTree(root) {
+function normalizeGeneratedTypeScriptTree(root, packageSources = []) {
   for (const entry of readdirSync(root, { withFileTypes: true })) {
     const path = join(root, entry.name);
     if (entry.isDirectory()) {
-      normalizeGeneratedTypeScriptTree(path);
+      normalizeGeneratedTypeScriptTree(path, packageSources);
       continue;
     }
     if (!entry.isFile() || !path.endsWith(".ts")) continue;
@@ -983,7 +985,9 @@ function normalizeGeneratedTypeScriptTree(root) {
           ? sources
           : imported.length > 0
             ? imported
-            : [sourceProtoForGeneratedFile(relativePath)],
+            : packageSources.length > 0
+              ? packageSources
+              : [sourceProtoForGeneratedFile(relativePath)],
       ),
     );
   }

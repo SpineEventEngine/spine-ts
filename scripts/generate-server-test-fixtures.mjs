@@ -1,5 +1,6 @@
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, copyFileSync, renameSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -62,7 +63,7 @@ function main() {
 }
 
 export function publishFixtureModule(target, source, operations = {}) {
-  const stage = join(dirname(target), `.${String(target).split("/").at(-1)}.stage-${crypto.randomUUID()}`);
+  const stage = join(dirname(target), `.${String(target).split("/").at(-1)}.stage-${randomUUID()}`);
   const write = operations.write ?? ((path, contents) => writeFileSync(path, contents, "utf8"));
   const rename = operations.rename ?? renameSync;
   const remove = operations.remove ?? ((path) => rmSync(path, { force: true }));

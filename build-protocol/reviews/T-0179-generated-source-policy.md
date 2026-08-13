@@ -4,7 +4,8 @@ Status: Implementation and mechanical preflight complete; specialist review in p
 
 ## Accepted Findings
 
-- Documentation, API, style, and reliability reviewers accepted corrections for
+- Documentation, API, style, and reliability reviewer findings were accepted for
+  correction covering
   all direct generators, fail-closed paths, package-qualified registries,
   generated declaration TSDoc, atomic fixtures, and durable records.
 - Security is concrete N/A: the correction narrows provenance inputs and does
