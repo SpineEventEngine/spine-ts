@@ -150,3 +150,11 @@ Message Board notice-idempotency correction are resolved by implementation.
   finite walker depth/entry bounds, and Message Board app `.d.ts`
   normalization/inventory. Status: final correction complete / re-review ready.
   `verify:release` remains intentionally unrun.
+
+## Final closure correction disposition
+
+- Copied upstream copyright/license preambles are stripped by the canonical
+  renderer and a generated TS/`.d.ts` inventory is clean. The standalone server
+  fixture generator reuses the existing bootstrap policy in a parallel-safe
+  isolated clean-worktree test. Workflow recursive normalization is now bounded
+  iteratively; all added temporary fixtures clean up in `finally`.

@@ -2,6 +2,12 @@
 
 Status: Review corrections complete; re-review ready
 
+Final closure correction evidence: canonical generation strips copied leading
+copyright/license preambles for every holder; generated TS/`.d.ts` inventory is
+clean. The standalone fixture generator now bootstraps the canonical policy in
+an isolated clean worktree, workflow traversal is iterative and bounded, and
+new temporary traversal fixtures clean up in `finally`. Release remains unrun.
+
 Correction evidence (2026-08-13): direct package generation, compose, and
 handlers are covered by the shared publishable policy; a full explicit-source
 focused run records 81/88 changed executable lines hit (92.05%). The global

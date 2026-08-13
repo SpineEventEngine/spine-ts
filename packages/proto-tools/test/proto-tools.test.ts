@@ -474,9 +474,9 @@ describe("spine proto model tooling", () => {
       for (let index = 0; index < 1_001; index += 1)
         writeFileSync(join(root, `entry-${String(index)}.ts`), "export {};\n");
 
-      expect(() => normalizeGeneratedTree(root, ["example/task.proto"])).toThrow(
-        /bounded inventory/u,
-      );
+      expect(() => {
+        normalizeGeneratedTree(root, ["example/task.proto"]);
+      }).toThrow(/bounded inventory/u);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
