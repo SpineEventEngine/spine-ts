@@ -1,6 +1,15 @@
 # T-0179: Generated TypeScript Provenance And Copyright Policy
 
-Status: Release-contract correction complete; release verification rerun in progress
+Status: Complete; specialist reviews and release verification passed
+
+Final acceptance (2026-08-13): all four applicable specialist lanes are CLEAN.
+The converged `pnpm verify:release` profile exited 0 with 248 passing and 3
+skipped test files, 3,945 passing and 14 skipped tests, and repository coverage
+of 94.20% statements, 90.40% branches, 94.11% functions, and 95.21% lines.
+Release readiness verified 82 package imports, 51 package assets, and 365
+relative Markdown links. The untracked `.superpowers/` user scratch directory
+was held outside the task worktree only for the release-readiness scan and was
+restored byte-for-byte without entering task history.
 
 Release-contract correction (2026-08-13): the first mandatory release profile
 found four stale test contracts, not generated-policy production defects. The
