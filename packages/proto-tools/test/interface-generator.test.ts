@@ -169,4 +169,39 @@ describe("InterfaceGenerator", () => {
 
     expect(() => InterfaceGenerator.generateCompanions(schema)).toThrow("ts_type");
   });
+
+  it("rejects planned name and provider conflicts before opening output", () => {
+    for (const files of [
+      [optionFile("SignalFamily"), optionFile("SignalFamily")],
+      [optionFile("SignalFamily", true, "SignalFamily")],
+    ]) {
+      let generated = 0;
+      const schema = {
+        files,
+        generateFile: () => {
+          generated++;
+          throw new Error("must not emit");
+        },
+      } as unknown as Schema;
+      expect(() => InterfaceGenerator.generateCompanions(schema)).toThrow(/duplicate|conflict/u);
+      expect(generated).toBe(0);
+    }
+    for (const declaration of [
+      { name: "Different", importPath: "../src/authored.js" },
+      { name: "AuthoredSignal", importPath: "" },
+    ]) {
+      let generated = 0;
+      const schema = {
+        files: [optionFile("SignalFamily", true, "AuthoredSignal")],
+        generateFile: () => {
+          generated++;
+          throw new Error("must not emit");
+        },
+      } as unknown as Schema;
+      expect(() =>
+        InterfaceGenerator.generateWithProvider(schema, { resolve: () => declaration }),
+      ).toThrow("irreconcilable");
+      expect(generated).toBe(0);
+    }
+  });
 });
