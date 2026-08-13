@@ -1,6 +1,17 @@
 # T-0181 Review Log
 
-Status: Complete; final release verified and integration-ready
+Status: Integrated; post-merge verified
+
+## Post-Integration Disposition
+
+- `T-0181` remains the immutable tag at merged `8c25c766`; later
+  record/API-mechanical commits advance the active main/task line without
+  retagging. The orchestrator recorded remote main push/tag integration and
+  intentionally left the dirty primary local main worktree untouched.
+- Post-merge verification passed on the byte-identical task tree: 6 focused
+  files / 233 tests (core index, interface generator, Proto-tools, source
+  view, external consumer, and Proto workflow). All final dispositions remain
+  resolved.
 
 ## Scope
 

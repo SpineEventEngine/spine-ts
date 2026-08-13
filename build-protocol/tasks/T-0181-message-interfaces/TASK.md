@@ -1,6 +1,17 @@
 # T-0181: Generate Interfaces And Immutable Runtime Tokens
 
-Status: Complete; release verified and integration-ready
+Status: Integrated; post-merge verified
+
+## 2026-08-14 - Post-Integration Verification
+
+- `origin/main` and this task line converged at `8c25c766` when immutable tag
+  `T-0181` was created. Subsequent mechanical record/API commits advance the
+  current task/main line; the published tag is intentionally unchanged.
+- Post-merge focused proof on the byte-identical task tree passed: 6 files,
+  233 tests (core index, interface-generator, Proto-tools, source view,
+  external consumer, and Proto workflow). Remote main push/tag integration is
+  recorded by the orchestrator. The dirty primary local main worktree remains
+  intentionally untouched.
 
 ## 2026-08-14 - Final Reliability P2 Hardening
 
