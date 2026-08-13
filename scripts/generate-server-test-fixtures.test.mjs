@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { renderFixtureModule } from "./generate-server-test-fixtures.mjs";
+import { publishFixtureModule, renderFixtureModule } from "./generate-server-test-fixtures.mjs";
 
 const scriptPath = fileURLToPath(new URL("./generate-server-test-fixtures.mjs", import.meta.url));
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -25,5 +25,19 @@ describe("generate-server-test-fixtures", () => {
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
+  });
+
+  it("preserves the prior fixture when atomic publication fails", () => {
+    const writes = [];
+    expect(() =>
+      publishFixtureModule("fixture.ts", "next", {
+        write: (path, source) => writes.push([path, source]),
+        rename: () => {
+          throw new Error("rename failed");
+        },
+        remove: (path) => writes.push(["remove", path]),
+      }),
+    ).toThrow("rename failed");
+    expect(writes.at(-1)).toEqual(["remove", expect.stringContaining(".stage-")]);
   });
 });

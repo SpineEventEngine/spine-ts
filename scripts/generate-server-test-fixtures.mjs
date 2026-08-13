@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, copyFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, copyFileSync, renameSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
@@ -58,7 +58,21 @@ function main() {
     return;
   }
 
-  writeFileSync(outputPath, generated);
+  publishFixtureModule(outputPath, generated);
+}
+
+export function publishFixtureModule(target, source, operations = {}) {
+  const stage = join(dirname(target), `.${String(target).split("/").at(-1)}.stage-${crypto.randomUUID()}`);
+  const write = operations.write ?? ((path, contents) => writeFileSync(path, contents, "utf8"));
+  const rename = operations.rename ?? renameSync;
+  const remove = operations.remove ?? ((path) => rmSync(path, { force: true }));
+  write(stage, source);
+  try {
+    rename(stage, target);
+  } catch (error) {
+    remove(stage);
+    throw error;
+  }
 }
 
 export function renderFixtureModule() {
