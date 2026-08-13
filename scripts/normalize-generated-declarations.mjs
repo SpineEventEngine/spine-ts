@@ -16,6 +16,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join, relative, resolve } from "node:path";
 import { generatedTypeScript } from "./generated-source-policy.mjs";
+import { prepareProtoToolsBootstrap, releaseProtoToolsBootstrap } from "./proto-workflow.mjs";
 
 export const generatedDeclarationRoots = Object.freeze([
   "packages/proto",
@@ -86,4 +87,11 @@ export function normalizeGeneratedDeclarations(
 const isMain =
   process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
-if (isMain) normalizeGeneratedDeclarations();
+if (isMain) {
+  prepareProtoToolsBootstrap();
+  try {
+    normalizeGeneratedDeclarations();
+  } finally {
+    releaseProtoToolsBootstrap();
+  }
+}
