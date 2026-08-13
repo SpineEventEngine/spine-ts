@@ -129,6 +129,15 @@ Status: Implementation and release preflight complete; specialist review ready
 - Release-preflight correction: repository-wide ESLint exposed and removed one
   unused workflow-test fixture parameter; focused workflow and static cheap
   gates pass. Release remains unrun after this mechanical correction.
+- Review correction closure: all accepted findings are corrected and targeted
+  re-review is ready. Fresh build/tooling, repository ESLint, 228 affected
+  tests, cleanup/TSDoc/copyright/format/diff, API documentation, Proto
+  generation/current-output checks pass; TypeDoc emitted no prior
+  `MessageInterfaces` link warnings. Focused coverage is not a meaningful
+  global threshold measure because monolithic `core/src/index.ts` is included
+  whole (36.98% branches); changed Proto-tools production coverage is 92.10%
+  generator branches and the final release evidence remains 90.37% repository
+  branches.
 
 ## Skills
 

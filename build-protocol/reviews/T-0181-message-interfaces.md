@@ -89,3 +89,10 @@ the evidence.
   94.07% functions, and 95.19% lines. Generated gates, docs, Proto,
   containment, and release readiness passed. TypeDoc's nonfatal unresolved-link
   warnings are retained for the API reviewer.
+- Correction-complete and targeted re-review-ready: accepted API, style,
+  reliability, and docs findings are addressed. Fresh 228 affected tests and
+  cheap gates pass, API docs no longer emit the `MessageInterfaces` link
+  warnings, and Proto generation/current output pass. Focused generator branch
+  coverage is 92.10%; the focused global denominator includes the monolithic
+  core index, so final release's 90.37% repository branches is retained as the
+  task-level coverage disposition.
