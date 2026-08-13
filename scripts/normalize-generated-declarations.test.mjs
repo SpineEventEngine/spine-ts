@@ -54,4 +54,14 @@ describe("generated declaration normalization", () => {
       handler,
     );
   });
+
+  it("rejects bounded traversal depth", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-declaration-depth-"));
+    let directory = join(root, "fixture", "dist", "generated");
+    for (let depth = 0; depth < 66; depth += 1) directory = join(directory, "nested");
+    mkdirSync(directory, { recursive: true });
+    mkdirSync(join(root, "fixture", "generated"), { recursive: true });
+
+    expect(() => normalizeGeneratedDeclarations(root, ["fixture"])).toThrow(/bounded inventory/u);
+  });
 });

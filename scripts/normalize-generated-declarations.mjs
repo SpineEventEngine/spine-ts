@@ -26,20 +26,23 @@ export const generatedDeclarationRoots = Object.freeze([
 ]);
 
 export function declarationFiles(root) {
-  const pending = [root];
+  const pending = [[root, 0]];
   const files = [];
   let entries = 0;
   while (pending.length > 0) {
     if (pending.length > 64 || entries > 1_000)
       throw new Error("generated declaration traversal exceeds bounded inventory");
-    const directory = pending.pop();
+    const [directory, depth] = pending.pop();
+    if (depth > 64) throw new Error("generated declaration traversal exceeds bounded inventory");
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       entries += 1;
       const path = join(directory, entry.name);
-      if (entry.isDirectory()) pending.push(path);
+      if (entry.isDirectory()) pending.push([path, depth + 1]);
       else if (
         entry.isFile() &&
-        /(?:_pb|rejections|_columns|proto-module|generated-handler-registry)\.d\.ts$/u.test(path)
+        /(?:_pb|rejections|_columns|proto-module|generated-handler-registry|model-registry)\.d\.ts$/u.test(
+          path,
+        )
       )
         files.push(path);
     }
