@@ -28,9 +28,13 @@ export const generatedDeclarationRoots = Object.freeze([
 export function declarationFiles(root) {
   const pending = [root];
   const files = [];
+  let entries = 0;
   while (pending.length > 0) {
+    if (pending.length > 64 || entries > 1_000)
+      throw new Error("generated declaration traversal exceeds bounded inventory");
     const directory = pending.pop();
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      entries += 1;
       const path = join(directory, entry.name);
       if (entry.isDirectory()) pending.push(path);
       else if (
@@ -53,19 +57,22 @@ export function normalizeGeneratedDeclarations(
 ) {
   for (const root of roots) {
     const packageRoot = resolve(repoRoot, root);
-    const dist = join(packageRoot, "dist", "generated");
-    const generated = join(packageRoot, "generated");
-    if (!existsSync(dist) || !existsSync(generated)) continue;
-    for (const declaration of declarationFiles(dist)) {
-      const sourcePath = join(generated, relative(dist, declaration).replace(/\.d\.ts$/u, ".ts"));
-      if (!existsSync(sourcePath)) continue;
-      const provenance = declarationSources(readFileSync(sourcePath, "utf8"));
-      if (provenance.length > 0)
-        writeFileSync(
-          declaration,
-          generatedTypeScript(readFileSync(declaration, "utf8"), provenance),
-          "utf8",
-        );
+    for (const [dist, generated] of [
+      [join(packageRoot, "dist", "generated"), join(packageRoot, "generated")],
+      [join(packageRoot, "dist", "src"), join(packageRoot, "src")],
+    ]) {
+      if (!existsSync(dist) || !existsSync(generated)) continue;
+      for (const declaration of declarationFiles(dist)) {
+        const sourcePath = join(generated, relative(dist, declaration).replace(/\.d\.ts$/u, ".ts"));
+        if (!existsSync(sourcePath)) continue;
+        const provenance = declarationSources(readFileSync(sourcePath, "utf8"));
+        if (provenance.length > 0)
+          writeFileSync(
+            declaration,
+            generatedTypeScript(readFileSync(declaration, "utf8"), provenance),
+            "utf8",
+          );
+      }
     }
   }
 }

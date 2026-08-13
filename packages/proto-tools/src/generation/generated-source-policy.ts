@@ -68,9 +68,22 @@ const generatedPolicy = Object.freeze({
 
   /* Normalizes generated TypeScript files below a directory. */
   normalizeGeneratedTree(root: string, sources: readonly string[]): void {
+    generatedPolicy.normalizeGeneratedTreeAt(root, sources, 0, { entries: 0 });
+  },
+
+  normalizeGeneratedTreeAt(
+    root: string,
+    sources: readonly string[],
+    depth: number,
+    state: { entries: number },
+  ): void {
+    if (depth > 64 || state.entries > 1_000)
+      throw new Error("spine-proto: generated source traversal exceeds bounded inventory");
     for (const entry of readdirSync(root, { withFileTypes: true })) {
+      state.entries += 1;
       const path = join(root, entry.name);
-      if (entry.isDirectory()) generatedPolicy.normalizeGeneratedTree(path, sources);
+      if (entry.isDirectory())
+        generatedPolicy.normalizeGeneratedTreeAt(path, sources, depth + 1, state);
       else if (
         entry.isFile() &&
         /(?:_pb|rejections|_columns|proto-module|generated-handler-registry)\.ts$/u.test(path)
