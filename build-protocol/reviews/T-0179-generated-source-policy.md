@@ -1,6 +1,6 @@
 # T-0179 Review Log
 
-Status: Implementation not started
+Status: Implementation in progress; review not yet requested.
 
 ## Planned Concern Dispositions
 
@@ -23,3 +23,11 @@ Status: Implementation not started
   no subagents; immediate origin pushes for coherent checkpoints.
 - Runtime metadata: record it when exposed; otherwise record the immutable
   configured role/profile and the surface limitation.
+
+## Implementation Evidence (pre-review)
+
+- Configured implementation profile: existing `implementer`, `gpt-5.6-terra` /
+  medium; runtime metadata is not exposed by this surface.
+- Observed behavior RED and GREEN for generated-path copyright classification,
+  copied Buf copyright stripping, and the tracked server-fixture header. Full
+  review remains pending after convergence.

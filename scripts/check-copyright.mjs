@@ -20,6 +20,7 @@ import {
   recognizedCopyrightHeader,
   separateCopyrightHeader,
 } from "./copyright-header.mjs";
+import { isGeneratedTypeScriptPath } from "./generated-source-policy.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const manifestPath = "packages/proto/proto/spine-sources.json";
@@ -35,7 +36,7 @@ function placement(content) {
 }
 
 function isEligible(path, excluded) {
-  return /\.(?:ts|tsx|proto)$/u.test(path) && !excluded.has(path);
+  return /\.(?:ts|tsx|proto)$/u.test(path) && !excluded.has(path) && !isGeneratedTypeScriptPath(path);
 }
 
 function usesCopyrightSpacingPolicy(path) {
@@ -105,6 +106,10 @@ export function checkCopyright({
   for (const path of [...files].sort((left, right) => left.localeCompare(right))) {
     if (!/\.(?:ts|tsx|proto)$/u.test(path)) continue;
     const content = readFile(path);
+    if (isGeneratedTypeScriptPath(path)) {
+      if (content.includes("CodeMatters")) problems.push(`${path}: forbidden CodeMatters header`);
+      continue;
+    }
     if (excluded.has(path)) {
       if (content.includes("CodeMatters")) problems.push(`${path}: forbidden CodeMatters header`);
       else if (!/[Cc]opyright/u.test(content))

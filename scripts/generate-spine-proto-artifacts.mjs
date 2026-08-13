@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
+import { generatedFileNotice } from "./generated-source-policy.mjs";
 
 function files(root, suffix) {
   const output = [];
@@ -43,6 +44,8 @@ export function writeSpineProtoArtifacts(repoRoot, generatedRoot, manifestOutput
     throw new Error("generated Protobuf modules must exactly match owned Proto sources");
   }
   const source = [
+    generatedFileNotice(protoFiles).trimEnd(),
+    "",
     'import type { Message } from "@bufbuild/protobuf";',
     'import type { GenMessage } from "@bufbuild/protobuf/codegenv2";',
     'import type { ProtoModule } from "../src/model/proto-module.js";',

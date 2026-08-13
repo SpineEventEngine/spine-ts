@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { findSymlinkedAncestors, lstatIfPresent } from "./generated-path-safety.mjs";
 import { writeSpineProtoArtifacts } from "./generate-spine-proto-artifacts.mjs";
-import { copyrightHeader, separateCopyrightHeader } from "./copyright-header.mjs";
+import { generatedTypeScript, sourceProtoForGeneratedFile } from "./generated-source-policy.mjs";
 
 const protoRoot = fileURLToPath(new URL("../packages/proto/proto", import.meta.url));
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -63,10 +63,9 @@ export const atomicGeneratedTargets = [
   { displayPath: "examples/message-board/app/generated" },
 ];
 
-/* Adds the required copyright notice to the one tracked generated registry. */
-export function withCopyrightHeader(contents, year = new Date().getFullYear()) {
-  const header = copyrightHeader(year);
-  return separateCopyrightHeader(contents.startsWith(header) ? contents : `${header}${contents}`);
+/** Applies the shared generated-source policy to the tracked Message Board registry. */
+export function withCopyrightHeader(contents) {
+  return generatedTypeScript(contents, ["spine/examples/messageboard/message_board.proto"]);
 }
 
 /**
@@ -753,6 +752,7 @@ export function stageGeneratedTargets(options = {}) {
           status: generateStatus,
         };
       }
+      normalizeGeneratedTypeScriptTree(stagedTarget.stagedOutputRoot);
     }
 
     const spineTarget = stagedTargets.find(
@@ -926,6 +926,9 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
           );
     if (handlerStatus !== 0)
       throw new Error(`${target.moduleName} handler registry post-step failed`);
+    normalizeGeneratedTypeScriptTree(output);
+    if (handlerStagedTarget !== undefined)
+      normalizeGeneratedTypeScriptTree(handlerStagedTarget.stagedOutputRoot);
     if (!existsSync(join(packageRoot, "spine-proto-manifest.json")))
       throw new Error(`${target.moduleName} staged manifest is missing`);
     return {
@@ -952,6 +955,21 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
       rmSync(handlerStagedTarget.stageRoot, { recursive: true, force: true });
     rmSync(stageRoot, { recursive: true, force: true });
     return { status: 1 };
+  }
+}
+
+function normalizeGeneratedTypeScriptTree(root) {
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) {
+      normalizeGeneratedTypeScriptTree(path);
+      continue;
+    }
+    if (!entry.isFile() || !path.endsWith(".ts")) continue;
+    const relativePath = relative(root, path).split(sep).join("/");
+    if (relativePath === "proto-module.ts" || relativePath.endsWith("generated-handler-registry.ts"))
+      continue;
+    writeFileSync(path, generatedTypeScript(readFileSync(path, "utf8"), [sourceProtoForGeneratedFile(relativePath)]));
   }
 }
 
