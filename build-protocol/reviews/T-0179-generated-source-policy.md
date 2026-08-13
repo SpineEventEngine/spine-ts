@@ -47,6 +47,17 @@ Message Board notice-idempotency correction are resolved by implementation.
   remain as recorded above. Status remains correction-complete/re-review-ready,
   not reviewer-accepted.
 
+## Final Independent Evidence
+
+- Exact build plus five-suite verification passed 174/174 after final
+  idempotency, cleanup, and formatting corrections. Repeat generation twice,
+  current-output, TSDoc, copyright, tooling, exact ESLint, cleanup, format, and
+  diff checks all pass.
+- The coverage command passed 174/174. Package generator coverage is 97.98%
+  lines and 92% branches; changed executable range is 83/88 (94.32%): policy
+  35/35, generator 11/11, copyright 4/4, fixture 11/12, root adapter 2/4, and
+  workflow 20/22. Status remains targeted re-review ready; release is unrun.
+
 ## Specialist Review Assignments
 
 - Documentation completeness: existing `documentation_reviewer`, immutable

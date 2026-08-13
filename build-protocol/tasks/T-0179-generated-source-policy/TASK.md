@@ -8,6 +8,12 @@ focused run records 81/88 changed executable lines hit (92.05%). The global
 aggregate is not the acceptance metric for the legacy workflow scripts. The
 converged release profile remains intentionally unrun pending the orchestrator.
 
+Final independent evidence: build plus the exact five-suite run passed 174/174;
+generation repeated twice and current-output passed. TSDoc, copyright, tooling,
+changed-file ESLint, cleanup, formatting, and diff checks passed. Changed-range
+coverage is 83/88 executable lines (94.32%). Status remains targeted re-review
+ready; the release profile has not run.
+
 ## Objective
 
 Make every Spine-owned TypeScript generator emit deterministic generated-file
