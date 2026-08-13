@@ -20,6 +20,7 @@ import {
   generatedTargets,
   modelAtomicTargets,
   generateTargets,
+  normalizeGeneratedTypeScriptTree,
   prepareGeneratedOutput,
   prepareProtoToolsBootstrap,
   protoToolsExecutable,
@@ -59,6 +60,31 @@ describe("clean proto-tools bootstrap", () => {
       rmSync(isolated, { recursive: true, force: true });
     }
   }, 120_000);
+});
+
+describe("generated TypeScript traversal bounds", () => {
+  it("rejects generated output deeper than the bounded inventory", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-workflow-depth-"));
+    let directory = root;
+    for (let depth = 0; depth <= 64; depth += 1) {
+      directory = join(directory, "nested");
+      mkdirSync(directory);
+    }
+    expect(() => normalizeGeneratedTypeScriptTree(root, ["spine/example/task.proto"])).toThrow(
+      "generated TypeScript traversal exceeds bounded inventory",
+    );
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("rejects generated output exceeding the bounded entry inventory", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-workflow-entries-"));
+    for (let entry = 0; entry <= 1_000; entry += 1)
+      writeFileSync(join(root, `file-${entry}.txt`), "x");
+    expect(() => normalizeGeneratedTypeScriptTree(root, ["spine/example/task.proto"])).toThrow(
+      "generated TypeScript traversal exceeds bounded inventory",
+    );
+    rmSync(root, { recursive: true, force: true });
+  });
 });
 
 function workflowClaimOperations(claims, liveness) {

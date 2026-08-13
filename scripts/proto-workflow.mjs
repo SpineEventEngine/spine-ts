@@ -979,7 +979,7 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
   }
 }
 
-function normalizeGeneratedTypeScriptTree(root, packageSources = []) {
+export function normalizeGeneratedTypeScriptTree(root, packageSources = []) {
   const pending = [[root, 0]];
   let entries = 0;
   while (pending.length > 0) {
