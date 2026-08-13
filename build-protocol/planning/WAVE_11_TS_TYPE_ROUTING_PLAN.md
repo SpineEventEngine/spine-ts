@@ -137,16 +137,17 @@ The public type relationship is frozen as the following equivalent contract
 (implementation details may use private helpers):
 
 ```ts
-type InterfaceMember<Schemas extends readonly MessageSchema[]> = MessageShape<Schemas[number]>;
+type InterfaceSchemas = readonly [MessageSchema, ...MessageSchema[]];
+type InterfaceMember<Schemas extends InterfaceSchemas> = MessageShape<Schemas[number]>;
 
-interface MessageInterface<TInterface extends object, Schemas extends readonly MessageSchema[]> {
+interface MessageInterface<TInterface extends object, Schemas extends InterfaceSchemas> {
   readonly schemas: Schemas;
   // A private unique-symbol brand prevents structural object literals/copies.
   // Its covariant witness also makes every member shape assignable to TInterface.
 }
 
 const MessageInterfaces: {
-  define<TInterface extends object, const Schemas extends readonly MessageSchema[]>(
+  define<TInterface extends object, const Schemas extends InterfaceSchemas>(
     schemas: InterfaceMember<Schemas> extends TInterface ? Schemas : never,
   ): MessageInterface<TInterface, Schemas>;
 };
@@ -154,9 +155,10 @@ const MessageInterfaces: {
 
 The conditional factory input is the generated compile-time witness that every
 derived schema member implements `TInterface`. `TInterface` is object-shaped;
-`Schemas` is a non-empty readonly tuple of Spine `MessageSchema` values. Runtime
-construction rejects an empty tuple, duplicate schemas, and malformed entries,
-then copies and freezes the tuple.
+`Schemas` is statically constrained to the non-empty readonly tuple
+`InterfaceSchemas`. Runtime construction also rejects dynamically malformed or
+empty JavaScript inputs, duplicate schemas, and malformed entries, then copies
+and freezes the tuple.
 
 ### Routing use
 
@@ -173,7 +175,7 @@ this exact callback message type:
 ```ts
 type InterfaceRouteMessage<
   TInterface extends object,
-  Schemas extends readonly MessageSchema[],
+  Schemas extends InterfaceSchemas,
 > = MessageShape<Schemas[number]> & TInterface;
 ```
 

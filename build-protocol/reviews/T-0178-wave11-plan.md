@@ -111,6 +111,11 @@ callback at that derived union intersected with `TInterface`. Compile-fail
 fixtures now cover non-schema entries, incompatible pairing, empty membership,
 and unsafe member-only field access.
 
+Second targeted re-review found that `readonly MessageSchema[]` still admitted
+an empty tuple through `never`. The final correction introduces and consistently
+uses `InterfaceSchemas = readonly [MessageSchema, ...MessageSchema[]]`, while
+retaining runtime rejection for dynamically malformed JavaScript callers.
+
 ### Style/maintainability
 
 Profile: explicit `style_maintainability_reviewer`, `gpt-5.6-terra` / high.
