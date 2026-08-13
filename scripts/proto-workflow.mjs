@@ -155,7 +155,7 @@ export function main(argv = process.argv.slice(2)) {
   }
 
   if (command === "generate") {
-    return generateTargets();
+    return generateTargets({ prepareBootstrap: prepareProtoToolsBootstrap });
   }
 
   return runCommand("buf lint", resolveBufExecutable(), ["lint"]);
@@ -1103,7 +1103,7 @@ export function generateTargets(options = {}) {
   let staged;
   let messageBoardRegistry;
   try {
-    prepareProtoToolsBootstrap(root, options.runBootstrapCommand);
+    options.prepareBootstrap?.(root, options.runBootstrapCommand);
     recoverPublication(root, { ...defaultPublicationOperations, ...options.publicationOperations });
     const prepareStatus = prepareGeneratedOutput(root);
     if (prepareStatus !== 0) {
