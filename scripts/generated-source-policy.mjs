@@ -1,7 +1,10 @@
-import {
-  generatedFileNotice,
-  generatedTypeScript,
-} from "../packages/proto-tools/dist/src/generation/generated-source-policy.js";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+
+function policy() {
+  return require("../packages/proto-tools/dist/src/generation/generated-source-policy.js");
+}
 
 const trackedGeneratedTypeScript = new Set([
   "examples/message-board/app/src/model-registry.ts",
@@ -14,7 +17,13 @@ export function isGeneratedTypeScriptPath(path) {
 }
 
 /* Delegates generated content policy to the publishable proto-tools implementation. */
-export { generatedFileNotice, generatedTypeScript };
+export function generatedFileNotice(sourcePaths) {
+  return policy().generatedFileNotice(sourcePaths);
+}
+
+export function generatedTypeScript(source, sourcePaths) {
+  return policy().generatedTypeScript(source, sourcePaths);
+}
 
 /* Derives stable Proto provenance from an ordinary generated file name. */
 export function sourceProtoForGeneratedFile(path) {

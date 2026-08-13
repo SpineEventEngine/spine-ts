@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
-import { generatedFileNotice } from "./generated-source-policy.mjs";
+import { generatedTypeScript } from "./generated-source-policy.mjs";
 
 function files(root, suffix) {
   const output = [];
@@ -43,36 +43,37 @@ export function writeSpineProtoArtifacts(repoRoot, generatedRoot, manifestOutput
   ) {
     throw new Error("generated Protobuf modules must exactly match owned Proto sources");
   }
-  const source = [
-    generatedFileNotice(protoFiles).trimEnd(),
-    "",
-    'import type { Message } from "@bufbuild/protobuf";',
-    'import type { GenMessage } from "@bufbuild/protobuf/codegenv2";',
-    'import type { ProtoModule } from "../src/model/proto-module.js";',
-    ...generatedFiles.map(
-      (path, index) =>
-        `import * as schemas${String(index)} from ${JSON.stringify(`./${path.replace(/\.ts$/, ".js")}`)};`,
-    ),
-    "",
-    "const schemas = Object.freeze([",
-    ...generatedFiles.map((_, index) =>
-      [
-        `  ...Object.values(schemas${String(index)})`,
-        '    .filter((value) => typeof value === "object" && value !== null &&',
-        '      (value as { kind?: unknown }).kind === "message")',
-        "    .map((value) => value as unknown as GenMessage<Message>),",
-      ].join("\n"),
-    ),
-    "].sort((left, right) => left.typeName < right.typeName ? -1 : left.typeName > right.typeName ? 1 : 0));",
-    "",
-    "/** All Spine schemas shipped by `@spine-event-engine/proto`. */",
-    `export const ${config.moduleExport}: ProtoModule = Object.freeze({`,
-    `  name: ${JSON.stringify(packageJson.name)},`,
-    "  schemas,",
-    "  dependencies: Object.freeze([]),",
-    "});",
-    "",
-  ].join("\n");
+  const source = generatedTypeScript(
+    [
+      'import type { Message } from "@bufbuild/protobuf";',
+      'import type { GenMessage } from "@bufbuild/protobuf/codegenv2";',
+      'import type { ProtoModule } from "../src/model/proto-module.js";',
+      ...generatedFiles.map(
+        (path, index) =>
+          `import * as schemas${String(index)} from ${JSON.stringify(`./${path.replace(/\.ts$/, ".js")}`)};`,
+      ),
+      "",
+      "const schemas = Object.freeze([",
+      ...generatedFiles.map((_, index) =>
+        [
+          `  ...Object.values(schemas${String(index)})`,
+          '    .filter((value) => typeof value === "object" && value !== null &&',
+          '      (value as { kind?: unknown }).kind === "message")',
+          "    .map((value) => value as unknown as GenMessage<Message>),",
+        ].join("\n"),
+      ),
+      "].sort((left, right) => left.typeName < right.typeName ? -1 : left.typeName > right.typeName ? 1 : 0));",
+      "",
+      "/** All Spine schemas shipped by `@spine-event-engine/proto`. */",
+      `export const ${config.moduleExport}: ProtoModule = Object.freeze({`,
+      `  name: ${JSON.stringify(packageJson.name)},`,
+      "  schemas,",
+      "  dependencies: Object.freeze([]),",
+      "});",
+      "",
+    ].join("\n"),
+    protoFiles,
+  );
   writeFileSync(join(generatedRoot, "proto-module.ts"), source, "utf8");
   const manifest = {
     formatVersion: config.formatVersion,

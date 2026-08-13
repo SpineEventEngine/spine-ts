@@ -86,7 +86,7 @@ const generatedPolicy = Object.freeze({
           (match) => match[1] ?? "",
         );
         const provenance =
-          derived.length > 0 ? derived : generated.length > 0 ? generated : sources;
+          generated.length > 0 ? generated : derived.length > 0 ? derived : sources;
         if (provenance.length > 0)
           writeFileSync(path, generatedPolicy.generatedSource(source, provenance), "utf8");
       }
