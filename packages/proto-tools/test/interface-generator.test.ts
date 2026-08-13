@@ -1,0 +1,87 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
+import { create, setExtension } from "@bufbuild/protobuf";
+import { fileDesc } from "@bufbuild/protobuf/codegenv2";
+import { base64Encode } from "@bufbuild/protobuf/wire";
+import { toBinary } from "@bufbuild/protobuf";
+import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
+import { EveryIsOptionSchema, every_is, file_spine_options } from "@spine-event-engine/proto";
+import { describe, expect, it } from "vitest";
+
+import { InterfaceGenerator } from "../src/generation/interface-generator.js";
+import type { Schema } from "@bufbuild/protoplugin";
+
+function optionFile(tsType: string, generate = true) {
+  const file = create(FileDescriptorProtoSchema, {
+    name: "example/signals.proto",
+    package: "example",
+    dependency: ["spine/options.proto"],
+    options: {},
+    messageType: [{ name: "Signal", nestedType: [{ name: "Nested" }] }],
+  });
+  if (file.options === undefined) throw new Error("fixture options are missing");
+  setExtension(file.options, every_is, create(EveryIsOptionSchema, { generate, tsType }));
+  return fileDesc(base64Encode(toBinary(FileDescriptorProtoSchema, file)), [file_spine_options]);
+}
+
+describe("InterfaceGenerator", () => {
+  it("emits one same-name type/value companion with nested schema membership", () => {
+    const printed: string[] = [];
+    const generated: string[] = [];
+    const schema = {
+      files: [optionFile("SignalFamily")],
+      generateFile: (name: string) => {
+        generated.push(name);
+        return {
+          import: (name_: string) => name_,
+          importSchema: (message: { readonly name: string }) => `${message.name}Schema`,
+          preamble: () => undefined,
+          export: (kind: string, name_: string) => `export ${kind} ${name_}`,
+          print: (...parts: readonly string[]) => printed.push(parts.join("")),
+        };
+      },
+    } as unknown as Schema;
+
+    InterfaceGenerator.generateCompanions(schema);
+
+    expect(generated).toEqual(["interfaces/example/signals.ts"]);
+    expect(printed.join("")).toContain("export interface SignalFamily {}");
+    expect(printed.join("")).toContain("[SignalSchema, NestedSchema] as const");
+    expect(printed.join("")).toContain("export const SignalFamily");
+  });
+
+  it("rejects empty and invalid generated TypeScript names before emitting output", () => {
+    for (const name of ["", "Outer.Inner", "not-valid"]) {
+      const schema = {
+        files: [optionFile(name)],
+        generateFile: () => {
+          throw new Error("invalid declaration must not emit output");
+        },
+      } as unknown as Schema;
+      expect(() => InterfaceGenerator.generateCompanions(schema)).toThrow("ts_type");
+    }
+  });
+
+  it("does not emit a companion when every_is generation is disabled", () => {
+    const schema = {
+      files: [optionFile("AuthoredSignal", false)],
+      generateFile: () => {
+        throw new Error("authored declaration must not emit output");
+      },
+    } as unknown as Schema;
+
+    InterfaceGenerator.generateCompanions(schema);
+  });
+});
