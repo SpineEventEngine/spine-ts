@@ -174,3 +174,9 @@ Message Board notice-idempotency correction are resolved by implementation.
   nine-source coverage is **180/200 changed executable lines (90.00%)** against
   `origin/main...HEAD`. Status is correction-complete/re-review-ready; release
   remains unrun.
+
+## Reliability correction disposition
+
+- Reliability (existing Terra/high; runtime metadata unavailable) found and the
+  implementation resolves bootstrap refusal cleanup, descriptor failure cleanup,
+  fixture write-stage cleanup, and bounded iterative Proto source discovery.
