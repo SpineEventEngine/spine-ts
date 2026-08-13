@@ -3,6 +3,12 @@
 Status: Accepted review findings corrected; re-review ready. No reviewer has
 yet accepted this correction batch.
 
+Final CLI-level cleanup proof: the isolated failing-Buf CLI regression starts
+the real bootstrap and proves descriptor-root and bootstrap-cache cleanup. The
+sequential generated build and exact six-file suite pass 199/199; changed
+executable coverage is 185/203 (91.13%). Reliability re-review and
+`verify:release` remain pending.
+
 Final reliability correction evidence: generated build and the exact six-file
 suite pass 195/195; changed executable coverage is 180/199 (90.45%). CLI
 bootstrap preparation occurs after lock acquisition, injected orchestration is

@@ -2,6 +2,12 @@
 
 Status: Review corrections complete; re-review ready
 
+Final CLI-cleanup evidence (2026-08-13): an isolated CLI-level failing-Buf
+regression starts the real bootstrap and proves both descriptor temporary roots
+and bootstrap cache entries are removed. Sequential generated build and exact
+six-file verification pass 199/199; changed executable coverage is 185/203
+(91.13%). Reliability re-review and `verify:release` remain pending.
+
 Final reliability-correction verification (2026-08-13): the generated build
 passes; the exact six-file suite passes 195/195; and executable changed-range
 coverage against `origin/main...HEAD` is 180/199 (90.45%). The bootstrap now
