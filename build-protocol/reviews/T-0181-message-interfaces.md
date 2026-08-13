@@ -39,3 +39,9 @@ the evidence.
 - Copyright preflight correction: canonical header restored in the provider
   module. `pnpm lint:copyright`, ESLint, TSDoc, formatting, and diff-integrity
   pass; it does not reopen behavioral review and release remains pending.
+- Clean-bootstrap correction: the post-Buf plugin is included in the compiled
+  bootstrap inventory and resolves custom option descriptors from Buf's schema
+  rather than a generated-package runtime import. RED reproduced the missing
+  module in an isolated clone; GREEN has 64 workflow tests, 74 focused tests,
+  real `proto:generate`, and generated-current verification passing. No
+  specialist review was dispatched and release remains pending.

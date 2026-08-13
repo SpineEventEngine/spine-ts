@@ -79,6 +79,12 @@ Status: In implementation
   Focused suites (4 files, 162 tests), ESLint, cleanup, TSDoc, formatting, and
   diff integrity pass. Release verification remains intentionally unrun at this
   checkpoint.
+- Clean-bootstrap correction: isolated real model generation now proves the
+  compiled bootstrap contains and runs the interface plugin without a normal
+  Proto Tools `dist` cache. The plugin obtains custom option descriptors from
+  the Buf schema request; 64 workflow tests, 74 focused tests, real generation,
+  and generated-current verification pass. Release remains intentionally
+  unrun at this checkpoint.
 
 ## Skills
 
