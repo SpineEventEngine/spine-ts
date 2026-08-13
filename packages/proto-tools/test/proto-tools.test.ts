@@ -470,12 +470,16 @@ function linkThirdParty(app: string): void {
 describe("spine proto model tooling", () => {
   it("rejects generated source traversal entry inventory", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-generated-entries-"));
-    for (let index = 0; index < 1_001; index += 1)
-      writeFileSync(join(root, `entry-${String(index)}.ts`), "export {};\n");
+    try {
+      for (let index = 0; index < 1_001; index += 1)
+        writeFileSync(join(root, `entry-${String(index)}.ts`), "export {};\n");
 
-    expect(() => normalizeGeneratedTree(root, ["example/task.proto"])).toThrow(
-      /bounded inventory/u,
-    );
+      expect(() => normalizeGeneratedTree(root, ["example/task.proto"])).toThrow(
+        /bounded inventory/u,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("preserves a prior handler registry when model provenance is invalid", () => {
