@@ -197,3 +197,8 @@ Message Board notice-idempotency correction are resolved by implementation.
   both per-model depth and entry bounds. Exact changed executable coverage is
   **201/218 (92.20%)** against `origin/main...HEAD`; status remains
   correction-complete/re-review-ready and release remains unrun.
+
+- Final reliability residual resolved: an isolated CLI-level Buf failure proves
+  descriptor and bootstrap cleanup instead of relying only on injected rendering.
+  Exact six-file suite is **199/199** and changed executable coverage is
+  **203/220 (92.27%)**. Status remains correction-complete/re-review-ready.
