@@ -70,6 +70,9 @@ Status: In implementation
   single existing staged Buf output transaction. It validates generated names,
   includes nested messages, and is normalized under the shared provenance policy.
   Fixture coverage for options/rollback and source-view behavior remains pending.
+- Staged publication: T-0181 uses the existing sole staged-generation and atomic
+  manifest/tree publication transaction. Focused fault-injection evidence now
+  covers every generation-to-publication boundary and prior-output preservation.
 
 ## Skills
 
