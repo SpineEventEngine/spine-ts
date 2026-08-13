@@ -103,6 +103,14 @@ The correction also requires positive/negative declaration fixtures,
 repeat-generation coverage, public factory TSDoc, copied-object rejection, and
 cross-package external-consumer typing.
 
+First targeted re-review found one residual P1: the generic relationship was
+still prose-only. The second correction freezes `MessageInterface<TInterface,
+Schemas>`, derives members as `MessageShape<Schemas[number]>`, constrains the
+factory tuple with conditional assignability, and fixes each token-route
+callback at that derived union intersected with `TInterface`. Compile-fail
+fixtures now cover non-schema entries, incompatible pairing, empty membership,
+and unsafe member-only field access.
+
 ### Style/maintainability
 
 Profile: explicit `style_maintainability_reviewer`, `gpt-5.6-terra` / high.
