@@ -1,6 +1,6 @@
 # T-0178: Wave 11 Semantic Type Generation And Interface Routing Plan
 
-Status: Specialist review corrections applied; targeted re-review pending
+Status: Reviewed and verification-complete; awaiting human approval
 
 ## Objective
 
@@ -214,7 +214,8 @@ Dispatch acceptance:
 The splitter left only the public spelling of the generated token abstraction
 open. The plan resolves it as:
 
-- `MessageInterface<TInterface, TMessage>` for the immutable token type;
+- `MessageInterface<TInterface, Schemas>` for the immutable token type, where
+  `Schemas` is the non-empty readonly member-schema tuple;
 - `MessageInterfaces.define(...)` for the supported low-level public factory
   used by generated modules.
 

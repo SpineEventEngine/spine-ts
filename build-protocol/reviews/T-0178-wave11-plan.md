@@ -1,6 +1,6 @@
 # T-0178 Review Log
 
-Status: Consolidated corrections applied; targeted re-review pending
+Status: CLEAN; planning package awaiting human approval
 
 ## Planned Concern Dispositions
 
@@ -122,6 +122,29 @@ factory-instance identity with a public guard and copy/lookalike tests; a
 generation-ID protocol with manifest-as-commit-point and fail-closed readers;
 and a normalized path/content inventory including recursively extended
 `tsconfig` files, with add/remove/rename/config race fixtures.
+
+Final TypeScript/API re-review confirmed the tuple-based public signature, then
+found one record-only mismatch: the task ledger still called the second generic
+`TMessage`. It now consistently names the non-empty member-schema tuple
+`Schemas`.
+
+## Final Re-Review Dispositions
+
+- Documentation completeness: CLEAN.
+- TypeScript/API documentation: CLEAN after the non-empty tuple and ledger
+  corrections.
+- Style/maintainability: CLEAN.
+- Performance/reliability: CLEAN.
+- Security: N/A for planning, for the concrete reason recorded above; final
+  implementation security review remains assigned to T-0186.
+
+## Final Planning Verification
+
+`pnpm verify:task -- --no-tests` passed after convergence. It completed the
+clean TypeScript build, tooling typecheck, cleanup, TSDoc, copyright, logging
+containment, formatting, documentation-audience, and release-readiness checks.
+Release readiness verified 82 package imports, 51 package assets, and 364
+relative Markdown links.
 
 ### Style/maintainability
 
