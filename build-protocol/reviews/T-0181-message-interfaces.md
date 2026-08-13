@@ -1,6 +1,7 @@
 # T-0181 Review Log
 
-Status: Implementation in progress; no specialist review dispatched
+Status: Implementation and release preflight complete; specialist review ready;
+no specialist review dispatched
 
 ## Scope
 
@@ -24,6 +25,20 @@ Reviewer dispatch remains orchestrator-owned. Every future assignment must
 record the existing role and explicit model/reasoning; runtime metadata is
 recorded when exposed, otherwise configured role/profile and that limitation are
 the evidence.
+
+## Pending Review Assignments
+
+- Documentation completeness reviewer: existing role, `gpt-5.6-luna` / medium,
+  explicit orchestrator assignment required.
+- TypeScript/API reviewer: existing role, `gpt-5.6-terra` / high, explicit
+  orchestrator assignment required; inspect the nonfatal TypeDoc links to
+  excluded `MessageInterfaces.define` and `.is` targets.
+- Style/maintainability reviewer: existing role, `gpt-5.6-terra` / high,
+  explicit orchestrator assignment required.
+- Performance/reliability reviewer: existing role, `gpt-5.6-terra` / high,
+  explicit orchestrator assignment required.
+- Runtime model/reasoning telemetry is unavailable; configured role/profile
+  and explicit dispatch are the available acceptance evidence.
 
 ## Implementation Evidence
 
@@ -53,3 +68,8 @@ the evidence.
   unused test fixture parameter outside the earlier scoped lint command. It is
   removed; repository ESLint, the 64-test workflow suite, cleanup, TSDoc,
   copyright, formatting, and diff integrity pass. Release was not rerun.
+- Final release verification passed: 249 test files passed / 3 skipped; 3,961
+  tests passed / 14 skipped; coverage is 94.17% statements, 90.37% branches,
+  94.07% functions, and 95.19% lines. Generated gates, docs, Proto,
+  containment, and release readiness passed. TypeDoc's nonfatal unresolved-link
+  warnings are retained for the API reviewer.

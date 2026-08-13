@@ -60,6 +60,28 @@ Status: In implementation
 - Security: N/A unless implementation changes a trust boundary; final Wave 11
   security review remains T-0186.
 
+## Release And Review Readiness
+
+Status: Implementation and release preflight complete; specialist review ready.
+
+- First release attempt reached repository-wide ESLint and failed only on the
+  unused bootstrap-fixture parameter recorded below; the correction preceded
+  the final verification.
+- Final `pnpm verify:release` passed: 249 test files passed, 3 skipped; 3,961
+  tests passed, 14 skipped. Coverage: statements 94.17%, branches 90.37%,
+  functions 94.07%, lines 95.19%. Generated gates, documentation, Proto,
+  containment, and release-readiness checks passed.
+- TypeDoc emitted nonfatal warnings that `MessageInterface` links to
+  `MessageInterfaces.define` and `MessageInterfaces.is`, whose targets are not
+  included in the generated API documentation. This is pending TypeScript/API
+  review rather than a release failure.
+- Pending orchestrator-owned reviewer assignments: documentation completeness
+  reviewer `gpt-5.6-luna` / medium; TypeScript/API reviewer
+  `gpt-5.6-terra` / high; style/maintainability reviewer `gpt-5.6-terra` /
+  high; performance/reliability reviewer `gpt-5.6-terra` / high. Each is an
+  explicit profile assignment; runtime metadata remains unavailable on this
+  surface.
+
 ## Checkpoints
 
 - Core token RED/GREEN: focused test first failed for the absent public export,
