@@ -35,11 +35,7 @@ import { ProtoConfig, ProtoManifest } from "../index.js";
 import { readManifestAt } from "../io/manifest-reader.js";
 import { ModelGraph } from "../model/model-graph.js";
 import { ManifestFile, type ManifestFileOperations } from "../io/atomic-manifest.js";
-import {
-  generatedNotice,
-  generatedSource,
-  normalizeGeneratedTree,
-} from "./generated-source-policy.js";
+import { generatedSource, normalizeGeneratedTree } from "./generated-source-policy.js";
 
 /**
  * Bounded seams used to test failure handling while retaining real Buf integration.

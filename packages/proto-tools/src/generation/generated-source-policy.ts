@@ -14,7 +14,7 @@
 
 /* Shared publishable generated-TypeScript provenance policy. */
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { join } from "node:path";
 
 /**
  * Renders a deterministic generated-file notice.
@@ -64,11 +64,10 @@ export function generatedSource(source: string, sources: readonly string[]): str
   const provenance = ` * Generated from Proto: ${[...new Set(sources)].sort().join(", ")}.`;
   return `${generatedNotice(sources)}${body.replace(
     /(^|\n)(\/\*\*[\s\S]*?\*\/\n)?(export (?:const|interface|enum|type|class|function) )/gu,
-    (_match, prefix, documentation = "", declaration) => {
-      const cleaned = documentation.replace(/ \* Generated from Proto: .*\.\n/gu, "");
-      const oneLine = cleaned.match(/^\/\*\*[ \t]*([^\n]*?)[ \t]*\*\/\n$/u);
-      const normalized =
-        oneLine === null ? cleaned : `/**\n * ${oneLine[1] ?? ""}\n */\n`;
+    (_match: string, prefix: string, documentation: string | undefined, declaration: string) => {
+      const cleaned = (documentation ?? "").replace(/ \* Generated from Proto: .*\.\n/gu, "");
+      const oneLine = /^\/\*\*[ \t]*([^\n]*?)[ \t]*\*\/\n$/u.exec(cleaned);
+      const normalized = oneLine === null ? cleaned : `/**\n * ${oneLine[1] ?? ""}\n */\n`;
       return cleaned === ""
         ? `${prefix}/**\n${provenance}\n */\n${declaration}`
         : `${prefix}${normalized.replace(/ \*\/\n$/u, `${provenance}\n */\n`)}${declaration}`;
