@@ -15,7 +15,7 @@ Status: In implementation
 
 ## Human-Imposed Requirements Ledger
 
-1. Ingest exact upstream bytes for `SpineEventEngine/base` master commit
+1. Ingest exact upstream bytes for `SpineEventEngine/base-libraries` master commit
    `51cb428771e5af8a944675fb8e26e9eb2c3d0dfe`, upstream path
    `base/src/main/proto/spine/options.proto`, whose SHA-256 is
    `894468a9ee427d4805accae79ef83cbdf5aacb09e41193b4d5cc965b3ede0ad9`.
@@ -83,3 +83,10 @@ Status: In implementation
   mechanically verified.
 - Security: N/A: no trust boundary changes; final Wave 11 security review is
   owned by T-0186.
+
+## 2026-08-13 - Accepted Documentation Correction
+
+The canonical Wave 11 authority is `SpineEventEngine/base-libraries`, not its
+`SpineEventEngine/base` redirect alias. The provenance fixture now requires the
+canonical repository and canonical source/raw URLs at the same pinned commit;
+the exact source bytes, SHA-256, and frozen descriptor digest remain unchanged.

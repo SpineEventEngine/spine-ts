@@ -103,16 +103,16 @@ describe("@spine-event-engine/proto", () => {
     );
 
     expect(source).toMatchObject({
-      repository: "SpineEventEngine/base",
+      repository: "SpineEventEngine/base-libraries",
       commit: "51cb428771e5af8a944675fb8e26e9eb2c3d0dfe",
       upstreamPath: "base/src/main/proto/spine/options.proto",
       sha256: "894468a9ee427d4805accae79ef83cbdf5aacb09e41193b4d5cc965b3ede0ad9",
     });
     expect(source?.sourceUrl).toBe(
-      "https://github.com/SpineEventEngine/base/blob/51cb428771e5af8a944675fb8e26e9eb2c3d0dfe/base/src/main/proto/spine/options.proto",
+      "https://github.com/SpineEventEngine/base-libraries/blob/51cb428771e5af8a944675fb8e26e9eb2c3d0dfe/base/src/main/proto/spine/options.proto",
     );
     expect(source?.rawUrl).toBe(
-      "https://raw.githubusercontent.com/SpineEventEngine/base/51cb428771e5af8a944675fb8e26e9eb2c3d0dfe/base/src/main/proto/spine/options.proto",
+      "https://raw.githubusercontent.com/SpineEventEngine/base-libraries/51cb428771e5af8a944675fb8e26e9eb2c3d0dfe/base/src/main/proto/spine/options.proto",
     );
   });
 

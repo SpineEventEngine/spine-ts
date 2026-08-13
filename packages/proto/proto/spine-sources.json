@@ -256,11 +256,11 @@
     },
     {
       "localPath": "packages/proto/proto/spine/options.proto",
-      "repository": "SpineEventEngine/base",
+      "repository": "SpineEventEngine/base-libraries",
       "commit": "51cb428771e5af8a944675fb8e26e9eb2c3d0dfe",
       "upstreamPath": "base/src/main/proto/spine/options.proto",
-      "sourceUrl": "https://github.com/SpineEventEngine/base/blob/51cb428771e5af8a944675fb8e26e9eb2c3d0dfe/base/src/main/proto/spine/options.proto",
-      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/base/51cb428771e5af8a944675fb8e26e9eb2c3d0dfe/base/src/main/proto/spine/options.proto",
+      "sourceUrl": "https://github.com/SpineEventEngine/base-libraries/blob/51cb428771e5af8a944675fb8e26e9eb2c3d0dfe/base/src/main/proto/spine/options.proto",
+      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/base-libraries/51cb428771e5af8a944675fb8e26e9eb2c3d0dfe/base/src/main/proto/spine/options.proto",
       "sha256": "894468a9ee427d4805accae79ef83cbdf5aacb09e41193b4d5cc965b3ede0ad9"
     },
     {
