@@ -53,8 +53,8 @@ function validateMessageDeclarations(file: {
 /**
  * Generates file-scoped empty TypeScript interfaces and nominal schema tokens.
  *
- * Authored interface discovery and message-level conformance are intentionally
- * owned by T-0182; this phase only materializes `(every_is).generate = true`.
+ * T-0181 materializes generated declarations and provider-resolved authored
+ * declarations; T-0182 owns the concrete same-module provider implementation.
  */
 export const InterfaceGenerator: Readonly<{
   generateCompanions(schema: Schema): void;
@@ -66,7 +66,10 @@ export const InterfaceGenerator: Readonly<{
 
   generateWithProvider(schema: Schema, provider: InterfaceDeclarationProvider): void {
     const authored = new Map<string, DescMessage[]>();
-    const generated = new Map<string, { readonly file: (typeof schema.files)[number]; readonly members: readonly DescMessage[] }>();
+    const generated = new Map<
+      string,
+      { readonly file: (typeof schema.files)[number]; readonly members: readonly DescMessage[] }
+    >();
     for (const file of schema.files) {
       validateMessageDeclarations(file);
       for (const message of collectMessages(file.messages)) {
@@ -85,12 +88,14 @@ export const InterfaceGenerator: Readonly<{
       }
     }
     for (const name of authored.keys()) {
-      if (generated.has(name)) throw new Error(`spine-proto: generated and authored interface names conflict`);
+      if (generated.has(name))
+        throw new Error(`spine-proto: generated and authored interface names conflict`);
     }
     const paths = new Set<string>();
     for (const name of [...generated.keys(), ...authored.keys()]) {
       const path = companionPath(name);
-      if (paths.has(path)) throw new Error(`spine-proto: duplicate interface companion path ${path}`);
+      if (paths.has(path))
+        throw new Error(`spine-proto: duplicate interface companion path ${path}`);
       paths.add(path);
     }
     const resolved = [...authored.entries()].map(([name, members]) => ({
@@ -98,13 +103,24 @@ export const InterfaceGenerator: Readonly<{
       members,
       declaration: provider.resolve(name, members),
     }));
+    for (const candidate of generated.values()) {
+      if (candidate.members.length === 0)
+        throw new Error(
+          `${candidate.file.proto.name}: every_is cannot target an empty message set`,
+        );
+    }
+    for (const candidate of resolved) {
+      if (
+        candidate.declaration !== undefined &&
+        (candidate.declaration.name !== candidate.name ||
+          candidate.declaration.importPath.length === 0)
+      )
+        throw new Error(
+          "spine-proto: authored interface provider returned an irreconcilable declaration",
+        );
+    }
     for (const [name, candidate] of generated) {
       const members = candidate.members;
-      if (members.length === 0) {
-        throw new Error(
-          `spine-proto: ${candidate.file.proto.name}: every_is cannot target an empty message set`,
-        );
-      }
       const output = schema.generateFile(companionPath(name));
       const define = output.import("MessageInterfaces", "@spine-event-engine/core");
       const token = output.import("MessageInterface", "@spine-event-engine/core", true);
@@ -127,17 +143,13 @@ export const InterfaceGenerator: Readonly<{
     }
     for (const candidate of resolved) {
       if (candidate.declaration === undefined) continue;
-      if (
-        candidate.declaration.name !== candidate.name ||
-        candidate.declaration.importPath.length === 0
-      )
-        throw new Error("spine-proto: authored interface provider returned an irreconcilable declaration");
       const output = schema.generateFile(companionPath(candidate.name));
       const define = output.import("MessageInterfaces", "@spine-event-engine/core");
       const token = output.import("MessageInterface", "@spine-event-engine/core", true);
       const schemaImports = candidate.members.map((member) => output.importSchema(member));
       const sourceFile = candidate.members[0]?.file;
-      if (sourceFile === undefined) throw new Error("spine-proto: authored interface has no members");
+      if (sourceFile === undefined)
+        throw new Error("spine-proto: authored interface has no members");
       output.preamble(sourceFile);
       output.print(
         `import type { ${candidate.declaration.name} as Authored${candidate.name} } from ${JSON.stringify(candidate.declaration.importPath)};\n\n`,
