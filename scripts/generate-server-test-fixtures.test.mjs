@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -71,6 +79,48 @@ describe("generate-server-test-fixtures", () => {
         },
       );
       expect(result.status).toBe(0);
+      const cache = join(clone, "packages/proto-tools/node_modules/.cache");
+      expect(existsSync(cache) ? readdirSync(cache) : []).not.toContainEqual(
+        expect.stringMatching(/^spine-proto-tools-bootstrap-/u),
+      );
+    } finally {
+      spawnSync("git", ["worktree", "remove", "--force", clone], { cwd: root, encoding: "utf8" });
+      rmSync(isolated, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it("releases standalone bootstrap and descriptor temporaries when Buf fails", () => {
+    const root = process.cwd();
+    const isolated = mkdtempSync(join(tmpdir(), "spine-fixture-failing-bootstrap-"));
+    const clone = join(isolated, "repo");
+    const childTemp = join(isolated, "child-temp");
+    const worktree = spawnSync("git", ["worktree", "add", "--detach", clone, "HEAD"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    if (worktree.status !== 0) throw new Error(`${worktree.stdout}${worktree.stderr}`);
+    try {
+      const install = spawnSync("pnpm", ["install", "--offline", "--frozen-lockfile"], {
+        cwd: clone,
+        encoding: "utf8",
+      });
+      if (install.status !== 0) throw new Error(`${install.stdout}${install.stderr}`);
+      rmSync(join(clone, "packages/proto-tools/dist"), { recursive: true, force: true });
+      rmSync(join(clone, "node_modules/.bin/buf"), { force: true });
+      mkdirSync(childTemp);
+      const result = spawnSync(
+        process.execPath,
+        [join(clone, "scripts/generate-server-test-fixtures.mjs")],
+        {
+          cwd: clone,
+          encoding: "utf8",
+          env: { ...process.env, TMPDIR: childTemp, PATH: childTemp },
+        },
+      );
+      expect(result.status).not.toBe(0);
+      expect(readdirSync(childTemp)).not.toContainEqual(
+        expect.stringMatching(/^spine-server-fixtures-/u),
+      );
       const cache = join(clone, "packages/proto-tools/node_modules/.cache");
       expect(existsSync(cache) ? readdirSync(cache) : []).not.toContainEqual(
         expect.stringMatching(/^spine-proto-tools-bootstrap-/u),
