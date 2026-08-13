@@ -980,35 +980,44 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
 }
 
 function normalizeGeneratedTypeScriptTree(root, packageSources = []) {
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    const path = join(root, entry.name);
-    if (entry.isDirectory()) {
-      normalizeGeneratedTypeScriptTree(path, packageSources);
-      continue;
+  const pending = [[root, 0]];
+  let entries = 0;
+  while (pending.length > 0) {
+    const [directory, depth] = pending.pop();
+    if (depth > 64) throw new Error("generated TypeScript traversal exceeds bounded inventory");
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      entries += 1;
+      if (entries > 1_000)
+        throw new Error("generated TypeScript traversal exceeds bounded inventory");
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        pending.push([path, depth + 1]);
+        continue;
+      }
+      if (!entry.isFile() || !path.endsWith(".ts")) continue;
+      const relativePath = relative(root, path).split(sep).join("/");
+      const source = readFileSync(path, "utf8");
+      const sources = [...source.matchAll(/@generated from file ([^\s)]+)/gu)].map(
+        (match) => match[1],
+      );
+      const imported = [
+        ...source.matchAll(/from "(?:\.\/|\.\.\/)+([^" ]+)_pb\.js"/gu),
+        ...source.matchAll(/from "[^" ]+\/generated\/([^" ]+)_pb\.js"/gu),
+      ].map((match) => match[1].replace(/^.*?spine\//u, "spine/") + ".proto");
+      writeFileSync(
+        path,
+        generatedTypeScript(
+          source,
+          sources.length > 0
+            ? sources
+            : imported.length > 0
+              ? imported
+              : packageSources.length > 0
+                ? packageSources
+                : [sourceProtoForGeneratedFile(relativePath)],
+        ),
+      );
     }
-    if (!entry.isFile() || !path.endsWith(".ts")) continue;
-    const relativePath = relative(root, path).split(sep).join("/");
-    const source = readFileSync(path, "utf8");
-    const sources = [...source.matchAll(/@generated from file ([^\s)]+)/gu)].map(
-      (match) => match[1],
-    );
-    const imported = [
-      ...source.matchAll(/from "(?:\.\/|\.\.\/)+([^" ]+)_pb\.js"/gu),
-      ...source.matchAll(/from "[^" ]+\/generated\/([^" ]+)_pb\.js"/gu),
-    ].map((match) => match[1].replace(/^.*?spine\//u, "spine/") + ".proto");
-    writeFileSync(
-      path,
-      generatedTypeScript(
-        source,
-        sources.length > 0
-          ? sources
-          : imported.length > 0
-            ? imported
-            : packageSources.length > 0
-              ? packageSources
-              : [sourceProtoForGeneratedFile(relativePath)],
-      ),
-    );
   }
 }
 
