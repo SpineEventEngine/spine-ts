@@ -553,6 +553,12 @@ const protoGeneration = Object.freeze({
         import.meta.url,
       ),
     );
+    const interfaceGenerator = fileURLToPath(
+      new URL(
+        import.meta.url.endsWith(".ts") ? "./interface-generator.ts" : "./interface-generator.js",
+        import.meta.url,
+      ),
+    );
     writeFileSync(join(moduleRoot, "buf.yaml"), "version: v2\nmodules:\n  - path: .\n", "utf8");
     writeFileSync(
       join(moduleRoot, "buf.gen.yaml"),
@@ -567,6 +573,13 @@ const protoGeneration = Object.freeze({
         "  - local:",
         `      - ${process.execPath}`,
         `      - ${rejectionGenerator}`,
+        "    out: output",
+        "    opt:",
+        "      - target=ts",
+        "      - import_extension=js",
+        "  - local:",
+        `      - ${process.execPath}`,
+        `      - ${interfaceGenerator}`,
         "    out: output",
         "    opt:",
         "      - target=ts",

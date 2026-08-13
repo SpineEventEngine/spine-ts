@@ -66,6 +66,10 @@ Status: In implementation
   then passed after implementation. The test proves copied/deduplicated/frozen
   membership and rejects spread, `Object.assign`, prototype, serialized, and
   hand-built lookalikes through factory-instance identity.
+- Post-Buf checkpoint: file-level generated-interface plugin is wired into the
+  single existing staged Buf output transaction. It validates generated names,
+  includes nested messages, and is normalized under the shared provenance policy.
+  Fixture coverage for options/rollback and source-view behavior remains pending.
 
 ## Skills
 
