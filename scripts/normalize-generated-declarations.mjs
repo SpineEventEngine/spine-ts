@@ -36,7 +36,8 @@ export function declarationFiles(root) {
     if (depth > 64) throw new Error("generated declaration traversal exceeds bounded inventory");
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       entries += 1;
-      if (entries > 1_000) throw new Error("generated declaration traversal exceeds bounded inventory");
+      if (entries > 1_000)
+        throw new Error("generated declaration traversal exceeds bounded inventory");
       const path = join(directory, entry.name);
       if (entry.isDirectory()) pending.push([path, depth + 1]);
       else if (

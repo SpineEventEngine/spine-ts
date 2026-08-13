@@ -123,3 +123,16 @@ Message Board notice-idempotency correction are resolved by implementation.
   valid multiline TSDoc (merged into existing declaration documentation when
   present); private policy helpers use ordinary block comments. The TSDoc gate
   passes; full review remains pending.
+
+## Correction evidence: clean-dist test isolation
+
+- The accepted clean-bootstrap finding is now regression-tested without shared
+  build-output mutation: an isolated detached worktree with an offline locked
+  install removes its own proto-tools `dist` and successfully executes real
+  workflow generation. The test's `finally` removes all temporary state.
+- This fixes the former parallel-suite interference. Independent generated
+  build typecheck plus the exact six focused files pass **180/180** in parallel;
+  repeat generation/current-output and cheap mechanical gates pass. It is a
+  test-only correction, so the recorded changed executable coverage remains
+  114/123 (92.68%). Status remains correction-complete/final re-review-ready;
+  no specialist re-review or release profile has been run.

@@ -152,3 +152,17 @@ is one converged `pnpm verify:release`.
   resource cleanup, and fail-closed classification.
 - Security: N/A for the task review unless path classification accepts input
   outside configured model roots; final Wave 11 security review remains T-0186.
+
+## 2026-08-13 - Parallel-safe clean-bootstrap verification
+
+- The clean-dist black-box regression now uses a detached temporary Git
+  worktree, installs its locked dependencies offline, removes only that
+  worktree's `packages/proto-tools/dist`, and runs the real `pnpm
+proto:generate`. Cleanup is in `finally`; the shared worktree is never
+  moved or deleted.
+- RED: moving shared `dist` made parallel Vitest files lose policy/CLI output.
+  GREEN: generated-build typecheck and the six focused files pass **180/180**
+  in parallel; repeat generation twice and current-output pass. The bounded
+  test-only correction does not change the established executable changed-range
+  coverage of **114/123 (92.68%)**. Targeted re-review remains pending and
+  `verify:release` remains unrun.
