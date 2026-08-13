@@ -5325,3 +5325,84 @@ Consequences:
   copyright-header correction, and multiple-Gateway behavior move to Wave 10.
 - Browser logging, Sentry integration, Cloud Run, and npm publication remain
   outside Wave 9.
+
+## D-0113: Generate TypeScript Message Interfaces And Route By Their Tokens
+
+Status: Accepted
+
+Date: 2026-08-13
+
+Task: T-0178 planning and the Wave 11 implementation train
+
+Context:
+
+- T-0167A correctly removed TypeScript routing based on Java-only
+  `(is).java_type` and `(every_is).java_type` values.
+- The canonical upstream `spine/options.proto` now defines `ts_type` for both
+  options and documents generated versus existing TypeScript interfaces.
+- TypeScript interfaces disappear at runtime, so repository routing needs a
+  generated, typed runtime identity without returning to arbitrary strings or
+  generic semantic metadata.
+- The human requires interface inheritance to stay inside the Proto model
+  module, while allowing external property types, and requires generated
+  TypeScript to carry generated/provenance notices but no copyright header.
+
+Decision:
+
+- Import and freeze the exact pinned upstream `options.proto` source.
+- Run one automatic semantic post-generation phase after Buf and before atomic
+  publication.
+- Generate `(every_is)` interfaces only when `generate` is true. Resolve every
+  `(is)` interface and non-generated `(every_is)` interface from ordinary
+  authored source in the same model module.
+- Require every interface parent to remain in that model module after realpath
+  resolution. Permit external property types. Use the model module's
+  TypeScript program as the compatibility authority.
+- Emit generated companions under `generated/interfaces/`. The same exported
+  name denotes the TypeScript interface in type position and an immutable
+  runtime token in value position.
+- Name the public token type `MessageInterface` and its generated-code factory
+  `MessageInterfaces.define()`.
+- Reuse `.route(...)` for exact schemas and interface tokens across Command,
+  Event, and state-update routing. Resolve exact schema first, then the first
+  matching token in registration order, then the replacement/default route.
+  Do not restore `routeSemantic()` or add `@Route`.
+- Route application code once per accepted admission. Durable replay consumes
+  stored typed Inbox targets and does not invoke application routing again.
+- Demonstrate Event interface routing in To-Do with generated `TaskEvent`,
+  authored `TaskAssignmentEvent`, and exact `TaskReassigned`; never introduce
+  `TaskReassignmentEvent`.
+- Give generated TypeScript deterministic generated/provenance notices and no
+  CodeMatters copyright header. Preserve the authored-source copyright and
+  exact-one-blank-line rule.
+- Defer multiple-Gateway behavior wholly to Wave 12.
+
+Alternatives considered:
+
+- Route by Java type strings: rejected because Java names are not TypeScript
+  contracts and this caused the T-0167A correction.
+- Add `routeSemantic()` or arbitrary string keys: rejected as an unapproved
+  parallel API that is easy to mistype.
+- Search an entire dependency graph for interfaces: rejected because it makes
+  generation ambiguous and permits hidden runtime-token ancestry.
+- Infer the most-specific matching interface: rejected in favor of explicit,
+  visible registration order after exact routes.
+- Put authored interfaces in a special directory: rejected because they are
+  normal application code.
+
+Security impact:
+
+- No network, authentication, secret, or tenant boundary changes.
+- Compiler discovery and generated provenance must fail closed on realpath or
+  symlink escape; generated output never includes absolute machine paths.
+- The final Wave 11 release task runs the existing final security reviewer.
+
+Consequences:
+
+- T-0179 through T-0186 form one dependency-ordered Wave 11 train.
+- Shared generator, Proto, core, and server changes use release verification;
+  the isolated example and documentation tasks use bounded task profiles until
+  evidence requires expansion.
+- D-0112 remains authoritative for logging, `@Where`, implicit IDs,
+  rejections, default routing, and durable replay. Its Java-semantic routing
+  clause was superseded by T-0167A and this `ts_type` decision.

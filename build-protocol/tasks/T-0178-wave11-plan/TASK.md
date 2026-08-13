@@ -1,6 +1,6 @@
 # T-0178: Wave 11 Semantic Type Generation And Interface Routing Plan
 
-Status: Planning in progress
+Status: Requirements split complete; specialist review pending
 
 ## Objective
 
@@ -180,3 +180,52 @@ This planning-only task will use deterministic plan/status/link checks and
 review converge. Wave implementation tasks will select bounded coverage-enabled
 `verify:task` profiles or `verify:release` according to their shared build and
 runtime impact.
+
+## Requirements-Splitter Result
+
+The existing requirements splitter returned the smallest safe serial train:
+
+1. T-0179 generated-source provenance and copyright policy;
+2. T-0180 fresh frozen `options.proto` intake;
+3. T-0181 generated TypeScript interfaces and runtime tokens;
+4. T-0182 authored-interface discovery, inheritance, and compiler conformance;
+5. T-0183 Command/Event/state-update routing by interface token;
+6. T-0184 To-Do domain proof;
+7. T-0185 beginner-facing documentation;
+8. T-0186 convergence, release verification, and durable closure.
+
+The chain is serial because adjacent tasks overlap generated output or public
+contracts. The full ownership, acceptance, TDD, verification, and review matrix
+is in
+[`WAVE_11_TS_TYPE_ROUTING_PLAN.md`](../../planning/WAVE_11_TS_TYPE_ROUTING_PLAN.md).
+
+Dispatch acceptance:
+
+- existing role: `requirements_splitter`;
+- explicit dispatched profile: `gpt-5.6-sol` / high;
+- read-only and no-subagent constraints were followed;
+- the execution surface exposed no independently queryable runtime model or
+  reasoning telemetry, so the explicit dispatch and immutable configured role
+  are the available evidence;
+- no mismatch or fallback was visible.
+
+## Public Token Naming Resolution
+
+The splitter left only the public spelling of the generated token abstraction
+open. The plan resolves it as:
+
+- `MessageInterface<TInterface, TMessage>` for the immutable token type;
+- `MessageInterfaces.define(...)` for the generated-code-only factory.
+
+This vocabulary says what the token represents, follows existing plural
+utility names such as `Identifiers` and `Stringifiers`, and avoids reviving the
+generic semantic-tag vocabulary removed by T-0167A. Application code normally
+imports the same-named generated token, such as `TaskEvent`, and does not call
+the factory.
+
+## Additional Selected Skills
+
+- `requesting-code-review`: supplies focused concern-specific review inputs
+  after the plan is mechanically clean.
+- `verification-before-completion`: requires fresh deterministic evidence
+  before the planning task is called complete or proposed for approval.

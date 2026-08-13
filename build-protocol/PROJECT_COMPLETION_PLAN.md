@@ -1,7 +1,7 @@
 # Spine TS Project Completion Plan
 
 Status: Initial release, T-0080 authored-API/example quality correction, and
-Waves 9 and 10 complete
+Waves 9 and 10 complete; Wave 11 planning pending approval
 
 Plan date: 2026-07-12
 
@@ -175,6 +175,16 @@ durably closed.
   canonical reference navigation, and copyright/license correction.
   Multiple-Gateway behavior is deferred to a later wave. Cloud Run remains
   outside the initial offering.
+- **Wave 11:** fresh frozen `ts_type` support for `(is)` and `(every_is)`,
+  generated and authored TypeScript interfaces with same-named runtime tokens,
+  interface-based Command/Event/state-update routing through `.route(...)`, a
+  To-Do Event-routing proof, generated-source provenance with no generated
+  copyright headers, and beginner documentation. T-0178 owns the pending
+  approval plan in
+  `build-protocol/planning/WAVE_11_TS_TYPE_ROUTING_PLAN.md`.
+- **Wave 12:** multiple-Gateway behavior, subject to a future human Q&A and
+  planning task. Wave 11 creates no provisional Gateway API. Cloud Run remains
+  outside the initial offering.
 
 Wave 6 Q&A, its original implementation, review, release verification,
 integration, and documentation closure are complete. T-0113 records the
@@ -219,6 +229,12 @@ canonical API and architecture references, and the approved ten-section
 beginner guide. The integrated review wave and final release profile are clean
 after one focused metadata-test wording correction. Multiple-Gateway behavior
 remains deferred, and Cloud Run remains outside the initial offering.
+
+T-0178 plans Wave 11 from the subsequently approved human decisions and the
+fresh upstream `ts_type` contract. It is planning-only and must return a
+reviewed dependency-ordered proposal before frozen Proto, generator, runtime,
+To-Do, or reader-facing files change. Multiple-Gateway behavior moves wholly to
+Wave 12.
 
 ## Authored API And Example Quality Correction
 
