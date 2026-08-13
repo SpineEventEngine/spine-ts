@@ -491,13 +491,38 @@ describe("packed external model consumer", () => {
       );
       run(
         process.execPath,
-        [join(chat, "node_modules/@spine-event-engine/proto-tools/bin/spine-proto.mjs"), "generate"],
+        [
+          join(chat, "node_modules/@spine-event-engine/proto-tools/bin/spine-proto.mjs"),
+          "generate",
+        ],
         chat,
       );
       const firstInterfaceOutput = readFileSync(
         join(chat, "generated/interfaces/external/chat/v1/message_board.ts"),
         "utf8",
       );
+      const messageBoardSource = join(chat, "proto/external/chat/v1/message_board.proto");
+      const validMessageBoard = readFileSync(messageBoardSource, "utf8");
+      writeFileSync(messageBoardSource, validMessageBoard.replace("ChatSignal", "Outer.Inner"));
+      expect(() => {
+        run(
+          process.execPath,
+          [
+            join(chat, "node_modules/@spine-event-engine/proto-tools/bin/spine-proto.mjs"),
+            "generate",
+          ],
+          chat,
+        );
+      }).toThrow("ts_type must be a non-empty TypeScript identifier");
+      expect(
+        readFileSync(join(chat, "generated/interfaces/external/chat/v1/message_board.ts"), "utf8"),
+      ).toBe(firstInterfaceOutput);
+      expect(
+        readdirSync(join(chat, "generated")).some((name) =>
+          /^\.generated\.(?:stage|.+\.backup)-/u.test(name),
+        ),
+      ).toBe(false);
+      writeFileSync(messageBoardSource, validMessageBoard);
       const chatTarballs = join(root, "chat-tarballs");
       mkdirSync(chatTarballs);
       const chatPacked = generateBuildAndPack(chat, chatTarballs);
