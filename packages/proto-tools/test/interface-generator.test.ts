@@ -29,7 +29,7 @@ import { describe, expect, it } from "vitest";
 import { InterfaceGenerator } from "../src/generation/interface-generator.js";
 import type { Schema } from "@bufbuild/protoplugin";
 
-function optionFile(tsType: string, generate = true, messageType = "") {
+function optionFile(tsType: string, generate = true, messageType = "", javaType = "") {
   const file = create(FileDescriptorProtoSchema, {
     name: "example/signals.proto",
     package: "example",
@@ -44,7 +44,7 @@ function optionFile(tsType: string, generate = true, messageType = "") {
     ],
   });
   if (file.options === undefined) throw new Error("fixture options are missing");
-  setExtension(file.options, every_is, create(EveryIsOptionSchema, { generate, tsType }));
+  setExtension(file.options, every_is, create(EveryIsOptionSchema, { generate, tsType, javaType }));
   if (messageType.length > 0) {
     const message = file.messageType[0];
     if (message?.options === undefined) throw new Error("fixture message options are missing");
@@ -96,6 +96,17 @@ describe("InterfaceGenerator", () => {
       files: [optionFile("AuthoredSignal", false)],
       generateFile: () => {
         throw new Error("authored declaration must not emit output");
+      },
+    } as unknown as Schema;
+
+    InterfaceGenerator.generateCompanions(schema);
+  });
+
+  it("ignores JVM-only interface declarations", () => {
+    const schema = {
+      files: [optionFile("", false, "", "example.jvm.Signal")],
+      generateFile: () => {
+        throw new Error("JVM-only declaration must not emit output");
       },
     } as unknown as Schema;
 
