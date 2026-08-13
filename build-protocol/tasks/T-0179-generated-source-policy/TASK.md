@@ -2,6 +2,12 @@
 
 Status: Review corrections complete; re-review ready
 
+Final review-wave correction: Documentation review (Luna/medium) and API review
+(Terra/high) were CLEAN; runtime metadata is unavailable. Accepted style
+findings are resolved: proprietary/confidential copied preambles are stripped,
+and declaration normalization is import-side-effect-free with CLI-only
+bootstrap execution. Refreshed changed executable coverage is 180/200 (90.00%).
+
 Final explicit coverage: nine-source coverage over six focused files passed
 **189/189**; changed executable coverage against `origin/main...HEAD` is
 **174/193 (90.16%)**. `verify:release` remains unrun.

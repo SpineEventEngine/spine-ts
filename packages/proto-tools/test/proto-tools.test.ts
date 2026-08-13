@@ -468,6 +468,20 @@ function linkThirdParty(app: string): void {
 }
 
 describe("spine proto model tooling", () => {
+  it("removes proprietary block and line preambles from direct package output", () => {
+    const rendered = generatedSource(
+      [
+        "/* TeamDev Proprietary and Confidential */",
+        "// TeamDev Proprietary and Confidential",
+        "// @generated from file example/task.proto",
+        "export const task = true;",
+      ].join("\n"),
+      ["example/task.proto"],
+    );
+    expect(rendered).not.toMatch(/TeamDev|proprietary|confidential/iu);
+    expect(rendered).toContain("// @generated from file example/task.proto");
+  });
+
   it("rejects generated source traversal entry inventory", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-generated-entries-"));
     try {

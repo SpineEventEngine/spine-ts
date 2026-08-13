@@ -162,3 +162,15 @@ Message Board notice-idempotency correction are resolved by implementation.
 - Final explicit nine-source coverage passed the six focused files **189/189**;
   changed executable coverage against `origin/main...HEAD` is **174/193
   (90.16%)**, meeting the acceptance threshold. Release remains unrun.
+
+## Final review-wave disposition
+
+- Documentation completeness review: CLEAN (existing Luna/medium). TypeScript
+  API review: CLEAN (existing Terra/high). Runtime metadata is unavailable;
+  configured reviewer profiles are the durable record.
+- Accepted style corrections: canonical rendering strips proprietary/confidential
+  copied preambles, and declaration-normalizer imports are read-only while the
+  CLI explicitly bootstraps/releases policy. Focused RED/GREEN passed; refreshed
+  nine-source coverage is **180/200 changed executable lines (90.00%)** against
+  `origin/main...HEAD`. Status is correction-complete/re-review-ready; release
+  remains unrun.
