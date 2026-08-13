@@ -31,3 +31,8 @@ the evidence.
   coverage passes and the public factory rejects structural copies by private
   factory-instance identity. Generated-contract review remains pending the
   post-Buf implementation.
+- Mechanical preflight correction is ready for later review: public TSDoc now
+  describes the provider boundary without internal chronology, exact helper
+  necessity dispositions are recorded, and the focused 4-file / 162-test suite,
+  ESLint, cleanup, TSDoc, formatting, and diff-integrity gates pass. No
+  specialist review was dispatched; release verification remains pending.

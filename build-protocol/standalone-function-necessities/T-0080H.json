@@ -1,1 +1,38 @@
-[]
+[
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/interface-generator.ts",
+    "kind": "function-declaration",
+    "identity": "companionPath()#1",
+    "name": "companionPath",
+    "disposition": "necessity",
+    "reason": "TypeScript generator path boundary: companionPath deterministically maps public interface names to generated companion files before the atomic publication workflow."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/interface-generator.ts",
+    "kind": "function-declaration",
+    "identity": "collectMessages()#1",
+    "name": "collectMessages",
+    "disposition": "necessity",
+    "reason": "TypeScript descriptor traversal boundary: collectMessages recursively flattens nested message descriptors for generated membership planning."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/interface-generator.ts",
+    "kind": "function-declaration",
+    "identity": "assertTypeName()#1",
+    "name": "assertTypeName",
+    "disposition": "necessity",
+    "reason": "TypeScript generator input-validation boundary: assertTypeName rejects invalid option identifiers before any generated output is opened."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/interface-generator.ts",
+    "kind": "function-declaration",
+    "identity": "validateMessageDeclarations()#1",
+    "name": "validateMessageDeclarations",
+    "disposition": "necessity",
+    "reason": "TypeScript descriptor option-validation boundary: validateMessageDeclarations validates message-level declarations during the all-input planning pass."
+  }
+]

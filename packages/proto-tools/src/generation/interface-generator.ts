@@ -21,7 +21,9 @@ import { fileURLToPath } from "node:url";
 import type { InterfaceDeclarationProvider } from "./interface-provider.js";
 
 const typescriptIdentifier = /^[A-Za-z_$][A-Za-z0-9_$]*$/u;
-const unresolvedInterfaceProvider: InterfaceDeclarationProvider = Object.freeze({ resolve: () => undefined });
+const unresolvedInterfaceProvider: InterfaceDeclarationProvider = Object.freeze({
+  resolve: () => undefined,
+});
 
 function companionPath(name: string): string {
   return `interfaces/${name.replace(/([a-z0-9])([A-Z])/gu, "$1-$2").toLowerCase()}.ts`;
@@ -51,8 +53,8 @@ function validateMessageDeclarations(file: {
 /**
  * Generates file-scoped empty TypeScript interfaces and nominal schema tokens.
  *
- * T-0181 materializes generated declarations and provider-resolved authored
- * declarations; T-0182 owns the concrete same-module provider implementation.
+ * Provider-resolved authored declarations are emitted when a compatible
+ * discovery provider supplies them; unresolved declarations are omitted.
  */
 export const InterfaceGenerator: Readonly<{
   generateCompanions(schema: Schema): void;
@@ -66,7 +68,10 @@ export const InterfaceGenerator: Readonly<{
     const authored = new Map<string, DescMessage[]>();
     const generated = new Map<
       string,
-      { readonly file: (typeof schema.files)[number]; readonly members: readonly DescMessage[] }
+      {
+        readonly file: (typeof schema.files)[number];
+        readonly members: readonly DescMessage[];
+      }
     >();
     for (const file of schema.files) {
       validateMessageDeclarations(file);
@@ -150,7 +155,9 @@ export const InterfaceGenerator: Readonly<{
         throw new Error("spine-proto: authored interface has no members");
       output.preamble(sourceFile);
       output.print(
-        `import type { ${candidate.declaration.name} as Authored${candidate.name} } from ${JSON.stringify(candidate.declaration.importPath)};\n\n`,
+        `import type { ${candidate.declaration.name} as Authored${candidate.name} } from ${JSON.stringify(
+          candidate.declaration.importPath,
+        )};\n\n`,
         `export type ${candidate.name} = Authored${candidate.name};\n\n`,
         "const memberSchemas = [",
         ...schemaImports.flatMap((member, index) => (index === 0 ? [member] : [", ", member])),

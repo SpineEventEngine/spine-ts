@@ -71,7 +71,9 @@ describe("InterfaceGenerator", () => {
         return {
           import: (name_: string) => name_,
           importSchema: (message: { readonly name: string }) => `${message.name}Schema`,
-          preamble: () => undefined,
+          preamble: () => {
+            return undefined;
+          },
           export: (kind: string, name_: string) => `export ${kind} ${name_}`,
           print: (...parts: readonly string[]) => printed.push(parts.join("")),
         };
@@ -94,7 +96,9 @@ describe("InterfaceGenerator", () => {
           throw new Error("invalid declaration must not emit output");
         },
       } as unknown as Schema;
-      expect(() => InterfaceGenerator.generateCompanions(schema)).toThrow("ts_type");
+      expect(() => {
+        InterfaceGenerator.generateCompanions(schema);
+      }).toThrow("ts_type");
     }
   });
 
@@ -128,7 +132,9 @@ describe("InterfaceGenerator", () => {
         import: (name: string) => name,
         importSchema: (message: { readonly typeName: string }) =>
           `${message.typeName.replaceAll(".", "_")}Schema`,
-        preamble: () => undefined,
+        preamble: () => {
+          return undefined;
+        },
         export: (kind: string, name: string) => `export ${kind} ${name}`,
         print: (...parts: readonly string[]) => printed.push(parts.join("")),
       }),
@@ -136,7 +142,9 @@ describe("InterfaceGenerator", () => {
 
     InterfaceGenerator.generateCompanions(schema);
 
-    expect(printed.join("")).toContain("[example_SignalSchema, example_Signal_NestedSchema] as const");
+    expect(printed.join("")).toContain(
+      "[example_SignalSchema, example_Signal_NestedSchema] as const",
+    );
   });
 
   it("hands message declarations to the authored-interface provider seam", () => {
@@ -148,7 +156,9 @@ describe("InterfaceGenerator", () => {
         import: (name: string) => name,
         importSchema: (message: { readonly typeName: string }) =>
           `${message.typeName.replaceAll(".", "_")}Schema`,
-        preamble: () => undefined,
+        preamble: () => {
+          return undefined;
+        },
         export: (kind: string, name: string) => `export ${kind} ${name}`,
         print: (...parts: readonly string[]) => output.push(`${path}:${parts.join("")}`),
       }),
@@ -176,7 +186,9 @@ describe("InterfaceGenerator", () => {
       },
     } as unknown as Schema;
 
-    expect(() => InterfaceGenerator.generateCompanions(schema)).toThrow("ts_type");
+    expect(() => {
+      InterfaceGenerator.generateCompanions(schema);
+    }).toThrow("ts_type");
   });
 
   it("rejects planned name and provider conflicts before opening output", () => {
@@ -192,7 +204,9 @@ describe("InterfaceGenerator", () => {
           throw new Error("must not emit");
         },
       } as unknown as Schema;
-      expect(() => InterfaceGenerator.generateCompanions(schema)).toThrow(/duplicate|conflict/u);
+      expect(() => {
+        InterfaceGenerator.generateCompanions(schema);
+      }).toThrow(/duplicate|conflict/u);
       expect(generated).toBe(0);
     }
     for (const declaration of [
@@ -207,9 +221,9 @@ describe("InterfaceGenerator", () => {
           throw new Error("must not emit");
         },
       } as unknown as Schema;
-      expect(() =>
-        InterfaceGenerator.generateWithProvider(schema, { resolve: () => declaration }),
-      ).toThrow("irreconcilable");
+      expect(() => {
+        InterfaceGenerator.generateWithProvider(schema, { resolve: () => declaration });
+      }).toThrow("irreconcilable");
       expect(generated).toBe(0);
     }
   });
@@ -226,7 +240,9 @@ describe("InterfaceGenerator", () => {
         import: (name: string) => name,
         importSchema: (message: { readonly typeName: string }) =>
           `${message.typeName.replaceAll(".", "_")}Schema`,
-        preamble: () => undefined,
+        preamble: () => {
+          return undefined;
+        },
         export: (kind: string, name: string) => `export ${kind} ${name}`,
         print: (...parts: readonly string[]) => output.push(parts.join("")),
       }),
@@ -251,7 +267,9 @@ describe("InterfaceGenerator", () => {
         throw new Error("must not emit");
       },
     } as unknown as Schema;
-    expect(() => InterfaceGenerator.generateCompanions(schema)).toThrow("duplicate interface companion path");
+    expect(() => {
+      InterfaceGenerator.generateCompanions(schema);
+    }).toThrow("duplicate interface companion path");
     expect(generated).toBe(0);
   });
 });

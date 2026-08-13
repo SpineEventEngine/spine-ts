@@ -118,9 +118,14 @@ const MESSAGE_INTERFACE_TOKENS = new WeakSet<object>();
  * @typeParam Schemas The concrete non-empty tuple of member schemas.
  */
 export interface MessageInterface<TInterface extends object, Schemas extends InterfaceSchemas> {
-  /** Concrete, immutable generated message schemas that belong to this interface. */
+  /**
+   * Concrete, immutable generated message schemas that belong to this interface.
+   */
   readonly schemas: Schemas;
 
+  /**
+   * Nominal compile-time association with the represented interface shape.
+   */
   readonly [MESSAGE_INTERFACE_BRAND]: TInterface;
 }
 

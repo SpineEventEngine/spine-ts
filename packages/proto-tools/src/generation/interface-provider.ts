@@ -12,18 +12,38 @@
 
 import type { DescMessage } from "@bufbuild/protobuf";
 
-/** A resolved authored interface declaration supplied by the T-0182 provider. */
+/**
+ * A resolved authored interface declaration supplied by an authored-interface provider.
+ */
 export interface AuthoredInterfaceDeclaration {
+  /**
+   * Public TypeScript identifier of the authored interface.
+   */
   readonly name: string;
+
+  /**
+   * Module specifier from which the authored interface is imported.
+   */
   readonly importPath: string;
 }
 
-/** T-0181-owned seam for later authored-interface discovery and conformance. */
+/**
+ * Resolves authored interface declarations for generated message membership.
+ */
 export interface InterfaceDeclarationProvider {
+  /**
+   * Resolves one compatible authored interface declaration, if available.
+   *
+   * @param name The requested generated TypeScript interface name.
+   * @param members Concrete generated message members of that interface.
+   * @returns The authored declaration to alias, or `undefined` when unresolved.
+   */
   resolve(name: string, members: readonly DescMessage[]): AuthoredInterfaceDeclaration | undefined;
 }
 
-/** Fails closed until T-0182 supplies same-module authored-interface discovery. */
+/**
+ * Leaves authored declarations unresolved until a discovery provider is installed.
+ */
 export const unresolvedInterfaceProvider: InterfaceDeclarationProvider = Object.freeze({
   resolve: () => undefined,
 });

@@ -1,6 +1,15 @@
 [
   {
     "rule": "standalone-function",
+    "file": "packages/core/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "isMessageSchema()#1",
+    "name": "isMessageSchema",
+    "disposition": "necessity",
+    "reason": "TypeScript runtime validation boundary: isMessageSchema validates untyped MessageInterfaces.define membership before immutable nominal-token construction."
+  },
+  {
+    "rule": "standalone-function",
     "file": "packages/storage/src/entity/entity-history-record-spec.ts",
     "kind": "function-declaration",
     "identity": "eventHistorySpec()#1",

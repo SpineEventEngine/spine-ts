@@ -100,17 +100,15 @@ describe("MessageInterfaces", () => {
       // @ts-expect-error Interface membership cannot be empty.
       MessageInterfaces.define<SignalMessage, readonly []>([]);
       // @ts-expect-error Interface membership contains generated message schemas only.
-      MessageInterfaces.define<SignalMessage, readonly [{}]>([{}]);
+      MessageInterfaces.define<SignalMessage, readonly [object]>([{}]);
       // @ts-expect-error Every member shape must implement the declared interface.
       MessageInterfaces.define<{ readonly absent: string }, readonly [typeof CommandSchema]>([
         CommandSchema,
       ]);
 
-      const mixed = MessageInterfaces.define<
-        Message,
-        readonly [typeof RequiredNameSchema, typeof PayloadRejectedSchema]
-      >([RequiredNameSchema, PayloadRejectedSchema]);
-      type MixedMember = MessageShape<(typeof mixed.schemas)[number]>;
+      type MixedSchemas = readonly [typeof RequiredNameSchema, typeof PayloadRejectedSchema];
+      MessageInterfaces.define<Message, MixedSchemas>([RequiredNameSchema, PayloadRejectedSchema]);
+      type MixedMember = MessageShape<MixedSchemas[number]>;
       const mixedMember = undefined as unknown as MixedMember;
       // @ts-expect-error `name` is absent from one concrete member of the interface tuple.
       void mixedMember.name;

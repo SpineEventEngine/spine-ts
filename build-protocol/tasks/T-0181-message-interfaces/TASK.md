@@ -73,6 +73,12 @@ Status: In implementation
 - Staged publication: T-0181 uses the existing sole staged-generation and atomic
   manifest/tree publication transaction. Focused fault-injection evidence now
   covers every generation-to-publication boundary and prior-output preservation.
+- Lint/preflight correction: preserved the compile-fail generic assertions while
+  replacing lint-invalid test-only forms, documented the public provider seam,
+  and recorded required exact standalone-function necessity dispositions.
+  Focused suites (4 files, 162 tests), ESLint, cleanup, TSDoc, formatting, and
+  diff integrity pass. Release verification remains intentionally unrun at this
+  checkpoint.
 
 ## Skills
 
