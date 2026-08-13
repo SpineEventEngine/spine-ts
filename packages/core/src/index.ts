@@ -145,38 +145,21 @@ function isMessageSchema(value: unknown): value is MessageSchema {
 /**
  * Creates and validates nominal generated message-interface tokens.
  */
-export const MessageInterfaces: Readonly<{
-  // prettier-ignore
-
+export namespace MessageInterfaces {
   /**
    * Creates a nominal token from a non-empty tuple of generated message schemas.
    *
    * Every schema's message shape must implement `TInterface`. At runtime this
-   * factory rejects empty, malformed, and duplicate membership; it copies and
-   * freezes the retained membership. Factory availability is not an authenticity
-   * boundary: use {@link is} when accepting a runtime token candidate.
+   * factory rejects empty and malformed membership, deduplicates it, then copies
+   * and freezes the retained sequence. Factory availability is not an
+   * authenticity boundary: use `is` when accepting a runtime token candidate.
    *
    * @typeParam TInterface The common object shape of all member messages.
    * @typeParam Schemas The concrete non-empty member-schema tuple.
    * @param schemas Generated message schemas belonging to the interface.
    * @returns A frozen nominal token with concrete schema membership.
    */
-  define<TInterface extends object, const Schemas extends InterfaceSchemas>(
-    schemas: InterfaceMember<Schemas> extends TInterface ? Schemas : never,
-  ): MessageInterface<TInterface, Schemas>;
-
-  /**
-   * Determines whether a value is the exact token instance created by this factory.
-   *
-   * Structural copies, prototype copies, serialized values, and hand-built
-   * lookalikes are rejected even when they expose matching schema membership.
-   *
-   * @param value The runtime value to inspect.
-   * @returns Whether `value` is a factory-created message-interface token.
-   */
-  is(value: unknown): value is MessageInterface<object, InterfaceSchemas>;
-}> = Object.freeze({
-  define<TInterface extends object, const Schemas extends InterfaceSchemas>(
+  export function define<TInterface extends object, const Schemas extends InterfaceSchemas>(
     schemas: InterfaceMember<Schemas> extends TInterface ? Schemas : never,
   ): MessageInterface<TInterface, Schemas> {
     if (schemas.length === 0) throw new Error("A message interface requires at least one schema.");
@@ -194,11 +177,22 @@ export const MessageInterfaces: Readonly<{
     const token = Object.freeze({ schemas: Object.freeze(uniqueSchemas) });
     MESSAGE_INTERFACE_TOKENS.add(token);
     return token as unknown as MessageInterface<TInterface, Schemas>;
-  },
-  is(value: unknown): value is MessageInterface<object, InterfaceSchemas> {
+  }
+
+  /**
+   * Determines whether a value is the exact token instance created by this factory.
+   *
+   * Structural copies, prototype copies, serialized values, and hand-built
+   * lookalikes are rejected even when they expose matching schema membership.
+   *
+   * @param value The runtime value to inspect.
+   * @returns Whether `value` is a factory-created message-interface token.
+   */
+  export function is(value: unknown): value is MessageInterface<object, InterfaceSchemas> {
     return typeof value === "object" && value !== null && MESSAGE_INTERFACE_TOKENS.has(value);
-  },
-});
+  }
+}
+Object.freeze(MessageInterfaces);
 
 /**
  * Structured result returned by {@link Validate.message}.
