@@ -96,3 +96,10 @@ in that fixture after its preceding generated descriptor, build, tooling, and
 ESLint gates passed. The test now joins wrapped URL segments without changing
 the asserted values; the orchestrator retains ownership of the next release
 attempt and targeted documentation re-review.
+
+The second converged release attempt passed through release-readiness and found
+only an internal “Wave 11” execution-history term in the narrow Proto README.
+The documentation now uses timeless reader-facing language: later generator
+work owns marker interpretation and generation. This changes neither frozen
+source bytes nor current deferred behavior; the orchestrator owns the next
+release attempt and targeted documentation re-review.

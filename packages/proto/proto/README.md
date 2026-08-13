@@ -61,8 +61,8 @@ The frozen `spine/options.proto` source is pinned to
 [`SpineEventEngine/base-libraries@51cb428771e5af8a944675fb8e26e9eb2c3d0dfe`](https://github.com/SpineEventEngine/base-libraries/blob/51cb428771e5af8a944675fb8e26e9eb2c3d0dfe/base/src/main/proto/spine/options.proto).
 It retains its Java option fields and adds the upstream TypeScript-only
 `(is).ts_type` and `(every_is).ts_type` declarations. The source manifest and
-descriptor lock verify the exact bytes and field numbers; later Wave 11 tasks
-own interpretation and generation of those markers.
+descriptor lock verify the exact bytes and field numbers; later generator work
+owns interpretation and generation of those markers.
 
 ## ⚠️ Original naming is preserved
 

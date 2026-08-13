@@ -52,3 +52,12 @@ build, tooling, and ESLint gates passed. The fixture now joins wrapped URL
 segments to preserve its exact assertion value. This mechanical test-only
 correction does not reopen specialist review; targeted documentation re-review
 remains ready.
+
+## Reader-Documentation Release-Gate Correction
+
+The second converged release profile passed through release-readiness and then
+rejected the internal “Wave 11” execution-history term in the narrow Proto
+README. The reader-facing sentence now states only that later generator work
+owns marker interpretation and generation. This record-only correction does not
+alter the frozen contract or reopen specialist review; targeted documentation
+re-review remains ready.
