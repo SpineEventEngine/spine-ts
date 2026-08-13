@@ -839,6 +839,12 @@ function collectNames(value) {
         ? value.children
         : value.type?.type === "reflection" && Array.isArray(value.type.declaration?.children)
           ? value.type.declaration.children
+          : value.type?.type === "reference" &&
+              value.type.name === "Readonly" &&
+              value.type.typeArguments?.length === 1 &&
+              value.type.typeArguments[0]?.type === "reflection" &&
+              Array.isArray(value.type.typeArguments[0].declaration?.children)
+            ? value.type.typeArguments[0].declaration.children
           : [];
 
     for (const member of members) {

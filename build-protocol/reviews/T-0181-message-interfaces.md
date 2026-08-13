@@ -127,3 +127,11 @@ the evidence.
   `cwd` default parameter (TS9011). Generated build, tooling typecheck, 16
   focused tests, repository ESLint, cleanup, copyright, TSDoc, formatting, and
   diff checks are GREEN. No release or reviewer was dispatched here.
+
+- Second release RED was a TypeDoc inventory false negative: the collector
+  inspected only direct reflection values and missed `Readonly`'s one direct
+  reflection argument for `MessageInterfaces`. The public API is unchanged;
+  the collector now unwraps only that direct wrapper shape. GREEN:
+  `docs:api:check` confirms all 35 expected core exports, including `.define`
+  and `.is`, and 71 focused core/Proto-tools tests plus tooling typecheck pass.
+  No release or reviewer was dispatched here.

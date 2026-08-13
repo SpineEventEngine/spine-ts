@@ -38,6 +38,18 @@ Status: Final correction complete; final targeted confirmation pending
   cleanup, copyright, TSDoc, formatting, and diff integrity pass. Release is
   intentionally not rerun here.
 
+## 2026-08-14 - TypeDoc Inventory Correction
+
+- Second release RED was a checker false negative, not a public API defect:
+  TypeDoc represents `MessageInterfaces` as `Readonly<reflection>`, while the
+  collector previously inspected only a direct reflection. The collector now
+  recognizes the one direct `Readonly` reflection argument and does not recurse
+  through arbitrary nested reflection types.
+- GREEN: `pnpm docs:api:check` confirms all 35 expected core exports including
+  `.define` and `.is`; affected core/Proto-tools tests pass (3 files, 71
+  tests), along with tooling typecheck. Release remains reserved for the
+  orchestrator's single rerun.
+
 ## Classification And Isolation
 
 - Classification: high-risk public/generated contract. This task introduces a
