@@ -575,11 +575,14 @@ describe("proto-workflow", () => {
     expect(existsSync(second)).toBe(false);
   }, 30_000);
 
-  it("includes the generated rejection companion plugin in the bootstrap output", () => {
+  it("includes generated companion plugins in the bootstrap output", () => {
     const root = fileURLToPath(new URL("..", import.meta.url));
     const executable = prepareProtoToolsBootstrap(root);
     try {
       expect(existsSync(join(dirname(executable), "../generation/rejection-generator.js"))).toBe(
+        true,
+      );
+      expect(existsSync(join(dirname(executable), "../generation/interface-generator.js"))).toBe(
         true,
       );
     } finally {

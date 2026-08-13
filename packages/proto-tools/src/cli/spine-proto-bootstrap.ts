@@ -16,6 +16,7 @@
 import { resolve } from "node:path";
 
 import { ProtoGeneration } from "../generation/generator.js";
+import "../generation/interface-generator.js";
 import "../generation/rejection-generator.js";
 
 const root = resolve(process.cwd());
