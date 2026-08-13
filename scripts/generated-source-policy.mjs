@@ -29,12 +29,13 @@ export function generatedTypeScript(source, sourcePaths) {
   const withoutBlockHeader = header === undefined ? source : source.slice(header.length).replace(/^\n+/u, "");
   const lines = withoutBlockHeader.split("\n");
   const generatedAt = lines.findIndex((line) => line.startsWith("// @generated"));
-  const copiedCopyright = lines.slice(0, generatedAt === -1 ? lines.length : generatedAt);
-  const body =
-    copiedCopyright.some((line) => line.includes("CodeMatters")) && generatedAt !== -1
-      ? lines.slice(generatedAt).join("\n")
-      : withoutBlockHeader;
-  return `${generatedFileNotice(sourcePaths)}${body}`;
+  const body = generatedAt !== -1 ? lines.slice(generatedAt).join("\n") : withoutBlockHeader;
+  const provenance = [...new Set(sourcePaths)].sort((left, right) => left.localeCompare(right));
+  const documented = body.replace(
+    /(^|\n)(export const )/gu,
+    `$1/** Generated from Proto: ${provenance.join(", ")}. */\n$2`,
+  );
+  return `${generatedFileNotice(provenance)}${documented}`;
 }
 
 /** Derives stable Proto provenance from an ordinary generated file name. */

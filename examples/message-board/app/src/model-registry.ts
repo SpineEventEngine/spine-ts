@@ -9,4 +9,5 @@ import { messageBoardProtoModule as model0 } from "@spine-event-engine/example-m
 /**
  * The application type registry composed from every declared model package.
  */
+/** Generated from Proto: spine/examples/messageboard/message_board.proto. */
 export const typeRegistry: TypeRegistry = TypeRegistry.from(model0);

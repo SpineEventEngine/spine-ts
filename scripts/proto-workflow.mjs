@@ -967,9 +967,22 @@ function normalizeGeneratedTypeScriptTree(root) {
     }
     if (!entry.isFile() || !path.endsWith(".ts")) continue;
     const relativePath = relative(root, path).split(sep).join("/");
-    if (relativePath === "proto-module.ts" || relativePath.endsWith("generated-handler-registry.ts"))
-      continue;
-    writeFileSync(path, generatedTypeScript(readFileSync(path, "utf8"), [sourceProtoForGeneratedFile(relativePath)]));
+    const source = readFileSync(path, "utf8");
+    const sources = [...source.matchAll(/@generated from file ([^\s)]+)/gu)].map((match) => match[1]);
+    const imported = [...source.matchAll(/from "(?:\.\/|\.\.\/)+([^" ]+)_pb\.js"/gu)].map(
+      (match) => match[1].replace(/^.*?spine\//u, "spine/") + ".proto",
+    );
+    writeFileSync(
+      path,
+      generatedTypeScript(
+        source,
+        sources.length > 0
+          ? sources
+          : imported.length > 0
+            ? imported
+            : [sourceProtoForGeneratedFile(relativePath)],
+      ),
+    );
   }
 }
 

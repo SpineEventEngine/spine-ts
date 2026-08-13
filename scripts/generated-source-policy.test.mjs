@@ -22,6 +22,7 @@ describe("generated source policy", () => {
         " */",
         "",
         "// @generated from file spine/example/task.proto",
+        "/** Generated from Proto: spine/example/task.proto. */",
         "export const Task = true;",
         "",
       ].join("\n"),
