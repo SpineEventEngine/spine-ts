@@ -182,6 +182,7 @@ export function buildDescriptorSetBase64(protoPath, operations = {}) {
 }
 
 const isMain =
-  process.argv[1] !== undefined && realpathSync(resolve(process.argv[1])) === realpathSync(scriptPath);
+  process.argv[1] !== undefined &&
+  realpathSync(resolve(process.argv[1])) === realpathSync(scriptPath);
 
 if (isMain) main();
