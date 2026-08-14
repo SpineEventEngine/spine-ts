@@ -470,3 +470,32 @@ non-overlapping Core residual returns to a separate explicit
 `gpt-5.6-terra` / medium implementer. Neither may touch the other's files.
 Desktop exposes no independent runtime telemetry; configured profiles and no
 visible mismatch are the assignment evidence.
+
+## Final Security Residual Correction and Platform Boundaries (2026-08-14)
+
+- Checkpoint `39ad232f` closes the exposed post-validation quarantine race:
+  the validated object is atomically moved to a second fresh same-directory
+  retirement name, snapshotted again through a no-follow/nonblocking regular
+  descriptor, and dev/inode-compared before deletion. Controlled direct and
+  workflow races replace the first quarantine after descriptor close; the
+  replacement survives and cleanup is refused. Proto Tools `138/138`, workflow
+  `94/94`, tooling typecheck, ESLint, formatting, and diff checks pass.
+- Portable Node exposes no unlink-by-descriptor/unlinkat API. Therefore no
+  pathname cleanup can be mathematically identity-atomic against a malicious
+  same-UID actor that continuously watches the directory and wins the final
+  post-revalidation unlink interval. The implementation uses a second fresh
+  unpredictable retirement name to minimize that interval; hostile same-UID
+  filesystem mutation beyond the tested publication protocol is an explicit
+  platform trust limit, not a promised Wave 11 isolation boundary.
+- Standard JavaScript likewise provides no trap-free way to distinguish an
+  Array Proxy from an Array: `Array.isArray()` is trap-free but returns true,
+  while every subsequent useful property/reflection operation may invoke a
+  trap. Protobuf descriptors are structural and unbranded; allow-listing object
+  identity would reject valid external generated descriptors and change the
+  public contract. Bounded indexed traversal remains; throwing traps fail
+  closed. Hostile non-returning same-process callbacks are an explicit trusted
+  callback limitation, because JavaScript cannot preempt them synchronously.
+- The existing `security_reviewer`, explicit `gpt-5.6-terra` / high, must
+  determine whether the corrected exposed races plus these platform limits are
+  acceptable or identify a concrete implementable repository-local control.
+  Desktop runtime telemetry remains unavailable.
