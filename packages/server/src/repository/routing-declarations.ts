@@ -47,6 +47,8 @@ interface InterfaceRoute<Route> {
  * @typeParam Route Signal-specific route callback type.
  */
 export interface RoutingDeclarationState<Route> {
+  // prettier-ignore
+
   /**
    * Exact-schema routes indexed by their generated schemas.
    */
@@ -69,6 +71,8 @@ export interface RoutingDeclarationState<Route> {
  * @typeParam Route Signal-specific route callback type.
  */
 export interface RoutingDeclarationSnapshot<Route> {
+  // prettier-ignore
+
   /**
    * Immutable exact-schema routes indexed by generated schemas.
    */

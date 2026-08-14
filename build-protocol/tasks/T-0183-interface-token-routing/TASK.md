@@ -148,3 +148,18 @@ TSDoc enforcement, API documentation generation/checking, full ESLint, cleanup,
 and the five focused routing suites (262/262) pass after the correction. This
 context did not rerun `verify:release`; the branch is ready for the
 orchestrator's next release-profile attempt.
+
+## Fourth Release TSDoc Layout Correction
+
+The fourth `verify:release` attempt again reached TSDoc after cleanup and
+reported only two missing blank lines before the first property documentation
+blocks in the shared mutable and snapshot routing declarations. Prettier had
+removed ordinary blank lines after the interface openings. The established
+`// prettier-ignore` preservation convention now protects each required blank
+line, with no runtime or API change.
+
+After formatting the source, format check and TSDoc enforcement both pass;
+rerunning the formatter preserves the required layout. Full ESLint, cleanup,
+the five focused routing suites (262/262), and diff integrity also pass. This
+context did not rerun `verify:release`; the branch is ready for the
+orchestrator's next release-profile attempt.

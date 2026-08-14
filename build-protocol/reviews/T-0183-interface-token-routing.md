@@ -161,3 +161,20 @@ available acceptance evidence.
   replay semantics changed.
 - This context did not rerun `verify:release`; the branch is ready for the
   orchestrator's next release-profile attempt.
+
+## Fourth Release TSDoc Layout Correction
+
+- Release RED: after cleanup, the fourth `verify:release` attempt reported
+  only `missing-tsdoc-blank-line` at blocks 50 and 72 in
+  `routing-declarations.ts`, before tests. The required first-property blank
+  lines had been removed by Prettier after the third correction.
+- Resolution: use the repository-approved `// prettier-ignore` convention
+  immediately inside each declaration interface to preserve the required blank
+  line before its first property TSDoc block. This is layout-only; no behavior,
+  API, persistence, or replay semantics changed.
+- GREEN evidence in the required order: `pnpm format`, then
+  `pnpm format:check`, then `pnpm lint:tsdoc`; a repeat formatter/check confirms
+  the layout remains intact. Full `pnpm exec eslint .`, `pnpm lint:cleanup`,
+  the five focused routing suites (262/262), and `git diff --check` pass.
+- This context did not rerun `verify:release`; the branch is ready for the
+  orchestrator's next release-profile attempt.
