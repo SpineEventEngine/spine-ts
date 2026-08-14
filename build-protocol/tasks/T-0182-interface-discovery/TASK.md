@@ -115,6 +115,10 @@ T-0185 reader documentation, and Wave 12 behavior.
   failed because the discovery module did not exist.
 - GREEN: the same focused test passes (1 file, 1 test), plus tooling typecheck,
   scoped ESLint, TSDoc, formatting, and diff integrity.
+- GREEN integration: default post-Buf generation resolves both message `(is)`
+  and non-generated file `(every_is)` declarations, emits writer-owned
+  companions, and performs provider diagnostics before any `generateFile` call
+  (2 files, 16 tests).
 
 ## Coverage Result
 

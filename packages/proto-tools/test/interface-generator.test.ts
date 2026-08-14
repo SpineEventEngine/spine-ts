@@ -31,6 +31,7 @@ import { join } from "node:path";
 import { mkdtempSync } from "node:fs";
 
 import { InterfaceGenerator, stagedSourceView } from "../src/generation/interface-generator.js";
+import { AuthoredInterfaceProvider } from "../src/generation/authored-interface-provider.js";
 import type { Schema } from "@bufbuild/protoplugin";
 
 function optionFile(
@@ -274,6 +275,79 @@ describe("InterfaceGenerator", () => {
     expect(() => {
       InterfaceGenerator.generateCompanions(schema);
     }).toThrow("duplicate interface companion path");
+    expect(generated).toBe(0);
+  });
+
+  it("emits resolved authored companions for non-generated every_is and is declarations", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-phase-"));
+    const stagedGeneratedRoot = join(root, ".generated.stage-1/output");
+    const liveGeneratedRoot = join(root, "src/generated");
+    const authored = join(root, "src/interfaces.ts");
+    const output: string[] = [];
+    try {
+      mkdirSync(join(stagedGeneratedRoot, "example"), { recursive: true });
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(
+        join(root, "tsconfig.json"),
+        JSON.stringify({
+          compilerOptions: { module: "NodeNext", moduleResolution: "NodeNext", strict: true },
+        }),
+      );
+      writeFileSync(
+        join(stagedGeneratedRoot, "example/signals_pb.ts"),
+        "export type Signal = { readonly text: string };\n" +
+          "export type Signal_Nested = { readonly text: string };\n",
+      );
+      writeFileSync(
+        authored,
+        "export interface FileSignal { readonly text: string }\n" +
+          "export interface MessageSignal { readonly text: string }\n",
+      );
+      const schema = {
+        files: [optionFile("FileSignal", false, "MessageSignal")],
+        generateFile: (path: string) => ({
+          import: (name: string) => name,
+          importSchema: (message: { readonly name: string }) => `${message.name}Schema`,
+          preamble: () => {
+            return undefined;
+          },
+          export: (kind: string, name: string) => `export ${kind} ${name}`,
+          print: (...parts: readonly string[]) => output.push(`${path}:${parts.join("")}`),
+        }),
+      } as unknown as Schema;
+      InterfaceGenerator.generateWithProvider(schema, new AuthoredInterfaceProvider(), {
+        authoredFiles: [authored],
+        liveGeneratedRoot,
+        packageRoot: root,
+        stagedGeneratedRoot,
+      });
+      expect(output.join("")).toContain("interfaces/file-signal.ts");
+      expect(output.join("")).toContain("interfaces/message-signal.ts");
+      expect(output.join("")).toContain("export type FileSignal = AuthoredFileSignal");
+      expect(output.join("")).toContain("export type MessageSignal = AuthoredMessageSignal");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not open staged output when authored discovery fails", () => {
+    let generated = 0;
+    const schema = {
+      files: [optionFile("FileSignal", false, "MessageSignal")],
+      generateFile: () => {
+        generated += 1;
+        throw new Error("must not publish partial companions");
+      },
+    } as unknown as Schema;
+    expect(() => {
+      InterfaceGenerator.generateWithProvider(schema, {
+        resolve: () => {
+          throw new Error(
+            "spine-proto: authored interface MessageSignal: missing top-level interface",
+          );
+        },
+      });
+    }).toThrow("missing top-level interface");
     expect(generated).toBe(0);
   });
 

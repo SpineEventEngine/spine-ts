@@ -18,13 +18,11 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from "node:pat
 import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync } from "node:fs";
 
+import { AuthoredInterfaceProvider } from "./authored-interface-provider.js";
 import type { InterfaceDeclarationProvider } from "./interface-provider.js";
 import type { ModelSourceView } from "./source-view.js";
 
 const typescriptIdentifier = /^[A-Za-z_$][A-Za-z0-9_$]*$/u;
-const unresolvedInterfaceProvider: InterfaceDeclarationProvider = Object.freeze({
-  resolve: () => undefined,
-});
 
 /**
  * Reads the immutable source-view handoff for the post-Buf interface phase.
@@ -204,18 +202,26 @@ function validateMessageDeclarations(
  */
 export const InterfaceGenerator: Readonly<{
   generateCompanions(schema: Schema): void;
-  generateWithProvider(schema: Schema, provider: InterfaceDeclarationProvider): void;
+  generateWithProvider(
+    schema: Schema,
+    provider: InterfaceDeclarationProvider,
+    sourceView?: ModelSourceView,
+  ): void;
 }> = Object.freeze({
   generateCompanions(schema: Schema): void {
-    InterfaceGenerator.generateWithProvider(schema, unresolvedInterfaceProvider);
+    InterfaceGenerator.generateWithProvider(schema, new AuthoredInterfaceProvider());
   },
 
-  generateWithProvider(schema: Schema, provider: InterfaceDeclarationProvider): void {
+  generateWithProvider(
+    schema: Schema,
+    provider: InterfaceDeclarationProvider,
+    suppliedSourceView?: ModelSourceView,
+  ): void {
     const optionFiles =
       (schema as { readonly allFiles?: readonly DescFile[] }).allFiles ?? schema.files;
     const everyIs = optionExtension(optionFiles, "every_is");
     const isOption = optionExtension(optionFiles, "is");
-    const sourceView = stagedSourceView();
+    const sourceView = suppliedSourceView ?? stagedSourceView();
     const authored = new Map<string, DescMessage[]>();
     const generated = new Map<
       string,
@@ -242,6 +248,10 @@ export const InterfaceGenerator: Readonly<{
         if (generated.has(declaration.tsType))
           throw new Error(`spine-proto: ${file.proto.name}: duplicate generated interface name`);
         generated.set(declaration.tsType, { file, members: collectMessages(file.messages) });
+      } else if (declaration.tsType.length > 0) {
+        const members = authored.get(declaration.tsType) ?? [];
+        members.push(...collectMessages(file.messages));
+        authored.set(declaration.tsType, members);
       }
     }
     for (const name of authored.keys()) {

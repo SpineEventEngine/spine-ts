@@ -18,13 +18,24 @@ import { dirname, extname, join, relative } from "node:path";
 import type { DescMessage } from "@bufbuild/protobuf";
 import ts from "typescript";
 
-import type { AuthoredInterfaceDeclaration, InterfaceDeclarationProvider } from "./interface-provider.js";
+import type {
+  AuthoredInterfaceDeclaration,
+  InterfaceDeclarationProvider,
+} from "./interface-provider.js";
 import type { ModelSourceView } from "./source-view.js";
 
 /**
  * Resolves authored TypeScript interfaces from the validated model source view.
  */
 export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
+  /**
+   * Resolves one compatible authored interface from the staged model Program.
+   *
+   * @param name Requested TypeScript interface identifier.
+   * @param members Generated messages that must satisfy the interface.
+   * @param sourceView Validated authored/staged compiler input.
+   * @returns The authored declaration import, or undefined without a source view.
+   */
   resolve(
     name: string,
     members: readonly DescMessage[],
@@ -38,7 +49,9 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     for (const member of members) {
       const type = this.messageType(program, checker, sourceView, member);
       if (!checker.isTypeAssignableTo(type, interfaceType))
-        throw new Error(`spine-proto: authored interface ${name}: incompatible message ${member.typeName}`);
+        throw new Error(
+          `spine-proto: authored interface ${name}: incompatible message ${member.typeName}`,
+        );
     }
     return Object.freeze({
       importPath: this.importPath(sourceView, name, declaration.getSourceFile().fileName),
@@ -72,7 +85,11 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     return ts.sys.readDirectory(root, [".cts", ".mts", ".ts", ".tsx"], undefined, ["**/*"]);
   }
 
-  private declaration(program: ts.Program, sourceView: ModelSourceView, name: string): ts.InterfaceDeclaration {
+  private declaration(
+    program: ts.Program,
+    sourceView: ModelSourceView,
+    name: string,
+  ): ts.InterfaceDeclaration {
     const candidates = sourceView.authoredFiles.flatMap((file) => {
       const source = program.getSourceFile(file);
       if (source === undefined) return [];
@@ -89,7 +106,9 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     if (declaration === undefined)
       throw new Error(`spine-proto: authored interface ${name}: missing top-level interface`);
     if (declaration.typeParameters !== undefined && declaration.typeParameters.length > 0)
-      throw new Error(`spine-proto: authored interface ${name}: generic interface is not supported`);
+      throw new Error(
+        `spine-proto: authored interface ${name}: generic interface is not supported`,
+      );
     return declaration;
   }
 
@@ -106,11 +125,22 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     );
     const source = program.getSourceFile(generated);
     if (source === undefined)
-      throw new Error(`spine-proto: authored interface ${member.name}: missing staged generated message`);
+      throw new Error(
+        `spine-proto: authored interface ${member.name}: missing staged generated message`,
+      );
     const module = checker.getSymbolAtLocation(source);
-    const symbol = module === undefined ? undefined : checker.getExportsOfModule(module).find((value) => value.name === member.name);
+    const packagePrefix = `${member.file.proto.package}.`;
+    const generatedName = member.typeName.startsWith(packagePrefix)
+      ? member.typeName.slice(packagePrefix.length).replaceAll(".", "_")
+      : member.name;
+    const symbol =
+      module === undefined
+        ? undefined
+        : checker.getExportsOfModule(module).find((value) => value.name === generatedName);
     if (symbol === undefined)
-      throw new Error(`spine-proto: authored interface ${member.name}: missing staged generated message`);
+      throw new Error(
+        `spine-proto: authored interface ${member.name}: missing staged generated message`,
+      );
     return checker.getDeclaredTypeOfSymbol(symbol);
   }
 

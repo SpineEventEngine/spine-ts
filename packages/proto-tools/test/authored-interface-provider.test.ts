@@ -32,16 +32,15 @@ describe("AuthoredInterfaceProvider", () => {
       mkdirSync(join(root, "src"), { recursive: true });
       writeFileSync(
         join(root, "tsconfig.json"),
-        JSON.stringify({ compilerOptions: { module: "NodeNext", moduleResolution: "NodeNext", strict: true } }),
+        JSON.stringify({
+          compilerOptions: { module: "NodeNext", moduleResolution: "NodeNext", strict: true },
+        }),
       );
       writeFileSync(
         join(stagedGeneratedRoot, "example/signals_pb.ts"),
-        'export type Signal = { readonly text: string };\n',
+        "export type Signal = { readonly text: string };\n",
       );
-      writeFileSync(
-        authored,
-        'export interface SignalFamily { readonly text: string }\n',
-      );
+      writeFileSync(authored, "export interface SignalFamily { readonly text: string }\n");
       const provider = new AuthoredInterfaceProvider();
       const result = provider.resolve(
         "SignalFamily",

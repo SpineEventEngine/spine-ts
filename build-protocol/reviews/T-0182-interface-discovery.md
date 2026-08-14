@@ -29,4 +29,5 @@ Baseline: `8f987ae8`
 Pending implementation and mechanical preflight. First TDD slice is GREEN:
 provider resolves a compatible top-level interface via the staged Program;
 focused Vitest, tooling typecheck, scoped ESLint, TSDoc, formatting, and diff
-integrity pass.
+integrity pass. Default staged generation now resolves non-generated file and
+message declarations, and discovery diagnostics open no partial companion.
