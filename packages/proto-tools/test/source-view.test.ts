@@ -103,6 +103,11 @@ describe("modelSourceView", () => {
       expect(() => readSourceViewPublicationRecord(stage, live, join(live, "generated"))).toThrow(
         "invalid source-view publication record",
       );
+      rmSync(record);
+      symlinkSync(join(live, "tsconfig.json"), record);
+      expect(() => readSourceViewPublicationRecord(stage, live, join(live, "generated"))).toThrow(
+        "invalid source-view publication record",
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
