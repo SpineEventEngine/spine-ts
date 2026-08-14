@@ -815,7 +815,11 @@ describe("proto-workflow", () => {
     }
   });
 
-  it.each(["Todo companion generation", "Todo handler registry post-step"])(
+  it.each([
+    "Todo companion generation",
+    "Todo handler registry post-step",
+    "Todo source-view publication revalidation",
+  ])(
     "%s preserves live Todo and root artifacts when its staged post-step fails",
     (failure) => {
       const repoRoot = todoTransactionFixture();
