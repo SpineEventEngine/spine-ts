@@ -695,6 +695,58 @@ describe("@spine-event-engine/example-todo", () => {
     }
   });
 
+  it("keeps projections unchanged for rejected assignment transitions before reopening permits one", async () => {
+    const context = await createTodoContext();
+    const fixture = await createTodoBlackBox(context);
+    const scope = fixture.asGuest();
+    const taskId = "task-assignment-rejections";
+    const listId = taskId;
+    const ada = create(UserIdSchema, { value: "ada" });
+    const lin = create(UserIdSchema, { value: "lin" });
+    try {
+      await scope.post(CreateTaskSchema, createTaskInList(taskId, listId, "One"));
+      const initial = await readTaskListsEventually(
+        fixture,
+        scope,
+        createTaskListQuery(),
+        (rows) => readList(rows, listId)?.tasks.some((task) => task.id?.value === taskId) === true,
+      );
+      await scope.post(ReassignTaskSchema, reassignTask(taskId, "lin"));
+      await scope.post(UnassignTaskSchema, unassignTask(taskId));
+      await expectTaskListEventuallyUnchanged(fixture, scope, initial, taskId);
+      await scope.post(AssignTaskSchema, assignTask(taskId, "ada"));
+      await expectTaskAssigneeEventually(fixture, context, ada, [taskId]);
+      const assigned = await readTaskListsEventually(
+        fixture,
+        scope,
+        createTaskListIdQuery(listId),
+        (rows) => readTask(rows, taskId)?.assignee?.value === "ada",
+      );
+      await scope.post(AssignTaskSchema, assignTask(taskId, "lin"));
+      await scope.post(ReassignTaskSchema, reassignTask(taskId, "ada"));
+      await expectTaskListEventuallyUnchanged(fixture, scope, assigned, taskId);
+      await scope.post(CompleteTaskSchema, completeTask(taskId));
+      const completed = await readTaskListsEventually(
+        fixture,
+        scope,
+        createTaskListIdQuery(listId),
+        (rows) => readTask(rows, taskId)?.completed === true,
+      );
+      await scope.post(AssignTaskSchema, assignTask(taskId, "lin"));
+      await scope.post(ReassignTaskSchema, reassignTask(taskId, "lin"));
+      await scope.post(UnassignTaskSchema, unassignTask(taskId));
+      await expectTaskListEventuallyUnchanged(fixture, scope, completed, taskId);
+      await expectTaskAssigneeEventually(fixture, context, ada, [taskId]);
+      await expect(context.stand().read(TaskAssigneeSchema, lin)).resolves.toBeUndefined();
+      await scope.post(ReopenTaskSchema, reopenTask(taskId));
+      await scope.post(ReassignTaskSchema, reassignTask(taskId, "lin"));
+      await expectTaskAssigneeEventually(fixture, context, ada, []);
+      await expectTaskAssigneeEventually(fixture, context, lin, [taskId]);
+    } finally {
+      await fixture.close();
+    }
+  });
+
   it("replays a persisted projection Inbox target without rerouting after restart", async () => {
     const todo: TodoModule = await import("../dist/src/index.js");
     const { TaskEvent }: typeof import("../dist/generated/interfaces/task-event.js") =
