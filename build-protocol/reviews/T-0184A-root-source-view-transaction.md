@@ -27,3 +27,10 @@ immutable configured profiles are the available evidence.
 Review starts only after the frozen RED matrix is green, changed-production
 coverage is at least 90%, cheap preflight/root generation/current passes, and
 the implementation records the exact evidence.
+
+## Checkpoint Evidence
+
+Tuple and basic source-view record RED/GREEN evidence is recorded in the task
+work log. Root generation/current is green after a narrow self-stage inventory
+exclusion. Review remains pending the full malformed-record and transaction
+rollback matrix.

@@ -211,6 +211,7 @@ function messageBoardRegistryFixture() {
 }
 
 function rootStageCommand(label, _executable, args) {
+  if (label.endsWith("source-view publication revalidation")) return 0;
   if (!label.startsWith("buf generate")) {
     const output = args[args.indexOf("--out") + 1];
     mkdirSync(dirname(output), { recursive: true });
@@ -234,6 +235,7 @@ function todoStageCommand(failure, writeManifest = true) {
       return 0;
     }
     if (label === failure) return 1;
+    if (label.endsWith("source-view publication revalidation")) return 0;
     if (label === "Todo companion generation") {
       const template = readFileSync(args.at(-1), "utf8");
       const output = template.match(/^\s*out:\s*(.+)$/mu)?.[1];
@@ -294,6 +296,7 @@ function applicationModelStageCommand(failure) {
       return 0;
     }
     if (label === failure) return 1;
+    if (label.endsWith("source-view publication revalidation")) return 0;
     const output = args[args.indexOf("--out") + 1];
     if (output === undefined) return 1;
     mkdirSync(dirname(output), { recursive: true });

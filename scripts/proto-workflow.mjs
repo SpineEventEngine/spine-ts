@@ -844,7 +844,7 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
     const modelStatus = run(
       `${target.moduleName} model generation`,
       process.execPath,
-      [executable],
+      [executable, "generate", "--live-package-root", livePackageRoot],
       packageRoot,
     );
     if (modelStatus !== 0) throw new Error(`${target.moduleName} model generation failed`);
@@ -950,6 +950,21 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
           );
     if (handlerStatus !== 0)
       throw new Error(`${target.moduleName} handler registry post-step failed`);
+    const recordStatus = run(
+      `${target.moduleName} source-view publication revalidation`,
+      process.execPath,
+      [
+        executable,
+        "verify-source-view-record",
+        "--live-package-root",
+        livePackageRoot,
+        "--live-generated-root",
+        join(livePackageRoot, "generated"),
+      ],
+      packageRoot,
+    );
+    if (recordStatus !== 0)
+      throw new Error(`${target.moduleName} source-view publication revalidation failed`);
     const modelSources = findProtoFiles(join(livePackageRoot, "proto")).map((path) =>
       relative(join(livePackageRoot, "proto"), path).split(sep).join("/"),
     );

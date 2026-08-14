@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,12 +20,40 @@ import { mkdtempSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
+  assertSourceViewPublicationRecordCurrent,
   assertSourceViewCurrent,
   modelSourceView,
+  readSourceViewPublicationRecord,
   SourceViewInputs,
+  writeSourceViewPublicationRecord,
 } from "../src/generation/source-view.js";
 
 describe("modelSourceView", () => {
+  it("persists and revalidates a canonical live source view from an outer stage", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-source-view-publication-"));
+    const live = join(root, "live-model");
+    const stage = join(root, "stage-model");
+    try {
+      mkdirSync(join(live, "src"), { recursive: true });
+      mkdirSync(join(live, "generated"), { recursive: true });
+      mkdirSync(join(stage, "generated"), { recursive: true });
+      writeFileSync(join(live, "tsconfig.json"), '{"include":["src/**/*.ts"]}\n');
+      writeFileSync(join(live, "src/authored.ts"), "export interface Authored {}\n");
+      const view = modelSourceView(live, "generated", join(stage, "generated"));
+
+      writeSourceViewPublicationRecord(stage, view);
+      const record = readSourceViewPublicationRecord(stage, live, join(live, "generated"));
+      expect(record.livePackageRoot).toBe(realpathSync(live));
+      expect(record.liveGeneratedRoot).toBe(join(realpathSync(live), "generated"));
+      expect(() => assertSourceViewPublicationRecordCurrent(record)).not.toThrow();
+
+      writeFileSync(join(live, "src/authored.ts"), "export interface Changed {}\n");
+      expect(() => assertSourceViewPublicationRecordCurrent(record)).toThrow("source view changed");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects non-regular TypeScript inputs before hashing", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-source-view-nonregular-"));
     try {
@@ -103,6 +131,7 @@ describe("modelSourceView", () => {
         "dist",
       ])
         mkdirSync(join(root, path));
+      mkdirSync(join(root, "src/.generated-root-transaction/generated"), { recursive: true });
       writeFileSync(join(root, "src/authored.ts"), "export interface Authored {}\n");
       writeFileSync(join(root, "src/dist/local.ts"), "export interface Local {}\n");
       writeFileSync(join(root, "src/types.d.ts"), "export interface Declared {}\n");
@@ -110,6 +139,10 @@ describe("modelSourceView", () => {
       writeFileSync(join(root, "src/generated/live.ts"), "export {};\n");
       writeFileSync(join(root, "src/.generated.stage-1/staged.ts"), "export {};\n");
       writeFileSync(join(root, "src/.generated.a.backup/backup.ts"), "export {};\n");
+      writeFileSync(
+        join(root, "src/.generated-root-transaction/generated/staged.ts"),
+        "export {};\n",
+      );
       writeFileSync(join(root, "dist/output.d.ts"), "export {};\n");
       const view = modelSourceView(
         root,
@@ -117,14 +150,14 @@ describe("modelSourceView", () => {
         join(root, "src/.generated.stage-x/output"),
       );
       expect(view.authoredFiles).toEqual([
-        join(root, "src/authored.ts"),
-        join(root, "src/dist/local.ts"),
+        join(realpathSync(root), "src/authored.ts"),
+        join(realpathSync(root), "src/dist/local.ts"),
       ]);
       expect(view.compilerFiles).toEqual([
-        join(root, "src/authored.ts"),
-        join(root, "src/dist/local.ts"),
-        join(root, "src/helper.js"),
-        join(root, "src/types.d.ts"),
+        join(realpathSync(root), "src/authored.ts"),
+        join(realpathSync(root), "src/dist/local.ts"),
+        join(realpathSync(root), "src/helper.js"),
+        join(realpathSync(root), "src/types.d.ts"),
       ]);
       expect(view.stagedGeneratedRoot).toBe(join(root, "src/.generated.stage-x/output"));
     } finally {

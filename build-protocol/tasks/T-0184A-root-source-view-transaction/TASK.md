@@ -91,3 +91,11 @@ reliability verifies nested transaction, mutation, cleanup, rollback, and lock;
 style verifies bounded bootstrap/no competing parser; docs verifies
 internal/generated-only claims. Security is deferred to T-0186, while
 path/special-file tests are mandatory here.
+
+## Current Evidence
+
+The initial declaration-safe tuple RED and source-view record RED are green.
+Root `pnpm proto:generate` and `pnpm proto:check-generated:current` pass after
+the live inventory excludes only the outer root-transaction sibling. The
+remaining matrix still needs malformed-record, mutation/rollback, all-model
+rollback, and isolatedDeclarations fixture coverage before review.
