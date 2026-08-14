@@ -104,3 +104,13 @@ least 90%, cheap preflight, and bounded `verify:task` with loopback permissions.
   were made by this correction.
 - Prior branch coverage was 86.54% (RED against 90%). Fresh LCOV and bounded
   verification disposition remain pending the one coverage-enabled `verify:task` run.
+
+## Source Preflight Correction
+
+- Cleanup/TSDoc findings in newly changed Todo handlers are resolved without
+  weakening required explicit generated-event return types. Lifecycle event
+  types use generated `*Event` aliases and the handlers follow the local
+  multi-line TSDoc convention.
+- Formatting, TSDoc before and after formatting, cleanup, ESLint, tooling
+  typecheck, and diff hygiene are green. Individual black-box confirmation is
+  pending before the single coverage-enabled task gate.

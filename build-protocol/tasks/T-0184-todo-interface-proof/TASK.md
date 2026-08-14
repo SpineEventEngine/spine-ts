@@ -154,3 +154,10 @@ pending implementation continuation.
   will be recorded from one converged coverage-enabled `verify:task` run.
   Cleanup/TSDoc gates currently report only pre-existing unassigned findings in
   `examples/todo/src/index.ts`.
+
+## Source Preflight Correction
+
+- The Todo source correction preserves required explicit generated event return
+  types using `*Event` aliases and adds canonical lifecycle handler TSDoc.
+  Formatting, cleanup, TSDoc, ESLint, tooling typecheck, and diff hygiene pass;
+  individual black-box confirmation remains pending before coverage.

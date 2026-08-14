@@ -42,13 +42,13 @@ import {
   TaskRenamedSchema,
   TaskReopenedSchema,
   TaskUnassignedSchema,
-  type TaskAssigned,
+  type TaskAssigned as TaskAssignedEvent,
   type TaskCompleted,
   type TaskCreated,
-  type TaskReassigned,
+  type TaskReassigned as TaskReassignedEvent,
   type TaskRenamed,
   type TaskReopened,
-  type TaskUnassigned,
+  type TaskUnassigned as TaskUnassignedEvent,
 } from "../generated/spine/examples/todo/task_events_pb.js";
 import {
   TaskIdSchema,
@@ -81,7 +81,11 @@ export { todoProtoModule } from "../generated/proto-module.js";
  * remains an exact-schema two-target route.
  */
 export interface TaskAssignmentEvent {
-  /** Assignee selected by the assignment lifecycle Event. */
+  // prettier-ignore
+
+  /**
+   * Describes the assignee selected by the assignment lifecycle Event.
+   */
   readonly assignee?: UserId | undefined;
 }
 
@@ -210,9 +214,14 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
     return create(TaskReopenedSchema, { id, taskListId });
   }
 
-  /** Assigns a task and records its assignee. */
+  /**
+   * Records a task assignment and its assignee.
+   *
+   * @param command The command that selects the assignee.
+   * @returns The event that records the assignment.
+   */
   @Assign
-  assignTask(command: AssignTask): TaskAssigned {
+  assignTask(command: AssignTask): TaskAssignedEvent {
     const id = clone(TaskIdSchema, this.id);
     const taskListId = taskListIds.require(this.state.taskListId);
     const assignee = assignees.require(command.assignee);
@@ -222,9 +231,14 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
     return create(TaskAssignedSchema, { id, taskListId, assignee });
   }
 
-  /** Reassigns a task and records both assignee targets. */
+  /**
+   * Records a task reassignment and both assignee targets.
+   *
+   * @param command The command that selects the replacement assignee.
+   * @returns The event that records the reassignment.
+   */
   @Assign
-  reassignTask(command: ReassignTask): TaskReassigned {
+  reassignTask(command: ReassignTask): TaskReassignedEvent {
     const id = clone(TaskIdSchema, this.id);
     const taskListId = taskListIds.require(this.state.taskListId);
     const previousAssignee = assignees.require(this.state.assignee);
@@ -235,9 +249,14 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
     return create(TaskReassignedSchema, { id, taskListId, previousAssignee, assignee });
   }
 
-  /** Removes a task assignee and records the former target. */
+  /**
+   * Removes a task assignee and records the former target.
+   *
+   * @param command The command that requests unassignment.
+   * @returns The event that records the unassignment.
+   */
   @Assign
-  unassignTask(command: UnassignTask): TaskUnassigned {
+  unassignTask(command: UnassignTask): TaskUnassignedEvent {
     void command;
     const id = clone(TaskIdSchema, this.id);
     const taskListId = taskListIds.require(this.state.taskListId);
@@ -405,21 +424,33 @@ export class TaskListProjection extends Projection<TaskListId, typeof TaskListSc
     });
   }
 
-  /** Records an assignment in the list view. */
+  /**
+   * Records an assignment in the list view.
+   *
+   * @param event The assignment event to apply.
+   */
   @Subscribe
-  onTaskAssigned(event: TaskAssigned): void {
+  onTaskAssigned(event: TaskAssignedEvent): void {
     this.updateTaskAssignee(event.id, event.taskListId, event.assignee);
   }
 
-  /** Records a reassignment in the list view. */
+  /**
+   * Records a reassignment in the list view.
+   *
+   * @param event The reassignment event to apply.
+   */
   @Subscribe
-  onTaskReassigned(event: TaskReassigned): void {
+  onTaskReassigned(event: TaskReassignedEvent): void {
     this.updateTaskAssignee(event.id, event.taskListId, event.assignee);
   }
 
-  /** Removes an assignee in the list view. */
+  /**
+   * Removes an assignee in the list view.
+   *
+   * @param event The unassignment event to apply.
+   */
   @Subscribe
-  onTaskUnassigned(event: TaskUnassigned): void {
+  onTaskUnassigned(event: TaskUnassignedEvent): void {
     this.updateTaskAssignee(event.id, event.taskListId, undefined);
   }
 
@@ -453,11 +484,19 @@ export class TaskListProjection extends Projection<TaskListId, typeof TaskListSc
   }
 }
 
-/** Tracks task identifiers currently assigned to one user. */
+/**
+ * Tracks task identifiers currently assigned to one user.
+ */
 export class TaskAssigneeProjection extends Projection<UserId, typeof TaskAssigneeSchema, number> {
-  /** Adds a task to the assignee view. */
+  // prettier-ignore
+
+  /**
+   * Adds a task to the assignee view.
+   *
+   * @param event The assignment event to apply.
+   */
   @Subscribe
-  onTaskAssigned(event: TaskAssigned): void {
+  onTaskAssigned(event: TaskAssignedEvent): void {
     const id = taskIds.require(event.id);
     this.update((draft) =>
       Object.assign(
@@ -470,15 +509,23 @@ export class TaskAssigneeProjection extends Projection<UserId, typeof TaskAssign
     );
   }
 
-  /** Removes a task from the former assignee view. */
+  /**
+   * Removes a task from the former assignee view.
+   *
+   * @param event The unassignment event to apply.
+   */
   @Subscribe
-  onTaskUnassigned(event: TaskUnassigned): void {
+  onTaskUnassigned(event: TaskUnassignedEvent): void {
     this.remove(event.id);
   }
 
-  /** Adds or removes a task according to the exact reassignment target. */
+  /**
+   * Adds or removes a task according to the exact reassignment target.
+   *
+   * @param event The reassignment event to apply.
+   */
   @Subscribe
-  onTaskReassigned(event: TaskReassigned): void {
+  onTaskReassigned(event: TaskReassignedEvent): void {
     const id = taskIds.require(event.id);
     const isReplacement = this.id.value === event.assignee?.value;
     this.update((draft) =>
