@@ -293,3 +293,22 @@ Final security and release verification remain pending.
   mismatch; Desktop runtime telemetry is unavailable. The four residual
   findings are accepted as one batch for the current implementer. Only style
   and reliability reopen after correction unless public/docs surfaces change.
+
+## Residual Correction and Final Targeted Re-Review Assignment (2026-08-14)
+
+- Checkpoints `9932c49c`, `dcc7ee55`, and `62464e92` delete the obsolete root
+  wrappers, prove direct staged symlinks fail before publication, preserve and
+  later recover journal-owned registry stages, bound claim scans at
+  `1,000/1,001`, restore ordinary unowned-stage cleanup, and close the final
+  public manifest-read branch without changing production behavior.
+- Fresh affected evidence is Proto Tools `131/131`, workflow `88/88`, and
+  generated-clean `10/10`; tooling typecheck, affected ESLint, current-output,
+  formatting/diff, and residue checks are clean. The exact current
+  changed-source union is **194/197 lines (98.48%)** and **153/169 branches
+  (90.53%)**.
+- Final targeted re-review is limited to the existing style/maintainability and
+  performance/reliability roles. Both dispatches explicitly use immutable
+  `gpt-5.6-terra` / high configuration. Desktop exposes no independent runtime
+  telemetry, so the configured role/profile and absence of a visible mismatch
+  are the acceptance evidence. TypeScript/API and documentation remain CLEAN
+  because the residual correction changed no public or reader-facing surface.
