@@ -133,8 +133,8 @@ describe("local multi-process to-do mode", () => {
         idFilter: {
           id: [
             AnyMessages.pack(
-              StringValueSchema,
-              create(StringValueSchema, { value: "local-multi-process-task" }),
+              TaskListIdSchema,
+              create(TaskListIdSchema, { value: "local-multi-process-task" }),
             ),
           ],
         },
@@ -263,6 +263,7 @@ describe("local multi-process to-do mode", () => {
             tasks: [
               {
                 id: create(TaskIdSchema, { value: "local-multi-process-task" }),
+                taskListId: create(TaskListIdSchema, { value: "local-multi-process-task" }),
                 title: "Handled by child process",
                 completed: false,
               },
@@ -939,6 +940,7 @@ class LocalMultiProcessFixture {
           schema: CreateTaskSchema,
           message: create(CreateTaskSchema, {
             id: create(TaskIdSchema, { value: "local-multi-process-task" }),
+            taskListId: create(TaskListIdSchema, { value: "local-multi-process-task" }),
             title: "Handled by child process",
           }),
         }),
@@ -1336,8 +1338,8 @@ function createTaskListQuery(): Query {
           idFilter: {
             id: [
               AnyMessages.pack(
-                StringValueSchema,
-                create(StringValueSchema, { value: "local-multi-process-task" }),
+                TaskListIdSchema,
+                create(TaskListIdSchema, { value: "local-multi-process-task" }),
               ),
             ],
           },
@@ -1389,10 +1391,11 @@ function sanitizeRowId(id: string, ipcDirectory: string): string {
 
 function isExpectedTaskList(list: TaskList): boolean {
   return (
-    list.id === "local-multi-process-task" &&
+    list.id?.value === "local-multi-process-task" &&
     list.openTaskCount === 1 &&
     list.tasks.length === 1 &&
     list.tasks[0]?.id?.value === "local-multi-process-task" &&
+    list.tasks[0]?.taskListId?.value === "local-multi-process-task" &&
     list.tasks[0].title === "Handled by child process" &&
     !list.tasks[0].completed
   );
