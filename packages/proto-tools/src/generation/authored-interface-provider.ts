@@ -12,7 +12,16 @@
  * the License.
  */
 
-import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+} from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 
 import type { DescMessage } from "@bufbuild/protobuf";
@@ -23,6 +32,24 @@ import type {
   InterfaceDeclarationProvider,
 } from "./interface-provider.js";
 import type { ModelSourceView } from "./source-view.js";
+
+const nonRegularInputDiagnostic = "spine-proto: source view contains non-regular TypeScript input";
+
+const SourceSnapshotFiles = Object.freeze({
+  read(path: string): string {
+    let descriptor: number | undefined;
+    try {
+      descriptor = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW);
+      if (!fstatSync(descriptor).isFile()) throw new Error(nonRegularInputDiagnostic);
+      return readFileSync(descriptor, "utf8");
+    } catch (error) {
+      if (error instanceof Error && error.message === nonRegularInputDiagnostic) throw error;
+      throw new Error(nonRegularInputDiagnostic, { cause: error });
+    } finally {
+      if (descriptor !== undefined) closeSync(descriptor);
+    }
+  },
+});
 
 /**
  * Resolves authored TypeScript interfaces from the validated model source view.
@@ -84,12 +111,13 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     const configFile = join(sourceView.packageRoot, "tsconfig.json");
     if (!existsSync(configFile))
       throw new Error("spine-proto: authored interface discovery requires tsconfig.json");
-    const config = ts.readConfigFile(configFile, (path) => ts.sys.readFile(path));
+    const readSourceViewText = (path: string) => SourceSnapshotFiles.read(path);
+    const config = ts.readConfigFile(configFile, readSourceViewText);
     if (config.error !== undefined)
       throw new Error("spine-proto: authored interface discovery could not read tsconfig.json");
     const parsed = ts.parseJsonConfigFileContent(
       config.config,
-      ts.sys,
+      { ...ts.sys, readFile: readSourceViewText },
       sourceView.packageRoot,
       undefined,
       configFile,
@@ -101,7 +129,9 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
       configuredFiles.has(resolve(file)),
     );
     const capturedAuthored = new Map(
-      sourceView.authoredFiles.map((file) => [resolve(file), readFileSync(file, "utf8")] as const),
+      sourceView.authoredFiles.map(
+        (file) => [resolve(file), SourceSnapshotFiles.read(file)] as const,
+      ),
     );
     const host = ts.createCompilerHost(parsed.options);
     const redirect = (path: string) => {

@@ -33,6 +33,7 @@ import { describe, expect, it } from "vitest";
 
 import { ManifestFile } from "../src/io/atomic-manifest.js";
 import { ProtoConfig, ProtoManifest } from "../src/index.js";
+import { AuthoredInterfaceProvider } from "../src/generation/authored-interface-provider.js";
 import {
   ProtoGeneration,
   type GenerationLockOperations,
@@ -1628,6 +1629,38 @@ describe("spine proto model tooling", () => {
       },
     );
   });
+
+  it("preserves prior output when an authored source becomes a FIFO after capture", () => {
+    const model = packageDirectory("@example/source-fifo-mutation-model");
+    const authored = join(model, "src/authored.ts");
+    try {
+      writeJson(model, "spine-proto.json", modelConfig("@example/source-fifo-mutation-model"));
+      writeJson(model, "tsconfig.json", { files: ["src/authored.ts"] });
+      mkdirSync(join(model, "proto"), { recursive: true });
+      mkdirSync(join(model, "src/generated"), { recursive: true });
+      writeFileSync(join(model, "proto/model.proto"), 'syntax = "proto3"; message Model {}\n');
+      writeFileSync(authored, "export interface Authored {}\n");
+      writeFileSync(join(model, "src/generated/prior.ts"), "prior output\n");
+      writeFileSync(join(model, "spine-proto-manifest.json"), "prior manifest\n");
+
+      expect(() => {
+        generateModel(model, {
+          runBuf: generatedOutput,
+          runInterfacePhase: (_, _output, _owned, _packageName, sourceView) => {
+            rmSync(authored);
+            execFileSync("mkfifo", [authored]);
+            new AuthoredInterfaceProvider().resolve("Authored", [], sourceView);
+          },
+        });
+      }).toThrow("non-regular TypeScript input");
+      expect(readFileSync(join(model, "src/generated/prior.ts"), "utf8")).toBe("prior output\n");
+      expect(readFileSync(join(model, "spine-proto-manifest.json"), "utf8")).toBe(
+        "prior manifest\n",
+      );
+    } finally {
+      rmSync(model, { recursive: true, force: true });
+    }
+  }, 15_000);
 
   it("publishes byte-identical output across repeated staged interface phases", () => {
     const model = packageDirectory("@example/interface-repeat-model");

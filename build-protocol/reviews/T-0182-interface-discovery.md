@@ -56,9 +56,9 @@ Baseline: `8f987ae8`
 
 ## Final Correction Evidence
 
-- Exact focused behavior: 5 files / 203 tests pass.
-- Final focused profile: 97.57% lines (322/330), 90.55% branches (211/233),
-  98.50% functions (66/67).
+- Exact focused behavior: 5 files / 205 tests pass.
+- Final focused profile: 97.71% lines (342/350), 91.09% branches (225/247),
+  98.55% functions (68/69).
 - Canonical Proto generation/current output, generated and tooling typechecks,
   full ESLint, cleanup, TSDoc, copyright, formatting/diff, TypeDoc/API,
   audience, package/assets/links readiness, and generated cleanliness pass.
@@ -67,8 +67,11 @@ Baseline: `8f987ae8`
   declaration discovery, while every eligible regular same-module TypeScript
   source is now captured for transitive compiler imports, parent locality, and
   prepublication revalidation. FIFO/non-regular TypeScript inputs fail before
-  reads or hashes. Final targeted confirmation is pending; `verify:release` is
-  intentionally reserved for post-review convergence.
+  reads or hashes. Style confirmation then found a post-capture FIFO
+  replacement race. The source-view and standalone provider execution
+  boundaries now use descriptor-based nonblocking, no-final-symlink reads,
+  with a real rollback regression. Final targeted confirmation is pending;
+  `verify:release` is intentionally reserved for post-review convergence.
 
 ## Historical Pre-Review Checkpoints
 

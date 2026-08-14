@@ -12,20 +12,45 @@
  * the License.
  */
 
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdtempSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { assertSourceViewCurrent, modelSourceView } from "../src/generation/source-view.js";
+import {
+  assertSourceViewCurrent,
+  modelSourceView,
+  SourceViewInputs,
+} from "../src/generation/source-view.js";
 
 describe("modelSourceView", () => {
   it("rejects non-regular TypeScript inputs before hashing", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-source-view-nonregular-"));
     try {
       execFileSync("mkfifo", [join(root, "blocked.ts")]);
+      expect(() => SourceViewInputs.read(join(root, "blocked.ts"))).toThrow(
+        "non-regular TypeScript input",
+      );
+      expect(() =>
+        modelSourceView(root, "src/generated", join(root, ".generated.stage/output")),
+      ).toThrow("non-regular TypeScript input");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("normalizes missing and symlinked source read failures", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-source-view-read-"));
+    try {
+      const authored = join(root, "authored.ts");
+      writeFileSync(authored, "export interface Authored {}\n");
+      expect(SourceViewInputs.read(authored).toString("utf8")).toContain("Authored");
+      expect(() => SourceViewInputs.read(join(root, "missing.ts"))).toThrow(
+        "non-regular TypeScript input",
+      );
+      symlinkSync(authored, join(root, "linked.ts"));
       expect(() =>
         modelSourceView(root, "src/generated", join(root, ".generated.stage/output")),
       ).toThrow("non-regular TypeScript input");

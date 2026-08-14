@@ -135,17 +135,17 @@ T-0185 reader documentation, and Wave 12 behavior.
   parent fails closed while external property types remain allowed (2 files,
   17 tests and focused static gates).
 - GREEN correction convergence: provider, interface generator, source view,
-  Proto-tools transaction, and real workflow suites pass 5 files / 203 tests.
+  Proto-tools transaction, and real workflow suites pass 5 files / 205 tests.
   Source content/add/remove/rename, same-module transitive-import content, and
   recursive-config mutations preserve the exact prior tree and manifest.
-  TypeScript candidates must be regular files; a FIFO is rejected before any
-  blocking read or hash.
+  TypeScript candidates must be regular files; descriptor-based nonblocking
+  reads reject a FIFO before capture and after a post-snapshot replacement.
 
 ## Coverage Result
 
-- Final focused LCOV: 97.57% lines (322/330), 90.55% branches (211/233),
-  and 98.50% functions (66/67) across the three changed production modules.
-  The exact five-suite profile passes 203/203 tests; no threshold was waived.
+- Final focused LCOV: 97.71% lines (342/350), 91.09% branches (225/247),
+  and 98.55% functions (68/69) across the three changed production modules.
+  The exact five-suite profile passes 205/205 tests; no threshold was waived.
 
 ## Documentation And Public API Impact
 
@@ -193,8 +193,11 @@ T-0185 reader documentation, and Wave 12 behavior.
   frozen or eligible as local parents. Reliability also found that a FIFO with
   a TypeScript suffix could block inventory reads. Discovery roots remain
   tsconfig-owned, while the frozen compiler input closure now includes all
-  eligible regular local TypeScript sources; non-regular inputs fail closed.
-  Final targeted confirmation is pending.
+  eligible regular local TypeScript sources. A subsequent style confirmation
+  identified the lstat-to-read FIFO replacement race; both independently
+  executable source-view/provider boundaries now open nonblocking without
+  following the final symlink, validate the opened descriptor as a regular
+  file, and read that same descriptor. Final targeted confirmation is pending.
 - Security: N/A for T-0182 because it adds no dependency, secret, IPC, tenant,
   deserialization, or external capability boundary; Wave 11 final security is
   owned by T-0186.

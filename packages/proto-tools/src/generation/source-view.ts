@@ -13,12 +13,56 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+} from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import ts from "typescript";
 
 const maximumSourceViewDepth = 32;
 const maximumSourceViewEntries = 10_000;
+
+const nonRegularInputDiagnostic = "spine-proto: source view contains non-regular TypeScript input";
+
+/**
+ * Race-safe reads for files owned by a compiler source view.
+ */
+export const SourceViewInputs: Readonly<{
+  read(path: string): Buffer;
+}> = Object.freeze({
+  // prettier-ignore
+
+  /**
+   * Opens without following the final symlink or waiting on a special file,
+   * validates the opened descriptor, and reads that immutable file identity.
+   *
+   * @param path Source or configuration path.
+   * @returns Exact file bytes.
+   */
+  read(path: string): Buffer {
+    let descriptor: number | undefined;
+    try {
+      descriptor = openSync(
+        path,
+        constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW,
+      );
+      if (!fstatSync(descriptor).isFile()) throw new Error(nonRegularInputDiagnostic);
+      return readFileSync(descriptor);
+    } catch (error) {
+      if (error instanceof Error && error.message === nonRegularInputDiagnostic) throw error;
+      throw new Error(nonRegularInputDiagnostic, { cause: error });
+    } finally {
+      if (descriptor !== undefined) closeSync(descriptor);
+    }
+  },
+});
 
 /**
  * Stable compiler input view for authored sources and staged generated output.
@@ -76,8 +120,8 @@ function projectConfig(root: string): ProjectConfigView | undefined {
   const host = {
     ...ts.sys,
     readFile: (path: string) => {
-      const text = ts.sys.readFile(path);
-      if (text !== undefined) texts.set(resolve(path), text);
+      const text = SourceViewInputs.read(path).toString("utf8");
+      texts.set(resolve(path), text);
       return text;
     },
   };
@@ -101,14 +145,15 @@ function projectConfig(root: string): ProjectConfigView | undefined {
     .map((file) => resolve(file))
     .filter((file, index, values) => values.indexOf(file) === index)
     .sort();
-  for (const file of files) if (!texts.has(file)) texts.set(file, readFileSync(file, "utf8"));
+  for (const file of files)
+    if (!texts.has(file)) texts.set(file, SourceViewInputs.read(file).toString("utf8"));
   return Object.freeze({
     configFiles: Object.freeze(files),
   });
 }
 
 function hashFile(hash: ReturnType<typeof createHash>, category: string, file: string): void {
-  const content = readFileSync(file);
+  const content = SourceViewInputs.read(file);
   hash.update(
     `${String(category.length)}:${category}${String(file.length)}:${file}${String(content.length)}:`,
   );
@@ -186,7 +231,7 @@ function collectAuthored(root: string, excluded: readonly string[]): readonly st
       const entry = lstatSync(path);
       if (entry.isSymbolicLink()) {
         if ([".cts", ".mts", ".ts", ".tsx"].some((extension) => name.endsWith(extension)))
-          throw new Error("spine-proto: source view contains non-regular TypeScript input");
+          throw new Error(nonRegularInputDiagnostic);
         continue;
       }
       if (entry.isDirectory()) pending.push({ path, depth: current.depth + 1 });
@@ -194,8 +239,7 @@ function collectAuthored(root: string, excluded: readonly string[]): readonly st
         [".cts", ".mts", ".ts", ".tsx"].some((extension) => name.endsWith(extension)) &&
         !name.endsWith(".d.ts")
       ) {
-        if (!entry.isFile())
-          throw new Error("spine-proto: source view contains non-regular TypeScript input");
+        if (!entry.isFile()) throw new Error(nonRegularInputDiagnostic);
         files.push(path);
       }
     }
