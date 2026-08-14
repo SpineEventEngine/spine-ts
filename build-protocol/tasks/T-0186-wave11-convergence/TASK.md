@@ -1,6 +1,6 @@
 # T-0186: Converge, Release, And Close Wave 11
 
-Status: Release RED corrected; converged release profile ready
+Status: Release acceptance blocked by cross-process harness timeouts
 Start: `2026-08-14 WEST`
 End: Pending
 Baseline: `f128af42`
@@ -411,6 +411,17 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   at the recorded final counts, two stable canonical generations, complete
   generated/static/docs/package gates, zero residue, and clean diff/worktree.
   The corrected converged release profile is ready.
+
+## Corrected Release Residual (2026-08-14)
+
+- The corrected release run passed every deterministic gate and eliminated all
+  prior package/fixture failures. Coverage reached `252` passing files and
+  `4,106` passing tests; only three tests in the same ZeroMQ cross-process file
+  timed out at their 5-second harness limits under full parallel V8 load.
+- This is a bounded test-harness reliability correction. Production transport,
+  routing, persistence, and Wave 11 semantics are unchanged unless focused
+  diagnosis proves otherwise. Release coverage percentages remain pending
+  because Vitest suppresses its summary on RED.
 
 ## Release RED Test-Only Correction (2026-08-14)
 

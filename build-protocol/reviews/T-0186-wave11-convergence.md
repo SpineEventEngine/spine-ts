@@ -572,6 +572,16 @@ preflight and the one converged release profile remain pending.
   preflight evidence are GREEN. Existing specialist and security verdicts
   remain CLEAN. A corrected converged release profile is authorized.
 
+## Corrected Release Residual Disposition (2026-08-14)
+
+- The former release RED families are closed. The corrected profile leaves only
+  three 5-second timeouts in one cross-process ZeroMQ test file under full
+  parallel coverage load; `252` files and `4,106` tests pass.
+- A test-harness-only timing/capacity correction does not reopen production
+  reliability or security review if semantic quiet-window/deadline assertions
+  remain unchanged. Focused coverage stress and mandatory preflight evidence
+  are required before release acceptance resumes.
+
 ## Release RED Test-Only Correction Disposition (2026-08-14)
 
 - Accepted as a bounded mechanical test correction under the existing
