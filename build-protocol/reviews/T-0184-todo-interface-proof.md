@@ -171,3 +171,25 @@ least 90%, cheap preflight, and bounded `verify:task` with loopback permissions.
 - Fresh correction-profile evidence: the six To-Do suites and authoritative
   compiled/source helper list completed under `verify:task --coverage`; LCOV is
   92.42% branches (61/66) and 96.54% lines (223/231).
+
+## Exact Rejection Evidence Closure
+
+- The first generic subscription proof was RED because it passed the
+  `SubscriptionDelivery` wrapper to the Protobuf unpacker and opened multiple
+  iterators on a single-consumer stream. The corrected helper reuses one
+  iterator, unwraps only live `update` deliveries, and drains readiness probes
+  through a typed fence before observing the command-generated rejection.
+- Focused GREEN directly unpacks `TaskNotAssigned`, `TaskAlreadyAssigned`, and
+  reused `TaskAlreadyDone` messages with their exact generated schemas. A real
+  custom context also proves both the shared `TaskAssignmentEvent` callback and
+  exact `TaskReassigned` callback remain uncalled for rejected commands.
+- The exact two-test run passed `2/2`; the complete six-suite To-Do regression
+  passed `76/76`. Tooling typecheck, full ESLint, cleanup, TSDoc, copyright,
+  formatting, generated-output currency, and diff hygiene passed. Production
+  code did not change after the authoritative `92.42%` branch / `96.54%` line
+  coverage profile, so the expensive profile was not repeated.
+- The debugging function used an explicit `gpt-5.6-terra` / medium profile.
+  Desktop telemetry could not expose independent runtime metadata. Checkpoint
+  `04961e27` is correction-complete and ready for targeted API, style, and
+  documentation confirmation; reliability remains CLEAN and behavior-neutral
+  test-only closure does not reopen it.

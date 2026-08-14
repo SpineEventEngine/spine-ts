@@ -11,6 +11,8 @@ Implementation owner: existing `implementer`, explicit `gpt-5.6-terra` / medium
 Runtime metadata: unavailable from the desktop surface; the immutable configured
 role/profile is the available evidence.
 
+Final correction evidence checkpoint: `04961e27`.
+
 ## Objective
 
 Demonstrate the accepted Wave 11 interface-token routing contract in the To-Do
