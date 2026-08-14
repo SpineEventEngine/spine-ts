@@ -16,6 +16,7 @@ import { lstatSync, opendirSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { isAbsolute, join, normalize, sep } from "node:path";
 
+import { generationMarkerFile } from "./generation/generation-marker.js";
 import { RegistryDependency } from "./model/registry-dependency.js";
 import { NpmPackageName } from "./model/npm-package-name.js";
 
@@ -24,11 +25,6 @@ import { NpmPackageName } from "./model/npm-package-name.js";
  */
 export const manifestFormatVersion = 2;
 const configFormatVersion = 1;
-
-/**
- * Names the generated-root marker that binds output to a v2 manifest generation.
- */
-export const generationMarkerFile = ".spine-proto-generation.json";
 
 /**
  * Configures an independently published Proto model package.
@@ -807,10 +803,12 @@ export const ProtoManifest: Readonly<{
   read(packageRoot: string, manifestPath?: string): ProtoManifest;
 
   /**
-   * Creates a deterministic manifest from package-owned Proto paths.
+   * Creates a manifest from package-owned Proto paths. Without a supplied generation ID,
+   * a fresh random ID is assigned for a new generated-root marker lifecycle.
    *
    * @param packageRoot The model package root.
    * @param ownedProtoFiles Optional explicit package-relative Proto paths.
+   * @param generationId Optional generation ID; a random ID is used when omitted.
    * @returns The created manifest.
    */
   create(
@@ -836,10 +834,12 @@ export const ProtoManifest: Readonly<{
   },
 
   /**
-   * Creates a deterministic manifest from package-owned Proto paths.
+   * Creates a manifest from package-owned Proto paths. Without a supplied generation ID,
+   * a fresh random ID is assigned for a new generated-root marker lifecycle.
    *
    * @param packageRoot The model package root.
    * @param ownedProtoFiles Optional explicit package-relative Proto paths.
+   * @param generationId Optional generation ID; a random ID is used when omitted.
    * @returns The created manifest.
    */
   create(

@@ -31,7 +31,8 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import type { SpawnSyncReturns } from "node:child_process";
 
-import { generationMarkerFile, ProtoConfig, ProtoManifest } from "../index.js";
+import { ProtoConfig, ProtoManifest } from "../index.js";
+import { generationMarkerFile } from "./generation-marker.js";
 import { readManifestAt } from "../io/manifest-reader.js";
 import { ModelGraph } from "../model/model-graph.js";
 import { ManifestFile, type ManifestFileOperations } from "../io/atomic-manifest.js";

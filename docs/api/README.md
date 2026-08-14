@@ -361,7 +361,7 @@ runtime drains that inbox immediately, requires tenant-safe replay in
 multitenant contexts, and resolves only after the received inbox row is marked
 delivered. Live projection subscribers use the same local handoff shape with
 `UPDATE_SUBSCRIBER` rows, original event IDs as dedup signal IDs, and exact-row
-target replay during the 30-second local retention window. Live
+target replay through the Inbox delivery lifecycle. Live
 process-manager event reactors and event-commanding handlers use the same
 durable inbox handoff with `REACT_UPON_EVENT` rows, original `Event`
 envelopes, and exact-row target replay. Before handler code runs, replay
