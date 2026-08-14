@@ -193,3 +193,15 @@ least 90%, cheap preflight, and bounded `verify:task` with loopback permissions.
   `04961e27` is correction-complete and ready for targeted API, style, and
   documentation confirmation; reliability remains CLEAN and behavior-neutral
   test-only closure does not reopen it.
+
+## Targeted Style Residual
+
+- Targeted style re-review found one P2: the assignment-rejection readiness
+  helper bounded reads and its fence but awaited each initial probe admission
+  without the helper deadline. The correction wraps every probe post with
+  `withTimeout(..., remainingMs(deadline))`, matching the established rejection
+  readiness contract.
+- A focused non-settling-post regression was RED before that bound and is GREEN
+  with the correction. The exact readiness/rejection/routing selection is `3/3`;
+  tooling typecheck, scoped ESLint, formatting, and diff hygiene pass. No
+  production behavior changed. Targeted style confirmation remains pending.

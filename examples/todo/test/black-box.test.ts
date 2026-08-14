@@ -1099,6 +1099,22 @@ describe("@spine-event-engine/example-todo", () => {
     expect(postCount).toBe(1);
   });
 
+  it("bounds a non-settling assignment-rejection readiness probe post", async () => {
+    const pendingRead = new Promise<
+      IteratorResult<import("@spine-event-engine/client-node").SubscriptionDelivery>
+    >(() => undefined);
+
+    await expect(
+      establishAssignmentRejectionSubscriptionReadiness(
+        { postEvent: () => new Promise<void>(() => undefined) },
+        { next: () => pendingRead },
+        createTaskNotAssignedProbe,
+        unpackSubscribedTaskNotAssigned,
+        100,
+      ),
+    ).rejects.toThrow(/Timed out waiting for assignment rejection readiness probe 1 post/u);
+  });
+
   it("propagates an immediate readiness read failure while a probe post is pending", async () => {
     const readFailure = new Error("rejection subscription read failed");
     const latePostFailure = new Error("late rejection readiness post failed");
@@ -2228,8 +2244,9 @@ async function establishAssignmentRejectionSubscriptionReadiness(
     readonly message: AssignmentRejectionMessage;
   },
   unpack: (update: SubscriptionUpdate) => AssignmentRejectionMessage,
+  timeoutMs = 500,
 ): Promise<void> {
-  const deadline = Date.now() + 500;
+  const deadline = Date.now() + timeoutMs;
   const read = () =>
     subscription.next().then((result): SubscriptionUpdate | undefined => {
       if (result.done) throw new Error("Rejection subscription ended during readiness.");
@@ -2257,7 +2274,11 @@ async function establishAssignmentRejectionSubscriptionReadiness(
 
   for (let attempt = 1; attempt <= 16; attempt++) {
     const probe = createProbe(`readiness-${String(attempt)}`);
-    const posted = fixture.postEvent(probe.schema, probe.message);
+    const posted = withTimeout(
+      fixture.postEvent(probe.schema, probe.message),
+      `assignment rejection readiness probe ${String(attempt)} post`,
+      remainingMs(deadline),
+    );
     const initial = await Promise.race([
       pendingRead.then((update) => ({ case: "received" as const, update })),
       posted.then(() => ({ case: "posted" as const })),
