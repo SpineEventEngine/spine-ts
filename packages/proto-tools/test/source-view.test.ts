@@ -190,6 +190,7 @@ describe("modelSourceView", () => {
       writeFileSync(join(root, "tsconfig.json"), JSON.stringify({ extends: "./base.json" }));
       writeFileSync(join(root, "base.json"), JSON.stringify({ compilerOptions: { strict: true } }));
       writeFileSync(join(root, "src/authored.ts"), "export interface Authored {}\n");
+      symlinkSync(join(root, "src/authored.ts"), join(root, "src/ignored-link.txt"));
       const view = modelSourceView(root, "src/generated", join(root, ".generated.stage/output"));
       writeFileSync(
         join(root, "base.json"),
