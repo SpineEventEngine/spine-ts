@@ -120,3 +120,15 @@ least 90%, cheap preflight, and bounded `verify:task` with loopback permissions.
 - A coverage task-profile invocation with raw `src/index.ts` and no
   `src/process.ts` was cancelled before acceptance. It is non-authoritative and
   provides no coverage evidence; the corrected source set is pending.
+
+## Mechanical Preflight And Bounded Verification GREEN
+
+- The exact authoritative coverage profile passed with all six Todo suites and
+  sources `examples/todo/dist/src/index.js`, `examples/todo/src/smoke-task-lists.ts`,
+  and `examples/todo/src/process.ts`. Generated build/tooling, lint, cleanup,
+  TSDoc, format, documentation, Proto, containment, and release-readiness gates
+  completed before coverage.
+- Fresh LCOV is branches `90.38%` (`47/52`), functions `95.59%` (`65/68`), and
+  lines `96.23%` (`204/212`), meeting the task's 90% threshold.
+- No specialist lane is dispatched by this implementer. The branch is pushed
+  and ready for the planned TypeScript/API, style, reliability, and TSDoc review.
