@@ -5,8 +5,8 @@ developers should start with the [end-user guide](../USER_GUIDE.md).
 
 ## Generated interfaces and admission routing
 
-The Proto compiler turns `ts_type` declarations into nominal TypeScript
-interfaces and runtime tokens. Generated `every_is` interfaces live under a
+The Proto compiler turns `ts_type` declarations into structural TypeScript
+interfaces and nominal runtime tokens. Generated `every_is` interfaces live under a
 model's `generated/interfaces/`; `is.ts_type` resolves an authored interface
 from the same model module, although its property types may be external. The
 route-selection order is exact schema, first registered matching token, then

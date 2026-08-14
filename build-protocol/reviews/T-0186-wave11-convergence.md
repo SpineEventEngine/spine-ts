@@ -642,3 +642,41 @@ release, or integration finding remains.
   server entrypoints `10/10`; tooling typecheck, exact ESLint, cleanup, TSDoc,
   Prettier, and diff checks pass. The prior release RED is retained; this owner
   does not run `verify:release`.
+
+## Human-Directed Wave Documentation Audit (2026-08-14)
+
+The human rejected the Wave-added root README interface-routing section and
+required a complete audit of documentation changed since Wave 11 base
+`ab1a6deb`. The rejected section is removed before review.
+
+Two existing reviewer concerns are explicitly dispatched over the 49 changed
+Markdown files:
+
+- documentation completeness/audience reviewer: existing
+  `documentation_reviewer`, configured `gpt-5.6-luna` / medium;
+- standards/scope reviewer: existing `style_maintainability_reviewer`,
+  configured `gpt-5.6-terra` / high.
+
+Both assignments are read-only and concern-specific. They may not edit, touch
+the primary checkout or protected human files, or spawn sub-agents. The desktop
+surface exposes the immutable configured roles/profiles but no additional
+runtime model telemetry. Findings require direct verification against current
+`main`; one correction batch follows the complete review wave.
+
+The complete review wave found no further audience, scope, navigation, or stale
+claim defect after removal of the root README section. The standards reviewer
+found one accepted P2 wording defect: two framework references called the
+structural TypeScript interfaces nominal, although only their runtime tokens
+are nominal. `docs/architecture/README.md` and `packages/core/REFERENCE.md` now
+state that boundary exactly. No other published Wave documentation requires a
+correction.
+
+The first API-doc check in the fresh reconciliation worktree was RED before
+content validation because generated/build outputs were absent. Canonical
+generation and `typecheck:build` restored the required local outputs; the
+corrected documentation profile is GREEN for API inventory, audience rules,
+TypeScript snippets, TSDoc, copyright, Prettier, generated-current output, and
+diff cleanliness. Canonical generation verified 47 source checks and 52 frozen
+descriptors at the accepted digest. No runtime or public contract changed.
+Targeted standards re-review is CLEAN for both corrected references and confirms
+that the root README contains no comparable implementation/tutorial leakage.

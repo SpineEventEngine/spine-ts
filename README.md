@@ -3,14 +3,6 @@
 A framework helping build Domain-Driven Design (DDD) and CQRS applications on
 Node.js with less code.
 
-## Interface routing
-
-Proto can name a TypeScript message interface with `ts_type`. Generation can
-produce both an interface and same-named runtime token; repositories register
-an exact schema or token with `.route(...)`. The [To-Do walkthrough](examples/todo/USER_GUIDE.md)
-is the runnable path from declaration through `pnpm proto:generate`, routing,
-retry, and catch-up behavior.
-
 > **🔧 Spine TS is an experimental snapshot.** Its public API may change before
 > the first stable release.
 

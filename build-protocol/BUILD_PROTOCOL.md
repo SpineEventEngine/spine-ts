@@ -355,17 +355,28 @@ diagnosed immediately, while local work remains preserved.
 After each task is complete, reviewed, merged into `main`, and post-merge
 verified:
 
-1. push the completed task branch to `origin`;
-2. push updated `main` to `origin`;
-3. push any task/release tags created by that task;
-4. fetch or inspect the remote refs and prove that the intended local and
-   remote commits match; and
-5. record remote state in the existing closure update when one is already
+1. push the completed task branch and updated `main` to `origin` so the
+   integration is durable before cleanup;
+2. fetch or inspect every remote branch and tag, and prove that each completed
+   task ref is contained in `origin/main`;
+3. reconcile any remote branch that is not contained in `origin/main` before
+   deleting it: classify every unique path, preserve all confirmed work in
+   `main`, retain newer `main` behavior where it supersedes the branch, and
+   record the disposition;
+4. delete the completed remote task branch and every remote tag; tags are not
+   release artifacts retained by this repository;
+5. at task and Wave closure, prove with a fresh remote-ref query that `origin`
+   exposes exactly one branch, `main`, and no tags; and
+6. record remote state in the existing closure update when one is already
    required. Otherwise the verified remote refs and Git history are the
    durable evidence; do not create a commit solely to make a log name the
    commit or push that immediately preceded it.
 
-Only then mark remote synchronization complete and continue.
+A task or Wave is not complete while `origin` contains any branch other than
+`main` or any tag. A leftover unmerged branch is unresolved work, not disposable
+remote clutter: inspect and reconcile it without loss, then delete it. Only
+after the one-branch/no-tag audit passes may remote synchronization and closure
+be marked complete.
 
 A push failure is handled like other tooling failures: diagnose credentials,
 network, remote policy, or non-fast-forward state without rewriting or losing

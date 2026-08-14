@@ -4,8 +4,8 @@ This reference is for agents integrating the public core package.
 
 ## Message interfaces
 
-`MessageInterfaces.define()` creates the runtime token corresponding to a
-nominal TypeScript interface and its member schemas. A route accepts that token
+`MessageInterfaces.define()` creates the nominal runtime token corresponding to
+a structural TypeScript interface and its member schemas. A route accepts that token
 as well as an exact schema. Tokens are checked at declaration time; matching is
 ordered after exact schemas and before replacement/default routing. They are not
 transport semantic tags.
