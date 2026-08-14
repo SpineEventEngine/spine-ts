@@ -88,3 +88,19 @@ least 90%, cheap preflight, and bounded `verify:task` with loopback permissions.
   dependency: its public import is unresolved under Vitest. The proof imports
   the matching built workspace entrypoint by relative path so the storage
   factory shares server-runtime identity.
+
+## Compile-Convergence Preflight
+
+- No specialist review has been dispatched. The existing implementer assignment
+  remains explicit `gpt-5.6-terra` / medium; desktop runtime telemetry remains
+  unavailable, so the immutable configured profile is the acceptance evidence.
+- Initial tooling RED was confined to stale To-Do test contracts: omitted
+  `TaskListId`, incompatible exact-optional callback, string-ID view helper,
+  unchecked generated optional fields, and scalar TaskList fixtures. Assigned
+  tests now compile against generated types with guarded observations;
+  `typecheck:tooling` and six focused Todo suites exit 0.
+- Cleanup and TSDoc preflight remain RED solely for pre-existing, unassigned
+  `examples/todo/src/index.ts` findings. No production behavior or API changes
+  were made by this correction.
+- Prior branch coverage was 86.54% (RED against 90%). Fresh LCOV and bounded
+  verification disposition remain pending the one coverage-enabled `verify:task` run.

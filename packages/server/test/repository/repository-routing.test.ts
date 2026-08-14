@@ -67,7 +67,10 @@ import {
   type TaskAlreadyDone as TaskAlreadyDoneMessage,
   TaskAlreadyDoneSchema,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections_pb.js";
-import { TaskIdSchema as TodoIdSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import {
+  TaskIdSchema as TodoIdSchema,
+  TaskListIdSchema as TodoTaskListIdSchema,
+} from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 import * as TodoEvents from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
 import { TaskSchema as TodoTaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import {
@@ -1321,7 +1324,7 @@ class AlternateCatchUpProjection extends Projection<string, typeof TaskListSchem
       Object.assign(
         draft,
         create(TaskListSchema, {
-          id: "task-alternate",
+          id: create(TodoTaskListIdSchema, { value: "task-alternate" }),
           openTaskCount: event.id === 1 ? 1 : 0,
         }),
       ),
@@ -7707,7 +7710,7 @@ describe("repository signal routing", () => {
     await context.stand().update(
       TaskListSchema,
       create(TaskListSchema, {
-        id: "task-alternate",
+        id: create(TodoTaskListIdSchema, { value: "task-alternate" }),
         openTaskCount: 99,
       }),
     );
@@ -7728,7 +7731,7 @@ describe("repository signal routing", () => {
     );
     await expect(context.stand().read(TaskListSchema, "task-alternate")).resolves.toEqual(
       create(TaskListSchema, {
-        id: "task-alternate",
+        id: create(TodoTaskListIdSchema, { value: "task-alternate" }),
         openTaskCount: 1,
       }),
     );

@@ -1390,7 +1390,14 @@ function sanitizeRowId(id: string, ipcDirectory: string): string {
 
 function isExpectedTaskList(list: TaskList): boolean {
   const task = list.tasks[0];
-  if (task === undefined) return false;
+  if (
+    task === undefined ||
+    list.id === undefined ||
+    task.id === undefined ||
+    task.taskListId === undefined
+  ) {
+    return false;
+  }
   return (
     list.id.value === "local-multi-process-task" &&
     list.openTaskCount === 1 &&

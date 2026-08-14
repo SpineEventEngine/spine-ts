@@ -79,7 +79,11 @@ import {
   ReopenTaskSchema,
   UnassignTaskSchema,
 } from "../generated/spine/examples/todo/task_commands_pb.js";
-import { TaskIdSchema, TaskListIdSchema } from "../generated/spine/examples/todo/task_id_pb.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+  type TaskListId,
+} from "../generated/spine/examples/todo/task_id_pb.js";
 import { TaskAssigneeSchema } from "../generated/spine/examples/todo/task_assignee_pb.js";
 import { TaskListSchema, type TaskList } from "../generated/spine/examples/todo/task_list_pb.js";
 import { TaskAlreadyDoneSchema } from "../generated/spine/examples/todo/task_rejections_pb.js";
@@ -697,7 +701,7 @@ describe("@spine-event-engine/example-todo", () => {
       await import("../dist/generated/interfaces/task-event.js");
     const storageBackend = new InMemoryStorageBackend();
     const firstRoute = vi.fn(
-      (event: { readonly taskListId?: MessageShape<typeof TaskListIdSchema> }) =>
+      (event: { readonly taskListId?: MessageShape<typeof TaskListIdSchema> | undefined }) =>
         event.taskListId === undefined ? [] : [event.taskListId],
     );
     const firstStorage = new InMemoryStorageFactory(storageBackend);
@@ -709,7 +713,6 @@ describe("@spine-event-engine/example-todo", () => {
       .add(todo.TaskAggregate)
       .add(todo.TaskListProjection, {
         // Generated interface tokens cross the dynamic compiled-example boundary.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         eventRouting: firstRouting,
       })
       .buildAsync();
@@ -782,7 +785,6 @@ describe("@spine-event-engine/example-todo", () => {
       .add(todo.TaskAggregate)
       .add(todo.TaskListProjection, {
         // Generated interface tokens cross the dynamic compiled-example boundary.
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         eventRouting: replayRouting,
       })
       .buildAsync();
@@ -2253,21 +2255,9 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-interface TaskView {
-  readonly id?: { readonly value: string } | undefined;
-  readonly title: string;
-  readonly completed: boolean;
-}
+type TaskListRows = readonly TaskList[] | Pick<QueryResponse, "message">;
 
-interface TaskListView {
-  readonly id: string;
-  readonly tasks: readonly TaskView[];
-  readonly openTaskCount: number;
-}
-
-type TaskListRows = readonly TaskListView[] | Pick<QueryResponse, "message">;
-
-function decodedTaskLists(rows: TaskListRows): readonly TaskListView[] {
+function decodedTaskLists(rows: TaskListRows): readonly TaskList[] {
   if ("message" in rows) {
     const lists: TaskList[] = [];
     for (const message of rows.message) {
@@ -2280,10 +2270,10 @@ function decodedTaskLists(rows: TaskListRows): readonly TaskListView[] {
 }
 
 function readList(rows: TaskListRows, taskId: string) {
-  return decodedTaskLists(rows).find((list) => list.id.value === taskId);
+  return decodedTaskLists(rows).find((list) => list.id?.value === taskId);
 }
 
-function readTask(rows: TaskListRows, taskId: string): TaskView | undefined {
+function readTask(rows: TaskListRows, taskId: string): Task | undefined {
   return readList(rows, taskId)?.tasks.find((task) => task.id?.value === taskId);
 }
 
@@ -2315,8 +2305,7 @@ function taskListSnapshot(rows: TaskListRows, taskId: string) {
   const list = readList(rows, taskId);
 
   return {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    id: list === undefined ? undefined : list.id.value,
+    id: list?.id?.value,
     openTaskCount: list === undefined ? undefined : list.openTaskCount,
     tasks:
       list?.tasks.map((task) => ({

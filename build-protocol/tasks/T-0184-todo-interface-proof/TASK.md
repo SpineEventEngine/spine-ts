@@ -142,3 +142,15 @@ pending implementation continuation.
   invoked.
 - Focused evidence is GREEN (`1/1`). The wider native matrix, coverage,
   preflight, and bounded task verification remain pending.
+
+## Compile-Convergence Checkpoint
+
+- `pnpm typecheck:tooling` initially failed only in stale tests after the
+  generated TaskList ID migration. Assigned tests now use `TaskListId` and
+  generated `TaskList` values, guard generated optional fields, preserve the
+  exact-optional callback contract, and construct server fixtures with
+  `TaskListIdSchema`; tooling typecheck and six focused Todo suites exit 0.
+- Prior coverage remains RED at 86.54% against the required 90%. Fresh LCOV
+  will be recorded from one converged coverage-enabled `verify:task` run.
+  Cleanup/TSDoc gates currently report only pre-existing unassigned findings in
+  `examples/todo/src/index.ts`.
