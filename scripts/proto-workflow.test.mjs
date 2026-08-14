@@ -142,6 +142,11 @@ function workflowClaimOperations(claims, liveness) {
     read(path) {
       return claims.get(basename(path)).content;
     },
+    snapshot(path) {
+      const claim = claims.get(basename(path));
+      if (claim === undefined || claim.kind !== "regular") throw new Error("unsafe claim");
+      return { content: claim.content, identity: claim.identity ?? claim.content };
+    },
     inspect(path) {
       return claims.get(basename(path)).kind;
     },
@@ -2549,6 +2554,41 @@ describe("proto-workflow", () => {
       ),
     ).toBe(true);
     expect(existsSync(join(repoRoot, "packages/proto/generated"))).toBe(false);
+  });
+
+  it("does not delete a same-content workflow quarantine replacement after descriptor close", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const claims = new Map();
+    const operations = workflowClaimOperations(claims, () => "dead");
+    const snapshot = operations.snapshot;
+    let replaced = false;
+
+    expect(
+      generateTargets({
+        repoRoot,
+        lockOperations: {
+          ...operations,
+          snapshot(path) {
+            const observed = snapshot(path);
+            if (!replaced && basename(path).includes(".quarantine-")) {
+              claims.set(basename(path), {
+                content: observed.content,
+                kind: "regular",
+                identity: "replacement",
+              });
+              replaced = true;
+            }
+            return observed;
+          },
+        },
+      }),
+    ).toBe(1);
+    expect(replaced).toBe(true);
+    expect(
+      [...claims.values()].some(
+        (claim) => claim.identity === "replacement" && claim.content.includes('"token"'),
+      ),
+    ).toBe(true);
   });
 
   it.each(["symlink", "fifo"])(

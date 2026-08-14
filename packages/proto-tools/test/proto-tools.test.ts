@@ -178,13 +178,14 @@ function writeInstalledManifest(
 interface Claim {
   readonly content: string;
   readonly kind?: "regular" | "symlink" | "other";
+  readonly identity?: string;
 }
 
 function claimOperations(
   claims: Map<string, Claim>,
   alive: ReadonlySet<number> = new Set(),
   removed: string[] = [],
-): GenerationLockOperations {
+): Required<GenerationLockOperations> {
   return {
     create: (path, content) => {
       const name = basename(path);
@@ -200,6 +201,12 @@ function claimOperations(
       const claim = claims.get(basename(path));
       if (claim === undefined) throw new Error("missing claim");
       return claim.content;
+    },
+    snapshot: (path) => {
+      const claim = claims.get(basename(path));
+      if (claim === undefined || (claim.kind !== undefined && claim.kind !== "regular"))
+        throw new Error("generation claim is not a regular file");
+      return { content: claim.content, identity: claim.identity ?? claim.content };
     },
     inspect: (path) => claims.get(basename(path))?.kind ?? "regular",
     remove: (path) => {
@@ -1326,6 +1333,43 @@ describe("spine proto model tooling", () => {
         lockOperations: { ...operations, remove: release },
       });
     }).toThrow("primary generation failure");
+  });
+
+  it("does not delete a same-content quarantine replacement after its descriptor closes", () => {
+    const model = packageDirectory("@example/quarantine-replacement-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/quarantine-replacement-model"));
+    mkdirSync(join(model, "proto"), { recursive: true });
+    const claims = new Map<string, Claim>();
+    const removed: string[] = [];
+    const operations = claimOperations(claims, new Set(), removed);
+    const snapshot = operations.snapshot;
+    let replaced = false;
+
+    expect(() => {
+      generateModel(model, {
+        runBuf: generatedOutput,
+        lockOperations: {
+          ...operations,
+          snapshot: (path) => {
+            const observed = snapshot(path);
+            if (!replaced && basename(path).includes(".quarantine-")) {
+              claims.set(basename(path), { content: observed.content, identity: "replacement" });
+              replaced = true;
+            }
+            return observed;
+          },
+        },
+      });
+    }).toThrow(
+      "spine-proto: @example/quarantine-replacement-model: cannot clean up generation lock",
+    );
+    expect(replaced).toBe(true);
+    expect(removed).toEqual([]);
+    expect(
+      [...claims.values()].some(
+        (claim) => claim.identity === "replacement" && claim.content.includes('"token"'),
+      ),
+    ).toBe(true);
   });
 
   it("rejects an owned Proto import from a nested transitive model before publication", () => {
@@ -3211,9 +3255,10 @@ describe("spine proto model tooling", () => {
         runBuf: generatedOutput,
         lockOperations: {
           ...operations,
-          read: (path) => {
-            const owner = JSON.parse(operations.read(path)) as { token?: string };
-            return JSON.stringify({ ...owner, token: "replaced" });
+          snapshot: (path) => {
+            const observed = operations.snapshot(path);
+            const owner = JSON.parse(observed.content) as { token?: string };
+            return { ...observed, content: JSON.stringify({ ...owner, token: "replaced" }) };
           },
         },
       });
@@ -3378,7 +3423,12 @@ describe("spine proto model tooling", () => {
     expect(() => {
       generateModel(replacement, {
         runBuf: generatedOutput,
-        lockOperations: { ...operations, inspect: () => "other" },
+        lockOperations: {
+          ...operations,
+          snapshot: () => {
+            throw new Error("replacement is not regular");
+          },
+        },
       });
     }).toThrow("spine-proto: @example/replaced-release-claim: cannot clean up generation lock");
   });

@@ -634,18 +634,27 @@ function probeWorkflowClaimLiveness(pid, probe = (candidate) => process.kill(can
   }
 }
 
-function readRegularWorkflowClaim(path) {
-  const descriptor = openSync(
-    path,
-    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-  );
+function snapshotRegularWorkflowClaim(path) {
+  let descriptor;
   try {
-    if (!fstatSync(descriptor).isFile())
-      throw new Error("workflow generation claim is not a regular file");
-    return readFileSync(descriptor, "utf8");
+    descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  } catch {
+    throw new Error("workflow generation claim is not a regular file");
+  }
+  try {
+    const stats = fstatSync(descriptor);
+    if (!stats.isFile()) throw new Error("workflow generation claim is not a regular file");
+    return {
+      content: readFileSync(descriptor, "utf8"),
+      identity: `${String(stats.dev)}:${String(stats.ino)}`,
+    };
   } finally {
     closeSync(descriptor);
   }
+}
+
+function readRegularWorkflowClaim(path) {
+  return snapshotRegularWorkflowClaim(path).content;
 }
 
 function workflowClaimQuarantine(path) {
@@ -656,6 +665,7 @@ const defaultWorkflowLockOperations = {
   create: (path, contents) => writeFileSync(path, contents, { flag: "wx" }),
   list: (directory) => readdirSync(directory),
   read: readRegularWorkflowClaim,
+  snapshot: snapshotRegularWorkflowClaim,
   inspect: (path) => {
     const entry = lstatSync(path);
     if (entry.isSymbolicLink()) return "symlink";
@@ -665,6 +675,14 @@ const defaultWorkflowLockOperations = {
   move: renameSync,
   liveness: (pid) => probeWorkflowClaimLiveness(pid),
 };
+
+function removeWorkflowSnapshotClaim(operations, path, snapshot) {
+  const retired = workflowClaimQuarantine(path);
+  operations.move(path, retired);
+  if (operations.snapshot(retired).identity !== snapshot.identity)
+    throw new Error("workflow generation claim ownership changed");
+  operations.remove(retired);
+}
 
 function acquireWorkflowLock(root, overrides = {}) {
   const operations = { ...defaultWorkflowLockOperations, ...overrides };
@@ -687,11 +705,11 @@ function acquireWorkflowLock(root, overrides = {}) {
         if (candidate === path) continue;
         const quarantine = workflowClaimQuarantine(candidate);
         let owner;
+        let snapshot;
         try {
           operations.move(candidate, quarantine);
-          if (operations.inspect(quarantine) !== "regular")
-            throw new Error("workflow generation claim is not a regular file");
-          owner = JSON.parse(operations.read(quarantine));
+          snapshot = operations.snapshot(quarantine);
+          owner = JSON.parse(snapshot.content);
         } catch {
           throw new Error("workflow generation claim has invalid owner metadata");
         }
@@ -699,7 +717,7 @@ function acquireWorkflowLock(root, overrides = {}) {
           throw new Error("workflow generation claim has invalid owner metadata");
         if (operations.liveness(owner.pid) !== "dead")
           throw new Error("workflow generation already in progress");
-        operations.remove(quarantine);
+        removeWorkflowSnapshotClaim(operations, quarantine, snapshot);
       }
     }
   } catch (error) {
@@ -717,10 +735,10 @@ function releaseWorkflowLock(lock) {
   const quarantine = workflowClaimQuarantine(lock.path);
   try {
     lock.operations.move(lock.path, quarantine);
-    const owner = JSON.parse(lock.operations.read(quarantine));
-    if (owner.token !== lock.token || lock.operations.inspect(quarantine) !== "regular")
-      throw new Error();
-    lock.operations.remove(quarantine);
+    const snapshot = lock.operations.snapshot(quarantine);
+    const owner = JSON.parse(snapshot.content);
+    if (owner.token !== lock.token) throw new Error();
+    removeWorkflowSnapshotClaim(lock.operations, quarantine, snapshot);
   } catch {
     throw new Error("cannot clean up workflow generation claim");
   }
