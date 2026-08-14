@@ -1,7 +1,7 @@
 # Spine TS Project Completion Plan
 
 Status: Initial release, T-0080 authored-API/example quality correction, and
-Waves 9 and 10 complete; Wave 11 T-0180 through T-0182 complete, T-0183 next
+Waves 9 and 10 complete; Wave 11 T-0180 through T-0183 complete, T-0184 next
 
 Plan date: 2026-07-12
 
@@ -234,10 +234,10 @@ T-0178 planned Wave 11 from the approved human decisions and the fresh upstream
 `ts_type` contract. T-0180 froze the pinned upstream options contract; T-0181
 implemented generated interface tokens and companions; T-0182 implemented and
 verified same-module authored-interface discovery, conformance, immutable
-compiler input snapshots, and rollback. All three are reviewed,
-release-verified, integrated, post-merge verified, tagged, and remotely
-synchronized. T-0183 interface-token routing is next. Multiple-Gateway behavior
-moves wholly to Wave 12. See
+compiler input snapshots, and rollback. T-0183 added interface-token routing
+for Command, Event, and state updates. All four are reviewed, release-verified,
+integrated, post-merge verified, tagged, and remotely synchronized. T-0184 is
+next. Multiple-Gateway behavior moves wholly to Wave 12. See
 `build-protocol/DECISION_LOG.md#d-0113-generate-typescript-message-interfaces-and-route-by-their-tokens`.
 
 ## Authored API And Example Quality Correction

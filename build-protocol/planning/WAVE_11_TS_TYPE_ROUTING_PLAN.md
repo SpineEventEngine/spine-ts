@@ -1,6 +1,6 @@
 # Wave 11: TypeScript Interfaces And Interface-Based Routing
 
-Status: In implementation; T-0180 through T-0182 complete, T-0183 next
+Status: In implementation; T-0180 through T-0183 complete, T-0184 next
 
 ## Purpose
 
@@ -477,6 +477,8 @@ preflight then `verify:release`; all four specialist lanes are relevant.
 ### T-0183: Route Commands, Events, and state updates by interface token
 
 Classification: high-risk public dispatch and replay behavior.
+
+Status: Complete, integrated, and post-merge verified; T-0184 is next.
 
 Primary ownership:
 
