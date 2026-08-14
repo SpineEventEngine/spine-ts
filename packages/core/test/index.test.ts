@@ -187,6 +187,27 @@ describe("MessageInterfaces", () => {
     }
   });
 
+  it("accepts genuine descriptor membership without invoking an array iterator", () => {
+    const schema = {
+      kind: "message",
+      typeName: "example.IteratorSafe",
+      file: {
+        kind: "file",
+        messages: [] as unknown[],
+        proto: { $typeName: "google.protobuf.FileDescriptorProto" },
+      },
+      proto: { $typeName: "google.protobuf.DescriptorProto" },
+    };
+    schema.file.messages.push(schema);
+    Object.defineProperty(schema.file.messages, Symbol.iterator, {
+      value() {
+        throw new Error("must not invoke descriptor iterator");
+      },
+    });
+
+    expect(MessageInterfaces.define([schema] as never).schemas).toEqual([schema]);
+  });
+
   it("accepts a genuine generated schema even when its message requires populated fields", () => {
     const token = MessageInterfaces.define<RequiredName, readonly [typeof RequiredNameSchema]>([
       RequiredNameSchema,

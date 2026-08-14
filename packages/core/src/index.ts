@@ -138,8 +138,22 @@ function dataProperty(value: object, name: string): unknown {
   return descriptor !== undefined && "value" in descriptor ? descriptor.value : undefined;
 }
 
+function indexedDataProperties(values: readonly unknown[]): unknown[] | undefined {
+  const length = dataProperty(values, "length");
+  if (!Number.isSafeInteger(length) || length < 0 || length > 1_000) return undefined;
+  const indexed: unknown[] = [];
+  for (let index = 0; index < length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(values, String(index));
+    if (descriptor === undefined || !("value" in descriptor)) return undefined;
+    indexed.push(descriptor.value);
+  }
+  return indexed;
+}
+
 function descriptorTreeIncludes(roots: readonly unknown[], target: object): boolean {
-  const pending = [...roots];
+  const initial = indexedDataProperties(roots);
+  if (initial === undefined) return false;
+  const pending = initial;
   const visited = new Set<object>();
   let entries = 0;
   while (pending.length > 0) {
@@ -152,7 +166,9 @@ function descriptorTreeIncludes(roots: readonly unknown[], target: object): bool
     const nested = dataProperty(value, "nestedMessages");
     if (nested === undefined) continue;
     if (!Array.isArray(nested)) return false;
-    for (const child of nested) pending.push(child as unknown);
+    const children = indexedDataProperties(nested);
+    if (children === undefined || pending.length + children.length > 1_000) return false;
+    pending.push(...children);
   }
   return false;
 }

@@ -296,3 +296,11 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   generated-clean `10/10`; tooling typecheck, affected ESLint, Prettier,
   diff, current-output, cleanup, and residue checks are green. Targeted
   style/reliability re-review is ready; security/release remain pending.
+## Final Security Correction Checkpoint (2026-08-14)
+
+- The existing `implementer`, explicit `gpt-5.6-terra` / medium, began the
+  accepted final security batch. Desktop independent runtime telemetry is
+  unavailable. Test-first corrections now bound descriptor-root traversal
+  without iterator invocation and reject direct staged FIFO entries before
+  publication while preserving committed state. Claim-release, marker, and
+  workflow-tree trust boundaries remain in progress.

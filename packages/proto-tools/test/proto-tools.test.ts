@@ -2056,6 +2056,35 @@ describe("spine proto model tooling", () => {
     }
   });
 
+  it("rejects a FIFO in a direct generation stage before it can replace committed output", () => {
+    const model = packageDirectory("@example/direct-staged-fifo");
+    try {
+      writeJson(model, "spine-proto.json", modelConfig("@example/direct-staged-fifo"));
+      mkdirSync(join(model, "proto"));
+      writeFileSync(join(model, "proto/value.proto"), 'syntax = "proto3";\n');
+      mkdirSync(join(model, "src/generated"), { recursive: true });
+      writeFileSync(join(model, "src/generated/previous.ts"), "previous\n");
+      writeFileSync(join(model, "spine-proto-manifest.json"), "previous manifest\n");
+
+      expect(() =>
+        generateModel(model, {
+          runBuf(_moduleRoot, output) {
+            mkdirSync(output, { recursive: true });
+            writeFileSync(join(output, "value_pb.ts"), 'import {} from "./value_pb.js";\n');
+            const created = spawnSync("mkfifo", [join(output, "unsafe.fifo")]);
+            if (created.status !== 0) throw new Error(created.stderr.toString());
+          },
+        }),
+      ).toThrow("generated source traversal must contain only regular files and directories");
+      expect(readFileSync(join(model, "src/generated/previous.ts"), "utf8")).toBe("previous\n");
+      expect(readFileSync(join(model, "spine-proto-manifest.json"), "utf8")).toBe(
+        "previous manifest\n",
+      );
+    } finally {
+      rmSync(model, { recursive: true, force: true });
+    }
+  });
+
   it("fails a malformed manifest immediately when no generation claim is live", () => {
     const model = packageDirectory("@example/no-claim-manifest-read");
     try {

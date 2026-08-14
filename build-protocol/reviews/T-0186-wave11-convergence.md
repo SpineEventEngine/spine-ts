@@ -406,3 +406,10 @@ bounds/descriptors, v2 semantic mismatch rejection, journal allowlists and
 retained evidence, network/auth/tenant scope, logging, dependencies, and
 generated registry loading outside the marker gap are CLEAN. Security re-review
 will cover only these four corrected trust boundaries.
+## Final Security Correction Checkpoint (2026-08-14)
+
+- Existing `implementer`, explicit `gpt-5.6-terra` / medium; Desktop exposes
+  no independent runtime-profile telemetry. Test-first corrections address the
+  accepted P2 descriptor iterator exposure and direct P1 staged FIFO exposure.
+  The remaining accepted claim, marker, and workflow-tree findings are still
+  in progress; final security verdict remains BLOCK pending re-review.

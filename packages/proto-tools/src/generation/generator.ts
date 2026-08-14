@@ -909,6 +909,10 @@ const protoGeneration = Object.freeze({
           throw new Error("generated source traversal must not contain symlinks");
         if (status.isDirectory()) pending.push([path, depth + 1]);
         else if (status.isFile()) output.push(path);
+        else
+          throw new Error(
+            "generated source traversal must contain only regular files and directories",
+          );
       }
     }
     return output;
