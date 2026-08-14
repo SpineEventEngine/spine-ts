@@ -7,6 +7,7 @@ exposes commands, queries, and subscriptions through a real local server.
 ## 💡 What will you learn?
 
 - ✅ How Proto messages become generated TypeScript model code.
+- ✅ How one generated message interface and one authored interface become routing tokens.
 - ✅ How `@Assign` and `@Subscribe` methods handle commands and events.
 - ✅ How generated validation and domain rejections protect entity state.
 - ✅ How a client posts a command and reads the resulting Projection.
@@ -66,6 +67,17 @@ function createTask(id: TaskId, title: string): TaskCreated {
 `TaskListProjection.onTaskCreated()` adds that task to the list and increments
 the open-task count. The smoke client waits for this Projection row, which is
 why the example demonstrates a command followed by an observable read model.
+
+## 🧩 Route related events together
+
+The To-Do model has a generated `TaskEvent` interface for every task event and
+an authored `TaskAssignmentEvent` interface for assignment lifecycle events.
+Run `pnpm proto:generate` after changing the Proto model; it writes
+`generated/interfaces/task-event.ts` and
+`generated/interfaces/task-assignment-event.ts`. The application imports each
+exported name in type position for the interface and in value position for the
+runtime routing token. The [walkthrough](USER_GUIDE.md) shows the complete
+create, assign, reassign, and unassign path.
 
 ## 🧪 Run the focused tests
 

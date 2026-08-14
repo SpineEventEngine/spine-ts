@@ -26,12 +26,90 @@ technical failures are non-OK acknowledgements; a domain rejection is accepted
 command processing with no state transition and is published separately on a
 best-effort rejection-event path.
 
-The generated registry uses exact message types first. A routing declaration
-can supply the fallback with `replaceDefault`; a handler does not declare its
-own default. Command, event, and state-update handlers are distinct routes;
-TypeScript does not interpret Java Proto options for routing. An event handler
-can narrow an event with `@Where` against an event field. Keep filters about
-event data, not a made-up semantic route name.
+## Give events a shared TypeScript interface
+
+The To-Do event file deliberately has two kinds of declaration:
+
+```proto
+option (every_is).ts_type = "TaskEvent";
+option (every_is).generate = true;
+
+message TaskAssigned {
+  option (is).ts_type = "TaskAssignmentEvent";
+  // fields omitted here; see task_events.proto
+}
+
+message TaskUnassigned {
+  option (is).ts_type = "TaskAssignmentEvent";
+}
+```
+
+`every_is` applies to all messages in this file. With `generate = true`,
+`pnpm proto:generate` creates `generated/interfaces/task-event.ts`: it exports
+both a TypeScript `TaskEvent` interface and a runtime `TaskEvent` token.
+`is.ts_type` names an interface you author in the same model module as the
+message source. Here, [`src/index.ts`](src/index.ts) exports
+`interface TaskAssignmentEvent { readonly assignee?: UserId }`; generation
+creates `generated/interfaces/task-assignment-event.ts`, which exports that
+type and its token. An interface can use property types imported from another
+module, such as `UserId`, but the interface declaration itself and its parent
+message model must share the model module.
+
+TypeScript reads `ts_type`. It ignores Java-only option fields, and neither
+option creates semantic tags or transport topics. A compiler error is useful:
+an authored interface in a different module, a missing exported interface, or
+an interface whose member message is not structurally compatible stops
+generation/compilation instead of silently broadening a route.
+
+Generated files identify their generated provenance and intentionally have no
+copyright header. Keep copyright in authored Proto and TypeScript; regenerate,
+do not hand-edit `generated/interfaces/`.
+
+## Register exact and interface routes
+
+The same exported name works in two places: use `TaskEvent` or
+`TaskAssignmentEvent` as a type in a type annotation, and use the imported
+runtime value as the token passed to `.route(...)`. The application aliases the
+assignment token only to make that distinction easy to read.
+
+```ts
+// docs-snippet-path: examples/todo/src/index.ts
+import { EventRouting } from "@spine-event-engine/server";
+import { TaskReassignedSchema } from "../generated/spine/examples/todo/task_events_pb.js";
+import type { TaskListId } from "../generated/spine/examples/todo/task_id_pb.js";
+import type { UserId } from "@spine-event-engine/proto";
+import { TaskAssignmentEvent as TaskAssignmentEventToken } from "../generated/interfaces/task-assignment-event.js";
+import { TaskEvent } from "../generated/interfaces/task-event.js";
+
+export interface TaskAssignmentEvent {
+  readonly assignee?: UserId | undefined;
+}
+
+const taskListRouting = EventRouting.create<TaskListId>()
+  .route(TaskEvent, (event) => (event.taskListId === undefined ? [] : [event.taskListId]));
+const assigneeRouting = EventRouting.create<UserId>()
+  .route(TaskAssignmentEventToken, (event) => (event.assignee === undefined ? [] : [event.assignee]))
+  .route(TaskReassignedSchema, (event) =>
+    event.previousAssignee === undefined || event.assignee === undefined
+      ? []
+      : [event.previousAssignee, event.assignee],
+  );
+
+void taskListRouting;
+void assigneeRouting;
+```
+
+The schema overload is `.route(Schema, route)`; the token overload is
+`.route(Token, route)`. Selection is exact schema first, then the first
+registered matching token, then the replacement/default route. Therefore the
+exact `TaskReassigned` route wins over the broader assignment token and returns
+two assignee targets; `TaskAssigned` and `TaskUnassigned` use the token route
+and return one; an unrelated event can return zero from its selected route.
+
+Routing runs once when an accepted event is admitted. The framework stores the
+typed targets with that accepted work, so retry replays those stored targets
+without calling the route again. Read-side catch-up intentionally rebuilds
+from events and may evaluate routing again to construct its view.
 
 Server components receive framework logging through their configured logger;
 use it for operational context, never as a substitute for a stored event or a
@@ -80,8 +158,10 @@ Use generated schemas and public clients. The checked-in `pnpm --filter
 uses an `Http2SessionManager`, bounds the command and eventual query, checks an
 OK acknowledgement, and aborts its session in `finally`.
 
-`CreateTask` needs a task ID and non-empty title. `RenameTask` changes the title;
-`CompleteTask` marks it done; `ReopenTask` marks it open. All use the same
+`CreateTask` needs a task ID and non-empty title. `AssignTask` selects an
+assignee, `ReassignTask` changes it and emits `TaskReassigned`, and
+`UnassignTask` removes it. `RenameTask` changes the title; `CompleteTask` marks
+it done; `ReopenTask` marks it open. All use the same
 `CommandService.Post` envelope shape as the smoke program, replacing only the
 generated command schema/message.
 
@@ -101,9 +181,29 @@ effect.
 Client envelopes redact rejected-command payloads and throwable stacks.
 Technical failures remain non-OK acknowledgements.
 
+### Assignment rejections
+
+| Attempt | Current state | Rejection |
+| --- | --- | --- |
+| Assign, reassign, or unassign | Completed task | `TaskAlreadyDone` |
+| Assign | An assignee already exists | `TaskAlreadyAssigned` |
+| Reassign | No current assignee | `TaskNotAssigned` |
+| Reassign | Requested assignee is the current assignee | `TaskAlreadyAssigned` |
+| Unassign | No current assignee | `TaskNotAssigned` |
+
+Rejected commands preserve aggregate state and produce no normal event route
+targets. The rejection event has its own declared TaskList route where needed.
+
+### Snapshot boundary
+
+`TaskList` now stores its typed `TaskListId` in field 4; field 1 is reserved.
+Existing snapshots are reset for this change. The example provides no automatic
+migration and does not infer a task-list ID from a task ID, so start local
+example data fresh after updating.
+
 ## Query task lists
 
-Every `TaskList` projection row has the task ID as its projection ID. The
+Every `TaskList` projection row has the task-list ID as its projection ID. The
 following complete ESM client factors the shared client, target, read, and
 decode setup while executing all-row, exact-ID, and declared-column queries.
 First run `pnpm typecheck:build` from the repository root, then save the module

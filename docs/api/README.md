@@ -6,6 +6,16 @@ and individual [package guides](../../README.md). TypeDoc is the canonical
 declaration generator for this repository; this page explains how its entry
 points fit together and records cross-package API limits.
 
+## Interface-routing API
+
+`EventRouting`, `CommandRouting`, and `StateUpdateRouting` each expose
+`.route(Schema, via)` for one generated schema and `.route(Token, via)` for a
+generated message-interface token. Exact schema wins; otherwise the first
+registered matching token wins; otherwise the replacement/default applies.
+Routes execute at accepted admission and retries use stored typed targets.
+Catch-up rebuilds by design. The [To-Do guide](../../examples/todo/USER_GUIDE.md)
+contains executable source-linked registration.
+
 ## 🧭 Start here
 
 - Building a server: [`@spine-event-engine/server`](../../packages/server/README.md)
@@ -64,15 +74,15 @@ delivery ports; generated delivery RPC clients remain internal.
 ## Exact repository routing
 
 `CommandRouting`, `EventRouting`, and `StateUpdateRouting` are the TypeScript
-routing declarations. Each `route(schema, via)` registers one exact generated
-message or state schema. Use `replaceDefault(via)` only when the declaration's
-default route must be replaced; an exact route takes precedence. Route functions
-are deterministic and side-effect-free during admission, while durable replay
-uses the stored target rather than calculating it again.
+routing declarations. Each accepts an exact generated schema or a generated
+interface token. Matching selects exact schema, then the first registered
+matching token, then the replacement/default route. Route functions are
+deterministic and side-effect-free during accepted admission, while durable
+replay uses stored typed targets rather than calculating them again.
 
-This is not Java semantic routing. TypeScript does not consume
-`(is).java_type` or `(every_is).java_type`, and it has no `@Route` decorator or
-`routeSemantic()` API. Frozen Proto options remain preserved wire definitions.
+TypeScript consumes `ts_type` and ignores Java-only option fields. Frozen Proto
+options remain preserved wire definitions; `ts_type` does not create transport
+semantic tags or topics.
 One `@Where({ eventField, equals })` equality filter may be used after type
 routing on an event- or rejection-consuming `@Subscribe`, `@React`, or
 `@Command` handler. `eventField` and `equals` are required typed string

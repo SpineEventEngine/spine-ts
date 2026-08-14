@@ -136,14 +136,16 @@ flowchart LR
 ```
 
 Use an exact route when the first field is not the correct target. `CommandRouting`,
-`EventRouting`, and `StateUpdateRouting` register exact generated schemas with
-`route(schema, via)`. `replaceDefault(via)` replaces the matching declaration's
-default route. Exact routes win, and route functions run deterministically only
-during admission; durable replay uses the stored target.
+`EventRouting`, and `StateUpdateRouting` accept both `.route(Schema, via)` and
+`.route(Token, via)`. Selection is exact schema, then the first registered
+matching token, then the replacement/default route. Route functions run once at
+accepted admission and stored typed targets are replayed on retry; catch-up
+intentionally rebuilds the read side.
 
-TypeScript does not use `(is).java_type` or `(every_is).java_type` to route,
-and it has no `@Route` decorator or `routeSemantic()` API. Those copied Proto
-definitions are preserved wire definitions, not TypeScript routing behavior.
+Proto `ts_type` options describe those TypeScript interfaces and tokens.
+TypeScript ignores Java-only option fields and does not create semantic tags or
+topics from them. See the [To-Do interface-routing walkthrough](../examples/todo/USER_GUIDE.md)
+for generated versus authored interfaces and compiler boundaries.
 
 Use one `@Where({ eventField, equals })` equality filter after type routing on
 an event- or rejection-consuming `@Subscribe`, `@React`, or `@Command` handler.
@@ -286,8 +288,7 @@ flowchart LR
 
 The supported GKE and GCE templates use one standalone Gateway. GKE discovers
 ready application Pods through headless-Service DNS; GCE uses a durable leased
-node registry. The Gateway is not a Multiple-Gateway topology. Cloud Run is
-outside the initial offering.
+node registry.
 
 The simple Delivery server is in-memory, single-replica, and not highly
 available. Choose an operationally suitable delivery design before depending

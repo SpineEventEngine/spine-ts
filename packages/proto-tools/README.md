@@ -5,6 +5,14 @@ assembles those models into an application registry. Those models can define
 commands, events, and state used by Aggregates or Projections. It runs at build
 time, not inside a server process.
 
+## Generate interface artifacts
+
+`pnpm proto:generate` discovers `ts_type` options and emits model-local
+`generated/interfaces/*.ts` artifacts. Generated `TaskEvent` is a complete
+generated declaration; generated `TaskAssignmentEvent` binds the token to an
+authored interface in the same model module. Do not edit output: rerun the
+generator instead.
+
 For detailed contracts intended for coding agents, see the
 [REFERENCE.md documentation for agents](REFERENCE.md).
 

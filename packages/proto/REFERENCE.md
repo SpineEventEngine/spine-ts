@@ -2,6 +2,14 @@
 
 This reference is for agents using Spine TS Protobuf contracts.
 
+## `ts_type` boundary
+
+The TypeScript generator reads `ts_type`; Java-only option fields are ignored.
+`every_is.generate` produces an interface/token in `generated/interfaces/`.
+`is.ts_type` requires an exported authored interface in the message model's
+module; external property types are allowed. Missing, misplaced, or incompatible
+interfaces fail compilation. These options do not create semantic tags or topics.
+
 ## Public exports
 
 The root `@spine-event-engine/proto` export provides the curated Spine schemas,

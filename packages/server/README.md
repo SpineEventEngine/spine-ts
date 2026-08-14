@@ -4,6 +4,13 @@ This package runs a Spine bounded context in Node. It assembles entities,
 handlers, storage, command/event processing, query-side Projections,
 subscriptions, and a local Connect/gRPC-compatible server.
 
+## Route a schema or interface token
+
+Use `.route(Schema, via)` for one message or `.route(Token, via)` for a named
+message-interface family. Exact schema routes take priority, then the first
+registered matching token, then replacement/default. The [To-Do example](../../examples/todo/USER_GUIDE.md)
+uses `TaskEvent`, an assignment token, and an exact `TaskReassigned` route.
+
 For a standalone application, use `await server.run()` to let the framework
 close the server on `SIGINT` or `SIGTERM` and permanently close the environment
 after the final run-managed server retires. Embedded applications use

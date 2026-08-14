@@ -5,6 +5,14 @@ Spine TS application. Use it when application code needs to validate a message,
 pack it into `google.protobuf.Any`, create a command or event envelope, or look
 up a generated message schema by its Spine type URL.
 
+## Message-interface tokens
+
+A generated interface export has one name in two TypeScript namespaces: use it
+as a type for message shape and as a value token in a repository `.route(...)`
+call. The To-Do `TaskEvent` token groups task events; its authored
+`TaskAssignmentEvent` counterpart groups assignment events. Start with the
+[To-Do walkthrough](../../examples/todo/USER_GUIDE.md) for the complete path.
+
 For the detailed contract and integration notes, see
 [REFERENCE documentation for agents](REFERENCE.md).
 

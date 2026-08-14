@@ -3,6 +3,17 @@
 These notes are for framework maintainers and coding agents. Application
 developers should start with the [end-user guide](../USER_GUIDE.md).
 
+## Generated interfaces and admission routing
+
+The Proto compiler turns `ts_type` declarations into nominal TypeScript
+interfaces and runtime tokens. Generated `every_is` interfaces live under a
+model's `generated/interfaces/`; `is.ts_type` resolves an authored interface
+from the same model module, although its property types may be external. The
+route-selection order is exact schema, first registered matching token, then
+replacement/default. Accepted admission stores typed targets; retry reuses them;
+read-side catch-up intentionally rebuilds. Generated source records provenance
+and has no copyright header.
+
 They explain the server scope: delivery/inbox processing,
 command/query/subscription services, same-host ZeroMQ transport for
 multi-process use, and a `Server` lifecycle owner that starts and closes those
@@ -71,8 +82,7 @@ discovers application nodes on GKE or GCE: GKE headless-Service DNS or GCE
 leased discovery provides the authoritative complete membership. It reconciles
 every discovered node with bounded connection starts; the expected count of 32
 is an operational expectation, not a hard runtime maximum. The platform, not
-Spine TS, scales identical application versions. Cloud Run and multiple
-Gateways are outside this deployment model.
+Spine TS, scales identical application versions.
 
 ## Proto Contract Boundary
 
@@ -94,15 +104,16 @@ values, and custom options. This boundary is intentionally contract-only:
 ## Repository routing boundary
 
 Repository routing is explicit TypeScript code. `CommandRouting`,
-`EventRouting`, and `StateUpdateRouting` use `route(schema, via)` for exact
-generated-schema matches. `replaceDefault(via)` replaces the applicable default
-route; exact routes win. Each route runs deterministically during admission,
-and durable replay uses the stored target instead of running the route again.
+`EventRouting`, and `StateUpdateRouting` accept `.route(schema, via)` for an
+exact generated schema and `.route(token, via)` for an interface token. Matching
+uses exact schema, then the first registered matching token, then the
+replacement/default route. Each route runs deterministically during accepted
+admission, and durable replay uses stored typed targets instead of running it
+again.
 
-The copied `(is).java_type` and `(every_is).java_type` definitions are preserved
-wire definitions only. They are not TypeScript `TypeRegistry` or entity
-metadata, repository-routing input, or runtime-topic input. TypeScript routing
-does not consume them, and it has no `@Route` decorator or `routeSemantic()` API.
+The copied Java-only option definitions remain preserved wire definitions only.
+TypeScript reads `ts_type`; it does not create TypeRegistry/entity metadata,
+repository-routing input, semantic tags, or runtime topics from Java fields.
 One `@Where({ eventField, equals })` equality filter may be used after type
 routing on an event- or rejection-consuming `@Subscribe`, `@React`, or
 `@Command` handler. Its two values must be typed string literals; invalid or

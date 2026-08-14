@@ -139,6 +139,18 @@ describe("TypeScript documentation snippets", () => {
     expect(snippet?.[1]).not.toContain("undefined as");
   });
 
+  it("keeps the Todo interface-routing journey source-linked and current", () => {
+    const guide = readFileSync(resolve(root, "examples/todo/USER_GUIDE.md"), "utf8");
+    const frameworkGuide = readFileSync(resolve(root, "docs/USER_GUIDE.md"), "utf8");
+
+    expect(guide).toContain("option (every_is).ts_type = \"TaskEvent\";");
+    expect(guide).toContain("option (is).ts_type = \"TaskAssignmentEvent\";");
+    expect(guide).toContain("// docs-snippet-path: examples/todo/src/index.ts");
+    expect(guide).toContain("TaskReassigned");
+    expect(frameworkGuide).toMatch(/first registered\s+matching token/u);
+    expect(frameworkGuide).toContain("stored typed targets");
+  });
+
   it("keeps the Todo rejection companion in its stated source context", () => {
     const source = readFileSync(resolve(root, "packages/core/README.md"), "utf8");
     const rejectionSnippet = extractTypeScriptSnippets(source).find((snippet) =>

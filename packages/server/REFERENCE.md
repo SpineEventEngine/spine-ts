@@ -2,6 +2,14 @@
 
 This reference describes the public server contracts for coding agents.
 
+## Routing lifecycle
+
+Event, command, and state-update routing accepts exact schemas and nominal
+message-interface tokens. It selects exact, first registered matching token,
+then replacement/default. The route runs once at accepted admission; its
+validated typed targets are stored and reused for retries. Read-side catch-up
+intentionally rebuilds, so it is distinct from replaying admitted work.
+
 ## Handler routing and operations
 
 Generated handler metadata routes a command, event, or state update by its

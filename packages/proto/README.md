@@ -6,6 +6,15 @@ schemas, validation messages, options, and schemas needed by the supported
 client and delivery packages. Most applications use it as a dependency of their
 model package rather than calling it directly.
 
+## TypeScript interface options
+
+Use `(every_is).ts_type = "TaskEvent"` with `(every_is).generate = true` to
+generate a shared interface/token for a Proto file. Use
+`(is).ts_type = "TaskAssignmentEvent"` when the model module authors that
+interface. Run `pnpm proto:generate` after changing either declaration. The
+[To-Do model](../../examples/todo/proto/spine/examples/todo/task_events.proto)
+uses both forms.
+
 For the complete export map and model-package contract, see
 [REFERENCE documentation for agents](REFERENCE.md).
 

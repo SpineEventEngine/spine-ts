@@ -2,6 +2,14 @@
 
 This reference describes the public build-time Proto tooling for coding agents.
 
+## Interface discovery and provenance
+
+The compiler resolves authored `is.ts_type` interfaces against the owning model
+module and rejects missing or incompatible declarations. Each generated output
+records source provenance and intentionally omits copyright headers; authored
+sources retain their copyright. Generation is deterministic through
+`pnpm proto:generate`.
+
 ## CLI
 
 The `spine-proto` binary is the primary public API. Run it from the package
