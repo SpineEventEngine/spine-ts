@@ -17,30 +17,46 @@ import {
   Aggregate,
   Assign,
   BoundedContext,
+  EventRouting,
   Projection,
   Server,
   Subscribe,
   type RunningServer,
 } from "@spine-event-engine/server";
-import type { EventContext } from "@spine-event-engine/proto";
+import { type EventContext, UserIdSchema, type UserId } from "@spine-event-engine/proto";
 
 import {
   type CompleteTask,
   type CreateTask,
+  type AssignTask,
+  type ReassignTask,
   type RenameTask,
   type ReopenTask,
+  type UnassignTask,
 } from "../generated/spine/examples/todo/task_commands_pb.js";
 import {
   TaskCreatedSchema,
+  TaskAssignedSchema,
   TaskCompletedSchema,
+  TaskReassignedSchema,
   TaskRenamedSchema,
   TaskReopenedSchema,
+  TaskUnassignedSchema,
+  type TaskAssigned,
   type TaskCompleted,
   type TaskCreated,
+  type TaskReassigned,
   type TaskRenamed,
   type TaskReopened,
+  type TaskUnassigned,
 } from "../generated/spine/examples/todo/task_events_pb.js";
-import { TaskIdSchema, type TaskId } from "../generated/spine/examples/todo/task_id_pb.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+  type TaskId,
+  type TaskListId,
+} from "../generated/spine/examples/todo/task_id_pb.js";
+import { TaskAssigneeSchema } from "../generated/spine/examples/todo/task_assignee_pb.js";
 import { TaskListSchema } from "../generated/spine/examples/todo/task_list_pb.js";
 import { TaskAlreadyDone, TaskNotDone } from "../generated/spine/examples/todo/task_rejections.js";
 import type {
@@ -48,9 +64,22 @@ import type {
   TaskNotDone as TaskNotDoneMessage,
 } from "../generated/spine/examples/todo/task_rejections_pb.js";
 import { TaskSchema } from "../generated/spine/examples/todo/tasks_pb.js";
+import { TaskAssignmentEvent as TaskAssignmentEventToken } from "../generated/interfaces/task-assignment-event.js";
+import { TaskEvent } from "../generated/interfaces/task-event.js";
 import { TodoProcessSignals } from "./process.js";
 
 export { todoProtoModule } from "../generated/proto-module.js";
+
+/**
+ * Common authored shape for task-assignment lifecycle Events.
+ *
+ * Assignment and unassignment use the same assignee target, while reassignment
+ * remains an exact-schema two-target route.
+ */
+export interface TaskAssignmentEvent {
+  /** Assignee selected by the assignment lifecycle Event. */
+  readonly assignee?: UserId | undefined;
+}
 
 /**
  * Task aggregate for the create-task example flow.
@@ -67,6 +96,7 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
   @Assign
   createTask(command: CreateTask): TaskCreated {
     const id = clone(TaskIdSchema, this.id);
+    const taskListId = taskListIds.require(command.taskListId);
 
     this.update((draft) =>
       Object.assign(
@@ -75,11 +105,13 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
           id,
           title: command.title,
           completed: false,
+          taskListId,
         }),
       ),
     );
     return create(TaskCreatedSchema, {
       id,
+      taskListId,
       title: command.title,
     });
   }
@@ -93,6 +125,7 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
   @Assign
   renameTask(command: RenameTask): TaskRenamed {
     const id = clone(TaskIdSchema, this.id);
+    const taskListId = taskListIds.require(this.state.taskListId);
 
     this.update((draft) =>
       Object.assign(
@@ -101,11 +134,14 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
           id,
           title: command.title,
           completed: draft.completed,
+          taskListId,
+          assignee: draft.assignee,
         }),
       ),
     );
     return create(TaskRenamedSchema, {
       id,
+      taskListId,
       title: command.title,
     });
   }
@@ -120,6 +156,7 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
   completeTask(command: CompleteTask): TaskCompleted {
     void command;
     const id = clone(TaskIdSchema, this.id);
+    const taskListId = taskListIds.require(this.state.taskListId);
     if (this.state.completed) {
       throw TaskAlreadyDone.create({ id });
     }
@@ -131,10 +168,12 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
           id,
           title: draft.title,
           completed: true,
+          taskListId,
+          assignee: draft.assignee,
         }),
       ),
     );
-    return create(TaskCompletedSchema, { id });
+    return create(TaskCompletedSchema, { id, taskListId });
   }
 
   /**
@@ -147,6 +186,7 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
   reopenTask(command: ReopenTask): TaskReopened {
     void command;
     const id = clone(TaskIdSchema, this.id);
+    const taskListId = taskListIds.require(this.state.taskListId);
     if (!this.state.completed) {
       throw TaskNotDone.create({ id });
     }
@@ -158,17 +198,57 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
           id,
           title: draft.title,
           completed: false,
+          taskListId,
+          assignee: draft.assignee,
         }),
       ),
     );
-    return create(TaskReopenedSchema, { id });
+    return create(TaskReopenedSchema, { id, taskListId });
+  }
+
+  /** Assigns a task and records its assignee. */
+  @Assign
+  assignTask(command: AssignTask): TaskAssigned {
+    const id = clone(TaskIdSchema, this.id);
+    const taskListId = taskListIds.require(this.state.taskListId);
+    const assignee = assignees.require(command.assignee);
+    this.update((draft) =>
+      Object.assign(draft, create(TaskSchema, { ...draft, id, taskListId, assignee })),
+    );
+    return create(TaskAssignedSchema, { id, taskListId, assignee });
+  }
+
+  /** Reassigns a task and records both assignee targets. */
+  @Assign
+  reassignTask(command: ReassignTask): TaskReassigned {
+    const id = clone(TaskIdSchema, this.id);
+    const taskListId = taskListIds.require(this.state.taskListId);
+    const previousAssignee = assignees.require(this.state.assignee);
+    const assignee = assignees.require(command.assignee);
+    this.update((draft) =>
+      Object.assign(draft, create(TaskSchema, { ...draft, id, taskListId, assignee })),
+    );
+    return create(TaskReassignedSchema, { id, taskListId, previousAssignee, assignee });
+  }
+
+  /** Removes a task assignee and records the former target. */
+  @Assign
+  unassignTask(command: UnassignTask): TaskUnassigned {
+    void command;
+    const id = clone(TaskIdSchema, this.id);
+    const taskListId = taskListIds.require(this.state.taskListId);
+    const assignee = assignees.require(this.state.assignee);
+    this.update((draft) =>
+      Object.assign(draft, create(TaskSchema, { ...draft, id, taskListId, assignee: undefined })),
+    );
+    return create(TaskUnassignedSchema, { id, taskListId, assignee });
   }
 }
 
 /**
  * Read-side task list projection for visible task queries.
  */
-export class TaskListProjection extends Projection<string, typeof TaskListSchema, number> {
+export class TaskListProjection extends Projection<TaskListId, typeof TaskListSchema, number> {
   // prettier-ignore
 
   /**
@@ -201,18 +281,20 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
   @Subscribe
   onTaskCreated(event: TaskCreated): void {
     const id = taskIds.require(event.id);
+    const taskListId = taskListIds.require(event.taskListId);
 
     this.update((draft) =>
       Object.assign(
         draft,
         create(TaskListSchema, {
-          id: id.value,
+          id: clone(TaskListIdSchema, taskListId),
           tasks: [
             ...draft.tasks,
             create(TaskSchema, {
               id: clone(TaskIdSchema, id),
               title: event.title,
               completed: false,
+              taskListId: clone(TaskListIdSchema, taskListId),
             }),
           ],
           openTaskCount: draft.openTaskCount + 1,
@@ -229,18 +311,21 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
   @Subscribe
   onTaskRenamed(event: TaskRenamed): void {
     const id = taskIds.require(event.id);
+    const taskListId = taskListIds.require(event.taskListId);
 
     this.update((draft) =>
       Object.assign(
         draft,
         create(TaskListSchema, {
-          id: id.value,
+          id: clone(TaskListIdSchema, taskListId),
           tasks: draft.tasks.map((task) =>
             task.id?.value === id.value
               ? create(TaskSchema, {
                   id: clone(TaskIdSchema, id),
                   title: event.title,
                   completed: task.completed,
+                  taskListId: clone(TaskListIdSchema, taskListId),
+                  assignee: task.assignee,
                 })
               : task,
           ),
@@ -258,6 +343,7 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
   @Subscribe
   onTaskCompleted(event: TaskCompleted): void {
     const id = taskIds.require(event.id);
+    const taskListId = taskListIds.require(event.taskListId);
 
     this.update((draft) => {
       const tasks = draft.tasks.map((task) =>
@@ -266,13 +352,15 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
               id: clone(TaskIdSchema, id),
               title: task.title,
               completed: true,
+              taskListId: clone(TaskListIdSchema, taskListId),
+              assignee: task.assignee,
             })
           : clone(TaskSchema, task),
       );
       Object.assign(
         draft,
         create(TaskListSchema, {
-          id: id.value,
+          id: clone(TaskListIdSchema, taskListId),
           tasks,
           openTaskCount: tasks.filter((task) => !task.completed).length,
         }),
@@ -288,6 +376,7 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
   @Subscribe
   onTaskReopened(event: TaskReopened): void {
     const id = taskIds.require(event.id);
+    const taskListId = taskListIds.require(event.taskListId);
 
     this.update((draft) => {
       const tasks = draft.tasks.map((task) =>
@@ -296,18 +385,122 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
               id: clone(TaskIdSchema, id),
               title: task.title,
               completed: false,
+              taskListId: clone(TaskListIdSchema, taskListId),
+              assignee: task.assignee,
             })
           : clone(TaskSchema, task),
       );
       Object.assign(
         draft,
         create(TaskListSchema, {
-          id: id.value,
+          id: clone(TaskListIdSchema, taskListId),
           tasks,
           openTaskCount: tasks.filter((task) => !task.completed).length,
         }),
       );
     });
+  }
+
+  /** Records an assignment in the list view. */
+  @Subscribe
+  onTaskAssigned(event: TaskAssigned): void {
+    this.updateTaskAssignee(event.id, event.taskListId, event.assignee);
+  }
+
+  /** Records a reassignment in the list view. */
+  @Subscribe
+  onTaskReassigned(event: TaskReassigned): void {
+    this.updateTaskAssignee(event.id, event.taskListId, event.assignee);
+  }
+
+  /** Removes an assignee in the list view. */
+  @Subscribe
+  onTaskUnassigned(event: TaskUnassigned): void {
+    this.updateTaskAssignee(event.id, event.taskListId, undefined);
+  }
+
+  private updateTaskAssignee(
+    id: TaskId | undefined,
+    taskListId: TaskListId | undefined,
+    assignee: UserId | undefined,
+  ): void {
+    const taskId = taskIds.require(id);
+    const listId = taskListIds.require(taskListId);
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(TaskListSchema, {
+          id: clone(TaskListIdSchema, listId),
+          tasks: draft.tasks.map((task) =>
+            task.id?.value === taskId.value
+              ? create(TaskSchema, {
+                  id: clone(TaskIdSchema, taskId),
+                  title: task.title,
+                  completed: task.completed,
+                  taskListId: clone(TaskListIdSchema, listId),
+                  assignee: assignee === undefined ? undefined : clone(UserIdSchema, assignee),
+                })
+              : clone(TaskSchema, task),
+          ),
+          openTaskCount: draft.openTaskCount,
+        }),
+      ),
+    );
+  }
+}
+
+/** Tracks task identifiers currently assigned to one user. */
+export class TaskAssigneeProjection extends Projection<UserId, typeof TaskAssigneeSchema, number> {
+  /** Adds a task to the assignee view. */
+  @Subscribe
+  onTaskAssigned(event: TaskAssigned): void {
+    const id = taskIds.require(event.id);
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(TaskAssigneeSchema, {
+          id: clone(UserIdSchema, this.id),
+          taskIds: [...draft.taskIds, id],
+        }),
+      ),
+    );
+  }
+
+  /** Removes a task from the former assignee view. */
+  @Subscribe
+  onTaskUnassigned(event: TaskUnassigned): void {
+    this.remove(event.id);
+  }
+
+  /** Adds or removes a task according to the exact reassignment target. */
+  @Subscribe
+  onTaskReassigned(event: TaskReassigned): void {
+    const id = taskIds.require(event.id);
+    const isReplacement = this.id.value === event.assignee?.value;
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(TaskAssigneeSchema, {
+          id: clone(UserIdSchema, this.id),
+          taskIds: isReplacement
+            ? [...draft.taskIds, id]
+            : draft.taskIds.filter((taskId) => taskId.value !== id.value),
+        }),
+      ),
+    );
+  }
+
+  private remove(id: TaskId | undefined): void {
+    const taskId = taskIds.require(id);
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(TaskAssigneeSchema, {
+          id: clone(UserIdSchema, this.id),
+          taskIds: draft.taskIds.filter((value) => value.value !== taskId.value),
+        }),
+      ),
+    );
   }
 }
 
@@ -317,10 +510,22 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
  * @returns The assembled Tasks bounded context.
  */
 export async function createTodoContext(): Promise<BoundedContext> {
+  const taskListRouting = EventRouting.create<TaskListId>().route(TaskEvent, (event) =>
+    event.taskListId === undefined ? [] : [clone(TaskListIdSchema, event.taskListId)],
+  );
+  const assigneeRouting = EventRouting.create<UserId>()
+    .route(TaskAssignmentEventToken, (event) =>
+      event.assignee === undefined ? [] : [clone(UserIdSchema, event.assignee)],
+    )
+    .route(TaskReassignedSchema, (event) => {
+      if (event.previousAssignee === undefined || event.assignee === undefined) return [];
+      return [clone(UserIdSchema, event.previousAssignee), clone(UserIdSchema, event.assignee)];
+    });
   return BoundedContext.singleTenant("Tasks")
     .withGeneratedRegistryRoot(new URL("..", import.meta.url))
     .add(TaskAggregate)
-    .add(TaskListProjection)
+    .add(TaskListProjection, { eventRouting: taskListRouting })
+    .add(TaskAssigneeProjection, { eventRouting: assigneeRouting })
     .buildAsync();
 }
 
@@ -367,6 +572,20 @@ const taskIds = {
     }
 
     return clone(TaskIdSchema, id);
+  },
+};
+
+const taskListIds = {
+  require(id: TaskListId | undefined): TaskListId {
+    if (id === undefined) throw new Error("Task list ID is missing.");
+    return clone(TaskListIdSchema, id);
+  },
+};
+
+const assignees = {
+  require(id: UserId | undefined): UserId {
+    if (id === undefined) throw new Error("Task assignee is missing.");
+    return clone(UserIdSchema, id);
   },
 };
 

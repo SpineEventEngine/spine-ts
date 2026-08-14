@@ -16,6 +16,7 @@ syntax = "proto3";
 package spine.examples.todo;
 
 import "spine/examples/todo/task_id.proto";
+import "spine/core/user_id.proto";
 import "spine/options.proto";
 
 option (type_url_prefix) = "type.spine.examples.todo";
@@ -36,4 +37,10 @@ message Task {
 
   // Indicates whether the task is completed.
   bool completed = 3;
+
+  // Identifies the list that owns this task.
+  TaskListId task_list_id = 4 [(required) = true, (validate) = true, (set_once) = true];
+
+  // Identifies the current assignee when the task is assigned.
+  spine.core.UserId assignee = 5;
 }

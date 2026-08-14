@@ -16,6 +16,7 @@ syntax = "proto3";
 package spine.examples.todo;
 
 import "spine/examples/todo/task_id.proto";
+import "spine/core/user_id.proto";
 import "spine/options.proto";
 
 option (type_url_prefix) = "type.spine.examples.todo";
@@ -28,8 +29,11 @@ message CreateTask {
     (validate) = true
   ];
 
+  // Identifies the list that receives the task.
+  TaskListId task_list_id = 2 [(required) = true, (validate) = true];
+
   // Specifies the initial task title.
-  string title = 2 [(required) = true];
+  string title = 3 [(required) = true];
 }
 
 // Renames an existing task.
@@ -60,4 +64,28 @@ message ReopenTask {
     (required) = true,
     (validate) = true
   ];
+}
+
+// Assigns an open task to a user.
+message AssignTask {
+  // Identifies the task to assign.
+  TaskId id = 1 [(required) = true, (validate) = true];
+
+  // Identifies the user who receives the task assignment.
+  spine.core.UserId assignee = 2 [(required) = true, (validate) = true];
+}
+
+// Moves an assigned task to another user.
+message ReassignTask {
+  // Identifies the task to reassign.
+  TaskId id = 1 [(required) = true, (validate) = true];
+
+  // Identifies the user who receives the reassigned task.
+  spine.core.UserId assignee = 2 [(required) = true, (validate) = true];
+}
+
+// Removes the current task assignee.
+message UnassignTask {
+  // Identifies the task to unassign.
+  TaskId id = 1 [(required) = true, (validate) = true];
 }

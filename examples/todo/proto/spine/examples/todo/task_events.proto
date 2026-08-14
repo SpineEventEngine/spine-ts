@@ -16,9 +16,12 @@ syntax = "proto3";
 package spine.examples.todo;
 
 import "spine/examples/todo/task_id.proto";
+import "spine/core/user_id.proto";
 import "spine/options.proto";
 
 option (type_url_prefix) = "type.spine.examples.todo";
+option (every_is).ts_type = "TaskEvent";
+option (every_is).generate = true;
 
 // Records that a task was created.
 message TaskCreated {
@@ -28,8 +31,11 @@ message TaskCreated {
     (validate) = true
   ];
 
+  // Identifies the list that receives the task.
+  TaskListId task_list_id = 2 [(required) = true, (validate) = true];
+
   // Stores the task's initial title.
-  string title = 2 [(required) = true];
+  string title = 3 [(required) = true];
 }
 
 // Records that a task was renamed.
@@ -40,8 +46,11 @@ message TaskRenamed {
     (validate) = true
   ];
 
+  // Identifies the task list.
+  TaskListId task_list_id = 2 [(required) = true, (validate) = true];
+
   // Stores the task's new title.
-  string title = 2 [(required) = true];
+  string title = 3 [(required) = true];
 }
 
 // Records that a task was completed.
@@ -51,6 +60,9 @@ message TaskCompleted {
     (required) = true,
     (validate) = true
   ];
+
+  // Identifies the task list.
+  TaskListId task_list_id = 2 [(required) = true, (validate) = true];
 }
 
 // Records that a completed task was reopened.
@@ -60,4 +72,50 @@ message TaskReopened {
     (required) = true,
     (validate) = true
   ];
+
+  // Identifies the task list.
+  TaskListId task_list_id = 2 [(required) = true, (validate) = true];
+}
+
+// Records that a task received an assignee.
+message TaskAssigned {
+  option (is).ts_type = "TaskAssignmentEvent";
+
+  // Identifies the assigned task.
+  TaskId id = 1 [(required) = true, (validate) = true];
+
+  // Identifies the task list.
+  TaskListId task_list_id = 2 [(required) = true, (validate) = true];
+
+  // Identifies the user who received the task assignment.
+  spine.core.UserId assignee = 3 [(required) = true, (validate) = true];
+}
+
+// Records that a task moved between assignees.
+message TaskReassigned {
+  // Identifies the reassigned task.
+  TaskId id = 1 [(required) = true, (validate) = true];
+
+  // Identifies the task list.
+  TaskListId task_list_id = 2 [(required) = true, (validate) = true];
+
+  // Identifies the previous assignee.
+  spine.core.UserId previous_assignee = 3 [(required) = true, (validate) = true];
+
+  // Identifies the user who received the reassigned task.
+  spine.core.UserId assignee = 4 [(required) = true, (validate) = true];
+}
+
+// Records that a task no longer has an assignee.
+message TaskUnassigned {
+  option (is).ts_type = "TaskAssignmentEvent";
+
+  // Identifies the unassigned task.
+  TaskId id = 1 [(required) = true, (validate) = true];
+
+  // Identifies the task list.
+  TaskListId task_list_id = 2 [(required) = true, (validate) = true];
+
+  // Identifies the former assignee.
+  spine.core.UserId assignee = 3 [(required) = true, (validate) = true];
 }

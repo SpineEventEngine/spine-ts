@@ -15,26 +15,20 @@ syntax = "proto3";
 
 package spine.examples.todo;
 
-import "spine/examples/todo/tasks.proto";
+import "spine/core/user_id.proto";
 import "spine/examples/todo/task_id.proto";
 import "spine/options.proto";
 
 option (type_url_prefix) = "type.spine.examples.todo";
 
-// A list of tasks with its count of open tasks.
-message TaskList {
+// A user's currently assigned tasks.
+message TaskAssignee {
   option (entity).kind = PROJECTION;
   option (entity).visibility = FULL;
 
-  // Identifies this task list.
-  TaskListId id = 1 [
-    (required) = true,
-    (set_once) = true
-  ];
+  // Identifies the assignee.
+  spine.core.UserId id = 1 [(required) = true, (validate) = true, (set_once) = true];
 
-  // The tasks in this list.
-  repeated Task tasks = 2 [(validate) = true];
-
-  // Counts tasks that are not completed.
-  int32 open_task_count = 3 [(column) = true];
+  // Stores the identifiers of tasks currently assigned to the user.
+  repeated TaskId task_ids = 2 [(validate) = true];
 }

@@ -24,3 +24,9 @@ message TaskId {
   // Holds the task identifier value.
   string value = 1 [(required) = true];
 }
+
+// Identifies a list that groups related tasks.
+message TaskListId {
+  // Holds the task-list identifier value.
+  string value = 1 [(required) = true];
+}

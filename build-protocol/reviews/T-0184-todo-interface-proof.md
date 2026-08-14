@@ -1,6 +1,6 @@
 # T-0184 Review Log
 
-Status: Implementation in progress
+Status: Blocked pending shared generation corrections
 
 Task: `build-protocol/tasks/T-0184-todo-interface-proof/TASK.md`
 Branch: `task/T-0184-todo-interface-proof`
@@ -29,3 +29,17 @@ available evidence.
 
 Review begins after focused RED/GREEN, changed example-production coverage of at
 least 90%, cheap preflight, and bounded `verify:task` with loopback permissions.
+
+## Implementation Checkpoint
+
+- Focused contract RED is recorded: the initial test failed `2/2` while the
+  required `TaskEvent` declarations and application token routes were absent.
+- The same test is GREEN after the To-Do changes: `1` file and `2` tests pass.
+- Direct To-Do generation succeeds, including generated provenance/no-copyright
+  interface files.
+- Review cannot begin because root atomic generation fails when the staged model
+  cannot discover authored sources/configuration, and direct generated-model
+  typechecking fails with `TS9013` for unannotated generated `memberSchemas`
+  tuples. Both are outside the T-0184 example-only implementation boundary.
+- No specialist lane has been invoked. Security remains N/A for this checkpoint;
+  T-0186 owns final Wave security review.

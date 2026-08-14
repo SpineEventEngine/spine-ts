@@ -3,6 +3,7 @@
   "packageName": "@spine-event-engine/example-todo",
   "packageVersion": "2.0.0-snapshot.1",
   "protoFiles": [
+    "spine/examples/todo/task_assignee.proto",
     "spine/examples/todo/task_commands.proto",
     "spine/examples/todo/task_events.proto",
     "spine/examples/todo/task_id.proto",
@@ -11,6 +12,7 @@
     "spine/examples/todo/tasks.proto"
   ],
   "generatedExports": {
+    "spine/examples/todo/task_assignee.proto": "generated/spine/examples/todo/task_assignee_pb.js",
     "spine/examples/todo/task_commands.proto": "generated/spine/examples/todo/task_commands_pb.js",
     "spine/examples/todo/task_events.proto": "generated/spine/examples/todo/task_events_pb.js",
     "spine/examples/todo/task_id.proto": "generated/spine/examples/todo/task_id_pb.js",

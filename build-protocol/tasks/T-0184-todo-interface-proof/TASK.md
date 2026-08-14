@@ -1,6 +1,6 @@
 # T-0184: To-Do Interface-Routing Proof
 
-Status: In implementation
+Status: Blocked — shared generation prerequisites
 Start: `2026-08-14 WEST`
 End: Pending
 Baseline commit: `aed2f194`
@@ -77,6 +77,31 @@ interface markers, `TaskReassignmentEvent`, and any serialization format change.
 The loopback multi-process test retains the existing supported topology: one
 Gateway connected to multiple application nodes. It is not a multiple-Gateway
 test and creates no Wave 12 behavior.
+
+## Demonstrated Progress And Blockers
+
+- RED: `pnpm exec vitest run examples/todo/test/interface-routing-contract.test.ts`
+  initially failed both assertions because the Task event token declarations and
+  the application routing were absent.
+- GREEN: after the To-Do Proto/model changes, the same focused test passed
+  `2/2`.
+- Direct `pnpm -C examples/todo proto:generate` succeeds and emits generated
+  TaskEvent and TaskAssignmentEvent token files with the required provenance
+  header and no copyright header.
+- Root `pnpm proto:generate` is blocked before publication: its atomic model
+  stage copies only `package.json`, `spine-proto.json`, and `proto`. Authored
+  interface discovery consequently cannot find `tsconfig.json` or `src`; a
+  naive copy also changes the depth at which To-Do's `../../tsconfig.base.json`
+  extension resolves. This is shared transaction/source-view work outside this
+  task's ownership.
+- Direct generated-model typechecking is independently blocked by emitted
+  interface `memberSchemas` constants without declaration-safe tuple
+  annotations, producing TypeScript `TS9013` under `isolatedDeclarations`.
+  This is shared T-0181 generator work outside this task's ownership.
+
+No shared implementation was changed. Full preflight, coverage, native
+black-box/startup/Proto-module/smoke/loopback verification, specialist review,
+and `verify:task` remain intentionally pending the prerequisite correction.
 
 ## Review And Verification Plan
 
