@@ -12,6 +12,51 @@
     "rule": "standalone-function",
     "file": "packages/proto-tools/src/generation/source-view.ts",
     "kind": "function-declaration",
+    "identity": "projectConfig()#1",
+    "name": "projectConfig",
+    "disposition": "necessity",
+    "reason": "TypeScript project snapshot boundary: projectConfig delegates JSONC and recursive extends resolution to TypeScript while retaining configured source membership and config provenance."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/source-view.ts",
+    "kind": "function-declaration",
+    "identity": "hashFile()#1",
+    "name": "hashFile",
+    "disposition": "necessity",
+    "reason": "TypeScript compiler inventory encoding: hashFile length-delimits each categorized path and exact file body before transaction comparison."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/source-view.ts",
+    "kind": "function-declaration",
+    "identity": "inventoryDigest()#1",
+    "name": "inventoryDigest",
+    "disposition": "necessity",
+    "reason": "TypeScript compiler inventory digest: inventoryDigest combines stable authored-source and recursive-config entries into one prepublication fingerprint."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/source-view.ts",
+    "kind": "function-declaration",
+    "identity": "sourceInventory()#1",
+    "name": "sourceInventory",
+    "disposition": "necessity",
+    "reason": "Compiler transaction boundary: sourceInventory intersects bounded authored candidates with TypeScript config membership and captures their publication fingerprint."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/source-view.ts",
+    "kind": "function-declaration",
+    "identity": "assertSourceViewCurrent()#1",
+    "name": "assertSourceViewCurrent",
+    "disposition": "necessity",
+    "reason": "TypeScript atomic publication boundary: assertSourceViewCurrent recomputes compiler inputs immediately before publish and fails on any mixed source revision."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/source-view.ts",
+    "kind": "function-declaration",
     "identity": "collectAuthored()#1",
     "name": "collectAuthored",
     "disposition": "necessity",

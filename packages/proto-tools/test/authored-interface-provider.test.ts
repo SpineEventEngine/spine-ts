@@ -70,6 +70,47 @@ describe("AuthoredInterfaceProvider", () => {
     }
   });
 
+  it("accepts a local diamond inheritance graph", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-diamond-"));
+    const stagedGeneratedRoot = join(root, ".generated.stage-1/output");
+    const liveGeneratedRoot = join(root, "src/generated");
+    const authored = join(root, "src/signal-family.ts");
+    try {
+      mkdirSync(join(stagedGeneratedRoot, "example"), { recursive: true });
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(
+        join(root, "tsconfig.json"),
+        JSON.stringify({ compilerOptions: { strict: true } }),
+      );
+      writeFileSync(
+        join(stagedGeneratedRoot, "example/signals_pb.ts"),
+        "export type Signal = { readonly text: string };\n",
+      );
+      writeFileSync(
+        authored,
+        "export interface Base { readonly text: string }\n" +
+          "export interface Left extends Base {}\n" +
+          "export interface Right extends Base {}\n" +
+          "export interface SignalFamily extends Left, Right {}\n",
+      );
+      expect(
+        new AuthoredInterfaceProvider().resolve(
+          "SignalFamily",
+          [
+            {
+              file: { proto: { name: "example/signals.proto", package: "example" } },
+              name: "Signal",
+              typeName: "example.Signal",
+            } as DescMessage,
+          ],
+          { authoredFiles: [authored], liveGeneratedRoot, packageRoot: root, stagedGeneratedRoot },
+        ),
+      ).toBeDefined();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects an authored interface that launders an external extends parent", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-external-parent-"));
     const stagedGeneratedRoot = join(root, ".generated.stage-1/output");
@@ -171,7 +212,8 @@ describe("AuthoredInterfaceProvider", () => {
       );
       writeFileSync(
         authored,
-        'import type { Signal } from "./generated/example/signals_pb.js";\nexport interface SignalFamily { readonly text: string; readonly payload?: Signal }\n',
+        'import type { Signal } from "./generated/example/signals_pb.js";\n' +
+          "export interface SignalFamily { readonly text: string; readonly payload?: Signal }\n",
       );
       expect(
         new AuthoredInterfaceProvider().resolve(
@@ -329,7 +371,9 @@ describe("AuthoredInterfaceProvider", () => {
       );
       writeFileSync(
         authored,
-        "export interface First { readonly text: string }\nexport interface Second { readonly text: string }\n",
+        "export interface Parent { readonly text: string }\n" +
+          "export interface First extends Parent {}\n" +
+          "export interface Second extends Parent {}\n",
       );
       const provider = new AuthoredInterfaceProvider();
       expect(provider.resolve("First", [member], sourceView)).toBeDefined();
@@ -345,7 +389,9 @@ describe("AuthoredInterfaceProvider", () => {
       );
       writeFileSync(
         renamed,
-        "export interface First { readonly text: string }\nexport interface Second { readonly missing: string }\n",
+        "export interface Parent { readonly missing: string }\n" +
+          "export interface First extends Parent {}\n" +
+          "export interface Second extends Parent {}\n",
       );
       expect(provider.resolve("Second", [member], sourceView)).toBeDefined();
     } finally {

@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { existsSync, lstatSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 
 import type { DescMessage } from "@bufbuild/protobuf";
@@ -48,13 +48,17 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     sourceView: ModelSourceView | undefined,
   ): AuthoredInterfaceDeclaration | undefined {
     if (sourceView === undefined) return undefined;
-    if (sourceView.authoredFiles.some((file) => file.split(/[\\/]/u).includes("dist")))
-      throw new Error("spine-proto: authored interface discovery source path escapes model module");
     const program = this.program(sourceView);
     const declaration = this.declaration(program, sourceView, name);
     const checker = program.getTypeChecker();
     this.assertNamedModuleExport(checker, declaration, name);
-    this.assertLocalParents(checker, sourceView, declaration, name, new Set());
+    this.assertLocalParents(
+      checker,
+      declaration,
+      name,
+      new Set(),
+      new Set(sourceView.authoredFiles.map((file) => resolve(file))),
+    );
     const interfaceType = checker.getTypeAtLocation(declaration);
     for (const member of members) {
       const type = this.messageType(program, checker, sourceView, member);
@@ -92,6 +96,9 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     const authoredFiles = sourceView.authoredFiles.filter((file) =>
       configuredFiles.has(resolve(file)),
     );
+    const capturedAuthored = new Map(
+      authoredFiles.map((file) => [resolve(file), readFileSync(file, "utf8")] as const),
+    );
     const host = ts.createCompilerHost(parsed.options);
     const redirect = (path: string) => {
       const liveRelative = relative(sourceView.liveGeneratedRoot, resolve(path));
@@ -101,8 +108,8 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     };
     const readFile = host.readFile.bind(host);
     const fileExists = host.fileExists.bind(host);
-    host.readFile = (path) => readFile(redirect(path));
-    host.fileExists = (path) => fileExists(redirect(path));
+    host.readFile = (path) => capturedAuthored.get(resolve(path)) ?? readFile(redirect(path));
+    host.fileExists = (path) => capturedAuthored.has(resolve(path)) || fileExists(redirect(path));
     const program = ts.createProgram({
       options: parsed.options,
       rootNames: [...authoredFiles, ...this.stagedFiles(sourceView.stagedGeneratedRoot)],
@@ -118,7 +125,9 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
 
   private assertSourceView(sourceView: ModelSourceView): void {
     const packageRoot = realpathSync(sourceView.packageRoot);
-    const liveGeneratedRoot = resolve(sourceView.liveGeneratedRoot);
+    const canonicalPath = (path: string) =>
+      resolve(packageRoot, relative(sourceView.packageRoot, resolve(path)));
+    const liveGeneratedRoot = canonicalPath(sourceView.liveGeneratedRoot);
     const parent = dirname(liveGeneratedRoot);
     const generatedName = basename(liveGeneratedRoot);
     const stage = join(parent, `.${generatedName}.stage-`);
@@ -129,18 +138,19 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
       return pathRelative === "" || (!pathRelative.startsWith("..") && !isAbsolute(pathRelative));
     };
     for (const file of sourceView.authoredFiles) {
-      if (file === dist || file.startsWith(`${dist}/`))
+      const candidate = canonicalPath(file);
+      if (candidate === dist || candidate.startsWith(`${dist}/`))
         throw new Error(
           "spine-proto: authored interface discovery source path escapes model module",
         );
       if (
         lstatSync(file).isSymbolicLink() ||
         !within(packageRoot, realpathSync(file)) ||
-        file === liveGeneratedRoot ||
-        file.startsWith(`${liveGeneratedRoot}/`) ||
-        file.startsWith(stage) ||
-        (file.startsWith(backup) && file.includes(".backup")) ||
-        file.endsWith(".d.ts")
+        candidate === liveGeneratedRoot ||
+        candidate.startsWith(`${liveGeneratedRoot}/`) ||
+        candidate.startsWith(stage) ||
+        (candidate.startsWith(backup) && candidate.includes(".backup")) ||
+        candidate.endsWith(".d.ts")
       )
         throw new Error(
           "spine-proto: authored interface discovery source path escapes model module",
@@ -249,10 +259,10 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
 
   private assertLocalParents(
     checker: ts.TypeChecker,
-    sourceView: ModelSourceView,
     declaration: ts.InterfaceDeclaration,
     name: string,
-    visited: Set<ts.Symbol>,
+    active: Set<ts.Symbol>,
+    localSources: ReadonlySet<string>,
   ): void {
     const clauses = Object.getOwnPropertyDescriptor(declaration, "heritageClauses")?.value as
       ts.NodeArray<ts.HeritageClause> | undefined;
@@ -268,9 +278,9 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
           throw new Error(
             `spine-proto: authored interface ${name}: extends parent must stay in the model module`,
           );
-        if (visited.has(symbol))
+        if (active.has(symbol))
           throw new Error(`spine-proto: authored interface ${name}: cyclic extends chain`);
-        visited.add(symbol);
+        active.add(symbol);
         const parentDeclaration = symbol.declarations?.find(ts.isInterfaceDeclaration);
         if (parentDeclaration === undefined)
           throw new Error(
@@ -283,12 +293,12 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
           throw new Error(
             `spine-proto: authored interface ${name}: generic extends parent is not supported`,
           );
-        const localSources = new Set(sourceView.authoredFiles.map((file) => realpathSync(file)));
-        if (!localSources.has(realpathSync(parentDeclaration.getSourceFile().fileName)))
+        if (!localSources.has(resolve(parentDeclaration.getSourceFile().fileName)))
           throw new Error(
             `spine-proto: authored interface ${name}: extends parent must stay in the model module`,
           );
-        this.assertLocalParents(checker, sourceView, parentDeclaration, name, visited);
+        this.assertLocalParents(checker, parentDeclaration, name, active, localSources);
+        active.delete(symbol);
       }
     }
   }

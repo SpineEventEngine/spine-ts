@@ -186,6 +186,37 @@ function generatedOutput(_: string, output: string): void {
   writeFileSync(join(output, "model_pb.ts"), "export {};\n");
 }
 
+function expectSourceViewMutationRollback(
+  name: string,
+  configure: (model: string) => void,
+  mutate: (model: string) => void,
+): void {
+  const packageName = `@example/source-view-${name}`;
+  const model = packageDirectory(packageName);
+  try {
+    writeJson(model, "spine-proto.json", modelConfig(packageName));
+    mkdirSync(join(model, "proto"), { recursive: true });
+    mkdirSync(join(model, "src/generated"), { recursive: true });
+    writeFileSync(join(model, "proto/model.proto"), 'syntax = "proto3"; message Model {}\n');
+    writeFileSync(join(model, "src/authored.ts"), "export interface Authored {}\n");
+    writeFileSync(join(model, "src/generated/prior.ts"), "prior output\n");
+    writeFileSync(join(model, "spine-proto-manifest.json"), "prior manifest\n");
+    configure(model);
+    expect(() => {
+      generateModel(model, {
+        runBuf: generatedOutput,
+        runInterfacePhase: () => {
+          mutate(model);
+        },
+      });
+    }).toThrow("authored interface source view changed during generation");
+    expect(readFileSync(join(model, "src/generated/prior.ts"), "utf8")).toBe("prior output\n");
+    expect(readFileSync(join(model, "spine-proto-manifest.json"), "utf8")).toBe("prior manifest\n");
+  } finally {
+    rmSync(model, { recursive: true, force: true });
+  }
+}
+
 function generatedRejectionOutput(_: string, output: string): void {
   mkdirSync(output, { recursive: true });
   writeFileSync(join(output, "model_rejections.ts"), "export {};\n");
@@ -1521,6 +1552,61 @@ describe("spine proto model tooling", () => {
     } finally {
       rmSync(model, { recursive: true, force: true });
     }
+  });
+
+  it("preserves prior output when an included authored source is added after capture", () => {
+    expectSourceViewMutationRollback(
+      "source-addition-model",
+      (model) => {
+        writeJson(model, "tsconfig.json", { include: ["src/**/*.ts"] });
+      },
+      (model) => {
+        writeFileSync(join(model, "src/added.ts"), "export interface Added {}\n");
+      },
+    );
+  });
+
+  it("preserves prior output when an included authored source is removed after capture", () => {
+    expectSourceViewMutationRollback(
+      "source-removal-model",
+      (model) => {
+        writeJson(model, "tsconfig.json", { include: ["src/**/*.ts"] });
+      },
+      (model) => {
+        rmSync(join(model, "src/authored.ts"));
+      },
+    );
+  });
+
+  it("preserves prior output when an included authored source is renamed after capture", () => {
+    expectSourceViewMutationRollback(
+      "source-rename-model",
+      (model) => {
+        writeJson(model, "tsconfig.json", { include: ["src/**/*.ts"] });
+      },
+      (model) => {
+        renameSync(join(model, "src/authored.ts"), join(model, "src/renamed.ts"));
+      },
+    );
+  });
+
+  it("preserves prior output when an extended tsconfig changes after capture", () => {
+    expectSourceViewMutationRollback(
+      "config-mutation-model",
+      (model) => {
+        writeJson(model, "base.json", {
+          include: ["src/**/*.ts"],
+          compilerOptions: { strict: true },
+        });
+        writeJson(model, "tsconfig.json", { extends: "./base.json" });
+      },
+      (model) => {
+        writeJson(model, "base.json", {
+          include: ["src/**/*.ts"],
+          compilerOptions: { strict: false },
+        });
+      },
+    );
   });
 
   it("publishes byte-identical output across repeated staged interface phases", () => {

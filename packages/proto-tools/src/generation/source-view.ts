@@ -53,14 +53,26 @@ export interface ModelSourceView {
   readonly stagedGeneratedRoot: string;
 }
 
-/** Internal source view carrying the required publication revalidation digest. */
+/**
+ * Internal source view carrying the required publication revalidation digest.
+ */
 export interface PublicationSourceView extends ModelSourceView {
+  // prettier-ignore
+
+  /**
+   * Fingerprint of configured authored sources and recursive TypeScript configuration inputs.
+   */
   readonly inventoryDigest: string;
 }
 
-function configFiles(root: string): readonly string[] {
+interface ProjectConfigView {
+  readonly configFiles: readonly string[];
+  readonly fileNames: ReadonlySet<string>;
+}
+
+function projectConfig(root: string): ProjectConfigView | undefined {
   const configPath = join(root, "tsconfig.json");
-  if (!existsSync(configPath)) return [];
+  if (!existsSync(configPath)) return undefined;
   const texts = new Map<string, string>();
   const host = {
     ...ts.sys,
@@ -91,33 +103,65 @@ function configFiles(root: string): readonly string[] {
     .filter((file, index, values) => values.indexOf(file) === index)
     .sort();
   for (const file of files) if (!texts.has(file)) texts.set(file, readFileSync(file, "utf8"));
-  return files;
+  return Object.freeze({
+    configFiles: Object.freeze(files),
+    fileNames: new Set(parsed.fileNames.map((file) => resolve(file))),
+  });
+}
+
+function hashFile(hash: ReturnType<typeof createHash>, category: string, file: string): void {
+  const content = readFileSync(file);
+  hash.update(
+    `${String(category.length)}:${category}${String(file.length)}:${file}${String(content.length)}:`,
+  );
+  hash.update(content);
 }
 
 function inventoryDigest(files: readonly string[], configs: readonly string[] = []): string {
   const hash = createHash("sha256");
-  for (const file of files) {
-    hash.update(file);
-    hash.update("\0");
-    hash.update(readFileSync(file));
-    hash.update("\0");
-  }
-  for (const config of configs) {
-    hash.update(config);
-    hash.update("\0");
-    hash.update(readFileSync(config));
-    hash.update("\0");
-  }
+  for (const file of files) hashFile(hash, "source", file);
+  for (const config of configs) hashFile(hash, "config", config);
   return hash.digest("hex");
 }
 
-/** Revalidates the immutable authored-source inventory before publication. */
+interface SourceInventory {
+  readonly authoredFiles: readonly string[];
+  readonly digest: string;
+}
+
+function sourceInventory(root: string, generated: string): SourceInventory {
+  const generatedDirectory = dirname(generated);
+  const generatedName = basename(generated);
+  const excluded = [generated, "dist"];
+  const siblingStage = join(generatedDirectory, `.${generatedName}.stage-`);
+  const siblingBackup = join(generatedDirectory, `.${generatedName}.`);
+  const candidates = collectAuthored(root, [...excluded, siblingStage, siblingBackup]);
+  const config = projectConfig(root);
+  const authoredFiles = Object.freeze(
+    config === undefined
+      ? candidates
+      : candidates.filter((file) => config.fileNames.has(resolve(file))),
+  );
+  return Object.freeze({
+    authoredFiles,
+    digest: inventoryDigest(authoredFiles, config?.configFiles),
+  });
+}
+
+/**
+ * Checks that the immutable authored-source inventory is current before publication.
+ *
+ * @param sourceView Compiler input snapshot captured before generation.
+ */
 export function assertSourceViewCurrent(sourceView: PublicationSourceView): void {
-  if (
-    inventoryDigest(sourceView.authoredFiles, configFiles(sourceView.packageRoot)) !==
-    sourceView.inventoryDigest
-  )
-    throw new Error("spine-proto: authored interface source view changed during generation");
+  try {
+    const generated = relative(sourceView.packageRoot, sourceView.liveGeneratedRoot);
+    const current = sourceInventory(sourceView.packageRoot, generated);
+    if (current.digest === sourceView.inventoryDigest) return;
+  } catch {
+    // Report one stable transaction diagnostic for every inventory mutation.
+  }
+  throw new Error("spine-proto: authored interface source view changed during generation");
 }
 
 function collectAuthored(root: string, excluded: readonly string[]): readonly string[] {
@@ -173,18 +217,11 @@ export function modelSourceView(
 ): PublicationSourceView {
   const root = resolve(packageRoot);
   const generated = generatedRoot.replaceAll("\\", "/");
-  const generatedDirectory = dirname(generated);
-  const generatedName = basename(generated);
-  const excluded = [generated, "dist"];
-  const siblingStage = join(generatedDirectory, `.${generatedName}.stage-`);
-  const siblingBackup = join(generatedDirectory, `.${generatedName}.`);
   const liveGeneratedRoot = resolve(root, generated);
-  const authoredFiles = Object.freeze(
-    collectAuthored(root, [...excluded, siblingStage, siblingBackup]),
-  );
+  const inventory = sourceInventory(root, generated);
   return Object.freeze({
-    authoredFiles,
-    inventoryDigest: inventoryDigest(authoredFiles, configFiles(root)),
+    authoredFiles: inventory.authoredFiles,
+    inventoryDigest: inventory.digest,
     packageRoot: root,
     liveGeneratedRoot,
     stagedGeneratedRoot: resolve(stagedGeneratedRoot),
