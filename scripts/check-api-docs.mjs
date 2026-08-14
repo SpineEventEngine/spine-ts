@@ -529,6 +529,7 @@ const expectedServerExports = [
   "CommandReactionHandlerMetadata",
   "CommandRoute",
   "CommandRouting",
+  "InterfaceRouteMessage",
   "CommandContextInput",
   "Clock",
   "ContextSpec",

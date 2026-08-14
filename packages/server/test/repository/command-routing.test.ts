@@ -12,10 +12,11 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { MessageInterfaces } from "@spine-event-engine/core";
 import { CommandContextSchema, CommandSchema } from "@spine-event-engine/proto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { CommandRouting } from "../../src/index.js";
 import { CommandRoutingInternals } from "../../src/repository/command-routing.js";
@@ -70,5 +71,29 @@ describe("CommandRouting", () => {
     expect(() => routing.route({ schemas: token.schemas } as never, route)).toThrow(
       /generated message interface token/,
     );
+  });
+
+  it("types interface callbacks as the member union intersected with the interface", () => {
+    type Shared = { readonly common: string };
+    type First = Message<"test.First"> & Shared & { readonly firstOnly: string };
+    type Second = Message<"test.Second"> & Shared & { readonly secondOnly: string };
+    const first = CommandSchema as unknown as GenMessage<First>;
+    const second = CommandSchema as unknown as GenMessage<Second>;
+    const token = MessageInterfaces.define<Shared, readonly [typeof first, typeof second]>([
+      first,
+      second,
+    ]);
+
+    CommandRouting.create<string>()
+      .route(CommandSchema, (message) => {
+        expectTypeOf(message).toMatchTypeOf<Message<"spine.core.Command">>();
+        return "exact";
+      })
+      .route(token, (message) => {
+        expectTypeOf(message.common).toEqualTypeOf<string>();
+        // @ts-expect-error A member-only field is not safe without narrowing the member union.
+        message.firstOnly;
+        return "interface";
+      });
   });
 });

@@ -13,20 +13,16 @@
  */
 
 import type { MessageShape } from "@bufbuild/protobuf";
-import {
-  MessageInterfaces,
-  type MessageInterface,
-  type MessageSchema,
-} from "@spine-event-engine/core";
+import { type MessageInterface, type MessageSchema } from "@spine-event-engine/core";
 import type { EventContext } from "@spine-event-engine/proto";
 import {
   RoutingDeclarations,
+  type InterfaceRouteSchemas,
   type InterfaceRouteMessage,
   type RoutingDeclarationSnapshot,
   type RoutingDeclarationState,
 } from "./routing-declarations.js";
 
-type InterfaceSchemas = readonly [MessageSchema, ...MessageSchema[]];
 
 /**
  * Calculates target Entity IDs for one accepted Entity state update.
@@ -68,33 +64,41 @@ export class StateUpdateRouting<Id> {
   }
 
   /**
-   * Registers an exact generated Entity-state schema route.
+   * Registers an exact generated Entity-state schema route or a nominal message-interface route.
    *
-   * @param schema Generated Entity-state schema to match.
+   * A schema route receives its exact state shape. An interface route receives
+   * {@link InterfaceRouteMessage}, the member-state union intersected with the
+   * declared interface. Routing selects an exact schema route first, then the
+   * first matching interface token in registration order, then the
+   * replacement/default route.
+   *
+   * Copied or malformed tokens fail during declaration. Every token member must
+   * be registered by the repository, or construction fails. The selected route
+   * runs once for an accepted admission; durable replay uses stored targets and
+   * does not run routing again.
+   *
+   * @param schemaOrToken Generated Entity-state schema or nominal message-interface token.
    * @param via Route function to invoke.
    * @returns These mutable declarations.
    */
   route<Schema extends MessageSchema>(schema: Schema, via: StateUpdateRoute<Id, Schema>): this;
-  route<TInterface extends object, Schemas extends InterfaceSchemas>(
+  route<TInterface extends object, Schemas extends InterfaceRouteSchemas>(
     token: MessageInterface<TInterface, Schemas>,
     via: (message: InterfaceRouteMessage<TInterface, Schemas>, context: EventContext) => readonly Id[],
   ): this;
   route(
-    schemaOrToken: MessageSchema | MessageInterface<object, InterfaceSchemas>,
+    schemaOrToken: MessageSchema | MessageInterface<object, InterfaceRouteSchemas>,
     via: StateUpdateRoute<Id>,
   ): this {
     if (typeof via !== "function")
       throw new TypeError("State-update routing requires a route function.");
     const state = StateUpdateRoutingInternals.state(this);
-    if (
-      MessageInterfaces.is(schemaOrToken) ||
-      (typeof schemaOrToken === "object" && schemaOrToken !== null && "schemas" in schemaOrToken)
-    ) {
+    if (RoutingDeclarations.isInterfaceTokenCandidate(schemaOrToken)) {
       RoutingDeclarations.routeInterface(state, schemaOrToken, via, "State-update routing");
     } else {
       RoutingDeclarations.exact(
         state,
-        schemaOrToken,
+        schemaOrToken as MessageSchema,
         via,
         "State-update routing has a duplicate exact state-update route.",
       );

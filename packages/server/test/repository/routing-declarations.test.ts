@@ -78,4 +78,23 @@ describe("RoutingDeclarations", () => {
       RoutingDeclarations.validate(RoutingDeclarations.snapshot(declarations), [CommandSchema], "command"),
     ).toThrow(/unregistered interface member.*spine.core.Event/);
   });
+
+  it("passes the immutable map facade to snapshot forEach callbacks", () => {
+    const declarations = RoutingDeclarations.create<string>();
+    RoutingDeclarations.exact(declarations, CommandSchema, "route", "Command routing");
+    const snapshot = RoutingDeclarations.snapshot(declarations);
+
+    snapshot.exact.forEach((_route, _schema, map) => {
+      expect(map).toBe(snapshot.exact);
+      expect("set" in map).toBe(false);
+    });
+  });
+
+  it("classifies nominal and copied interface-token candidates without classifying schemas", () => {
+    const token = MessageInterfaces.define<object, readonly [typeof CommandSchema]>([CommandSchema]);
+
+    expect(RoutingDeclarations.isInterfaceTokenCandidate(token)).toBe(true);
+    expect(RoutingDeclarations.isInterfaceTokenCandidate({ schemas: token.schemas })).toBe(true);
+    expect(RoutingDeclarations.isInterfaceTokenCandidate(CommandSchema)).toBe(false);
+  });
 });

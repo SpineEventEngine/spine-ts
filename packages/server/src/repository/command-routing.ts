@@ -13,20 +13,15 @@
  */
 
 import type { MessageShape } from "@bufbuild/protobuf";
-import {
-  MessageInterfaces,
-  type MessageInterface,
-  type MessageSchema,
-} from "@spine-event-engine/core";
+import { type MessageInterface, type MessageSchema } from "@spine-event-engine/core";
 import type { CommandContext } from "@spine-event-engine/proto";
 import {
   RoutingDeclarations,
+  type InterfaceRouteSchemas,
   type InterfaceRouteMessage,
   type RoutingDeclarationSnapshot,
   type RoutingDeclarationState,
 } from "./routing-declarations.js";
-
-type InterfaceSchemas = readonly [MessageSchema, ...MessageSchema[]];
 
 /**
  * Calculates one Entity ID for a Command message.
@@ -77,33 +72,41 @@ export class CommandRouting<Id> {
   }
 
   /**
-   * Registers an exact generated Command schema route.
+   * Registers an exact generated Command-schema route or a nominal message-interface route.
    *
-   * @param schema Generated Command message schema.
+   * A schema route receives its exact message shape. An interface route receives
+   * {@link InterfaceRouteMessage}, the member-message union intersected with
+   * the declared interface. Routing selects an exact schema route first, then
+   * the first matching interface token in registration order, then the
+   * replacement/default route.
+   *
+   * Copied or malformed tokens fail during declaration. Every token member must
+   * be registered by the repository, or construction fails. The selected route
+   * runs once for an accepted admission; durable replay uses stored targets and
+   * does not run routing again.
+   *
+   * @param schemaOrToken Generated Command schema or nominal message-interface token.
    * @param via Route that calculates the target Entity ID.
    * @returns These mutable route declarations.
    */
   route<Schema extends MessageSchema>(schema: Schema, via: CommandRoute<Id, Schema>): this;
-  route<TInterface extends object, Schemas extends InterfaceSchemas>(
+  route<TInterface extends object, Schemas extends InterfaceRouteSchemas>(
     token: MessageInterface<TInterface, Schemas>,
     via: (message: InterfaceRouteMessage<TInterface, Schemas>, context: CommandContext) => Id,
   ): this;
   route(
-    schemaOrToken: MessageSchema | MessageInterface<object, InterfaceSchemas>,
+    schemaOrToken: MessageSchema | MessageInterface<object, InterfaceRouteSchemas>,
     via: CommandRoute<Id>,
   ): this {
     if (typeof via !== "function")
       throw new TypeError("Command routing requires a route function.");
     const state = CommandRoutingInternals.state(this);
-    if (
-      MessageInterfaces.is(schemaOrToken) ||
-      (typeof schemaOrToken === "object" && schemaOrToken !== null && "schemas" in schemaOrToken)
-    ) {
+    if (RoutingDeclarations.isInterfaceTokenCandidate(schemaOrToken)) {
       RoutingDeclarations.routeInterface(state, schemaOrToken, via, "Command routing");
     } else {
       RoutingDeclarations.exact(
         state,
-        schemaOrToken,
+        schemaOrToken as MessageSchema,
         via,
         "Command routing has a duplicate exact command route.",
       );

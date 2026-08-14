@@ -12,9 +12,11 @@
  * the License.
  */
 
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { EventSchema } from "@spine-event-engine/proto";
 import { MessageInterfaces } from "@spine-event-engine/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { EventRouting } from "../../src/index.js";
 import { EventRoutingInternals } from "../../src/repository/event-routing.js";
@@ -58,5 +60,24 @@ describe("EventRouting", () => {
     expect(() => routing.route({ schemas: token.schemas } as never, route)).toThrow(
       /generated message interface token/,
     );
+  });
+
+  it("types an Event interface callback with only common member fields", () => {
+    type Shared = { readonly common: string };
+    type First = Message<"test.First"> & Shared & { readonly firstOnly: string };
+    type Second = Message<"test.Second"> & Shared & { readonly secondOnly: string };
+    const first = EventSchema as unknown as GenMessage<First>;
+    const second = EventSchema as unknown as GenMessage<Second>;
+    const token = MessageInterfaces.define<Shared, readonly [typeof first, typeof second]>([
+      first,
+      second,
+    ]);
+
+    EventRouting.create<string>().route(token, (message) => {
+      expectTypeOf(message.common).toEqualTypeOf<string>();
+      // @ts-expect-error A member-only field is not safe without narrowing the member union.
+      message.secondOnly;
+      return [];
+    });
   });
 });

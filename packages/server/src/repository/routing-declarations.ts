@@ -12,15 +12,15 @@
  * the License.
  */
 
+import type { MessageShape } from "@bufbuild/protobuf";
 import {
   MessageInterfaces,
   type MessageInterface,
   type MessageSchema,
 } from "@spine-event-engine/core";
-import type { MessageShape } from "@bufbuild/protobuf";
 
-type InterfaceSchemas = readonly [MessageSchema, ...MessageSchema[]];
-type InterfaceToken = MessageInterface<object, InterfaceSchemas>;
+export type InterfaceRouteSchemas = readonly [MessageSchema, ...MessageSchema[]];
+type InterfaceToken = MessageInterface<object, InterfaceRouteSchemas>;
 
 /**
  * Message shape available to a route declared for a message-interface token.
@@ -30,7 +30,7 @@ type InterfaceToken = MessageInterface<object, InterfaceSchemas>;
  */
 export type InterfaceRouteMessage<
   TInterface extends object,
-  Schemas extends InterfaceSchemas,
+  Schemas extends InterfaceRouteSchemas,
 > = MessageShape<Schemas[number]> & TInterface;
 
 interface InterfaceRoute<Route> {
@@ -51,7 +51,8 @@ export interface RoutingDeclarationSnapshot<Route> {
 }
 
 function readOnlyMap<Key, Value>(source: ReadonlyMap<Key, Value>): ReadonlyMap<Key, Value> {
-  return Object.freeze({
+  let facade: ReadonlyMap<Key, Value>;
+  facade = Object.freeze({
     get size() {
       return source.size;
     },
@@ -62,8 +63,9 @@ function readOnlyMap<Key, Value>(source: ReadonlyMap<Key, Value>): ReadonlyMap<K
     keys: () => source.keys(),
     values: () => source.values(),
     forEach: (callback: (value: Value, key: Key, map: ReadonlyMap<Key, Value>) => void) =>
-      source.forEach((value, key) => callback(value, key, source)),
+      source.forEach((value, key) => callback(value, key, facade)),
   }) as ReadonlyMap<Key, Value>;
+  return facade;
 }
 
 /**
@@ -85,6 +87,9 @@ export const RoutingDeclarations: Readonly<{
     route: Route,
     routingName: string,
   ): void;
+  isInterfaceTokenCandidate(
+    value: unknown,
+  ): value is MessageInterface<object, InterfaceRouteSchemas> | { readonly schemas: unknown };
   default<Route>(state: RoutingDeclarationState<Route>, route: Route): void;
   snapshot<Route>(state: RoutingDeclarationState<Route>): RoutingDeclarationSnapshot<Route>;
   select<Route>(
@@ -127,6 +132,15 @@ export const RoutingDeclarations: Readonly<{
       throw new Error(`${routingName} has a duplicate interface route.`);
     }
     state.interfaceRoutes.set(interfaceToken, route);
+  },
+
+  isInterfaceTokenCandidate(
+    value: unknown,
+  ): value is MessageInterface<object, InterfaceRouteSchemas> | { readonly schemas: unknown } {
+    return (
+      MessageInterfaces.is(value) ||
+      (typeof value === "object" && value !== null && "schemas" in value)
+    );
   },
 
   default<Route>(state: RoutingDeclarationState<Route>, route: Route): void {

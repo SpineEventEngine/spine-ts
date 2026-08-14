@@ -12,9 +12,11 @@
  * the License.
  */
 
+import type { Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { EntityStateChangedSchema } from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
 import { MessageInterfaces } from "@spine-event-engine/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { StateUpdateRouting } from "../../src/index.js";
 import { StateUpdateRoutingInternals } from "../../src/repository/state-update-routing.js";
@@ -62,5 +64,24 @@ describe("StateUpdateRouting", () => {
     expect(() => routing.route({ schemas: token.schemas } as never, route)).toThrow(
       /generated message interface token/,
     );
+  });
+
+  it("types a state interface callback with only common member fields", () => {
+    type Shared = { readonly common: string };
+    type First = Message<"test.First"> & Shared & { readonly firstOnly: string };
+    type Second = Message<"test.Second"> & Shared & { readonly secondOnly: string };
+    const first = EntityStateChangedSchema as unknown as GenMessage<First>;
+    const second = EntityStateChangedSchema as unknown as GenMessage<Second>;
+    const token = MessageInterfaces.define<Shared, readonly [typeof first, typeof second]>([
+      first,
+      second,
+    ]);
+
+    StateUpdateRouting.create<string>().route(token, (message) => {
+      expectTypeOf(message.common).toEqualTypeOf<string>();
+      // @ts-expect-error A member-only field is not safe without narrowing the member union.
+      message.firstOnly;
+      return [];
+    });
   });
 });
