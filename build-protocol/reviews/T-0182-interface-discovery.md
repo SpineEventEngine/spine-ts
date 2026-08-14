@@ -1,6 +1,6 @@
 # T-0182 Review Log
 
-Status: Pending implementation
+Status: Corrections complete; targeted re-review ready
 
 Task log: `build-protocol/tasks/T-0182-interface-discovery/TASK.md`
 Branch: `task/T-0182-interface-discovery`
@@ -21,8 +21,10 @@ Baseline: `8f987ae8`
 - Existing implementer assignment is explicit `gpt-5.6-terra` / medium, sole
   production writer, no subagents. Runtime model/reasoning telemetry is not
   exposed; the immutable configured profile and explicit dispatch are retained.
-- Specialist reviewer dispatch remains orchestrator-owned. No review has been
-  dispatched by this implementation owner.
+- Review assignments were explicit: TypeScript/API, style/maintainability, and
+  performance/reliability used their existing immutable `gpt-5.6-terra` / high
+  profiles; documentation used its existing immutable `gpt-5.6-luna` / medium
+  profile. Runtime telemetry was unavailable for every assignment.
 
 ## Findings And Outcome
 
@@ -35,6 +37,35 @@ Baseline: `8f987ae8`
   transaction inventory, staged compiler redirect, diamond-safe inheritance,
   and one containment policy. Security remains N/A: no new trust boundary or
   external capability is introduced by this compiler-internal follow-up.
+
+## Resolutions
+
+- TypeScript/API P1s: discovery requires a named module export, intersects
+  candidates with TypeScript config membership, and revalidates configured
+  source/config bytes immediately before publication.
+- Style P1/P2s: traversal uses an active recursion stack so diamonds pass;
+  compiler reads and parent locality use captured paths/text; canonical
+  package-root exclusions no longer reject valid nested `src/dist`; records
+  are reconciled.
+- Reliability P1s: recursive config/source inventory is deterministic and
+  length-delimited; live generated imports are redirected through the staged
+  compiler host. Real transaction tests cover source content/add/remove/rename
+  and extended-config mutation with exact prior tree/manifest preservation.
+- Documentation: changed TSDoc is clean; active status/evidence contradictions
+  are removed. Reader-facing documentation remains T-0185 scope.
+
+## Final Correction Evidence
+
+- Exact focused behavior: 5 files / 200 tests pass.
+- Coverage-enabled task profile: 97.85% lines (318/325), 91.34% branches
+  (211/231), 98.51% functions (66/67).
+- Canonical Proto generation/current output, generated and tooling typechecks,
+  full ESLint, cleanup, TSDoc, copyright, formatting/diff, TypeDoc/API,
+  audience, package/assets/links readiness, and generated cleanliness pass.
+- Targeted re-review is pending. `verify:release` is intentionally reserved for
+  post-review convergence.
+
+## Historical Pre-Review Checkpoints
 
 Pending implementation and mechanical preflight. First TDD slice is GREEN:
 provider resolves a compatible top-level interface via the staged Program;

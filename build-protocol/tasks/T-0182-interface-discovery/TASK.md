@@ -1,6 +1,6 @@
 # T-0182: Authored Interface Discovery And Conformance
 
-Status: Implementation complete; review-ready
+Status: Review corrections complete; targeted re-review pending
 Start: `2026-08-14 01:01 WEST`
 End: Pending
 Baseline commit: `8f987ae8`
@@ -8,24 +8,17 @@ Task log path: `build-protocol/tasks/T-0182-interface-discovery/TASK.md`
 Branch: `task/T-0182-interface-discovery`
 Worktree: `.worktrees/T-0182-interface-discovery`
 Authoring sub-agent: existing `implementer`, explicit `gpt-5.6-terra` / medium
-Reviewer sub-agents: Pending orchestrator dispatch
-Implementation commit: Pending
-Final branch HEAD: Pending
+Reviewer sub-agents: existing TypeScript/API, style/maintainability,
+performance/reliability, and documentation reviewers; explicit configured
+profiles recorded below
+Implementation commit: `bb9c3174`
+Final branch HEAD: Pending targeted re-review and release closure
 
-Latest checkpoint: parent/compiler diagnostic matrix GREEN; transaction and
-repeat-generation convergence remains pending.
-
-Analysis-snapshot race behavior is GREEN (source mutation/add/rename and
-recursive-tsconfig mutation after Program capture); real transaction/repeat
-workflow proof remains pending.
-
-Workflow proof is now GREEN: the real post-Buf source-view handoff reaches the
-provider phase, a provider failure preserves the prior generated tree and
-manifest, and repeated staged interface publication is byte-identical. Cheap
-preflight and parameterized `verify:task` remain pending.
-
-Cheap preflight and the selected coverage-enabled `verify:task` are GREEN.
-The task is ready for the orchestrator-owned specialist review wave.
+Latest checkpoint: the accepted specialist batch is corrected. Named exports,
+tsconfig-owned membership, staged generated import redirection, immutable
+compiler input snapshots, prepublication revalidation, diamond inheritance,
+and canonical containment are GREEN. Cheap preflight and the selected
+coverage-enabled `verify:task` pass; targeted re-review remains.
 
 Task classification: High-risk
 Classification reason: compiler-program discovery and conformance governs
@@ -122,7 +115,9 @@ T-0185 reader documentation, and Wave 12 behavior.
 
 ## Files Changed
 
-- Task/work/review records initially; production files pending TDD.
+- Proto-tools authored-interface provider, interface generator integration,
+  source-view transaction snapshot, bootstrap inventory, focused provider /
+  generator / workflow tests, cleanup necessity inventory, and task records.
 
 ## Tests Run
 
@@ -137,11 +132,16 @@ T-0185 reader documentation, and Wave 12 behavior.
 - GREEN inheritance: local parent interfaces are accepted; an imported external
   parent fails closed while external property types remain allowed (2 files,
   17 tests and focused static gates).
+- GREEN correction convergence: provider, interface generator, source view,
+  Proto-tools transaction, and real workflow suites pass 5 files / 200 tests.
+  Source content/add/remove/rename and recursive-config mutations preserve the
+  exact prior tree and manifest.
 
 ## Coverage Result
 
-- Pending expanded behavior matrix; changed production files target at least
-  90% branches.
+- Coverage-enabled `verify:task` LCOV: 97.85% lines (318/325), 91.34%
+  branches (211/231), and 98.51% functions (66/67) across the three changed
+  production modules. Provider branches are 92/97; no threshold was waived.
 
 ## Documentation And Public API Impact
 
@@ -175,9 +175,20 @@ T-0185 reader documentation, and Wave 12 behavior.
 
 ## Review Waves And Dispositions
 
-- Pending. Style, documentation, TypeScript/API, and reliability are relevant;
-  security is deferred to T-0186 absent a changed trust boundary.
+- TypeScript/API (`gpt-5.6-terra` / high): three P1 findings accepted and
+  corrected (named export, tsconfig authority, transaction revalidation).
+- Style/maintainability (`gpt-5.6-terra` / high): diamond inheritance,
+  parent-snapshot, containment-policy, and record findings corrected.
+- Performance/reliability (`gpt-5.6-terra` / high): transaction inventory and
+  live-to-staged compiler import redirect findings corrected.
+- Documentation (`gpt-5.6-luna` / medium): source comments clean; stale record
+  statuses/evidence corrected. Runtime telemetry was unavailable for every
+  reviewer, so immutable configured profiles are the recorded evidence.
+- Security: N/A for T-0182 because it adds no dependency, secret, IPC, tenant,
+  deserialization, or external capability boundary; Wave 11 final security is
+  owned by T-0186.
 
 ## Integration Result
 
-Pending.
+Not integrated. Targeted re-review, release verification, merge, tag, and
+post-merge verification remain orchestrator-owned.
