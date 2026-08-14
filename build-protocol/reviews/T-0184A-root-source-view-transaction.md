@@ -72,3 +72,11 @@ order is composition before verification with no journal write. It also proves
 all live generated roots, manifests, and registry remain unchanged and no
 stage/journal residue remains. This test fails if validation moves back into
 `stageModel`.
+
+## Final Reliability Test Correction
+
+Reliability review (configured `gpt-5.6-terra` / high) accepted P2 that the
+ordering regression inspected adjacent rather than actual registry and root
+Proto stage directories. The regression now also asserts cleanup in
+`examples/message-board/app` and `packages/proto`, the exact owners of those
+outer `.generated-*` stages.

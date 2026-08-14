@@ -976,7 +976,13 @@ describe("proto-workflow", () => {
         readFileSync(join(repoRoot, "examples/message-board/app/src/model-registry.ts"), "utf8"),
       ).toBe("previous registry\n");
       expect(readdirSync(repoRoot).some((name) => name.startsWith(".spine-proto-"))).toBe(false);
-      for (const directory of ["examples/todo", "examples/message-board", "examples/message-board/app/src"])
+      for (const directory of [
+        "examples/todo",
+        "examples/message-board",
+        "examples/message-board/app",
+        "examples/message-board/app/src",
+        "packages/proto",
+      ])
         expect(readdirSync(join(repoRoot, directory)).some((name) => name.startsWith(".generated-"))).toBe(false);
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
