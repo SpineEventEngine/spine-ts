@@ -1,6 +1,6 @@
 # T-0183: Interface-Token Repository Routing
 
-Status: Implementation in progress; focused RED/GREEN complete
+Status: Implementation complete; specialist review pending
 Start: `2026-08-14 03:53 WEST`
 End: Pending
 Baseline commit: `d02379f7`
@@ -8,7 +8,7 @@ Branch: `task/T-0183-interface-routing`
 Worktree: `.worktrees/T-0183-interface-routing`
 Task classification: High-risk
 Implementation owner: existing `implementer`, explicit `gpt-5.6-terra` / medium
-Implementation commit: `c74c9310`, `27fa36df`; lifecycle/type-contract checkpoint pending
+Implementation commit: `c74c9310`, `27fa36df`, `11e5d867`; pre-review record checkpoint pending
 Final branch HEAD: Pending
 
 ## Objective
@@ -77,6 +77,8 @@ Event, and state-update declarations overload the existing `.route(...)` API
 for `MessageInterface`; construction validates all token members against the
 registered schemas. Focused tests cover copied-token rejection, duplicate and
 incomplete declarations, selection precedence, callback typing, and one
-admission/no-recomputation replay path for each signal kind. Specialist review,
-changed-source coverage, release verification, integration, tag, and post-merge
-verification remain pending.
+admission/no-recomputation replay path for each signal kind. Full coverage is
+95.25% lines, 90.44% branches, and 94.07% functions. The complete
+`verify:task -- --no-coverage` gate passed with the five focused routing test
+files after that coverage evidence. Specialist review, release verification,
+integration, tag, and post-merge verification remain pending.
