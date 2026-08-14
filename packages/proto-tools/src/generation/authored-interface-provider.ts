@@ -12,8 +12,8 @@
  * the License.
  */
 
-import { existsSync, realpathSync } from "node:fs";
-import { dirname, extname, join, relative } from "node:path";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 
 import type { DescMessage } from "@bufbuild/protobuf";
 import ts from "typescript";
@@ -28,6 +28,8 @@ import type { ModelSourceView } from "./source-view.js";
  * Resolves authored TypeScript interfaces from the validated model source view.
  */
 export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
+  // prettier-ignore
+
   /**
    * Resolves one compatible authored interface from the staged model Program.
    *
@@ -42,6 +44,7 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     sourceView: ModelSourceView | undefined,
   ): AuthoredInterfaceDeclaration | undefined {
     if (sourceView === undefined) return undefined;
+    this.assertSourceView(sourceView);
     const program = this.program(sourceView);
     const declaration = this.declaration(program, sourceView, name);
     const checker = program.getTypeChecker();
@@ -84,6 +87,33 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
 
   private stagedFiles(root: string): readonly string[] {
     return ts.sys.readDirectory(root, [".cts", ".mts", ".ts", ".tsx"], undefined, ["**/*"]);
+  }
+
+  private assertSourceView(sourceView: ModelSourceView): void {
+    const packageRoot = realpathSync(sourceView.packageRoot);
+    const liveGeneratedRoot = resolve(sourceView.liveGeneratedRoot);
+    const parent = dirname(liveGeneratedRoot);
+    const generatedName = basename(liveGeneratedRoot);
+    const stage = join(parent, `.${generatedName}.stage-`);
+    const backup = join(parent, `.${generatedName}.`);
+    const within = (root: string, path: string) => {
+      const pathRelative = relative(root, path);
+      return pathRelative === "" || (!pathRelative.startsWith("..") && !isAbsolute(pathRelative));
+    };
+    for (const file of sourceView.authoredFiles) {
+      if (
+        lstatSync(file).isSymbolicLink() ||
+        !within(packageRoot, realpathSync(file)) ||
+        within(liveGeneratedRoot, file) ||
+        file.startsWith(stage) ||
+        (file.startsWith(backup) && file.includes(".backup")) ||
+        within(join(packageRoot, "dist"), file) ||
+        file.endsWith(".d.ts")
+      )
+        throw new Error(
+          "spine-proto: authored interface discovery source path escapes model module",
+        );
+    }
   }
 
   private declaration(

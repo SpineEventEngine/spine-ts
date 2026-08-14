@@ -158,4 +158,74 @@ describe("AuthoredInterfaceProvider", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("rejects generated and declaration outputs as authored candidates before analysis", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-path-"));
+    const liveGeneratedRoot = join(root, "src/generated");
+    const stagedGeneratedRoot = join(root, ".generated.stage-1/output");
+    const generated = join(liveGeneratedRoot, "example/signals_pb.ts");
+    try {
+      mkdirSync(join(liveGeneratedRoot, "example"), { recursive: true });
+      mkdirSync(join(stagedGeneratedRoot, "example"), { recursive: true });
+      writeFileSync(
+        join(root, "tsconfig.json"),
+        JSON.stringify({ compilerOptions: { strict: true } }),
+      );
+      writeFileSync(generated, "export interface SignalFamily {}\n");
+      writeFileSync(
+        join(stagedGeneratedRoot, "example/signals_pb.ts"),
+        "export type Signal = {};\n",
+      );
+      expect(() =>
+        new AuthoredInterfaceProvider().resolve(
+          "SignalFamily",
+          [
+            {
+              file: { proto: { name: "example/signals.proto", package: "example" } },
+              name: "Signal",
+              typeName: "example.Signal",
+            } as DescMessage,
+          ],
+          { authoredFiles: [generated], liveGeneratedRoot, packageRoot: root, stagedGeneratedRoot },
+        ),
+      ).toThrow("source path escapes model module");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an incomplete authored interface through TypeScript assignability", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-incompatible-"));
+    const stagedGeneratedRoot = join(root, ".generated.stage-1/output");
+    const liveGeneratedRoot = join(root, "src/generated");
+    const authored = join(root, "src/interface.ts");
+    try {
+      mkdirSync(join(stagedGeneratedRoot, "example"), { recursive: true });
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(
+        join(root, "tsconfig.json"),
+        JSON.stringify({ compilerOptions: { strict: true } }),
+      );
+      writeFileSync(
+        join(stagedGeneratedRoot, "example/signals_pb.ts"),
+        "export type Signal = {};\n",
+      );
+      writeFileSync(authored, "export interface SignalFamily { readonly required: string }\n");
+      expect(() =>
+        new AuthoredInterfaceProvider().resolve(
+          "SignalFamily",
+          [
+            {
+              file: { proto: { name: "example/signals.proto", package: "example" } },
+              name: "Signal",
+              typeName: "example.Signal",
+            } as DescMessage,
+          ],
+          { authoredFiles: [authored], liveGeneratedRoot, packageRoot: root, stagedGeneratedRoot },
+        ),
+      ).toThrow("incompatible message example.Signal");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
