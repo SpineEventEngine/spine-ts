@@ -2067,6 +2067,20 @@ describe("spine proto model tooling", () => {
     }
   });
 
+  it("fails closed when malformed publication state cannot scan generation claims", () => {
+    const model = packageDirectory("@example/unscannable-manifest-read");
+    try {
+      writeJson(model, "spine-proto.json", modelConfig("@example/unscannable-manifest-read"));
+      writeFileSync(join(model, "spine-proto-manifest.json"), "not json\n");
+      chmodSync(model, 0o300);
+
+      expect(() => readManifest(model)).toThrow("cannot read spine-proto-manifest.json");
+    } finally {
+      chmodSync(model, 0o700);
+      rmSync(model, { recursive: true, force: true });
+    }
+  });
+
   it("does not treat a dead generation claim as a coherent manifest commit", () => {
     const model = packageDirectory("@example/dead-claim-manifest-read");
     try {
