@@ -119,6 +119,9 @@ T-0185 reader documentation, and Wave 12 behavior.
   and non-generated file `(every_is)` declarations, emits writer-owned
   companions, and performs provider diagnostics before any `generateFile` call
   (2 files, 16 tests).
+- GREEN inheritance: local parent interfaces are accepted; an imported external
+  parent fails closed while external property types remain allowed (2 files,
+  17 tests and focused static gates).
 
 ## Coverage Result
 

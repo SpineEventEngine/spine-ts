@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { dirname, extname, join, relative } from "node:path";
 
 import type { DescMessage } from "@bufbuild/protobuf";
@@ -28,6 +28,7 @@ import type { ModelSourceView } from "./source-view.js";
  * Resolves authored TypeScript interfaces from the validated model source view.
  */
 export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
+
   /**
    * Resolves one compatible authored interface from the staged model Program.
    *
@@ -45,6 +46,7 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     const program = this.program(sourceView);
     const declaration = this.declaration(program, sourceView, name);
     const checker = program.getTypeChecker();
+    this.assertLocalParents(checker, sourceView, declaration, name, new Set());
     const interfaceType = checker.getTypeAtLocation(declaration);
     for (const member of members) {
       const type = this.messageType(program, checker, sourceView, member);
@@ -142,6 +144,48 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
         `spine-proto: authored interface ${member.name}: missing staged generated message`,
       );
     return checker.getDeclaredTypeOfSymbol(symbol);
+  }
+
+  private assertLocalParents(
+    checker: ts.TypeChecker,
+    sourceView: ModelSourceView,
+    declaration: ts.InterfaceDeclaration,
+    name: string,
+    visited: Set<ts.Symbol>,
+  ): void {
+    const clauses = Object.getOwnPropertyDescriptor(declaration, "heritageClauses")?.value as
+      | ts.NodeArray<ts.HeritageClause>
+      | undefined;
+    if (clauses === undefined) return;
+    for (const clause of clauses) {
+      for (const parent of clause.types) {
+        const referenced = checker.getSymbolAtLocation(parent.expression);
+        const symbol =
+          referenced !== undefined && (referenced.flags & ts.SymbolFlags.Alias) !== 0
+            ? checker.getAliasedSymbol(referenced)
+            : referenced;
+        if (symbol === undefined)
+          throw new Error(
+            `spine-proto: authored interface ${name}: extends parent must stay in the model module`,
+          );
+        if (visited.has(symbol))
+          throw new Error(`spine-proto: authored interface ${name}: cyclic extends chain`);
+        visited.add(symbol);
+        const parentDeclaration = symbol.declarations?.find(ts.isInterfaceDeclaration);
+        if (parentDeclaration === undefined)
+          throw new Error(
+            `spine-proto: authored interface ${name}: extends parent must stay in the model module`,
+          );
+        if (parentDeclaration.typeParameters !== undefined && parentDeclaration.typeParameters.length > 0)
+          throw new Error(`spine-proto: authored interface ${name}: generic extends parent is not supported`);
+        const localSources = new Set(sourceView.authoredFiles.map((file) => realpathSync(file)));
+        if (!localSources.has(realpathSync(parentDeclaration.getSourceFile().fileName)))
+          throw new Error(
+            `spine-proto: authored interface ${name}: extends parent must stay in the model module`,
+          );
+        this.assertLocalParents(checker, sourceView, parentDeclaration, name, visited);
+      }
+    }
   }
 
   private importPath(sourceView: ModelSourceView, name: string, source: string): string {

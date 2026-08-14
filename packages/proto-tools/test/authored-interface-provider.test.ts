@@ -40,7 +40,13 @@ describe("AuthoredInterfaceProvider", () => {
         join(stagedGeneratedRoot, "example/signals_pb.ts"),
         "export type Signal = { readonly text: string };\n",
       );
-      writeFileSync(authored, "export interface SignalFamily { readonly text: string }\n");
+      writeFileSync(join(root, "src/external.ts"), "export interface ExternalValue {}\n");
+      writeFileSync(
+        authored,
+        'import type { ExternalValue } from "./external.js";\n' +
+          "export interface SignalParent { readonly text: string; readonly external?: ExternalValue }\n" +
+          "export interface SignalFamily extends SignalParent {}\n",
+      );
       const provider = new AuthoredInterfaceProvider();
       const result = provider.resolve(
         "SignalFamily",
@@ -59,6 +65,51 @@ describe("AuthoredInterfaceProvider", () => {
         },
       );
       expect(result).toEqual({ name: "SignalFamily", importPath: "../../signal-family.js" });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an authored interface that launders an external extends parent", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-external-parent-"));
+    const stagedGeneratedRoot = join(root, ".generated.stage-1/output");
+    const liveGeneratedRoot = join(root, "src/generated");
+    const authored = join(root, "src/signal-family.ts");
+    try {
+      mkdirSync(join(stagedGeneratedRoot, "example"), { recursive: true });
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(
+        join(root, "tsconfig.json"),
+        JSON.stringify({
+          compilerOptions: { module: "NodeNext", moduleResolution: "NodeNext", strict: true },
+        }),
+      );
+      writeFileSync(
+        join(stagedGeneratedRoot, "example/signals_pb.ts"),
+        "export type Signal = { readonly text: string };\n",
+      );
+      writeFileSync(
+        join(root, "src/external.ts"),
+        "export interface External { readonly text: string }\n",
+      );
+      writeFileSync(
+        authored,
+        'import type { External } from "./external.js";\n' +
+          "export interface SignalFamily extends External {}\n",
+      );
+      expect(() =>
+        new AuthoredInterfaceProvider().resolve(
+          "SignalFamily",
+          [
+            {
+              file: { proto: { name: "example/signals.proto", package: "example" } },
+              name: "Signal",
+              typeName: "example.Signal",
+            } as DescMessage,
+          ],
+          { authoredFiles: [authored], liveGeneratedRoot, packageRoot: root, stagedGeneratedRoot },
+        ),
+      ).toThrow("extends parent must stay in the model module");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
