@@ -2039,6 +2039,22 @@ describe("spine proto model tooling", () => {
     }
   });
 
+  it("does not treat a dead generation claim as a coherent manifest commit", () => {
+    const model = packageDirectory("@example/dead-claim-manifest-read");
+    try {
+      writeJson(model, "spine-proto.json", modelConfig("@example/dead-claim-manifest-read"));
+      writeFileSync(
+        join(model, ".spine-proto-generate.lock.dead"),
+        JSON.stringify({ pid: 999_999_999, token: "dead" }),
+      );
+      writeFileSync(join(model, "spine-proto-manifest.json"), "not json\n");
+
+      expect(() => readManifest(model)).toThrow("cannot read spine-proto-manifest.json");
+    } finally {
+      rmSync(model, { recursive: true, force: true });
+    }
+  });
+
   it("reads only the completed manifest when a live claim commits during a retry", async () => {
     const model = packageDirectory("@example/interleaved-manifest-read");
     const claim = join(model, ".spine-proto-generate.lock.live");
