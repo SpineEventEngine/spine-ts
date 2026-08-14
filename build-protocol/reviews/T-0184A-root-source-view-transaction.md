@@ -1,6 +1,6 @@
 # T-0184A Review Log
 
-Status: Implementation in progress
+Status: Ready for specialist review
 Baseline: `aed2f194`
 Branch: `task/T-0184A-root-source-view-transaction`
 
@@ -28,9 +28,17 @@ Review starts only after the frozen RED matrix is green, changed-production
 coverage is at least 90%, cheap preflight/root generation/current passes, and
 the implementation records the exact evidence.
 
-## Checkpoint Evidence
+## Implementation Evidence
 
-Tuple and basic source-view record RED/GREEN evidence is recorded in the task
-work log. Root generation/current is green after a narrow self-stage inventory
-exclusion. Review remains pending the full malformed-record and transaction
-rollback matrix.
+The full focused matrix is green: strict fixed-record parsing rejects malformed
+JSON, version, digest, root, missing, symlink, and FIFO inputs; live source and
+recursive-config mutations block publication; and the workflow preserves live
+publication on revalidation failure. Exact readonly tuple declarations compile
+with `isolatedDeclarations` for generated/authored single- and multi-member
+forms. Focused changed-production coverage is 95.03% statements and 91.06%
+branches (29 tests).
+
+Mechanical pre-review gates pass: tooling typecheck, full ESLint, cleanup,
+TSDoc, formatting, root generation/current, focused workflow tests, and diff
+check. No specialist lane has been invoked; `verify:release` remains deferred
+to the designated final profile.

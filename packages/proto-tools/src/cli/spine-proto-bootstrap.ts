@@ -16,10 +16,7 @@
 import { resolve } from "node:path";
 
 import { ProtoGeneration } from "../generation/generator.js";
-import {
-  assertSourceViewPublicationRecordCurrent,
-  readSourceViewPublicationRecord,
-} from "../generation/source-view.js";
+import { assertViewRecordCurrent, readViewRecord } from "../generation/source-view.js";
 import "../generation/interface-generator.js";
 import "../generation/rejection-generator.js";
 
@@ -36,8 +33,8 @@ if (command === "generate") {
 } else if (command === "verify-source-view-record") {
   const livePackageRoot = requiredInternalOption("--live-package-root");
   const liveGeneratedRoot = requiredInternalOption("--live-generated-root");
-  assertSourceViewPublicationRecordCurrent(
-    readSourceViewPublicationRecord(root, resolve(livePackageRoot), resolve(liveGeneratedRoot)),
+  assertViewRecordCurrent(
+    readViewRecord(root, resolve(livePackageRoot), resolve(liveGeneratedRoot)),
   );
 } else {
   throw new Error(`spine-proto bootstrap: unsupported command ${command}`);

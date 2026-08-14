@@ -94,8 +94,15 @@ path/special-file tests are mandatory here.
 
 ## Current Evidence
 
-The initial declaration-safe tuple RED and source-view record RED are green.
-Root `pnpm proto:generate` and `pnpm proto:check-generated:current` pass after
-the live inventory excludes only the outer root-transaction sibling. The
-remaining matrix still needs malformed-record, mutation/rollback, all-model
-rollback, and isolatedDeclarations fixture coverage before review.
+Implementation is review-ready. The initial declaration-safe tuple and
+source-view-record RED cases are green. Focused source-view and
+interface-generator coverage is 95.03% statements, 91.06% branches, 97.77%
+functions, and 97.21% lines (29 tests). The matrix covers live source/config
+content, add/remove/rename mutations; malformed JSON/version/digest/root;
+missing, symlink, and FIFO records; staged revalidation rollback; and
+declaration compilation of generated/authored single- and multi-member tuples.
+
+`pnpm typecheck:tooling`, full ESLint, cleanup, TSDoc, format, focused workflow
+tests, `pnpm proto:generate`, `pnpm proto:check-generated:current`, and
+`git diff --check` pass. Specialist review and `verify:release` remain
+intentionally unrun.

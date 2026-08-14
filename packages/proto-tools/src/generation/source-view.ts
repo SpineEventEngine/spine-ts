@@ -30,8 +30,8 @@ import ts from "typescript";
 
 const maximumSourceViewDepth = 32;
 const maximumSourceViewEntries = 10_000;
-const sourceViewPublicationRecordName = ".spine-source-view-publication.json";
-const sourceViewPublicationRecordVersion = 1;
+const recordFileName = ".spine-source-view-publication.json";
+const recordFormat = 1;
 
 const nonRegularInputDiagnostic = "spine-proto: source view contains non-regular TypeScript input";
 
@@ -247,14 +247,11 @@ export function assertSourceViewCurrent(sourceView: PublicationSourceView): void
  * @param stageRoot Outer staged model package root.
  * @param sourceView Captured live-authored/staged-generated source view.
  */
-export function writeSourceViewPublicationRecord(
-  stageRoot: string,
-  sourceView: PublicationSourceView,
-): void {
+export function writeViewRecord(stageRoot: string, sourceView: PublicationSourceView): void {
   writeFileSync(
-    join(stageRoot, sourceViewPublicationRecordName),
+    join(stageRoot, recordFileName),
     `${JSON.stringify({
-      formatVersion: sourceViewPublicationRecordVersion,
+      formatVersion: recordFormat,
       inventoryDigest: sourceView.inventoryDigest,
       liveGeneratedRoot: sourceView.liveGeneratedRoot,
       livePackageRoot: sourceView.packageRoot,
@@ -271,12 +268,12 @@ export function writeSourceViewPublicationRecord(
  * @param expectedLiveGeneratedRoot Canonical selected live generated root.
  * @returns Validated immutable internal handoff.
  */
-export function readSourceViewPublicationRecord(
+export function readViewRecord(
   stageRoot: string,
   expectedLivePackageRoot: string,
   expectedLiveGeneratedRoot: string,
 ): SourceViewPublicationRecord {
-  const recordPath = join(stageRoot, sourceViewPublicationRecordName);
+  const recordPath = join(stageRoot, recordFileName);
   const stagePath = resolve(stageRoot);
   const candidate = resolve(recordPath);
   let stage: string;
@@ -308,7 +305,7 @@ export function readSourceViewPublicationRecord(
   );
   const liveGeneratedRoot = resolve(livePackageRoot, expectedGeneratedRelative);
   if (
-    record.formatVersion !== sourceViewPublicationRecordVersion ||
+    record.formatVersion !== recordFormat ||
     record.livePackageRoot !== livePackageRoot ||
     record.liveGeneratedRoot !== liveGeneratedRoot ||
     expectedGeneratedRelative === "" ||
@@ -320,7 +317,7 @@ export function readSourceViewPublicationRecord(
   )
     throw new Error("spine-proto: invalid source-view publication record");
   return Object.freeze({
-    formatVersion: sourceViewPublicationRecordVersion,
+    formatVersion: recordFormat,
     inventoryDigest: record.inventoryDigest,
     liveGeneratedRoot,
     livePackageRoot,
@@ -332,9 +329,7 @@ export function readSourceViewPublicationRecord(
  *
  * @param record Validated internal root-transaction handoff.
  */
-export function assertSourceViewPublicationRecordCurrent(
-  record: SourceViewPublicationRecord,
-): void {
+export function assertViewRecordCurrent(record: SourceViewPublicationRecord): void {
   try {
     const generated = relative(record.livePackageRoot, record.liveGeneratedRoot);
     if (

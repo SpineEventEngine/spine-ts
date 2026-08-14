@@ -20,12 +20,12 @@ import { mkdtempSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
-  assertSourceViewPublicationRecordCurrent,
+  assertViewRecordCurrent,
   assertSourceViewCurrent,
   modelSourceView,
-  readSourceViewPublicationRecord,
+  readViewRecord,
   SourceViewInputs,
-  writeSourceViewPublicationRecord,
+  writeViewRecord,
 } from "../src/generation/source-view.js";
 
 describe("modelSourceView", () => {
@@ -41,17 +41,17 @@ describe("modelSourceView", () => {
       writeFileSync(join(live, "src/authored.ts"), "export interface Authored {}\n");
       const view = modelSourceView(live, "generated", join(stage, "generated"));
 
-      writeSourceViewPublicationRecord(stage, view);
-      const record = readSourceViewPublicationRecord(stage, live, join(live, "generated"));
+      writeViewRecord(stage, view);
+      const record = readViewRecord(stage, live, join(live, "generated"));
       expect(record.livePackageRoot).toBe(realpathSync(live));
       expect(record.liveGeneratedRoot).toBe(join(realpathSync(live), "generated"));
       expect(() => {
-        assertSourceViewPublicationRecordCurrent(record);
+        assertViewRecordCurrent(record);
       }).not.toThrow();
 
       writeFileSync(join(live, "src/authored.ts"), "export interface Changed {}\n");
       expect(() => {
-        assertSourceViewPublicationRecordCurrent(record);
+        assertViewRecordCurrent(record);
       }).toThrow("source view changed");
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -83,29 +83,29 @@ describe("modelSourceView", () => {
         },
       ]) {
         writeFileSync(record, `${JSON.stringify(value)}\n`);
-        expect(() => readSourceViewPublicationRecord(stage, live, join(live, "generated"))).toThrow(
+        expect(() => readViewRecord(stage, live, join(live, "generated"))).toThrow(
           "invalid source-view publication record",
         );
       }
       writeFileSync(record, "{\n");
-      expect(() => readSourceViewPublicationRecord(stage, live, join(live, "generated"))).toThrow(
+      expect(() => readViewRecord(stage, live, join(live, "generated"))).toThrow(
         "invalid source-view publication record",
       );
       writeFileSync(record, "null\n");
-      expect(() => readSourceViewPublicationRecord(stage, live, join(live, "generated"))).toThrow(
+      expect(() => readViewRecord(stage, live, join(live, "generated"))).toThrow(
         "invalid source-view publication record",
       );
       rmSync(record);
-      expect(() => readSourceViewPublicationRecord(stage, live, join(live, "generated"))).toThrow(
+      expect(() => readViewRecord(stage, live, join(live, "generated"))).toThrow(
         "invalid source-view publication record",
       );
       execFileSync("mkfifo", [record]);
-      expect(() => readSourceViewPublicationRecord(stage, live, join(live, "generated"))).toThrow(
+      expect(() => readViewRecord(stage, live, join(live, "generated"))).toThrow(
         "invalid source-view publication record",
       );
       rmSync(record);
       symlinkSync(join(live, "tsconfig.json"), record);
-      expect(() => readSourceViewPublicationRecord(stage, live, join(live, "generated"))).toThrow(
+      expect(() => readViewRecord(stage, live, join(live, "generated"))).toThrow(
         "invalid source-view publication record",
       );
     } finally {
@@ -127,15 +127,15 @@ describe("modelSourceView", () => {
         const authored = join(live, "src/authored.ts");
         writeFileSync(authored, "export interface Authored {}\n");
         const view = modelSourceView(live, "generated", join(stage, "generated"));
-        writeSourceViewPublicationRecord(stage, view);
-        const record = readSourceViewPublicationRecord(stage, live, join(live, "generated"));
+        writeViewRecord(stage, view);
+        const record = readViewRecord(stage, live, join(live, "generated"));
         if (mutation === "add") writeFileSync(join(live, "src/added.ts"), "export {}\n");
         if (mutation === "remove") rmSync(authored);
         if (mutation === "rename") renameSync(authored, join(live, "src/renamed.ts"));
         if (mutation === "config")
           writeFileSync(join(live, "tsconfig.json"), '{"include":["src/renamed.ts"]}\n');
         expect(() => {
-          assertSourceViewPublicationRecordCurrent(record);
+          assertViewRecordCurrent(record);
         }).toThrow("source view changed");
       } finally {
         rmSync(root, { recursive: true, force: true });

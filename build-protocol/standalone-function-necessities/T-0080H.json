@@ -115,5 +115,50 @@
     "name": "validateMessageDeclarations",
     "disposition": "necessity",
     "reason": "TypeScript descriptor option-validation boundary: validateMessageDeclarations validates message-level declarations during the all-input planning pass."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/source-view.ts",
+    "kind": "function-declaration",
+    "identity": "writeViewRecord()#1",
+    "name": "writeViewRecord",
+    "disposition": "necessity",
+    "reason": "TypeScript root-transaction boundary: writeViewRecord remains standalone because generation and root publication share the exact fixed source-view handoff."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/source-view.ts",
+    "kind": "function-declaration",
+    "identity": "readViewRecord()#1",
+    "name": "readViewRecord",
+    "disposition": "necessity",
+    "reason": "TypeScript root-transaction boundary: readViewRecord remains standalone because root revalidation and publication share the exact staged handoff validation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/source-view.ts",
+    "kind": "function-declaration",
+    "identity": "assertViewRecordCurrent()#1",
+    "name": "assertViewRecordCurrent",
+    "disposition": "necessity",
+    "reason": "TypeScript root-transaction boundary: assertViewRecordCurrent remains standalone because all model records share the exact live-input mutation guard."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/cli/spine-proto-bootstrap.ts",
+    "kind": "function-declaration",
+    "identity": "internalOption()#1",
+    "name": "internalOption",
+    "disposition": "necessity",
+    "reason": "TypeScript bootstrap boundary: internalOption remains standalone because internal commands share the exact non-public transaction argument lookup."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/cli/spine-proto-bootstrap.ts",
+    "kind": "function-declaration",
+    "identity": "requiredInternalOption()#1",
+    "name": "requiredInternalOption",
+    "disposition": "necessity",
+    "reason": "TypeScript bootstrap boundary: requiredInternalOption remains standalone because internal commands share the exact required transaction argument invariant."
   }
 ]
