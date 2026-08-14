@@ -25,6 +25,34 @@ import { NpmPackageName } from "./model/npm-package-name.js";
  */
 export const manifestFormatVersion = 2;
 const configFormatVersion = 1;
+const manifestReadAttempts = 3;
+
+function hasLiveGenerationClaim(packageRoot: string): boolean {
+  try {
+    const directory = opendirSync(packageRoot, { encoding: "utf8" });
+    try {
+      let entry;
+      while ((entry = directory.readSync()) !== null) {
+        if (!entry.name.startsWith(".spine-proto-generate.lock.") || !entry.isFile()) continue;
+        const owner = JSON.parse(readFileSync(join(packageRoot, entry.name), "utf8")) as {
+          pid?: unknown;
+        };
+        if (typeof owner.pid !== "number" || owner.pid <= 0) continue;
+        try {
+          process.kill(owner.pid, 0);
+          return true;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ESRCH") return true;
+        }
+      }
+    } finally {
+      directory.closeSync();
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
 
 /**
  * Configures an independently published Proto model package.
@@ -830,7 +858,16 @@ export const ProtoManifest: Readonly<{
     packageRoot: string,
     manifestPath: string = join(packageRoot, "spine-proto-manifest.json"),
   ): ProtoManifest {
-    return ProtoPackage.manifestFromPackage(packageRoot, manifestPath);
+    let failure: unknown;
+    for (let attempt = 0; attempt < manifestReadAttempts; attempt += 1) {
+      try {
+        return ProtoPackage.manifestFromPackage(packageRoot, manifestPath);
+      } catch (error) {
+        failure = error;
+        if (!hasLiveGenerationClaim(packageRoot)) throw error;
+      }
+    }
+    throw failure;
   },
 
   /**
