@@ -296,8 +296,14 @@ function reuseStagedGenerationId(livePackageRoot, stagedPackageRoot, stagedOutpu
   const liveOutputRoot = join(livePackageRoot, "generated");
   if (!existsSync(liveManifestPath) || !existsSync(stagedManifestPath) || !existsSync(liveOutputRoot))
     return;
-  const liveManifest = JSON.parse(readFileSync(liveManifestPath, "utf8"));
-  const stagedManifest = JSON.parse(readFileSync(stagedManifestPath, "utf8"));
+  let liveManifest;
+  let stagedManifest;
+  try {
+    liveManifest = JSON.parse(readFileSync(liveManifestPath, "utf8"));
+    stagedManifest = JSON.parse(readFileSync(stagedManifestPath, "utf8"));
+  } catch {
+    return;
+  }
   const { generationId: liveGenerationId, ...liveContents } = liveManifest;
   const { generationId: _stagedGenerationId, ...stagedContents } = stagedManifest;
   if (

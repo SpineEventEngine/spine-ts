@@ -341,7 +341,12 @@ const protoGeneration = Object.freeze({
           graph.models.filter((model) => config.dependencies.includes(model.name)),
         );
         normalizeGeneratedTree(output, manifest.protoFiles);
-        const reusedGenerationId = protoGeneration.reusableGenerationId(target, output, manifest);
+        const reusedGenerationId = protoGeneration.reusableGenerationId(
+          packageRoot,
+          target,
+          output,
+          manifest,
+        );
         if (reusedGenerationId !== undefined) {
           generationId = reusedGenerationId;
           manifest = ProtoManifest.create(packageRoot, undefined, generationId);
@@ -866,11 +871,12 @@ const protoGeneration = Object.freeze({
   },
 
   reusableGenerationId(
+    packageRoot: string,
     target: string,
     output: string,
     manifest: { readonly generationId: string },
   ): string | undefined {
-    const manifestPath = join(dirname(target), "spine-proto-manifest.json");
+    const manifestPath = join(packageRoot, "spine-proto-manifest.json");
     if (!existsSync(target) || !existsSync(manifestPath)) return undefined;
     try {
       const previous = JSON.parse(readFileSync(manifestPath, "utf8"));
