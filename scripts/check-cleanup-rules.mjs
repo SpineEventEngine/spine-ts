@@ -210,7 +210,11 @@ function packageDirs(repoRoot) {
 function checkGeneratedLayout(repoRoot, files, packages) {
   const failures = [];
   const srcGeneratedFiles = files.filter((file) => /^packages\/[^/]+\/src\/generated\//.test(file));
-  const generatedTrackedFiles = files.filter((file) => /^packages\/[^/]+\/generated\//.test(file));
+  const generatedTrackedFiles = files.filter(
+    (file) =>
+      /^packages\/[^/]+\/generated\//.test(file) &&
+      !/^packages\/[^/]+\/generated\/\.spine-proto-generation\.json$/.test(file),
+  );
 
   if (srcGeneratedFiles.length > 0) {
     failures.push({

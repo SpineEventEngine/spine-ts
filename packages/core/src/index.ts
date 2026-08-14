@@ -152,7 +152,7 @@ function descriptorTreeIncludes(roots: readonly unknown[], target: object): bool
     const nested = dataProperty(value, "nestedMessages");
     if (nested === undefined) continue;
     if (!Array.isArray(nested)) return false;
-    pending.push(...nested);
+    for (const child of nested) pending.push(child as unknown);
   }
   return false;
 }
@@ -160,7 +160,7 @@ function descriptorTreeIncludes(roots: readonly unknown[], target: object): bool
 function isMessageSchema(value: unknown): value is MessageSchema {
   try {
     if (typeof value !== "object" || value === null) return false;
-    const schema = value as object;
+    const schema = value;
     const file = dataProperty(schema, "file");
     const proto = dataProperty(schema, "proto");
     if (

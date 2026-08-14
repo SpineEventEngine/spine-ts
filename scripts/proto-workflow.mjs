@@ -305,7 +305,8 @@ function reuseStagedGenerationId(livePackageRoot, stagedPackageRoot, stagedOutpu
     return;
   }
   const { generationId: liveGenerationId, ...liveContents } = liveManifest;
-  const { generationId: _stagedGenerationId, ...stagedContents } = stagedManifest;
+  const stagedContents = { ...stagedManifest };
+  delete stagedContents.generationId;
   if (
     liveManifest.formatVersion !== 2 ||
     typeof liveGenerationId !== "string" ||

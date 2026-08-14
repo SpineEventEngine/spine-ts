@@ -157,7 +157,9 @@ function installModel(
   return directory;
 }
 
-/** Writes a coherent v2 installed-model fixture for assertions beyond manifest admission. */
+/**
+ * Writes a coherent v2 installed-model fixture for assertions beyond manifest admission.
+ */
 function writeInstalledManifest(
   directory: string,
   manifest: Record<string, unknown>,
@@ -2394,9 +2396,11 @@ describe("spine proto model tooling", () => {
     const directory = packageDirectory("@example/users-model");
     writeJson(directory, "spine-proto.json", modelConfig("@example/users-model"));
 
-    expect(createManifest(directory, ["users/v1/user.proto", "users/v1/id.proto"])).toEqual({
+    const manifest = createManifest(directory, ["users/v1/user.proto", "users/v1/id.proto"]);
+    expect(manifest.generationId).toEqual(expect.any(String));
+    expect(manifest).toEqual({
       formatVersion: 2,
-      generationId: expect.any(String),
+      generationId: manifest.generationId,
       packageName: "@example/users-model",
       packageVersion: "1.2.3",
       protoFiles: ["users/v1/id.proto", "users/v1/user.proto"],

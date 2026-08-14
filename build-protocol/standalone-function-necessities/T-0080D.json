@@ -3,6 +3,24 @@
     "rule": "standalone-function",
     "file": "packages/core/src/index.ts",
     "kind": "function-declaration",
+    "identity": "dataProperty()#1",
+    "name": "dataProperty",
+    "disposition": "necessity",
+    "reason": "JavaScript descriptor boundary: dataProperty avoids invoking untrusted accessors during generated schema validation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/core/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "descriptorTreeIncludes()#1",
+    "name": "descriptorTreeIncludes",
+    "disposition": "necessity",
+    "reason": "JavaScript descriptor boundary: descriptorTreeIncludes bounds recursive generated schema containment validation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/core/src/index.ts",
+    "kind": "function-declaration",
     "identity": "isMessageSchema()#1",
     "name": "isMessageSchema",
     "disposition": "necessity",

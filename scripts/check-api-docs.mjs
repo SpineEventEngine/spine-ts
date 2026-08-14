@@ -108,6 +108,7 @@ const expectedProtoExports = [
 ];
 const expectedProtoToolsExports = [
   "manifestFormatVersion",
+  "generationMarkerFile",
   "ModelConfig",
   "ApplicationConfig",
   "SpineProtoConfig",

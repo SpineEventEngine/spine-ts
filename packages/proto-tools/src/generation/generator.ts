@@ -879,8 +879,10 @@ const protoGeneration = Object.freeze({
     const manifestPath = join(packageRoot, "spine-proto-manifest.json");
     if (!existsSync(target) || !existsSync(manifestPath)) return undefined;
     try {
-      const previous = JSON.parse(readFileSync(manifestPath, "utf8"));
-      if (previous?.formatVersion !== 2 || typeof previous.generationId !== "string")
+      const parsed: unknown = JSON.parse(readFileSync(manifestPath, "utf8"));
+      if (typeof parsed !== "object" || parsed === null) return undefined;
+      const previous = parsed as Record<string, unknown>;
+      if (previous.formatVersion !== 2 || typeof previous.generationId !== "string")
         return undefined;
       const currentFiles = protoGeneration
         .files(output)
@@ -897,8 +899,10 @@ const protoGeneration = Object.freeze({
         if (readFileSync(join(output, file), "utf8") !== readFileSync(join(target, file), "utf8"))
           return undefined;
       }
-      const { generationId: _, ...previousContents } = previous;
-      const { generationId: __, ...nextContents } = manifest;
+      const previousContents = { ...previous };
+      delete previousContents.generationId;
+      const { generationId: nextGenerationId, ...nextContents } = manifest;
+      void nextGenerationId;
       if (JSON.stringify(previousContents) !== JSON.stringify(nextContents)) return undefined;
       return previous.generationId;
     } catch {

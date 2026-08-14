@@ -24,6 +24,10 @@ import { NpmPackageName } from "./model/npm-package-name.js";
  */
 export const manifestFormatVersion = 2;
 const configFormatVersion = 1;
+
+/**
+ * Names the generated-root marker that binds output to a v2 manifest generation.
+ */
 export const generationMarkerFile = ".spine-proto-generation.json";
 
 /**
@@ -116,7 +120,9 @@ export interface ProtoManifest {
    */
   readonly formatVersion: 2;
 
-  /** Opaque identifier shared with the generated-root marker. */
+  /**
+   * Stores the opaque identifier shared with the generated-root marker.
+   */
   readonly generationId: string;
 
   /**

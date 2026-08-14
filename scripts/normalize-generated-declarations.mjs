@@ -26,6 +26,8 @@ export const generatedDeclarationRoots = Object.freeze([
   "examples/message-board/model",
   "examples/message-board/app",
 ]);
+const generatedDeclarationPattern =
+  /(?:_pb|rejections|_columns|proto-module|generated-handler-registry|model-registry|interfaces\/.+)\.d\.ts$/u;
 
 export function declarationFiles(root) {
   const pending = [[root, 0]];
@@ -44,9 +46,7 @@ export function declarationFiles(root) {
       if (entry.isDirectory()) pending.push([path, depth + 1]);
       else if (
         entry.isFile() &&
-        /(?:_pb|rejections|_columns|proto-module|generated-handler-registry|model-registry|interfaces\/.+)\.d\.ts$/u.test(
-          path,
-        )
+        generatedDeclarationPattern.test(path)
       )
         files.push(path);
     }
@@ -70,7 +70,10 @@ export function normalizeGeneratedDeclarations(
     ]) {
       if (!existsSync(dist) || !existsSync(generated)) continue;
       for (const declaration of declarationFiles(dist)) {
-        const sourcePath = join(generated, relative(dist, declaration).replace(/\.d\.ts$/u, ".ts"));
+        const sourcePath = join(
+          generated,
+          relative(dist, declaration).replace(/\.d\.ts$/u, ".ts"),
+        );
         if (!existsSync(sourcePath)) continue;
         const provenance = declarationSources(readFileSync(sourcePath, "utf8"));
         if (provenance.length > 0)
