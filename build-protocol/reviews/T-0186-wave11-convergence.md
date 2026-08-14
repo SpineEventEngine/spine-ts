@@ -550,3 +550,14 @@ preflight and the one converged release profile remain pending.
   generated/static/docs/package gates, zero residue, and clean diff/worktree
   pass. Specialist and security verdicts remain CLEAN. Exactly one converged
   `pnpm verify:release` is authorized next.
+
+## Release RED Deterministic Disposition (2026-08-14)
+
+- The release RED does not reopen implementation review: its broad missing-
+  output cascade is caused by a test invoking the root clean build concurrently
+  with other Vitest files. The remaining failures are stale v1/required-field/
+  lifecycle assertions in tests. No production or contract change is required.
+- A bounded test-only correction is mechanical/behavior-fixture evidence. After
+  focused GREEN and mandatory cheap preflight, the corrected tree may run one
+  converged release profile; the failed profile is retained as RED chronology
+  and is not used as a diagnostic loop.

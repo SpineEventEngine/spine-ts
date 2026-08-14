@@ -1,6 +1,6 @@
 # T-0186: Converge, Release, And Close Wave 11
 
-Status: Security and cheap preflight CLEAN; release profile ready
+Status: Release RED root causes accepted; deterministic correction in progress
 Start: `2026-08-14 WEST`
 End: Pending
 Baseline: `f128af42`
@@ -385,3 +385,18 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   typechecks, ESLint, cleanup, TSDoc, copyright, format, docs API/audience/
   snippets, Proto lint/current output, logging containment, release readiness,
   zero residue, and diff checks are GREEN. Exactly one `verify:release` is next.
+
+## Release RED Correction Batch (2026-08-14)
+
+- The first release profile passed every deterministic gate, then exposed a
+  test-isolation defect: the new Proto Tools package-bin regression ran the
+  repository-wide clean build inside parallel Vitest and deleted shared `dist`
+  trees while other suites imported them. This explains the missing package/
+  example entrypoints, child-process failures, and timeout cascade.
+- Independent stale fixtures also expect manifest v1, omit required To-Do
+  `taskListId` fields in three server service paths, and assert global bootstrap
+  cache cleanup after calling a renderer that owns only descriptor temp cleanup.
+- One test-only deterministic batch will isolate the package build, update the
+  v2/required-field fixtures, and align the cleanup assertion with its actual
+  owner. Runtime, public API, serialized behavior, and security controls do not
+  change; specialist/security review is not reopened.
