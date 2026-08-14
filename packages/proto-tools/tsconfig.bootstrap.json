@@ -9,5 +9,5 @@
     "sourceMap": false,
     "types": ["node"]
   },
-  "files": ["src/cli/spine-proto-bootstrap.ts"]
+  "files": ["src/cli/spine-proto-bootstrap.ts", "src/generation/authored-interface-provider.ts"]
 }

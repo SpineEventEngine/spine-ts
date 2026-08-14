@@ -24,6 +24,9 @@ provider phase, a provider failure preserves the prior generated tree and
 manifest, and repeated staged interface publication is byte-identical. Cheap
 preflight and parameterized `verify:task` remain pending.
 
+Cheap preflight is GREEN after the bootstrap inventory correction; only the
+selected parameterized `verify:task` remains before review-ready status.
+
 Task classification: High-risk
 Classification reason: compiler-program discovery and conformance governs
 generated public interfaces, staged publication rollback, and realpath-local
