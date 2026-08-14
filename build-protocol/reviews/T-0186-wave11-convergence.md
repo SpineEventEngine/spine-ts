@@ -349,3 +349,13 @@ Final security and release verification remain pending.
 - Evidence: Proto Tools `133/133`; workflow `89/89`; generated-clean `10/10`;
   tooling typecheck, affected ESLint, Prettier/diff, current-output, cleanup,
   and residue checks pass. Style and reliability targeted re-review are ready.
+- Independent complete-source V8 verification passed the six extant affected
+  files and `404/404` tests. All ten changed production sources are present in
+  LCOV; exact changed coverage is **201/204 lines (98.53%)** and **159/175
+  branches (90.86%)**. The verification function used explicit
+  `gpt-5.6-luna` / low configuration; Desktop runtime telemetry is unavailable.
+- Final correction re-review is dispatched only to the existing style and
+  performance/reliability roles, each with explicit immutable
+  `gpt-5.6-terra` / high configuration. Desktop exposes no independent runtime
+  telemetry; configured profiles and no visible mismatch are the acceptance
+  gate.
