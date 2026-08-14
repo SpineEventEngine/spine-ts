@@ -1,6 +1,6 @@
 # T-0186 Review Log
 
-Status: Correction complete; targeted specialist re-review ready
+Status: Complete specialist wave accepted; correction in progress
 
 Task: `build-protocol/tasks/T-0186-wave11-convergence/TASK.md`
 Baseline: `f128af42`
@@ -210,3 +210,43 @@ by this fix pass.
 - One-time generated-family audit: `169` files, zero violations. Prohibited
   active names are absent and every Cloud Run/multiple-Gateway match is an
   explicit exclusion. Lightweight status/API/overclaim lint is clean.
+
+## Complete Targeted Specialist Wave (2026-08-14)
+
+Assignment acceptance gate: every dispatch used its existing role and explicit
+model/reasoning fields. TypeScript/API, style, and reliability used immutable
+`gpt-5.6-terra` / high; documentation used immutable `gpt-5.6-luna` / medium.
+Every reviewer reported no visible mismatch. Desktop exposes no independent
+runtime telemetry, so configured roles/profiles are the acceptance evidence.
+
+Accepted and deduplicated findings:
+
+1. **P1 reliability/style:** generation-ID reuse is duplicated and marker-blind
+   in direct model/root paths. Establish one canonical internal marker-aware
+   manifest/tree reuse policy and parity tests for missing, malformed, empty,
+   and mismatched markers.
+2. **P1 reliability:** direct generator tree comparison is unbounded and
+   follows symlinks. Use bounded, symlink-rejecting traversal and cover depth,
+   entry, and live/staged symlink cases.
+3. **P1 reliability:** strict manifest readers do not perform bounded retry
+   while a live generation claim exists. Add fail-closed bounded claim-aware
+   retry and reader interleaving/exhaustion tests.
+4. **P1 reliability:** wrapper cleanup removes journal-referenced stage
+   evidence after rollback restoration fails. Preserve recovery-owned stages
+   and prove primary/recovery errors, journal, backup, and staged evidence
+   survive until later recovery.
+5. **P2 TypeScript/API:** `generationMarkerFile` leaked as a public export while
+   documentation calls the marker internal. Make it internal and remove it from
+   public API inventory unless a stable public contract is deliberately added.
+6. **P2 TypeScript/API:** `ProtoManifest.create()` claims determinism while its
+   optional `generationId` defaults to `randomUUID()` and is undocumented.
+   Correct declaration/implementation TSDoc or narrow the public parameter.
+7. **P2 documentation:** remove the stale claim that exact-row replay occurs
+   only during a 30-second retention window; replay follows Inbox delivery
+   lifecycle independently of duplicate-admission expiry.
+
+Disposition: all findings accepted. The style marker-policy finding is the same
+underlying defect as finding 1 and receives one correction. No P0 was reported.
+Corrections return as one batch to the existing implementer; TypeScript/API,
+style, reliability, and documentation are all affected for targeted re-review.
+Final security and release verification remain pending.

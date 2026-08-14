@@ -1,6 +1,6 @@
 # T-0186: Converge, Release, And Close Wave 11
 
-Status: Correction complete; targeted specialist re-review ready
+Status: Specialist findings accepted; correction in progress
 Start: `2026-08-14 WEST`
 End: Pending
 Baseline: `f128af42`
@@ -221,3 +221,21 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   are absent; all Cloud Run/multiple-Gateway matches are explicit exclusions.
   The lightweight pre-review status/API/overclaim pass found no new public
   export, duplicated policy source, or active behavioral overclaim.
+
+## Complete Specialist Wave And Accepted Batch (2026-08-14)
+
+- TypeScript/API (`gpt-5.6-terra` / high): two P2 findings; style/
+  maintainability (`gpt-5.6-terra` / high): one P2 finding, deduplicated into
+  reliability P1; performance/reliability (`gpt-5.6-terra` / high): four P1
+  findings; documentation (`gpt-5.6-luna` / medium): one P2 finding. All
+  dispatch fields were explicit, reviewers reported no visible mismatch, and
+  Desktop runtime telemetry remains unavailable.
+- Accepted correction batch: canonical marker-aware ID reuse across direct and
+  workflow/root paths; bounded symlink-rejecting direct tree comparison;
+  bounded claim-aware reader retry; retained journal-owned stage evidence after
+  rollback failure; remove the accidental public marker-filename export;
+  correct/document `ProtoManifest.create()` generation-ID semantics; and remove
+  the stale 30-second replay-retention claim.
+- No P0 was reported. All four P1 and all three independent P2 concerns block
+  convergence until correction and affected-lane re-review. Final security and
+  `verify:release` remain unstarted.
