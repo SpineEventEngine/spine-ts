@@ -43,12 +43,12 @@ import type { ModelSourceView } from "./source-view.js";
  * Bounded seams used to test failure handling while retaining real Buf integration.
  */
 export interface GenerationOperations {
+  // prettier-ignore
+
   /**
    * Canonical live model root used only by the root transaction bootstrap.
    */
   readonly livePackageRoot?: string;
-
-  // prettier-ignore
 
   /**
    * Executes Buf for the staged model sources.

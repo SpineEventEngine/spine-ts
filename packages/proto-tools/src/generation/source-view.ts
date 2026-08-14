@@ -132,6 +132,8 @@ export interface PublicationSourceView extends ModelSourceView {
  * Fixed internal handoff retained by a root model-generation transaction.
  */
 export interface SourceViewPublicationRecord {
+  // prettier-ignore
+
   /**
    * Fixed internal record format version.
    */

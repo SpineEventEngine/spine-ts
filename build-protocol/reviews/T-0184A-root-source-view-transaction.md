@@ -87,3 +87,9 @@ The release profile stopped at `lint:tsdoc` after build, ESLint, and cleanup.
 The correction documents the internal record contract and callable, restores
 the protected interface separator, and is ready for final verification without
 rerunning it here.
+
+## Second Release TSDoc Correction
+
+The release profile again found only the interface-opening separator placement.
+Both markers now precede their first member documentation, and the exact
+post-generation formatting/TSDoc sequence passes twice.
