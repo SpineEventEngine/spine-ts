@@ -325,11 +325,11 @@ describe("InterfaceGenerator", () => {
       });
       expect(output.join("")).toContain("interfaces/file-signal.ts");
       expect(output.join("")).toContain("interfaces/message-signal.ts");
-    expect(output.join("")).toContain("export type FileSignal = AuthoredFileSignal");
-    expect(output.join("")).toContain("export type MessageSignal = AuthoredMessageSignal");
-    expect(output.join("")).toContain(
-      "const memberSchemas: readonly [typeof SignalSchema, typeof NestedSchema] = [SignalSchema, NestedSchema];",
-    );
+      expect(output.join("")).toContain("export type FileSignal = AuthoredFileSignal");
+      expect(output.join("")).toContain("export type MessageSignal = AuthoredMessageSignal");
+      expect(output.join("")).toContain(
+        "const memberSchemas: readonly [typeof SignalSchema, typeof NestedSchema] = [SignalSchema, NestedSchema];",
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
