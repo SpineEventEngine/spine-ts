@@ -1,6 +1,6 @@
 # T-0184A: Root Source-View Transaction And Declaration-Safe Interface Tuples
 
-Status: Release-verified, review-clean, integration-ready
+Status: Complete, integrated, tagged, and post-merge verified
 Baseline: `origin/main@aed2f194`
 Branch: `task/T-0184A-root-source-view-transaction`
 Classification: High-risk shared generation and atomic-publication correction
@@ -126,3 +126,10 @@ unchanged.
 passed. API, style, reliability, and documentation review confirmations are
 clean; security remains deferred to T-0186. The task is integration-ready; no
 merge or tag was performed by this implementation owner.
+
+## Integration And Post-Merge Verification
+
+`origin/main` and tag `T-0184A` are at `0bacb0b3`. Post-merge
+`pnpm proto:generate`, `pnpm proto:check-generated:current`, and the focused
+source-view/interface-generator/bootstrap-cli/proto-workflow selection passed:
+4 files and 100 tests. Status and diff were clean. T-0184 resumes next.

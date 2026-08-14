@@ -1,6 +1,6 @@
 # Wave 11: TypeScript Interfaces And Interface-Based Routing
 
-Status: In implementation; T-0180 through T-0183 and T-0184A prerequisite complete, T-0184 resume next
+Status: In implementation; T-0180 through T-0183 and T-0184A prerequisite complete, integrated, tagged, and post-merge verified; T-0184 resume next
 
 ## Purpose
 
@@ -353,8 +353,9 @@ entire root transaction. The generated interface companions also require exact
 declaration-safe readonly tuples. This internal prerequisite creates no public
 CLI/configuration surface and does not modify unpublished To-Do work.
 
-Status: Complete, review-clean, and release-verified at `5e435b20`; resume the
-published T-0184 To-Do proof next. Security remains deferred to T-0186.
+Status: Complete, integrated, tagged, and post-merge verified at `0bacb0b3`
+with tag `T-0184A`; resume the published T-0184 To-Do proof next. Security
+remains deferred to T-0186.
 
 ### T-0179: Generated-source provenance and copyright policy
 

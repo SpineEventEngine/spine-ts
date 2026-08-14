@@ -1,6 +1,6 @@
 # T-0184A Review Log
 
-Status: Review-clean and release-verified
+Status: Complete, integrated, tagged, and post-merge verified
 Baseline: `aed2f194`
 Branch: `task/T-0184A-root-source-view-transaction`
 
@@ -118,3 +118,9 @@ profiles are the durable evidence. Security is deferred to T-0186.
 `verify:release` passed at `5e435b20` with 252 passing files/3 skipped,
 4,026 passing tests/14 skipped, and 90.41% branch coverage. All deterministic
 gates passed. T-0184A is review-clean and integration-ready.
+
+## Integration Closure
+
+Integration advanced `origin/main` and tag `T-0184A` to `0bacb0b3`. The
+post-merge Proto generate/current gates and four focused suites (100 tests)
+passed with a clean status and diff. T-0184 is next.
