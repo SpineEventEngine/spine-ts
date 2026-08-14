@@ -1,8 +1,7 @@
 # Wave 11: TypeScript Interfaces And Interface-Based Routing
 
-Status: In implementation; T-0180 through T-0185 and the T-0184A prerequisite
-complete, integrated, tagged, and post-merge verified; T-0186 final convergence
-in progress
+Status: COMPLETE; T-0180 through T-0186 and the T-0184A prerequisite are
+integrated, tagged, post-merge verified, and remotely synchronized
 
 ## Purpose
 
@@ -644,6 +643,12 @@ generation-ID/commit-point reader behavior, and cleanup of stage, backup, and
 claim resources. A rollback-restoration failure preserves recovery artifacts
 and leaves every reader fail-closed rather than claiming the old generation was
 restored.
+
+Completion: reviewed, final-security CLEAN, release-verified, tagged `T-0186`,
+fast-forward integrated to `origin/main`, and post-merge verified. Final release
+coverage is 94.17% statements, 90.38% branches, 94.07% functions, and 95.22%
+lines; `253` files and `4,109` tests pass. Wave 11 is COMPLETE. Multiple-Gateway
+behavior remains wholly deferred to Wave 12, and Cloud Run remains excluded.
 
 ## Review And Verification Policy
 

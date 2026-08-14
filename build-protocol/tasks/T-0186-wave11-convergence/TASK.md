@@ -1,8 +1,8 @@
 # T-0186: Converge, Release, And Close Wave 11
 
-Status: Release CLEAN; integration-ready
+Status: COMPLETE; integrated, tagged, and post-merge verified
 Start: `2026-08-14 WEST`
-End: Pending
+End: `2026-08-14 WEST`
 Baseline: `f128af42`
 Branch: `task/T-0186-wave11-convergence`
 Worktree: `.worktrees/T-0186-wave11-convergence`
@@ -444,6 +444,19 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
 - Every deterministic gate passed. Residue, diff, and worktree are clean.
   Specialist/security review and release verification are CLEAN; the reviewed
   release commit is integration-ready.
+
+## Integration Closure (2026-08-14)
+
+- Reviewed release commit `6a4e0af7` is tagged `T-0186` and fast-forwarded to
+  `origin/main`; the remote task branch matches it at integration.
+- Post-merge canonical generation/current checks retain all five generation IDs
+  and hashes. Focused post-merge suites pass Core `95/95`, Proto Tools
+  `138/138`, workflow `94/94`, repository routing `244/244`, Todo short
+  `14/14`, black-box `41/41`, and cross-process `7/7`; tooling typecheck,
+  residue, diff, and worktree checks pass.
+- Wave 11 and project completion mirrors are COMPLETE. The primary checkout and
+  human-owned untracked `agentic-review-of-main-branch-14-Aug-2026` content were
+  not touched.
 
 ## Release RED Test-Only Correction (2026-08-14)
 

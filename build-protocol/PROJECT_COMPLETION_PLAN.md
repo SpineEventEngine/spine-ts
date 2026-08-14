@@ -1,9 +1,8 @@
 # Spine TS Project Completion Plan
 
 Status: Initial release, T-0080 authored-API/example quality correction, and
-Waves 9 and 10 complete; Wave 11 T-0180 through T-0185 and T-0184A complete,
-integrated, tagged, and post-merge verified; T-0186 final convergence in
-progress
+Waves 9, 10, and 11 complete, integrated, tagged, post-merge verified, and
+remotely synchronized
 
 Plan date: 2026-07-12
 
@@ -241,8 +240,11 @@ for Command, Event, and state updates. All four are reviewed, release-verified,
 integrated, post-merge verified, tagged, and remotely synchronized. The
 T-0184A root source-view transaction prerequisite and the resumed T-0184 To-Do
 proof and beginner documentation are complete, integrated, post-merge verified,
-and tagged. T-0186 final convergence is next. Multiple-Gateway
-behavior moves wholly to Wave 12. See
+and tagged. T-0186 closed manifest/marker publication, bounded recovery and
+claim trust, package-build convergence, specialist/security review, repository
+coverage, release verification, and post-merge proof. Wave 11 is complete at
+tag `T-0186`; `origin/main` and the preserved task branch are remotely
+synchronized. Multiple-Gateway behavior moves wholly to Wave 12. See
 `build-protocol/DECISION_LOG.md#d-0113-generate-typescript-message-interfaces-and-route-by-their-tokens`.
 
 ## Authored API And Example Quality Correction
