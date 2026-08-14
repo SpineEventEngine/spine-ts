@@ -95,3 +95,13 @@ for Command, Event, and state-update routing. The correction passes 262 focused
 tests, full 95.25% line / 90.44% branch / 94.11% function coverage, and the
 complete `verify:task` preflight. Targeted re-review, release verification,
 integration, tag, and post-merge verification remain pending.
+
+## Targeted API/TSDoc Correction
+
+The confirming TypeScript/API (`gpt-5.6-terra` / high) and documentation/TSDoc
+(`gpt-5.6-luna` / medium) review lanes identified an unbound TypeDoc parameter
+warning. All Command, Event, and state-update `.route(...)` overloads now use
+the shared `schemaOrToken` parameter name named by their TSDoc. TypeDoc and API
+checks, tooling typecheck, 262 focused routing tests, formatting, and diff
+checks pass. Release verification, integration, tag, and post-merge
+verification remain pending.

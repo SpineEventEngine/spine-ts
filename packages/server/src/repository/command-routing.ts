@@ -89,9 +89,12 @@ export class CommandRouting<Id> {
    * @param via Route that calculates the target Entity ID.
    * @returns These mutable route declarations.
    */
-  route<Schema extends MessageSchema>(schema: Schema, via: CommandRoute<Id, Schema>): this;
+  route<Schema extends MessageSchema>(
+    schemaOrToken: Schema,
+    via: CommandRoute<Id, Schema>,
+  ): this;
   route<TInterface extends object, Schemas extends InterfaceRouteSchemas>(
-    token: MessageInterface<TInterface, Schemas>,
+    schemaOrToken: MessageInterface<TInterface, Schemas>,
     via: (message: InterfaceRouteMessage<TInterface, Schemas>, context: CommandContext) => Id,
   ): this;
   route(

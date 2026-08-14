@@ -81,9 +81,12 @@ export class StateUpdateRouting<Id> {
    * @param via Route function to invoke.
    * @returns These mutable declarations.
    */
-  route<Schema extends MessageSchema>(schema: Schema, via: StateUpdateRoute<Id, Schema>): this;
+  route<Schema extends MessageSchema>(
+    schemaOrToken: Schema,
+    via: StateUpdateRoute<Id, Schema>,
+  ): this;
   route<TInterface extends object, Schemas extends InterfaceRouteSchemas>(
-    token: MessageInterface<TInterface, Schemas>,
+    schemaOrToken: MessageInterface<TInterface, Schemas>,
     via: (message: InterfaceRouteMessage<TInterface, Schemas>, context: EventContext) => readonly Id[],
   ): this;
   route(

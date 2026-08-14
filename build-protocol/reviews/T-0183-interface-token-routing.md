@@ -90,3 +90,18 @@ available acceptance evidence.
   `pnpm verify:task -- --no-coverage` preflight with the five focused suites
   pass. The correction is ready for targeted re-review; do not run
   `verify:release` before review convergence.
+
+## Targeted API/TSDoc Correction
+
+- Confirming reviewers: TypeScript/API `gpt-5.6-terra` / high and
+  documentation/TSDoc `gpt-5.6-luna` / medium. Desktop telemetry does not
+  expose independent runtime-model metadata; the immutable configured profiles
+  are recorded as acceptance evidence.
+- Residual P2: one shared TSDoc block used `@param schemaOrToken`, while the
+  overload signatures used `schema` and `token`, producing unbound TypeDoc
+  parameter warnings.
+- Resolution: each overload and implementation now consistently names its first
+  parameter `schemaOrToken`. This changes neither runtime behavior nor the
+  public overload types.
+- Evidence: corrected `pnpm docs:api`, `pnpm docs:api:check`, tooling typecheck,
+  262 focused routing tests, format check, and diff check pass.

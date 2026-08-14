@@ -88,9 +88,9 @@ export class EventRouting<Id> {
    * @param via Route that calculates target Entity IDs.
    * @returns These mutable route declarations.
    */
-  route<Schema extends MessageSchema>(schema: Schema, via: EventRoute<Id, Schema>): this;
+  route<Schema extends MessageSchema>(schemaOrToken: Schema, via: EventRoute<Id, Schema>): this;
   route<TInterface extends object, Schemas extends InterfaceRouteSchemas>(
-    token: MessageInterface<TInterface, Schemas>,
+    schemaOrToken: MessageInterface<TInterface, Schemas>,
     via: (message: InterfaceRouteMessage<TInterface, Schemas>, context: EventContext) => readonly Id[],
   ): this;
   route(
