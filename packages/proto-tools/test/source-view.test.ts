@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -91,6 +91,36 @@ describe("modelSourceView", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it.each(["add", "remove", "rename", "config"])(
+    "detects a live source-view %s mutation after its record is written",
+    (mutation) => {
+      const root = mkdtempSync(join(tmpdir(), "spine-source-view-record-mutation-"));
+      const live = join(root, "live-model");
+      const stage = join(root, "stage-model");
+      try {
+        mkdirSync(join(live, "src"), { recursive: true });
+        mkdirSync(join(live, "generated"), { recursive: true });
+        mkdirSync(join(stage, "generated"), { recursive: true });
+        writeFileSync(join(live, "tsconfig.json"), '{"include":["src/**/*.ts"]}\n');
+        const authored = join(live, "src/authored.ts");
+        writeFileSync(authored, "export interface Authored {}\n");
+        const view = modelSourceView(live, "generated", join(stage, "generated"));
+        writeSourceViewPublicationRecord(stage, view);
+        const record = readSourceViewPublicationRecord(stage, live, join(live, "generated"));
+        if (mutation === "add") writeFileSync(join(live, "src/added.ts"), "export {}\n");
+        if (mutation === "remove") rmSync(authored);
+        if (mutation === "rename") renameSync(authored, join(live, "src/renamed.ts"));
+        if (mutation === "config")
+          writeFileSync(join(live, "tsconfig.json"), '{"include":["src/renamed.ts"]}\n');
+        expect(() => assertSourceViewPublicationRecordCurrent(record)).toThrow(
+          "source view changed",
+        );
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("rejects non-regular TypeScript inputs before hashing", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-source-view-nonregular-"));
