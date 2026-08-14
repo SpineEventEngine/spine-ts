@@ -20,7 +20,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { create } from "@bufbuild/protobuf";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient, type Interceptor } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
@@ -1390,14 +1389,16 @@ function sanitizeRowId(id: string, ipcDirectory: string): string {
 }
 
 function isExpectedTaskList(list: TaskList): boolean {
+  const task = list.tasks[0];
+  if (task === undefined) return false;
   return (
-    list.id?.value === "local-multi-process-task" &&
+    list.id.value === "local-multi-process-task" &&
     list.openTaskCount === 1 &&
     list.tasks.length === 1 &&
-    list.tasks[0]?.id?.value === "local-multi-process-task" &&
-    list.tasks[0]?.taskListId?.value === "local-multi-process-task" &&
-    list.tasks[0].title === "Handled by child process" &&
-    !list.tasks[0].completed
+    task.id.value === "local-multi-process-task" &&
+    task.taskListId.value === "local-multi-process-task" &&
+    task.title === "Handled by child process" &&
+    !task.completed
   );
 }
 

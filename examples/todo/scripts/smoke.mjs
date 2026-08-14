@@ -5,7 +5,6 @@ import { clearTimeout, setTimeout } from "node:timers";
 import { pathToFileURL } from "node:url";
 
 import { create } from "@bufbuild/protobuf";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
@@ -21,7 +20,10 @@ import {
 import { SignalMetadata } from "@spine-event-engine/server";
 
 import { CreateTaskSchema } from "../dist/generated/spine/examples/todo/task_commands_pb.js";
-import { TaskIdSchema } from "../dist/generated/spine/examples/todo/task_id_pb.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../dist/generated/spine/examples/todo/task_id_pb.js";
 import { TaskListSchema } from "../dist/generated/spine/examples/todo/task_list_pb.js";
 import { SmokeTaskLists } from "../dist/src/smoke-task-lists.js";
 
@@ -58,7 +60,7 @@ async function main() {
     }
 
     const taskList = await readTaskListEventually(taskId, actorContext);
-    log(`to-do smoke ok: ${taskList.id} (${taskList.tasks[0]?.title ?? "untitled"})`);
+    log(`to-do smoke ok: ${taskList.id.value} (${taskList.tasks[0]?.title ?? "untitled"})`);
   } finally {
     session.abort();
   }
@@ -75,6 +77,7 @@ function createCommand(id, commandSuffix, context) {
     schema: CreateTaskSchema,
     message: create(CreateTaskSchema, {
       id: create(TaskIdSchema, { value: id }),
+      taskListId: create(TaskListIdSchema, { value: id }),
       title: "Smoke task",
     }),
   });
@@ -95,7 +98,7 @@ async function readTaskListEventually(id, context) {
     attempts += 1;
     lastResponse = response;
     const taskList = SmokeTaskLists.inspectRows(response).taskLists.find(
-      (candidate) => candidate.id === id,
+      (candidate) => candidate.id.value === id,
     );
     if (response.response?.status?.status.case === "ok" && taskList !== undefined) {
       return taskList;
@@ -118,7 +121,7 @@ function createTaskListQuery(id, context, attempt) {
         case: "filters",
         value: create(TargetFiltersSchema, {
           idFilter: {
-            id: [AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id }))],
+            id: [AnyMessages.pack(TaskListIdSchema, create(TaskListIdSchema, { value: id }))],
           },
         }),
       },

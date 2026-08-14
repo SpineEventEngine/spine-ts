@@ -13,7 +13,7 @@
  */
 
 import { create, type MessageShape } from "@bufbuild/protobuf";
-import { Int32ValueSchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
+import { Int32ValueSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { createClient, type Client } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
@@ -80,10 +80,7 @@ import {
   UnassignTaskSchema,
 } from "../generated/spine/examples/todo/task_commands_pb.js";
 import { TaskIdSchema, TaskListIdSchema } from "../generated/spine/examples/todo/task_id_pb.js";
-import {
-  TaskAssigneeSchema,
-  type TaskAssignee,
-} from "../generated/spine/examples/todo/task_assignee_pb.js";
+import { TaskAssigneeSchema } from "../generated/spine/examples/todo/task_assignee_pb.js";
 import { TaskListSchema, type TaskList } from "../generated/spine/examples/todo/task_list_pb.js";
 import { TaskAlreadyDoneSchema } from "../generated/spine/examples/todo/task_rejections_pb.js";
 import { TaskCreatedSchema } from "../generated/spine/examples/todo/task_events_pb.js";
@@ -654,20 +651,25 @@ describe("@spine-event-engine/example-todo", () => {
   });
 
   it("replays a persisted projection Inbox target without rerouting after restart", async () => {
-    const todo = await import("../dist/src/index.js");
-    const { TaskEvent } = await import("../dist/generated/interfaces/task-event.js");
+    const todo: TodoModule = await import("../dist/src/index.js");
+    const { TaskEvent }: typeof import("../dist/generated/interfaces/task-event.js") =
+      await import("../dist/generated/interfaces/task-event.js");
     const storageBackend = new InMemoryStorageBackend();
     const firstRoute = vi.fn(
       (event: { readonly taskListId?: MessageShape<typeof TaskListIdSchema> }) =>
         event.taskListId === undefined ? [] : [event.taskListId],
     );
     const firstStorage = new InMemoryStorageFactory(storageBackend);
+    const firstRouting = EventRouting.create<TaskListId>();
+    firstRouting.route(TaskEvent, firstRoute);
     const first = await BoundedContext.singleTenant("Tasks")
       .withStorageFactory(firstStorage)
       .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
       .add(todo.TaskAggregate)
       .add(todo.TaskListProjection, {
-        eventRouting: EventRouting.create<TaskListId>().route(TaskEvent, firstRoute),
+        // Generated interface tokens cross the dynamic compiled-example boundary.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        eventRouting: firstRouting,
       })
       .buildAsync();
     const listId = create(TaskListIdSchema, { value: "task-inbox-replay" });
@@ -731,12 +733,16 @@ describe("@spine-event-engine/example-todo", () => {
     const replayRoute = vi.fn(() => {
       throw new Error("durable Inbox replay must not reroute");
     });
+    const replayRouting = EventRouting.create<TaskListId>();
+    replayRouting.route(TaskEvent, replayRoute);
     const replay = await BoundedContext.singleTenant("Tasks")
       .withStorageFactory(new InMemoryStorageFactory(storageBackend))
       .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
       .add(todo.TaskAggregate)
       .add(todo.TaskListProjection, {
-        eventRouting: EventRouting.create<TaskListId>().route(TaskEvent, replayRoute),
+        // Generated interface tokens cross the dynamic compiled-example boundary.
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        eventRouting: replayRouting,
       })
       .buildAsync();
     const replayFixture = await createTodoBlackBox(replay);
@@ -2229,7 +2235,7 @@ function decodedTaskLists(rows: TaskListRows): readonly TaskListView[] {
 }
 
 function readList(rows: TaskListRows, taskId: string) {
-  return decodedTaskLists(rows).find((list) => list.id?.value === taskId);
+  return decodedTaskLists(rows).find((list) => list.id.value === taskId);
 }
 
 function readTask(rows: TaskListRows, taskId: string): TaskView | undefined {
@@ -2264,8 +2270,9 @@ function taskListSnapshot(rows: TaskListRows, taskId: string) {
   const list = readList(rows, taskId);
 
   return {
-    id: list?.id?.value,
-    openTaskCount: list?.openTaskCount,
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    id: list === undefined ? undefined : list.id.value,
+    openTaskCount: list === undefined ? undefined : list.openTaskCount,
     tasks:
       list?.tasks.map((task) => ({
         id: task.id?.value,
