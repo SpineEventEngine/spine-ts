@@ -1,8 +1,8 @@
 # T-0182: Authored Interface Discovery And Conformance
 
-Status: Release verified; integration pending
+Status: Complete, integrated, and post-merge verified
 Start: `2026-08-14 01:01 WEST`
-End: Pending
+End: `2026-08-14 03:52 WEST`
 Baseline commit: `8f987ae8`
 Task log path: `build-protocol/tasks/T-0182-interface-discovery/TASK.md`
 Branch: `task/T-0182-interface-discovery`
@@ -13,7 +13,7 @@ performance/reliability, and documentation reviewers; explicit configured
 profiles recorded below
 Implementation commits: correction convergence through `5127f3f3`
 Final implementation HEAD: `5127f3f3`
-Release closure HEAD: Pending this record commit
+Release closure HEAD: `22541522`
 
 Latest checkpoint: the accepted specialist batch and its targeted-review
 residuals are corrected. Named exports, tsconfig-owned discovery roots, the
@@ -212,7 +212,9 @@ T-0185 reader documentation, and Wave 12 behavior.
 
 ## Integration Result
 
-Not integrated. `pnpm verify:release` passes 251 test files with 3 skipped and
+Integrated by fast-forward at `22541522`; tag `T-0182` points to that
+release-verified commit. `pnpm verify:release` passes 251 test files with 3 skipped and
 4,000 tests with 14 skipped. Repository coverage is 94.25% statements, 90.43%
-branches, 94.18% functions, and 95.27% lines. Merge, tag, and post-merge
-verification remain orchestrator-owned.
+branches, 94.18% functions, and 95.27% lines. Post-merge Proto generation,
+generated-current checks, and the exact five focused suites pass 208/208 tests
+on the identical integrated tree.
