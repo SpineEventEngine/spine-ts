@@ -133,13 +133,59 @@ export interface MessageInterface<TInterface extends object, Schemas extends Int
   readonly [MESSAGE_INTERFACE_BRAND]: TInterface;
 }
 
+function dataProperty(value: object, name: string): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(value, name);
+  return descriptor !== undefined && "value" in descriptor ? descriptor.value : undefined;
+}
+
+function descriptorTreeIncludes(roots: readonly unknown[], target: object): boolean {
+  const pending = [...roots];
+  const visited = new Set<object>();
+  let entries = 0;
+  while (pending.length > 0) {
+    if (pending.length > 1_000 || entries > 10_000) return false;
+    const value = pending.pop();
+    entries += 1;
+    if (value === target) return true;
+    if (typeof value !== "object" || value === null || visited.has(value)) continue;
+    visited.add(value);
+    const nested = dataProperty(value, "nestedMessages");
+    if (nested === undefined) continue;
+    if (!Array.isArray(nested)) return false;
+    pending.push(...nested);
+  }
+  return false;
+}
+
 function isMessageSchema(value: unknown): value is MessageSchema {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "kind" in value &&
-    (value as { readonly kind?: unknown }).kind === "message"
-  );
+  try {
+    if (typeof value !== "object" || value === null) return false;
+    const schema = value as object;
+    const file = dataProperty(schema, "file");
+    const proto = dataProperty(schema, "proto");
+    if (
+      dataProperty(schema, "kind") !== "message" ||
+      typeof dataProperty(schema, "typeName") !== "string" ||
+      typeof proto !== "object" ||
+      proto === null ||
+      dataProperty(proto, "$typeName") !== "google.protobuf.DescriptorProto" ||
+      typeof file !== "object" ||
+      file === null ||
+      dataProperty(file, "kind") !== "file"
+    )
+      return false;
+    const fileProto = dataProperty(file, "proto");
+    const messages = dataProperty(file, "messages");
+    return (
+      typeof fileProto === "object" &&
+      fileProto !== null &&
+      dataProperty(fileProto, "$typeName") === "google.protobuf.FileDescriptorProto" &&
+      Array.isArray(messages) &&
+      descriptorTreeIncludes(messages, schema)
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**

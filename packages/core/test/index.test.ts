@@ -90,6 +90,51 @@ describe("MessageInterfaces", () => {
     expect(token.schemas).toEqual([CommandSchema, EventSchema]);
   });
 
+  it("rejects forged descriptor-shaped runtime membership before token registration", () => {
+    const forged = [
+      { kind: "message" },
+      {
+        kind: "message",
+        typeName: "example.Forged",
+        file: { kind: "file", messages: [] },
+      },
+      (() => {
+        const descriptor = {
+          kind: "message",
+          typeName: "example.Forged",
+          file: { kind: "file", messages: [] as unknown[] },
+          proto: { $typeName: "google.protobuf.DescriptorProto" },
+        };
+        descriptor.file.messages.push(descriptor);
+        return descriptor;
+      })(),
+      new Proxy(
+        {
+          kind: "message",
+          typeName: "example.Proxy",
+          file: { kind: "file", messages: [] },
+        },
+        {
+          get() {
+            throw new Error("forged getter");
+          },
+        },
+      ),
+      Object.create(null, {
+        kind: { value: "message" },
+        typeName: { get: () => "example.Accessor" },
+        file: { value: { kind: "file", messages: [] } },
+      }),
+    ];
+
+    for (const schema of forged) {
+      expect(() => MessageInterfaces.define([schema] as never)).toThrow(TypeError);
+      expect(() => MessageInterfaces.define([schema] as never)).toThrow(
+        "A message interface requires generated message schemas.",
+      );
+    }
+  });
+
   it("enforces non-empty compatible schema tuples at compile time", () => {
     const compatible = MessageInterfaces.define<SignalMessage, readonly [typeof CommandSchema]>([
       CommandSchema,
