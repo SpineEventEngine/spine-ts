@@ -376,3 +376,33 @@ Final security and release verification remain pending.
   adds no network, authentication, authorization, or tenant boundary. Desktop
   exposes no independent runtime telemetry; the configured role/profile and
   no visible mismatch are the acceptance evidence.
+
+## Final Security Review Findings (2026-08-14)
+
+Final security verdict: BLOCK. The existing `security_reviewer` used explicit
+`gpt-5.6-terra` / high configuration; Desktop exposes no independent runtime
+telemetry, and no visible profile mismatch was reported.
+
+1. **P1 claim protocol:** direct and workflow writer admission classify claim
+   paths, then read them by path; release likewise reads/inspects/unlinks across
+   mutable path operations. A symlink/FIFO replacement can escape or block the
+   bounded protocol. Use no-follow/nonblocking descriptor validation and an
+   ownership-safe release protocol with race regressions.
+2. **P1 generated trees:** staged traversal rejects symlinks but permits other
+   non-regular entries which can then be renamed live. Direct and workflow
+   boundaries must reject every entry that is neither a regular file nor a
+   directory, with FIFO/socket coverage and prior-tree preservation.
+3. **P1 marker trust:** strict manifest readers open the coherent-commit marker
+   by path without no-follow/regular-file validation. Require a contained,
+   non-symlink regular marker and cover crafted/replaced marker paths.
+4. **P2 schema resources:** `descriptorTreeIncludes()` spreads an
+   attacker-controlled roots array before applying its bounds. Traverse bounded
+   indexed own data properties without invoking arbitrary iterators or making
+   an unbounded copy; cover huge/custom-iterator/proxy inputs.
+
+The four findings are accepted as one correction batch for the existing
+implementer, explicitly configured `gpt-5.6-terra` / medium. Reader-side claim
+bounds/descriptors, v2 semantic mismatch rejection, journal allowlists and
+retained evidence, network/auth/tenant scope, logging, dependencies, and
+generated registry loading outside the marker gap are CLEAN. Security re-review
+will cover only these four corrected trust boundaries.
