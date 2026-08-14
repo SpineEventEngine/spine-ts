@@ -27,7 +27,11 @@ whose `spine-proto.json` it should read:
 
 The package also exposes `manifestFormatVersion`, `ProtoConfig`, and
 `ProtoManifest` for build tooling that needs to read or validate the same
-version-one contracts. Generator, filesystem, parser, and handler-discovery
+configuration and manifest contracts. Model configuration is format version 1;
+generated manifests are format version 2 and carry a nonempty opaque
+`generationId`. Each generated root has the matching internal generation
+marker. Readers reject missing, malformed, or mismatched IDs rather than using
+a version-one fallback. Generator, filesystem, parser, and handler-discovery
 implementation modules are not public APIs.
 
 ## Model configuration and package layout
@@ -40,8 +44,10 @@ compiled generated output, canonical `proto` sources, `spine-proto.json`, and
 `spine-proto-manifest.json` with matching exports.
 
 `generate` produces a deterministic manifest containing package identity and
-version, sorted Proto files in the package, generated exports, direct dependencies, and
-the module export. A model with a top-level `*rejections.proto` also gets a
+version, sorted Proto files in the package, generated exports, direct
+dependencies, the module export, and a generation ID. Byte-identical staged
+output reuses its committed ID; changed output receives a new opaque ID. A model
+with a top-level `*rejections.proto` also gets a
 typed same-directory rejection companion. When such a companion is produced,
 the model must directly depend on `@spine-event-engine/core`.
 
@@ -67,5 +73,8 @@ symlink ancestors. Generation rejects invalid configuration, unowned or
 undeclared imports, absent manifest/proto exports, graph cycles, duplicate fully
 qualified generated messages, and missing required dependencies. It stages
 output and manifest replacement: validation or Buf failure preserves the prior
-output and manifest. The CLI does not start services and is not a runtime server
-dependency.
+output and manifest. It installs generated trees and their markers before
+publishing manifests, so the manifest is the commit point. If rollback cannot
+restore prior state, journal-owned recovery evidence is retained and readers
+fail closed until a later recovery succeeds. The CLI does not start services
+and is not a runtime server dependency.

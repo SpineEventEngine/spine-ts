@@ -212,9 +212,11 @@ Entity's Inbox. Local intake can then directly drain the persisted work in the
 current request path. With an attached `ServerEnvironment`, delivery workers
 replay admitted Inbox work through the same path. In shared remote delivery,
 every matching node may attempt a shard, while one active lease owner performs
-one bounded drain; later drains can have a different lease owner. Events and
-later Process Manager commands use the same path. See [REFERENCE.md](REFERENCE.md)
-for operational delivery details.
+one bounded drain page; later drains can have a different lease owner. A page
+bound does not cap all pending work: the owner may take later pages until the
+delivery policy releases the shard. Events and later Process Manager commands
+use the same path. See [REFERENCE.md](REFERENCE.md) for operational delivery
+details.
 
 Domain-event subscriptions observe exposed domain events on the domain
 `EventBus`. Entity subscriptions observe committed `EntityStateChanged`

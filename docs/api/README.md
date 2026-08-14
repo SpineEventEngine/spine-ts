@@ -272,8 +272,14 @@ effects and the delivered-row compare-and-set are not one transaction, so a
 lost acknowledgement can redeliver after restart and downstream handling must
 be idempotent. `DeliveryMonitor` is the explicit failure-policy seam: by
 default it marks a failed reception delivered and continues independent targets;
-an application can instead choose the immediate repeat action. The framework
-persists no attempts, quarantine, receipts, markers, timers, backoff,
+an application can instead choose the immediate repeat action.
+
+Each delivery drain is bounded to one page, not to a total backlog: an active
+lease owner can take later pages while its policy retains the shard. The
+30-second Inbox deduplication window controls duplicate admission only. It is
+not a replay-retention period; accepted rows follow their Inbox lifecycle and
+may be replayed after the duplicate window has elapsed.
+The framework persists no attempts, quarantine, receipts, markers, timers, backoff,
 dead-letter storage, or scheduler policy.
 Process-manager
 repositories with authentic generated metadata do execute through the local

@@ -89,3 +89,19 @@ forged tokens; reliability P1 commit point and recovery evidence plus P2
 bounds/idempotency; style P2 long lines/stale log; documentation P1
 commit-point/total-drain and P2 dedup/replay wording. No reviewer is dispatched
 by this fix pass.
+
+## Correction Evidence (2026-08-14)
+
+- API P1 forged descriptor validation is covered by the focused core suite.
+- Reliability P1/P2 coverage includes v2 manifest/marker reader rejection,
+  manifest-last publication, retained recovery evidence, aggregate recovery
+  failures, and bounded tree/declaration inventories. The live graph and
+  compose fixtures now publish valid v2 dependency manifests and matching
+  markers, so operational readers are exercised through `ProtoManifest.read`.
+- Documentation/style corrections state the manifest commit point and retained
+  rollback evidence without determinism overclaim; distinguish a bounded drain
+  page from total backlog processing; and distinguish 30-second duplicate
+  admission from replay retention. The duplicate stale `Next` entry was
+  removed.
+- No reviewer has been dispatched. Configured reviewer profiles and the desktop
+  runtime-telemetry limitation above remain the available immutable evidence.

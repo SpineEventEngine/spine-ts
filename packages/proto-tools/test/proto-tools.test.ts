@@ -132,16 +132,27 @@ function installModel(
     name,
     version: "1.2.3",
     dependencies: Object.fromEntries(dependencies.map((dependency) => [dependency, "^1.2.3"])),
-    exports: { "./spine-proto-manifest.json": "./spine-proto-manifest.json" },
+    exports: {
+      "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+      "./generated/*.js": {
+        types: "./dist/generated/*.d.ts",
+        default: "./dist/generated/*.js",
+      },
+    },
   });
+  writeJson(directory, "spine-proto.json", modelConfig(name, dependencies));
   writeJson(directory, "spine-proto-manifest.json", {
-    formatVersion: 1,
+    formatVersion: 2,
+    generationId: "fixture-generation",
     packageName: name,
     packageVersion: "1.2.3",
     protoFiles: [protoFile],
     generatedExports: { [protoFile]: `generated/${protoFile.replace(/\.proto$/, "_pb.js")}` },
     dependencies,
     moduleExport: "modelProtoModule",
+  });
+  writeJson(directory, "src/generated/.spine-proto-generation.json", {
+    generationId: "fixture-generation",
   });
   return directory;
 }
@@ -734,6 +745,14 @@ describe("spine proto model tooling", () => {
       exports: {
         "./spine-proto-manifest.json": "./spine-proto-manifest.json",
         "./proto/users/v1/user.proto": "./proto/users/v1/user.proto",
+        "./generated/*.js": {
+          types: "./dist/generated/*.d.ts",
+          default: "./dist/generated/*.js",
+        },
+        "./generated/*.js": {
+          types: "./dist/generated/*.d.ts",
+          default: "./dist/generated/*.js",
+        },
       },
     });
     writeJson(chat, "package.json", {
@@ -777,10 +796,15 @@ describe("spine proto model tooling", () => {
       exports: {
         "./spine-proto-manifest.json": "./spine-proto-manifest.json",
         "./proto/users/v1/user.proto": "./proto/users/v1/user.proto",
+        "./generated/*.js": {
+          types: "./dist/generated/*.d.ts",
+          default: "./dist/generated/*.js",
+        },
       },
     });
     writeJson(users, "spine-proto-manifest.json", {
-      formatVersion: 1,
+      formatVersion: 2,
+      generationId: "fixture-generation",
       packageName: "@example/users-model",
       packageVersion: "1.2.3",
       protoFiles: ["users/v1/user.proto"],
@@ -833,7 +857,8 @@ describe("spine proto model tooling", () => {
       },
     });
     writeJson(users, "spine-proto-manifest.json", {
-      formatVersion: 1,
+      formatVersion: 2,
+      generationId: "fixture-generation",
       packageName: "@example/users-model",
       packageVersion: "1.2.3",
       protoFiles: ["users/v1/user.proto"],
@@ -1839,7 +1864,8 @@ describe("spine proto model tooling", () => {
     });
     const users = installModel(application, "@example/users-model");
     writeJson(users, "spine-proto-manifest.json", {
-      formatVersion: 1,
+      formatVersion: 2,
+      generationId: "fixture-generation",
       packageName: "@example/users-model",
       packageVersion: "1.2.3",
       protoFiles: ["user.proto"],
@@ -2312,12 +2338,13 @@ describe("spine proto model tooling", () => {
       "spine-proto: @example/shared-model: package @example/shared-model resolves to multiple installed roots",
     );
   });
-  it("creates a deterministic version-one manifest for a model package", () => {
+  it("creates a deterministic version-two manifest for a model package", () => {
     const directory = packageDirectory("@example/users-model");
     writeJson(directory, "spine-proto.json", modelConfig("@example/users-model"));
 
     expect(createManifest(directory, ["users/v1/user.proto", "users/v1/id.proto"])).toEqual({
-      formatVersion: 1,
+      formatVersion: 2,
+      generationId: expect.any(String),
       packageName: "@example/users-model",
       packageVersion: "1.2.3",
       protoFiles: ["users/v1/id.proto", "users/v1/user.proto"],

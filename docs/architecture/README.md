@@ -70,7 +70,9 @@ flowchart LR
 An `@Assign` command to an Aggregate or Process Manager is persisted in its
 Entity Inbox before delivery. Every server node can attempt a shared delivery
 shard, while one active lease owner performs one bounded drain; a later drain
-can have a different owner. Process Manager delivery uses the same mechanism.
+can have a different owner. The bound applies to one drain page, not the total
+pending workload: the active owner can take later pages while its policy keeps
+the shard. Process Manager delivery uses the same mechanism.
 Domain events stay on the domain EventBus and in the domain EventStore.
 `EntityStateChanged` is a System Context event: it never enters either domain
 facility. System-event persistence is optional and uses separate system storage
@@ -748,6 +750,10 @@ process-manager state type URL, and the routed process-manager ID target, then
 replays that exact row. Process-manager replay validates the row label, pending
 `TO_DELIVER` status, tenant context, payload/schema, target type URL, and routed
 target ID before handler code.
+
+Inbox duplicate admission is limited by its 30-second deduplication window.
+That window is not replay retention: accepted rows remain subject to their
+Inbox delivery lifecycle and can be replayed after the duplicate window ends.
 Bounded contexts create internal system-pairing metadata and a tenant index.
 Single-tenant indexes are constant and reject tenant recording. Multitenant
 indexes are catalog views: MySQL enumerates configured tenant/database entries,

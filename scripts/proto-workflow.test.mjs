@@ -114,6 +114,19 @@ describe("generated TypeScript traversal bounds", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("accepts generated output at the bounded entry inventory limit", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-workflow-entry-limit-"));
+    try {
+      for (let entry = 0; entry < 1_000; entry += 1)
+        writeFileSync(join(root, `file-${entry}.txt`), "x");
+      expect(() =>
+        normalizeGeneratedTypeScriptTree(root, ["spine/example/task.proto"]),
+      ).not.toThrow();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 function workflowClaimOperations(claims, liveness) {
