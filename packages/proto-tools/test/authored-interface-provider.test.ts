@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -134,10 +134,8 @@ describe("AuthoredInterfaceProvider", () => {
     try {
       mkdirSync(join(stagedGeneratedRoot, "example"), { recursive: true });
       mkdirSync(join(root, "src"), { recursive: true });
-      writeFileSync(
-        join(root, "tsconfig.json"),
-        JSON.stringify({ compilerOptions: { strict: true } }),
-      );
+      writeFileSync(join(root, "tsconfig.json"), JSON.stringify({ extends: "./base.json" }));
+      writeFileSync(join(root, "base.json"), JSON.stringify({ compilerOptions: { strict: true } }));
       writeFileSync(
         join(stagedGeneratedRoot, "example/signals_pb.ts"),
         "export type Signal = {};\n",
@@ -167,10 +165,8 @@ describe("AuthoredInterfaceProvider", () => {
     try {
       mkdirSync(join(liveGeneratedRoot, "example"), { recursive: true });
       mkdirSync(join(stagedGeneratedRoot, "example"), { recursive: true });
-      writeFileSync(
-        join(root, "tsconfig.json"),
-        JSON.stringify({ compilerOptions: { strict: true } }),
-      );
+      writeFileSync(join(root, "tsconfig.json"), JSON.stringify({ extends: "./base.json" }));
+      writeFileSync(join(root, "base.json"), JSON.stringify({ compilerOptions: { strict: true } }));
       writeFileSync(generated, "export interface SignalFamily {}\n");
       writeFileSync(
         join(stagedGeneratedRoot, "example/signals_pb.ts"),
@@ -248,10 +244,8 @@ describe("AuthoredInterfaceProvider", () => {
     try {
       mkdirSync(join(stagedGeneratedRoot, "example"), { recursive: true });
       mkdirSync(join(root, "src"), { recursive: true });
-      writeFileSync(
-        join(root, "tsconfig.json"),
-        JSON.stringify({ compilerOptions: { strict: true } }),
-      );
+      writeFileSync(join(root, "tsconfig.json"), JSON.stringify({ extends: "./base.json" }));
+      writeFileSync(join(root, "base.json"), JSON.stringify({ compilerOptions: { strict: true } }));
       writeFileSync(
         join(stagedGeneratedRoot, "example/signals_pb.ts"),
         "export type Signal = { readonly text: string };\n",
@@ -262,8 +256,18 @@ describe("AuthoredInterfaceProvider", () => {
       );
       const provider = new AuthoredInterfaceProvider();
       expect(provider.resolve("First", [member], sourceView)).toBeDefined();
+      const renamed = join(root, "src/interfaces-renamed.ts");
+      renameSync(authored, renamed);
       writeFileSync(
-        authored,
+        join(root, "src/added.ts"),
+        "export interface Added { readonly missing: string }\n",
+      );
+      writeFileSync(
+        join(root, "base.json"),
+        JSON.stringify({ compilerOptions: { strict: false } }),
+      );
+      writeFileSync(
+        renamed,
         "export interface First { readonly text: string }\nexport interface Second { readonly missing: string }\n",
       );
       expect(provider.resolve("Second", [member], sourceView)).toBeDefined();

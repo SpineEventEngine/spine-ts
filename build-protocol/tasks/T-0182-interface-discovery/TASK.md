@@ -15,6 +15,10 @@ Final branch HEAD: Pending
 Latest checkpoint: parent/compiler diagnostic matrix GREEN; transaction and
 repeat-generation convergence remains pending.
 
+Analysis-snapshot race behavior is GREEN (source mutation/add/rename and
+recursive-tsconfig mutation after Program capture); real transaction/repeat
+workflow proof remains pending.
+
 Task classification: High-risk
 Classification reason: compiler-program discovery and conformance governs
 generated public interfaces, staged publication rollback, and realpath-local

@@ -50,7 +50,6 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     if (sourceView === undefined) return undefined;
     if (sourceView.authoredFiles.some((file) => file.split(/[\\/]/u).includes("dist")))
       throw new Error("spine-proto: authored interface discovery source path escapes model module");
-    this.assertSourceView(sourceView);
     const program = this.program(sourceView);
     const declaration = this.declaration(program, sourceView, name);
     const checker = program.getTypeChecker();
@@ -72,6 +71,7 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
   private program(sourceView: ModelSourceView): ts.Program {
     const cached = this.programs.get(sourceView);
     if (cached !== undefined) return cached;
+    this.assertSourceView(sourceView);
     const configFile = join(sourceView.packageRoot, "tsconfig.json");
     if (!existsSync(configFile))
       throw new Error("spine-proto: authored interface discovery requires tsconfig.json");
