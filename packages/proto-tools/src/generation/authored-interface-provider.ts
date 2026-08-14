@@ -30,6 +30,10 @@ import type { ModelSourceView } from "./source-view.js";
 export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
   // prettier-ignore
 
+  private readonly programs = new WeakMap<ModelSourceView, ts.Program>();
+
+  // prettier-ignore
+
   /**
    * Resolves one compatible authored interface from the staged model Program.
    *
@@ -64,6 +68,8 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
   }
 
   private program(sourceView: ModelSourceView): ts.Program {
+    const cached = this.programs.get(sourceView);
+    if (cached !== undefined) return cached;
     const configFile = join(sourceView.packageRoot, "tsconfig.json");
     if (!existsSync(configFile))
       throw new Error("spine-proto: authored interface discovery requires tsconfig.json");
@@ -79,10 +85,12 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     );
     if (parsed.errors.length > 0)
       throw new Error("spine-proto: authored interface discovery has invalid tsconfig.json");
-    return ts.createProgram({
+    const program = ts.createProgram({
       options: parsed.options,
       rootNames: [...sourceView.authoredFiles, ...this.stagedFiles(sourceView.stagedGeneratedRoot)],
     });
+    this.programs.set(sourceView, program);
+    return program;
   }
 
   private stagedFiles(root: string): readonly string[] {

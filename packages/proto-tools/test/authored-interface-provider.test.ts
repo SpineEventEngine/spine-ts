@@ -228,4 +228,47 @@ describe("AuthoredInterfaceProvider", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("uses one source snapshot when authored sources change during an interface phase", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-snapshot-"));
+    const stagedGeneratedRoot = join(root, ".generated.stage-1/output");
+    const liveGeneratedRoot = join(root, "src/generated");
+    const authored = join(root, "src/interfaces.ts");
+    const sourceView = {
+      authoredFiles: [authored],
+      liveGeneratedRoot,
+      packageRoot: root,
+      stagedGeneratedRoot,
+    };
+    const member = {
+      file: { proto: { name: "example/signals.proto", package: "example" } },
+      name: "Signal",
+      typeName: "example.Signal",
+    } as DescMessage;
+    try {
+      mkdirSync(join(stagedGeneratedRoot, "example"), { recursive: true });
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(
+        join(root, "tsconfig.json"),
+        JSON.stringify({ compilerOptions: { strict: true } }),
+      );
+      writeFileSync(
+        join(stagedGeneratedRoot, "example/signals_pb.ts"),
+        "export type Signal = { readonly text: string };\n",
+      );
+      writeFileSync(
+        authored,
+        "export interface First { readonly text: string }\nexport interface Second { readonly text: string }\n",
+      );
+      const provider = new AuthoredInterfaceProvider();
+      expect(provider.resolve("First", [member], sourceView)).toBeDefined();
+      writeFileSync(
+        authored,
+        "export interface First { readonly text: string }\nexport interface Second { readonly missing: string }\n",
+      );
+      expect(provider.resolve("Second", [member], sourceView)).toBeDefined();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
