@@ -26,7 +26,7 @@ message TaskAssignee {
   option (entity).kind = PROJECTION;
   option (entity).visibility = FULL;
 
-  // Identifies the assignee.
+  // Identifies the user whose assigned tasks this record lists.
   spine.core.UserId id = 1 [(required) = true, (validate) = true, (set_once) = true];
 
   // Stores the identifiers of tasks currently assigned to the user.

@@ -22,6 +22,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { TaskListSchema } from "../generated/spine/examples/todo/task_list_pb.js";
+import { TaskListIdSchema } from "../generated/spine/examples/todo/task_id_pb.js";
 import { SmokeTaskLists } from "../src/smoke-task-lists.js";
 
 describe("to-do smoke row inspection", () => {
@@ -43,14 +44,19 @@ describe("to-do smoke row inspection", () => {
           }),
         }),
         create(EntityStateWithVersionSchema, {
-          state: AnyMessages.pack(TaskListSchema, create(TaskListSchema, { id: targetId })),
+          state: AnyMessages.pack(
+            TaskListSchema,
+            create(TaskListSchema, { id: create(TaskListIdSchema, { value: targetId }) }),
+          ),
         }),
       ],
     });
 
     const inspected = SmokeTaskLists.inspectRows(response);
 
-    expect(inspected.taskLists).toEqual([create(TaskListSchema, { id: targetId })]);
+    expect(inspected.taskLists).toEqual([
+      create(TaskListSchema, { id: create(TaskListIdSchema, { value: targetId }) }),
+    ]);
     expect(inspected.diagnostics).toEqual(["target row", "<3 unavailable rows>"]);
   });
 
@@ -60,7 +66,9 @@ describe("to-do smoke row inspection", () => {
         create(EntityStateWithVersionSchema, {
           state: AnyMessages.pack(
             TaskListSchema,
-            create(TaskListSchema, { id: `oversized-${String(index)}` }),
+            create(TaskListSchema, {
+              id: create(TaskListIdSchema, { value: `oversized-${String(index)}` }),
+            }),
           ),
         }),
       ),
@@ -69,7 +77,7 @@ describe("to-do smoke row inspection", () => {
     const inspected = SmokeTaskLists.inspectRows(response);
 
     expect(inspected.taskLists).toHaveLength(16);
-    expect(inspected.taskLists.map((taskList) => taskList.id)).toEqual(
+    expect(inspected.taskLists.map((taskList) => taskList.id?.value)).toEqual(
       Array.from({ length: 16 }, (_, index) => `oversized-${String(index)}`),
     );
     expect(inspected.diagnostics).toEqual([

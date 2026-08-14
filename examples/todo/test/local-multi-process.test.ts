@@ -42,6 +42,7 @@ import { describe, expect, it, vi } from "vitest";
 import { CreateTaskSchema } from "../generated/spine/examples/todo/task_commands_pb.js";
 import { TaskIdSchema } from "../generated/spine/examples/todo/task_id_pb.js";
 import { TaskListSchema, type TaskList } from "../generated/spine/examples/todo/task_list_pb.js";
+import { TaskListIdSchema } from "../generated/spine/examples/todo/task_id_pb.js";
 
 const requestTimeoutMs = 2_000;
 const receiveTimeoutMs = 100;
@@ -258,7 +259,7 @@ describe("local multi-process to-do mode", () => {
         await fixture.requestCreateTask();
         expect(await fixture.readTaskListEventually()).toEqual(
           create(TaskListSchema, {
-            id: "local-multi-process-task",
+            id: create(TaskListIdSchema, { value: "local-multi-process-task" }),
             tasks: [
               {
                 id: create(TaskIdSchema, { value: "local-multi-process-task" }),
@@ -1299,14 +1300,18 @@ function controlledDiagnosticQueryResponse(): QueryResponse {
         state: AnyMessages.pack(
           TaskListSchema,
           create(TaskListSchema, {
-            id: `unsafe\nrow\t${"x".repeat(maxDiagnosticLength)}`,
+            id: create(TaskListIdSchema, {
+              value: `unsafe\nrow\t${"x".repeat(maxDiagnosticLength)}`,
+            }),
           }),
         ),
       },
       ...Array.from({ length: maxDiagnosticRowIds + 1 }, (_, index) => ({
         state: AnyMessages.pack(
           TaskListSchema,
-          create(TaskListSchema, { id: `extra-row-${String(index)}` }),
+          create(TaskListSchema, {
+            id: create(TaskListIdSchema, { value: `extra-row-${String(index)}` }),
+          }),
         ),
       })),
     ],
@@ -1351,7 +1356,7 @@ function findTaskList(response: QueryResponse, id: string): TaskList | undefined
       continue;
     }
     const list = AnyMessages.unpack(message.state, TaskListSchema);
-    if (list?.id === id) {
+    if (list?.id?.value === id) {
       return list;
     }
   }
@@ -1364,7 +1369,7 @@ function summarizeRowIds(response: QueryResponse, ipcDirectory: string): string 
     if (message.state === undefined) {
       return "<unreadable>";
     }
-    const id = AnyMessages.unpack(message.state, TaskListSchema)?.id;
+    const id = AnyMessages.unpack(message.state, TaskListSchema)?.id?.value;
     return id === undefined ? "<unreadable>" : sanitizeRowId(id, ipcDirectory);
   });
   const omittedRows = response.message.length - inspectedRows.length;

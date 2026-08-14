@@ -76,7 +76,7 @@ export const SmokeTaskLists = {
 
     const diagnostics = taskLists
       .slice(0, maxDiagnosticRows)
-      .map((taskList) => this.sanitizeValue(taskList.id));
+      .map((taskList) => this.sanitizeValue(taskList.id?.value));
     const omittedDiagnosticRows = Math.max(0, taskLists.length - maxDiagnosticRows);
     if (unavailableRows > 0) {
       diagnostics.push(`<${String(unavailableRows)} unavailable rows>`);

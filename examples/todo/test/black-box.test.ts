@@ -60,12 +60,15 @@ import { BuildHandlerAnalyzer } from "../../../packages/server/src/handler/build
 import { GeneratedRegistryWriter } from "../../../packages/server/src/handler/generated-registry-writer.js";
 import { generatedSource } from "../../../packages/proto-tools/src/generation/generated-source-policy.js";
 import {
+  AssignTaskSchema,
   CompleteTaskSchema,
   CreateTaskSchema,
+  ReassignTaskSchema,
   RenameTaskSchema,
   ReopenTaskSchema,
+  UnassignTaskSchema,
 } from "../generated/spine/examples/todo/task_commands_pb.js";
-import { TaskIdSchema } from "../generated/spine/examples/todo/task_id_pb.js";
+import { TaskIdSchema, TaskListIdSchema } from "../generated/spine/examples/todo/task_id_pb.js";
 import { TaskListSchema, type TaskList } from "../generated/spine/examples/todo/task_list_pb.js";
 import { TaskAlreadyDoneSchema } from "../generated/spine/examples/todo/task_rejections_pb.js";
 import { TaskSchema, type Task } from "../generated/spine/examples/todo/tasks_pb.js";
@@ -122,11 +125,14 @@ describe("@spine-event-engine/example-todo", () => {
         TypeUrls.derive(RenameTaskSchema),
         TypeUrls.derive(CompleteTaskSchema),
         TypeUrls.derive(ReopenTaskSchema),
+        TypeUrls.derive(AssignTaskSchema),
+        TypeUrls.derive(ReassignTaskSchema),
+        TypeUrls.derive(UnassignTaskSchema),
       ].sort(),
     );
     expect(
       context.registeredRepositories().map((repository) => repository.entityType.name),
-    ).toEqual(["TaskAggregate", "TaskListProjection"]);
+    ).toEqual(["TaskAggregate", "TaskListProjection", "TaskAssigneeProjection"]);
   });
 
   it("keeps generated registry discovery out of application context assembly", () => {
@@ -145,7 +151,7 @@ describe("@spine-event-engine/example-todo", () => {
           state: AnyMessages.pack(
             TaskListSchema,
             create(TaskListSchema, {
-              id: "unsafe\nrow",
+              id: create(TaskListIdSchema, { value: "unsafe\nrow" }),
             }),
           ),
         }),
@@ -315,7 +321,7 @@ describe("@spine-event-engine/example-todo", () => {
         expect(response.response?.status?.status.case).toBe("ok");
         expect(readTask(response, "task-standalone")?.completed).toBe(false);
         expect(update.subscription.id).toEqual(subscription.id);
-        expect(update.list.id).toBe("task-standalone");
+        expect(update.list.id?.value).toBe("task-standalone");
         expect(update.list.tasks[0]?.title).toBe("Standalone");
 
         const cancel = await withTimeout(
@@ -584,7 +590,7 @@ describe("@spine-event-engine/example-todo", () => {
     expect(ack.kind).toBe("ok");
     expect(rows[0]).toEqual(
       create(TaskListSchema, {
-        id: "task-1",
+        id: create(TaskListIdSchema, { value: "task-1" }),
         tasks: [
           {
             id: create(TaskIdSchema, { value: "task-1" }),
@@ -626,7 +632,10 @@ describe("@spine-event-engine/example-todo", () => {
       (candidate) => candidate.length === 2,
     );
 
-    expect(rows.map((row) => row.id).sort()).toEqual(["task-list-first", "task-list-second"]);
+    expect(rows.map((row) => row.id?.value).sort()).toEqual([
+      "task-list-first",
+      "task-list-second",
+    ]);
     expect(rows.flatMap((row) => row.tasks.map((task) => task.title)).sort()).toEqual([
       "First",
       "Second",
@@ -678,7 +687,7 @@ describe("@spine-event-engine/example-todo", () => {
 
       expect(created).toEqual(
         create(TaskListSchema, {
-          id: "task-live",
+          id: create(TaskListIdSchema, { value: "task-live" }),
           tasks: [
             {
               id: create(TaskIdSchema, { value: "task-live" }),
@@ -1239,7 +1248,7 @@ describe("@spine-event-engine/example-todo", () => {
       await context.stand().update(
         TaskListSchema,
         create(TaskListSchema, {
-          id: "task-catch-up",
+          id: create(TaskListIdSchema, { value: "task-catch-up" }),
           tasks: [
             {
               id: create(TaskIdSchema, { value: "task-catch-up" }),
@@ -1256,9 +1265,11 @@ describe("@spine-event-engine/example-todo", () => {
         clearedEntityCount: 1,
         clearedStateTypes: [TypeUrls.derive(TaskListSchema)],
       });
-      await expect(context.stand().read(TaskListSchema, "task-catch-up")).resolves.toEqual(
+      await expect(
+        context.stand().read(TaskListSchema, create(TaskListIdSchema, { value: "task-catch-up" })),
+      ).resolves.toEqual(
         create(TaskListSchema, {
-          id: "task-catch-up",
+          id: create(TaskListIdSchema, { value: "task-catch-up" }),
           tasks: [
             {
               id: create(TaskIdSchema, { value: "task-catch-up" }),
@@ -1498,6 +1509,7 @@ function createTaskCommand(commandId: string, taskId: string, title: string) {
     schema: CreateTaskSchema,
     message: create(CreateTaskSchema, {
       id: create(TaskIdSchema, { value: taskId }),
+      taskListId: create(TaskListIdSchema, { value: taskId }),
       title,
     }),
   });
@@ -1506,6 +1518,7 @@ function createTaskCommand(commandId: string, taskId: string, title: string) {
 function createTask(taskId: string, title: string) {
   return create(CreateTaskSchema, {
     id: create(TaskIdSchema, { value: taskId }),
+    taskListId: create(TaskListIdSchema, { value: taskId }),
     title,
   });
 }
@@ -1594,7 +1607,7 @@ function createTaskListIdQuery(id = "task-list-query") {
         case: "filters",
         value: create(TargetFiltersSchema, {
           idFilter: {
-            id: [AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id }))],
+            id: [AnyMessages.pack(TaskListIdSchema, create(TaskListIdSchema, { value: id }))],
           },
         }),
       },
@@ -2033,7 +2046,7 @@ function decodedTaskLists(rows: TaskListRows): readonly TaskListView[] {
 }
 
 function readList(rows: TaskListRows, taskId: string) {
-  return decodedTaskLists(rows).find((list) => list.id === taskId);
+  return decodedTaskLists(rows).find((list) => list.id?.value === taskId);
 }
 
 function readTask(rows: TaskListRows, taskId: string): TaskView | undefined {
@@ -2043,7 +2056,7 @@ function readTask(rows: TaskListRows, taskId: string): TaskView | undefined {
 function createTaskListRows(id: string, tasks: Task[]): readonly TaskList[] {
   return [
     create(TaskListSchema, {
-      id,
+      id: create(TaskListIdSchema, { value: id }),
       openTaskCount: tasks.filter((task) => !task.completed).length,
       tasks,
     }),
@@ -2068,7 +2081,7 @@ function taskListSnapshot(rows: TaskListRows, taskId: string) {
   const list = readList(rows, taskId);
 
   return {
-    id: list?.id,
+    id: list?.id?.value,
     openTaskCount: list?.openTaskCount,
     tasks:
       list?.tasks.map((task) => ({

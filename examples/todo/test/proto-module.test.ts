@@ -29,6 +29,7 @@ describe("Todo Proto model package", () => {
     expect(todoProtoModule.name).toBe("@spine-event-engine/example-todo");
     expect(todoProtoModule.dependencies).toHaveLength(1);
     expect(manifest.protoFiles).toEqual([
+      "spine/examples/todo/task_assignee.proto",
       "spine/examples/todo/task_commands.proto",
       "spine/examples/todo/task_events.proto",
       "spine/examples/todo/task_id.proto",
