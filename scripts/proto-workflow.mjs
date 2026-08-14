@@ -16,6 +16,7 @@ import {
 import { fileURLToPath } from "node:url";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { findSymlinkedAncestors, lstatIfPresent } from "./generated-path-safety.mjs";
+import { reusableGenerationId } from "./generation-reuse.mjs";
 import { writeSpineProtoArtifacts } from "./generate-spine-proto-artifacts.mjs";
 import {
   generatedTypeScript,
@@ -324,37 +325,19 @@ function reuseStagedGenerationId(livePackageRoot, stagedPackageRoot, stagedOutpu
     !existsSync(liveOutputRoot)
   )
     return;
-  let liveManifest;
   let stagedManifest;
   try {
-    liveManifest = JSON.parse(readFileSync(liveManifestPath, "utf8"));
     stagedManifest = JSON.parse(readFileSync(stagedManifestPath, "utf8"));
   } catch {
     return;
   }
-  const { generationId: liveGenerationId, ...liveContents } = liveManifest;
-  const stagedContents = { ...stagedManifest };
-  delete stagedContents.generationId;
-  const matches = {
-    format: liveManifest.formatVersion === 2,
-    liveId: typeof liveGenerationId === "string" && liveGenerationId.length > 0,
-    liveMarker: generationMarkerId(liveOutputRoot) === liveGenerationId,
-    stagedMarker: generationMarkerId(stagedOutputRoot) === stagedManifest.generationId,
-    manifest:
-      JSON.stringify(canonicalJson(liveContents)) === JSON.stringify(canonicalJson(stagedContents)),
-    tree:
-      JSON.stringify(generatedTreeContents(liveOutputRoot)) ===
-      JSON.stringify(generatedTreeContents(stagedOutputRoot)),
-  };
-  if (
-    !matches.format ||
-    !matches.liveId ||
-    !matches.liveMarker ||
-    !matches.stagedMarker ||
-    !matches.manifest ||
-    !matches.tree
-  )
-    return;
+  const liveGenerationId = reusableGenerationId(
+    liveManifestPath,
+    liveOutputRoot,
+    stagedManifest,
+    stagedOutputRoot,
+  );
+  if (liveGenerationId === undefined) return;
   stagedManifest.generationId = liveGenerationId;
   writeFileSync(stagedManifestPath, `${JSON.stringify(stagedManifest, null, 2)}\n`, "utf8");
   writeFileSync(

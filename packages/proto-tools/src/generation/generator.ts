@@ -32,7 +32,10 @@ import { spawnSync } from "node:child_process";
 import type { SpawnSyncReturns } from "node:child_process";
 
 import { ProtoConfig, ProtoManifest } from "../index.js";
-import { generationMarkerFile } from "./generation-marker.js";
+import {
+  generationMarkerFile,
+  reusableGenerationId,
+} from "../../../../scripts/generation-reuse.mjs";
 import { readManifestAt } from "../io/manifest-reader.js";
 import { ModelGraph } from "../model/model-graph.js";
 import { ManifestFile, type ManifestFileOperations } from "../io/atomic-manifest.js";
@@ -882,53 +885,12 @@ const protoGeneration = Object.freeze({
     output: string,
     manifest: { readonly generationId: string },
   ): string | undefined {
-    const manifestPath = join(packageRoot, "spine-proto-manifest.json");
-    if (!existsSync(target) || !existsSync(manifestPath)) return undefined;
-    try {
-      const parsed: unknown = JSON.parse(readFileSync(manifestPath, "utf8"));
-      if (typeof parsed !== "object" || parsed === null) return undefined;
-      const previous = parsed as Record<string, unknown>;
-      if (
-        previous.formatVersion !== 2 ||
-        typeof previous.generationId !== "string" ||
-        previous.generationId.length === 0
-      )
-        return undefined;
-      const marker = JSON.parse(readFileSync(join(target, generationMarkerFile), "utf8")) as {
-        generationId?: unknown;
-      };
-      const stagedMarker = JSON.parse(readFileSync(join(output, generationMarkerFile), "utf8")) as {
-        generationId?: unknown;
-      };
-      if (
-        marker.generationId !== previous.generationId ||
-        stagedMarker.generationId !== manifest.generationId
-      )
-        return undefined;
-      const currentFiles = protoGeneration
-        .files(output)
-        .map((path) => relative(output, path))
-        .filter((path) => path !== generationMarkerFile)
-        .sort();
-      const previousFiles = protoGeneration
-        .files(target)
-        .map((path) => relative(target, path))
-        .filter((path) => path !== generationMarkerFile)
-        .sort();
-      if (JSON.stringify(currentFiles) !== JSON.stringify(previousFiles)) return undefined;
-      for (const file of currentFiles) {
-        if (readFileSync(join(output, file), "utf8") !== readFileSync(join(target, file), "utf8"))
-          return undefined;
-      }
-      const previousContents = { ...previous };
-      delete previousContents.generationId;
-      const { generationId: nextGenerationId, ...nextContents } = manifest;
-      void nextGenerationId;
-      if (JSON.stringify(previousContents) !== JSON.stringify(nextContents)) return undefined;
-      return previous.generationId;
-    } catch {
-      return undefined;
-    }
+    return reusableGenerationId(
+      join(packageRoot, "spine-proto-manifest.json"),
+      target,
+      manifest,
+      output,
+    );
   },
 
   files(root: string): string[] {

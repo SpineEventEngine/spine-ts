@@ -16,7 +16,7 @@ import { lstatSync, opendirSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { isAbsolute, join, normalize, sep } from "node:path";
 
-import { generationMarkerFile } from "./generation/generation-marker.js";
+import { generationMarkerFile } from "../../../scripts/generation-reuse.mjs";
 import { RegistryDependency } from "./model/registry-dependency.js";
 import { NpmPackageName } from "./model/npm-package-name.js";
 
