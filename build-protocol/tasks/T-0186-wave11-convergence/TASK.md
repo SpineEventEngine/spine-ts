@@ -1,6 +1,6 @@
 # T-0186: Converge, Release, And Close Wave 11
 
-Status: Final release residual corrected; acceptance profile ready
+Status: Release CLEAN; integration-ready
 Start: `2026-08-14 WEST`
 End: Pending
 Baseline: `f128af42`
@@ -434,6 +434,16 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   groups plus cross-process `7/7`, two stable generations, all generated/static/
   docs/package gates, zero residue, and clean worktree. Release acceptance is
   ready.
+
+## Release Acceptance (2026-08-14)
+
+- Final `pnpm verify:release` is GREEN: `253` test files passed, `3` skipped;
+  `4,109` tests passed, `14` skipped. Coverage is statements
+  `21,135/22,442` (94.17%), branches `12,364/13,679` (90.38%), functions
+  `5,127/5,450` (94.07%), and lines `19,702/20,690` (95.22%).
+- Every deterministic gate passed. Residue, diff, and worktree are clean.
+  Specialist/security review and release verification are CLEAN; the reviewed
+  release commit is integration-ready.
 
 ## Release RED Test-Only Correction (2026-08-14)
 
