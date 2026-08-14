@@ -345,7 +345,6 @@ export function runGeneratedClean(args = process.argv.slice(2)) {
   } finally {
     cleanupStagedTargets(staged.stagedTargets);
     if (messageBoardRegistry !== undefined) {
-      rmSync(messageBoardRegistry.stageRoot, { recursive: true, force: true });
       rmSync(messageBoardRegistry.fileStageRoot, { recursive: true, force: true });
     }
   }
