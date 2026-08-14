@@ -890,14 +890,21 @@ export function stageGeneratedTargets(options = {}) {
     const spineTarget = stagedTargets.find(
       (candidate) => candidate.target.displayPath === "packages/proto/generated",
     );
-    if (spineTarget !== undefined && existsSync(join(root, "packages/proto/spine-proto.json"))) {
+    if (spineTarget !== undefined) {
       const stagedManifest = join(spineTarget.stageRoot, "spine-proto-manifest.json");
-      (options.writeSpineArtifacts ?? writeSpineProtoArtifacts)(
-        root,
+      if (existsSync(join(root, "packages/proto/spine-proto.json"))) {
+        (options.writeSpineArtifacts ?? writeSpineProtoArtifacts)(
+          root,
+          spineTarget.stagedOutputRoot,
+          stagedManifest,
+        );
+        if (!existsSync(stagedManifest)) throw new Error("Spine staged manifest is missing");
+      }
+      reuseStagedGenerationId(
+        join(root, "packages/proto"),
+        spineTarget.stageRoot,
         spineTarget.stagedOutputRoot,
-        stagedManifest,
       );
-      if (!existsSync(stagedManifest)) throw new Error("Spine staged manifest is missing");
     }
 
     for (const target of modelAtomicTargets) {

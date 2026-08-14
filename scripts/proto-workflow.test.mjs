@@ -989,6 +989,41 @@ describe("proto-workflow", () => {
     }
   });
 
+  it("reuses a v2 root generation ID when its staged and live output agree", () => {
+    const repoRoot = todoTransactionFixture();
+    const rootPackage = join(repoRoot, "packages/proto");
+    try {
+      rmSync(join(rootPackage, "generated"), { recursive: true, force: true });
+      mkdirSync(join(rootPackage, "generated"), { recursive: true });
+      writeFileSync(join(rootPackage, "generated/next.txt"), "next\n");
+      writeFileSync(
+        join(rootPackage, "generated/.spine-proto-generation.json"),
+        '{"generationId":"root-live"}\n',
+      );
+      writeFileSync(join(rootPackage, "spine-proto-manifest.json"), rootManifest("root-live"));
+
+      expect(
+        generateTargets({
+          repoRoot,
+          runCommand: rootStageCommand,
+          runModelCommand: todoStageCommand(undefined),
+        }),
+      ).toBe(0);
+      expect(
+        JSON.parse(readFileSync(join(rootPackage, "spine-proto-manifest.json"), "utf8")),
+      ).toMatchObject({
+        generationId: "root-live",
+      });
+      expect(
+        JSON.parse(
+          readFileSync(join(rootPackage, "generated/.spine-proto-generation.json"), "utf8"),
+        ),
+      ).toEqual({ generationId: "root-live" });
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it.each([
     ["has no live manifest", (todoRoot) => rmSync(join(todoRoot, "spine-proto-manifest.json"))],
     [

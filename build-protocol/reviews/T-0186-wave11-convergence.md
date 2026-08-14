@@ -139,3 +139,28 @@ by this fix pass.
   paths, not omitted normal-transaction behavior.
 - Coverage is mechanically converged. Specialist and security review remain
   undispatched pending the complete cheap preflight and its durable evidence.
+
+## Preflight Reopened Correction (2026-08-14)
+
+- Two unchanged canonical generations failed to reuse the root `packages/proto`
+  generation ID while all four example model IDs remained stable. Publication
+  stayed coherent and current-output/residue checks passed, but specialist
+  review remains blocked until the root-only reuse defect is corrected.
+- Bounded correction owner: existing `implementer`, explicitly dispatched as
+  `gpt-5.6-terra` / medium, with root-cause investigation and behavior-first
+  regression scope. Desktop runtime telemetry remains unavailable.
+
+## Root Reuse Correction Evidence (2026-08-14)
+
+- Disposition: corrected and targeted re-review ready. The existing
+  `implementer` ran with explicitly configured `gpt-5.6-terra` / medium;
+  Desktop exposes no independent runtime telemetry, so the immutable configured
+  profile is the available acceptance evidence.
+- The root stage omitted the existing `reuseStagedGenerationId()` handoff that
+  model stages already use. The production root manifest and all `48` staged
+  generated files were semantically identical; only this omitted handoff left
+  the random staged ID to publish.
+- Regression TDD observed RED (`root-staged` rather than `root-live`) then
+  GREEN. The focused test passed `1/1`, full workflow passed `78/78`, two
+  serial canonical generations retained identical all-five manifest/marker
+  hashes and IDs, current-output passed, and no workflow residue remained.

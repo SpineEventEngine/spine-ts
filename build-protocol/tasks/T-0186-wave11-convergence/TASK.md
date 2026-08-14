@@ -167,3 +167,22 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   generated-output check rejects all other tracked generated files. Focused
   checker evidence: 10 tests passed; committed-HEAD bootstrap and repeated
   generation/current-output validation were rerun.
+
+## Root Generation-ID Reuse Correction (2026-08-14)
+
+- The existing `implementer`, explicitly configured `gpt-5.6-terra` / medium,
+  traced the root-only instability. Desktop exposes no independent runtime
+  telemetry, so that immutable configured profile is the assignment evidence.
+- Root cause: `reuseStagedGenerationId()` was invoked after every model stage,
+  but never at the `packages/proto` root stage. A real staged diagnostic showed
+  equal canonical root manifests and `48/48` equal generated files, leaving
+  only the new staged UUID unreplaced.
+- TDD RED: the new root normal-transaction test failed because it published
+  `root-staged` where `root-live` was required. GREEN: root staging now invokes
+  the existing fail-closed reuse gate after either root manifest producer.
+  Focused regression passed `1/1`; the full workflow suite passed `78/78`.
+- Two serial canonical `pnpm proto:generate` runs retained byte-identical
+  hashes and IDs for all five manifest/marker pairs (root ID
+  `32aa4024-1052-4da2-ae47-f2ec6b8b431d`); both retained the 47-source/52-
+  descriptor digest. `pnpm proto:check-generated:current` passed and the
+  stage/backup/claim/journal/lock residue scan was empty.
