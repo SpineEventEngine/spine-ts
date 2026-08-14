@@ -1,6 +1,6 @@
 # T-0186: Converge, Release, And Close Wave 11
 
-Status: Release RED root causes accepted; deterministic correction in progress
+Status: Release RED corrected; converged release profile ready
 Start: `2026-08-14 WEST`
 End: Pending
 Baseline: `f128af42`
@@ -400,6 +400,17 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   v2/required-field fixtures, and align the cleanup assertion with its actual
   owner. Runtime, public API, serialized behavior, and security controls do not
   change; specialist/security review is not reopened.
+
+## Post-RED Preflight Closure (2026-08-14)
+
+- Correction checkpoint `c723e9d8` isolates the clean-build regression in a
+  detached offline worktree and aligns all v2/required-field/lifecycle test
+  fixtures. Focused correction evidence is `131/131`; full Proto Tools is
+  `199/199`; the former parallel cascade reproduction is `10/10`.
+- The mandatory comprehensive preflight then passed all eleven affected groups
+  at the recorded final counts, two stable canonical generations, complete
+  generated/static/docs/package gates, zero residue, and clean diff/worktree.
+  The corrected converged release profile is ready.
 
 ## Release RED Test-Only Correction (2026-08-14)
 

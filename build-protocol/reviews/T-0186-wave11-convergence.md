@@ -562,6 +562,16 @@ preflight and the one converged release profile remain pending.
   converged release profile; the failed profile is retained as RED chronology
   and is not used as a diagnostic loop.
 
+## Corrected Release Convergence (2026-08-14)
+
+- Test-only checkpoint `c723e9d8` closes the release RED causes without a
+  production/API/security change. The clean-build regression is isolated from
+  shared outputs; manifest v2, required To-Do IDs, and renderer lifecycle
+  expectations match active contracts.
+- Focused, full Proto Tools, former parallel-cascade, and complete mandatory
+  preflight evidence are GREEN. Existing specialist and security verdicts
+  remain CLEAN. A corrected converged release profile is authorized.
+
 ## Release RED Test-Only Correction Disposition (2026-08-14)
 
 - Accepted as a bounded mechanical test correction under the existing
