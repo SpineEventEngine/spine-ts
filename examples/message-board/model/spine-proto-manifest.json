@@ -1,5 +1,6 @@
 {
-  "formatVersion": 1,
+  "formatVersion": 2,
+  "generationId": "e3fd8a4a-a3d9-436d-9168-03dcb132c8c0",
   "packageName": "@spine-event-engine/example-message-board-model",
   "packageVersion": "2.0.0-snapshot.1",
   "protoFiles": [

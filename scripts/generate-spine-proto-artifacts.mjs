@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join, relative, resolve, sep } from "node:path";
 import { generatedTypeScript } from "./generated-source-policy.mjs";
 
@@ -76,7 +77,7 @@ export function writeSpineProtoArtifacts(repoRoot, generatedRoot, manifestOutput
   );
   writeFileSync(join(generatedRoot, "proto-module.ts"), source, "utf8");
   const manifest = {
-    formatVersion: config.formatVersion,
+    formatVersion: 2,
     packageName: packageJson.name,
     packageVersion: packageJson.version,
     protoFiles,
@@ -89,5 +90,26 @@ export function writeSpineProtoArtifacts(repoRoot, generatedRoot, manifestOutput
     dependencies: [...config.dependencies].sort(),
     moduleExport: config.moduleExport,
   };
+  let generationId = randomUUID();
+  try {
+    const previous = JSON.parse(
+      readFileSync(join(packageRoot, "spine-proto-manifest.json"), "utf8"),
+    );
+    const { generationId: previousId, ...previousContents } = previous;
+    if (
+      typeof previousId === "string" &&
+      previous.formatVersion === 2 &&
+      JSON.stringify(previousContents) === JSON.stringify(manifest)
+    )
+      generationId = previousId;
+  } catch {
+    // First publication has no committed generation ID to reuse.
+  }
+  writeFileSync(
+    join(generatedRoot, ".spine-proto-generation.json"),
+    `${JSON.stringify({ generationId })}\n`,
+    "utf8",
+  );
+  manifest.generationId = generationId;
   writeFileSync(manifestOutput, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 }

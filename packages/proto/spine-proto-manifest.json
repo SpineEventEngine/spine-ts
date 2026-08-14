@@ -1,5 +1,5 @@
 {
-  "formatVersion": 1,
+  "formatVersion": 2,
   "packageName": "@spine-event-engine/proto",
   "packageVersion": "2.0.0-snapshot.1",
   "protoFiles": [
@@ -101,5 +101,6 @@
     "spine/validation/validation_error.proto": "generated/spine/validation/validation_error_pb.js"
   },
   "dependencies": [],
-  "moduleExport": "spineProtoModule"
+  "moduleExport": "spineProtoModule",
+  "generationId": "18b4ab7a-4d5e-4a52-b6c1-43b3fc387261"
 }
