@@ -615,6 +615,15 @@ describe("@spine-event-engine/example-todo", () => {
     );
   });
 
+  it("starts and closes the standalone server with its default listener options", async () => {
+    const server = await startTodoServer();
+    try {
+      expect(server.baseUrl).toBe("http://127.0.0.1:8080");
+    } finally {
+      await server.close();
+    }
+  });
+
   it("updates one task in a shared list without changing its sibling", async () => {
     const fixture = await createTodoBlackBox();
     const scope = fixture.asGuest();
