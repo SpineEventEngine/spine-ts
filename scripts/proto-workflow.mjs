@@ -699,8 +699,11 @@ export function publishGeneratedTargets(stagedTargets, root = repoRoot, options 
   } catch (error) {
     try {
       recoverPublication(root, operations);
-    } catch {
-      // The journal remains the bounded recovery record for the next invocation.
+    } catch (recoveryError) {
+      throw new AggregateError(
+        [error, recoveryError],
+        `generated publication failed: ${String(error)}; recovery could not complete: ${String(recoveryError)}`,
+      );
     }
     throw error;
   }
