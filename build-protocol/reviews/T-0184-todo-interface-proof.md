@@ -58,3 +58,10 @@ least 90%, cheap preflight, and bounded `verify:task` with loopback permissions.
   are GREEN after regeneration; the temporary exact-schema diagnostic was
   removed after proving routing was not causal.
 - No specialist lane has been invoked; this is implementation evidence only.
+
+## Typed-ID Compatibility Checkpoint
+
+- The focused To-Do contract and black-box suite is GREEN (`2` files / `36`
+  tests) after typed TaskListId migration and narrowly scoped rejection routing.
+- Assignment lifecycle, target cardinality, replay, coverage, and formal review
+  remain pending.

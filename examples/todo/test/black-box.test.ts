@@ -69,6 +69,7 @@ import {
   UnassignTaskSchema,
 } from "../generated/spine/examples/todo/task_commands_pb.js";
 import { TaskIdSchema, TaskListIdSchema } from "../generated/spine/examples/todo/task_id_pb.js";
+import { TaskAssigneeSchema } from "../generated/spine/examples/todo/task_assignee_pb.js";
 import { TaskListSchema, type TaskList } from "../generated/spine/examples/todo/task_list_pb.js";
 import { TaskAlreadyDoneSchema } from "../generated/spine/examples/todo/task_rejections_pb.js";
 import { TaskSchema, type Task } from "../generated/spine/examples/todo/tasks_pb.js";
@@ -397,10 +398,9 @@ describe("@spine-event-engine/example-todo", () => {
           candidate.message.length === 1 && readList(candidate, "task-second") !== undefined,
       );
 
-      expect(all.message.map((message) => unpackTaskList(message.state)?.id).sort()).toEqual([
-        "task-first",
-        "task-second",
-      ]);
+      expect(all.message.map((message) => unpackTaskList(message.state)?.id?.value).sort()).toEqual(
+        ["task-first", "task-second"],
+      );
       expect(readTask(exact, "task-first")?.title).toBe("First");
       expect(readList(filtered, "task-second")?.openTaskCount).toBe(1);
     });
@@ -546,10 +546,9 @@ describe("@spine-event-engine/example-todo", () => {
       expect(missingId.status?.status.case).toBe("error");
       expect(blankId.status?.status.case).toBe("error");
       expect(taskListSnapshot(after, "task-kept")).toEqual(taskListSnapshot(before, "task-kept"));
-      expect(after.message.map((message) => unpackTaskList(message.state)?.id).sort()).toEqual([
-        "task-id-fence",
-        "task-kept",
-      ]);
+      expect(
+        after.message.map((message) => unpackTaskList(message.state)?.id?.value).sort(),
+      ).toEqual(["task-id-fence", "task-kept"]);
     });
   }, 15_000);
 
@@ -654,11 +653,11 @@ describe("@spine-event-engine/example-todo", () => {
       fixture,
       scope,
       createOpenTaskCountQuery(1),
-      (candidate) => candidate.length === 1 && candidate[0]?.id === "task-column-second",
+      (candidate) => candidate.length === 1 && candidate[0]?.id?.value === "task-column-second",
     );
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.id).toBe("task-column-second");
+    expect(rows[0]?.id?.value).toBe("task-column-second");
     expect(rows[0]?.openTaskCount).toBe(1);
     expect(rows[0]?.tasks[0]?.title).toBe("Second");
   });
@@ -692,6 +691,7 @@ describe("@spine-event-engine/example-todo", () => {
           tasks: [
             {
               id: create(TaskIdSchema, { value: "task-live" }),
+              taskListId: create(TaskListIdSchema, { value: "task-live" }),
               title: "First",
               completed: false,
             },
@@ -1096,7 +1096,7 @@ describe("@spine-event-engine/example-todo", () => {
 
     try {
       await scope.post(CreateTaskSchema, createTask("task-cancel", "Cancel"));
-      expect((await nextTaskListState(iterator, "cancel")).id).toBe("task-cancel");
+      expect((await nextTaskListState(iterator, "cancel")).id?.value).toBe("task-cancel");
 
       await subscription.cancel();
       await expect(iterator.next()).resolves.toMatchObject({ done: true });
@@ -1253,6 +1253,7 @@ describe("@spine-event-engine/example-todo", () => {
           tasks: [
             {
               id: create(TaskIdSchema, { value: "task-catch-up" }),
+              taskListId: create(TaskListIdSchema, { value: "task-catch-up" }),
               title: "Wrong",
               completed: false,
             },
@@ -1264,7 +1265,7 @@ describe("@spine-event-engine/example-todo", () => {
       await expect(context.catchUpReadSide()).resolves.toEqual({
         replayedEventCount: 2,
         clearedEntityCount: 1,
-        clearedStateTypes: [TypeUrls.derive(TaskListSchema)],
+        clearedStateTypes: [TypeUrls.derive(TaskListSchema), TypeUrls.derive(TaskAssigneeSchema)],
       });
       await expect(
         context.stand().read(TaskListSchema, create(TaskListIdSchema, { value: "task-catch-up" })),
@@ -1274,6 +1275,7 @@ describe("@spine-event-engine/example-todo", () => {
           tasks: [
             {
               id: create(TaskIdSchema, { value: "task-catch-up" }),
+              taskListId: create(TaskListIdSchema, { value: "task-catch-up" }),
               title: "Original",
               completed: true,
             },
@@ -1659,9 +1661,7 @@ function createTaskListTopic(id?: string) {
               case: "filters",
               value: create(TargetFiltersSchema, {
                 idFilter: {
-                  id: [
-                    AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
-                  ],
+                  id: [AnyMessages.pack(TaskListIdSchema, create(TaskListIdSchema, { value: id }))],
                 },
               }),
             },
@@ -1969,7 +1969,7 @@ function remoteReadTimeout(
   const rows = response?.message ?? [];
   const rowIds = rows.slice(0, maxRemoteDiagnosticRows).map((message) => {
     try {
-      return sanitizeDiagnostic(unpackTaskList(message.state)?.id ?? "<unreadable>");
+      return sanitizeDiagnostic(unpackTaskList(message.state)?.id?.value ?? "<unreadable>");
     } catch {
       return "<unreadable>";
     }

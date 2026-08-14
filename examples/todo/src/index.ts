@@ -63,6 +63,10 @@ import type {
   TaskAlreadyDone as TaskAlreadyDoneMessage,
   TaskNotDone as TaskNotDoneMessage,
 } from "../generated/spine/examples/todo/task_rejections_pb.js";
+import {
+  TaskAlreadyDoneSchema,
+  TaskNotDoneSchema,
+} from "../generated/spine/examples/todo/task_rejections_pb.js";
 import { TaskSchema } from "../generated/spine/examples/todo/tasks_pb.js";
 import { TaskAssignmentEvent as TaskAssignmentEventToken } from "../generated/interfaces/task-assignment-event.js";
 import { TaskEvent } from "../generated/interfaces/task-event.js";
@@ -510,9 +514,12 @@ export class TaskAssigneeProjection extends Projection<UserId, typeof TaskAssign
  * @returns The assembled Tasks bounded context.
  */
 export async function createTodoContext(): Promise<BoundedContext> {
-  const taskListRouting = EventRouting.create<TaskListId>().route(TaskEvent, (event) =>
-    event.taskListId === undefined ? [] : [clone(TaskListIdSchema, event.taskListId)],
-  );
+  const taskListRouting = EventRouting.create<TaskListId>()
+    .route(TaskEvent, (event) =>
+      event.taskListId === undefined ? [] : [clone(TaskListIdSchema, event.taskListId)],
+    )
+    .route(TaskAlreadyDoneSchema, (event) => taskListIds.fromTaskId(event.id))
+    .route(TaskNotDoneSchema, (event) => taskListIds.fromTaskId(event.id));
   const assigneeRouting = EventRouting.create<UserId>()
     .route(TaskAssignmentEventToken, (event) =>
       event.assignee === undefined ? [] : [clone(UserIdSchema, event.assignee)],
@@ -579,6 +586,11 @@ const taskListIds = {
   require(id: TaskListId | undefined): TaskListId {
     if (id === undefined) throw new Error("Task list ID is missing.");
     return clone(TaskListIdSchema, id);
+  },
+
+  fromTaskId(id: TaskId | undefined): readonly TaskListId[] {
+    if (id === undefined) return [];
+    return [create(TaskListIdSchema, { value: id.value })];
   },
 };
 
