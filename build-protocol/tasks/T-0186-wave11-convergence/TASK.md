@@ -1,6 +1,6 @@
 # T-0186: Converge, Release, And Close Wave 11
 
-Status: Specialist findings accepted; correction in progress
+Status: Specialist corrections complete; targeted re-review ready
 Start: `2026-08-14 WEST`
 End: Pending
 Baseline: `f128af42`
@@ -239,3 +239,23 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
 - No P0 was reported. All four P1 and all three independent P2 concerns block
   convergence until correction and affected-lane re-review. Final security and
   `verify:release` remain unstarted.
+
+## Specialist Correction Closure (2026-08-14)
+
+- The complete accepted batch is corrected through `660d35bf`. Generation-ID
+  reuse now uses one internal marker/manifest/bounded-tree policy across direct
+  and workflow paths; direct traversal rejects symlinks and enforces exact
+  depth/entry bounds; strict readers use bounded claim-aware retry; failed
+  recovery retains journal-owned stage evidence until later recovery; the
+  marker filename is internal; factory TSDoc is accurate; and replay wording is
+  independent of the 30-second duplicate-admission window.
+- Behavior proof covers marker parity, exact bounds, live/staged symlinks,
+  no-claim/dead-claim/interleaving/exhaustion reads, aggregate primary/recovery
+  failure evidence, and later successful cleanup. Full Proto Tools passes
+  `127/127`; workflow passes `88/88`; affected static/current/residue checks are
+  green.
+- Independent final changed-source coverage is **181/186 executable lines
+  (97.31%)** and **140/155 branches (90.32%)** across eleven production sources.
+  All accepted P1/P2 findings are correction-complete; all four affected lanes
+  require targeted re-review. Final security and `verify:release` remain
+  unstarted.

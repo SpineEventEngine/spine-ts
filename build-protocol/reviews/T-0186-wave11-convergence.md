@@ -1,6 +1,6 @@
 # T-0186 Review Log
 
-Status: Complete specialist wave accepted; correction in progress
+Status: Specialist corrections complete; targeted re-review ready
 
 Task: `build-protocol/tasks/T-0186-wave11-convergence/TASK.md`
 Baseline: `f128af42`
@@ -250,3 +250,29 @@ underlying defect as finding 1 and receives one correction. No P0 was reported.
 Corrections return as one batch to the existing implementer; TypeScript/API,
 style, reliability, and documentation are all affected for targeted re-review.
 Final security and release verification remain pending.
+
+## Accepted Batch Correction Evidence (2026-08-14)
+
+- Checkpoints `fc507d08`, `a246519d`, `1dc5dbfe`, `e71189bb`, `c1107a1d`,
+  `8fc57c5c`, `df213200`, `10ce8a45`, and `660d35bf` correct the complete
+  accepted batch. The first implementation context became unavailable before
+  adversarial completion; the fresh existing implementer finished the bounded
+  handoff. Both used explicit immutable `gpt-5.6-terra` / medium configuration;
+  Desktop runtime telemetry is unavailable and no visible mismatch was
+  reported.
+- Canonical reuse parity now includes marker validity/coherence, manifest
+  semantics, bounded depth/entries, and symlink rejection. Strict readers
+  distinguish no/dead/live claims, yield for bounded interleaving, and fail
+  closed after three attempts. Recovery tests retain aggregate errors, journal,
+  backup, and stage evidence until a later successful recovery cleans them.
+- Public/API/docs corrections internalize the marker filename, correct
+  generation-ID TSDoc, and separate exact-row replay lifecycle from the
+  30-second duplicate-admission window.
+- Independent evidence: Proto Tools `127/127`, workflow `88/88`, tooling
+  typecheck, affected ESLint, current-output, formatting/diff, and residue are
+  clean. Final coverage is **181/186 lines (97.31%)** and **140/155 branches
+  (90.32%)** using the retained serial correction LCOV plus the independent
+  Proto Tools coverage report.
+- Targeted re-review scope: TypeScript/API findings 5-6; style/canonical-policy
+  finding 1; reliability findings 1-4 including reader retry and retained
+  recovery evidence; documentation finding 7. Final security remains pending.
