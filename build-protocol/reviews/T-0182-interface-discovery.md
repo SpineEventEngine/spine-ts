@@ -31,3 +31,7 @@ provider resolves a compatible top-level interface via the staged Program;
 focused Vitest, tooling typecheck, scoped ESLint, TSDoc, formatting, and diff
 integrity pass. Default staged generation now resolves non-generated file and
 message declarations, and discovery diagnostics open no partial companion.
+
+The current diagnostic checkpoint also covers malformed compiler configuration,
+unresolved parents, non-interface and generic parent declarations, and missing
+staged exports. Transaction/repeat evidence remains pending implementation.

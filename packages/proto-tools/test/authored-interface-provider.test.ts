@@ -373,4 +373,131 @@ describe("AuthoredInterfaceProvider", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("fails closed for absent and invalid compiler inputs", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-config-"));
+    const stagedGeneratedRoot = join(root, ".generated.stage-1/output");
+    const liveGeneratedRoot = join(root, "src/generated");
+    const authored = join(root, "src/interface.ts");
+    const member = {
+      file: { proto: { name: "example/signals.proto", package: "example" } },
+      name: "Signal",
+      typeName: "Signal",
+    } as DescMessage;
+    const view = {
+      authoredFiles: [authored],
+      liveGeneratedRoot,
+      packageRoot: root,
+      stagedGeneratedRoot,
+    };
+    try {
+      mkdirSync(join(root, "src"), { recursive: true });
+      mkdirSync(stagedGeneratedRoot, { recursive: true });
+      writeFileSync(authored, "export interface SignalFamily {}\n");
+      const provider = new AuthoredInterfaceProvider();
+      expect(provider.resolve("SignalFamily", [member], undefined)).toBeUndefined();
+      expect(() => provider.resolve("SignalFamily", [member], view)).toThrow(
+        "requires tsconfig.json",
+      );
+      writeFileSync(join(root, "tsconfig.json"), "{ invalid");
+      expect(() => new AuthoredInterfaceProvider().resolve("SignalFamily", [member], view)).toThrow(
+        "could not read tsconfig.json",
+      );
+      writeFileSync(join(root, "tsconfig.json"), JSON.stringify({ include: 1 }));
+      expect(() => new AuthoredInterfaceProvider().resolve("SignalFamily", [member], view)).toThrow(
+        "invalid tsconfig.json",
+      );
+      writeFileSync(
+        join(root, "tsconfig.json"),
+        JSON.stringify({ compilerOptions: { strict: true } }),
+      );
+      expect(() => new AuthoredInterfaceProvider().resolve("SignalFamily", [member], view)).toThrow(
+        "missing staged generated message",
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects non-interface and generic local extends parents", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-parent-shape-"));
+    const stagedGeneratedRoot = join(root, ".generated.stage-1/output");
+    const liveGeneratedRoot = join(root, "src/generated");
+    const authored = join(root, "src/interface.ts");
+    const member = {
+      file: { proto: { name: "example/signals.proto", package: "example" } },
+      name: "Signal",
+      typeName: "example.Signal",
+    } as DescMessage;
+    try {
+      mkdirSync(join(stagedGeneratedRoot, "example"), { recursive: true });
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(
+        join(root, "tsconfig.json"),
+        JSON.stringify({ compilerOptions: { strict: true } }),
+      );
+      writeFileSync(
+        join(stagedGeneratedRoot, "example/signals_pb.ts"),
+        "export type Signal = {};\n",
+      );
+      for (const [source, diagnostic] of [
+        [
+          "export type Parent = {}; export interface SignalFamily extends Parent {}\n",
+          "extends parent must stay",
+        ],
+        [
+          "export interface Parent<T> {}; export interface SignalFamily extends Parent<string> {}\n",
+          "generic extends parent",
+        ],
+        ["export interface SignalFamily extends Unknown {}\n", "extends parent must stay"],
+      ] as const) {
+        writeFileSync(authored, source);
+        expect(() =>
+          new AuthoredInterfaceProvider().resolve("SignalFamily", [member], {
+            authoredFiles: [authored],
+            liveGeneratedRoot,
+            packageRoot: root,
+            stagedGeneratedRoot,
+          }),
+        ).toThrow(diagnostic);
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reports a missing generated member export before accepting an authored declaration", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-member-export-"));
+    const stagedGeneratedRoot = join(root, ".generated.stage-1/output");
+    const liveGeneratedRoot = join(root, "src/generated");
+    const authored = join(root, "src/interface.ts");
+    try {
+      mkdirSync(join(stagedGeneratedRoot, "example"), { recursive: true });
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(
+        join(root, "tsconfig.json"),
+        JSON.stringify({ compilerOptions: { strict: true } }),
+      );
+      writeFileSync(authored, "export interface SignalFamily {}\n");
+      writeFileSync(
+        join(stagedGeneratedRoot, "example/signals_pb.ts"),
+        "export type Other = {};\n",
+      );
+      expect(() =>
+        new AuthoredInterfaceProvider().resolve(
+          "SignalFamily",
+          [
+            {
+              file: { proto: { name: "example/signals.proto", package: "example" } },
+              name: "Signal",
+              typeName: "example.Signal",
+            } as DescMessage,
+          ],
+          { authoredFiles: [authored], liveGeneratedRoot, packageRoot: root, stagedGeneratedRoot },
+        ),
+      ).toThrow("missing staged generated message");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
