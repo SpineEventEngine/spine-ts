@@ -79,6 +79,24 @@ subagents.
 - final security verdict;
 - release and post-merge evidence.
 
+## Cross-Process Fixture Residual Disposition (2026-08-14)
+
+- **Disposition: test-only correction; existing review verdicts remain
+  applicable.** Focused RED showed the ready child observed command handling
+  but no projections because its emitted and the parent's published
+  `TaskCreated` omitted the now-required validated `taskListId` fixture field.
+  No production runtime behavior was implicated.
+- The correction supplies the current generated `TaskListIdSchema` in those
+  two fixtures, keeps the existing 5-second phase and 200ms quiet-window
+  semantics, and makes future phase failures report bounded child state.
+  Normal, focused V8, repeated normal, and CPU-contention V8 evidence are
+  green; repository routing is `244/244`; exact static gates are green.
+- No public API, serialized contract, production source, or security control
+  changed. TypeScript/API, style, reliability, documentation, and final
+  security review do not reopen. Release verification remains pending and was
+  not rerun by this bounded correction. The bounded no-coverage task gate over
+  the cross-process and repository-routing suites completed.
+
 ## Pre-Review Convergence Evidence (2026-08-14)
 
 - One-time generated-output audit (an inline command recorded in the task, not

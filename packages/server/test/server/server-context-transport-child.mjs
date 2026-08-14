@@ -21,7 +21,10 @@ import { createZeroMqTransport, ZeroMqConfig } from "@spine-event-engine/transpo
 
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.ts";
 import { TaskCreatedSchema } from "../../../../examples/todo/dist/generated/spine/examples/todo/task_events_pb.js";
-import { TaskIdSchema } from "../../../../examples/todo/dist/generated/spine/examples/todo/task_id_pb.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../../examples/todo/dist/generated/spine/examples/todo/task_id_pb.js";
 
 const ipcDirectory = requiredEnvironment("SPINE_T0038B_IPC_DIRECTORY");
 const adapterIdentity = adapterIdentityEnvironment("SPINE_T0038B_ADAPTER_IDENTITY");
@@ -46,6 +49,7 @@ class TaskAggregate extends Aggregate {
       message: create(TaskCreatedSchema, {
         id: create(TaskIdSchema, { value: command.id }),
         title: command.name,
+        taskListId: create(TaskListIdSchema, { value: "cross-process-task-list" }),
       }),
     });
   }

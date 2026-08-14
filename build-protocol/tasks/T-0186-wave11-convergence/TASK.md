@@ -444,3 +444,27 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   package/example/server entrypoint reproduction `10/10`. Tooling typecheck,
   exact-file ESLint, cleanup, TSDoc, Prettier, and diff checks are GREEN.
   The release profile remains deliberately unrerun in this correction context.
+
+## Cross-Process Fixture Residual Correction (2026-08-14)
+
+- The corrected release residual was a stale cross-process fixture, not a
+  transport, routing, persistence, or startup-capacity defect. The focused RED
+  reproduced both normally and with V8 coverage: after the child reported
+  `command-handled`, neither projection observed the emitted `TaskCreated`.
+  Bounded harness diagnostics showed a ready, running child with no stderr.
+- `TaskCreated.taskListId` is now required and validated. The child command
+  fixture and parent inbound-event fixture had both omitted that current
+  generated `TaskListId`; adding it restores the same existing command/event
+  projection proof without changing the 5-second phase deadline or 200ms quiet
+  window. Timeout diagnostics now retain ready/stopped/observation/stderr state
+  if a future bounded wait fails.
+- RED was observed at the original 5-second phase limit and again at a temporary
+  15-second diagnostic limit. GREEN restored the original limits: normal,
+  focused V8, two sequential runs, and focused V8 under four bounded CPU
+  spinners each passed `7/7`; repository routing passed `244/244`.
+- This is test-only current-schema fixture maintenance plus diagnostics. No
+  production source, public/serialized contract, or security control changed;
+  specialist and final-security dispositions remain applicable. The release
+  profile is deliberately not rerun in this correction context. The bounded
+  no-coverage task gate completed over this cross-process proof and repository
+  routing suite.

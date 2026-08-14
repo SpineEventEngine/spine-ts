@@ -43,7 +43,10 @@ import { describe, expect, it } from "vitest";
 
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 import { TaskCreatedSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
-import { TaskIdSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 
 const transportTimeoutMs = 2_000;
 const phaseTimeoutMs = 5_000;
@@ -652,7 +655,18 @@ class CrossProcessFixture {
       await waitFor(10);
     }
 
-    throw new Error(`Cross-process ${phase} timed out after ${String(phaseTimeoutMs)}ms.`);
+    const observed = this.#observations
+      .map((observation) => `${observation.source}:${observation.behavior}:${observation.entityId}`)
+      .join(", ")
+      .slice(0, 480);
+    const stderr = safeMessage(this.#stderr, this.#ipcDirectory);
+    throw new Error(
+      `Cross-process ${phase} timed out after ${String(phaseTimeoutMs)}ms; ` +
+        `childReady=${String(this.#readyState !== undefined)}; ` +
+        `childStopped=${String(this.#stopped)}; ` +
+        `observed=[${observed}]; ` +
+        `childStderr=${stderr.length === 0 ? "<empty>" : stderr}.`,
+    );
   }
 
   #throwChildFailure(phase: string): void {
@@ -747,6 +761,7 @@ function createInboundEvent(): Event {
     message: create(TaskCreatedSchema, {
       id: create(TaskIdSchema, { value: inboundEventEntityId }),
       title: "Transported event",
+      taskListId: create(TaskListIdSchema, { value: "cross-process-task-list" }),
     }),
   });
 }
