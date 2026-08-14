@@ -1,6 +1,6 @@
 # T-0185: Beginner Interface-Routing Documentation
 
-Status: Correction complete; targeted re-review ready
+Status: Release verification complete; integration ready
 Start: `2026-08-14 WEST`
 End: Pending
 Task-start baseline: `696bbac3`
@@ -99,3 +99,18 @@ Historical build-protocol narrative is not reader-documentation ownership.
   medium) and `typescript_api_docs_reviewer` (`gpt-5.6-terra` / high). Desktop
   telemetry does not expose independent child runtime metadata; configured
   profiles are the available durable evidence.
+
+## 2026-08-14 Final Verification
+
+- Final reviewed content hash: `e446d592811ef3da315dc0c5472403b2a3256eeb`.
+  Task-start baseline: `696bbac3`; prior accepted correction checkpoint:
+  `078a24e7`; final targeted API residual: `e446d592`.
+- Documentation review confirmation: CLEAN, existing `documentation_reviewer`,
+  configured `gpt-5.6-luna` / medium. TypeScript/API review confirmation:
+  CLEAN, existing `typescript_api_docs_reviewer`, configured `gpt-5.6-terra` /
+  high. Desktop runtime telemetry exposes no independent child runtime metadata;
+  configured profiles are the durable evidence.
+- Final cheap docs preflight and one converged
+  `pnpm verify:task -- --no-tests` completed with no generated residue and a
+  clean worktree. Integration may proceed; this task does not authorize merge
+  or tag creation.

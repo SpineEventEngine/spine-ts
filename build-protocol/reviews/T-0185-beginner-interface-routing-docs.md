@@ -1,6 +1,6 @@
 # T-0185 Review Log
 
-Status: Correction complete; targeted re-review pending
+Status: CLEAN; release verification complete; integration ready
 
 Task: `build-protocol/tasks/T-0185-beginner-interface-routing-docs/TASK.md`
 Branch: `task/T-0185-beginner-docs`
@@ -75,3 +75,18 @@ parents must resolve within the same model module but need not be named exports
 or top-level. The reader-contract RED failed on the older claim, then passed
 12/12 after correction. Strict snippets, API inventory, formatting, and diff
 checks passed. Targeted re-review remains ready.
+
+## Final Confirmations
+
+- Documentation: CLEAN — existing `documentation_reviewer`, configured
+  `gpt-5.6-luna` / medium.
+- TypeScript/API: CLEAN — existing `typescript_api_docs_reviewer`, configured
+  `gpt-5.6-terra` / high.
+- Desktop runtime telemetry does not expose independent child runtime metadata;
+  the configured reviewer profiles above are the available durable evidence.
+- Final reviewed content hash: `e446d592811ef3da315dc0c5472403b2a3256eeb`;
+  task-start baseline: `696bbac3`; accepted correction checkpoints:
+  `078a24e7` and `e446d592`.
+- Final cheap docs preflight and one converged `pnpm verify:task -- --no-tests`
+  completed cleanly. The post-profile worktree was clean with no generated
+  residue. Integration is ready; merge and tag actions remain out of scope.
