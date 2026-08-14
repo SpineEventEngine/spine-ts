@@ -1,6 +1,6 @@
 # T-0182: Authored Interface Discovery And Conformance
 
-Status: Pre-review convergence in progress
+Status: Implementation complete; review-ready
 Start: `2026-08-14 01:01 WEST`
 End: Pending
 Baseline commit: `8f987ae8`
@@ -24,8 +24,8 @@ provider phase, a provider failure preserves the prior generated tree and
 manifest, and repeated staged interface publication is byte-identical. Cheap
 preflight and parameterized `verify:task` remain pending.
 
-Cheap preflight is GREEN after the bootstrap inventory correction; only the
-selected parameterized `verify:task` remains before review-ready status.
+Cheap preflight and the selected coverage-enabled `verify:task` are GREEN.
+The task is ready for the orchestrator-owned specialist review wave.
 
 Task classification: High-risk
 Classification reason: compiler-program discovery and conformance governs
