@@ -9,7 +9,7 @@ Worktree: `.worktrees/T-0183-interface-routing`
 Task classification: High-risk
 Implementation owner: existing `implementer`, explicit `gpt-5.6-terra` / medium
 Implementation commit: `c74c9310`, `27fa36df`, `11e5d867`, `788a22d0`; correction record checkpoint pending
-Final branch HEAD: Pending
+Release lint correction checkpoint: `b6ca9ab7`
 
 ## Objective
 
@@ -115,7 +115,8 @@ facade declaration and confusing void-expression callbacks, and test-style
 violations. This correction removes only those lint violations; routing
 selection, admission, replay, and persisted Inbox targets are unchanged.
 
-The complete repository ESLint run, the five focused routing suites (262/262
+Checkpoint `b6ca9ab7` contains the correction and durable records. The complete
+repository ESLint run, the five focused routing suites (262/262
 tests), tooling typecheck, TypeDoc/API checks, format check, and diff check
 pass after the correction. The branch is ready for the orchestrator's final
 release attempt; this implementation context did not rerun `verify:release`.

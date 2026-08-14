@@ -123,4 +123,5 @@ available acceptance evidence.
   `pnpm docs:api:check`; `pnpm format:check`; and `git diff --check` pass.
 - This is a deterministic release-gate correction, not a specialist-review
   finding. The branch is ready for the orchestrator's final `verify:release`
-  attempt; this context did not rerun that profile.
+  attempt; this context did not rerun that profile. Correction checkpoint:
+  `b6ca9ab7`.
