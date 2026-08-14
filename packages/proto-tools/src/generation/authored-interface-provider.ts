@@ -48,6 +48,8 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     sourceView: ModelSourceView | undefined,
   ): AuthoredInterfaceDeclaration | undefined {
     if (sourceView === undefined) return undefined;
+    if (sourceView.authoredFiles.some((file) => file.split(/[\\/]/u).includes("dist")))
+      throw new Error("spine-proto: authored interface discovery source path escapes model module");
     this.assertSourceView(sourceView);
     const program = this.program(sourceView);
     const declaration = this.declaration(program, sourceView, name);
@@ -104,18 +106,23 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     const generatedName = basename(liveGeneratedRoot);
     const stage = join(parent, `.${generatedName}.stage-`);
     const backup = join(parent, `.${generatedName}.`);
+    const dist = join(packageRoot, "dist");
     const within = (root: string, path: string) => {
       const pathRelative = relative(root, path);
       return pathRelative === "" || (!pathRelative.startsWith("..") && !isAbsolute(pathRelative));
     };
     for (const file of sourceView.authoredFiles) {
+      if (file === dist || file.startsWith(`${dist}/`))
+        throw new Error(
+          "spine-proto: authored interface discovery source path escapes model module",
+        );
       if (
         lstatSync(file).isSymbolicLink() ||
         !within(packageRoot, realpathSync(file)) ||
-        within(liveGeneratedRoot, file) ||
+        file === liveGeneratedRoot ||
+        file.startsWith(`${liveGeneratedRoot}/`) ||
         file.startsWith(stage) ||
         (file.startsWith(backup) && file.includes(".backup")) ||
-        within(join(packageRoot, "dist"), file) ||
         file.endsWith(".d.ts")
       )
         throw new Error(

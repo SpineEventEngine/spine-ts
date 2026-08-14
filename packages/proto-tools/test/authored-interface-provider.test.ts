@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -267,6 +267,108 @@ describe("AuthoredInterfaceProvider", () => {
         "export interface First { readonly text: string }\nexport interface Second { readonly missing: string }\n",
       );
       expect(provider.resolve("Second", [member], sourceView)).toBeDefined();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects symlink, stage, backup, dist, and declaration authored candidates", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-exclusions-"));
+    const liveGeneratedRoot = join(root, "src/generated");
+    const stagedGeneratedRoot = join(root, ".generated.stage-1/output");
+    const external = join(root, "external.ts");
+    const member = {
+      file: { proto: { name: "example/signals.proto", package: "example" } },
+      name: "Signal",
+      typeName: "example.Signal",
+    } as DescMessage;
+    try {
+      mkdirSync(join(root, "src/.generated.stage-x"), { recursive: true });
+      mkdirSync(join(root, "src/.generated.1.backup"), { recursive: true });
+      mkdirSync(join(root, "dist"), { recursive: true });
+      mkdirSync(join(stagedGeneratedRoot, "example"), { recursive: true });
+      writeFileSync(
+        join(root, "tsconfig.json"),
+        JSON.stringify({ compilerOptions: { strict: true } }),
+      );
+      writeFileSync(
+        join(stagedGeneratedRoot, "example/signals_pb.ts"),
+        "export type Signal = {};\n",
+      );
+      writeFileSync(external, "export interface SignalFamily {}\n");
+      const symlink = join(root, "src/symlink.ts");
+      symlinkSync(external, symlink);
+      for (const candidate of [
+        symlink,
+        join(root, "src/.generated.stage-x/source.ts"),
+        join(root, "src/.generated.1.backup/source.ts"),
+        join(root, "dist/source.ts"),
+        join(root, "src/source.d.ts"),
+      ]) {
+        if (!candidate.endsWith("symlink.ts"))
+          writeFileSync(candidate, "export interface SignalFamily {}\n");
+        let diagnostic = "";
+        try {
+          new AuthoredInterfaceProvider().resolve("SignalFamily", [member], {
+            authoredFiles: [candidate],
+            liveGeneratedRoot,
+            packageRoot: root,
+            stagedGeneratedRoot,
+          });
+        } catch (error) {
+          diagnostic = String(error);
+        }
+        expect(diagnostic, candidate).toContain("source path escapes model module");
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects ambiguous and cyclic local interface declarations", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-cycle-"));
+    const stagedGeneratedRoot = join(root, ".generated.stage-1/output");
+    const liveGeneratedRoot = join(root, "src/generated");
+    const first = join(root, "src/first.ts");
+    const second = join(root, "src/second.ts");
+    const member = {
+      file: { proto: { name: "example/signals.proto", package: "example" } },
+      name: "Signal",
+      typeName: "example.Signal",
+    } as DescMessage;
+    try {
+      mkdirSync(join(stagedGeneratedRoot, "example"), { recursive: true });
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(
+        join(root, "tsconfig.json"),
+        JSON.stringify({ compilerOptions: { strict: true } }),
+      );
+      writeFileSync(
+        join(stagedGeneratedRoot, "example/signals_pb.ts"),
+        "export type Signal = {};\n",
+      );
+      writeFileSync(first, "export interface SignalFamily {}\n");
+      writeFileSync(second, "export interface SignalFamily {}\n");
+      expect(() =>
+        new AuthoredInterfaceProvider().resolve("SignalFamily", [member], {
+          authoredFiles: [first, second],
+          liveGeneratedRoot,
+          packageRoot: root,
+          stagedGeneratedRoot,
+        }),
+      ).toThrow("ambiguous top-level interface");
+      writeFileSync(
+        first,
+        "export interface SignalFamily extends Parent {}\nexport interface Parent extends SignalFamily {}\n",
+      );
+      expect(() =>
+        new AuthoredInterfaceProvider().resolve("SignalFamily", [member], {
+          authoredFiles: [first],
+          liveGeneratedRoot,
+          packageRoot: root,
+          stagedGeneratedRoot,
+        }),
+      ).toThrow("cyclic extends chain");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
