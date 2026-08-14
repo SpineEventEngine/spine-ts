@@ -26,6 +26,16 @@ Baseline: `8f987ae8`
 
 ## Findings And Outcome
 
+## Accepted Correction Batch
+
+- API/style/reliability/docs findings are accepted for the existing
+  `gpt-5.6-terra` / medium implementer. Runtime metadata is unavailable; the
+  explicit configured profile is retained.
+- Required corrections: named exports, tsconfig-owned membership, immutable
+  transaction inventory, staged compiler redirect, diamond-safe inheritance,
+  and one containment policy. Security remains N/A: no new trust boundary or
+  external capability is introduced by this compiler-internal follow-up.
+
 Pending implementation and mechanical preflight. First TDD slice is GREEN:
 provider resolves a compatible top-level interface via the staged Program;
 focused Vitest, tooling typecheck, scoped ESLint, TSDoc, formatting, and diff

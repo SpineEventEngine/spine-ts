@@ -53,6 +53,7 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     const program = this.program(sourceView);
     const declaration = this.declaration(program, sourceView, name);
     const checker = program.getTypeChecker();
+    this.assertNamedModuleExport(checker, declaration, name);
     this.assertLocalParents(checker, sourceView, declaration, name, new Set());
     const interfaceType = checker.getTypeAtLocation(declaration);
     for (const member of members) {
@@ -181,6 +182,21 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     };
     ts.forEachChild(source, visit);
     return nested;
+  }
+
+  private assertNamedModuleExport(
+    checker: ts.TypeChecker,
+    declaration: ts.InterfaceDeclaration,
+    name: string,
+  ): void {
+    const module = checker.getSymbolAtLocation(declaration.getSourceFile());
+    if (
+      module === undefined ||
+      !checker.getExportsOfModule(module).some((candidate) => candidate.name === name)
+    )
+      throw new Error(
+        `spine-proto: authored interface ${name}: declaration must be a named module export`,
+      );
   }
 
   private messageType(

@@ -145,6 +145,7 @@ describe("AuthoredInterfaceProvider", () => {
         ["export interface Outer { }\n", "missing top-level interface"],
         ["export interface SignalFamily<T> {}\n", "generic interface is unbound"],
         ["export namespace Outer { export interface SignalFamily {} }\n", "nested interface"],
+        ["interface SignalFamily {}\n", "named module export"],
       ];
       for (const [source, diagnostic] of cases) {
         writeFileSync(authored, source);
