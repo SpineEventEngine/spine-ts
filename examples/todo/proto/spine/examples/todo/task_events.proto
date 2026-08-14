@@ -31,11 +31,11 @@ message TaskCreated {
     (validate) = true
   ];
 
-  // Identifies the list that receives the task.
-  TaskListId task_list_id = 2 [(required) = true, (validate) = true];
-
   // Stores the task's initial title.
-  string title = 3 [(required) = true];
+  string title = 2 [(required) = true];
+
+  // Identifies the list that receives the task.
+  TaskListId task_list_id = 3 [(required) = true, (validate) = true];
 }
 
 // Records that a task was renamed.
@@ -46,11 +46,11 @@ message TaskRenamed {
     (validate) = true
   ];
 
-  // Identifies the task list.
-  TaskListId task_list_id = 2 [(required) = true, (validate) = true];
-
   // Stores the task's new title.
-  string title = 3 [(required) = true];
+  string title = 2 [(required) = true];
+
+  // Identifies the task list.
+  TaskListId task_list_id = 3 [(required) = true, (validate) = true];
 }
 
 // Records that a task was completed.

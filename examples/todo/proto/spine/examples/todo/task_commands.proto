@@ -29,11 +29,11 @@ message CreateTask {
     (validate) = true
   ];
 
-  // Identifies the list that receives the task.
-  TaskListId task_list_id = 2 [(required) = true, (validate) = true];
-
   // Specifies the initial task title.
-  string title = 3 [(required) = true];
+  string title = 2 [(required) = true];
+
+  // Identifies the list that receives the task.
+  TaskListId task_list_id = 3 [(required) = true, (validate) = true];
 }
 
 // Renames an existing task.

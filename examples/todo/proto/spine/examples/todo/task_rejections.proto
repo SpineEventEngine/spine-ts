@@ -16,11 +16,12 @@ syntax = "proto3";
 package spine.examples.todo;
 
 import "spine/examples/todo/task_id.proto";
+import "spine/core/user_id.proto";
 import "spine/options.proto";
 
 option (type_url_prefix) = "type.spine.examples.todo";
 
-// Rejects completion of a task that is already completed.
+// Rejects an operation that requires an open task when it is already completed.
 message TaskAlreadyDone {
   // Identifies the already completed task.
   TaskId id = 1 [
@@ -36,4 +37,19 @@ message TaskNotDone {
     (required) = true,
     (validate) = true
   ];
+}
+
+// Rejects assigning a task that already has an assignee.
+message TaskAlreadyAssigned {
+  // Identifies the assigned task.
+  TaskId id = 1 [(required) = true, (validate) = true];
+
+  // Identifies the task's current assignee.
+  spine.core.UserId assignee = 2 [(required) = true, (validate) = true];
+}
+
+// Rejects an operation that requires an assigned task.
+message TaskNotAssigned {
+  // Identifies the unassigned task.
+  TaskId id = 1 [(required) = true, (validate) = true];
 }

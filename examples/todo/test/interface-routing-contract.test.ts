@@ -12,13 +12,16 @@
  * the License.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { validateEntityStateTransition } from "@spine-event-engine/server";
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
+import { CreateTaskSchema } from "../generated/spine/examples/todo/task_commands_pb.js";
+import { TaskCreatedSchema, TaskRenamedSchema } from "../generated/spine/examples/todo/task_events_pb.js";
 import { TaskIdSchema, TaskListIdSchema } from "../generated/spine/examples/todo/task_id_pb.js";
+import { TaskListSchema } from "../generated/spine/examples/todo/task_list_pb.js";
 import { TaskSchema } from "../generated/spine/examples/todo/tasks_pb.js";
 
 const todoRoot = new URL("..", import.meta.url);
@@ -62,5 +65,24 @@ describe("To-Do interface-routing contract", () => {
     });
 
     expect(result.valid).toBe(true);
+  });
+
+  it("preserves legacy task title tags while assigning list identity new tags", () => {
+    const fields = (schema: { readonly fields: readonly { readonly localName: string; readonly number: number }[] }) =>
+      Object.fromEntries(schema.fields.map((field) => [field.localName, field.number]));
+
+    expect(fields(CreateTaskSchema)).toMatchObject({ id: 1, title: 2, taskListId: 3 });
+    expect(fields(TaskCreatedSchema)).toMatchObject({ id: 1, title: 2, taskListId: 3 });
+    expect(fields(TaskRenamedSchema)).toMatchObject({ id: 1, title: 2, taskListId: 3 });
+    expect(fields(TaskListSchema)).toMatchObject({ id: 4, tasks: 2, openTaskCount: 3 });
+  });
+
+  it("does not decode a legacy TaskList field-one ID into the typed ID", () => {
+    const legacyFieldOne = new Uint8Array([0x0a, 0x03, 0x6f, 0x6c, 0x64]);
+
+    expect(fromBinary(TaskListSchema, legacyFieldOne).id).toBeUndefined();
+    expect(toBinary(TaskListSchema, create(TaskListSchema, {
+      id: create(TaskListIdSchema, { value: "new" }),
+    }))[0]).toBe(0x22);
   });
 });

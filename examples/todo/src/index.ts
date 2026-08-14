@@ -58,7 +58,12 @@ import {
 } from "../generated/spine/examples/todo/task_id_pb.js";
 import { TaskAssigneeSchema } from "../generated/spine/examples/todo/task_assignee_pb.js";
 import { TaskListSchema } from "../generated/spine/examples/todo/task_list_pb.js";
-import { TaskAlreadyDone, TaskNotDone } from "../generated/spine/examples/todo/task_rejections.js";
+import {
+  TaskAlreadyAssigned,
+  TaskAlreadyDone,
+  TaskNotAssigned,
+  TaskNotDone,
+} from "../generated/spine/examples/todo/task_rejections.js";
 import type {
   TaskAlreadyDone as TaskAlreadyDoneMessage,
   TaskNotDone as TaskNotDoneMessage,
@@ -225,6 +230,10 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
     const id = clone(TaskIdSchema, this.id);
     const taskListId = taskListIds.require(this.state.taskListId);
     const assignee = assignees.require(command.assignee);
+    if (this.state.completed) throw TaskAlreadyDone.create({ id });
+    if (this.state.assignee !== undefined) {
+      throw TaskAlreadyAssigned.create({ id, assignee: this.state.assignee });
+    }
     this.update((draft) =>
       Object.assign(draft, create(TaskSchema, { ...draft, id, taskListId, assignee })),
     );
@@ -241,8 +250,13 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
   reassignTask(command: ReassignTask): TaskReassignedEvent {
     const id = clone(TaskIdSchema, this.id);
     const taskListId = taskListIds.require(this.state.taskListId);
-    const previousAssignee = assignees.require(this.state.assignee);
     const assignee = assignees.require(command.assignee);
+    if (this.state.completed) throw TaskAlreadyDone.create({ id });
+    if (this.state.assignee === undefined) throw TaskNotAssigned.create({ id });
+    const previousAssignee = assignees.require(this.state.assignee);
+    if (previousAssignee.value === assignee.value) {
+      throw TaskAlreadyAssigned.create({ id, assignee: previousAssignee });
+    }
     this.update((draft) =>
       Object.assign(draft, create(TaskSchema, { ...draft, id, taskListId, assignee })),
     );
@@ -260,6 +274,8 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
     void command;
     const id = clone(TaskIdSchema, this.id);
     const taskListId = taskListIds.require(this.state.taskListId);
+    if (this.state.completed) throw TaskAlreadyDone.create({ id });
+    if (this.state.assignee === undefined) throw TaskNotAssigned.create({ id });
     const assignee = assignees.require(this.state.assignee);
     this.update((draft) =>
       Object.assign(draft, create(TaskSchema, { ...draft, id, taskListId, assignee: undefined })),

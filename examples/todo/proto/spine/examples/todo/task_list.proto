@@ -26,8 +26,10 @@ message TaskList {
   option (entity).kind = PROJECTION;
   option (entity).visibility = FULL;
 
+  reserved 1;
+
   // Identifies this task list.
-  TaskListId id = 1 [
+  TaskListId id = 4 [
     (required) = true,
     (set_once) = true
   ];

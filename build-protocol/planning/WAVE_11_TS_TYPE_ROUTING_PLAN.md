@@ -560,6 +560,11 @@ Acceptance:
 - repository scan proves `TaskReassignmentEvent` does not exist;
 - native black-box, startup, Proto-module, smoke, and loopback
   multi-process behavior remain green.
+- reject completed assignment operations with `TaskAlreadyDone`; reject duplicate
+  or same-target assignment with `TaskAlreadyAssigned`; reject missing current
+  assignment with `TaskNotAssigned`; preserve state and emit no route targets.
+- TaskList snapshot storage is reset for the typed-ID field migration; no
+  migration shim or TaskId-to-TaskListId inference is provided.
 
 The loopback multi-process test retains the existing supported topology: one
 Gateway connected to multiple application nodes. It is not a multiple-Gateway
@@ -593,6 +598,8 @@ Acceptance:
   transport semantic tags;
 - explain generated-file provenance and no-copyright policy;
 - use the real To-Do model and never mention `TaskReassignmentEvent`;
+- explain the assignment rejection table and the snapshot reset/no-migration
+  boundary after T-0184 rather than preserving stale beginner claims;
 - remove now-stale exact-only and “Java semantic is ignored entirely” claims;
 - keep every README's existing look and feel, while dense detail remains in
   references.
