@@ -1480,16 +1480,52 @@ describe("spine proto model tooling", () => {
           mkdirSync(output, { recursive: true });
           writeFileSync(join(output, "model_pb.ts"), "export {};\n");
         },
-        runInterfacePhase: () => {
-          throw new Error("interface phase failed");
+        runInterfacePhase: (_, output, _owned, _packageName, sourceView) => {
+          expect(sourceView.stagedGeneratedRoot).toBe(output);
+          expect(Object.isFrozen(sourceView)).toBe(true);
+          throw new Error("authored provider failure");
         },
       });
-    }).toThrow("interface phase failed");
+    }).toThrow("authored provider failure");
     expect(readFileSync(join(model, "src/generated/prior.ts"), "utf8")).toBe("prior output\n");
     expect(readFileSync(join(model, "spine-proto-manifest.json"), "utf8")).toBe("prior manifest\n");
     expect(readdirSync(join(model, "src")).filter((name) => name.includes("generated"))).toEqual([
       "generated",
     ]);
+  });
+
+  it("publishes byte-identical output across repeated staged interface phases", () => {
+    const model = packageDirectory("@example/interface-repeat-model");
+    try {
+      writeJson(model, "spine-proto.json", modelConfig("@example/interface-repeat-model"));
+      mkdirSync(join(model, "proto"), { recursive: true });
+      writeFileSync(join(model, "proto/model.proto"), 'syntax = "proto3"; message Model {}\n');
+      const operations: GenerationOperations = {
+        runBuf: generatedOutput,
+        runInterfacePhase: (_, output, _owned, _packageName, sourceView) => {
+          expect(sourceView.stagedGeneratedRoot).toBe(output);
+          mkdirSync(join(output, "interfaces"), { recursive: true });
+          writeFileSync(
+            join(output, "interfaces/model-interface.ts"),
+            "export interface ModelInterface {}\n",
+          );
+        },
+      };
+      generateModel(model, operations);
+      const first = {
+        companion: readFileSync(join(model, "src/generated/interfaces/model-interface.ts"), "utf8"),
+        manifest: readFileSync(join(model, "spine-proto-manifest.json"), "utf8"),
+        primary: readFileSync(join(model, "src/generated/model_pb.ts"), "utf8"),
+      };
+      generateModel(model, operations);
+      expect({
+        companion: readFileSync(join(model, "src/generated/interfaces/model-interface.ts"), "utf8"),
+        manifest: readFileSync(join(model, "spine-proto-manifest.json"), "utf8"),
+        primary: readFileSync(join(model, "src/generated/model_pb.ts"), "utf8"),
+      }).toEqual(first);
+    } finally {
+      rmSync(model, { recursive: true, force: true });
+    }
   });
 
   it("leaves no generated output, manifest, backup, or stage when first manifest publication fails", () => {

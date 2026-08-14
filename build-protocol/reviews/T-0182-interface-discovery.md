@@ -35,3 +35,8 @@ message declarations, and discovery diagnostics open no partial companion.
 The current diagnostic checkpoint also covers malformed compiler configuration,
 unresolved parents, non-interface and generic parent declarations, and missing
 staged exports. Transaction/repeat evidence remains pending implementation.
+
+Transaction/repeat evidence is now GREEN: the provider phase is invoked after
+Buf within the existing staged transaction; an injected provider failure keeps
+the prior tree and manifest intact, and repeat publication is byte-identical.
+Mechanical preflight and `verify:task` remain pending before review dispatch.

@@ -21,11 +21,12 @@ import { existsSync, readFileSync } from "node:fs";
 import type { InterfaceDeclarationProvider } from "./interface-provider.js";
 import type { ModelSourceView } from "./source-view.js";
 
-const { AuthoredInterfaceProvider } = await import(
+const authoredProviderModule = (await import(
   import.meta.url.endsWith(".ts")
     ? "./authored-interface-provider.ts"
     : "./authored-interface-provider.js"
-);
+)) as unknown as { readonly AuthoredInterfaceProvider: new () => InterfaceDeclarationProvider };
+const { AuthoredInterfaceProvider } = authoredProviderModule;
 
 const typescriptIdentifier = /^[A-Za-z_$][A-Za-z0-9_$]*$/u;
 

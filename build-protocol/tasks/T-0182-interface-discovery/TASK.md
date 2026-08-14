@@ -1,6 +1,6 @@
 # T-0182: Authored Interface Discovery And Conformance
 
-Status: In progress
+Status: Pre-review convergence in progress
 Start: `2026-08-14 01:01 WEST`
 End: Pending
 Baseline commit: `8f987ae8`
@@ -18,6 +18,11 @@ repeat-generation convergence remains pending.
 Analysis-snapshot race behavior is GREEN (source mutation/add/rename and
 recursive-tsconfig mutation after Program capture); real transaction/repeat
 workflow proof remains pending.
+
+Workflow proof is now GREEN: the real post-Buf source-view handoff reaches the
+provider phase, a provider failure preserves the prior generated tree and
+manifest, and repeated staged interface publication is byte-identical. Cheap
+preflight and parameterized `verify:task` remain pending.
 
 Task classification: High-risk
 Classification reason: compiler-program discovery and conformance governs
