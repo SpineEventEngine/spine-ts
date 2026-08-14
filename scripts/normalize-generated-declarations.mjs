@@ -44,11 +44,7 @@ export function declarationFiles(root) {
         throw new Error("generated declaration traversal exceeds bounded inventory");
       const path = join(directory, entry.name);
       if (entry.isDirectory()) pending.push([path, depth + 1]);
-      else if (
-        entry.isFile() &&
-        generatedDeclarationPattern.test(path)
-      )
-        files.push(path);
+      else if (entry.isFile() && generatedDeclarationPattern.test(path)) files.push(path);
     }
   }
   return files;
@@ -70,10 +66,7 @@ export function normalizeGeneratedDeclarations(
     ]) {
       if (!existsSync(dist) || !existsSync(generated)) continue;
       for (const declaration of declarationFiles(dist)) {
-        const sourcePath = join(
-          generated,
-          relative(dist, declaration).replace(/\.d\.ts$/u, ".ts"),
-        );
+        const sourcePath = join(generated, relative(dist, declaration).replace(/\.d\.ts$/u, ".ts"));
         if (!existsSync(sourcePath)) continue;
         const provenance = declarationSources(readFileSync(sourcePath, "utf8"));
         if (provenance.length > 0)

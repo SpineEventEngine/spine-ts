@@ -7789,7 +7789,9 @@ describe("repository signal routing", () => {
       }),
     );
     await expect(
-      context.stand().read(TaskListSchema, create(TodoTaskListIdSchema, { value: "task-alternate" })),
+      context
+        .stand()
+        .read(TaskListSchema, create(TodoTaskListIdSchema, { value: "task-alternate" })),
     ).resolves.toEqual(
       create(TaskListSchema, {
         id: create(TodoTaskListIdSchema, { value: "task-alternate" }),

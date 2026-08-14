@@ -146,7 +146,7 @@ delegated from this owner.
   state schema with the same scalar ID shape, and catch-up routes generated
   `TaskCreated.taskListId` to the compatible message-valued `TaskList` ID.
 - Fresh focused evidence: `pnpm --config.verify-deps-before-run=false exec
-  vitest run packages/server/test/repository/repository-routing.test.ts` —
+vitest run packages/server/test/repository/repository-routing.test.ts` —
   244 passed; `git diff --check` — clean. Specialist/security review and
   `verify:release` remain unstarted.
 

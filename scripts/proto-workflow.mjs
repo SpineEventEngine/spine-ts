@@ -294,7 +294,11 @@ function reuseStagedGenerationId(livePackageRoot, stagedPackageRoot, stagedOutpu
   const liveManifestPath = join(livePackageRoot, "spine-proto-manifest.json");
   const stagedManifestPath = join(stagedPackageRoot, "spine-proto-manifest.json");
   const liveOutputRoot = join(livePackageRoot, "generated");
-  if (!existsSync(liveManifestPath) || !existsSync(stagedManifestPath) || !existsSync(liveOutputRoot))
+  if (
+    !existsSync(liveManifestPath) ||
+    !existsSync(stagedManifestPath) ||
+    !existsSync(liveOutputRoot)
+  )
     return;
   let liveManifest;
   let stagedManifest;
