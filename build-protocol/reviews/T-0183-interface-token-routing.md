@@ -1,6 +1,6 @@
 # T-0183 Review Log
 
-Status: Implementation pending; specialist review not started
+Status: Implementation in progress; specialist review not started
 
 Task: `build-protocol/tasks/T-0183-interface-token-routing/TASK.md`
 Branch: `task/T-0183-interface-routing`
@@ -28,4 +28,10 @@ configured role/profile and telemetry limitation are evidence.
 
 ## Findings And Outcome
 
-Pending implementation and mechanical preflight.
+Focused RED/GREEN evidence is complete. The shared routing declaration seam
+proves exact > registration-ordered token > default selection, rejects copied
+tokens and incomplete membership, and snapshots declarations. Repository tests
+prove construction-time membership validation and Command/Event/state selection;
+admission/replay tests prove one callback on admission and none on stored-row
+replay for each signal kind. Mechanical coverage/preflight and specialist
+review remain pending.

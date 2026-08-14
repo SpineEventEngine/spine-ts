@@ -17,9 +17,21 @@ import {
   type MessageInterface,
   type MessageSchema,
 } from "@spine-event-engine/core";
+import type { MessageShape } from "@bufbuild/protobuf";
 
 type InterfaceSchemas = readonly [MessageSchema, ...MessageSchema[]];
 type InterfaceToken = MessageInterface<object, InterfaceSchemas>;
+
+/**
+ * Message shape available to a route declared for a message-interface token.
+ *
+ * @typeParam TInterface Declared common interface shape.
+ * @typeParam Schemas Concrete token member schemas.
+ */
+export type InterfaceRouteMessage<
+  TInterface extends object,
+  Schemas extends InterfaceSchemas,
+> = MessageShape<Schemas[number]> & TInterface;
 
 interface InterfaceRoute<Route> {
   readonly token: InterfaceToken;
@@ -65,7 +77,7 @@ export const RoutingDeclarations: Readonly<{
     state: RoutingDeclarationState<Route>,
     schema: MessageSchema,
     route: Route,
-    routingName: string,
+    duplicateMessage: string,
   ): void;
   routeInterface<Route>(
     state: RoutingDeclarationState<Route>,
@@ -93,10 +105,10 @@ export const RoutingDeclarations: Readonly<{
     state: RoutingDeclarationState<Route>,
     schema: MessageSchema,
     route: Route,
-    routingName: string,
+    duplicateMessage: string,
   ): void {
     if (state.exact.has(schema)) {
-      throw new Error(`${routingName} has a duplicate exact route.`);
+      throw new Error(duplicateMessage);
     }
     state.exact.set(schema, route);
   },

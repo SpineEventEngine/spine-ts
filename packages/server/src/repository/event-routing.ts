@@ -21,13 +21,12 @@ import {
 import type { EventContext } from "@spine-event-engine/proto";
 import {
   RoutingDeclarations,
+  type InterfaceRouteMessage,
   type RoutingDeclarationSnapshot,
   type RoutingDeclarationState,
 } from "./routing-declarations.js";
 
 type InterfaceSchemas = readonly [MessageSchema, ...MessageSchema[]];
-type InterfaceRouteMessage<TInterface extends object, Schemas extends InterfaceSchemas> =
-  MessageShape<Schemas[number]> & TInterface;
 
 /**
  * Calculates target Entity IDs for one Event admission.

@@ -1,6 +1,6 @@
 # T-0183: Interface-Token Repository Routing
 
-Status: Implementation authorized; assignment pending
+Status: Implementation in progress; focused RED/GREEN complete
 Start: `2026-08-14 03:53 WEST`
 End: Pending
 Baseline commit: `d02379f7`
@@ -8,7 +8,7 @@ Branch: `task/T-0183-interface-routing`
 Worktree: `.worktrees/T-0183-interface-routing`
 Task classification: High-risk
 Implementation owner: existing `implementer`, explicit `gpt-5.6-terra` / medium
-Implementation commit: Pending
+Implementation commit: `c74c9310`, `27fa36df`; lifecycle/type-contract checkpoint pending
 Final branch HEAD: Pending
 
 ## Objective
@@ -71,5 +71,12 @@ new persistence, semantic tags, and Gateway work.
 
 ## Integration Result
 
-Pending implementation, review, release verification, integration, tag, and
-post-merge verification.
+The shared declaration snapshot now resolves exact schema routes before ordered
+nominal interface-token routes before replacement/default routes. Command,
+Event, and state-update declarations overload the existing `.route(...)` API
+for `MessageInterface`; construction validates all token members against the
+registered schemas. Focused tests cover copied-token rejection, duplicate and
+incomplete declarations, selection precedence, callback typing, and one
+admission/no-recomputation replay path for each signal kind. Specialist review,
+changed-source coverage, release verification, integration, tag, and post-merge
+verification remain pending.

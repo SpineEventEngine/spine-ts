@@ -4707,10 +4707,13 @@ describe("repository signal routing", () => {
     expect(RoutingProcessManager.commandCalls).toBe(1);
   });
 
-  it("does not call custom Process Manager routing again during replay", async () => {
+  it("does not call Command interface routing again during replay", async () => {
     RoutingProcessManager.reset();
     let routeCalls = 0;
-    const routing = CommandRouting.create<string>().route(AggregateStateSchema, (message) => {
+    const token = MessageInterfaces.define<object, readonly [typeof AggregateStateSchema]>([
+      AggregateStateSchema,
+    ]);
+    const routing = CommandRouting.create<string>().route(token, (message) => {
       routeCalls += 1;
       return message.id;
     });
@@ -5912,10 +5915,13 @@ describe("repository signal routing", () => {
     expect(RoutingProcessManager.eventCalls).toBe(1);
   });
 
-  it("routes a Process Manager Event once at admission and not during replay", async () => {
+  it("routes a Process Manager Event interface once at admission and not during replay", async () => {
     RoutingProcessManager.reset();
     let routeCalls = 0;
-    const eventRouting = EventRouting.create<string>().route(ProjectionEventSchema, (message) => {
+    const token = MessageInterfaces.define<object, readonly [typeof ProjectionEventSchema]>([
+      ProjectionEventSchema,
+    ]);
+    const eventRouting = EventRouting.create<string>().route(token, (message) => {
       routeCalls += 1;
       return [message.id];
     });
@@ -11700,9 +11706,12 @@ describe("Projection state-update routing", () => {
     );
   });
 
-  it("admits one durable projection row per selected target and replays it without rerouting", async () => {
+  it("admits one durable state-interface row per selected target", async () => {
     StateObservingProjection.reset();
     const route = vi.fn(() => ["second", "first", "second"]);
+    const token = MessageInterfaces.define<object, readonly [typeof AggregateStateSchema]>([
+      AggregateStateSchema,
+    ]);
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectionStateSchema,
@@ -11712,7 +11721,7 @@ describe("Projection state-update routing", () => {
       entityType: StateObservingProjection,
       schema: ProjectionStateSchema,
       handlers,
-      stateUpdateRouting: StateUpdateRouting.create<string>().route(AggregateStateSchema, route),
+      stateUpdateRouting: StateUpdateRouting.create<string>().route(token, route),
     });
     const context = BoundedContext.singleTenant("State updates").add(repository).build();
 
@@ -11745,6 +11754,9 @@ describe("Projection state-update routing", () => {
   it("rejects corrupted durable state-update routes without rerouting", async () => {
     PassiveTaskProjection.reset();
     const route = vi.fn(() => ["target"]);
+    const token = MessageInterfaces.define<object, readonly [typeof AggregateStateSchema]>([
+      AggregateStateSchema,
+    ]);
     const factory = new InMemoryStorageFactory();
     const handlers = EntityHandlers.define(
       PassiveTaskProjection,
@@ -11755,7 +11767,7 @@ describe("Projection state-update routing", () => {
       entityType: PassiveTaskProjection,
       schema: ProjectionStateSchema,
       handlers,
-      stateUpdateRouting: StateUpdateRouting.create<string>().route(AggregateStateSchema, route),
+      stateUpdateRouting: StateUpdateRouting.create<string>().route(token, route),
     });
     const context = BoundedContext.singleTenant("Stored state updates")
       .add(repository)
@@ -11776,6 +11788,8 @@ describe("Projection state-update routing", () => {
       }
       const target = requireProjectionInboxTarget(repository);
       const routeCallsBeforeReplay = route.mock.calls.length;
+      await expect(target.replay(stored)).resolves.toBeUndefined();
+      expect(route).toHaveBeenCalledTimes(routeCallsBeforeReplay);
       await expect(
         target.replay({
           ...stored,

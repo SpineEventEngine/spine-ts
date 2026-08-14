@@ -21,22 +21,12 @@ import {
 import type { CommandContext } from "@spine-event-engine/proto";
 import {
   RoutingDeclarations,
+  type InterfaceRouteMessage,
   type RoutingDeclarationSnapshot,
   type RoutingDeclarationState,
 } from "./routing-declarations.js";
 
 type InterfaceSchemas = readonly [MessageSchema, ...MessageSchema[]];
-
-/**
- * Message shape available to a Command interface route.
- *
- * @typeParam TInterface Declared common interface shape.
- * @typeParam Schemas Concrete token member schemas.
- */
-export type InterfaceRouteMessage<
-  TInterface extends object,
-  Schemas extends InterfaceSchemas,
-> = MessageShape<Schemas[number]> & TInterface;
 
 /**
  * Calculates one Entity ID for a Command message.
