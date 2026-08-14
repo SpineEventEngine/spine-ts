@@ -499,3 +499,18 @@ visible mismatch are the assignment evidence.
   determine whether the corrected exposed races plus these platform limits are
   acceptable or identify a concrete implementable repository-local control.
   Desktop runtime telemetry remains unavailable.
+
+## Final Security Verdict (2026-08-14)
+
+Verdict: CLEAN. Two-stage fresh-name retirement, no-follow/nonblocking regular
+descriptor snapshots, dev/inode identity comparison, and mismatch refusal are
+the appropriate portable Node controls for the local build protocol. The final
+unlink interval against a continuously hostile same-UID writer is an accepted
+OS/API trust limit. Bounded indexed schema traversal is accepted; a
+non-returning same-process Proxy trap is an unavoidable JavaScript trusted-
+callback limit without breaking valid external structural descriptors.
+
+All other scoped security lanes remain CLEAN. The existing reviewer used
+explicit `gpt-5.6-terra` / high configuration; Desktop exposes no independent
+runtime telemetry and no visible mismatch was reported. Mandatory cheap
+preflight and the one converged release profile remain pending.

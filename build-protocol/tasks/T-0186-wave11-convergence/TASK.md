@@ -1,6 +1,6 @@
 # T-0186: Converge, Release, And Close Wave 11
 
-Status: Targeted residual findings accepted; correction in progress
+Status: Security CLEAN; final cheap preflight ready
 Start: `2026-08-14 WEST`
 End: Pending
 Baseline: `f128af42`
@@ -331,3 +331,18 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   without overlap. Fresh tooling typecheck and exact ESLint are GREEN; full
   Proto Tools is `137/137` and workflow is `93/93`. This claim correction is
   ready for final-security re-review.
+
+## Final Security Closure (2026-08-14)
+
+- The mandatory final security reviewer is CLEAN after the second-retirement
+  claim correction. Direct and workflow replacement races pass at Proto Tools
+  `138/138` and workflow `94/94`; all marker, special-file, reader-bound,
+  recovery, logging, dependency, and no-network/auth/tenant lanes are CLEAN.
+- Two platform limits are explicit and accepted: portable Node has no
+  unlink-by-descriptor against a continuously hostile same-UID writer, and
+  JavaScript cannot preempt a non-returning same-process Proxy trap without
+  changing external structural descriptor semantics. The attainable controls
+  use fresh same-directory retirement plus descriptor identity revalidation,
+  and bounded indexed traversal with throwing traps failing closed.
+- Specialist and security review are converged. Mandatory cheap preflight is
+  next; `verify:release` has not run.
