@@ -600,6 +600,14 @@ preflight and the one converged release profile remain pending.
   remain unchanged. Focused coverage stress and mandatory preflight evidence
   are required before release acceptance resumes.
 
+## Final Release Residual Closure (2026-08-14)
+
+- The three remaining timeouts were test-fixture validation failures from
+  missing required `taskListId`, not a production transport or timing defect.
+  The test-only correction preserves semantic timing and passes normal, V8,
+  repeated, CPU-contention, routing, bounded task, and comprehensive preflight
+  checks. Specialist/security verdicts remain CLEAN; release acceptance resumes.
+
 ## Release RED Test-Only Correction Disposition (2026-08-14)
 
 - Accepted as a bounded mechanical test correction under the existing

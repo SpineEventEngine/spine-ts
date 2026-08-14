@@ -1,6 +1,6 @@
 # T-0186: Converge, Release, And Close Wave 11
 
-Status: Release acceptance blocked by cross-process harness timeouts
+Status: Final release residual corrected; acceptance profile ready
 Start: `2026-08-14 WEST`
 End: Pending
 Baseline: `f128af42`
@@ -422,6 +422,18 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   routing, persistence, and Wave 11 semantics are unchanged unless focused
   diagnosis proves otherwise. Release coverage percentages remain pending
   because Vitest suppresses its summary on RED.
+
+## Final Release Residual Closure (2026-08-14)
+
+- The final three timeouts were stale cross-process `TaskCreated.taskListId`
+  fixtures, not transport capacity. Checkpoint `64ec84d5` corrects parent and
+  child fixture events while retaining the original 5-second phase and 200 ms
+  quiet-window semantics.
+- Normal, V8, repeated, and CPU-contention focused runs pass `7/7`; repository
+  routing passes `244/244`. The complete mandatory preflight passes all prior
+  groups plus cross-process `7/7`, two stable generations, all generated/static/
+  docs/package gates, zero residue, and clean worktree. Release acceptance is
+  ready.
 
 ## Release RED Test-Only Correction (2026-08-14)
 
