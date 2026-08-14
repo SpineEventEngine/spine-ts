@@ -2084,7 +2084,7 @@ describe("spine proto model tooling", () => {
       writeFileSync(join(model, "src/generated/previous.ts"), "previous\n");
       writeFileSync(join(model, "spine-proto-manifest.json"), "previous manifest\n");
 
-      expect(() =>
+      expect(() => {
         generateModel(model, {
           runBuf(_moduleRoot, output) {
             mkdirSync(output, { recursive: true });
@@ -2092,8 +2092,8 @@ describe("spine proto model tooling", () => {
             const created = spawnSync("mkfifo", [join(output, "unsafe.fifo")]);
             if (created.status !== 0) throw new Error(created.stderr.toString());
           },
-        }),
-      ).toThrow("generated source traversal must contain only regular files and directories");
+        });
+      }).toThrow("generated source traversal must contain only regular files and directories");
       expect(readFileSync(join(model, "src/generated/previous.ts"), "utf8")).toBe("previous\n");
       expect(readFileSync(join(model, "spine-proto-manifest.json"), "utf8")).toBe(
         "previous manifest\n",
