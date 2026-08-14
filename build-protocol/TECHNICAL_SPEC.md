@@ -88,7 +88,7 @@ blocking requirements for all framework and example work.
   least one emitted schema in the declared return type; `@React` may emit none.
 - `@Subscribe` handlers must declare an explicit `void` return type.
 - New aggregate behavior must not introduce or depend on `@Apply`; aggregates
-  are planned as non-event-sourced in Spine TS.
+  are non-event-sourced, matching current Spine JVM behavior.
 - End-user application code must not start, commit, roll back, or otherwise
   control framework entity transactions. Entity transactions are opened,
   validated, committed, and rolled back by the framework runtime.

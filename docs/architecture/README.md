@@ -11,8 +11,9 @@ model's `generated/interfaces/`; `is.ts_type` resolves an authored interface
 from the same model module, although its property types may be external. The
 route-selection order is exact schema, first registered matching token, then
 replacement/default. Accepted admission stores typed targets; retry reuses them;
-read-side catch-up intentionally rebuilds. Generated source records provenance
-and has no copyright header.
+the legacy-named local `catchUpReadSide()` helper resets and replays the whole
+process-local read side and is not Projection catch-up. Generated source records
+provenance and has no copyright header.
 
 They explain the server scope: delivery/inbox processing,
 command/query/subscription services, same-host ZeroMQ transport for
@@ -563,14 +564,15 @@ The following runtime pieces are not available in the verified local/example con
 
 - visibility/type-supplier registration and lifecycle callbacks over the
   repository identity seam;
-- query/subscription execution over repository routes. A limited local
-  read-side catch-up support exists on
-  `BoundedContext.catchUpReadSide(options?)`: it clears registered projection
-  state rows for one tenant scope, replays already-stored events only to
-  matching projection subscribers through the same EventBus runtime queue as
-  live intake, does not re-append events, and excludes production delivery
-  worker orchestration, inbox lifecycle, retries, and cross-process catch-up
-  control;
+- query/subscription execution over repository routes. A legacy-named local
+  whole-read-side reset/replay helper exists on
+  `BoundedContext.catchUpReadSide(options?)`: it clears every registered
+  Projection state for one tenant scope and replays the whole stored event
+  history to matching Projection subscribers through the same process-local
+  EventBus queue as live intake. It cannot select a Projection repository,
+  entity IDs, or a starting time and has no durable operation identity,
+  progress, Inbox catch-up lifecycle, restart, resumption, or cross-process
+  historical/live coordination. It is not Projection catch-up;
 - production transport-backed/background worker topology and supervision,
   production catch-up orchestration, durable production storage adapters, entity
   storage/cache catch-up, and production tenant-index policy. Durable inbox

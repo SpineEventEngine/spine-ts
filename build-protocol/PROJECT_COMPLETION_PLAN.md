@@ -189,12 +189,15 @@ durably closed.
   current dependency advisories with an explicit networked audit lane.
 - **Wave 14:** make provider coverage and JVM interoperability claims match
   executable release evidence.
-- **Wave 15:** add deliberate registry-integrity and tenant-admission controls.
-- **Wave 16:** establish publishable runtime/tooling/auth and cross-package SPI
+- **Wave 15:** establish publishable runtime/tooling/auth and cross-package SPI
   boundaries.
-- **Wave 17:** extend the local whole-read-side rebuild into selective, durable,
-  Inbox-coordinated Projection catch-up.
-- **Wave 18:** add deliberate same-process cross-context event exchange.
+- **Wave 16:** add deliberate registry-integrity and tenant-admission controls.
+- **Wave 17:** implement JVM-equivalent Projection catch-up with repository-level
+  targeting, durable progress, Inbox coordination, restart, and live-event
+  ordering. The existing local whole-read-side reset/replay helper is not
+  catch-up and provides no completion credit.
+- **Wave 18:** implement JVM-equivalent same-process and cross-process Bounded
+  Context event exchange.
 - **Wave 19:** multiple-Gateway behavior, subject to a future human Q&A and
   planning task. Earlier Waves create no provisional multiple-Gateway API.
   Cloud Run remains outside the initial offering.

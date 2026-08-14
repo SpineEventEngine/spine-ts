@@ -13,8 +13,10 @@ points fit together and records cross-package API limits.
 generated message-interface token. Exact schema wins; otherwise the first
 registered matching token wins; otherwise the replacement/default applies.
 Routes execute at accepted admission and retries use stored typed targets.
-Catch-up rebuilds by design. The [To-Do guide](../../examples/todo/USER_GUIDE.md)
-contains executable source-linked registration.
+The legacy-named local `catchUpReadSide()` reset/replay helper reruns current
+Projection subscriptions; it is not Projection catch-up. The [To-Do
+guide](../../examples/todo/USER_GUIDE.md) contains executable source-linked
+registration.
 
 ## 🧭 Start here
 
@@ -287,14 +289,18 @@ command/event buses: default command routing reads the first command field,
 process-manager event routing reads the first event message field, state is
 loaded/created and stored through `Stand`, and returned domain commands/events
 are wrapped only after the current transaction and state write succeed.
-`BoundedContext.catchUpReadSide(options?)` is the framework
-read-side catch-up boundary. It clears registered projection rows through
+`BoundedContext.catchUpReadSide(options?)` is a legacy-named, process-local
+whole-read-side reset/replay maintenance helper. It is not the framework's
+Projection catch-up boundary. It clears registered projection rows through
 `Stand.clear()`, reads only already-stored events, and replays each event only
 to registered projection subscribers whose dispatcher declares that event
 message schema/type URL. It never re-appends events. Single-tenant contexts
 reject `tenantId`; multitenant contexts require the exact non-blank `tenantId`.
-The helper runs sequentially inside one local process and does not implement
-delivery jobs, schedulers, inbox lifecycle, retries, or transport topology.
+The helper runs sequentially inside one local process and cannot select a
+Projection repository, entity IDs, or a starting time. It does not return a
+catch-up operation ID or implement durable progress, overlap admission, live
+event coordination, delivery jobs, schedulers, inbox lifecycle, retries,
+restart, resumption, or transport topology.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `EntityScopeReason`,

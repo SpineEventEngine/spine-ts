@@ -7,8 +7,9 @@ This reference describes the public server contracts for coding agents.
 Event, command, and state-update routing accepts exact schemas and nominal
 message-interface tokens. It selects exact, first registered matching token,
 then replacement/default. The route runs once at accepted admission; its
-validated typed targets are stored and reused for retries. Read-side catch-up
-intentionally rebuilds, so it is distinct from replaying admitted work.
+validated typed targets are stored and reused for retries. The legacy-named
+local `catchUpReadSide()` helper is unrelated to retry: it resets and replays
+the whole local read side, and is not Projection catch-up.
 
 ## Handler routing and operations
 
@@ -135,10 +136,14 @@ does not close global process facilities; close `ServerEnvironment.instance()`
 separately when used. The final run-managed `run()` close closes its environment.
 
 `Stand` registers entity state for point/list reads, updates current state, and
-offers in-process subscriptions. `catchUpReadSide(options?)` clears registered
-projection state and replays stored events through matching projection
-subscribers; it does not append events or run delivery jobs. Single-tenant
-contexts reject a tenant option; multitenant contexts require one.
+offers in-process subscriptions. The legacy-named local reset/replay helper
+`catchUpReadSide(options?)` clears every registered Projection state and replays
+the whole stored event history through matching Projection subscribers; it does
+not append events. Single-tenant contexts reject a tenant option; multitenant
+contexts require one. It cannot target a Projection repository, entity IDs, or
+a starting time, and has no durable operation identity, progress, Inbox
+catch-up delivery, restart, resumption, or historical/live coordination. It is
+not JVM-equivalent Projection catch-up.
 
 Active subscription streams and queues are process-local. `Stand` serves
 authoritative queries from current state and Entity subscriptions observe

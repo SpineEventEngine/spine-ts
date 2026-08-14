@@ -164,8 +164,10 @@ eligible subscribers/reactors/projections.
 Requirements:
 
 - topic matching by concrete event type URL and semantic tags;
-- domestic/external event distinction;
-- event enrichment before delivery where configured;
+- domestic/external event distinction (required for future cross-context event
+  exchange and not implemented by the current TypeScript runtime);
+- event enrichment before delivery where configured (not implemented by the
+  current TypeScript runtime);
 - delivery through inbox-like durable records when persistence is enabled;
 - idempotence for event redelivery/replay and projection updates.
 

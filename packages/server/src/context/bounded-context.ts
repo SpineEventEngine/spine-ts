@@ -399,7 +399,7 @@ export interface EventEndpoint {
 }
 
 /**
- * Tenant-scoped options for one framework-owned read-side catch-up run.
+ * Tenant-scoped options for the legacy-named local read-side reset/replay helper.
  *
  * Single-tenant contexts reject `tenantId`. Multitenant contexts require a
  * complete generated `tenantId` and preserve its typed identity.
@@ -414,7 +414,7 @@ export interface ReadCatchUpOptions {
 }
 
 /**
- * Summary from one framework-owned read-side catch-up run.
+ * Summary from one legacy-named local read-side reset/replay run.
  *
  * The replay boundary covers only already-stored events routed to registered
  * projection subscribers after `Stand.clear()` removes the target projection
@@ -944,7 +944,12 @@ export class BoundedContext {
   }
 
   /**
-   * Builds registered projection state again from already-stored events.
+   * Clears and locally replays every registered Projection from already-stored events.
+   *
+   * Despite its legacy name, this method is not Projection catch-up. It is a
+   * process-local maintenance helper and provides no Projection targeting,
+   * historical starting point, durable operation identity, progress,
+   * historical/live coordination, restart, resumption, or multi-node work.
    *
    * Supported boundary:
    * - projection subscribers only;

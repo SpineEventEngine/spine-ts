@@ -139,8 +139,9 @@ Use an exact route when the first field is not the correct target. `CommandRouti
 `EventRouting`, and `StateUpdateRouting` accept both `.route(Schema, via)` and
 `.route(Token, via)`. Selection is exact schema, then the first registered
 matching token, then the replacement/default route. Route functions run once at
-accepted admission and stored typed targets are replayed on retry; catch-up
-intentionally rebuilds the read side.
+accepted admission and stored typed targets are replayed on retry. The
+legacy-named local `catchUpReadSide()` helper resets and replays the entire
+process-local read side; it is not Projection catch-up.
 
 Proto `ts_type` options describe those TypeScript interfaces and tokens.
 TypeScript ignores Java-only option fields and does not create semantic tags or

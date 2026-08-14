@@ -320,7 +320,12 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
   }
 
   /**
-   * @inheritdoc
+   * Creates provider-specific Datastore record storage.
+   *
+   * @param context The storage context.
+   * @param recordSpec The record specification.
+   * @param group Separates records that share one source type.
+   * @returns The created Datastore record storage.
    */
   protected onCreateRecordStorage<I, R extends Message>(
     context: StorageContext,
