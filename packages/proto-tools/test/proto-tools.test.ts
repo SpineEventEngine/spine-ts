@@ -25,7 +25,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -1874,6 +1874,222 @@ describe("spine proto model tooling", () => {
       },
       { runBuf: generatedOutput, writeModule: () => undefined },
     );
+  });
+
+  it.each([
+    ["missing live marker", "live", undefined],
+    ["malformed live marker", "live", "not json\n"],
+    ["empty live marker ID", "live", '{"generationId":""}\n'],
+    ["mismatched live marker ID", "live", '{"generationId":"other"}\n'],
+    ["missing staged marker", "staged", undefined],
+    ["malformed staged marker", "staged", "not json\n"],
+    ["empty staged marker ID", "staged", '{"generationId":""}\n'],
+    ["mismatched staged marker ID", "staged", '{"generationId":"other"}\n'],
+  ])("does not reuse a direct generation ID with a %s", (_name, location, marker) => {
+    const packageRoot = mkdtempSync(join(tmpdir(), "spine-direct-reuse-"));
+    const liveRoot = join(packageRoot, "src/generated");
+    const stagedRoot = join(packageRoot, ".generated-stage/output");
+    const manifest = {
+      formatVersion: 2,
+      generationId: "generation-id",
+      packageName: "@example/direct-reuse",
+      packageVersion: "1.2.3",
+      protoFiles: [],
+      generatedExports: {},
+      dependencies: [],
+      moduleExport: "modelProtoModule",
+    };
+    try {
+      for (const root of [liveRoot, stagedRoot]) {
+        mkdirSync(root, { recursive: true });
+        writeFileSync(join(root, "model_pb.ts"), "export {};\n");
+        writeFileSync(
+          join(root, ".spine-proto-generation.json"),
+          '{"generationId":"generation-id"}\n',
+        );
+      }
+      writeJson(packageRoot, "spine-proto-manifest.json", manifest);
+      const markerRoot = location === "live" ? liveRoot : stagedRoot;
+      const markerPath = join(markerRoot, ".spine-proto-generation.json");
+      if (marker === undefined) rmSync(markerPath);
+      else writeFileSync(markerPath, marker);
+
+      expect(
+        ProtoGeneration.reusableGenerationId(packageRoot, liveRoot, stagedRoot, manifest),
+      ).toBeUndefined();
+    } finally {
+      rmSync(packageRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    [64, false],
+    [65, true],
+  ])("accepts direct generated trees at depth %i only when bounded", (depth, rejects) => {
+    const packageRoot = mkdtempSync(join(tmpdir(), "spine-direct-depth-"));
+    const liveRoot = join(packageRoot, "src/generated");
+    const stagedRoot = join(packageRoot, ".generated-stage/output");
+    const manifest = { formatVersion: 2, generationId: "generation-id" };
+    try {
+      for (const root of [liveRoot, stagedRoot]) {
+        let directory = root;
+        mkdirSync(directory, { recursive: true });
+        for (let level = 0; level < depth; level += 1) {
+          directory = join(directory, "nested");
+          mkdirSync(directory);
+        }
+        writeFileSync(join(directory, "model_pb.ts"), "export {};\n");
+        writeFileSync(
+          join(root, ".spine-proto-generation.json"),
+          '{"generationId":"generation-id"}\n',
+        );
+      }
+      writeJson(packageRoot, "spine-proto-manifest.json", manifest);
+      const reusable = ProtoGeneration.reusableGenerationId(
+        packageRoot,
+        liveRoot,
+        stagedRoot,
+        manifest,
+      );
+      expect(reusable === undefined).toBe(rejects);
+    } finally {
+      rmSync(packageRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    [1_000, false],
+    [1_001, true],
+  ])("accepts direct generated trees with %i entries only when bounded", (entries, rejects) => {
+    const packageRoot = mkdtempSync(join(tmpdir(), "spine-direct-entries-"));
+    const liveRoot = join(packageRoot, "src/generated");
+    const stagedRoot = join(packageRoot, ".generated-stage/output");
+    const manifest = { formatVersion: 2, generationId: "generation-id" };
+    try {
+      for (const root of [liveRoot, stagedRoot]) {
+        mkdirSync(root, { recursive: true });
+        for (let entry = 0; entry < entries - 1; entry += 1)
+          writeFileSync(join(root, `entry-${entry}.txt`), "x\n");
+        writeFileSync(
+          join(root, ".spine-proto-generation.json"),
+          '{"generationId":"generation-id"}\n',
+        );
+      }
+      writeJson(packageRoot, "spine-proto-manifest.json", manifest);
+      const reusable = ProtoGeneration.reusableGenerationId(
+        packageRoot,
+        liveRoot,
+        stagedRoot,
+        manifest,
+      );
+      expect(reusable === undefined).toBe(rejects);
+    } finally {
+      rmSync(packageRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.each(["live", "staged"])("rejects a %s symlink during direct generation reuse", (location) => {
+    const packageRoot = mkdtempSync(join(tmpdir(), "spine-direct-symlink-"));
+    const liveRoot = join(packageRoot, "src/generated");
+    const stagedRoot = join(packageRoot, ".generated-stage/output");
+    const manifest = { formatVersion: 2, generationId: "generation-id" };
+    try {
+      for (const root of [liveRoot, stagedRoot]) {
+        mkdirSync(root, { recursive: true });
+        writeFileSync(join(root, "model_pb.ts"), "export {};\n");
+        writeFileSync(
+          join(root, ".spine-proto-generation.json"),
+          '{"generationId":"generation-id"}\n',
+        );
+      }
+      writeFileSync(join(packageRoot, "outside.ts"), "outside\n");
+      symlinkSync(
+        join(packageRoot, "outside.ts"),
+        join(location === "live" ? liveRoot : stagedRoot, "link.ts"),
+      );
+      writeJson(packageRoot, "spine-proto-manifest.json", manifest);
+
+      expect(
+        ProtoGeneration.reusableGenerationId(packageRoot, liveRoot, stagedRoot, manifest),
+      ).toBeUndefined();
+    } finally {
+      rmSync(packageRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("fails a malformed manifest immediately when no generation claim is live", () => {
+    const model = packageDirectory("@example/no-claim-manifest-read");
+    try {
+      writeJson(model, "spine-proto.json", modelConfig("@example/no-claim-manifest-read"));
+      writeFileSync(join(model, "spine-proto-manifest.json"), "not json\n");
+      expect(() => readManifest(model)).toThrow("cannot read spine-proto-manifest.json");
+    } finally {
+      rmSync(model, { recursive: true, force: true });
+    }
+  });
+
+  it("reads only the completed manifest when a live claim commits during a retry", async () => {
+    const model = packageDirectory("@example/interleaved-manifest-read");
+    const claim = join(model, ".spine-proto-generate.lock.live");
+    const marker = join(model, "src/generated/.spine-proto-generation.json");
+    const manifest = join(model, "spine-proto-manifest.json");
+    const ready = join(model, "writer-ready");
+    try {
+      writeJson(model, "spine-proto.json", modelConfig("@example/interleaved-manifest-read"));
+      mkdirSync(join(model, "src/generated"), { recursive: true });
+      writeFileSync(claim, JSON.stringify({ pid: process.pid, token: "live" }));
+      writeFileSync(marker, '{"generationId":"old"}\n');
+      writeFileSync(manifest, "not json\n");
+      const completed = JSON.stringify({
+        formatVersion: 2,
+        generationId: "complete",
+        packageName: "@example/interleaved-manifest-read",
+        packageVersion: "1.2.3",
+        protoFiles: [],
+        generatedExports: {},
+        dependencies: [],
+        moduleExport: "modelProtoModule",
+      });
+      const writer = spawn(process.execPath, [
+        "-e",
+        `const fs=require('node:fs'); fs.writeFileSync(process.argv[1], 'ready'); setTimeout(() => { fs.writeFileSync(process.argv[2], '{\\"generationId\\":\\"complete\\"}\\n'); fs.writeFileSync(process.argv[3], process.argv[4]+'\\n'); }, 15);`,
+        ready,
+        marker,
+        manifest,
+        completed,
+      ]);
+      const deadline = Date.now() + 1_000;
+      while (!existsSync(ready) && Date.now() < deadline) {
+        // Let the writer establish a deterministic pre-commit boundary.
+      }
+      expect(existsSync(ready)).toBe(true);
+      expect(readManifest(model).generationId).toBe("complete");
+      await new Promise<void>((resolveChild, rejectChild) => {
+        writer.once("error", rejectChild);
+        writer.once("exit", (code) =>
+          code === 0 ? resolveChild() : rejectChild(new Error(String(code))),
+        );
+      });
+      expect(existsSync(claim)).toBe(true);
+    } finally {
+      rmSync(model, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed after three live-claim manifest read attempts", () => {
+    const model = packageDirectory("@example/exhausted-manifest-read");
+    try {
+      writeJson(model, "spine-proto.json", modelConfig("@example/exhausted-manifest-read"));
+      mkdirSync(join(model, "src/generated"), { recursive: true });
+      writeFileSync(
+        join(model, ".spine-proto-generate.lock.live"),
+        JSON.stringify({ pid: process.pid }),
+      );
+      writeFileSync(join(model, "spine-proto-manifest.json"), "not json\n");
+      expect(() => readManifest(model)).toThrow("cannot read spine-proto-manifest.json");
+    } finally {
+      rmSync(model, { recursive: true, force: true });
+    }
   });
 
   it("leaves no generated output, manifest, backup, or stage when first manifest publication fails", () => {

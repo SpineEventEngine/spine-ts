@@ -32,10 +32,7 @@ import { spawnSync } from "node:child_process";
 import type { SpawnSyncReturns } from "node:child_process";
 
 import { ProtoConfig, ProtoManifest } from "../index.js";
-import {
-  generationMarkerFile,
-  reusableGenerationId,
-} from "../../../../scripts/generation-reuse.mjs";
+import { generationMarkerFile, reusableGenerationId } from "./generation-reuse.mjs";
 import { readManifestAt } from "../io/manifest-reader.js";
 import { ModelGraph } from "../model/model-graph.js";
 import { ManifestFile, type ManifestFileOperations } from "../io/atomic-manifest.js";

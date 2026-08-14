@@ -10,7 +10,7 @@
   },
   "scripts": {
     "clean": "node scripts/clean-dist.mjs",
-    "prepack": "node scripts/clean-dist.mjs && tsc -b"
+    "prepack": "node scripts/clean-dist.mjs && tsc -b && node scripts/copy-runtime-modules.mjs"
   },
   "exports": {
     ".": {
@@ -22,6 +22,7 @@
     "bin/spine-proto.mjs",
     "dist",
     "scripts/clean-dist.mjs",
+    "scripts/copy-runtime-modules.mjs",
     "README.md",
     "REFERENCE.md"
   ],

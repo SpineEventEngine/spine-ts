@@ -16,7 +16,7 @@ import {
 import { fileURLToPath } from "node:url";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { findSymlinkedAncestors, lstatIfPresent } from "./generated-path-safety.mjs";
-import { reusableGenerationId } from "./generation-reuse.mjs";
+import { reusableGenerationId } from "../packages/proto-tools/src/generation/generation-reuse.mjs";
 import { writeSpineProtoArtifacts } from "./generate-spine-proto-artifacts.mjs";
 import {
   generatedTypeScript,
@@ -218,6 +218,10 @@ export function prepareProtoToolsBootstrap(root = repoRoot, run = runCommandIn) 
         : "Proto Tools bootstrap build failed",
     );
   }
+  cpSync(
+    join(root, "packages/proto-tools/src/generation/generation-reuse.mjs"),
+    join(outputRoot, "generation/generation-reuse.mjs"),
+  );
   bootstrappedRoots.set(root, { executable, outputRoot });
   const policy = join(outputRoot, "generation/generated-source-policy.js");
   if (existsSync(policy)) useGeneratedSourcePolicy(policy);
@@ -757,6 +761,11 @@ export function publishGeneratedTargets(stagedTargets, root = repoRoot, options 
     for (const stagedTarget of stagedTargets) {
       if (!assertGeneratedPathSafe(root, stagedTarget.target.displayPath))
         throw new Error(`Generated path is not safe: ${stagedTarget.target.displayPath}`);
+      if (existsSync(stagedTarget.generatedRoot))
+        assertNoSymlinksInTree(
+          stagedTarget.generatedRoot,
+          `${stagedTarget.target.displayPath} live output`,
+        );
       assertNoSymlinksInTree(
         stagedTarget.stagedOutputRoot,
         `${stagedTarget.target.displayPath} staging`,

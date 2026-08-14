@@ -16,7 +16,7 @@ import { lstatSync, opendirSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { isAbsolute, join, normalize, sep } from "node:path";
 
-import { generationMarkerFile } from "../../../scripts/generation-reuse.mjs";
+import { generationMarkerFile } from "./generation/generation-reuse.mjs";
 import { RegistryDependency } from "./model/registry-dependency.js";
 import { NpmPackageName } from "./model/npm-package-name.js";
 
@@ -26,6 +26,16 @@ import { NpmPackageName } from "./model/npm-package-name.js";
 export const manifestFormatVersion = 2;
 const configFormatVersion = 1;
 const manifestReadAttempts = 3;
+const manifestReadRetryDelayMs = 25;
+
+function waitForManifestCommit(): void {
+  Atomics.wait(
+    new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)),
+    0,
+    0,
+    manifestReadRetryDelayMs,
+  );
+}
 
 function hasLiveGenerationClaim(packageRoot: string): boolean {
   try {
@@ -865,6 +875,7 @@ export const ProtoManifest: Readonly<{
       } catch (error) {
         failure = error;
         if (!hasLiveGenerationClaim(packageRoot)) throw error;
+        if (attempt + 1 < manifestReadAttempts) waitForManifestCommit();
       }
     }
     throw failure;

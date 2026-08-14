@@ -1071,6 +1071,45 @@ describe("proto-workflow", () => {
   });
 
   it.each([
+    ["missing", "live", undefined],
+    ["malformed", "live", "not json\n"],
+    ["empty", "live", '{"generationId":""}\n'],
+    ["mismatched", "live", '{"generationId":"other"}\n'],
+    ["missing", "staged", undefined],
+    ["malformed", "staged", "not json\n"],
+    ["empty", "staged", '{"generationId":""}\n'],
+    ["mismatched", "staged", '{"generationId":"other"}\n'],
+  ])("publishes a fresh Todo generation ID with a %s %s marker", (_state, location, marker) => {
+    const repoRoot = todoTransactionFixture();
+    const todoRoot = join(repoRoot, "examples/todo");
+    const rewriteMarker = (root) => {
+      const path = join(root, "generated/.spine-proto-generation.json");
+      if (marker === undefined) rmSync(path);
+      else writeFileSync(path, marker);
+    };
+    try {
+      rmSync(join(todoRoot, "generated"), { recursive: true, force: true });
+      writeTodoGenerationState(todoRoot, "todo-live", { companion: true, handler: true });
+      if (location === "live") rewriteMarker(todoRoot);
+
+      expect(
+        generateTargets({
+          repoRoot,
+          runCommand: rootStageCommand,
+          runModelCommand: todoStageCommand(undefined, true, ({ cwd }) => {
+            if (location === "staged") rewriteMarker(cwd);
+          }),
+        }),
+      ).toBe(0);
+      expect(
+        JSON.parse(readFileSync(join(todoRoot, "spine-proto-manifest.json"), "utf8")),
+      ).toMatchObject({ generationId: "todo-staged" });
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
     [
       "a depth of 64",
       ({ cwd }) => {
@@ -1155,6 +1194,37 @@ describe("proto-workflow", () => {
       expect(readFileSync(join(todoRoot, "spine-proto-manifest.json"), "utf8")).toBe(
         todoManifest("todo-live"),
       );
+      expect(existsSync(join(repoRoot, ".spine-proto-publication.json"))).toBe(false);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a symlinked live Todo tree before journal publication", () => {
+    const repoRoot = todoTransactionFixture();
+    const todoRoot = join(repoRoot, "examples/todo");
+    let journalWrites = 0;
+    const operations = {
+      write() {
+        journalWrites += 1;
+      },
+      rename(path, target) {
+        throw new Error(`rename unexpectedly attempted: ${path} ${target}`);
+      },
+    };
+    try {
+      writeFileSync(join(todoRoot, "outside.txt"), "outside\n");
+      symlinkSync(join(todoRoot, "outside.txt"), join(todoRoot, "generated/unsafe.txt"));
+
+      expect(
+        generateTargets({
+          repoRoot,
+          runCommand: rootStageCommand,
+          runModelCommand: todoStageCommand(undefined),
+          publicationOperations: operations,
+        }),
+      ).toBe(1);
+      expect(journalWrites).toBe(0);
       expect(existsSync(join(repoRoot, ".spine-proto-publication.json"))).toBe(false);
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
@@ -2135,6 +2205,70 @@ describe("proto-workflow", () => {
     ).toThrow("staged rename failed");
     expect(readFileSync(join(generatedRoot, "message.txt"), "utf8")).toBe("previous output\n");
     expect(existsSync(join(repoRoot, ".spine-proto-publication.json"))).toBe(false);
+  });
+
+  it("retains aggregate rollback evidence until a later recovery succeeds", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const generatedRoot = join(repoRoot, "packages/proto/generated");
+    const stageRoot = join(repoRoot, "packages/proto/.generated-test");
+    const stagedOutputRoot = join(stageRoot, "output");
+    mkdirSync(generatedRoot, { recursive: true });
+    mkdirSync(stagedOutputRoot, { recursive: true });
+    writeFileSync(join(generatedRoot, "message.txt"), "previous output\n");
+    writeFileSync(join(stagedOutputRoot, "message.txt"), "next output\n");
+    let backup;
+
+    try {
+      let failure;
+      try {
+        publishGeneratedTargets(
+          [
+            {
+              generatedRoot,
+              stagedOutputRoot,
+              stageRoot,
+              target: { displayPath: "packages/proto/generated" },
+            },
+          ],
+          repoRoot,
+          {
+            operations: {
+              rename(from, to) {
+                if (from === stagedOutputRoot && to === generatedRoot)
+                  throw new Error("primary staged rename failed");
+                if (from === backup && to === generatedRoot)
+                  throw new Error("recovery restore failed");
+                renameSync(from, to);
+              },
+            },
+            afterBackup(target) {
+              backup = target.backup;
+            },
+          },
+        );
+      } catch (caught) {
+        failure = caught;
+      }
+
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect(failure.errors.map((error) => String(error))).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining("primary staged rename failed"),
+          expect.stringContaining("recovery restore failed"),
+        ]),
+      );
+      expect(existsSync(join(repoRoot, ".spine-proto-publication.json"))).toBe(true);
+      expect(existsSync(backup)).toBe(true);
+      expect(existsSync(stagedOutputRoot)).toBe(true);
+
+      publishGeneratedTargets([], repoRoot);
+      expect(readFileSync(join(generatedRoot, "message.txt"), "utf8")).toBe("previous output\n");
+      expect(existsSync(join(repoRoot, ".spine-proto-publication.json"))).toBe(false);
+      expect(existsSync(backup)).toBe(false);
+      expect(existsSync(stagedOutputRoot)).toBe(false);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
   });
 
   it("removes first-publication output when finalization fails", () => {
