@@ -137,6 +137,36 @@ describe("check-generated-clean", () => {
     expect(result.stdout).toContain("already-generated");
   });
 
+  it("allows only the committed generation marker in an otherwise ignored generated root", () => {
+    const repoRoot = createFixture();
+    const marker = join(repoRoot, "packages/proto/generated/.spine-proto-generation.json");
+    writeFileSync(marker, '{"generationId":"fixture-generation"}\n');
+    run("git", ["add", "-f", marker], repoRoot);
+    run("git", ["commit", "-m", "generation marker"], repoRoot);
+    const generatedRoots = [
+      "examples/todo/generated",
+      "examples/projects/generated",
+      "examples/orders/generated",
+      "examples/message-board/model/generated",
+      "examples/message-board/app/generated",
+    ];
+    for (const generatedRoot of generatedRoots) {
+      mkdirSync(join(repoRoot, generatedRoot), { recursive: true });
+    }
+    writeFileSync(
+      join(repoRoot, ".gitignore"),
+      [
+        "packages/proto/generated/",
+        ...generatedRoots.map((generatedRoot) => `${generatedRoot}/`),
+      ].join("\n"),
+    );
+
+    const result = runCurrentOutputChecker(repoRoot);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("already-generated");
+  });
+
   it("compares every atomic model output by default", () => {
     expect(generatedTargetsForCheck().map((target) => target.displayPath)).toEqual([
       "packages/proto/generated",

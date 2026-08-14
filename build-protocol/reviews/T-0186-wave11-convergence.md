@@ -120,3 +120,11 @@ by this fix pass.
   `git diff --check` passed. The correction is ready for the planned relevant
   review wave after the remaining mechanical validation; no reviewer or final
   security reviewer has started in this pass.
+
+## Marker-Policy Correction Evidence (2026-08-14)
+
+- A clean checkout needs the v2 generation marker before source regeneration.
+  The checker permits only that exact marker and retains failure for all other
+  tracked generated output. Focused regression: 10 checker tests passed; the
+  current-output gate passed after repeated generation. No reviewer was
+  dispatched; this mechanical correction is re-review-ready.

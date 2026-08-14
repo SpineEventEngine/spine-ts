@@ -149,3 +149,11 @@ delegated from this owner.
   vitest run packages/server/test/repository/repository-routing.test.ts` —
   244 passed; `git diff --check` — clean. Specialist/security review and
   `verify:release` remain unstarted.
+
+## Clean-Checkout Marker Correction (2026-08-14)
+
+- The sole tracked exception beneath a generated root is its v2 generation
+  marker, required to validate a manifest in a clean checkout. The current
+  generated-output check rejects all other tracked generated files. Focused
+  checker evidence: 10 tests passed; committed-HEAD bootstrap and repeated
+  generation/current-output validation were rerun.

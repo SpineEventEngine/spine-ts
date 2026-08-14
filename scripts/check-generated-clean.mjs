@@ -255,7 +255,14 @@ function main() {
         );
       }
 
-      const trackedFiles = trackedResult.stdout.trim();
+      const trackedFiles = trackedResult.stdout
+        .trim()
+        .split("\n")
+        .filter(
+          (path) =>
+            path.length > 0 && path !== `${target.displayPath}/.spine-proto-generation.json`,
+        )
+        .join("\n");
       const generatedDirectory = resolve(repoRoot, target.displayPath);
       const generatedSafetyFailures = assertGeneratedDirectorySafe(
         repoRoot,
