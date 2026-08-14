@@ -441,3 +441,10 @@ will cover only these four corrected trust boundaries.
   typecheck, exact affected ESLint, Prettier, and diff checks are GREEN; full
   Proto Tools is `137/137` and workflow is `93/93`. The temporary typecheck
   limitation above is resolved. Final security re-review is unblocked.
+- Independent complete-source coverage passed `413/413` tests and all nine
+  changed production-source records: **262/265 lines (98.87%)** and **192/211
+  branches (91.00%)**. The mandatory existing `security_reviewer` is assigned
+  a targeted correction re-review with explicit immutable
+  `gpt-5.6-terra` / high configuration, limited to the four accepted security
+  findings. Desktop exposes no independent runtime telemetry; the configured
+  role/profile and no visible mismatch are the acceptance evidence.
