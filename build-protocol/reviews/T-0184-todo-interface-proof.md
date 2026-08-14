@@ -1,6 +1,6 @@
 # T-0184 Review Log
 
-Status: Review clean and bounded verification passed; integration-ready
+Status: Complete, integrated, tagged, and post-merge verified
 
 Task: `build-protocol/tasks/T-0184-todo-interface-proof/TASK.md`
 Branch: `task/T-0184-todo-interface-proof`
@@ -224,3 +224,17 @@ least 90%, cheap preflight, and bounded `verify:task` with loopback permissions.
   matrix (`76/76`), followed by cleanup, TSDoc, copyright, full ESLint,
   formatting, generated-output currency, and diff hygiene. T-0184 is review
   clean, bounded-verification complete, and integration-ready.
+
+## Integration And Post-Merge Verification
+
+- Fast-forward precondition was exact: `origin/main` and the merge base were
+  `eb249121`; task release HEAD was `6877d144` with a clean worktree.
+- `6877d144` was pushed to `origin/main` and tagged `T-0184`; the published task
+  branch remained synchronized.
+- Post-merge canonical Proto generation and current-output verification passed.
+  The six To-Do suites passed `77/77`, including exact rejection delivery,
+  bounded readiness, durable replay, startup/smoke, and the supported
+  one-Gateway/multiple-application-node loopback. Status and diff hygiene were
+  clean.
+- T-0184 is complete, integrated, tagged, and post-merge verified. T-0185
+  beginner documentation is next.

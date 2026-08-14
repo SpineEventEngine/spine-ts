@@ -1,6 +1,6 @@
 # Wave 11: TypeScript Interfaces And Interface-Based Routing
 
-Status: In implementation; T-0180 through T-0183 and T-0184A prerequisite complete, integrated, tagged, and post-merge verified; T-0184 resume next
+Status: In implementation; T-0180 through T-0184 and the T-0184A prerequisite complete, integrated, tagged, and post-merge verified; T-0185 next
 
 ## Purpose
 

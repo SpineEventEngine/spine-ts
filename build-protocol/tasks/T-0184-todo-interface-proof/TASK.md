@@ -1,8 +1,8 @@
 # T-0184: To-Do Interface-Routing Proof
 
-Status: Review clean and bounded verification passed; integration-ready
+Status: Complete, integrated, tagged, and post-merge verified
 Start: `2026-08-14 WEST`
-End: Pending
+End: `2026-08-14 WEST`
 Baseline commit: `aed2f194`
 Branch: `task/T-0184-todo-interface-proof`
 Worktree: `.worktrees/T-0184-todo-interface-proof`
@@ -12,6 +12,7 @@ Runtime metadata: unavailable from the desktop surface; the immutable configured
 role/profile is the available evidence.
 
 Final correction evidence checkpoint: `04961e27`.
+Release/integration tag: `T-0184` at `6877d144`.
 
 ## Objective
 
