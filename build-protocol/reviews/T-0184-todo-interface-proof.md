@@ -69,5 +69,5 @@ least 90%, cheap preflight, and bounded `verify:task` with loopback permissions.
 ## Assignment Lifecycle Checkpoint
 
 - Focused black-box proof now covers zero/one/two assignee target outcomes and
-  four-event durable read-side replay. Full matrix coverage and review remain
-  pending.
+  four-event read-side rebuild. Durable Inbox no-reroute is a separate existing
+  repository-routing contract. Full matrix coverage and review remain pending.
