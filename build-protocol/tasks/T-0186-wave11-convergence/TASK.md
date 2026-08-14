@@ -72,6 +72,15 @@ close the Wave.
 - cheap preflight and one converged `verify:release`;
 - integration, tag, post-merge verification, and cleanup.
 
+## Coverage Closure Status (2026-08-14)
+
+- In progress, not review-ready. Valid single-worker V8 evidence covers the
+  proto-tools changed publication behavior at 32/32 executable lines and 20/20
+  branches in `generator.ts`; `index.ts` has one remaining model-mode rejection
+  line/branch. Core descriptor validation has 27/28 changed executable lines
+  and 34/38 branches; the exact outstanding locations are retained in the work
+  log. No release or review gate has been started.
+
 ## Convergence Evidence (2026-08-14)
 
 - The one-time audit command was an inline `node --input-type=module` inventory

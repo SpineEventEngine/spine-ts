@@ -1793,6 +1793,81 @@ describe("spine proto model tooling", () => {
     }
   });
 
+  it("replaces the committed generation ID when regenerated output changes", () => {
+    const model = packageDirectory("@example/changed-generation-model");
+    try {
+      writeJson(model, "spine-proto.json", modelConfig("@example/changed-generation-model"));
+      mkdirSync(join(model, "proto"), { recursive: true });
+      writeFileSync(join(model, "proto/model.proto"), 'syntax = "proto3"; message Model {}\n');
+
+      generateModel(model, { runBuf: generatedOutput });
+      const firstGenerationId = JSON.parse(
+        readFileSync(join(model, "spine-proto-manifest.json"), "utf8"),
+      ).generationId;
+
+      generateModel(model, {
+        runBuf: (_, output) => {
+          generatedOutput("", output);
+          writeFileSync(join(output, "model_pb.ts"), "export const changed = true;\n");
+        },
+      });
+
+      const manifest = JSON.parse(readFileSync(join(model, "spine-proto-manifest.json"), "utf8"));
+      expect(manifest.generationId).not.toBe(firstGenerationId);
+      expect(readFileSync(join(model, "src/generated/.spine-proto-generation.json"), "utf8")).toBe(
+        `${JSON.stringify({ generationId: manifest.generationId })}\n`,
+      );
+    } finally {
+      rmSync(model, { recursive: true, force: true });
+    }
+  });
+
+  it("does not reuse a generation ID from corrupt or mismatched committed publication state", () => {
+    const regenerate = (
+      name: string,
+      changeCommittedState: (model: string, priorGenerationId: string) => void,
+      operations: GenerationOperations = { runBuf: generatedOutput },
+    ) => {
+      const model = packageDirectory(`@example/${name}`);
+      try {
+        writeJson(model, "spine-proto.json", modelConfig(`@example/${name}`));
+        mkdirSync(join(model, "proto"), { recursive: true });
+        writeFileSync(join(model, "proto/model.proto"), 'syntax = "proto3"; message Model {}\n');
+        generateModel(model, operations);
+        const priorGenerationId = JSON.parse(
+          readFileSync(join(model, "spine-proto-manifest.json"), "utf8"),
+        ).generationId;
+        changeCommittedState(model, priorGenerationId);
+        generateModel(model, operations);
+        expect(
+          JSON.parse(readFileSync(join(model, "spine-proto-manifest.json"), "utf8")).generationId,
+        ).not.toBe(priorGenerationId);
+      } finally {
+        rmSync(model, { recursive: true, force: true });
+      }
+    };
+
+    regenerate("null-committed-manifest", (model) => {
+      writeFileSync(join(model, "spine-proto-manifest.json"), "null\n");
+    });
+    regenerate("v1-committed-manifest", (model) => {
+      writeFileSync(join(model, "spine-proto-manifest.json"), '{"formatVersion":1}\n');
+    });
+    regenerate("different-committed-tree", (model) => {
+      writeFileSync(join(model, "src/generated/previous_pb.ts"), "export {};\n");
+    });
+    regenerate(
+      "different-committed-manifest",
+      (model) => {
+        writeJson(model, "package.json", {
+          name: "@example/different-committed-manifest",
+          version: "1.2.4",
+        });
+      },
+      { runBuf: generatedOutput, writeModule: () => undefined },
+    );
+  });
+
   it("leaves no generated output, manifest, backup, or stage when first manifest publication fails", () => {
     const model = packageDirectory("@example/first-manifest-failure-model");
     writeJson(model, "spine-proto.json", modelConfig("@example/first-manifest-failure-model"));

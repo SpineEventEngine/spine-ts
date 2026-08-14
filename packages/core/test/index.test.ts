@@ -91,7 +91,29 @@ describe("MessageInterfaces", () => {
   });
 
   it("rejects forged descriptor-shaped runtime membership before token registration", () => {
+    const excessiveDescriptorRoots = Array.from({ length: 1_001 }, () => ({}));
+    const deeplyNestedDescriptor = (() => {
+      const descriptor = {
+        kind: "message",
+        typeName: "example.Deep",
+        file: { kind: "file", messages: [] as unknown[] },
+        proto: { $typeName: "google.protobuf.DescriptorProto" },
+      };
+      let root: object = descriptor;
+      for (let depth = 0; depth <= 10_000; depth += 1) root = { nestedMessages: [root] };
+      descriptor.file.messages.push(root);
+      return descriptor;
+    })();
+    const descriptorWithMessages = (messages: unknown[]) => ({
+      kind: "message",
+      typeName: "example.Malicious",
+      file: { kind: "file", messages },
+      proto: { $typeName: "google.protobuf.DescriptorProto" },
+    });
+    const cyclicDescriptorNode: { nestedMessages?: unknown[] } = {};
+    cyclicDescriptorNode.nestedMessages = [cyclicDescriptorNode];
     const forged = [
+      42,
       { kind: "message" },
       {
         kind: "message",
@@ -120,11 +142,28 @@ describe("MessageInterfaces", () => {
           },
         },
       ),
+      new Proxy(
+        {},
+        {
+          getOwnPropertyDescriptor() {
+            throw new Error("forged reflection trap");
+          },
+        },
+      ),
       Object.create(null, {
         kind: { value: "message" },
         typeName: { get: () => "example.Accessor" },
         file: { value: { kind: "file", messages: [] } },
       }),
+      {
+        kind: "message",
+        typeName: "example.Excessive",
+        file: { kind: "file", messages: excessiveDescriptorRoots },
+        proto: { $typeName: "google.protobuf.DescriptorProto" },
+      },
+      deeplyNestedDescriptor,
+      descriptorWithMessages([cyclicDescriptorNode]),
+      descriptorWithMessages([{ nestedMessages: {} }]),
     ];
 
     for (const schema of forged) {
