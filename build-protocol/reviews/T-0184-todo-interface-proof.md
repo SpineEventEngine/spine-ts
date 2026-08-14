@@ -1,6 +1,6 @@
 # T-0184 Review Log
 
-Status: Blocked pending shared generation corrections
+Status: Resumed — implementation and verification pending
 
 Task: `build-protocol/tasks/T-0184-todo-interface-proof/TASK.md`
 Branch: `task/T-0184-todo-interface-proof`
@@ -37,9 +37,12 @@ least 90%, cheap preflight, and bounded `verify:task` with loopback permissions.
 - The same test is GREEN after the To-Do changes: `1` file and `2` tests pass.
 - Direct To-Do generation succeeds, including generated provenance/no-copyright
   interface files.
-- Review cannot begin because root atomic generation fails when the staged model
+- Historical review blocker: review could not begin because root atomic generation failed when the staged model
   cannot discover authored sources/configuration, and direct generated-model
   typechecking fails with `TS9013` for unannotated generated `memberSchemas`
-  tuples. Both are outside the T-0184 example-only implementation boundary.
+  tuples. Both were outside the T-0184 example-only implementation boundary.
+- These blockers are superseded by T-0184A, integrated, tagged, and post-merge
+  verified at `0bacb0b3`. The resumed task must rerun its focused behavior,
+  preflight, and bounded verification before specialist review.
 - No specialist lane has been invoked. Security remains N/A for this checkpoint;
   T-0186 owns final Wave security review.

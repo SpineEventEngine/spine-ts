@@ -29,6 +29,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdtempSync } from "node:fs";
+import ts from "typescript";
 
 import { InterfaceGenerator, stagedSourceView } from "../src/generation/interface-generator.js";
 import { AuthoredInterfaceProvider } from "../src/generation/authored-interface-provider.js";
@@ -89,8 +90,61 @@ describe("InterfaceGenerator", () => {
 
     expect(generated).toEqual(["interfaces/signal-family.ts"]);
     expect(printed.join("")).toContain("export interface SignalFamily {}");
-    expect(printed.join("")).toContain("[SignalSchema, NestedSchema] as const");
+    expect(printed.join("")).toContain(
+      "const memberSchemas: readonly [typeof SignalSchema, typeof NestedSchema] = [SignalSchema, NestedSchema];",
+    );
     expect(printed.join("")).toContain("export const SignalFamily");
+  });
+
+  it("keeps generated and authored single and multi-member tuples declaration-safe", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-interface-tuples-"));
+    try {
+      writeFileSync(
+        join(root, "schemas.ts"),
+        [
+          "export const SingleSchema = { typeName: 'single' };",
+          "export const FirstSchema = { typeName: 'first' };",
+          "export const SecondSchema = { typeName: 'second' };",
+          "",
+        ].join("\n"),
+      );
+      for (const [name, members] of [
+        ["generated-single", "SingleSchema"],
+        ["generated-multi", "FirstSchema, typeof SecondSchema"],
+        ["authored-single", "SingleSchema"],
+        ["authored-multi", "FirstSchema, typeof SecondSchema"],
+      ] as const) {
+        const valueMembers = members.replaceAll("typeof ", "");
+        writeFileSync(
+          join(root, `${name}.ts`),
+          [
+            `import { ${valueMembers} } from "./schemas.js";`,
+            `const memberSchemas: readonly [typeof ${members}] = [${valueMembers}];`,
+            "export { memberSchemas };",
+            "",
+          ].join("\n"),
+        );
+      }
+      const program = ts.createProgram(
+        ["generated-single", "generated-multi", "authored-single", "authored-multi"].map((name) =>
+          join(root, `${name}.ts`),
+        ),
+        {
+          declaration: true,
+          emitDeclarationOnly: true,
+          isolatedDeclarations: true,
+          module: ts.ModuleKind.NodeNext,
+          moduleResolution: ts.ModuleResolutionKind.NodeNext,
+          noEmitOnError: true,
+          strict: true,
+          target: ts.ScriptTarget.ES2022,
+        },
+      );
+      const diagnostics = [...ts.getPreEmitDiagnostics(program), ...program.emit().diagnostics];
+      expect(diagnostics).toEqual([]);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
   });
 
   it("rejects empty and invalid generated TypeScript names before emitting output", () => {
@@ -148,7 +202,10 @@ describe("InterfaceGenerator", () => {
     InterfaceGenerator.generateCompanions(schema);
 
     expect(printed.join("")).toContain(
-      "[example_SignalSchema, example_Signal_NestedSchema] as const",
+      [
+        "const memberSchemas: readonly [typeof example_SignalSchema, typeof example_Signal_NestedSchema]",
+        " = [example_SignalSchema, example_Signal_NestedSchema];",
+      ].join(""),
     );
   });
 
@@ -325,6 +382,9 @@ describe("InterfaceGenerator", () => {
       expect(output.join("")).toContain("interfaces/message-signal.ts");
       expect(output.join("")).toContain("export type FileSignal = AuthoredFileSignal");
       expect(output.join("")).toContain("export type MessageSignal = AuthoredMessageSignal");
+      expect(output.join("")).toContain(
+        "const memberSchemas: readonly [typeof SignalSchema, typeof NestedSchema] = [SignalSchema, NestedSchema];",
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

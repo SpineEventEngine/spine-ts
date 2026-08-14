@@ -677,6 +677,7 @@ export function publishGeneratedTargets(stagedTargets, root = repoRoot, options 
     }
     validatePublicationJournal(root, journal);
     assertPublicationFilesSafe(root, publicationFiles);
+    options.beforeJournal?.();
     writePublicationJournal(journalPath, journal, operations);
     for (const target of targets) {
       if (target.hadPrevious) operations.rename(target.target, target.backup);
@@ -821,6 +822,29 @@ export function stageGeneratedTargets(options = {}) {
   }
 }
 
+function revalidateModelSourceViews(stagedTargets, options = {}) {
+  const run = options.runModelCommand ?? runCommandIn;
+  for (const stagedTarget of stagedTargets) {
+    const record = stagedTarget.sourceViewRecord;
+    if (record === undefined) continue;
+    const status = run(
+      `${record.moduleName} source-view publication revalidation`,
+      process.execPath,
+      [
+        record.executable,
+        "verify-source-view-record",
+        "--live-package-root",
+        record.livePackageRoot,
+        "--live-generated-root",
+        join(record.livePackageRoot, "generated"),
+      ],
+      record.packageRoot,
+    );
+    if (status !== 0)
+      throw new Error(`${record.moduleName} source-view publication revalidation failed`);
+  }
+}
+
 function stageModel(target, root, options = {}, stagedTargets = []) {
   const livePackageRoot = join(root, target.packagePath);
   if (!existsSync(join(livePackageRoot, "spine-proto.json"))) return { status: 0 };
@@ -844,7 +868,7 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
     const modelStatus = run(
       `${target.moduleName} model generation`,
       process.execPath,
-      [executable],
+      [executable, "generate", "--live-package-root", livePackageRoot],
       packageRoot,
     );
     if (modelStatus !== 0) throw new Error(`${target.moduleName} model generation failed`);
@@ -965,6 +989,12 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
         stagedOutputRoot: output,
         stageRoot,
         target,
+        sourceViewRecord: {
+          executable,
+          livePackageRoot,
+          moduleName: target.moduleName,
+          packageRoot,
+        },
         files: [
           {
             target: join(livePackageRoot, "spine-proto-manifest.json"),
@@ -1164,6 +1194,7 @@ export function generateTargets(options = {}) {
           });
         }
         publishGeneratedTargets(staged.stagedTargets, root, {
+          beforeJournal: () => revalidateModelSourceViews(staged.stagedTargets, options),
           operations: options.publicationOperations,
           files: publicationFiles,
         });

@@ -36,7 +36,7 @@ import { readManifestAt } from "../io/manifest-reader.js";
 import { ModelGraph } from "../model/model-graph.js";
 import { ManifestFile, type ManifestFileOperations } from "../io/atomic-manifest.js";
 import { generatedSource, normalizeGeneratedTree } from "./generated-source-policy.js";
-import { assertSourceViewCurrent, modelSourceView } from "./source-view.js";
+import { assertSourceViewCurrent, modelSourceView, writeViewRecord } from "./source-view.js";
 import type { ModelSourceView } from "./source-view.js";
 
 /**
@@ -44,6 +44,11 @@ import type { ModelSourceView } from "./source-view.js";
  */
 export interface GenerationOperations {
   // prettier-ignore
+
+  /**
+   * Canonical live model root used only by the root transaction bootstrap.
+   */
+  readonly livePackageRoot?: string;
 
   /**
    * Executes Buf for the staged model sources.
@@ -291,7 +296,11 @@ const protoGeneration = Object.freeze({
       const moduleRoot = join(stage, "module");
       const output = join(moduleRoot, "output");
       try {
-        const sourceView = modelSourceView(packageRoot, config.generatedRoot, output);
+        const sourceView = modelSourceView(
+          operations.livePackageRoot ?? packageRoot,
+          config.generatedRoot,
+          output,
+        );
         protoGeneration.copyOwnedSources(
           packageRoot,
           config.protoRoot,
@@ -332,6 +341,8 @@ const protoGeneration = Object.freeze({
         );
         normalizeGeneratedTree(output, manifest.protoFiles);
         assertSourceViewCurrent(sourceView);
+        if (operations.livePackageRoot !== undefined)
+          writeViewRecord(packageRoot, sourceView);
         protoGeneration.publish(
           packageRoot,
           config.generatedRoot,

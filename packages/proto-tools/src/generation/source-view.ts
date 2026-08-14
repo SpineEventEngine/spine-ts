@@ -20,14 +20,19 @@ import {
   fstatSync,
   lstatSync,
   openSync,
+  realpathSync,
   readFileSync,
   readdirSync,
+  writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import ts from "typescript";
 
 const maximumSourceViewDepth = 32;
 const maximumSourceViewEntries = 10_000;
+const recordFileName = ".spine-source-view-publication.json";
+const recordFormat = 1;
+const maximumRecordBytes = 16 * 1024;
 
 const nonRegularInputDiagnostic = "spine-proto: source view contains non-regular TypeScript input";
 
@@ -123,6 +128,33 @@ export interface PublicationSourceView extends ModelSourceView {
   readonly inventoryDigest: string;
 }
 
+/**
+ * Fixed internal handoff retained by a root model-generation transaction.
+ */
+export interface SourceViewPublicationRecord {
+  // prettier-ignore
+
+  /**
+   * Fixed internal record format version.
+   */
+  readonly formatVersion: 1;
+
+  /**
+   * SHA-256 fingerprint of the live authored-source and configuration inventory.
+   */
+  readonly inventoryDigest: string;
+
+  /**
+   * Canonical live generated root excluded from the inventory.
+   */
+  readonly liveGeneratedRoot: string;
+
+  /**
+   * Canonical live model package root used to recompute the inventory.
+   */
+  readonly livePackageRoot: string;
+}
+
 interface ProjectConfigView {
   readonly allowJs: boolean;
   readonly configFiles: readonly string[];
@@ -194,9 +226,14 @@ function sourceInventory(root: string, generated: string): SourceInventory {
   const generatedName = basename(generated);
   const excluded = [generated, "dist"];
   const siblingStage = join(generatedDirectory, `.${generatedName}.stage-`);
+  const siblingRootTransaction = join(generatedDirectory, `.${generatedName}-`);
   const siblingBackup = join(generatedDirectory, `.${generatedName}.`);
   const config = projectConfig(root);
-  const inputs = collectAuthored(root, [...excluded, siblingStage, siblingBackup], config?.allowJs);
+  const inputs = collectAuthored(
+    root,
+    [...excluded, siblingStage, siblingRootTransaction, siblingBackup],
+    config?.allowJs,
+  );
   const authoredFiles = Object.freeze(inputs.authoredFiles);
   const compilerFiles = Object.freeze(inputs.compilerFiles);
   return Object.freeze({
@@ -216,6 +253,115 @@ export function assertSourceViewCurrent(sourceView: PublicationSourceView): void
     const generated = relative(sourceView.packageRoot, sourceView.liveGeneratedRoot);
     const current = sourceInventory(sourceView.packageRoot, generated);
     if (current.digest === sourceView.inventoryDigest) return;
+  } catch {
+    // Report one stable transaction diagnostic for every inventory mutation.
+  }
+  throw new Error("spine-proto: authored interface source view changed during generation");
+}
+
+/**
+ * Writes the fixed internal source-view handoff for an outer generation stage.
+ *
+ * @param stageRoot Outer staged model package root.
+ * @param sourceView Captured live-authored/staged-generated source view.
+ */
+export function writeViewRecord(stageRoot: string, sourceView: PublicationSourceView): void {
+  writeFileSync(
+    join(stageRoot, recordFileName),
+    `${JSON.stringify({
+      formatVersion: recordFormat,
+      inventoryDigest: sourceView.inventoryDigest,
+      liveGeneratedRoot: sourceView.liveGeneratedRoot,
+      livePackageRoot: sourceView.packageRoot,
+    })}\n`,
+    "utf8",
+  );
+}
+
+/**
+ * Reads one bounded root-transaction source-view handoff.
+ *
+ * @param stageRoot Outer staged model package root.
+ * @param expectedLivePackageRoot Canonical selected live model package root.
+ * @param expectedLiveGeneratedRoot Canonical selected live generated root.
+ * @returns Validated immutable internal handoff.
+ */
+export function readViewRecord(
+  stageRoot: string,
+  expectedLivePackageRoot: string,
+  expectedLiveGeneratedRoot: string,
+): SourceViewPublicationRecord {
+  const recordPath = join(stageRoot, recordFileName);
+  const stagePath = resolve(stageRoot);
+  const candidate = resolve(recordPath);
+  let stage: string;
+  let regular = false;
+  try {
+    stage = realpathSync(stagePath);
+    regular = lstatSync(candidate).isFile();
+  } catch {
+    throw new Error("spine-proto: invalid source-view publication record");
+  }
+  if (!candidate.startsWith(`${stagePath}/`) || !regular)
+    throw new Error("spine-proto: invalid source-view publication record");
+  const canonicalRecord = realpathSync(candidate);
+  if (!canonicalRecord.startsWith(`${stage}/`))
+    throw new Error("spine-proto: invalid source-view publication record");
+  let descriptor: number | undefined;
+  let raw: unknown;
+  try {
+    descriptor = openSync(
+      canonicalRecord,
+      constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW,
+    );
+    const metadata = fstatSync(descriptor);
+    if (!metadata.isFile() || metadata.size > maximumRecordBytes)
+      throw new Error("spine-proto: invalid source-view publication record");
+    raw = JSON.parse(readFileSync(descriptor).toString("utf8"));
+  } catch {
+    throw new Error("spine-proto: invalid source-view publication record");
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+  if (raw === null || typeof raw !== "object")
+    throw new Error("spine-proto: invalid source-view publication record");
+  const record = raw as Partial<SourceViewPublicationRecord>;
+  const livePackageRoot = realpathSync(expectedLivePackageRoot);
+  const expectedGeneratedRelative = relative(
+    resolve(expectedLivePackageRoot),
+    resolve(expectedLiveGeneratedRoot),
+  );
+  const liveGeneratedRoot = resolve(livePackageRoot, expectedGeneratedRelative);
+  if (
+    record.formatVersion !== recordFormat ||
+    record.livePackageRoot !== livePackageRoot ||
+    record.liveGeneratedRoot !== liveGeneratedRoot ||
+    expectedGeneratedRelative === "" ||
+    expectedGeneratedRelative.startsWith("..") ||
+    typeof record.inventoryDigest !== "string" ||
+    !/^[a-f0-9]{64}$/u.test(record.inventoryDigest) ||
+    Object.keys(record).sort().join(",") !==
+      "formatVersion,inventoryDigest,liveGeneratedRoot,livePackageRoot"
+  )
+    throw new Error("spine-proto: invalid source-view publication record");
+  return Object.freeze({
+    formatVersion: recordFormat,
+    inventoryDigest: record.inventoryDigest,
+    liveGeneratedRoot,
+    livePackageRoot,
+  });
+}
+
+/**
+ * Rejects a changed live source/configuration inventory captured in a handoff.
+ *
+ * @param record Validated internal root-transaction handoff.
+ */
+export function assertViewRecordCurrent(record: SourceViewPublicationRecord): void {
+  try {
+    const generated = relative(record.livePackageRoot, record.liveGeneratedRoot);
+    if (sourceInventory(record.livePackageRoot, generated).digest === record.inventoryDigest)
+      return;
   } catch {
     // Report one stable transaction diagnostic for every inventory mutation.
   }
@@ -248,7 +394,7 @@ function collectAuthored(
             relativePath === entry ||
             relativePath.startsWith(`${entry}${sep}`) ||
             relativePath.startsWith(`${entry}-`) ||
-            (entry.endsWith(".") && relativePath.startsWith(entry)),
+            ((entry.endsWith(".") || entry.endsWith("-")) && relativePath.startsWith(entry)),
         )
       )
         continue;
@@ -294,7 +440,7 @@ export function modelSourceView(
   generatedRoot: string,
   stagedGeneratedRoot: string,
 ): PublicationSourceView {
-  const root = resolve(packageRoot);
+  const root = realpathSync(resolve(packageRoot));
   const generated = generatedRoot.replaceAll("\\", "/");
   const liveGeneratedRoot = resolve(root, generated);
   const inventory = sourceInventory(root, generated);

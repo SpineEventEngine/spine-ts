@@ -1,6 +1,6 @@
 # T-0184: To-Do Interface-Routing Proof
 
-Status: Blocked — shared generation prerequisites
+Status: Resumed — implementation and verification pending
 Start: `2026-08-14 WEST`
 End: Pending
 Baseline commit: `aed2f194`
@@ -78,7 +78,7 @@ The loopback multi-process test retains the existing supported topology: one
 Gateway connected to multiple application nodes. It is not a multiple-Gateway
 test and creates no Wave 12 behavior.
 
-## Demonstrated Progress And Blockers
+## Demonstrated Progress And Superseded Blockers
 
 - RED: `pnpm exec vitest run examples/todo/test/interface-routing-contract.test.ts`
   initially failed both assertions because the Task event token declarations and
@@ -88,20 +88,23 @@ test and creates no Wave 12 behavior.
 - Direct `pnpm -C examples/todo proto:generate` succeeds and emits generated
   TaskEvent and TaskAssignmentEvent token files with the required provenance
   header and no copyright header.
-- Root `pnpm proto:generate` is blocked before publication: its atomic model
+- Historical blocker 1: root `pnpm proto:generate` was blocked before publication: its atomic model
   stage copies only `package.json`, `spine-proto.json`, and `proto`. Authored
   interface discovery consequently cannot find `tsconfig.json` or `src`; a
   naive copy also changes the depth at which To-Do's `../../tsconfig.base.json`
   extension resolves. This is shared transaction/source-view work outside this
   task's ownership.
-- Direct generated-model typechecking is independently blocked by emitted
+- Historical blocker 2: direct generated-model typechecking was independently blocked by emitted
   interface `memberSchemas` constants without declaration-safe tuple
   annotations, producing TypeScript `TS9013` under `isolatedDeclarations`.
   This is shared T-0181 generator work outside this task's ownership.
 
-No shared implementation was changed. Full preflight, coverage, native
-black-box/startup/Proto-module/smoke/loopback verification, specialist review,
-and `verify:task` remain intentionally pending the prerequisite correction.
+These historical blockers are superseded by T-0184A, integrated, tagged, and
+post-merge verified at `0bacb0b3`. Its root source-view transaction preserves
+the live authored/configuration view and emits declaration-safe tuples. T-0184
+is resumed; full preflight, coverage, native black-box/startup/Proto-module/
+smoke/loopback verification, specialist review, and `verify:task` remain
+pending implementation continuation.
 
 ## Review And Verification Plan
 

@@ -16,15 +16,41 @@
 import { resolve } from "node:path";
 
 import { ProtoGeneration } from "../generation/generator.js";
+import { assertViewRecordCurrent, readViewRecord } from "../generation/source-view.js";
 import "../generation/interface-generator.js";
 import "../generation/rejection-generator.js";
 
 const root = resolve(process.cwd());
 const command = process.argv[2] ?? "generate";
 if (command === "generate") {
-  ProtoGeneration.generate(root);
+  const livePackageRoot = internalOption("--live-package-root");
+  ProtoGeneration.generate(
+    root,
+    livePackageRoot === undefined ? {} : { livePackageRoot: resolve(livePackageRoot) },
+  );
 } else if (command === "compose") {
   ProtoGeneration.compose(root);
+} else if (command === "verify-source-view-record") {
+  const livePackageRoot = requiredInternalOption("--live-package-root");
+  const liveGeneratedRoot = requiredInternalOption("--live-generated-root");
+  assertViewRecordCurrent(
+    readViewRecord(root, resolve(livePackageRoot), resolve(liveGeneratedRoot)),
+  );
 } else {
   throw new Error(`spine-proto bootstrap: unsupported command ${command}`);
+}
+
+function internalOption(name: string): string | undefined {
+  const index = process.argv.indexOf(name);
+  if (index < 0) return undefined;
+  const value = process.argv[index + 1];
+  if (value === undefined || process.argv.slice(index + 1).includes(name))
+    throw new Error(`spine-proto bootstrap: missing ${name}`);
+  return value;
+}
+
+function requiredInternalOption(name: string): string {
+  const value = internalOption(name);
+  if (value === undefined) throw new Error(`spine-proto bootstrap: missing ${name}`);
+  return value;
 }

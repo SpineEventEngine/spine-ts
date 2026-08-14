@@ -33,7 +33,21 @@ describe("spine-proto source bootstrap", () => {
 
     await import("../src/cli/spine-proto-bootstrap.js");
 
-    expect(generateModel).toHaveBeenCalledExactlyOnceWith(resolve(process.cwd()));
+    expect(generateModel).toHaveBeenCalledExactlyOnceWith(resolve(process.cwd()), {});
+  });
+
+  it("passes the internal live model root to generation options", async () => {
+    const generateModel = vi.fn();
+    vi.doMock("../src/generation/generator.js", () => ({
+      ProtoGeneration: { generate: generateModel, compose: vi.fn() },
+    }));
+    process.argv = ["node", "bootstrap", "generate", "--live-package-root", "../live-model"];
+
+    await import("../src/cli/spine-proto-bootstrap.js");
+
+    expect(generateModel).toHaveBeenCalledExactlyOnceWith(resolve(process.cwd()), {
+      livePackageRoot: resolve(process.cwd(), "../live-model"),
+    });
   });
 
   it("dispatches compose to application composition", async () => {
