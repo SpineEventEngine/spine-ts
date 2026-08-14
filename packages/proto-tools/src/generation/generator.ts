@@ -342,6 +342,7 @@ const protoGeneration = Object.freeze({
           graph.models.filter((model) => config.dependencies.includes(model.name)),
         );
         normalizeGeneratedTree(output, manifest.protoFiles);
+        writeFileSync(join(output, generationMarkerFile), `${JSON.stringify({ generationId })}\n`, "utf8");
         const reusedGenerationId = protoGeneration.reusableGenerationId(
           packageRoot,
           target,
@@ -351,8 +352,12 @@ const protoGeneration = Object.freeze({
         if (reusedGenerationId !== undefined) {
           generationId = reusedGenerationId;
           manifest = ProtoManifest.create(packageRoot, undefined, generationId);
+          writeFileSync(
+            join(output, generationMarkerFile),
+            `${JSON.stringify({ generationId })}\n`,
+            "utf8",
+          );
         }
-        writeFileSync(join(output, generationMarkerFile), `${JSON.stringify({ generationId })}\n`, "utf8");
         assertSourceViewCurrent(sourceView);
         if (operations.livePackageRoot !== undefined)
           writeViewRecord(packageRoot, sourceView);
@@ -883,7 +888,22 @@ const protoGeneration = Object.freeze({
       const parsed: unknown = JSON.parse(readFileSync(manifestPath, "utf8"));
       if (typeof parsed !== "object" || parsed === null) return undefined;
       const previous = parsed as Record<string, unknown>;
-      if (previous.formatVersion !== 2 || typeof previous.generationId !== "string")
+      if (
+        previous.formatVersion !== 2 ||
+        typeof previous.generationId !== "string" ||
+        previous.generationId.length === 0
+      )
+        return undefined;
+      const marker = JSON.parse(readFileSync(join(target, generationMarkerFile), "utf8")) as {
+        generationId?: unknown;
+      };
+      const stagedMarker = JSON.parse(readFileSync(join(output, generationMarkerFile), "utf8")) as {
+        generationId?: unknown;
+      };
+      if (
+        marker.generationId !== previous.generationId ||
+        stagedMarker.generationId !== manifest.generationId
+      )
         return undefined;
       const currentFiles = protoGeneration
         .files(output)
@@ -913,14 +933,23 @@ const protoGeneration = Object.freeze({
 
   files(root: string): string[] {
     const output: string[] = [];
-    const pending = [root];
+    const pending: Array<readonly [string, number]> = [[root, 0]];
+    let entries = 0;
     while (pending.length > 0) {
-      const directory = pending.pop();
-      if (directory === undefined) continue;
+      const entry = pending.pop();
+      if (entry === undefined) continue;
+      const [directory, depth] = entry;
+      if (depth > 64) throw new Error("generated source traversal exceeds bounded inventory");
       for (const name of readdirSync(directory)) {
         const path = join(directory, name);
-        if (lstatSync(path).isDirectory()) pending.push(path);
-        else output.push(path);
+        entries += 1;
+        if (entries > 1_000)
+          throw new Error("generated source traversal exceeds bounded inventory");
+        const status = lstatSync(path);
+        if (status.isSymbolicLink())
+          throw new Error("generated source traversal must not contain symlinks");
+        if (status.isDirectory()) pending.push([path, depth + 1]);
+        else if (status.isFile()) output.push(path);
       }
     }
     return output;
