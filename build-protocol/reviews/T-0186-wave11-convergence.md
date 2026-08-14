@@ -105,3 +105,18 @@ by this fix pass.
   removed.
 - No reviewer has been dispatched. Configured reviewer profiles and the desktop
   runtime-telemetry limitation above remain the available immutable evidence.
+
+## Correction-Complete / Re-review-Ready (2026-08-14)
+
+- Final implementation handoff remains the existing `implementer`, explicit
+  `gpt-5.6-terra` / medium. Desktop does not expose independent child runtime
+  telemetry; the configured profile is therefore the recorded acceptance
+  evidence.
+- The inherited fixture migration is converged: feedback-cycle/one-way tests
+  use a separate Projection-family descriptor with compatible scalar identity,
+  and catch-up uses generated `TaskCreated.taskListId` for its message-valued
+  `TaskList` route. No Aggregate identity is used to stand in for a Projection.
+- Fresh focused repository routing is clean: 244 tests passed, and
+  `git diff --check` passed. The correction is ready for the planned relevant
+  review wave after the remaining mechanical validation; no reviewer or final
+  security reviewer has started in this pass.

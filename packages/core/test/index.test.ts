@@ -135,6 +135,14 @@ describe("MessageInterfaces", () => {
     }
   });
 
+  it("accepts a genuine generated schema even when its message requires populated fields", () => {
+    const token = MessageInterfaces.define<RequiredName, readonly [typeof RequiredNameSchema]>([
+      RequiredNameSchema,
+    ]);
+
+    expect(token.schemas).toEqual([RequiredNameSchema]);
+  });
+
   it("enforces non-empty compatible schema tuples at compile time", () => {
     const compatible = MessageInterfaces.define<SignalMessage, readonly [typeof CommandSchema]>([
       CommandSchema,

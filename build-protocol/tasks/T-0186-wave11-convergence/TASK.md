@@ -134,3 +134,18 @@ delegated from this owner.
 4. Bound generated-tree symlink traversal and preserve declaration
    normalization idempotency.
 5. Correct affected wording/records and run strict documentation gates.
+
+## Final Fixture-Convergence Handoff (2026-08-14)
+
+- The prior implementation owner exhausted its context after migrating the
+  fixture publication manifests. Final convergence remains owned by the
+  existing `implementer`, configured explicitly as `gpt-5.6-terra` / medium;
+  this Desktop surface does not expose independent runtime model telemetry.
+- The checkpoint retains that migration and corrects its affected fixtures:
+  the two state-subscription cases use a second descriptor-valid Projection
+  state schema with the same scalar ID shape, and catch-up routes generated
+  `TaskCreated.taskListId` to the compatible message-valued `TaskList` ID.
+- Fresh focused evidence: `pnpm --config.verify-deps-before-run=false exec
+  vitest run packages/server/test/repository/repository-routing.test.ts` —
+  244 passed; `git diff --check` — clean. Specialist/security review and
+  `verify:release` remain unstarted.

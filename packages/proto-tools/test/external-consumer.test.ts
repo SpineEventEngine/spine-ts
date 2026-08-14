@@ -289,7 +289,7 @@ function modelPackage(name: string, dependencies: Record<string, string>): Recor
     name,
     version: "1.0.0",
     type: "module",
-    files: ["dist", "proto", "spine-proto.json", "spine-proto-manifest.json"],
+    files: ["dist", "generated", "proto", "spine-proto.json", "spine-proto-manifest.json"],
     exports: {
       ".": {
         types: "./dist/generated/proto-module.d.ts",

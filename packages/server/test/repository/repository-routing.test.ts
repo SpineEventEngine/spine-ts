@@ -146,6 +146,12 @@ type ProjectionState = Message<"ProjectionState"> & {
   priority: number;
 };
 
+type NeutralProjectionState = Message<"NeutralProjectionState"> & {
+  id: string;
+  name: string;
+  priority: number;
+};
+
 type ProjectionEvent = Message<"ProjectionEvent"> & {
   id: string;
   name: string;
@@ -210,6 +216,11 @@ type Task = Message<"spine.examples.todo.Task"> & {
 type TaskCreated = Message<"spine.examples.todo.TaskCreated"> & {
   id?: TaskId;
   title: string;
+  taskListId?: TaskListId;
+};
+
+type TaskListId = Message<"spine.examples.todo.TaskListId"> & {
+  value: string;
 };
 
 type Int64ProjectionId = Message<"Int64ProjectionId"> & {
@@ -278,6 +289,26 @@ const fileProjectionEventFixture = (() => {
   if (event.options !== undefined) {
     event.options.$unknown = event.options.$unknown?.filter((field) => field.no !== 73_903);
   }
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+  ]);
+})();
+const fileNeutralProjectionStateFixture = (() => {
+  const descriptorSet = fromBinary(
+    FileDescriptorSetSchema,
+    Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
+  );
+  const source = descriptorSet.file[0];
+  const state = source?.messageType[0];
+  if (source === undefined || state === undefined) {
+    throw new Error("Neutral ProjectionState fixture declaration is missing.");
+  }
+  const descriptor = clone(FileDescriptorProtoSchema, source);
+  const neutral = descriptor.messageType[0];
+  if (neutral === undefined) throw new Error("Neutral ProjectionState fixture is missing.");
+  descriptor.name = "neutral_projection_state.proto";
+  descriptor.messageType = [neutral];
+  neutral.name = "NeutralProjectionState";
   return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
     file_spine_options,
   ]);
@@ -383,6 +414,10 @@ const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
 ) as GenMessage<ProjectionState>;
+const NeutralProjectionStateSchema = messageDesc(
+  fileNeutralProjectionStateFixture,
+  0,
+) as GenMessage<NeutralProjectionState>;
 const ProjectionEventSchema = messageDesc(
   fileProjectionEventFixture,
   0,
@@ -1318,14 +1353,14 @@ class AlternateCatchUpProjection extends Projection<string, typeof TaskListSchem
     this.subscriberCalls = 0;
   }
 
-  subscribeAggregate(event: NumberRouteEvent): void {
+  subscribeAggregate(event: TaskCreated): void {
     AlternateCatchUpProjection.subscriberCalls++;
     this.update((draft) =>
       Object.assign(
         draft,
         create(TaskListSchema, {
           id: create(TodoTaskListIdSchema, { value: "task-alternate" }),
-          openTaskCount: event.id === 1 ? 1 : 0,
+          openTaskCount: event.taskListId === undefined ? 0 : 1,
         }),
       ),
     );
@@ -1520,6 +1555,16 @@ class StateObservingProjection extends Projection<string, typeof ProjectionState
   }
 }
 
+class NeutralStateObservingProjection extends Projection<
+  string,
+  typeof NeutralProjectionStateSchema,
+  number
+> {
+  subscribeState(state: ProjectionState): void {
+    void state;
+  }
+}
+
 class ReactingTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
   reactTask(event: ProjectionEvent): void {
     void event;
@@ -1553,6 +1598,7 @@ class MessageIdProducingAggregate extends Aggregate<TaskId, typeof TaskSchema, b
     this.update((draft) => Object.assign(draft, command));
     return create(TaskCreatedSchema, {
       ...(command.id === undefined ? {} : { id: command.id }),
+      taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
       title: command.title,
     });
   }
@@ -3972,6 +4018,7 @@ describe("repository signal routing", () => {
         schema: TaskCreatedSchema,
         message: create(TaskCreatedSchema, {
           id: taskId,
+          taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
           title: "Message ID task",
         }),
       }),
@@ -3998,6 +4045,7 @@ describe("repository signal routing", () => {
         schema: TaskCreatedSchema,
         message: create(TaskCreatedSchema, {
           id: taskId,
+          taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
           title: "Message producer task",
         }),
       }),
@@ -4022,6 +4070,7 @@ describe("repository signal routing", () => {
           schema: TaskCreatedSchema,
           message: create(TaskCreatedSchema, {
             id: targetId,
+            taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
             title: "Mismatched message producer task",
           }),
         }),
@@ -4045,6 +4094,7 @@ describe("repository signal routing", () => {
           schema: TaskCreatedSchema,
           message: create(TaskCreatedSchema, {
             id: create(TaskIdSchema, { value: "first-field-task" }),
+            taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
             title: "Malformed producer",
           }),
         }),
@@ -4070,6 +4120,7 @@ describe("repository signal routing", () => {
           schema: TaskCreatedSchema,
           message: create(TaskCreatedSchema, {
             id: targetId,
+            taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
             title: "Mismatched scalar producer task",
           }),
         }),
@@ -4090,7 +4141,11 @@ describe("repository signal routing", () => {
             version: create(VersionSchema, { number: 1 }),
           }),
           schema: TaskCreatedSchema,
-          message: create(TaskCreatedSchema, { id, title: "Matching scalar producer task" }),
+          message: create(TaskCreatedSchema, {
+            id,
+            taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
+            title: "Matching scalar producer task",
+          }),
         }),
       ).entityIds,
     ).toEqual([id.value]);
@@ -7695,8 +7750,12 @@ describe("repository signal routing", () => {
       SignalEnvelopes.event({
         id: create(EventIdSchema, { value: "event-alternate" }),
         context: create(EventContextSchema),
-        schema: NumberRouteEventSchema,
-        message: create(NumberRouteEventSchema, { id: 1 }),
+        schema: TaskCreatedSchema,
+        message: create(TaskCreatedSchema, {
+          id: create(TodoIdSchema, { value: "task-alternate" }),
+          taskListId: create(TodoTaskListIdSchema, { value: "task-alternate" }),
+          title: "Alternate task",
+        }),
       }),
     );
     await context.stand().update(
@@ -7729,7 +7788,9 @@ describe("repository signal routing", () => {
         priority: 2,
       }),
     );
-    await expect(context.stand().read(TaskListSchema, "task-alternate")).resolves.toEqual(
+    await expect(
+      context.stand().read(TaskListSchema, create(TodoTaskListIdSchema, { value: "task-alternate" })),
+    ).resolves.toEqual(
       create(TaskListSchema, {
         id: create(TodoTaskListIdSchema, { value: "task-alternate" }),
         openTaskCount: 1,
@@ -9379,16 +9440,18 @@ function createAlternateCatchUpProjectionRepository(): Repository<
   typeof AlternateCatchUpProjection
 > {
   const handlers = EntityHandlers.define(AlternateCatchUpProjection, TaskListSchema, (builder) => [
-    builder.subscribe(NumberRouteEventSchema, "subscribeAggregate"),
+    builder.subscribe(TaskCreatedSchema, "subscribeAggregate"),
   ]);
 
   return new Repository({
     entityType: AlternateCatchUpProjection,
     schema: TaskListSchema,
     handlers,
-    eventRouting: EventRouting.create<string>().route(NumberRouteEventSchema, () => [
-      "task-alternate",
-    ]),
+    eventRouting: EventRouting.create<TaskListId>().route(TaskCreatedSchema, (event) =>
+      event.taskListId === undefined
+        ? []
+        : [create(TodoTaskListIdSchema, { value: event.taskListId.value })],
+    ),
   });
 }
 
@@ -10521,6 +10584,7 @@ function createTaskCommand(id: string, taskId: string, title = "Task") {
       TaskSchema,
       create(TaskSchema, {
         id: create(TaskIdSchema, { value: taskId }),
+        taskListId: create(TodoTaskListIdSchema, { value: "task-list" }),
         title,
         completed: false,
       }),
@@ -11434,26 +11498,29 @@ describe("Projection state-update routing", () => {
     const projectionHandlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectionStateSchema,
-      (builder) => [builder.subscribe(TaskListSchema, "subscribeState")],
+      (builder) => [builder.subscribe(NeutralProjectionStateSchema, "subscribeState")],
     );
-    const taskListHandlers = EntityHandlers.define(
-      AlternateCatchUpProjection,
-      TaskListSchema,
-      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeAggregate")],
+    const neutralProjectionHandlers = EntityHandlers.define(
+      NeutralStateObservingProjection,
+      NeutralProjectionStateSchema,
+      (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeState")],
     );
     const projection = new Repository({
       entityType: StateObservingProjection,
       schema: ProjectionStateSchema,
       handlers: projectionHandlers,
     });
-    const taskList = new Repository({
-      entityType: AlternateCatchUpProjection,
-      schema: TaskListSchema,
-      handlers: taskListHandlers,
+    const neutralProjection = new Repository({
+      entityType: NeutralStateObservingProjection,
+      schema: NeutralProjectionStateSchema,
+      handlers: neutralProjectionHandlers,
     });
 
     expect(() =>
-      BoundedContext.singleTenant("State subscription cycle").add(projection).add(taskList).build(),
+      BoundedContext.singleTenant("State subscription cycle")
+        .add(projection)
+        .add(neutralProjection)
+        .build(),
     ).toThrow(/Projection state subscriptions form a feedback cycle/);
   });
 
@@ -11461,7 +11528,7 @@ describe("Projection state-update routing", () => {
     const handlers = EntityHandlers.define(
       StateObservingProjection,
       ProjectionStateSchema,
-      (builder) => [builder.subscribe(TaskListSchema, "subscribeState")],
+      (builder) => [builder.subscribe(NeutralProjectionStateSchema, "subscribeState")],
     );
     const context = BoundedContext.singleTenant("One-way state subscription")
       .add(
@@ -11473,8 +11540,8 @@ describe("Projection state-update routing", () => {
       )
       .add(
         new Repository({
-          entityType: AlternateCatchUpProjection,
-          schema: TaskListSchema,
+          entityType: NeutralStateObservingProjection,
+          schema: NeutralProjectionStateSchema,
         }),
       )
       .build();

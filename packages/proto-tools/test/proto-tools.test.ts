@@ -157,6 +157,21 @@ function installModel(
   return directory;
 }
 
+/** Writes a coherent v2 installed-model fixture for assertions beyond manifest admission. */
+function writeInstalledManifest(
+  directory: string,
+  manifest: Record<string, unknown>,
+  generatedRoot = "src/generated",
+): void {
+  const generationId = "fixture-generation";
+  writeJson(directory, "spine-proto-manifest.json", {
+    formatVersion: 2,
+    generationId,
+    ...manifest,
+  });
+  writeJson(directory, join(generatedRoot, ".spine-proto-generation.json"), { generationId });
+}
+
 interface Claim {
   readonly content: string;
   readonly kind?: "regular" | "symlink" | "other";
@@ -853,6 +868,10 @@ describe("spine proto model tooling", () => {
         "./spine-proto-manifest.json": "./spine-proto-manifest.json",
         "./proto/users/v1/user.proto": "./proto/users/v1/user.proto",
         "./generated/users/v1/user_pb.js": "./generated/users/v1/user_pb.d.ts",
+        "./generated/*.js": {
+          types: "./dist/generated/*.d.ts",
+          default: "./dist/generated/*.js",
+        },
         ".": "./index.d.ts",
       },
     });
@@ -993,6 +1012,10 @@ describe("spine proto model tooling", () => {
           exports: {
             "./spine-proto-manifest.json": "./spine-proto-manifest.json",
             "./proto/users/v1/other.proto": "./proto/users/v1/other.proto",
+            "./generated/*.js": {
+              types: "./dist/generated/*.d.ts",
+              default: "./dist/generated/*.js",
+            },
           },
         });
       }
@@ -1315,6 +1338,10 @@ describe("spine proto model tooling", () => {
         exports: {
           "./spine-proto-manifest.json": "./spine-proto-manifest.json",
           [`./proto/${path}`]: `./proto/${path}`,
+          "./generated/*.js": {
+            types: "./dist/generated/*.d.ts",
+            default: "./dist/generated/*.js",
+          },
         },
       });
     }
@@ -1366,10 +1393,13 @@ describe("spine proto model tooling", () => {
         "./spine-proto-manifest.json": "./spine-proto-manifest.json",
         "./proto/dependency.proto": "./proto/dependency.proto",
         [`./${hostileExport}`]: `./${hostileExport.replace(/\.js$/, ".d.ts")}`,
+        "./generated/*.js": {
+          types: "./dist/generated/*.d.ts",
+          default: "./dist/generated/*.js",
+        },
       },
     });
-    writeJson(dependency, "spine-proto-manifest.json", {
-      formatVersion: 1,
+    writeInstalledManifest(dependency, {
       packageName: "@example/escaped-dependency",
       packageVersion: "1.2.3",
       protoFiles: ["dependency.proto"],
@@ -1989,7 +2019,13 @@ describe("spine proto model tooling", () => {
       name: "@example/chat-model",
       version: "1.2.3",
       dependencies: { "@example/users-model": "^1.2.3" },
-      exports: { "./spine-proto-manifest.json": "./dist/spine-proto-manifest.json" },
+      exports: {
+        "./spine-proto-manifest.json": "./dist/spine-proto-manifest.json",
+        "./generated/*.js": {
+          types: "./dist/generated/*.d.ts",
+          default: "./dist/generated/*.js",
+        },
+      },
     });
 
     const graph = resolveModelGraph(application, ["@example/chat-model"]);
@@ -2054,8 +2090,7 @@ describe("spine proto model tooling", () => {
     );
 
     const model = packageDirectory("@example/bounded-model");
-    writeJson(model, "spine-proto-manifest.json", {
-      formatVersion: 1,
+    writeInstalledManifest(model, {
       packageName: "@example/bounded-model",
       packageVersion: "1.2.3",
       protoFiles: Array.from({ length: 10001 }, (_, index) => `proto/${String(index)}.proto`),
@@ -2067,8 +2102,7 @@ describe("spine proto model tooling", () => {
       "spine-proto: @example/bounded-model: manifest protoFiles exceeds 10000 entries",
     );
 
-    writeJson(model, "spine-proto-manifest.json", {
-      formatVersion: 1,
+    writeInstalledManifest(model, {
       packageName: "@example/bounded-model",
       packageVersion: "1.2.3",
       protoFiles: [],
@@ -2103,8 +2137,7 @@ describe("spine proto model tooling", () => {
         { length: count },
         (_, index) => `${prefix}/${String(index)}.proto`,
       );
-      writeJson(directory, "spine-proto-manifest.json", {
-        formatVersion: 1,
+      writeInstalledManifest(directory, {
         packageName: name,
         packageVersion: "1.2.3",
         protoFiles,
@@ -2131,8 +2164,7 @@ describe("spine proto model tooling", () => {
 
   it("rejects 10,001 raw manifest dependencies before normalization", () => {
     const directory = packageDirectory("@example/oversized-model");
-    writeJson(directory, "spine-proto-manifest.json", {
-      formatVersion: 1,
+    writeInstalledManifest(directory, {
       packageName: "@example/oversized-model",
       packageVersion: "1.2.3",
       protoFiles: [],
@@ -2157,7 +2189,13 @@ describe("spine proto model tooling", () => {
       name: "@example/root-model",
       version: "1.2.3",
       dependencies: Object.fromEntries(dependencies.map((name) => [name, "^1.0.0"])),
-      exports: { "./spine-proto-manifest.json": "./spine-proto-manifest.json" },
+      exports: {
+        "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+        "./generated/*.js": {
+          types: "./dist/generated/*.d.ts",
+          default: "./dist/generated/*.js",
+        },
+      },
     });
     expect(() => resolveModelGraph(application, ["@example/root-model"])).toThrow(
       "spine-proto: @example/root-model: model dependency graph exceeds 10000 scheduled dependency edges",
@@ -2182,8 +2220,7 @@ describe("spine proto model tooling", () => {
       version: "1.2.3",
       dependencies: { "@example/users-model": "^1.2.3" },
     });
-    writeJson(join(chat, "node_modules", "@example", "users-model"), "spine-proto-manifest.json", {
-      formatVersion: 1,
+    writeInstalledManifest(join(chat, "node_modules", "@example", "users-model"), {
       packageName: "@example/users-model",
       packageVersion: "1.2.3",
       protoFiles: ["example-chat-model.proto"],
@@ -2204,10 +2241,15 @@ describe("spine proto model tooling", () => {
     writeJson(users, "package.json", {
       name: "@example/users-model",
       version: "2.0.0",
-      exports: { "./spine-proto-manifest.json": "./spine-proto-manifest.json" },
+      exports: {
+        "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+        "./generated/*.js": {
+          types: "./dist/generated/*.d.ts",
+          default: "./dist/generated/*.js",
+        },
+      },
     });
-    writeJson(users, "spine-proto-manifest.json", {
-      formatVersion: 1,
+    writeInstalledManifest(users, {
       packageName: "@example/users-model",
       packageVersion: "2.0.0",
       protoFiles: ["user.proto"],
@@ -2228,10 +2270,15 @@ describe("spine proto model tooling", () => {
       writeJson(users, "package.json", {
         name: "@example/users-model",
         version,
-        exports: { "./spine-proto-manifest.json": "./spine-proto-manifest.json" },
+        exports: {
+          "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+          "./generated/*.js": {
+            types: "./dist/generated/*.d.ts",
+            default: "./dist/generated/*.js",
+          },
+        },
       });
-      writeJson(users, "spine-proto-manifest.json", {
-        formatVersion: 1,
+      writeInstalledManifest(users, {
         packageName: "@example/users-model",
         packageVersion: version,
         protoFiles: ["user.proto"],
@@ -2245,7 +2292,13 @@ describe("spine proto model tooling", () => {
         name: "@example/chat-model",
         version: "1.2.3",
         dependencies: { "@example/users-model": specifier },
-        exports: { "./spine-proto-manifest.json": "./spine-proto-manifest.json" },
+        exports: {
+          "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+          "./generated/*.js": {
+            types: "./dist/generated/*.d.ts",
+            default: "./dist/generated/*.js",
+          },
+        },
       });
     };
 
@@ -2302,8 +2355,7 @@ describe("spine proto model tooling", () => {
 
     const identity = packageDirectory("@example/identity-application");
     const identityModel = installModel(identity, "@example/identity-model");
-    writeJson(identityModel, "spine-proto-manifest.json", {
-      formatVersion: 1,
+    writeInstalledManifest(identityModel, {
       packageName: "@example/other-model",
       packageVersion: "1.2.3",
       protoFiles: [],
@@ -2550,8 +2602,7 @@ describe("spine proto model tooling", () => {
     );
 
     const manifest = packageDirectory("@example/list-model");
-    writeJson(manifest, "spine-proto-manifest.json", {
-      formatVersion: 1,
+    writeInstalledManifest(manifest, {
       packageName: "@example/list-model",
       packageVersion: "1.2.3",
       protoFiles: [""],
@@ -2599,8 +2650,7 @@ describe("spine proto model tooling", () => {
     writeJson(model, "spine-proto.json", modelConfig("@example/validation-variants"));
     expect(() => readConfig(model)).toThrow("package.json exports must expose ./generated/*.js");
 
-    writeJson(model, "spine-proto-manifest.json", {
-      formatVersion: 1,
+    writeInstalledManifest(model, {
       packageName: "@example/validation-variants",
       packageVersion: "1.2.3",
       protoFiles: ["nested//model.proto"],
@@ -2754,6 +2804,10 @@ describe("spine proto model tooling", () => {
         exports: {
           "./spine-proto-manifest.json": "./spine-proto-manifest.json",
           "./proto/dependency.proto": "./exported.proto",
+          "./generated/*.js": {
+            types: "./dist/generated/*.d.ts",
+            default: "./dist/generated/*.js",
+          },
         },
       });
       writeJson(model, "package.json", {
@@ -3055,8 +3109,7 @@ describe("spine proto model tooling", () => {
 
   it("rejects duplicate Proto ownership in a manifest", () => {
     const directory = packageDirectory("@example/users-model");
-    writeJson(directory, "spine-proto-manifest.json", {
-      formatVersion: 1,
+    writeInstalledManifest(directory, {
       packageName: "@example/users-model",
       packageVersion: "1.2.3",
       protoFiles: ["users/id.proto", "users/id.proto"],
@@ -3072,8 +3125,7 @@ describe("spine proto model tooling", () => {
 
   it("rejects unsafe generated export mappings in a manifest", () => {
     const directory = packageDirectory("@example/users-model");
-    writeJson(directory, "spine-proto-manifest.json", {
-      formatVersion: 1,
+    writeInstalledManifest(directory, {
       packageName: "@example/users-model",
       packageVersion: "1.2.3",
       protoFiles: ["users/id.proto"],
@@ -3088,10 +3140,10 @@ describe("spine proto model tooling", () => {
 
   it("rejects real and dangling symlink ancestors in manifest paths", () => {
     const directory = packageDirectory("@example/users-model");
+    writeJson(directory, "spine-proto.json", modelConfig("@example/users-model"));
     const outside = mkdtempSync(join(tmpdir(), "spine-proto-outside-"));
     symlinkSync(outside, join(directory, "users"));
-    writeJson(directory, "spine-proto-manifest.json", {
-      formatVersion: 1,
+    writeInstalledManifest(directory, {
       packageName: "@example/users-model",
       packageVersion: "1.2.3",
       protoFiles: ["users/id.proto"],
@@ -3104,9 +3156,22 @@ describe("spine proto model tooling", () => {
     );
 
     const dangling = packageDirectory("@example/dangling-model");
+    writeJson(dangling, "package.json", {
+      name: "@example/dangling-model",
+      version: "1.2.3",
+      exports: {
+        "./safe/*.js": {
+          types: "./dist/safe/*.d.ts",
+          default: "./dist/safe/*.js",
+        },
+      },
+    });
+    writeJson(dangling, "spine-proto.json", {
+      ...modelConfig("@example/dangling-model"),
+      exportRoot: "safe",
+    });
     symlinkSync(join(outside, "missing"), join(dangling, "generated"));
-    writeJson(dangling, "spine-proto-manifest.json", {
-      formatVersion: 1,
+    writeInstalledManifest(dangling, {
       packageName: "@example/dangling-model",
       packageVersion: "1.2.3",
       protoFiles: ["users/id.proto"],
@@ -3389,8 +3454,7 @@ describe("spine proto model tooling", () => {
       registryOutput: "src/model-registry.ts",
     });
     for (const moduleExport of ["not-valid", "await"]) {
-      writeJson(model, "spine-proto-manifest.json", {
-        formatVersion: 1,
+      writeInstalledManifest(model, {
         packageName: "@example/manifest-binding-model",
         packageVersion: "1.2.3",
         protoFiles: [],

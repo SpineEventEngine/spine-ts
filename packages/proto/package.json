@@ -39,6 +39,7 @@
   },
   "files": [
     "dist",
+    "generated",
     "README.md",
     "REFERENCE.md",
     "proto",
