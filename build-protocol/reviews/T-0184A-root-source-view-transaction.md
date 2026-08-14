@@ -80,3 +80,10 @@ ordering regression inspected adjacent rather than actual registry and root
 Proto stage directories. The regression now also asserts cleanup in
 `examples/message-board/app` and `packages/proto`, the exact owners of those
 outer `.generated-*` stages.
+
+## Release TSDoc Correction
+
+The release profile stopped at `lint:tsdoc` after build, ESLint, and cleanup.
+The correction documents the internal record contract and callable, restores
+the protected interface separator, and is ready for final verification without
+rerunning it here.

@@ -132,9 +132,24 @@ export interface PublicationSourceView extends ModelSourceView {
  * Fixed internal handoff retained by a root model-generation transaction.
  */
 export interface SourceViewPublicationRecord {
+  /**
+   * Fixed internal record format version.
+   */
   readonly formatVersion: 1;
+
+  /**
+   * SHA-256 fingerprint of the live authored-source and configuration inventory.
+   */
   readonly inventoryDigest: string;
+
+  /**
+   * Canonical live generated root excluded from the inventory.
+   */
   readonly liveGeneratedRoot: string;
+
+  /**
+   * Canonical live model package root used to recompute the inventory.
+   */
   readonly livePackageRoot: string;
 }
 
@@ -336,7 +351,7 @@ export function readViewRecord(
 }
 
 /**
- * Revalidates the live source/configuration inventory captured in a handoff.
+ * Rejects a changed live source/configuration inventory captured in a handoff.
  *
  * @param record Validated internal root-transaction handoff.
  */

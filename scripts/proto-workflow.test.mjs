@@ -983,7 +983,9 @@ describe("proto-workflow", () => {
         "examples/message-board/app/src",
         "packages/proto",
       ])
-        expect(readdirSync(join(repoRoot, directory)).some((name) => name.startsWith(".generated-"))).toBe(false);
+        expect(
+          readdirSync(join(repoRoot, directory)).some((name) => name.startsWith(".generated-")),
+        ).toBe(false);
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

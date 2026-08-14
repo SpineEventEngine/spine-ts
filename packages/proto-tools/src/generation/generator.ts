@@ -47,6 +47,7 @@ export interface GenerationOperations {
    * Canonical live model root used only by the root transaction bootstrap.
    */
   readonly livePackageRoot?: string;
+
   // prettier-ignore
 
   /**
