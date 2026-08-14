@@ -12,6 +12,15 @@
     "rule": "standalone-function",
     "file": "packages/core/src/index.ts",
     "kind": "function-declaration",
+    "identity": "indexedDataProperties()#1",
+    "name": "indexedDataProperties",
+    "disposition": "necessity",
+    "reason": "JavaScript descriptor boundary: indexedDataProperties reads bounded indexed data properties without invoking untrusted accessors."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/core/src/index.ts",
+    "kind": "function-declaration",
     "identity": "descriptorTreeIncludes()#1",
     "name": "descriptorTreeIncludes",
     "disposition": "necessity",

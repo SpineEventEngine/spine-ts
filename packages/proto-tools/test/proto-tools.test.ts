@@ -2262,7 +2262,11 @@ describe("spine proto model tooling", () => {
       });
       const writer = spawn(process.execPath, [
         "-e",
-        `const fs=require('node:fs'); fs.writeFileSync(process.argv[1], 'ready'); setTimeout(() => { fs.writeFileSync(process.argv[2], '{\\"generationId\\":\\"complete\\"}\\n'); fs.writeFileSync(process.argv[3], process.argv[4]+'\\n'); }, 15);`,
+        [
+          "const fs=require('node:fs'); fs.writeFileSync(process.argv[1], 'ready');",
+          'setTimeout(() => { fs.writeFileSync(process.argv[2], \'{"generationId":"complete"}\\n\');',
+          "fs.writeFileSync(process.argv[3], process.argv[4]+'\\n'); }, 15);",
+        ].join(" "),
         ready,
         marker,
         manifest,

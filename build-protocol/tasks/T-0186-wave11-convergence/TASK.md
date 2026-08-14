@@ -299,6 +299,16 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
 
 ## Final Security Correction Checkpoint (2026-08-14)
 
+## Final preflight mechanical correction (2026-08-14)
+
+- Scope is limited to cleanup-policy conformance: wrap one Proto Tools fixture
+  line, rename the bounded manifest-commit retry delay without changing its
+  value or use, and record nine exact standalone-function necessities.
+- This correction changes no runtime behavior, public/serialized contract, or
+  test expectation. It therefore does not reopen the accepted specialist or
+  final-security review dispositions; fresh mechanical validation is required
+  before the pending release profile.
+
 - The existing `implementer`, explicit `gpt-5.6-terra` / medium, began the
   accepted final security batch. Desktop independent runtime telemetry is
   unavailable. Test-first corrections now bound descriptor-root traversal

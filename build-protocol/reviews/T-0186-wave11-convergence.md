@@ -502,6 +502,16 @@ visible mismatch are the assignment evidence.
 
 ## Final Security Verdict (2026-08-14)
 
+## Final preflight mechanical correction disposition (2026-08-14)
+
+- The final cheap-preflight RED is limited to the cleanup policy: a fixture
+  line wrap, a four-component semantic rename retaining the `25` ms delay, and
+  exact standalone-function necessity records. No runtime behavior or
+  reviewed security control changes.
+- Disposition: record-only/mechanical correction; specialist and final-security
+  verdicts remain accepted and are not reopened. Fresh cleanup, test, typing,
+  lint, documentation, formatting, and diff evidence remains required.
+
 Verdict: CLEAN. Two-stage fresh-name retirement, no-follow/nonblocking regular
 descriptor snapshots, dev/inode identity comparison, and mismatch refusal are
 the appropriate portable Node controls for the local build protocol. The final

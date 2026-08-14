@@ -34,7 +34,7 @@ import { NpmPackageName } from "./model/npm-package-name.js";
 export const manifestFormatVersion = 2;
 const configFormatVersion = 1;
 const manifestReadAttempts = 3;
-const manifestReadRetryDelayMs = 25;
+const manifestCommitDelayMs = 25;
 const generationClaimScanLimit = 1_000;
 
 function waitForManifestCommit(): void {
@@ -42,7 +42,7 @@ function waitForManifestCommit(): void {
     new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)),
     0,
     0,
-    manifestReadRetryDelayMs,
+    manifestCommitDelayMs,
   );
 }
 

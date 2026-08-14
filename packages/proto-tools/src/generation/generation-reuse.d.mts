@@ -1,7 +1,17 @@
-/** Shared generation marker and semantic-tree reuse policy. */
+/**
+ * Shared generation marker and semantic-tree reuse policy.
+ */
 export const generationMarkerFile: ".spine-proto-generation.json";
 
-/** Returns the live generation ID only for coherent, bounded, symlink-free output. */
+/**
+ * Returns the live generation ID only for coherent, bounded, symlink-free output.
+ *
+ * @param liveManifestPath Manifest path for the committed live output.
+ * @param liveRoot Generated-output root for the committed live tree.
+ * @param stagedManifest Manifest prepared for the staged output.
+ * @param stagedRoot Generated-output root for the staged tree.
+ * @returns The reusable live generation ID, if the live and staged outputs match.
+ */
 export function reusableGenerationId(
   liveManifestPath: string,
   liveRoot: string,

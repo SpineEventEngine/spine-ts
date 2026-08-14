@@ -1,6 +1,78 @@
 [
   {
     "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generation-reuse.d.mts",
+    "kind": "function-declaration",
+    "identity": "reusableGenerationId()#1",
+    "name": "reusableGenerationId",
+    "disposition": "necessity",
+    "reason": "TypeScript declaration boundary: reusableGenerationId preserves the internal generation-reuse module's precise callable contract."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "snapshotRegularClaim()#1",
+    "name": "snapshotRegularClaim",
+    "disposition": "necessity",
+    "reason": "JavaScript filesystem boundary: snapshotRegularClaim captures a no-follow regular-file descriptor identity before claim removal."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "readRegularClaim()#1",
+    "name": "readRegularClaim",
+    "disposition": "necessity",
+    "reason": "JavaScript filesystem boundary: readRegularClaim supplies descriptor-validated claim content to lock-operation callbacks."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "claimQuarantine()#1",
+    "name": "claimQuarantine",
+    "disposition": "necessity",
+    "reason": "JavaScript filesystem boundary: claimQuarantine creates a fresh same-directory claim retirement path before validation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "completeLockOperations()#1",
+    "name": "completeLockOperations",
+    "disposition": "necessity",
+    "reason": "TypeScript test seam: completeLockOperations merges explicit lock-operation overrides with the production filesystem contract."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "removeSnapshotClaim()#1",
+    "name": "removeSnapshotClaim",
+    "disposition": "necessity",
+    "reason": "JavaScript filesystem boundary: removeSnapshotClaim retires only the descriptor-identity-validated quarantined claim."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "waitForManifestCommit()#1",
+    "name": "waitForManifestCommit",
+    "disposition": "necessity",
+    "reason": "JavaScript Atomics boundary: waitForManifestCommit provides the bounded synchronous delay between manifest-read retries."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "hasLiveGenerationClaim()#1",
+    "name": "hasLiveGenerationClaim",
+    "disposition": "necessity",
+    "reason": "JavaScript filesystem boundary: hasLiveGenerationClaim safely detects active generation claims before a manifest retry."
+  },
+  {
+    "rule": "standalone-function",
     "file": "packages/proto-tools/src/generation/interface-generator.ts",
     "kind": "function-declaration",
     "identity": "stagedSourceView()#1",

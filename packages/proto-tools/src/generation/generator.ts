@@ -199,7 +199,7 @@ export interface GenerationLockOperations {
   readonly remove: (path: string) => void;
 
   /**
-   * Atomically moves a claim within its package directory.
+   * Updates a claim path by atomically moving it within its package directory.
    *
    * @param from The current claim path.
    * @param to The same-directory quarantine path.
