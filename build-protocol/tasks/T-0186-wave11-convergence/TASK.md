@@ -1,6 +1,6 @@
 # T-0186: Converge, Release, And Close Wave 11
 
-Status: Specialist corrections complete; targeted re-review ready
+Status: Targeted residual findings accepted; correction in progress
 Start: `2026-08-14 WEST`
 End: Pending
 Baseline: `f128af42`
@@ -259,3 +259,18 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   All accepted P1/P2 findings are correction-complete; all four affected lanes
   require targeted re-review. Final security and `verify:release` remain
   unstarted.
+
+## Targeted Re-Review Residual Batch (2026-08-14)
+
+- TypeScript/API and documentation are CLEAN. Style reported one P2 unused
+  duplicate root policy wrapper. Reliability reported two P1s and one P2:
+  direct generation can still publish a staged symlink after reuse declines;
+  Message Board registry stages are deleted while a retained journal can still
+  reference them; and claim-aware reader scans lack a per-attempt entry cap.
+- All four findings are accepted as one residual batch: delete the dead root
+  wrappers; add direct pre-publication safe-tree rejection with prior-output
+  preservation; retain Message Board registry stages through failed recovery
+  and later cleanup; and bound claim scanning with overflow fail-closed proof.
+  Style and reliability reopen after correction. API/docs remain CLEAN unless
+  the residual corrections alter their surfaces. Security/release remain
+  pending.

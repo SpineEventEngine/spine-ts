@@ -1,6 +1,6 @@
 # T-0186 Review Log
 
-Status: Specialist corrections complete; targeted re-review ready
+Status: Targeted residual findings accepted; correction in progress
 
 Task: `build-protocol/tasks/T-0186-wave11-convergence/TASK.md`
 Baseline: `f128af42`
@@ -276,3 +276,20 @@ Final security and release verification remain pending.
 - Targeted re-review scope: TypeScript/API findings 5-6; style/canonical-policy
   finding 1; reliability findings 1-4 including reader retry and retained
   recovery evidence; documentation finding 7. Final security remains pending.
+
+## Targeted Re-Review Wave (2026-08-14)
+
+- TypeScript/API (`gpt-5.6-terra` / high): CLEAN. Marker filename is internal,
+  factory TSDoc is accurate, and no API regression was introduced.
+- Documentation (`gpt-5.6-luna` / medium): CLEAN. Replay lifecycle is
+  independent of duplicate-admission expiry with no nearby contradiction.
+- Style/maintainability (`gpt-5.6-terra` / high): remaining P2. Unused root
+  `scripts/generation-reuse.{mjs,d.mts}` wrappers create a misleading second
+  entrypoint after workflow imports the canonical Proto Tools implementation.
+- Performance/reliability (`gpt-5.6-terra` / high): remaining P1 direct staged
+  symlink publication; P1 Message Board registry stage deletion despite a
+  retained journal; P2 unbounded package-root claim scan per retry attempt.
+- All dispatches retained explicit configured profiles and reported no visible
+  mismatch; Desktop runtime telemetry is unavailable. The four residual
+  findings are accepted as one batch for the current implementer. Only style
+  and reliability reopen after correction unless public/docs surfaces change.
