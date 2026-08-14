@@ -70,6 +70,39 @@ describe("AuthoredInterfaceProvider", () => {
     }
   });
 
+  it("resolves an authored interface through a local declaration compiler input", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-declaration-input-"));
+    const stagedGeneratedRoot = join(root, ".generated.stage-1/output");
+    const liveGeneratedRoot = join(root, "src/generated");
+    const authored = join(root, "src/signal-family.ts");
+    const declaration = join(root, "src/helper.d.ts");
+    try {
+      mkdirSync(stagedGeneratedRoot, { recursive: true });
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(
+        join(root, "tsconfig.json"),
+        JSON.stringify({ files: ["src/signal-family.ts"] }),
+      );
+      writeFileSync(declaration, "export interface Helper { readonly text: string }\n");
+      writeFileSync(
+        authored,
+        'import type { Helper } from "./helper.js";\n' +
+          "export interface SignalFamily { readonly helper: Helper }\n",
+      );
+      expect(
+        new AuthoredInterfaceProvider().resolve("SignalFamily", [], {
+          authoredFiles: [authored],
+          compilerFiles: [authored, declaration],
+          liveGeneratedRoot,
+          packageRoot: root,
+          stagedGeneratedRoot,
+        }),
+      ).toEqual({ name: "SignalFamily", importPath: "../../signal-family.js" });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("accepts a local diamond inheritance graph", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-diamond-"));
     const stagedGeneratedRoot = join(root, ".generated.stage-1/output");

@@ -135,7 +135,7 @@ T-0185 reader documentation, and Wave 12 behavior.
   parent fails closed while external property types remain allowed (2 files,
   17 tests and focused static gates).
 - GREEN correction convergence: provider, interface generator, source view,
-  Proto-tools transaction, and real workflow suites pass 5 files / 207 tests.
+  Proto-tools transaction, and real workflow suites pass 5 files / 208 tests.
   Source content/add/remove/rename, same-module transitive-import content, and
   recursive-config mutations preserve the exact prior tree and manifest.
   TypeScript candidates must be regular files; descriptor-based nonblocking
@@ -143,9 +143,9 @@ T-0185 reader documentation, and Wave 12 behavior.
 
 ## Coverage Result
 
-- Final focused LCOV: 98.06% lines (354/361), 91.57% branches (239/261),
-  and 98.61% functions (71/72) across the three changed production modules.
-  The exact five-suite profile passes 207/207 tests; no threshold was waived.
+- Final focused LCOV: 98.07% lines (356/363), 91.60% branches (240/262),
+  and 98.66% functions (74/75) across the three changed production modules.
+  The exact five-suite profile passes 208/208 tests; no threshold was waived.
 
 ## Documentation And Public API Impact
 
@@ -201,7 +201,10 @@ T-0185 reader documentation, and Wave 12 behavior.
   local declaration and `allowJs` inputs outside the digest. The source view
   now keeps authored declaration candidates separate from the complete local
   compiler inventory, which includes `.d.ts` plus JavaScript when enabled.
-  Final targeted confirmation is pending.
+  A final reliability pass found and corrected the older provider check that
+  rejected declarations even from compiler-only inputs; a real provider test
+  resolves an authored interface through a local declaration helper. Final
+  targeted confirmation is pending.
 - Security: N/A for T-0182 because it adds no dependency, secret, IPC, tenant,
   deserialization, or external capability boundary; Wave 11 final security is
   owned by T-0186.

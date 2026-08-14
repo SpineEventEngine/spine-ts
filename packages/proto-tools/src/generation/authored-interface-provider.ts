@@ -169,6 +169,9 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     const stage = join(parent, `.${generatedName}.stage-`);
     const backup = join(parent, `.${generatedName}.`);
     const dist = join(packageRoot, "dist");
+    const authoredFiles = new Set(sourceView.authoredFiles.map((file) => resolve(file)));
+    const isDeclaration = (path: string) =>
+      [".d.cts", ".d.mts", ".d.ts"].some((extension) => path.endsWith(extension));
     const within = (root: string, path: string) => {
       const pathRelative = relative(root, path);
       return pathRelative === "" || (!pathRelative.startsWith("..") && !isAbsolute(pathRelative));
@@ -186,7 +189,7 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
         candidate.startsWith(`${liveGeneratedRoot}/`) ||
         candidate.startsWith(stage) ||
         (candidate.startsWith(backup) && candidate.includes(".backup")) ||
-        candidate.endsWith(".d.ts")
+        (authoredFiles.has(resolve(file)) && isDeclaration(candidate))
       )
         throw new Error(
           "spine-proto: authored interface discovery source path escapes model module",

@@ -56,9 +56,9 @@ Baseline: `8f987ae8`
 
 ## Final Correction Evidence
 
-- Exact focused behavior: 5 files / 207 tests pass.
-- Final focused profile: 98.06% lines (354/361), 91.57% branches (239/261),
-  98.61% functions (71/72).
+- Exact focused behavior: 5 files / 208 tests pass.
+- Final focused profile: 98.07% lines (356/363), 91.60% branches (240/262),
+  98.66% functions (74/75).
 - Canonical Proto generation/current output, generated and tooling typechecks,
   full ESLint, cleanup, TSDoc, copyright, formatting/diff, TypeDoc/API,
   audience, package/assets/links readiness, and generated cleanliness pass.
@@ -74,6 +74,9 @@ Baseline: `8f987ae8`
   transitive local `.d.ts` and `allowJs` inputs were still live fallback reads.
   The transactional view now distinguishes authored interface candidates from
   the complete local compiler inventory and digests/revalidates both families.
+  A follow-up found the provider's old declaration-output check applied to the
+  broader compiler set; it now rejects declarations only as authored interface
+  candidates and a real provider test resolves through a compiler-only `.d.ts`.
   Final targeted confirmation is pending; `verify:release` is intentionally
   reserved for post-review convergence.
 
