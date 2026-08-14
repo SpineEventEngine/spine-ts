@@ -12,7 +12,8 @@
  * the License.
  */
 
-import { lstatSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { lstatSync, readFileSync, readdirSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 const maximumSourceViewDepth = 32;
@@ -49,6 +50,26 @@ export interface ModelSourceView {
    * Redirect root used when compiler imports address generated model sources.
    */
   readonly stagedGeneratedRoot: string;
+
+  /** Deterministic pre-analysis inventory for publication revalidation. */
+  readonly inventoryDigest: string;
+}
+
+function inventoryDigest(files: readonly string[]): string {
+  const hash = createHash("sha256");
+  for (const file of files) {
+    hash.update(file);
+    hash.update("\0");
+    hash.update(readFileSync(file));
+    hash.update("\0");
+  }
+  return hash.digest("hex");
+}
+
+/** Revalidates the immutable authored-source inventory before publication. */
+export function assertSourceViewCurrent(sourceView: ModelSourceView): void {
+  if (inventoryDigest(sourceView.authoredFiles) !== sourceView.inventoryDigest)
+    throw new Error("spine-proto: authored interface source view changed during generation");
 }
 
 function collectAuthored(root: string, excluded: readonly string[]): readonly string[] {
@@ -110,8 +131,12 @@ export function modelSourceView(
   const siblingStage = join(generatedDirectory, `.${generatedName}.stage-`);
   const siblingBackup = join(generatedDirectory, `.${generatedName}.`);
   const liveGeneratedRoot = resolve(root, generated);
+  const authoredFiles = Object.freeze(
+    collectAuthored(root, [...excluded, siblingStage, siblingBackup]),
+  );
   return Object.freeze({
-    authoredFiles: Object.freeze(collectAuthored(root, [...excluded, siblingStage, siblingBackup])),
+    authoredFiles,
+    inventoryDigest: inventoryDigest(authoredFiles),
     packageRoot: root,
     liveGeneratedRoot,
     stagedGeneratedRoot: resolve(stagedGeneratedRoot),

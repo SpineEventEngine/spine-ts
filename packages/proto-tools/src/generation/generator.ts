@@ -36,7 +36,7 @@ import { readManifestAt } from "../io/manifest-reader.js";
 import { ModelGraph } from "../model/model-graph.js";
 import { ManifestFile, type ManifestFileOperations } from "../io/atomic-manifest.js";
 import { generatedSource, normalizeGeneratedTree } from "./generated-source-policy.js";
-import { modelSourceView } from "./source-view.js";
+import { assertSourceViewCurrent, modelSourceView } from "./source-view.js";
 import type { ModelSourceView } from "./source-view.js";
 
 /**
@@ -331,6 +331,7 @@ const protoGeneration = Object.freeze({
           graph.models.filter((model) => config.dependencies.includes(model.name)),
         );
         normalizeGeneratedTree(output, manifest.protoFiles);
+        assertSourceViewCurrent(sourceView);
         protoGeneration.publish(
           packageRoot,
           config.generatedRoot,
