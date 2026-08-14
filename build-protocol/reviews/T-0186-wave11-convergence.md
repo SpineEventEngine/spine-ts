@@ -448,3 +448,25 @@ will cover only these four corrected trust boundaries.
   `gpt-5.6-terra` / high configuration, limited to the four accepted security
   findings. Desktop exposes no independent runtime telemetry; the configured
   role/profile and no visible mismatch are the acceptance evidence.
+
+## Final Security Re-Review Residuals (2026-08-14)
+
+Final security re-review remains BLOCK on two accepted findings:
+
+1. **P1 quarantine deletion:** direct and workflow validation close the
+   quarantine descriptor before a pathname removal. A same-name replacement in
+   that final window can still be deleted. The correction must never delete or
+   overwrite a replacement and must prove the post-read/pre-cleanup race, while
+   avoiding unbounded retained artifacts.
+2. **P2 descriptor Proxy:** bounded own-property reflection still invokes
+   `getOwnPropertyDescriptor` traps on a Proxy-backed `messages` array. The
+   correction must reject/avoid Proxy-backed arrays before user traps are
+   invoked and retain genuine descriptor behavior without an iterator path.
+
+All nonregular-tree, marker/JSON descriptor, manifest-reader, journal recovery,
+network/auth/tenant, logging, and dependency security lanes are CLEAN. The
+claim residual returns to an explicit `gpt-5.6-terra` / medium implementer; the
+non-overlapping Core residual returns to a separate explicit
+`gpt-5.6-terra` / medium implementer. Neither may touch the other's files.
+Desktop exposes no independent runtime telemetry; configured profiles and no
+visible mismatch are the assignment evidence.
