@@ -31,7 +31,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import type { SpawnSyncReturns } from "node:child_process";
 
-import { ProtoConfig, ProtoManifest } from "../index.js";
+import { generationMarkerFile, ProtoConfig, ProtoManifest } from "../index.js";
 import { readManifestAt } from "../io/manifest-reader.js";
 import { ModelGraph } from "../model/model-graph.js";
 import { ManifestFile, type ManifestFileOperations } from "../io/atomic-manifest.js";
@@ -288,7 +288,8 @@ const protoGeneration = Object.freeze({
     );
     let primaryError: unknown;
     try {
-      const manifest = ProtoManifest.create(packageRoot);
+      let generationId: string = crypto.randomUUID();
+      let manifest = ProtoManifest.create(packageRoot, undefined, generationId);
       const graph = ModelGraph.resolve(packageRoot, config.dependencies);
       const target = join(packageRoot, config.generatedRoot);
       mkdirSync(dirname(target), { recursive: true });
@@ -340,6 +341,16 @@ const protoGeneration = Object.freeze({
           graph.models.filter((model) => config.dependencies.includes(model.name)),
         );
         normalizeGeneratedTree(output, manifest.protoFiles);
+        const reusedGenerationId = protoGeneration.reusableGenerationId(
+          target,
+          output,
+          manifest,
+        );
+        if (reusedGenerationId !== undefined) {
+          generationId = reusedGenerationId;
+          manifest = ProtoManifest.create(packageRoot, undefined, generationId);
+        }
+        writeFileSync(join(output, generationMarkerFile), `${JSON.stringify({ generationId })}\n`, "utf8");
         assertSourceViewCurrent(sourceView);
         if (operations.livePackageRoot !== undefined)
           writeViewRecord(packageRoot, sourceView);
@@ -855,6 +866,41 @@ const protoGeneration = Object.freeze({
       if (oldManifest === undefined) rmSync(manifestTarget, { force: true });
       else ManifestFile.writeAtomically(manifestTarget, oldManifest, manifestOperations);
       throw error;
+    }
+  },
+
+  reusableGenerationId(
+    target: string,
+    output: string,
+    manifest: { readonly generationId: string },
+  ): string | undefined {
+    const manifestPath = join(dirname(target), "spine-proto-manifest.json");
+    if (!existsSync(target) || !existsSync(manifestPath)) return undefined;
+    try {
+      const previous = JSON.parse(readFileSync(manifestPath, "utf8"));
+      if (previous?.formatVersion !== 2 || typeof previous.generationId !== "string")
+        return undefined;
+      const currentFiles = protoGeneration
+        .files(output)
+        .map((path) => relative(output, path))
+        .sort();
+      const previousFiles = protoGeneration
+        .files(target)
+        .map((path) => relative(target, path))
+        .filter((path) => path !== generationMarkerFile)
+        .sort();
+      if (JSON.stringify(currentFiles) !== JSON.stringify(previousFiles)) return undefined;
+      for (const file of currentFiles) {
+        if (readFileSync(join(output, file), "utf8") !== readFileSync(join(target, file), "utf8"))
+          return undefined;
+      }
+      const { generationId: _, ...previousContents } = previous;
+      const { generationId: __, ...nextContents } = manifest;
+      return JSON.stringify(previousContents) === JSON.stringify(nextContents)
+        ? previous.generationId
+        : undefined;
+    } catch {
+      return undefined;
     }
   },
 

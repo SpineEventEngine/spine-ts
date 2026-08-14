@@ -13,15 +13,18 @@
  */
 
 import { lstatSync, opendirSync, readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { isAbsolute, join, normalize, sep } from "node:path";
 
 import { RegistryDependency } from "./model/registry-dependency.js";
 import { NpmPackageName } from "./model/npm-package-name.js";
 
 /**
- * Version shared by the configuration and published manifest JSON documents.
+ * Published manifest JSON revision.
  */
-export const manifestFormatVersion = 1;
+export const manifestFormatVersion = 2;
+const configFormatVersion = 1;
+export const generationMarkerFile = ".spine-proto-generation.json";
 
 /**
  * Configures an independently published Proto model package.
@@ -111,7 +114,10 @@ export interface ProtoManifest {
   /**
    * Declares the version of this manifest contract.
    */
-  readonly formatVersion: 1;
+  readonly formatVersion: 2;
+
+  /** Opaque identifier shared with the generated-root marker. */
+  readonly generationId: string;
 
   /**
    * Names the package that owns every listed Proto source.
@@ -217,7 +223,7 @@ const ProtoPackage = Object.freeze({
       ProtoPackage.readJson(join(packageRoot, "spine-proto.json"), packageJson.name),
       "configuration",
     );
-    if (config.formatVersion !== manifestFormatVersion)
+    if (config.formatVersion !== configFormatVersion)
       ProtoPackageErrors.fail(packageJson.name, "formatVersion must be 1");
     if (config.mode !== "model" && config.mode !== "application")
       ProtoPackageErrors.fail(packageJson.name, "mode must be model or application");
@@ -345,6 +351,29 @@ const ProtoPackage = Object.freeze({
         packageJson.name,
         "manifest packageVersion must match package.json version",
       );
+    const config = ProtoPackage.configFromPackage(packageRoot);
+    if (config.mode !== "model")
+      ProtoPackageErrors.fail(packageJson.name, "manifest requires model mode");
+    const marker = ProtoPackage.objectValue(
+      packageJson.name,
+      ProtoPackage.readJson(
+        join(packageRoot, config.generatedRoot, generationMarkerFile),
+        packageJson.name,
+      ),
+      "generated-root marker",
+    );
+    ProtoPackage.rejectKeys(packageJson.name, marker, ["generationId"], "generated-root marker");
+    if (
+      ProtoPackage.stringValue(
+        packageJson.name,
+        marker.generationId,
+        "generated-root marker generationId",
+      ) !== manifest.generationId
+    )
+      ProtoPackageErrors.fail(
+        packageJson.name,
+        "manifest generationId must match generated-root marker",
+      );
     for (const protoFile of manifest.protoFiles) {
       ProtoPackage.assertNoSymlinkAncestor(
         packageRoot,
@@ -365,7 +394,11 @@ const ProtoPackage = Object.freeze({
   /**
    * Builds a deterministic manifest from a model package's owned Proto paths.
    */
-  manifestForPackage(packageRoot: string, ownedProtoFiles?: readonly string[]): ProtoManifest {
+  manifestForPackage(
+    packageRoot: string,
+    ownedProtoFiles?: readonly string[],
+    generationId: string = randomUUID(),
+  ): ProtoManifest {
     const config = ProtoPackage.configFromPackage(packageRoot);
     if (config.mode !== "model")
       ProtoPackageErrors.fail(
@@ -384,7 +417,12 @@ const ProtoPackage = Object.freeze({
     if (new Set(protoFiles).size !== protoFiles.length)
       ProtoPackageErrors.fail(packageJson.name, "duplicate proto path");
     return {
-      formatVersion: 1,
+      formatVersion: manifestFormatVersion,
+      generationId: ProtoPackage.stringValue(
+        packageJson.name,
+        generationId,
+        "manifest generationId",
+      ),
       packageName: packageJson.name,
       packageVersion: packageJson.version,
       protoFiles,
@@ -406,6 +444,7 @@ const ProtoPackage = Object.freeze({
       manifest,
       [
         "formatVersion",
+        "generationId",
         "packageName",
         "packageVersion",
         "protoFiles",
@@ -416,7 +455,12 @@ const ProtoPackage = Object.freeze({
       "manifest",
     );
     if (manifest.formatVersion !== manifestFormatVersion)
-      ProtoPackageErrors.fail(requester, "manifest formatVersion must be 1");
+      ProtoPackageErrors.fail(requester, "manifest formatVersion must be 2");
+    const generationId = ProtoPackage.stringValue(
+      requester,
+      manifest.generationId,
+      "manifest generationId",
+    );
     const protoFiles = ProtoPackage.stringList(
       requester,
       manifest.protoFiles,
@@ -438,7 +482,8 @@ const ProtoPackage = Object.freeze({
       );
     }
     return {
-      formatVersion: 1,
+      formatVersion: manifestFormatVersion,
+      generationId,
       packageName: ProtoPackage.packageNameValue(
         requester,
         manifest.packageName,
@@ -762,7 +807,11 @@ export const ProtoManifest: Readonly<{
    * @param ownedProtoFiles Optional explicit package-relative Proto paths.
    * @returns The created manifest.
    */
-  create(packageRoot: string, ownedProtoFiles?: readonly string[]): ProtoManifest;
+  create(
+    packageRoot: string,
+    ownedProtoFiles?: readonly string[],
+    generationId?: string,
+  ): ProtoManifest;
 }> = Object.freeze({
   // prettier-ignore
 
@@ -787,7 +836,11 @@ export const ProtoManifest: Readonly<{
    * @param ownedProtoFiles Optional explicit package-relative Proto paths.
    * @returns The created manifest.
    */
-  create(packageRoot: string, ownedProtoFiles?: readonly string[]): ProtoManifest {
-    return ProtoPackage.manifestForPackage(packageRoot, ownedProtoFiles);
+  create(
+    packageRoot: string,
+    ownedProtoFiles?: readonly string[],
+    generationId?: string,
+  ): ProtoManifest {
+    return ProtoPackage.manifestForPackage(packageRoot, ownedProtoFiles, generationId);
   },
 });

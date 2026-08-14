@@ -2380,6 +2380,19 @@ describe("spine proto model tooling", () => {
     const model = packageDirectory("@example/contract-model");
     writeJson(model, "spine-proto.json", modelConfig("@example/contract-model"));
     writeJson(model, "spine-proto-manifest.json", {
+      formatVersion: 1,
+      packageName: "@example/contract-model",
+      packageVersion: "1.2.3",
+      protoFiles: [],
+      generatedExports: {},
+      dependencies: [],
+      moduleExport: "modelProtoModule",
+    });
+    expect(() => readManifest(model)).toThrow(
+      "spine-proto: @example/contract-model: manifest formatVersion must be 2",
+    );
+
+    writeJson(model, "spine-proto-manifest.json", {
       formatVersion: 2,
       packageName: "@example/contract-model",
       packageVersion: "1.2.3",
@@ -2389,11 +2402,12 @@ describe("spine proto model tooling", () => {
       moduleExport: "modelProtoModule",
     });
     expect(() => readManifest(model)).toThrow(
-      "spine-proto: @example/contract-model: manifest formatVersion must be 1",
+      "spine-proto: @example/contract-model: manifest generationId must be a non-empty string",
     );
 
     writeJson(model, "spine-proto-manifest.json", {
-      formatVersion: 1,
+      formatVersion: 2,
+      generationId: "contract-generation",
       packageName: "@example/contract-model",
       packageVersion: "1.2.3",
       protoFiles: ["model.proto"],
@@ -2406,7 +2420,8 @@ describe("spine proto model tooling", () => {
     );
 
     writeJson(model, "spine-proto-manifest.json", {
-      formatVersion: 1,
+      formatVersion: 2,
+      generationId: "contract-generation",
       packageName: "@example/contract-model",
       packageVersion: "9.9.9",
       protoFiles: [],
@@ -2416,6 +2431,29 @@ describe("spine proto model tooling", () => {
     });
     expect(() => readManifest(model)).toThrow(
       "spine-proto: @example/contract-model: manifest packageVersion must match package.json version",
+    );
+  });
+
+  it("rejects a manifest whose generation ID differs from its generated-root marker", () => {
+    const model = packageDirectory("@example/generation-marker-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/generation-marker-model"));
+    mkdirSync(join(model, "src/generated"), { recursive: true });
+    writeJson(model, "src/generated/.spine-proto-generation.json", {
+      generationId: "tree-generation",
+    });
+    writeJson(model, "spine-proto-manifest.json", {
+      formatVersion: 2,
+      generationId: "manifest-generation",
+      packageName: "@example/generation-marker-model",
+      packageVersion: "1.2.3",
+      protoFiles: [],
+      generatedExports: {},
+      dependencies: [],
+      moduleExport: "modelProtoModule",
+    });
+
+    expect(() => readManifest(model)).toThrow(
+      "spine-proto: @example/generation-marker-model: manifest generationId must match generated-root marker",
     );
   });
 
