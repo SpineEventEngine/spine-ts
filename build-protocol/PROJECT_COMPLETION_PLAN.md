@@ -1,8 +1,8 @@
 # Spine TS Project Completion Plan
 
 Status: Initial release, T-0080 authored-API/example quality correction, and
-Waves 9 and 10 complete; Wave 11 T-0180 through T-0184 and T-0184A complete,
-integrated, tagged, and post-merge verified; T-0185 next
+Waves 9 and 10 complete; Wave 11 T-0180 through T-0185 and T-0184A complete,
+integrated, tagged, and post-merge verified; T-0186 final convergence next
 
 Plan date: 2026-07-12
 
@@ -239,7 +239,8 @@ compiler input snapshots, and rollback. T-0183 added interface-token routing
 for Command, Event, and state updates. All four are reviewed, release-verified,
 integrated, post-merge verified, tagged, and remotely synchronized. The
 T-0184A root source-view transaction prerequisite and the resumed T-0184 To-Do
-proof are complete, integrated, post-merge verified, and tagged. T-0185 is next. Multiple-Gateway
+proof and beginner documentation are complete, integrated, post-merge verified,
+and tagged. T-0186 final convergence is next. Multiple-Gateway
 behavior moves wholly to Wave 12. See
 `build-protocol/DECISION_LOG.md#d-0113-generate-typescript-message-interfaces-and-route-by-their-tokens`.
 

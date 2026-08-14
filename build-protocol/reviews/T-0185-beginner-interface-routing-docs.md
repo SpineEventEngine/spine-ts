@@ -1,6 +1,6 @@
 # T-0185 Review Log
 
-Status: CLEAN; release verification complete; integration ready
+Status: CLEAN; integrated, tagged, and post-merge verified
 
 Task: `build-protocol/tasks/T-0185-beginner-interface-routing-docs/TASK.md`
 Branch: `task/T-0185-beginner-docs`
@@ -62,10 +62,11 @@ evidence. The accepted batch required these corrections:
 
 ## Current Disposition
 
-Targeted documentation and TypeScript/API re-review is ready. The previous N/A
-lanes remain N/A: this correction changes reader prose, source-linked snippets,
+Documentation and TypeScript/API targeted re-reviews are CLEAN. The previous
+N/A lanes remain N/A: this task changes reader prose, source-linked snippets,
 and records only; it changes no runtime lifecycle/persistence/source structure
-or trust boundary.
+or trust boundary. Release verification, integration, tag `T-0185`, and
+post-merge verification are complete.
 
 ## Final Targeted API Residual
 

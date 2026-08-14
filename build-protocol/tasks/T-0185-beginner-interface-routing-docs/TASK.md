@@ -1,8 +1,8 @@
 # T-0185: Beginner Interface-Routing Documentation
 
-Status: Release verification complete; integration ready
+Status: Complete, integrated, tagged, and post-merge verified
 Start: `2026-08-14 WEST`
-End: Pending
+End: `2026-08-14 WEST`
 Task-start baseline: `696bbac3`
 Branch: `task/T-0185-beginner-docs`
 Worktree: `.worktrees/T-0185-beginner-docs`
@@ -114,3 +114,13 @@ Historical build-protocol narrative is not reader-documentation ownership.
   `pnpm verify:task -- --no-tests` completed with no generated residue and a
   clean worktree. Integration may proceed; this task does not authorize merge
   or tag creation.
+
+## 2026-08-14 Integration And Post-Merge Verification
+
+- Fast-forwarded reviewed commit `1125dd642e04f4d20e7e53440884f99a0551b037`
+  to `origin/main` and pushed tag `T-0185` at that commit.
+- Post-merge verification passed canonical Proto generation, frozen-descriptor
+  checks, generated TypeScript build, documentation API inventory, audience
+  checks, strict snippets, and the focused reader contract (12/12).
+- `git status --short` and `git diff --check` were clean after verification.
+  T-0186 is the next and final Wave 11 milestone.
