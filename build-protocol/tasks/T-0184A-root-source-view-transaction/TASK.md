@@ -111,3 +111,8 @@ The accepted specialist correction batch moves every model handoff validation
 to the shared pre-journal boundary, after all staging and registry work, uses
 the digest from one source-inventory pass, and limits opened record descriptors
 to 16 KiB before parsing. Targeted re-review remains required.
+
+The final residual proof completes MessageBoard registry composition before the
+global Todo verification failure. It confirms verification precedes journal
+publication and leaves every live tree, manifest, registry, stage, and journal
+unchanged.

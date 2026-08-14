@@ -60,3 +60,15 @@ The correction retains all staged model records and invokes their validation
 after registry staging and safety checks, immediately before the publication
 journal. Record reading now checks the opened descriptor and a 16 KiB maximum
 before JSON allocation; currentness compares one `SourceInventory.digest`.
+
+## Targeted Residual Correction
+
+Style and reliability reviewers (both configured `gpt-5.6-terra` / high)
+accepted P2 that the global ordering needed an explicit workflow regression.
+The documentation reviewer (configured `gpt-5.6-luna` / medium) accepted the
+overlapping publication-boundary claim. The new MessageBoard fixture completes
+registry composition, then fails final Todo record verification and proves the
+order is composition before verification with no journal write. It also proves
+all live generated roots, manifests, and registry remain unchanged and no
+stage/journal residue remains. This test fails if validation moves back into
+`stageModel`.

@@ -932,6 +932,57 @@ describe("proto-workflow", () => {
     expect(existsSync(join(repoRoot, ".spine-proto-publication.json"))).toBe(false);
   });
 
+  it("validates staged model records after MessageBoard registry composition and before publication", () => {
+    const repoRoot = messageBoardRegistryFixture();
+    const order = [];
+    try {
+      expect(
+        generateTargets({
+          repoRoot,
+          runCommand: rootStageCommand,
+          runModelCommand(label, executable, args, cwd) {
+            if (label.endsWith("source-view publication revalidation")) {
+              order.push("verification");
+              return 1;
+            }
+            return todoStageCommand(undefined)(label, executable, args, cwd);
+          },
+          runCompositionCommand(label, executable, args, cwd) {
+            order.push("composition");
+            return messageBoardCompositionCommand(false)(label, executable, args, cwd);
+          },
+          publicationOperations: {
+            write() {
+              order.push("journal");
+            },
+          },
+        }),
+      ).toBe(1);
+
+      expect(order).toEqual(["composition", "verification"]);
+      expect(readFileSync(join(repoRoot, "packages/proto/generated/previous.txt"), "utf8")).toBe(
+        "packages/proto/generated\n",
+      );
+      expect(readFileSync(join(repoRoot, "examples/todo/generated/previous.txt"), "utf8")).toBe(
+        "examples/todo/generated\n",
+      );
+      expect(readFileSync(join(repoRoot, "packages/proto/spine-proto-manifest.json"), "utf8")).toBe(
+        "packages/proto/spine-proto-manifest.json\n",
+      );
+      expect(readFileSync(join(repoRoot, "examples/todo/spine-proto-manifest.json"), "utf8")).toBe(
+        "examples/todo/spine-proto-manifest.json\n",
+      );
+      expect(
+        readFileSync(join(repoRoot, "examples/message-board/app/src/model-registry.ts"), "utf8"),
+      ).toBe("previous registry\n");
+      expect(readdirSync(repoRoot).some((name) => name.startsWith(".spine-proto-"))).toBe(false);
+      for (const directory of ["examples/todo", "examples/message-board", "examples/message-board/app/src"])
+        expect(readdirSync(join(repoRoot, directory)).some((name) => name.startsWith(".generated-"))).toBe(false);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("rejects a symlinked staged MessageBoard registry before publication", () => {
     const repoRoot = messageBoardRegistryFixture();
     const external = mkdtempSync(join(tmpdir(), "spine-chat-registry-external-"));
