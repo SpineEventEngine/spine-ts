@@ -347,21 +347,31 @@ function assertNoSymlinksInTree(root, displayPath) {
     throw new Error(`Staged generated output must be a directory: ${displayPath}`);
   }
 
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    const entryPath = join(root, entry.name);
-    const entryDisplayPath = `${displayPath}/${entry.name}`;
-    const entryStat = lstatIfPresent(entryPath);
-
-    if (entryStat === undefined) {
-      continue;
-    }
-
-    if (entryStat.isSymbolicLink()) {
-      throw new Error(`Staged generated output must not contain symlinks: ${entryDisplayPath}`);
-    }
-
-    if (entryStat.isDirectory()) {
-      assertNoSymlinksInTree(entryPath, entryDisplayPath);
+  const pending = [{ path: root, displayPath, depth: 0 }];
+  let entries = 0;
+  while (pending.length > 0) {
+    if (pending.length > 64) throw new Error("Staged generated output exceeds bounded inventory");
+    const directory = pending.pop();
+    if (directory === undefined) continue;
+    for (const entry of readdirSync(directory.path, { withFileTypes: true })) {
+      entries += 1;
+      if (entries > 1_000) throw new Error("Staged generated output exceeds bounded inventory");
+      const entryPath = join(directory.path, entry.name);
+      const entryDisplayPath = `${directory.displayPath}/${entry.name}`;
+      const entryStat = lstatIfPresent(entryPath);
+      if (entryStat === undefined) continue;
+      if (entryStat.isSymbolicLink()) {
+        throw new Error(`Staged generated output must not contain symlinks: ${entryDisplayPath}`);
+      }
+      if (entryStat.isDirectory()) {
+        if (directory.depth >= 64)
+          throw new Error("Staged generated output exceeds bounded inventory");
+        pending.push({
+          path: entryPath,
+          displayPath: entryDisplayPath,
+          depth: directory.depth + 1,
+        });
+      }
     }
   }
 }
