@@ -296,6 +296,7 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   generated-clean `10/10`; tooling typecheck, affected ESLint, Prettier,
   diff, current-output, cleanup, and residue checks are green. Targeted
   style/reliability re-review is ready; security/release remain pending.
+
 ## Final Security Correction Checkpoint (2026-08-14)
 
 - The existing `implementer`, explicit `gpt-5.6-terra` / medium, began the
@@ -304,6 +305,7 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   without iterator invocation and reject direct staged FIFO entries before
   publication while preserving committed state. Claim-release, marker, and
   workflow-tree trust boundaries remain in progress.
+
 ## Security Marker Descriptor Checkpoint (2026-08-14)
 
 - Strict marker reads are now descriptor-based and fail closed for a symlinked
@@ -322,3 +324,10 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   admission and real symlink/FIFO release-replacement regressions are GREEN.
   Tooling typecheck is blocked by an untouched Core `TS18046` checkpoint defect;
   no unowned source was changed. The final security re-review remains pending.
+
+## Claim Protocol Verification Update (2026-08-14)
+
+- The independent Core correction resolved the temporary typecheck limitation
+  without overlap. Fresh tooling typecheck and exact ESLint are GREEN; full
+  Proto Tools is `137/137` and workflow is `93/93`. This claim correction is
+  ready for final-security re-review.

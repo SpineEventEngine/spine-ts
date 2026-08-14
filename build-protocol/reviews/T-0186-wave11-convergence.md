@@ -406,6 +406,7 @@ bounds/descriptors, v2 semantic mismatch rejection, journal allowlists and
 retained evidence, network/auth/tenant scope, logging, dependencies, and
 generated registry loading outside the marker gap are CLEAN. Security re-review
 will cover only these four corrected trust boundaries.
+
 ## Final Security Correction Checkpoint (2026-08-14)
 
 - Existing `implementer`, explicit `gpt-5.6-terra` / medium; Desktop exposes
@@ -413,6 +414,7 @@ will cover only these four corrected trust boundaries.
   accepted P2 descriptor iterator exposure and direct P1 staged FIFO exposure.
   The remaining accepted claim, marker, and workflow-tree findings are still
   in progress; final security verdict remains BLOCK pending re-review.
+
 ## Security Marker Descriptor Checkpoint (2026-08-14)
 
 - Marker P1 has a TDD correction: strict JSON reads use a no-follow,
@@ -432,3 +434,10 @@ will cover only these four corrected trust boundaries.
   retained quarantine evidence. Tooling typecheck is currently blocked by
   unowned Core `TS18046` errors, so final mechanical/release evidence remains
   pending the parent correction.
+
+## Claim-Protocol Verification Update (2026-08-14)
+
+- The independent Core correction is integrated without overlap. Fresh tooling
+  typecheck, exact affected ESLint, Prettier, and diff checks are GREEN; full
+  Proto Tools is `137/137` and workflow is `93/93`. The temporary typecheck
+  limitation above is resolved. Final security re-review is unblocked.
