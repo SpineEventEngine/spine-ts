@@ -199,3 +199,7 @@ pending implementation continuation.
   boundary; desktop telemetry cannot expose independent runtime metadata.
 - Security remains N/A for this example-only correction with no trust-boundary
   change; T-0186 owns the Wave 11 security review.
+- Fresh authoritative correction verification used all six To-Do suites and
+  sources `examples/todo/dist/src/index.js`,
+  `examples/todo/src/smoke-task-lists.ts`, and `examples/todo/src/process.ts`.
+  LCOV reports 92.42% branch coverage (61/66) and 96.54% lines (223/231).

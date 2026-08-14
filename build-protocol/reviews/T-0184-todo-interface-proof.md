@@ -168,3 +168,6 @@ least 90%, cheap preflight, and bounded `verify:task` with loopback permissions.
   child metadata; the immutable configured profile is the recorded evidence.
 - Reviewer profiles remain as assigned above; telemetry has the same desktop
   limitation. Security is N/A for T-0184 and remains T-0186 scope.
+- Fresh correction-profile evidence: the six To-Do suites and authoritative
+  compiled/source helper list completed under `verify:task --coverage`; LCOV is
+  92.42% branches (61/66) and 96.54% lines (223/231).
