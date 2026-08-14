@@ -12,9 +12,14 @@
  * the License.
  */
 
+import { create } from "@bufbuild/protobuf";
+import { validateEntityStateTransition } from "@spine-event-engine/server";
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
+
+import { TaskIdSchema, TaskListIdSchema } from "../generated/spine/examples/todo/task_id_pb.js";
+import { TaskSchema } from "../generated/spine/examples/todo/tasks_pb.js";
 
 const todoRoot = new URL("..", import.meta.url);
 
@@ -42,5 +47,20 @@ describe("To-Do interface-routing contract", () => {
     expect(application).toContain("TaskAssignmentEvent");
     expect(application).toContain("TaskReassignedSchema");
     expect(application).not.toContain("TaskReassignmentEvent");
+  });
+
+  it("allows the first Task transition to establish its task-list identity", () => {
+    const id = create(TaskIdSchema, { value: "task-1" });
+    const result = validateEntityStateTransition({
+      schema: TaskSchema,
+      previous: create(TaskSchema, { id }),
+      next: create(TaskSchema, {
+        id,
+        taskListId: create(TaskListIdSchema, { value: "list-1" }),
+        title: "First",
+      }),
+    });
+
+    expect(result.valid).toBe(true);
   });
 });

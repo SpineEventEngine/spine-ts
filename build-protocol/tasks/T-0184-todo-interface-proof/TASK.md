@@ -115,3 +115,18 @@ pending implementation continuation.
   performance/reliability, and documentation/TSDoc.
 - Security is deferred unless the example exposes a new trust boundary; T-0186
   owns the final Wave security review.
+
+## Runtime Admission Root Cause (Resolved)
+
+- RED: valid `CreateTask` invoked `TaskAggregate.createTask`, but no
+  `TaskCreated` was stored and neither a generated `TaskEvent` route nor an
+  exact `TaskCreated` route reached `TaskListProjection`.
+- Boundary tracing proved token membership and generated-registry schema
+  identity correct. The aggregate's framework-created initial Task state has
+  its ID; the first command then establishes `task_list_id`. Its `(set_once)`
+  option rejected that legitimate first update before event binding.
+- GREEN: `task_list_id` remains required and validated but is no longer
+  `set_once`. A focused state-transition test now proves first-create list
+  initialization; regenerated TaskEvent routing passes. A temporary exact-route
+  probe also passed and was removed after ruling routing out. This is a To-Do
+  Proto modeling correction, not a shared routing change.

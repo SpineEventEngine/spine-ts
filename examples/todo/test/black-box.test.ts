@@ -594,6 +594,7 @@ describe("@spine-event-engine/example-todo", () => {
         tasks: [
           {
             id: create(TaskIdSchema, { value: "task-1" }),
+            taskListId: create(TaskListIdSchema, { value: "task-1" }),
             title: "First",
             completed: false,
           },

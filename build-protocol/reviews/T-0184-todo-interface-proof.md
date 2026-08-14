@@ -46,3 +46,15 @@ least 90%, cheap preflight, and bounded `verify:task` with loopback permissions.
   preflight, and bounded verification before specialist review.
 - No specialist lane has been invoked. Security remains N/A for this checkpoint;
   T-0186 owns final Wave security review.
+
+## Runtime Admission Correction
+
+- Root-cause tracing found that `Task.task_list_id` was incorrectly
+  `(set_once)`: a framework-created Task already contains its ID, so CreateTask
+  legitimately assigns the list ID in the first state update. The transition
+  was rejected before event binding, independently of token or exact routing.
+- The example retains `(required)` and `(validate)` and removes only
+  `(set_once)`. Focused first-transition and generated-TaskEvent routing tests
+  are GREEN after regeneration; the temporary exact-schema diagnostic was
+  removed after proving routing was not causal.
+- No specialist lane has been invoked; this is implementation evidence only.
