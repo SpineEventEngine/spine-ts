@@ -1,6 +1,6 @@
 # T-0183: Interface-Token Repository Routing
 
-Status: Implementation complete; specialist review pending
+Status: Review corrections complete; targeted re-review pending
 Start: `2026-08-14 03:53 WEST`
 End: Pending
 Baseline commit: `d02379f7`
@@ -8,7 +8,7 @@ Branch: `task/T-0183-interface-routing`
 Worktree: `.worktrees/T-0183-interface-routing`
 Task classification: High-risk
 Implementation owner: existing `implementer`, explicit `gpt-5.6-terra` / medium
-Implementation commit: `c74c9310`, `27fa36df`, `11e5d867`; pre-review record checkpoint pending
+Implementation commit: `c74c9310`, `27fa36df`, `11e5d867`, `788a22d0`; correction record checkpoint pending
 Final branch HEAD: Pending
 
 ## Objective
@@ -81,4 +81,17 @@ admission/no-recomputation replay path for each signal kind. Full coverage is
 95.25% lines, 90.44% branches, and 94.07% functions. The complete
 `verify:task -- --no-coverage` gate passed with the five focused routing test
 files after that coverage evidence. Specialist review, release verification,
+integration, tag, and post-merge verification remain pending.
+
+## Review Correction Result
+
+The accepted API, style, and TSDoc findings are resolved at `788a22d0`: the
+public API inventory includes `InterfaceRouteMessage`; the immutable map facade
+does not expose its backing map; token classification and schema-tuple typing
+live only in the shared declaration seam; and each public route declaration
+documents its schema/token callback, precedence, validation, and durable replay
+behavior. Public compile-time regressions cover a two-member interface token
+for Command, Event, and state-update routing. The correction passes 262 focused
+tests, full 95.25% line / 90.44% branch / 94.11% function coverage, and the
+complete `verify:task` preflight. Targeted re-review, release verification,
 integration, tag, and post-merge verification remain pending.

@@ -1,6 +1,6 @@
 # T-0183 Review Log
 
-Status: Implementation complete; specialist review pending
+Status: Review corrections complete; targeted re-review pending
 
 Task: `build-protocol/tasks/T-0183-interface-token-routing/TASK.md`
 Branch: `task/T-0183-interface-routing`
@@ -50,3 +50,43 @@ replay for each signal kind. Specialist review remains pending.
   documentation audience/API checks, and release readiness.
 - Next: dispatch the relevant API, style, reliability, and documentation review
   lanes; security remains N/A until T-0186 as planned.
+
+## Accepted Review Batch And Resolution
+
+The explicit configured reviewer profiles were TypeScript/API
+`gpt-5.6-terra` / high, style/maintainability `gpt-5.6-terra` / high,
+performance/reliability `gpt-5.6-terra` / high, and documentation/TSDoc
+`gpt-5.6-luna` / medium. Desktop runtime telemetry does not independently
+expose runtime model metadata; these immutable configured profiles are the
+available acceptance evidence.
+
+- API P1: added `InterfaceRouteMessage` to the exact server API inventory and
+  verified it with `pnpm docs:api:check`.
+- API/docs P2: all three `.route(...)` TSDoc blocks now cover schema or nominal
+  `MessageInterface` targets, `InterfaceRouteMessage`, exact > first matching
+  token registration order > default precedence, copied/malformed/incomplete
+  token rejection, and admission-only routing versus durable replay.
+- API P2: public compile-time regressions use two-member tokens to prove common
+  interface access, reject unconditional member-only access, and retain exact
+  schema callback inference across Command, Event, and state-update APIs.
+- Style P2: snapshot `forEach` now receives the immutable facade, rather than
+  its backing `Map`; a RED/GREEN identity and mutation-surface regression proves
+  it.
+- Style P2: `RoutingDeclarations` now owns `InterfaceRouteSchemas` and the
+  token-candidate classifier, so the three public wrappers retain only their
+  signal-specific callback/result types.
+- Reliability: CLEAN; no correction was required. Security remains N/A as
+  planned, with Wave final security review owned by T-0186.
+
+## Post-Correction Mechanical Evidence
+
+- RED: facade `forEach` leaked its backing map and the common classifier was
+  absent. GREEN: 18/18 declaration and public type tests pass.
+- Five routing suites pass 262/262 tests; `pnpm typecheck:tooling` and
+  `pnpm docs:api:check` pass.
+- Full scripted `pnpm test:coverage` passes: 19,532 / 20,505 lines (95.25%),
+  12,237 / 13,531 branches (90.44%), and 5,113 / 5,433 functions (94.11%).
+- `git diff --check origin/main...HEAD` and the complete
+  `pnpm verify:task -- --no-coverage` preflight with the five focused suites
+  pass. The correction is ready for targeted re-review; do not run
+  `verify:release` before review convergence.
