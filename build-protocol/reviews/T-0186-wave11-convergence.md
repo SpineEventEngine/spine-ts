@@ -73,3 +73,19 @@ before acceptance. No review has started.
 - No specialist reviewer was dispatched in this implementation pass. The
   configured reviewer profiles and desktop runtime-telemetry limitation remain
   the immutable assignment evidence until the orchestrator starts that wave.
+
+## Accepted Correction Batch (2026-08-14)
+
+The accepted findings are being corrected by the existing `implementer`,
+explicit `gpt-5.6-terra` / medium. The copied requirements-splitter plan used
+the existing `requirements_splitter`, explicit `gpt-5.6-sol` / high. Desktop
+runtime telemetry exposes neither independent runtime profile; immutable
+configured profiles are the available evidence.
+
+Order: forged descriptor validation; manifest v2 generation IDs and
+manifest-last publication; recovery evidence/aggregation; bounded symlink
+traversal and declaration idempotency; then wording/records. Findings: API P1
+forged tokens; reliability P1 commit point and recovery evidence plus P2
+bounds/idempotency; style P2 long lines/stale log; documentation P1
+commit-point/total-drain and P2 dedup/replay wording. No reviewer is dispatched
+by this fix pass.

@@ -113,3 +113,24 @@ close the Wave.
   repository-wide `pnpm format:check`, `git diff --check`, and
   `pnpm verify:task -- --no-coverage scripts/check-typescript-snippets.test.mjs`.
   All passed; no release profile or review was started.
+
+## Accepted Review-Correction Plan (2026-08-14)
+
+The existing requirements splitter supplied the accepted dependency-ordered
+correction plan under its immutable configured `gpt-5.6-sol` / high profile.
+Desktop telemetry exposes no independent runtime model/reasoning metadata; the
+explicit role/profile is the available evidence. No implementation work is
+delegated from this owner.
+
+1. Harden `MessageInterfaces.define()` with descriptor-backed runtime
+   self-consistency validation before nominal registration; preserve tuple
+   typing, deduplication, freezing, and genuine Buf schemas without claiming
+   JavaScript provenance security.
+2. Upgrade manifests to v2 with opaque generation IDs and matching generated
+   root markers. Install trees/markers before manifests, which remain the sole
+   commit point; readers reject malformed, mixed, and v1 state.
+3. Retain journal-owned recovery evidence and the primary failure when rollback
+   fails; aggregate failures and recover on a subsequent safe run.
+4. Bound generated-tree symlink traversal and preserve declaration
+   normalization idempotency.
+5. Correct affected wording/records and run strict documentation gates.
