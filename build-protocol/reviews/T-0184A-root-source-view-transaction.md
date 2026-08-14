@@ -100,3 +100,10 @@ The release profile reached tests after all gates. Bootstrap tests now document
 the internal fixed options object and live-root propagation. The ordered
 MessageBoard fixture emits valid generated provenance so the production guard
 remains strict and the final verification barrier is exercised.
+
+## Final Release Workflow Fixture Correction
+
+The deterministic ordered fixture now supplies the root Spine artifact
+precondition and writes its staged manifest through the canonical test seam,
+allowing it to test the global verification barrier under coverage without
+weakening the production manifest check.

@@ -947,6 +947,8 @@ describe("proto-workflow", () => {
     const repoRoot = messageBoardRegistryFixture();
     const order = [];
     try {
+      mkdirSync(join(repoRoot, "packages/proto"), { recursive: true });
+      writeFileSync(join(repoRoot, "packages/proto/spine-proto.json"), "{}\n");
       expect(
         generateTargets({
           repoRoot,
@@ -966,6 +968,9 @@ describe("proto-workflow", () => {
             write() {
               order.push("journal");
             },
+          },
+          writeSpineArtifacts(_root, _generatedRoot, stagedManifest) {
+            writeFileSync(stagedManifest, "root next manifest\n");
           },
         }),
       ).toBe(1);
