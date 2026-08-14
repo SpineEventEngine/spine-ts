@@ -140,7 +140,8 @@ function dataProperty(value: object, name: string): unknown {
 
 function indexedDataProperties(values: readonly unknown[]): unknown[] | undefined {
   const length = dataProperty(values, "length");
-  if (!Number.isSafeInteger(length) || length < 0 || length > 1_000) return undefined;
+  if (typeof length !== "number" || !Number.isSafeInteger(length) || length < 0 || length > 1_000)
+    return undefined;
   const indexed: unknown[] = [];
   for (let index = 0; index < length; index += 1) {
     const descriptor = Object.getOwnPropertyDescriptor(values, String(index));
