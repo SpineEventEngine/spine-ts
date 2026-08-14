@@ -1,6 +1,6 @@
 # Wave 11: TypeScript Interfaces And Interface-Based Routing
 
-Status: In implementation; T-0180 through T-0183 complete, T-0184 next
+Status: In implementation; T-0180 through T-0183 complete, T-0184A prerequisite in progress
 
 ## Purpose
 
@@ -339,6 +339,19 @@ T-0179 generated-source policy
 The train is serial. Adjacent tasks deliberately share generator or public
 contract files, so parallel writers would create temporary inconsistencies and
 conflicting ownership.
+
+### T-0184A Addendum: Root Source-View Transaction Prerequisite
+
+T-0184A is a high-risk shared generation/atomic-publication correction inserted
+before the published T-0184 proof resumes. Root model staging must retain the
+canonical live package root for authored TypeScript/configuration while using
+only staged output for generated imports; it must not copy application sources
+or tsconfig files into the stage. A fixed internal source-view publication
+record is revalidated after every model/companion/handler/registry post-step and
+before any journal/rename, so mutations or malformed records roll back the
+entire root transaction. The generated interface companions also require exact
+declaration-safe readonly tuples. This internal prerequisite creates no public
+CLI/configuration surface and does not modify unpublished To-Do work.
 
 ### T-0179: Generated-source provenance and copyright policy
 
