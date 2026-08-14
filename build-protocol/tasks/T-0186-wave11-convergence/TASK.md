@@ -89,7 +89,7 @@ close the Wave.
     established unsupported/out-of-scope boundary; the durable binding source
     expressly says it does not coordinate multiple Gateway processes.
 - RED: `pnpm exec vitest run scripts/normalize-generated-declarations.test.mjs
-  -t 'normalizes generated interface declarations with their Proto provenance'`
+-t 'normalizes generated interface declarations with their Proto provenance'`
   failed as expected because the emitted interface declaration had no notice.
 - GREEN: the same focused test passed after interface `.d.ts` paths joined the
   declaration normalizer inventory. `pnpm typecheck:build:generated` completed
@@ -98,3 +98,7 @@ close the Wave.
   `8` focused workflow tests. They cover post-Buf validation, generated-tree
   rename, manifest publication failures, recovery journal/backup behavior,
   generation claim cleanup, and rollback/fail-closed publication boundaries.
+- Cheap preflight passed at correction commit `a4ce5fa88b886e12003c9a6a9d0710c094d0a002`:
+  `pnpm verify:task -- --coverage scripts/normalize-generated-declarations.test.mjs
+--source scripts/normalize-generated-declarations.mjs`. It includes the
+  changed-source coverage inspection; `verify:release` was not run.
