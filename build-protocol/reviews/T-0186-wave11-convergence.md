@@ -359,3 +359,20 @@ Final security and release verification remain pending.
   `gpt-5.6-terra` / high configuration. Desktop exposes no independent runtime
   telemetry; configured profiles and no visible mismatch are the acceptance
   gate.
+
+## Converged Specialist Verdict and Final Security Assignment (2026-08-14)
+
+- Style/maintainability: CLEAN. Candidate bounding, descriptor lifecycle,
+  public behavior tests, MessageBoard ownership proof, and the single canonical
+  reuse policy are clear and contain no dead wrapper or private test seam.
+- Performance/reliability: CLEAN. The review confirms candidate and retry
+  bounds, no-follow/nonblocking descriptor reads and closure, fail-closed
+  special/replacement handling, journal-owned stage retention and later
+  recovery, ordinary unowned cleanup, and publication path containment.
+- The mandatory existing `security_reviewer` is dispatched with explicit
+  immutable `gpt-5.6-terra` / high configuration. Scope is generated input and
+  path containment, manifest/marker trust boundaries, claim/retry races and
+  resource bounds, rollback/recovery evidence, and confirmation that Wave 11
+  adds no network, authentication, authorization, or tenant boundary. Desktop
+  exposes no independent runtime telemetry; the configured role/profile and
+  no visible mismatch are the acceptance evidence.
