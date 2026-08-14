@@ -80,6 +80,10 @@ import {
   type StateUpdateRoute,
   type StateUpdateRouting,
 } from "./state-update-routing.js";
+import {
+  RoutingDeclarations,
+  type RoutingDeclarationSnapshot,
+} from "./routing-declarations.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { Delivery } from "../delivery/delivery.js";
@@ -4190,18 +4194,9 @@ const RepositoryRoutes = {
     metadata: EntityMetadata,
     handlersOption: RepositoryHandlersOption,
     producedEvents: readonly MessageSchema[],
-    commandRouting: Readonly<{
-      exact: ReadonlyMap<MessageSchema, CommandRoute<RepositoryEntityId<EntityType>>>;
-      defaultRoute: CommandRoute<RepositoryEntityId<EntityType>> | undefined;
-    }>,
-    eventRouting: Readonly<{
-      exact: ReadonlyMap<MessageSchema, EventRoute<RepositoryEntityId<EntityType>>>;
-      defaultRoute: EventRoute<RepositoryEntityId<EntityType>> | undefined;
-    }>,
-    stateUpdateRouting: Readonly<{
-      exact: ReadonlyMap<MessageSchema, StateUpdateRoute<RepositoryEntityId<EntityType>>>;
-      defaultRoute: StateUpdateRoute<RepositoryEntityId<EntityType>> | undefined;
-    }>,
+    commandRouting: RoutingDeclarationSnapshot<CommandRoute<RepositoryEntityId<EntityType>>>,
+    eventRouting: RoutingDeclarationSnapshot<EventRoute<RepositoryEntityId<EntityType>>>,
+    stateUpdateRouting: RoutingDeclarationSnapshot<StateUpdateRoute<RepositoryEntityId<EntityType>>>,
     stringifiers: StringifierRegistry,
   ): RepositoryRouting<RepositoryEntityId<EntityType>> {
     const handlers = RepositoryHandlers.normalizeHandlers(handlersOption);
@@ -4363,26 +4358,14 @@ const RepositoryRoutes = {
 
   resolveCommandRoutes<Id>(
     schemas: readonly MessageSchema[],
-    routing: Readonly<{
-      exact: ReadonlyMap<MessageSchema, CommandRoute<Id>>;
-      defaultRoute: CommandRoute<Id> | undefined;
-    }>,
+    routing: RoutingDeclarationSnapshot<CommandRoute<Id>>,
   ): ReadonlyMap<MessageSchema, CommandRoute<Id>> {
     const routes = new Map<MessageSchema, CommandRoute<Id>>();
-    const schemaSet = new Set(schemas);
-
-    for (const [schema, route] of routing.exact) {
-      if (!schemaSet.has(schema)) {
-        throw new Error(
-          `Repository command routing has an unregistered exact route for "${schema.typeName}".`,
-        );
-      }
-      routes.set(schema, route);
-    }
+    RoutingDeclarations.validate(routing, schemas, "command");
 
     for (const schema of schemas) {
-      if (routes.has(schema)) continue;
-      if (routing.defaultRoute !== undefined) routes.set(schema, routing.defaultRoute);
+      const route = RoutingDeclarations.select(routing, schema);
+      if (route !== undefined) routes.set(schema, route);
     }
     return routes;
   },
@@ -4452,25 +4435,14 @@ const RepositoryRoutes = {
 
   resolveEventRoutes<Id>(
     schemas: readonly MessageSchema[],
-    routing: Readonly<{
-      exact: ReadonlyMap<MessageSchema, EventRoute<Id>>;
-      defaultRoute: EventRoute<Id> | undefined;
-    }>,
+    routing: RoutingDeclarationSnapshot<EventRoute<Id>>,
   ): ReadonlyMap<MessageSchema, EventRoute<Id>> {
     const routes = new Map<MessageSchema, EventRoute<Id>>();
-    const schemaSet = new Set(schemas);
-    for (const [schema, route] of routing.exact) {
-      if (!schemaSet.has(schema)) {
-        throw new Error(
-          `Repository event routing has an unregistered exact route for "${schema.typeName}".`,
-        );
-      }
-      routes.set(schema, route);
-    }
+    RoutingDeclarations.validate(routing, schemas, "event");
 
     for (const schema of schemas) {
-      if (routes.has(schema)) continue;
-      if (routing.defaultRoute !== undefined) routes.set(schema, routing.defaultRoute);
+      const route = RoutingDeclarations.select(routing, schema);
+      if (route !== undefined) routes.set(schema, route);
     }
     return routes;
   },
@@ -4500,25 +4472,14 @@ const RepositoryRoutes = {
 
   resolveStateRoutes<Id>(
     schemas: readonly DescriptorMessageSchema[],
-    routing: Readonly<{
-      exact: ReadonlyMap<MessageSchema, StateUpdateRoute<Id>>;
-      defaultRoute: StateUpdateRoute<Id> | undefined;
-    }>,
+    routing: RoutingDeclarationSnapshot<StateUpdateRoute<Id>>,
     targetIdField: DescriptorFieldMetadata,
   ): ReadonlyMap<DescriptorMessageSchema, StateUpdateRoute<Id>> {
     const routes = new Map<DescriptorMessageSchema, StateUpdateRoute<Id>>();
-    const schemaSet = new Set<MessageSchema>(schemas);
-    for (const [schema, route] of routing.exact) {
-      if (!schemaSet.has(schema)) {
-        throw new Error(
-          `Repository state-update routing has an unregistered exact route for "${schema.typeName}".`,
-        );
-      }
-      routes.set(schema, route);
-    }
+    RoutingDeclarations.validate(routing, schemas, "state-update");
     for (const schema of schemas) {
-      if (routes.has(schema)) continue;
-      if (routing.defaultRoute !== undefined) routes.set(schema, routing.defaultRoute);
+      const route = RoutingDeclarations.select(routing, schema);
+      if (route !== undefined) routes.set(schema, route);
       else if (
         !schema.fields.some((field) =>
           RepositoryRoutes.compatibleStateIdField(field, targetIdField),

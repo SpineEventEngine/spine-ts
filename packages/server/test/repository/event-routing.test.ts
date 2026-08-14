@@ -13,6 +13,7 @@
  */
 
 import { EventSchema } from "@spine-event-engine/proto";
+import { MessageInterfaces } from "@spine-event-engine/core";
 import { describe, expect, it } from "vitest";
 
 import { EventRouting } from "../../src/index.js";
@@ -43,5 +44,19 @@ describe("EventRouting", () => {
     expect(snapshot.exact.get(EventSchema)).toBe(first);
     expect(snapshot).not.toHaveProperty("semantic");
     expect(snapshot.defaultRoute).toBeUndefined();
+  });
+
+  it("declares an ordered nominal message-interface route", () => {
+    const token = MessageInterfaces.define<object, readonly [typeof EventSchema]>([EventSchema]);
+    const route = () => ["target"];
+    const routing = EventRouting.create<string>().route(token, route);
+
+    expect(EventRoutingInternals.snapshot(routing).interfaceRoutes).toEqual([
+      expect.objectContaining({ route, token }),
+    ]);
+    expect(() => routing.route(token, route)).toThrow(/duplicate interface route/);
+    expect(() => routing.route({ schemas: token.schemas } as never, route)).toThrow(
+      /generated message interface token/,
+    );
   });
 });

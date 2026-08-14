@@ -13,8 +13,21 @@
  */
 
 import type { MessageShape } from "@bufbuild/protobuf";
-import type { MessageSchema } from "@spine-event-engine/core";
+import {
+  MessageInterfaces,
+  type MessageInterface,
+  type MessageSchema,
+} from "@spine-event-engine/core";
 import type { EventContext } from "@spine-event-engine/proto";
+import {
+  RoutingDeclarations,
+  type RoutingDeclarationSnapshot,
+  type RoutingDeclarationState,
+} from "./routing-declarations.js";
+
+type InterfaceSchemas = readonly [MessageSchema, ...MessageSchema[]];
+type InterfaceRouteMessage<TInterface extends object, Schemas extends InterfaceSchemas> =
+  MessageShape<Schemas[number]> & TInterface;
 
 /**
  * Calculates target Entity IDs for one accepted Entity state update.
@@ -35,10 +48,7 @@ export type StateUpdateRoute<Id, Schema extends MessageSchema = MessageSchema> =
   context: EventContext,
 ) => readonly Id[];
 
-interface State<Id> {
-  readonly exact: Map<MessageSchema, StateUpdateRoute<Id>>;
-  defaultRoute: StateUpdateRoute<Id> | undefined;
-}
+type State<Id> = RoutingDeclarationState<StateUpdateRoute<Id>>;
 const states = new WeakMap<object, State<unknown>>();
 
 /**
@@ -46,7 +56,7 @@ const states = new WeakMap<object, State<unknown>>();
  */
 export class StateUpdateRouting<Id> {
   private constructor() {
-    states.set(this, { exact: new Map(), defaultRoute: undefined });
+    states.set(this, RoutingDeclarations.create<StateUpdateRoute<Id>>());
   }
 
   /**
@@ -65,13 +75,31 @@ export class StateUpdateRouting<Id> {
    * @param via Route function to invoke.
    * @returns These mutable declarations.
    */
-  route<Schema extends MessageSchema>(schema: Schema, via: StateUpdateRoute<Id, Schema>): this {
+  route<Schema extends MessageSchema>(schema: Schema, via: StateUpdateRoute<Id, Schema>): this;
+  route<TInterface extends object, Schemas extends InterfaceSchemas>(
+    token: MessageInterface<TInterface, Schemas>,
+    via: (message: InterfaceRouteMessage<TInterface, Schemas>, context: EventContext) => readonly Id[],
+  ): this;
+  route(
+    schemaOrToken: MessageSchema | MessageInterface<object, InterfaceSchemas>,
+    via: StateUpdateRoute<Id>,
+  ): this {
     if (typeof via !== "function")
       throw new TypeError("State-update routing requires a route function.");
     const state = StateUpdateRoutingInternals.state(this);
-    if (state.exact.has(schema))
-      throw new Error("State-update routing has a duplicate exact state-update route.");
-    state.exact.set(schema, via);
+    if (
+      MessageInterfaces.is(schemaOrToken) ||
+      (typeof schemaOrToken === "object" && schemaOrToken !== null && "schemas" in schemaOrToken)
+    ) {
+      RoutingDeclarations.routeInterface(state, schemaOrToken, via, "State-update routing");
+    } else {
+      RoutingDeclarations.exact(
+        state,
+        schemaOrToken,
+        via,
+        "State-update routing has a duplicate exact state-update route.",
+      );
+    }
     return this;
   }
 
@@ -84,7 +112,7 @@ export class StateUpdateRouting<Id> {
   replaceDefault(via: StateUpdateRoute<Id>): this {
     if (typeof via !== "function")
       throw new TypeError("State-update routing requires a route function.");
-    StateUpdateRoutingInternals.state(this).defaultRoute = via;
+    RoutingDeclarations.default(StateUpdateRoutingInternals.state(this), via);
     return this;
   }
 }
@@ -96,25 +124,19 @@ export class StateUpdateRouting<Id> {
  */
 export const StateUpdateRoutingInternals: Readonly<{
   state<Id>(routing: StateUpdateRouting<Id>): State<Id>;
-  snapshot<Id>(routing: StateUpdateRouting<Id> | undefined): Readonly<{
-    exact: ReadonlyMap<MessageSchema, StateUpdateRoute<Id>>;
-    defaultRoute: StateUpdateRoute<Id> | undefined;
-  }>;
+  snapshot<Id>(
+    routing: StateUpdateRouting<Id> | undefined,
+  ): RoutingDeclarationSnapshot<StateUpdateRoute<Id>>;
 }> = Object.freeze({
   state<Id>(routing: StateUpdateRouting<Id>): State<Id> {
     return states.get(routing) as State<Id>;
   },
-  snapshot<Id>(routing: StateUpdateRouting<Id> | undefined) {
+  snapshot<Id>(
+    routing: StateUpdateRouting<Id> | undefined,
+  ): RoutingDeclarationSnapshot<StateUpdateRoute<Id>> {
     if (routing === undefined) {
-      return Object.freeze({
-        exact: new Map<MessageSchema, StateUpdateRoute<Id>>(),
-        defaultRoute: undefined,
-      });
+      return RoutingDeclarations.snapshot(RoutingDeclarations.create<StateUpdateRoute<Id>>());
     }
-    const state = StateUpdateRoutingInternals.state(routing);
-    return Object.freeze({
-      exact: new Map(state.exact),
-      defaultRoute: state.defaultRoute,
-    });
+    return RoutingDeclarations.snapshot(StateUpdateRoutingInternals.state(routing));
   },
 });

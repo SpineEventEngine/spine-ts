@@ -13,8 +13,21 @@
  */
 
 import type { MessageShape } from "@bufbuild/protobuf";
-import type { MessageSchema } from "@spine-event-engine/core";
+import {
+  MessageInterfaces,
+  type MessageInterface,
+  type MessageSchema,
+} from "@spine-event-engine/core";
 import type { EventContext } from "@spine-event-engine/proto";
+import {
+  RoutingDeclarations,
+  type RoutingDeclarationSnapshot,
+  type RoutingDeclarationState,
+} from "./routing-declarations.js";
+
+type InterfaceSchemas = readonly [MessageSchema, ...MessageSchema[]];
+type InterfaceRouteMessage<TInterface extends object, Schemas extends InterfaceSchemas> =
+  MessageShape<Schemas[number]> & TInterface;
 
 /**
  * Calculates target Entity IDs for one Event admission.
@@ -36,10 +49,7 @@ export type EventRoute<Id, Schema extends MessageSchema = MessageSchema> = (
   context: EventContext,
 ) => readonly Id[];
 
-interface State<Id> {
-  readonly exact: Map<MessageSchema, EventRoute<Id>>;
-  defaultRoute: EventRoute<Id> | undefined;
-}
+type State<Id> = RoutingDeclarationState<EventRoute<Id>>;
 const states = new WeakMap<object, State<unknown>>();
 
 /**
@@ -52,7 +62,7 @@ export class EventRouting<Id> {
    * Creates empty mutable Event route declarations.
    */
   private constructor() {
-    states.set(this, { exact: new Map(), defaultRoute: undefined });
+    states.set(this, RoutingDeclarations.create<EventRoute<Id>>());
   }
 
   /**
@@ -72,12 +82,30 @@ export class EventRouting<Id> {
    * @param via Route that calculates target Entity IDs.
    * @returns These mutable route declarations.
    */
-  route<Schema extends MessageSchema>(schema: Schema, via: EventRoute<Id, Schema>): this {
+  route<Schema extends MessageSchema>(schema: Schema, via: EventRoute<Id, Schema>): this;
+  route<TInterface extends object, Schemas extends InterfaceSchemas>(
+    token: MessageInterface<TInterface, Schemas>,
+    via: (message: InterfaceRouteMessage<TInterface, Schemas>, context: EventContext) => readonly Id[],
+  ): this;
+  route(
+    schemaOrToken: MessageSchema | MessageInterface<object, InterfaceSchemas>,
+    via: EventRoute<Id>,
+  ): this {
     if (typeof via !== "function") throw new TypeError("Event routing requires a route function.");
     const state = EventRoutingInternals.state(this);
-    if (state.exact.has(schema))
-      throw new Error("Event routing has a duplicate exact event route.");
-    state.exact.set(schema, via);
+    if (
+      MessageInterfaces.is(schemaOrToken) ||
+      (typeof schemaOrToken === "object" && schemaOrToken !== null && "schemas" in schemaOrToken)
+    ) {
+      RoutingDeclarations.routeInterface(state, schemaOrToken, via, "Event routing");
+    } else {
+      RoutingDeclarations.exact(
+        state,
+        schemaOrToken,
+        via,
+        "Event routing has a duplicate exact event route.",
+      );
+    }
     return this;
   }
 
@@ -89,7 +117,7 @@ export class EventRouting<Id> {
    */
   replaceDefault(via: EventRoute<Id>): this {
     if (typeof via !== "function") throw new TypeError("Event routing requires a route function.");
-    EventRoutingInternals.state(this).defaultRoute = via;
+    RoutingDeclarations.default(EventRoutingInternals.state(this), via);
     return this;
   }
 }
@@ -101,28 +129,15 @@ export class EventRouting<Id> {
  */
 export const EventRoutingInternals: Readonly<{
   state<Id>(routing: EventRouting<Id>): State<Id>;
-  snapshot<Id>(routing: EventRouting<Id> | undefined): Readonly<{
-    exact: ReadonlyMap<MessageSchema, EventRoute<Id>>;
-    defaultRoute: EventRoute<Id> | undefined;
-  }>;
+  snapshot<Id>(routing: EventRouting<Id> | undefined): RoutingDeclarationSnapshot<EventRoute<Id>>;
 }> = Object.freeze({
   state<Id>(routing: EventRouting<Id>): State<Id> {
     return states.get(routing) as State<Id>;
   },
-  snapshot<Id>(routing: EventRouting<Id> | undefined): Readonly<{
-    exact: ReadonlyMap<MessageSchema, EventRoute<Id>>;
-    defaultRoute: EventRoute<Id> | undefined;
-  }> {
+  snapshot<Id>(routing: EventRouting<Id> | undefined): RoutingDeclarationSnapshot<EventRoute<Id>> {
     if (routing === undefined) {
-      return Object.freeze({
-        exact: new Map<MessageSchema, EventRoute<Id>>(),
-        defaultRoute: undefined,
-      });
+      return RoutingDeclarations.snapshot(RoutingDeclarations.create<EventRoute<Id>>());
     }
-    const state = EventRoutingInternals.state(routing);
-    return Object.freeze({
-      exact: new Map(state.exact),
-      defaultRoute: state.defaultRoute,
-    });
+    return RoutingDeclarations.snapshot(EventRoutingInternals.state(routing));
   },
 });

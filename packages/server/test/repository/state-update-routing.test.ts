@@ -13,6 +13,7 @@
  */
 
 import { EntityStateChangedSchema } from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
+import { MessageInterfaces } from "@spine-event-engine/core";
 import { describe, expect, it } from "vitest";
 
 import { StateUpdateRouting } from "../../src/index.js";
@@ -45,5 +46,21 @@ describe("StateUpdateRouting", () => {
     expect(snapshot.exact.get(EntityStateChangedSchema)).toBe(first);
     expect(snapshot).not.toHaveProperty("semantic");
     expect(snapshot.defaultRoute).toBeUndefined();
+  });
+
+  it("declares an ordered nominal message-interface route", () => {
+    const token = MessageInterfaces.define<object, readonly [typeof EntityStateChangedSchema]>([
+      EntityStateChangedSchema,
+    ]);
+    const route = () => ["target"];
+    const routing = StateUpdateRouting.create<string>().route(token, route);
+
+    expect(StateUpdateRoutingInternals.snapshot(routing).interfaceRoutes).toEqual([
+      expect.objectContaining({ route, token }),
+    ]);
+    expect(() => routing.route(token, route)).toThrow(/duplicate interface route/);
+    expect(() => routing.route({ schemas: token.schemas } as never, route)).toThrow(
+      /generated message interface token/,
+    );
   });
 });

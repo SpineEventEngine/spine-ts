@@ -13,8 +13,30 @@
  */
 
 import type { MessageShape } from "@bufbuild/protobuf";
-import type { MessageSchema } from "@spine-event-engine/core";
+import {
+  MessageInterfaces,
+  type MessageInterface,
+  type MessageSchema,
+} from "@spine-event-engine/core";
 import type { CommandContext } from "@spine-event-engine/proto";
+import {
+  RoutingDeclarations,
+  type RoutingDeclarationSnapshot,
+  type RoutingDeclarationState,
+} from "./routing-declarations.js";
+
+type InterfaceSchemas = readonly [MessageSchema, ...MessageSchema[]];
+
+/**
+ * Message shape available to a Command interface route.
+ *
+ * @typeParam TInterface Declared common interface shape.
+ * @typeParam Schemas Concrete token member schemas.
+ */
+export type InterfaceRouteMessage<
+  TInterface extends object,
+  Schemas extends InterfaceSchemas,
+> = MessageShape<Schemas[number]> & TInterface;
 
 /**
  * Calculates one Entity ID for a Command message.
@@ -35,10 +57,7 @@ export type CommandRoute<Id, Schema extends MessageSchema = MessageSchema> = (
   context: CommandContext,
 ) => Id;
 
-interface CommandRoutingState<Id> {
-  readonly exact: Map<MessageSchema, CommandRoute<Id>>;
-  defaultRoute: CommandRoute<Id> | undefined;
-}
+type CommandRoutingState<Id> = RoutingDeclarationState<CommandRoute<Id>>;
 
 const routingStates = new WeakMap<object, CommandRoutingState<unknown>>();
 
@@ -54,10 +73,7 @@ export class CommandRouting<Id> {
    * Creates empty mutable Command route declarations.
    */
   private constructor() {
-    routingStates.set(this, {
-      exact: new Map<MessageSchema, CommandRoute<Id>>(),
-      defaultRoute: undefined,
-    });
+    routingStates.set(this, RoutingDeclarations.create<CommandRoute<Id>>());
   }
 
   /**
@@ -77,13 +93,31 @@ export class CommandRouting<Id> {
    * @param via Route that calculates the target Entity ID.
    * @returns These mutable route declarations.
    */
-  route<Schema extends MessageSchema>(schema: Schema, via: CommandRoute<Id, Schema>): this {
+  route<Schema extends MessageSchema>(schema: Schema, via: CommandRoute<Id, Schema>): this;
+  route<TInterface extends object, Schemas extends InterfaceSchemas>(
+    token: MessageInterface<TInterface, Schemas>,
+    via: (message: InterfaceRouteMessage<TInterface, Schemas>, context: CommandContext) => Id,
+  ): this;
+  route(
+    schemaOrToken: MessageSchema | MessageInterface<object, InterfaceSchemas>,
+    via: CommandRoute<Id>,
+  ): this {
     if (typeof via !== "function")
       throw new TypeError("Command routing requires a route function.");
     const state = CommandRoutingInternals.state(this);
-    if (state.exact.has(schema))
-      throw new Error("Command routing has a duplicate exact command route.");
-    state.exact.set(schema, via);
+    if (
+      MessageInterfaces.is(schemaOrToken) ||
+      (typeof schemaOrToken === "object" && schemaOrToken !== null && "schemas" in schemaOrToken)
+    ) {
+      RoutingDeclarations.routeInterface(state, schemaOrToken, via, "Command routing");
+    } else {
+      RoutingDeclarations.exact(
+        state,
+        schemaOrToken,
+        via,
+        "Command routing has a duplicate exact command route.",
+      );
+    }
     return this;
   }
 
@@ -96,7 +130,7 @@ export class CommandRouting<Id> {
   replaceDefault(via: CommandRoute<Id>): this {
     if (typeof via !== "function")
       throw new TypeError("Command routing requires a route function.");
-    CommandRoutingInternals.state(this).defaultRoute = via;
+    RoutingDeclarations.default(CommandRoutingInternals.state(this), via);
     return this;
   }
 }
@@ -108,28 +142,15 @@ export class CommandRouting<Id> {
  */
 export const CommandRoutingInternals: Readonly<{
   state<Id>(routing: CommandRouting<Id>): CommandRoutingState<Id>;
-  snapshot<Id>(routing: CommandRouting<Id> | undefined): Readonly<{
-    exact: ReadonlyMap<MessageSchema, CommandRoute<Id>>;
-    defaultRoute: CommandRoute<Id> | undefined;
-  }>;
+  snapshot<Id>(routing: CommandRouting<Id> | undefined): RoutingDeclarationSnapshot<CommandRoute<Id>>;
 }> = Object.freeze({
   state<Id>(routing: CommandRouting<Id>): CommandRoutingState<Id> {
     return routingStates.get(routing) as CommandRoutingState<Id>;
   },
-  snapshot<Id>(routing: CommandRouting<Id> | undefined): Readonly<{
-    exact: ReadonlyMap<MessageSchema, CommandRoute<Id>>;
-    defaultRoute: CommandRoute<Id> | undefined;
-  }> {
+  snapshot<Id>(routing: CommandRouting<Id> | undefined): RoutingDeclarationSnapshot<CommandRoute<Id>> {
     if (routing === undefined) {
-      return Object.freeze({
-        exact: new Map<MessageSchema, CommandRoute<Id>>(),
-        defaultRoute: undefined,
-      });
+      return RoutingDeclarations.snapshot(RoutingDeclarations.create<CommandRoute<Id>>());
     }
-    const state = CommandRoutingInternals.state(routing);
-    return Object.freeze({
-      exact: new Map(state.exact),
-      defaultRoute: state.defaultRoute,
-    });
+    return RoutingDeclarations.snapshot(CommandRoutingInternals.state(routing));
   },
 });

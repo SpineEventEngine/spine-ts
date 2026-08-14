@@ -13,6 +13,7 @@
  */
 
 import { create } from "@bufbuild/protobuf";
+import { MessageInterfaces } from "@spine-event-engine/core";
 import { CommandContextSchema, CommandSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
@@ -55,5 +56,19 @@ describe("CommandRouting", () => {
     expect(snapshot.exact.get(CommandSchema)).toBe(first);
     expect(snapshot).not.toHaveProperty("semantic");
     expect(snapshot.defaultRoute).toBeUndefined();
+  });
+
+  it("declares an ordered nominal message-interface route", () => {
+    const token = MessageInterfaces.define<object, readonly [typeof CommandSchema]>([CommandSchema]);
+    const route = () => "target";
+    const routing = CommandRouting.create<string>().route(token, route);
+
+    expect(CommandRoutingInternals.snapshot(routing).interfaceRoutes).toEqual([
+      expect.objectContaining({ route, token }),
+    ]);
+    expect(() => routing.route(token, route)).toThrow(/duplicate interface route/);
+    expect(() => routing.route({ schemas: token.schemas } as never, route)).toThrow(
+      /generated message interface token/,
+    );
   });
 });

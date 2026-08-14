@@ -33,6 +33,7 @@ import {
   TypeUrls,
   AnyMessages,
   Identifiers,
+  MessageInterfaces,
   SignalEnvelopes,
   StringifierRegistry,
 } from "@spine-event-engine/core";
@@ -3520,6 +3521,39 @@ describe("repository signal routing", () => {
     expect(replacement.routeCommand(command).entityId).toBe("replacement");
   });
 
+  it("selects a Command interface route after exact routes and before the default", () => {
+    const token = MessageInterfaces.define<object, readonly [typeof AggregateStateSchema]>([
+      AggregateStateSchema,
+    ]);
+    const repository = createRoutingRepository(
+      CommandRouting.create<string>()
+        .route(token, () => "interface")
+        .replaceDefault(() => "default"),
+    );
+
+    expect(repository.routeCommand(createAggregateCommand("command-interface", "field")).entityId).toBe(
+      "interface",
+    );
+    expect(
+      createRoutingRepository(
+        CommandRouting.create<string>()
+          .route(token, () => "interface")
+          .route(AggregateStateSchema, () => "exact"),
+      ).routeCommand(createAggregateCommand("command-interface-exact", "field")).entityId,
+    ).toBe("exact");
+  });
+
+  it("rejects a Command interface token with an unregistered member at construction", () => {
+    const token = MessageInterfaces.define<
+      object,
+      readonly [typeof AggregateStateSchema, typeof ProjectionStateSchema]
+    >([AggregateStateSchema, ProjectionStateSchema]);
+
+    expect(() => createRoutingRepository(CommandRouting.create<string>().route(token, () => "target"))).toThrow(
+      /unregistered interface member/,
+    );
+  });
+
   it("keeps the Command routing snapshot captured by repository construction", () => {
     const routing = CommandRouting.create<string>().replaceDefault(() => "first");
     const repository = createRoutingRepository(routing);
@@ -3730,6 +3764,30 @@ describe("repository signal routing", () => {
 
     expect(exact.routeEvent(event).entityIds).toEqual(["exact"]);
     expect(replacement.routeEvent(event).entityIds).toEqual(["replacement"]);
+  });
+
+  it("selects an Event interface route after exact routes and before the default", () => {
+    const token = MessageInterfaces.define<object, readonly [typeof ProjectionEventSchema]>([
+      ProjectionEventSchema,
+    ]);
+    const repository = createRoutingRepository(
+      undefined,
+      EventRouting.create<string>()
+        .route(token, () => ["interface"])
+        .replaceDefault(() => ["default"]),
+    );
+
+    expect(repository.routeEvent(createProjectionEvent("event-interface", "field")).entityIds).toEqual([
+      "interface",
+    ]);
+    expect(
+      createRoutingRepository(
+        undefined,
+        EventRouting.create<string>()
+          .route(token, () => ["interface"])
+          .route(ProjectionEventSchema, () => ["exact"]),
+      ).routeEvent(createProjectionEvent("event-interface-exact", "field")).entityIds,
+    ).toEqual(["exact"]);
   });
 
   it("keeps the Event routing snapshot captured by repository construction", () => {
@@ -11554,6 +11612,29 @@ describe("Projection state-update routing", () => {
           )?.entityIds,
       ),
     ).toEqual([["exact"], ["replacement"]]);
+  });
+
+  it("selects a state interface route after exact routes and before the default", () => {
+    const token = MessageInterfaces.define<object, readonly [typeof AggregateStateSchema]>([
+      AggregateStateSchema,
+    ]);
+    const handlers = EntityHandlers.define(
+      StateObservingProjection,
+      ProjectionStateSchema,
+      (builder) => [builder.subscribe(AggregateStateSchema, "subscribeState")],
+    );
+    const repository = new Repository({
+      entityType: StateObservingProjection,
+      schema: ProjectionStateSchema,
+      handlers,
+      stateUpdateRouting: StateUpdateRouting.create<string>()
+        .route(token, () => ["interface"])
+        .replaceDefault(() => ["default"]),
+    });
+
+    expect(
+      repositoryAccess.routeStateUpdate(repository, createStateChangedEvent("interface"))?.entityIds,
+    ).toEqual(["interface"]);
   });
 
   it("fails closed for malformed System events", () => {
