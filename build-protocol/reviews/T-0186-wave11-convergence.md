@@ -164,3 +164,14 @@ by this fix pass.
   GREEN. The focused test passed `1/1`, full workflow passed `78/78`, two
   serial canonical generations retained identical all-five manifest/marker
   hashes and IDs, current-output passed, and no workflow residue remained.
+
+## Tooling Fixture Correction Evidence (2026-08-14)
+
+- Disposition: deterministic fixture correction complete; no production review
+  concern reopened. The existing `implementer` used explicit
+  `gpt-5.6-terra` / medium configuration; Desktop runtime telemetry is
+  unavailable.
+- Typecheck failures originated in stale test declarations: duplicate export
+  key, obsolete scalar generic for `TaskList`, and a missing current
+  `Task.taskListId` fixture property. Tooling typecheck passed; focused Proto
+  Tools and repository routing suites passed `109/109` and `244/244`.

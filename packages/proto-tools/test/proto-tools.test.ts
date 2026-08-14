@@ -766,10 +766,6 @@ describe("spine proto model tooling", () => {
           types: "./dist/generated/*.d.ts",
           default: "./dist/generated/*.js",
         },
-        "./generated/*.js": {
-          types: "./dist/generated/*.d.ts",
-          default: "./dist/generated/*.js",
-        },
       },
     });
     writeJson(chat, "package.json", {

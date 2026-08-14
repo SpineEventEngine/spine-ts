@@ -209,6 +209,7 @@ type TaskId = Message<"spine.examples.todo.TaskId"> & {
 
 type Task = Message<"spine.examples.todo.Task"> & {
   id?: TaskId;
+  taskListId?: TaskListId;
   title: string;
   completed: boolean;
 };
@@ -1346,7 +1347,7 @@ class ManagedTaskProjection extends Projection<string, typeof ProjectionStateSch
   }
 }
 
-class AlternateCatchUpProjection extends Projection<string, typeof TaskListSchema, number> {
+class AlternateCatchUpProjection extends Projection<TaskListId, typeof TaskListSchema, number> {
   static subscriberCalls = 0;
 
   static reset(): void {

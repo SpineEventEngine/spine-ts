@@ -186,3 +186,14 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   `32aa4024-1052-4da2-ae47-f2ec6b8b431d`); both retained the 47-source/52-
   descriptor digest. `pnpm proto:check-generated:current` passed and the
   stage/backup/claim/journal/lock residue scan was empty.
+
+## Tooling Fixture Correction (2026-08-14)
+
+- The existing `implementer`, explicitly configured `gpt-5.6-terra` / medium,
+  corrected the deterministic tooling-typecheck batch without production
+  changes. Desktop exposes no independent runtime telemetry; its immutable
+  configured profile is the assignment evidence.
+- The stale test declarations were a duplicate npm export, a string identity
+  left on message-valued `TaskList`, and a local Todo `Task` shape missing its
+  current `taskListId`. Tooling typecheck passed; direct suites passed Proto
+  Tools `109/109` and repository routing `244/244`.
