@@ -1,6 +1,6 @@
 # T-0186: Converge, Release, And Close Wave 11
 
-Status: In implementation; audit and review preparation
+Status: Implementation convergence corrected; specialist-review-ready
 Start: `2026-08-14 WEST`
 End: Pending
 Baseline: `f128af42`
@@ -67,8 +67,34 @@ close the Wave.
 
 ## Pending Gates
 
-- one-time repository and generated-output audit;
 - specialist and security review wave;
 - correction/re-review if required;
 - cheap preflight and one converged `verify:release`;
 - integration, tag, post-merge verification, and cleanup.
+
+## Convergence Evidence (2026-08-14)
+
+- The one-time audit command was an inline `node --input-type=module` inventory
+  over the declared generated roots plus the generated registry and server
+  fixture families, followed by `rg` excluding build records and test fixtures
+  for prohibited active identifiers and deployment-support claims. It is
+  recorded here only and was not added as a normal repository gate.
+  - Initial output: `generatedFamilyFiles: 169`; exactly two violations:
+    `examples/todo/dist/generated/interfaces/task-event.d.ts` and
+    `task-assignment-event.d.ts`, both with `notices: 0` and no provenance.
+  - Corrected output after the focused TDD fix:
+    `{ "generatedFamilyFiles": 169, "violations": [] }`.
+  - Active-source scan output for `TaskReassignmentEvent`, `routeSemantic`, and
+    `@Route`: no matches. All Cloud Run/multiple-Gateway matches state the
+    established unsupported/out-of-scope boundary; the durable binding source
+    expressly says it does not coordinate multiple Gateway processes.
+- RED: `pnpm exec vitest run scripts/normalize-generated-declarations.test.mjs
+  -t 'normalizes generated interface declarations with their Proto provenance'`
+  failed as expected because the emitted interface declaration had no notice.
+- GREEN: the same focused test passed after interface `.d.ts` paths joined the
+  declaration normalizer inventory. `pnpm typecheck:build:generated` completed
+  and the corrected generated-output audit was clean.
+- Publication transaction fixtures passed: `5` focused proto-tools tests and
+  `8` focused workflow tests. They cover post-Buf validation, generated-tree
+  rename, manifest publication failures, recovery journal/backup behavior,
+  generation claim cleanup, and rollback/fail-closed publication boundaries.

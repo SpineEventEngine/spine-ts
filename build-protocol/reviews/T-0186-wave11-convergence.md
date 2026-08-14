@@ -1,6 +1,6 @@
 # T-0186 Review Log
 
-Status: Implementation/audit preparation; no specialist review dispatched
+Status: Implementation convergence corrected; specialist review not yet dispatched
 
 Task: `build-protocol/tasks/T-0186-wave11-convergence/TASK.md`
 Baseline: `f128af42`
@@ -40,8 +40,26 @@ before acceptance. No review has started.
 
 ## Pending Evidence
 
-- one-time audit and release-failure matrix;
 - complete specialist findings and one accepted correction batch;
 - targeted re-review dispositions;
 - final security verdict;
 - release and post-merge evidence.
+
+## Pre-Review Convergence Evidence (2026-08-14)
+
+- One-time generated-output audit (an inline command recorded in the task, not
+  a permanent gate) initially found two unnoticed Todo generated interface
+  declarations. The behavior RED and minimal normalizer correction are
+  recorded in the work log. The rerun inventory covered `169` generated TS/d.ts
+  files with `0` notice/provenance/copyright/unstable-path violations.
+- The prohibited active-name scan found no `TaskReassignmentEvent`,
+  `routeSemantic`, or `@Route` occurrences outside excluded records and test
+  fixtures. Cloud Run/multiple-Gateway occurrences are explicit unsupported
+  boundaries; no support claim was found.
+- Focused release-publication transaction evidence is green: `5` proto-tools
+  fixtures and `8` workflow fixtures covered semantic post-Buf validation,
+  generated-tree rename, manifest failure and rollback, backup/journal
+  recovery, generation claims, and cleanup.
+- No specialist reviewer was dispatched in this implementation pass. The
+  configured reviewer profiles and desktop runtime-telemetry limitation remain
+  the immutable assignment evidence until the orchestrator starts that wave.

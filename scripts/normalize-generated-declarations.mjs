@@ -44,7 +44,7 @@ export function declarationFiles(root) {
       if (entry.isDirectory()) pending.push([path, depth + 1]);
       else if (
         entry.isFile() &&
-        /(?:_pb|rejections|_columns|proto-module|generated-handler-registry|model-registry)\.d\.ts$/u.test(
+        /(?:_pb|rejections|_columns|proto-module|generated-handler-registry|model-registry|interfaces\/.+)\.d\.ts$/u.test(
           path,
         )
       )
