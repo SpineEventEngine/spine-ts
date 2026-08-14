@@ -89,10 +89,24 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     if (parsed.errors.length > 0)
       throw new Error("spine-proto: authored interface discovery has invalid tsconfig.json");
     const configuredFiles = new Set(parsed.fileNames.map((file) => resolve(file)));
-    const authoredFiles = sourceView.authoredFiles.filter((file) => configuredFiles.has(resolve(file)));
+    const authoredFiles = sourceView.authoredFiles.filter((file) =>
+      configuredFiles.has(resolve(file)),
+    );
+    const host = ts.createCompilerHost(parsed.options);
+    const redirect = (path: string) => {
+      const liveRelative = relative(sourceView.liveGeneratedRoot, resolve(path));
+      return liveRelative === "" || (!liveRelative.startsWith("..") && !isAbsolute(liveRelative))
+        ? join(sourceView.stagedGeneratedRoot, liveRelative)
+        : path;
+    };
+    const readFile = host.readFile.bind(host);
+    const fileExists = host.fileExists.bind(host);
+    host.readFile = (path) => readFile(redirect(path));
+    host.fileExists = (path) => fileExists(redirect(path));
     const program = ts.createProgram({
       options: parsed.options,
       rootNames: [...authoredFiles, ...this.stagedFiles(sourceView.stagedGeneratedRoot)],
+      host,
     });
     this.programs.set(sourceView, program);
     return program;

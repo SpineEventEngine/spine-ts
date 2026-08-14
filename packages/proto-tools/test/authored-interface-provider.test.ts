@@ -126,7 +126,10 @@ describe("AuthoredInterfaceProvider", () => {
       writeFileSync(join(root, "tsconfig.json"), JSON.stringify({ files: ["src/included.ts"] }));
       writeFileSync(join(root, "src/included.ts"), "export interface Included {}\n");
       writeFileSync(authored, "export interface SignalFamily {}\n");
-      writeFileSync(join(stagedGeneratedRoot, "example/signals_pb.ts"), "export type Signal = {};\n");
+      writeFileSync(
+        join(stagedGeneratedRoot, "example/signals_pb.ts"),
+        "export type Signal = {};\n",
+      );
       expect(() =>
         new AuthoredInterfaceProvider().resolve(
           "SignalFamily",
@@ -140,6 +143,49 @@ describe("AuthoredInterfaceProvider", () => {
           { authoredFiles: [authored], liveGeneratedRoot, packageRoot: root, stagedGeneratedRoot },
         ),
       ).toThrow("missing top-level interface");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("redirects authored live-generated imports to the divergent staged output", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-staged-import-"));
+    const stagedGeneratedRoot = join(root, ".generated.stage-1/output");
+    const liveGeneratedRoot = join(root, "src/generated");
+    const authored = join(root, "src/interface.ts");
+    try {
+      mkdirSync(join(stagedGeneratedRoot, "example"), { recursive: true });
+      mkdirSync(join(liveGeneratedRoot, "example"), { recursive: true });
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(
+        join(root, "tsconfig.json"),
+        JSON.stringify({ compilerOptions: { module: "NodeNext", moduleResolution: "NodeNext" } }),
+      );
+      writeFileSync(
+        join(liveGeneratedRoot, "example/signals_pb.ts"),
+        "export type Signal = { readonly stale: string };\n",
+      );
+      writeFileSync(
+        join(stagedGeneratedRoot, "example/signals_pb.ts"),
+        "export type Signal = { readonly text: string };\n",
+      );
+      writeFileSync(
+        authored,
+        'import type { Signal } from "./generated/example/signals_pb.js";\nexport interface SignalFamily { readonly text: string; readonly payload?: Signal }\n',
+      );
+      expect(
+        new AuthoredInterfaceProvider().resolve(
+          "SignalFamily",
+          [
+            {
+              file: { proto: { name: "example/signals.proto", package: "example" } },
+              name: "Signal",
+              typeName: "example.Signal",
+            } as DescMessage,
+          ],
+          { authoredFiles: [authored], liveGeneratedRoot, packageRoot: root, stagedGeneratedRoot },
+        ),
+      ).toBeDefined();
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
