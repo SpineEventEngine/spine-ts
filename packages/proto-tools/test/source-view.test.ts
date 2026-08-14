@@ -54,6 +54,44 @@ describe("modelSourceView", () => {
     }
   });
 
+  it("rejects malformed or non-regular root publication records", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-source-view-record-invalid-"));
+    const live = join(root, "live-model");
+    const stage = join(root, "stage-model");
+    const record = join(stage, ".spine-source-view-publication.json");
+    try {
+      mkdirSync(join(live, "generated"), { recursive: true });
+      mkdirSync(stage);
+      for (const value of [
+        {},
+        { formatVersion: 2 },
+        {
+          formatVersion: 1,
+          inventoryDigest: "not-a-digest",
+          liveGeneratedRoot: join(live, "generated"),
+          livePackageRoot: live,
+        },
+        {
+          formatVersion: 1,
+          inventoryDigest: "0".repeat(64),
+          liveGeneratedRoot: join(root, "other"),
+          livePackageRoot: live,
+        },
+      ]) {
+        writeFileSync(record, `${JSON.stringify(value)}\n`);
+        expect(() => readSourceViewPublicationRecord(stage, live, join(live, "generated"))).toThrow(
+          "invalid source-view publication record",
+        );
+      }
+      rmSync(record);
+      expect(() => readSourceViewPublicationRecord(stage, live, join(live, "generated"))).toThrow(
+        "invalid source-view publication record",
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects non-regular TypeScript inputs before hashing", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-source-view-nonregular-"));
     try {

@@ -278,9 +278,16 @@ export function readSourceViewPublicationRecord(
 ): SourceViewPublicationRecord {
   const recordPath = join(stageRoot, sourceViewPublicationRecordName);
   const stagePath = resolve(stageRoot);
-  const stage = realpathSync(stagePath);
   const candidate = resolve(recordPath);
-  if (!candidate.startsWith(`${stagePath}/`) || !lstatSync(candidate).isFile())
+  let stage: string;
+  let regular = false;
+  try {
+    stage = realpathSync(stagePath);
+    regular = lstatSync(candidate).isFile();
+  } catch {
+    throw new Error("spine-proto: invalid source-view publication record");
+  }
+  if (!candidate.startsWith(`${stagePath}/`) || !regular)
     throw new Error("spine-proto: invalid source-view publication record");
   const canonicalRecord = realpathSync(candidate);
   if (!canonicalRecord.startsWith(`${stage}/`))
