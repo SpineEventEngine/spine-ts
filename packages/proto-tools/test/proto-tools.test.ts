@@ -1797,8 +1797,10 @@ describe("spine proto model tooling", () => {
       writeFileSync(join(model, "proto/model.proto"), 'syntax = "proto3"; message Model {}\n');
 
       generateModel(model, { runBuf: generatedOutput });
-      const firstGenerationId = JSON.parse(
-        readFileSync(join(model, "spine-proto-manifest.json"), "utf8"),
+      const firstGenerationId = (
+        JSON.parse(readFileSync(join(model, "spine-proto-manifest.json"), "utf8")) as {
+          generationId: string;
+        }
       ).generationId;
 
       generateModel(model, {
@@ -1808,7 +1810,11 @@ describe("spine proto model tooling", () => {
         },
       });
 
-      const manifest = JSON.parse(readFileSync(join(model, "spine-proto-manifest.json"), "utf8"));
+      const manifest = JSON.parse(
+        readFileSync(join(model, "spine-proto-manifest.json"), "utf8"),
+      ) as {
+        generationId: string;
+      };
       expect(manifest.generationId).not.toBe(firstGenerationId);
       expect(readFileSync(join(model, "src/generated/.spine-proto-generation.json"), "utf8")).toBe(
         `${JSON.stringify({ generationId: manifest.generationId })}\n`,
@@ -1830,13 +1836,19 @@ describe("spine proto model tooling", () => {
         mkdirSync(join(model, "proto"), { recursive: true });
         writeFileSync(join(model, "proto/model.proto"), 'syntax = "proto3"; message Model {}\n');
         generateModel(model, operations);
-        const priorGenerationId = JSON.parse(
-          readFileSync(join(model, "spine-proto-manifest.json"), "utf8"),
+        const priorGenerationId = (
+          JSON.parse(readFileSync(join(model, "spine-proto-manifest.json"), "utf8")) as {
+            generationId: string;
+          }
         ).generationId;
         changeCommittedState(model, priorGenerationId);
         generateModel(model, operations);
         expect(
-          JSON.parse(readFileSync(join(model, "spine-proto-manifest.json"), "utf8")).generationId,
+          (
+            JSON.parse(readFileSync(join(model, "spine-proto-manifest.json"), "utf8")) as {
+              generationId: string;
+            }
+          ).generationId,
         ).not.toBe(priorGenerationId);
       } finally {
         rmSync(model, { recursive: true, force: true });
