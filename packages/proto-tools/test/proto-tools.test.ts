@@ -1494,6 +1494,35 @@ describe("spine proto model tooling", () => {
     ]);
   });
 
+  it("preserves prior output when an included authored source changes after capture", () => {
+    const model = packageDirectory("@example/source-view-mutation-model");
+    const authored = join(model, "src/authored.ts");
+    try {
+      writeJson(model, "spine-proto.json", modelConfig("@example/source-view-mutation-model"));
+      writeFileSync(join(model, "tsconfig.json"), JSON.stringify({ files: ["src/authored.ts"] }));
+      mkdirSync(join(model, "proto"), { recursive: true });
+      mkdirSync(join(model, "src/generated"), { recursive: true });
+      writeFileSync(join(model, "proto/model.proto"), 'syntax = "proto3"; message Model {}\n');
+      writeFileSync(authored, "export interface Authored {}\n");
+      writeFileSync(join(model, "src/generated/prior.ts"), "prior output\n");
+      writeFileSync(join(model, "spine-proto-manifest.json"), "prior manifest\n");
+      expect(() => {
+        generateModel(model, {
+          runBuf: generatedOutput,
+          runInterfacePhase: () => {
+            writeFileSync(authored, "export interface Authored { readonly changed: string }\n");
+          },
+        });
+      }).toThrow("authored interface source view changed during generation");
+      expect(readFileSync(join(model, "src/generated/prior.ts"), "utf8")).toBe("prior output\n");
+      expect(readFileSync(join(model, "spine-proto-manifest.json"), "utf8")).toBe(
+        "prior manifest\n",
+      );
+    } finally {
+      rmSync(model, { recursive: true, force: true });
+    }
+  });
+
   it("publishes byte-identical output across repeated staged interface phases", () => {
     const model = packageDirectory("@example/interface-repeat-model");
     try {

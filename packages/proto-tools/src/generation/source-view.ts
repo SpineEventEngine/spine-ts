@@ -60,7 +60,7 @@ export interface PublicationSourceView extends ModelSourceView {
 
 function configFiles(root: string): readonly string[] {
   const configPath = join(root, "tsconfig.json");
-  if (!existsSync(configPath)) throw new Error("spine-proto: source view requires tsconfig.json");
+  if (!existsSync(configPath)) return [];
   const texts = new Map<string, string>();
   const host = {
     ...ts.sys,
@@ -81,7 +81,7 @@ function configFiles(root: string): readonly string[] {
     undefined,
     new Map(),
   );
-  if (parsed.errors.length > 0)
+  if (parsed.errors.some((diagnostic) => diagnostic.code !== 18002 && diagnostic.code !== 18003))
     throw new Error("spine-proto: source view has invalid tsconfig.json");
   const extended =
     (source as unknown as { readonly extendedSourceFiles?: readonly string[] })
