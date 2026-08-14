@@ -341,11 +341,7 @@ const protoGeneration = Object.freeze({
           graph.models.filter((model) => config.dependencies.includes(model.name)),
         );
         normalizeGeneratedTree(output, manifest.protoFiles);
-        const reusedGenerationId = protoGeneration.reusableGenerationId(
-          target,
-          output,
-          manifest,
-        );
+        const reusedGenerationId = protoGeneration.reusableGenerationId(target, output, manifest);
         if (reusedGenerationId !== undefined) {
           generationId = reusedGenerationId;
           manifest = ProtoManifest.create(packageRoot, undefined, generationId);
@@ -883,6 +879,7 @@ const protoGeneration = Object.freeze({
       const currentFiles = protoGeneration
         .files(output)
         .map((path) => relative(output, path))
+        .filter((path) => path !== generationMarkerFile)
         .sort();
       const previousFiles = protoGeneration
         .files(target)
@@ -896,9 +893,8 @@ const protoGeneration = Object.freeze({
       }
       const { generationId: _, ...previousContents } = previous;
       const { generationId: __, ...nextContents } = manifest;
-      return JSON.stringify(previousContents) === JSON.stringify(nextContents)
-        ? previous.generationId
-        : undefined;
+      if (JSON.stringify(previousContents) !== JSON.stringify(nextContents)) return undefined;
+      return previous.generationId;
     } catch {
       return undefined;
     }

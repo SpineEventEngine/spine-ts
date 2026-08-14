@@ -270,6 +270,54 @@ function findProtoFiles(directory) {
   return files;
 }
 
+function generatedTreeContents(root) {
+  const files = [];
+  const pending = [[root, 0]];
+  let entries = 0;
+  while (pending.length > 0) {
+    const [directory, depth] = pending.pop();
+    if (depth > 64) throw new Error("generated TypeScript traversal exceeds bounded inventory");
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      entries += 1;
+      if (entries > 1_000)
+        throw new Error("generated TypeScript traversal exceeds bounded inventory");
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) pending.push([path, depth + 1]);
+      else if (entry.isFile() && entry.name !== ".spine-proto-generation.json")
+        files.push([relative(root, path).split(sep).join("/"), readFileSync(path, "utf8")]);
+    }
+  }
+  return files.sort(([left], [right]) => left.localeCompare(right));
+}
+
+function reuseStagedGenerationId(livePackageRoot, stagedPackageRoot, stagedOutputRoot) {
+  const liveManifestPath = join(livePackageRoot, "spine-proto-manifest.json");
+  const stagedManifestPath = join(stagedPackageRoot, "spine-proto-manifest.json");
+  const liveOutputRoot = join(livePackageRoot, "generated");
+  if (!existsSync(liveManifestPath) || !existsSync(stagedManifestPath) || !existsSync(liveOutputRoot))
+    return;
+  const liveManifest = JSON.parse(readFileSync(liveManifestPath, "utf8"));
+  const stagedManifest = JSON.parse(readFileSync(stagedManifestPath, "utf8"));
+  const { generationId: liveGenerationId, ...liveContents } = liveManifest;
+  const { generationId: _stagedGenerationId, ...stagedContents } = stagedManifest;
+  if (
+    liveManifest.formatVersion !== 2 ||
+    typeof liveGenerationId !== "string" ||
+    liveGenerationId.length === 0 ||
+    JSON.stringify(liveContents) !== JSON.stringify(stagedContents) ||
+    JSON.stringify(generatedTreeContents(liveOutputRoot)) !==
+      JSON.stringify(generatedTreeContents(stagedOutputRoot))
+  )
+    return;
+  stagedManifest.generationId = liveGenerationId;
+  writeFileSync(stagedManifestPath, `${JSON.stringify(stagedManifest, null, 2)}\n`, "utf8");
+  writeFileSync(
+    join(stagedOutputRoot, ".spine-proto-generation.json"),
+    `${JSON.stringify({ generationId: liveGenerationId })}\n`,
+    "utf8",
+  );
+}
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -995,6 +1043,7 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
       normalizeGeneratedTypeScriptTree(handlerStagedTarget.stagedOutputRoot, modelSources);
     if (!existsSync(join(packageRoot, "spine-proto-manifest.json")))
       throw new Error(`${target.moduleName} staged manifest is missing`);
+    reuseStagedGenerationId(livePackageRoot, packageRoot, output);
     return {
       status: 0,
       stagedTarget: {
