@@ -86,7 +86,11 @@ import {
 } from "../generated/spine/examples/todo/task_id_pb.js";
 import { TaskAssigneeSchema } from "../generated/spine/examples/todo/task_assignee_pb.js";
 import { TaskListSchema, type TaskList } from "../generated/spine/examples/todo/task_list_pb.js";
-import { TaskAlreadyDoneSchema } from "../generated/spine/examples/todo/task_rejections_pb.js";
+import {
+  TaskAlreadyAssignedSchema,
+  TaskAlreadyDoneSchema,
+  TaskNotAssignedSchema,
+} from "../generated/spine/examples/todo/task_rejections_pb.js";
 import { TaskCreatedSchema } from "../generated/spine/examples/todo/task_events_pb.js";
 import { TaskSchema, type Task } from "../generated/spine/examples/todo/tasks_pb.js";
 
@@ -1308,6 +1312,157 @@ describe("@spine-event-engine/example-todo", () => {
     }
   });
 
+  it("publishes exact assignment rejection types through active subscriptions", async () => {
+    const context = await createTodoContext();
+    const fixture = await createTodoBlackBox(context);
+    const scope = fixture.asGuest();
+    const unassigned = await scope.createSubscription(
+      createTaskRejectionTopic(TaskNotAssignedSchema),
+      {
+        kind: "event",
+      },
+    );
+    const alreadyAssigned = await scope.createSubscription(
+      createTaskRejectionTopic(TaskAlreadyAssignedSchema),
+      { kind: "event" },
+    );
+    const alreadyDone = await scope.createSubscription(
+      createTaskRejectionTopic(TaskAlreadyDoneSchema),
+      {
+        kind: "event",
+      },
+    );
+    await Promise.all([unassigned.activate(), alreadyAssigned.activate(), alreadyDone.activate()]);
+    const unassignedUpdates = unassigned.updates[Symbol.asyncIterator]();
+    const alreadyAssignedUpdates = alreadyAssigned.updates[Symbol.asyncIterator]();
+    const alreadyDoneUpdates = alreadyDone.updates[Symbol.asyncIterator]();
+    const taskId = "task-assignment-rejection-subscription";
+    const listId = "list-assignment-rejection-subscription";
+
+    try {
+      await establishAssignmentRejectionSubscriptionReadiness(
+        assignmentRejectionPublisher(context),
+        unassignedUpdates,
+        createTaskNotAssignedProbe,
+        unpackSubscribedTaskNotAssigned,
+      );
+
+      await establishAssignmentRejectionSubscriptionReadiness(
+        assignmentRejectionPublisher(context),
+        alreadyAssignedUpdates,
+        createTaskAlreadyAssignedProbe,
+        unpackSubscribedTaskAlreadyAssigned,
+      );
+
+      await establishRejectionSubscriptionReadiness(rejectionPublisher(context), {
+        next: async () => {
+          const update = await nextSubscriptionUpdate(alreadyDoneUpdates);
+          return unpackSubscribedTaskAlreadyDone(update);
+        },
+      });
+
+      const notAssignedUpdate = nextMatchingRejectionUpdate(
+        unassignedUpdates,
+        unpackSubscribedTaskNotAssigned,
+        "TaskNotAssigned subscription",
+      );
+      await scope.post(CreateTaskSchema, createTaskInList(taskId, listId, "One"));
+      await scope.post(ReassignTaskSchema, reassignTask(taskId, "lin"));
+      expect(await notAssignedUpdate).toEqual(
+        create(TaskNotAssignedSchema, {
+          id: create(TaskIdSchema, { value: taskId }),
+          taskListId: create(TaskListIdSchema, { value: listId }),
+        }),
+      );
+
+      const alreadyAssignedUpdate = nextMatchingRejectionUpdate(
+        alreadyAssignedUpdates,
+        unpackSubscribedTaskAlreadyAssigned,
+        "TaskAlreadyAssigned subscription",
+      );
+      await scope.post(AssignTaskSchema, assignTask(taskId, "ada"));
+      await scope.post(AssignTaskSchema, assignTask(taskId, "lin"));
+      expect(await alreadyAssignedUpdate).toEqual(
+        create(TaskAlreadyAssignedSchema, {
+          id: create(TaskIdSchema, { value: taskId }),
+          assignee: create(UserIdSchema, { value: "ada" }),
+          taskListId: create(TaskListIdSchema, { value: listId }),
+        }),
+      );
+
+      const alreadyDoneUpdate = nextMatchingRejectionUpdate(
+        alreadyDoneUpdates,
+        unpackSubscribedTaskAlreadyDone,
+        "TaskAlreadyDone assignment subscription",
+      );
+      await scope.post(CompleteTaskSchema, completeTask(taskId));
+      await scope.post(UnassignTaskSchema, unassignTask(taskId));
+      expect((await alreadyDoneUpdate).message).toEqual(
+        create(TaskAlreadyDoneSchema, {
+          id: create(TaskIdSchema, { value: taskId }),
+        }),
+      );
+    } finally {
+      await Promise.all([unassigned.cancel(), alreadyAssigned.cancel(), alreadyDone.cancel()]);
+      await fixture.close();
+    }
+  });
+
+  it("does not invoke normal assignment routing callbacks for rejected commands", async () => {
+    const todo: TodoModule = await import("../dist/src/index.js");
+    const {
+      TaskAssignmentEvent,
+    }: typeof import("../dist/generated/interfaces/task-assignment-event.js") =
+      await import("../dist/generated/interfaces/task-assignment-event.js");
+    const {
+      TaskReassignedSchema: routedTaskReassignedSchema,
+    }: typeof import("../dist/generated/spine/examples/todo/task_events_pb.js") =
+      await import("../dist/generated/spine/examples/todo/task_events_pb.js");
+    const assignmentRoute = vi.fn(
+      (event: { readonly assignee?: MessageShape<typeof UserIdSchema> | undefined }) =>
+        event.assignee === undefined ? [] : [event.assignee],
+    );
+    const reassignmentRoute = vi.fn(
+      (event: {
+        readonly assignee?: MessageShape<typeof UserIdSchema> | undefined;
+        readonly previousAssignee?: MessageShape<typeof UserIdSchema> | undefined;
+      }) =>
+        event.assignee === undefined || event.previousAssignee === undefined
+          ? []
+          : [event.previousAssignee, event.assignee],
+    );
+    const routing = EventRouting.create<MessageShape<typeof UserIdSchema>>()
+      .route(TaskAssignmentEvent, assignmentRoute)
+      .route(routedTaskReassignedSchema, reassignmentRoute);
+    const context = await BoundedContext.singleTenant("Rejected assignment routing")
+      .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
+      .add(todo.TaskAggregate)
+      .add(todo.TaskAssigneeProjection, { eventRouting: routing })
+      .buildAsync();
+    const fixture = await createTodoBlackBox(context);
+    const scope = fixture.asGuest();
+    const taskId = "task-rejected-routing";
+
+    try {
+      await scope.post(CreateTaskSchema, createTask(taskId, "One"));
+      await scope.post(AssignTaskSchema, assignTask(taskId, "ada"));
+      assignmentRoute.mockClear();
+      reassignmentRoute.mockClear();
+
+      await scope.post(AssignTaskSchema, assignTask(taskId, "lin"));
+      await scope.post(ReassignTaskSchema, reassignTask(taskId, "ada"));
+      await scope.post(CompleteTaskSchema, completeTask(taskId));
+      await scope.post(AssignTaskSchema, assignTask(taskId, "lin"));
+      await scope.post(ReassignTaskSchema, reassignTask(taskId, "lin"));
+      await scope.post(UnassignTaskSchema, unassignTask(taskId));
+
+      expect(assignmentRoute).not.toHaveBeenCalled();
+      expect(reassignmentRoute).not.toHaveBeenCalled();
+    } finally {
+      await fixture.close();
+    }
+  });
+
   it("accepts reopening an open task as a rejection without changing the task list", async () => {
     const fixture = await createTodoBlackBox();
     const scope = fixture.asGuest();
@@ -1966,10 +2121,17 @@ function taskListSubscriptionOptions(id?: string) {
 }
 
 function createTaskAlreadyDoneTopic() {
+  return createTaskRejectionTopic(TaskAlreadyDoneSchema);
+}
+
+function createTaskRejectionTopic(
+  schema:
+    typeof TaskAlreadyAssignedSchema | typeof TaskAlreadyDoneSchema | typeof TaskNotAssignedSchema,
+) {
   return create(TopicSchema, {
-    id: create(TopicIdSchema, { value: "topic-task-already-done" }),
+    id: create(TopicIdSchema, { value: `topic-${TypeUrls.derive(schema)}` }),
     target: create(TargetSchema, {
-      type: TypeUrls.derive(TaskAlreadyDoneSchema),
+      type: TypeUrls.derive(schema),
       criterion: { case: "includeAll", value: true },
     }),
     context: createActorContext(),
@@ -2018,6 +2180,28 @@ function unpackSubscribedTaskAlreadyDone(update: SubscriptionUpdate) {
   return { message, context: event.context };
 }
 
+function unpackSubscribedTaskAlreadyAssigned(update: SubscriptionUpdate) {
+  const event = update.update.case === "eventUpdates" ? update.update.value.event[0] : undefined;
+  const message =
+    event?.message === undefined
+      ? undefined
+      : AnyMessages.unpack(event.message, TaskAlreadyAssignedSchema);
+  if (message === undefined)
+    throw new Error("Expected a TaskAlreadyAssigned event subscription update.");
+  return message;
+}
+
+function unpackSubscribedTaskNotAssigned(update: SubscriptionUpdate) {
+  const event = update.update.case === "eventUpdates" ? update.update.value.event[0] : undefined;
+  const message =
+    event?.message === undefined
+      ? undefined
+      : AnyMessages.unpack(event.message, TaskNotAssignedSchema);
+  if (message === undefined)
+    throw new Error("Expected a TaskNotAssigned event subscription update.");
+  return message;
+}
+
 type RejectionEvent = ReturnType<typeof unpackSubscribedTaskAlreadyDone>;
 
 interface RejectionPublisher {
@@ -2025,6 +2209,111 @@ interface RejectionPublisher {
     schema: typeof TaskAlreadyDoneSchema,
     message: MessageShape<typeof TaskAlreadyDoneSchema>,
   ): Promise<void>;
+}
+
+type AssignmentRejectionMessage =
+  MessageShape<typeof TaskAlreadyAssignedSchema> | MessageShape<typeof TaskNotAssignedSchema>;
+
+type AssignmentRejectionSchema = typeof TaskAlreadyAssignedSchema | typeof TaskNotAssignedSchema;
+
+interface AssignmentRejectionPublisher {
+  postEvent(schema: AssignmentRejectionSchema, message: AssignmentRejectionMessage): Promise<void>;
+}
+
+async function establishAssignmentRejectionSubscriptionReadiness(
+  fixture: AssignmentRejectionPublisher,
+  subscription: AsyncIterator<import("@spine-event-engine/client-node").SubscriptionDelivery>,
+  createProbe: (suffix: string) => {
+    readonly schema: AssignmentRejectionSchema;
+    readonly message: AssignmentRejectionMessage;
+  },
+  unpack: (update: SubscriptionUpdate) => AssignmentRejectionMessage,
+): Promise<void> {
+  const deadline = Date.now() + 500;
+  const read = () =>
+    subscription.next().then((result): SubscriptionUpdate | undefined => {
+      if (result.done) throw new Error("Rejection subscription ended during readiness.");
+      return result.value.kind === "update" ? result.value.update : undefined;
+    });
+  let pendingRead = read();
+  const finishReadiness = async (): Promise<void> => {
+    const fence = createProbe("readiness-fence");
+    await withTimeout(
+      fixture.postEvent(fence.schema, fence.message),
+      "assignment rejection readiness fence post",
+      remainingMs(deadline),
+    );
+    for (let remaining = 17; remaining > 0; remaining--) {
+      const update = await nextMatchingRejectionUpdate(
+        subscription,
+        unpack,
+        "assignment rejection readiness fence",
+        remainingMs(deadline),
+      );
+      if (update.id?.value === fence.message.id?.value) return;
+    }
+    throw new Error("Assignment rejection readiness fence was not delivered.");
+  };
+
+  for (let attempt = 1; attempt <= 16; attempt++) {
+    const probe = createProbe(`readiness-${String(attempt)}`);
+    const posted = fixture.postEvent(probe.schema, probe.message);
+    const initial = await Promise.race([
+      pendingRead.then((update) => ({ case: "received" as const, update })),
+      posted.then(() => ({ case: "posted" as const })),
+    ]);
+    if (initial.case === "received") {
+      await posted;
+      if (initial.update !== undefined) {
+        try {
+          unpack(initial.update);
+          await finishReadiness();
+          return;
+        } catch {
+          // The active stream may still deliver an unrelated update.
+        }
+      }
+      pendingRead = read();
+      continue;
+    }
+    await posted;
+    const afterTurn = await Promise.race([
+      pendingRead.then((update) => ({ case: "received" as const, update })),
+      nextEventLoopTurn().then(() => ({ case: "pending" as const })),
+    ]);
+    if (afterTurn.case === "received") {
+      if (afterTurn.update !== undefined) {
+        try {
+          unpack(afterTurn.update);
+          await finishReadiness();
+          return;
+        } catch {
+          // The active stream may still deliver an unrelated update.
+        }
+      }
+      pendingRead = read();
+    }
+    if (Date.now() >= deadline) break;
+  }
+
+  for (let attempt = 1; attempt <= 8; attempt++) {
+    const update = await withTimeout(
+      pendingRead,
+      "assignment rejection subscription readiness",
+      remainingMs(deadline),
+    );
+    if (update !== undefined) {
+      try {
+        unpack(update);
+        await finishReadiness();
+        return;
+      } catch {
+        // The active stream may still deliver an unrelated update.
+      }
+    }
+    pendingRead = read();
+  }
+  throw new Error("Assignment rejection subscription did not receive a matching readiness probe.");
 }
 
 type RejectionReadOutcome =
@@ -2172,6 +2461,51 @@ function rejectionPublisher(
   };
 }
 
+function assignmentRejectionPublisher(
+  context: Awaited<ReturnType<TodoModule["createTodoContext"]>>,
+): AssignmentRejectionPublisher {
+  return {
+    postEvent(schema, message) {
+      const producerId = message.id;
+      if (producerId === undefined) {
+        throw new Error("An assignment rejection readiness probe requires a Task ID.");
+      }
+      return context.eventBus().post(
+        SignalEnvelopes.event({
+          id: signalMetadata.eventId(),
+          context: create(EventContextSchema, {
+            timestamp: signalMetadata.timestamp(),
+            producerId: AnyMessages.pack(TaskIdSchema, producerId),
+          }),
+          schema,
+          message,
+        }),
+      );
+    },
+  };
+}
+
+function createTaskNotAssignedProbe(suffix: string) {
+  return {
+    schema: TaskNotAssignedSchema,
+    message: create(TaskNotAssignedSchema, {
+      id: create(TaskIdSchema, { value: `task-not-assigned-${suffix}` }),
+      taskListId: create(TaskListIdSchema, { value: `list-not-assigned-${suffix}` }),
+    }),
+  };
+}
+
+function createTaskAlreadyAssignedProbe(suffix: string) {
+  return {
+    schema: TaskAlreadyAssignedSchema,
+    message: create(TaskAlreadyAssignedSchema, {
+      id: create(TaskIdSchema, { value: `task-already-assigned-${suffix}` }),
+      assignee: create(UserIdSchema, { value: "ada" }),
+      taskListId: create(TaskListIdSchema, { value: `list-already-assigned-${suffix}` }),
+    }),
+  };
+}
+
 function expectTaskAlreadyDoneProbe(
   event: RejectionEvent,
   probes: ReadonlyMap<string, string>,
@@ -2212,6 +2546,40 @@ async function nextRejectionEvent(
   );
   if (result === undefined) throw new Error(`Expected a rejection event for ${label}.`);
   return result;
+}
+
+async function nextMatchingRejectionUpdate<T>(
+  subscription: AsyncIterator<import("@spine-event-engine/client-node").SubscriptionDelivery>,
+  unpack: (update: SubscriptionUpdate) => T,
+  label: string,
+  timeoutMs = 500,
+): Promise<T> {
+  for (let attempt = 1; attempt <= 8; attempt++) {
+    const result = await withTimeout(
+      subscription.next(),
+      `subscription update for ${label}`,
+      timeoutMs,
+    );
+    if (result.done) throw new Error(`Expected a subscription update for ${label}.`);
+    if (result.value.kind !== "update") continue;
+    try {
+      return unpack(result.value.update);
+    } catch {
+      // Activation may yield a non-event update before the posted rejection.
+    }
+  }
+  throw new Error(`Expected a matching rejection event for ${label}.`);
+}
+
+async function nextSubscriptionUpdate(
+  subscription: AsyncIterator<import("@spine-event-engine/client-node").SubscriptionDelivery>,
+): Promise<SubscriptionUpdate> {
+  const result = await withTimeout(subscription.next(), "subscription update", 500);
+  if (result.done) throw new Error("Expected a subscription update.");
+  if (result.value.kind !== "update") {
+    return await nextSubscriptionUpdate(subscription);
+  }
+  return result.value.update;
 }
 
 function assertRejectionEvent(value: RejectionEvent | undefined): RejectionEvent {
