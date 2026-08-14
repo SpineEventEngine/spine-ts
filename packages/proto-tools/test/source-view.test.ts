@@ -21,6 +21,18 @@ import { describe, expect, it } from "vitest";
 import { assertSourceViewCurrent, modelSourceView } from "../src/generation/source-view.js";
 
 describe("modelSourceView", () => {
+  it("rejects invalid TypeScript configuration before generation", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-source-view-invalid-config-"));
+    try {
+      writeFileSync(join(root, "tsconfig.json"), JSON.stringify({ include: 1 }));
+      expect(() =>
+        modelSourceView(root, "src/generated", join(root, ".generated.stage/output")),
+      ).toThrow("source view has invalid tsconfig.json");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("detects a recursively extended tsconfig byte mutation", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-source-view-tsconfig-"));
     try {

@@ -112,6 +112,9 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     host.fileExists = (path) => capturedAuthored.has(resolve(path)) || fileExists(redirect(path));
     const program = ts.createProgram({
       options: parsed.options,
+      ...(parsed.projectReferences === undefined
+        ? {}
+        : { projectReferences: parsed.projectReferences }),
       rootNames: [...authoredFiles, ...this.stagedFiles(sourceView.stagedGeneratedRoot)],
       host,
     });
