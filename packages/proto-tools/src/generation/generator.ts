@@ -13,11 +13,14 @@
  */
 
 import {
+  closeSync,
   copyFileSync,
   existsSync,
+  fstatSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   readdirSync,
   renameSync,
@@ -25,6 +28,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { constants } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -187,6 +191,14 @@ export interface GenerationLockOperations {
   readonly remove: (path: string) => void;
 
   /**
+   * Atomically moves a claim within its package directory.
+   *
+   * @param from The current claim path.
+   * @param to The same-directory quarantine path.
+   */
+  readonly move?: (from: string, to: string) => void;
+
+  /**
    * Determines whether a lock owner is still running.
    *
    * @param pid The candidate process identifier.
@@ -239,12 +251,29 @@ interface GenerationLock {
   readonly token: string;
 }
 
-const defaultLockOperations: GenerationLockOperations = {
+function readRegularClaim(path: string): string {
+  const descriptor = openSync(
+    path,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  );
+  try {
+    if (!fstatSync(descriptor).isFile()) throw new Error("generation claim is not a regular file");
+    return readFileSync(descriptor, "utf8");
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+function claimQuarantine(path: string): string {
+  return join(dirname(path), `${basename(path)}.quarantine-${crypto.randomUUID()}`);
+}
+
+const defaultLockOperations: Required<GenerationLockOperations> = {
   create: (path, content) => {
     writeFileSync(path, content, { flag: "wx" });
   },
   list: (directory) => readdirSync(directory),
-  read: (path) => readFileSync(path, "utf8"),
+  read: readRegularClaim,
   inspect: (path) => {
     const entry = lstatSync(path);
     if (entry.isSymbolicLink()) return "symlink";
@@ -253,8 +282,15 @@ const defaultLockOperations: GenerationLockOperations = {
   remove: (path) => {
     unlinkSync(path);
   },
+  move: renameSync,
   liveness: (pid) => protoGeneration.claimLiveness(pid),
 };
+
+function completeLockOperations(
+  operations: Partial<GenerationLockOperations>,
+): Required<GenerationLockOperations> {
+  return { ...defaultLockOperations, ...operations };
+}
 
 /**
  * Reports Proto artifact generation failures.
@@ -395,7 +431,7 @@ const protoGeneration = Object.freeze({
   ): GenerationLock {
     const token = crypto.randomUUID();
     const lock = join(packageRoot, `.spine-proto-generate.lock.${token}`);
-    const lockOperations = { ...defaultLockOperations, ...operations };
+    const lockOperations = completeLockOperations(operations);
     try {
       lockOperations.create(lock, JSON.stringify({ pid: process.pid, token }));
     } catch {
@@ -412,17 +448,19 @@ const protoGeneration = Object.freeze({
         for (const name of claims) {
           const path = join(packageRoot, name);
           if (path === lock) continue;
-          if (lockOperations.inspect(path) !== "regular")
-            ProtoGenerationErrors.fail(packageName, "generation claim is not a regular file");
+          const quarantine = claimQuarantine(path);
           try {
-            const owner = JSON.parse(lockOperations.read(path)) as { pid?: unknown };
+            lockOperations.move(path, quarantine);
+            if (lockOperations.inspect(quarantine) !== "regular")
+              ProtoGenerationErrors.fail(packageName, "generation claim is not a regular file");
+            const owner = JSON.parse(lockOperations.read(quarantine)) as { pid?: unknown };
             if (typeof owner.pid !== "number" || owner.pid <= 0) throw new Error();
             if (lockOperations.liveness(owner.pid) !== "dead")
               ProtoGenerationErrors.fail(
                 packageName,
                 "generation already in progress for this package",
               );
-            lockOperations.remove(path);
+            lockOperations.remove(quarantine);
           } catch (error) {
             if (error instanceof Error && error.message.startsWith("spine-proto:")) throw error;
             ProtoGenerationErrors.fail(packageName, "generation claim has invalid owner metadata");
@@ -431,7 +469,7 @@ const protoGeneration = Object.freeze({
       }
     } catch (error) {
       try {
-        lockOperations.remove(lock);
+        protoGeneration.releaseLock({ path: lock, token }, packageName, lockOperations);
       } catch {
         // Preserve the primary claim-admission failure.
       }
@@ -445,14 +483,16 @@ const protoGeneration = Object.freeze({
     packageName: string,
     operations: Partial<GenerationLockOperations> = {},
   ): void {
-    const lockOperations = { ...defaultLockOperations, ...operations };
+    const lockOperations = completeLockOperations(operations);
+    const quarantine = claimQuarantine(lock.path);
     try {
-      const owner = JSON.parse(lockOperations.read(lock.path)) as { token?: unknown };
+      lockOperations.move(lock.path, quarantine);
+      const owner = JSON.parse(lockOperations.read(quarantine)) as { token?: unknown };
       if (owner.token !== lock.token)
         ProtoGenerationErrors.fail(packageName, "generation lock ownership changed");
-      if (lockOperations.inspect(lock.path) !== "regular")
+      if (lockOperations.inspect(quarantine) !== "regular")
         ProtoGenerationErrors.fail(packageName, "generation lock is not a regular file");
-      lockOperations.remove(lock.path);
+      lockOperations.remove(quarantine);
     } catch {
       ProtoGenerationErrors.fail(packageName, "cannot clean up generation lock");
     }

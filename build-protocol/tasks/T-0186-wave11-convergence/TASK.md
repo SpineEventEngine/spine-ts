@@ -309,3 +309,16 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
 - Strict marker reads are now descriptor-based and fail closed for a symlinked
   marker; focused RED/GREEN evidence is retained in the work log. Claim and
   workflow trust-boundary corrections remain in progress.
+
+## Claim Protocol Security Correction (2026-08-14)
+
+- The remaining claim P1 is corrected by the existing `implementer`, explicitly
+  configured `gpt-5.6-terra` / medium. The direct and workflow paths now move
+  stale and owned claims atomically to a unique same-directory quarantine,
+  validate only that quarantine by no-follow/nonblocking regular descriptor,
+  and remove only the validated quarantine. Unsafe or replacement entries are
+  retained as lock evidence.
+- TDD evidence is direct Proto Tools `137/137` and workflow `93/93`; real FIFO
+  admission and real symlink/FIFO release-replacement regressions are GREEN.
+  Tooling typecheck is blocked by an untouched Core `TS18046` checkpoint defect;
+  no unowned source was changed. The final security re-review remains pending.

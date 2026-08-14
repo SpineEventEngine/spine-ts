@@ -207,6 +207,12 @@ function claimOperations(
       removed.push(name);
       claims.delete(name);
     },
+    move: (from, to) => {
+      const claim = claims.get(basename(from));
+      if (claim === undefined) throw new Error("missing claim");
+      claims.delete(basename(from));
+      claims.set(basename(to), claim);
+    },
     liveness: (pid) => (alive.has(pid) ? "alive" : "dead"),
   };
 }
@@ -1123,7 +1129,8 @@ describe("spine proto model tooling", () => {
     }).toThrow(
       "spine-proto: @example/active-claim-model: generation already in progress for this package",
     );
-    expect([...claims.keys()]).toEqual([".spine-proto-generate.lock.active"]);
+    expect([...claims.keys()]).toHaveLength(1);
+    expect([...claims.keys()][0]).toMatch(/^\.spine-proto-generate\.lock\.active\.quarantine-/);
     expect(removed).toHaveLength(1);
   });
 
@@ -1141,7 +1148,9 @@ describe("spine proto model tooling", () => {
       lockOperations: claimOperations(claims, new Set(), removed),
     });
     expect(claims).toEqual(new Map());
-    expect(removed).toContain(".spine-proto-generate.lock.dead");
+    expect(
+      removed.some((name) => name.startsWith(".spine-proto-generate.lock.dead.quarantine-")),
+    ).toBe(true);
     expect(removed).toHaveLength(2);
   });
 
@@ -1179,7 +1188,10 @@ describe("spine proto model tooling", () => {
     }).toThrow(
       "spine-proto: @example/indeterminate-claim-model: generation already in progress for this package",
     );
-    expect([...claims.keys()]).toEqual([claim]);
+    expect([...claims.keys()]).toHaveLength(1);
+    expect([...claims.keys()][0]).toMatch(
+      /^\.spine-proto-generate\.lock\.indeterminate\.quarantine-/,
+    );
   });
 
   it("classifies only ESRCH as dead when probing a generation claim owner", () => {
@@ -1219,7 +1231,11 @@ describe("spine proto model tooling", () => {
       }).toThrow(
         "spine-proto: @example/two-claim-model: generation already in progress for this package",
       );
-      expect(claims.has(`.spine-proto-generate.lock.${contender}`)).toBe(true);
+      expect(
+        [...claims.keys()].some((name) =>
+          name.startsWith(`.spine-proto-generate.lock.${contender}`),
+        ),
+      ).toBe(true);
     }
   });
 
@@ -1241,7 +1257,7 @@ describe("spine proto model tooling", () => {
         ...operations,
         remove: (path) => {
           originalRemove(path);
-          if (basename(path) === ".spine-proto-generate.lock.stale") {
+          if (basename(path).startsWith(".spine-proto-generate.lock.stale.quarantine-")) {
             claims.set(replacementName, {
               content: JSON.stringify({ pid: 72, token: replacement }),
             });
@@ -1254,8 +1270,10 @@ describe("spine proto model tooling", () => {
       }).toThrow(
         "spine-proto: @example/interleaved-claim-model: generation already in progress for this package",
       );
-      expect(claims.has(replacementName)).toBe(true);
-      expect([...claims.keys()]).toEqual([replacementName]);
+      expect([...claims.keys()]).toHaveLength(1);
+      expect([...claims.keys()][0]).toMatch(
+        new RegExp(`^${replacementName.replaceAll(".", "\\.")}\\.quarantine-`),
+      );
     }
   });
 
@@ -3343,6 +3361,15 @@ describe("spine proto model tooling", () => {
       generateModel(symlinked, { runBuf: generatedOutput });
     }).toThrow("spine-proto: @example/symlink-claim: generation claim is not a regular file");
 
+    const fifo = packageDirectory("@example/fifo-claim");
+    writeJson(fifo, "spine-proto.json", modelConfig("@example/fifo-claim"));
+    mkdirSync(join(fifo, "proto"));
+    const created = spawnSync("mkfifo", [join(fifo, ".spine-proto-generate.lock.fifo")]);
+    if (created.status !== 0) throw new Error(created.stderr.toString());
+    expect(() => {
+      generateModel(fifo, { runBuf: generatedOutput });
+    }).toThrow("spine-proto: @example/fifo-claim: generation claim is not a regular file");
+
     const replacement = packageDirectory("@example/replaced-release-claim");
     writeJson(replacement, "spine-proto.json", modelConfig("@example/replaced-release-claim"));
     mkdirSync(join(replacement, "proto"));
@@ -3380,6 +3407,41 @@ describe("spine proto model tooling", () => {
     if (replacedLock !== undefined)
       rmSync(join(model, replacedLock), { recursive: true, force: true });
   });
+
+  it.each(["symlink", "fifo"] as const)(
+    "retains an unsafe %s replacement instead of deleting it during release",
+    (kind) => {
+      const model = packageDirectory(`@example/default-${kind}-release`);
+      writeJson(model, "spine-proto.json", modelConfig(`@example/default-${kind}-release`));
+      mkdirSync(join(model, "proto"));
+      const sentinel = join(model, "sentinel.txt");
+      writeFileSync(sentinel, "keep\n");
+
+      expect(() => {
+        generateModel(model, {
+          runBuf: (_, output) => {
+            generatedOutput("", output);
+            const lock = readdirSync(model).find((name) =>
+              name.startsWith(".spine-proto-generate.lock."),
+            );
+            if (lock === undefined) throw new Error("generation lock was not created");
+            rmSync(join(model, lock));
+            if (kind === "symlink") symlinkSync("sentinel.txt", join(model, lock));
+            else {
+              const created = spawnSync("mkfifo", [join(model, lock)]);
+              if (created.status !== 0) throw new Error(created.stderr.toString());
+            }
+          },
+        });
+      }).toThrow(`spine-proto: @example/default-${kind}-release: cannot clean up generation lock`);
+      expect(readFileSync(sentinel, "utf8")).toBe("keep\n");
+      expect(
+        readdirSync(model).some(
+          (name) => name.startsWith(".spine-proto-generate.lock.") && name.includes(".quarantine-"),
+        ),
+      ).toBe(true);
+    },
+  );
 
   it("preserves local and unknown generated imports while ignoring non-TypeScript output", () => {
     const model = packageDirectory("@example/local-generated-imports");

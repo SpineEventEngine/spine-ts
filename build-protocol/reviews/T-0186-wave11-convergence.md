@@ -418,3 +418,17 @@ will cover only these four corrected trust boundaries.
 - Marker P1 has a TDD correction: strict JSON reads use a no-follow,
   nonblocking regular descriptor and close it after reading. The symlink-marker
   regression is GREEN; claim and workflow P1s remain open.
+
+## Claim-Protocol Correction Submitted (2026-08-14)
+
+- Security P1 claim admission/release is correction-complete and ready for
+  targeted final-security re-review. The explicit `gpt-5.6-terra` / medium
+  implementer profile is recorded; Desktop has no independent runtime
+  telemetry. Atomic same-directory quarantine precedes descriptor validation
+  and deletion in both direct and workflow writers.
+- Direct `137/137` and workflow `93/93` tests cover FIFO admission and
+  symlink/FIFO release replacements. They demonstrate nonblocking failure,
+  no early generated-output preparation, preserved replacement content, and
+  retained quarantine evidence. Tooling typecheck is currently blocked by
+  unowned Core `TS18046` errors, so final mechanical/release evidence remains
+  pending the parent correction.

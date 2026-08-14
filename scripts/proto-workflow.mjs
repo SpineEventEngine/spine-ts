@@ -1,10 +1,13 @@
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
+  closeSync,
   cpSync,
   existsSync,
+  fstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   lstatSync,
   readdirSync,
   readFileSync,
@@ -13,6 +16,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { constants } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { findSymlinkedAncestors, lstatIfPresent } from "./generated-path-safety.mjs";
@@ -630,16 +634,35 @@ function probeWorkflowClaimLiveness(pid, probe = (candidate) => process.kill(can
   }
 }
 
+function readRegularWorkflowClaim(path) {
+  const descriptor = openSync(
+    path,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  );
+  try {
+    if (!fstatSync(descriptor).isFile())
+      throw new Error("workflow generation claim is not a regular file");
+    return readFileSync(descriptor, "utf8");
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+function workflowClaimQuarantine(path) {
+  return join(dirname(path), `${basename(path)}.quarantine-${randomUUID()}`);
+}
+
 const defaultWorkflowLockOperations = {
   create: (path, contents) => writeFileSync(path, contents, { flag: "wx" }),
   list: (directory) => readdirSync(directory),
-  read: (path) => readFileSync(path, "utf8"),
+  read: readRegularWorkflowClaim,
   inspect: (path) => {
     const entry = lstatSync(path);
     if (entry.isSymbolicLink()) return "symlink";
     return entry.isFile() ? "regular" : "other";
   },
   remove: (path) => unlinkSync(path),
+  move: renameSync,
   liveness: (pid) => probeWorkflowClaimLiveness(pid),
 };
 
@@ -662,11 +685,13 @@ function acquireWorkflowLock(root, overrides = {}) {
       for (const name of claims) {
         const candidate = join(root, name);
         if (candidate === path) continue;
-        if (operations.inspect(candidate) !== "regular")
-          throw new Error("workflow generation claim is not a regular file");
+        const quarantine = workflowClaimQuarantine(candidate);
         let owner;
         try {
-          owner = JSON.parse(operations.read(candidate));
+          operations.move(candidate, quarantine);
+          if (operations.inspect(quarantine) !== "regular")
+            throw new Error("workflow generation claim is not a regular file");
+          owner = JSON.parse(operations.read(quarantine));
         } catch {
           throw new Error("workflow generation claim has invalid owner metadata");
         }
@@ -674,12 +699,12 @@ function acquireWorkflowLock(root, overrides = {}) {
           throw new Error("workflow generation claim has invalid owner metadata");
         if (operations.liveness(owner.pid) !== "dead")
           throw new Error("workflow generation already in progress");
-        operations.remove(candidate);
+        operations.remove(quarantine);
       }
     }
   } catch (error) {
     try {
-      operations.remove(path);
+      releaseWorkflowLock({ operations, path, token });
     } catch {
       // Preserve the primary claim-admission failure.
     }
@@ -689,11 +714,13 @@ function acquireWorkflowLock(root, overrides = {}) {
 }
 
 function releaseWorkflowLock(lock) {
+  const quarantine = workflowClaimQuarantine(lock.path);
   try {
-    const owner = JSON.parse(lock.operations.read(lock.path));
-    if (owner.token !== lock.token || lock.operations.inspect(lock.path) !== "regular")
+    lock.operations.move(lock.path, quarantine);
+    const owner = JSON.parse(lock.operations.read(quarantine));
+    if (owner.token !== lock.token || lock.operations.inspect(quarantine) !== "regular")
       throw new Error();
-    lock.operations.remove(lock.path);
+    lock.operations.remove(quarantine);
   } catch {
     throw new Error("cannot clean up workflow generation claim");
   }

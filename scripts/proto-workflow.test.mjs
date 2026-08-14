@@ -148,6 +148,12 @@ function workflowClaimOperations(claims, liveness) {
     remove(path) {
       claims.delete(basename(path));
     },
+    move(from, to) {
+      const claim = claims.get(basename(from));
+      if (claim === undefined) throw new Error("missing claim");
+      claims.delete(basename(from));
+      claims.set(basename(to), claim);
+    },
     liveness,
   };
 }
@@ -2525,8 +2531,59 @@ describe("proto-workflow", () => {
       "first writer journal\n",
     );
     expect(existsSync(join(repoRoot, "packages/proto/generated"))).toBe(false);
-    expect([...claims.keys()]).toEqual([".spine-proto-workflow.lock.live"]);
+    expect([...claims.keys()]).toHaveLength(1);
+    expect([...claims.keys()][0]).toMatch(/^\.spine-proto-workflow\.lock\.live\.quarantine-/);
   });
+
+  it("rejects a FIFO workflow claim without blocking or preparing generated output", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const claim = join(repoRoot, ".spine-proto-workflow.lock.fifo");
+    const created = spawnSync("mkfifo", [claim]);
+    if (created.status !== 0) throw new Error(created.stderr.toString());
+
+    expect(generateTargets({ repoRoot })).toBe(1);
+    expect(existsSync(claim)).toBe(false);
+    expect(
+      readdirSync(repoRoot).some((name) =>
+        name.startsWith(".spine-proto-workflow.lock.fifo.quarantine-"),
+      ),
+    ).toBe(true);
+    expect(existsSync(join(repoRoot, "packages/proto/generated"))).toBe(false);
+  });
+
+  it.each(["symlink", "fifo"])(
+    "retains an unsafe %s workflow-lock replacement during release",
+    (kind) => {
+      const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+      const sentinel = join(repoRoot, "sentinel.txt");
+      writeFileSync(sentinel, "keep\n");
+
+      expect(
+        generateTargets({
+          repoRoot,
+          prepareBootstrap: () => {
+            const lock = readdirSync(repoRoot).find((name) =>
+              name.startsWith(".spine-proto-workflow.lock."),
+            );
+            if (lock === undefined) throw new Error("workflow lock was not created");
+            rmSync(join(repoRoot, lock));
+            if (kind === "symlink") symlinkSync("sentinel.txt", join(repoRoot, lock));
+            else {
+              const created = spawnSync("mkfifo", [join(repoRoot, lock)]);
+              if (created.status !== 0) throw new Error(created.stderr.toString());
+            }
+            throw new Error("stop after lock replacement");
+          },
+        }),
+      ).toBe(1);
+      expect(readFileSync(sentinel, "utf8")).toBe("keep\n");
+      expect(
+        readdirSync(repoRoot).some(
+          (name) => name.startsWith(".spine-proto-workflow.lock.") && name.includes(".quarantine-"),
+        ),
+      ).toBe(true);
+    },
+  );
 
   it("acquires generate ownership before preparing live generated roots", () => {
     const source = readFileSync(new URL("./proto-workflow.mjs", import.meta.url), "utf8");
@@ -2557,7 +2614,10 @@ describe("proto-workflow", () => {
     });
 
     if (liveness === "dead" && kind === "regular") expect([...claims.keys()]).toEqual([]);
-    else expect([...claims.keys()]).toEqual([".spine-proto-workflow.lock.existing"]);
+    else {
+      expect([...claims.keys()]).toHaveLength(1);
+      expect([...claims.keys()][0]).toMatch(/^\.spine-proto-workflow\.lock\.existing\.quarantine-/);
+    }
     expect(status).toBe(1);
   });
 
