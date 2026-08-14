@@ -41,12 +41,12 @@ Skill sources checked: session inventory; task prompt; expected-skill manifest;
 
 Selected skills read before governed work:
 
-| Skill | Source | Applicability | Instructions applied |
-| --- | --- | --- | --- |
-| `implement` | `~/.agents/skills/implement/SKILL.md` | bounded implementation | focused tests/typechecks and commit current branch |
-| `tdd` | `~/.agents/skills/tdd/SKILL.md` | explicit RED/GREEN runtime work | vertical behavior slices, one regression at a time |
-| `typescript-advanced-types` | `~/.agents/skills/typescript-advanced-types/SKILL.md` | typed compiler/provider contracts | strict guards, readonly contracts, avoid `any` |
-| `verification-before-completion` | `~/.agents/skills/verification-before-completion/SKILL.md` | commits and completion claims | fresh command evidence before claims |
+| Skill                            | Source                                                     | Applicability                     | Instructions applied                               |
+| -------------------------------- | ---------------------------------------------------------- | --------------------------------- | -------------------------------------------------- |
+| `implement`                      | `~/.agents/skills/implement/SKILL.md`                      | bounded implementation            | focused tests/typechecks and commit current branch |
+| `tdd`                            | `~/.agents/skills/tdd/SKILL.md`                            | explicit RED/GREEN runtime work   | vertical behavior slices, one regression at a time |
+| `typescript-advanced-types`      | `~/.agents/skills/typescript-advanced-types/SKILL.md`      | typed compiler/provider contracts | strict guards, readonly contracts, avoid `any`     |
+| `verification-before-completion` | `~/.agents/skills/verification-before-completion/SKILL.md` | commits and completion claims     | fresh command evidence before claims               |
 
 Skipped: `using-git-worktrees` is N/A because the explicit assigned isolated
 worktree already exists; `requesting-code-review` is deferred because reviewer
@@ -111,29 +111,33 @@ T-0185 reader documentation, and Wave 12 behavior.
 
 ## Tests Run
 
-- Pending first RED fixture.
+- RED: `pnpm exec vitest run packages/proto-tools/test/authored-interface-provider.test.ts`
+  failed because the discovery module did not exist.
+- GREEN: the same focused test passes (1 file, 1 test), plus tooling typecheck,
+  scoped ESLint, TSDoc, formatting, and diff integrity.
 
 ## Coverage Result
 
-- Pending; changed production files target at least 90% branches.
+- Pending expanded behavior matrix; changed production files target at least
+  90% branches.
 
 ## Documentation And Public API Impact
 
-| Area | Impact |
-| --- | --- |
-| Package README impact | N/A in T-0182; T-0185 owns reader docs. |
-| TypeDoc/API docs impact | Internal provider/compiler modules; inspect if exports change. |
-| Public API additions/removals | None intended. |
-| Framework/example guides | N/A; T-0185 owns guides. |
-| Compatibility notes | Same-module authored-interface constraint is enforced. |
+| Area                          | Impact                                                         |
+| ----------------------------- | -------------------------------------------------------------- |
+| Package README impact         | N/A in T-0182; T-0185 owns reader docs.                        |
+| TypeDoc/API docs impact       | Internal provider/compiler modules; inspect if exports change. |
+| Public API additions/removals | None intended.                                                 |
+| Framework/example guides      | N/A; T-0185 owns guides.                                       |
+| Compatibility notes           | Same-module authored-interface constraint is enforced.         |
 
 ## Security Impact
 
-| Area | Impact |
-| --- | --- |
-| Dependencies/secrets/IPC/tenants/logging | N/A; no new boundary. |
-| Validation | High relevance: realpath/symlink/module escapes fail closed. |
-| `Any`/deserialization | N/A. |
+| Area                                     | Impact                                                       |
+| ---------------------------------------- | ------------------------------------------------------------ |
+| Dependencies/secrets/IPC/tenants/logging | N/A; no new boundary.                                        |
+| Validation                               | High relevance: realpath/symlink/module escapes fail closed. |
+| `Any`/deserialization                    | N/A.                                                         |
 
 ## Verification
 
@@ -142,10 +146,10 @@ T-0185 reader documentation, and Wave 12 behavior.
 
 ## Open Risks And Follow-Up Routing
 
-| Risk/Follow-Up | Owner | Disposition | Next Review Point |
-| --- | --- | --- | --- |
+| Risk/Follow-Up                       | Owner           | Disposition       | Next Review Point |
+| ------------------------------------ | --------------- | ----------------- | ----------------- |
 | T-0181 writer remains sole publisher | T-0181 contract | accepted boundary | integration tests |
-| Routing/To-Do/docs | T-0183/4/5 | deferred | later tasks |
+| Routing/To-Do/docs                   | T-0183/4/5      | deferred          | later tasks       |
 
 ## Review Waves And Dispositions
 
