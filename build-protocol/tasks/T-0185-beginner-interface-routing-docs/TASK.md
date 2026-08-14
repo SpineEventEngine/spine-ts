@@ -1,6 +1,6 @@
 # T-0185: Beginner Interface-Routing Documentation
 
-Status: Implementation authorized; assignment ready
+Status: Correction complete; targeted re-review ready
 Start: `2026-08-14 WEST`
 End: Pending
 Task-start baseline: `696bbac3`
@@ -80,3 +80,21 @@ Historical build-protocol narrative is not reader-documentation ownership.
   changes prose/snippets only and no runtime lifecycle, persistence, or source
   structure. Security is N/A because no trust boundary changes; T-0186 owns the
   final Wave security review.
+
+## 2026-08-14 Accepted Review Corrections
+
+- The runnable To-Do sequence must directly identify the existing public
+  black-box proof for create, assign, reassign, and unassign, including the
+  observable zero/one/two target states and the persisted Inbox stored-target
+  replay/no-reroute observation. It must distinguish `catchUpReadSide()` as a
+  read-side clear-and-rebuild operation.
+- Root and architecture reader material must keep Cloud Run and multiple
+  Gateways explicitly unsupported/out of scope; this is a boundary statement,
+  not a new topology claim.
+- Authored `ts_type` interface discovery is after realpath resolution: the
+  authored interface and every recursive `extends` parent are top-level named
+  exports in the same model module. External property types remain valid.
+- Assigned reviewer profiles were `documentation_reviewer` (`gpt-5.6-luna` /
+  medium) and `typescript_api_docs_reviewer` (`gpt-5.6-terra` / high). Desktop
+  telemetry does not expose independent child runtime metadata; configured
+  profiles are the available durable evidence.

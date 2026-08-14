@@ -82,7 +82,8 @@ discovers application nodes on GKE or GCE: GKE headless-Service DNS or GCE
 leased discovery provides the authoritative complete membership. It reconciles
 every discovered node with bounded connection starts; the expected count of 32
 is an operational expectation, not a hard runtime maximum. The platform, not
-Spine TS, scales identical application versions.
+Spine TS, scales identical application versions. Cloud Run and multiple
+Gateways are outside this deployment model.
 
 ## Proto Contract Boundary
 

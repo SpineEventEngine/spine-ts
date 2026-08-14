@@ -88,7 +88,7 @@ For the two-node, one-Gateway development topology, see the
 For production-style deployment guidance, use one standalone Gateway with
 [GKE](packages/deployment-gke/README.md) headless-Service discovery or
 [GCE](packages/deployment-gce/README.md) leased discovery. Operators configure
-scaling and storage selection.
+scaling and storage selection; Cloud Run and multiple Gateways are not included.
 
 ## 📦 Workspace map
 

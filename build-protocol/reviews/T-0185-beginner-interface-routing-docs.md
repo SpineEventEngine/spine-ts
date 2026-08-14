@@ -1,6 +1,6 @@
 # T-0185 Review Log
 
-Status: Implementation pending; specialist review not dispatched
+Status: Correction complete; targeted re-review pending
 
 Task: `build-protocol/tasks/T-0185-beginner-interface-routing-docs/TASK.md`
 Branch: `task/T-0185-beginner-docs`
@@ -31,6 +31,37 @@ reader-documentation-only milestone. T-0186 owns the final Wave security review.
 - no retired semantic-routing, invented annotation, or unsupported Gateway
   claims.
 
+## Accepted Review Batch
+
+The dispatched existing reviewer profiles were recorded as `documentation_reviewer`
+(`gpt-5.6-luna` / medium) and `typescript_api_docs_reviewer`
+(`gpt-5.6-terra` / high). Desktop runtime telemetry does not expose independent
+child runtime metadata; the immutable configured role/profile is the available
+evidence. The accepted batch required these corrections:
+
+1. Make the To-Do create → assign → reassign → unassign journey runnable and
+   observable, including zero/one/two targets, stored-target retry without
+   rerouting, and the distinct `catchUpReadSide()` rebuild boundary.
+2. Restore explicit unsupported/out-of-scope Cloud Run and multiple-Gateway
+   boundaries in the root README and architecture notes.
+3. State the realpath, top-level named-export, recursive-`extends`, same-model
+   module rule in the beginner guide and dense Proto/proto-tools references.
+
+## Correction Evidence
+
+- Added a focused RED/GREEN reader contract in the existing strict snippet test;
+  its RED failed because the guide lacked the zero/one/two and durable replay
+  proof. The corrected contract passes.
+- The guide invokes the existing focused black-box tests by exact test name and
+  links their source; no API or runtime behavior was invented. Each of the
+  assignment lifecycle, persisted Inbox replay/no-reroute, and read-side rebuild
+  tests passed independently.
+- The strict TypeScript snippet compiler passes; it retains the actual public
+  routing imports and no permissive stubs.
+
 ## Current Disposition
 
-Implementation, deterministic preflight, and specialist review are pending.
+Targeted documentation and TypeScript/API re-review is ready. The previous N/A
+lanes remain N/A: this correction changes reader prose, source-linked snippets,
+and records only; it changes no runtime lifecycle/persistence/source structure
+or trust boundary.

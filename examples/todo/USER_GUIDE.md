@@ -48,12 +48,13 @@ message TaskUnassigned {
 `pnpm proto:generate` creates `generated/interfaces/task-event.ts`: it exports
 both a TypeScript `TaskEvent` interface and a runtime `TaskEvent` token.
 `is.ts_type` names an interface you author in the same model module as the
-message source. Here, [`src/index.ts`](src/index.ts) exports
+message source. Here, [`src/index.ts`](src/index.ts) exports the top-level named
 `interface TaskAssignmentEvent { readonly assignee?: UserId }`; generation
 creates `generated/interfaces/task-assignment-event.ts`, which exports that
-type and its token. An interface can use property types imported from another
-module, such as `UserId`, but the interface declaration itself and its parent
-message model must share the model module.
+type and its token. After resolving real paths, that authored interface and
+every recursive `extends` parent must be top-level named exports in the same
+model module. Property types may still come from another module, such as
+`UserId`.
 
 TypeScript reads `ts_type`. It ignores Java-only option fields, and neither
 option creates semantic tags or transport topics. A compiler error is useful:
@@ -110,6 +111,42 @@ Routing runs once when an accepted event is admitted. The framework stores the
 typed targets with that accepted work, so retry replays those stored targets
 without calling the route again. Read-side catch-up intentionally rebuilds
 from events and may evaluate routing again to construct its view.
+
+## Run the assignment routing journey
+
+The public black-box test is the runnable proof. From the repository root, run
+the focused journey with:
+
+```bash
+pnpm vitest run examples/todo/test/black-box.test.ts -t "routes assignment lifecycle events to zero, one, and two assignee targets"
+```
+
+It posts the real generated commands in this order: `CreateTask`, `AssignTask`,
+`ReassignTask`, then `UnassignTask`. Immediately after create, the assignee
+Projection has **zero** targets. Assign routes to Ada, so Ada has **one** target
+(the task). Reassign uses the exact `TaskReassigned` route, so its stored plan
+has **two** targets: Ada loses the task and Lin gains it. Unassign routes to
+Lin, leaving Lin with **zero** targets. The test waits for each observable
+Projection state; it is not an assertion about a synchronous command Ack.
+
+Run the durable replay proof separately:
+
+```bash
+pnpm vitest run examples/todo/test/black-box.test.ts -t "replays a persisted projection Inbox target without rerouting after restart"
+```
+
+That test persists admitted work, restarts with a route callback that would
+produce a different target, and observes delivery to the originally stored
+typed target. The replacement callback is not called: retry replays the stored
+Inbox target and does not reroute. This is intentionally different from
+`context.catchUpReadSide()`: catch-up clears projection state and rebuilds it
+from stored events, rather than retrying one accepted Inbox item.
+
+The linked source is the complete executable proof:
+
+- [zero/one/two assignment test](test/black-box.test.ts)
+- [durable stored-target no-reroute test](test/black-box.test.ts)
+- [read-side rebuild test](test/black-box.test.ts)
 
 Server components receive framework logging through their configured logger;
 use it for operational context, never as a substitute for a stored event or a
