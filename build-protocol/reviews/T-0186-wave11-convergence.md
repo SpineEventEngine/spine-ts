@@ -312,3 +312,21 @@ Final security and release verification remain pending.
   telemetry, so the configured role/profile and absence of a visible mismatch
   are the acceptance evidence. TypeScript/API and documentation remain CLEAN
   because the residual correction changed no public or reader-facing surface.
+
+## Final Targeted Re-Review Findings (2026-08-14)
+
+- Style/maintainability (`gpt-5.6-terra` / high): P2. The `1,000` claim cap
+  counts only regular files after filtering; arbitrarily many lock-named
+  symlinks/directories can therefore make every retry scan unbounded. Count all
+  candidate claim entries before file-kind filtering and cover non-regular
+  overflow.
+- Performance/reliability (`gpt-5.6-terra` / high): P1. A claim entry can be
+  replaced between `Dirent.isFile()` and path-based `readFileSync()`, allowing
+  symlink following or FIFO blocking. Open with no-follow/nonblocking flags,
+  verify the opened descriptor is regular, and fail closed on unsafe/change
+  races. P2: add wrapper-level MessageBoard primary-plus-recovery-failure proof
+  that its journal-owned registry file stage survives only until later recovery.
+- Both findings are accepted as one bounded batch for the existing implementer,
+  explicitly configured `gpt-5.6-terra` / medium. Desktop exposes no independent
+  runtime telemetry; the immutable configured role/profile is the assignment
+  evidence. Re-review remains limited to style and reliability.
