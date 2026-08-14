@@ -51,10 +51,11 @@ both a TypeScript `TaskEvent` interface and a runtime `TaskEvent` token.
 message source. Here, [`src/index.ts`](src/index.ts) exports the top-level named
 `interface TaskAssignmentEvent { readonly assignee?: UserId }`; generation
 creates `generated/interfaces/task-assignment-event.ts`, which exports that
-type and its token. After resolving real paths, that authored interface and
-every recursive `extends` parent must be top-level named exports in the same
-model module. Property types may still come from another module, such as
-`UserId`.
+type and its token. After resolving real paths, only the requested authored
+interface must be a top-level named export. Its recursive `extends` parents
+must resolve to interfaces in the same model module, but they do not need to be
+top-level named exports. Property types may still come from another module, such
+as `UserId`.
 
 TypeScript reads `ts_type`. It ignores Java-only option fields, and neither
 option creates semantic tags or transport topics. A compiler error is useful:

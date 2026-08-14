@@ -91,9 +91,10 @@ Historical build-protocol narrative is not reader-documentation ownership.
 - Root and architecture reader material must keep Cloud Run and multiple
   Gateways explicitly unsupported/out of scope; this is a boundary statement,
   not a new topology claim.
-- Authored `ts_type` interface discovery is after realpath resolution: the
-  authored interface and every recursive `extends` parent are top-level named
-  exports in the same model module. External property types remain valid.
+- Authored `ts_type` interface discovery is after realpath resolution: only the
+  requested authored interface is a top-level named export. Recursive `extends`
+  parents resolve to interfaces in the same model module but need not be named
+  exports or top-level. External property types remain valid.
 - Assigned reviewer profiles were `documentation_reviewer` (`gpt-5.6-luna` /
   medium) and `typescript_api_docs_reviewer` (`gpt-5.6-terra` / high). Desktop
   telemetry does not expose independent child runtime metadata; configured

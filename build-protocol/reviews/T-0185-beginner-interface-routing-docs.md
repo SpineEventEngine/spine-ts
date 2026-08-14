@@ -44,8 +44,9 @@ evidence. The accepted batch required these corrections:
    rerouting, and the distinct `catchUpReadSide()` rebuild boundary.
 2. Restore explicit unsupported/out-of-scope Cloud Run and multiple-Gateway
    boundaries in the root README and architecture notes.
-3. State the realpath, top-level named-export, recursive-`extends`, same-model
-   module rule in the beginner guide and dense Proto/proto-tools references.
+3. State the realpath rule precisely: only the requested authored interface is
+   a top-level named export; recursive `extends` parents resolve within the same
+   model module but need not be top-level named exports.
 
 ## Correction Evidence
 
@@ -65,3 +66,12 @@ Targeted documentation and TypeScript/API re-review is ready. The previous N/A
 lanes remain N/A: this correction changes reader prose, source-linked snippets,
 and records only; it changes no runtime lifecycle/persistence/source structure
 or trust boundary.
+
+## Final Targeted API Residual
+
+The API residual narrowed the recursive-parent claim. Only the requested
+authored interface is a top-level named module export; recursive `extends`
+parents must resolve within the same model module but need not be named exports
+or top-level. The reader-contract RED failed on the older claim, then passed
+12/12 after correction. Strict snippets, API inventory, formatting, and diff
+checks passed. Targeted re-review remains ready.

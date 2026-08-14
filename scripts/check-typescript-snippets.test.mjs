@@ -162,6 +162,11 @@ describe("TypeScript documentation snippets", () => {
     expect(protoReference).toContain("top-level named export");
     expect(protoReference).toContain("realpath");
     expect(toolsReference).toContain("top-level named export");
+    for (const text of [guide, protoReference, toolsReference]) {
+      expect(text).toMatch(/requested authored\s+interface[\s\S]{0,160}top-level named export/iu);
+      expect(text).toMatch(/extends` parents[\s\S]{0,120}same model module/u);
+      expect(text).toMatch(/(?:need not be|do not need to be)\s+top-level named exports/u);
+    }
     expect(rootReadme).toContain("Cloud Run and multiple Gateways are not included");
     expect(architecture).toMatch(/Cloud Run and multiple\s+Gateways are outside this deployment model/u);
   });
