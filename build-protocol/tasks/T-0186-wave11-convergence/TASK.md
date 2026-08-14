@@ -1,6 +1,6 @@
 # T-0186: Converge, Release, And Close Wave 11
 
-Status: Implementation convergence corrected; specialist-review-ready
+Status: Correction complete; targeted specialist re-review ready
 Start: `2026-08-14 WEST`
 End: Pending
 Baseline: `f128af42`
@@ -197,3 +197,27 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   left on message-valued `TaskList`, and a local Todo `Task` shape missing its
   current `taskListId`. Tooling typecheck passed; direct suites passed Proto
   Tools `109/109` and repository routing `244/244`.
+
+## Complete Cheap Preflight (2026-08-14)
+
+- Affected suites are green: Core `57/57`, Proto Tools `109/109`, workflow
+  `78/78`, normalizer `6/6`, generated-clean `10/10`, cleanup `109/109`,
+  repository routing `244/244`, the five routing/runtime files `270/270`, Todo
+  short contracts `17/17`, Todo black-box `41/41`, and Todo local
+  multi-process `19/19`.
+- Two serial canonical generations retained all five IDs and all ten
+  manifest/marker SHA-256 hashes byte-for-byte. Root ID remains
+  `32aa4024-1052-4da2-ae47-f2ec6b8b431d`; both runs passed 47 source checks and
+  the 52-descriptor digest. Current-output passed and workflow residue was zero.
+- `pnpm verify:generated-gates` passed generated/tooling typechecks, full
+  ESLint, cleanup, TSDoc, copyright, formatting, API inventory, audience,
+  snippets, generated Proto lint/current-output, logging containment, and
+  release readiness. `git diff --check` is clean.
+- The refreshed serial coverage suite passed `380/380`; exact changed-source
+  coverage is **155/159 executable lines (97.48%)** and **126/136 branches
+  (92.65%)** across all nine changed production sources.
+- The one-time generated-family audit found exactly `169` files and zero
+  notice/provenance/copyright/absolute-path violations. Prohibited active names
+  are absent; all Cloud Run/multiple-Gateway matches are explicit exclusions.
+  The lightweight pre-review status/API/overclaim pass found no new public
+  export, duplicated policy source, or active behavioral overclaim.

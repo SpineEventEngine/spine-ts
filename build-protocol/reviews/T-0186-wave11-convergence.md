@@ -1,6 +1,6 @@
 # T-0186 Review Log
 
-Status: Implementation convergence corrected; specialist review not yet dispatched
+Status: Correction complete; targeted specialist re-review ready
 
 Task: `build-protocol/tasks/T-0186-wave11-convergence/TASK.md`
 Baseline: `f128af42`
@@ -28,6 +28,26 @@ Planned final concern-specific review wave:
 
 Runtime metadata limitations and every reviewer disposition will be recorded
 before acceptance. No review has started.
+
+The targeted wave is now dispatch-ready with these bounded assignments:
+
+- `typescript_api_docs_reviewer`, explicit immutable `gpt-5.6-terra` / high:
+  public/generated TypeScript contracts, manifest v2 reader compatibility,
+  declarations, exports, and API documentation;
+- `style_maintainability_reviewer`, explicit immutable `gpt-5.6-terra` / high:
+  changed production/test structure, duplicated policy, naming, and one
+  canonical implementation per publication rule;
+- `performance_reliability_reviewer`, explicit immutable `gpt-5.6-terra` /
+  high: bounded tree traversal, generation-ID reuse, commit-point publication,
+  rollback evidence, claim/retry cleanup, and replay lifecycle;
+- `documentation_reviewer`, explicit immutable `gpt-5.6-luna` / medium:
+  changed reader-facing publication, page-bounded drain, Inbox dedup/replay,
+  generated provenance, and Wave scope claims.
+
+Desktop does not expose independent child runtime telemetry. The immutable
+configured roles/profiles and explicit dispatch fields are the acceptance
+evidence unless a visible mismatch is reported. Reviewers must not spawn
+subagents.
 
 ## Review Concerns
 
@@ -175,3 +195,18 @@ by this fix pass.
   key, obsolete scalar generic for `TaskList`, and a missing current
   `Task.taskListId` fixture property. Tooling typecheck passed; focused Proto
   Tools and repository routing suites passed `109/109` and `244/244`.
+
+## Complete Pre-Review Mechanical Evidence (2026-08-14)
+
+- Exact affected results: Core `57/57`; Proto Tools `109/109`; workflow
+  `78/78`; normalizer `6/6`; generated-clean `10/10`; cleanup `109/109`;
+  repository routing `244/244`; five routing/runtime `270/270`; Todo short
+  contracts `17/17`; black-box `41/41`; local multi-process `19/19`.
+- Two serial canonical generations retained byte-identical all-five IDs and
+  all ten manifest/marker hashes. Current-output passed; residue was zero.
+- Complete generated gates passed. Fresh changed-source coverage is **155/159
+  executable lines (97.48%)** and **126/136 branches (92.65%)** from
+  `/tmp/t0186-changed-source-coverage-pre-review/lcov.info`.
+- One-time generated-family audit: `169` files, zero violations. Prohibited
+  active names are absent and every Cloud Run/multiple-Gateway match is an
+  explicit exclusion. Lightweight status/API/overclaim lint is clean.
