@@ -1331,7 +1331,8 @@ export function generateTargets(options = {}) {
     );
   } finally {
     try {
-      if (staged !== undefined) cleanupStagedTargets(staged.stagedTargets);
+      if (staged !== undefined && !existsSync(publicationJournalPath(root)))
+        cleanupStagedTargets(staged.stagedTargets);
     } catch {
       primaryFailure = true;
       status = 1;
