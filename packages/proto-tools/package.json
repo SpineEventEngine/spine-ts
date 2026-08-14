@@ -9,8 +9,10 @@
     "spine-proto": "./bin/spine-proto.mjs"
   },
   "scripts": {
+    "build": "tsc -b && pnpm run copy:runtime",
     "clean": "node scripts/clean-dist.mjs",
-    "prepack": "node scripts/clean-dist.mjs && tsc -b && node scripts/copy-runtime-modules.mjs"
+    "copy:runtime": "node scripts/copy-runtime-modules.mjs",
+    "prepack": "node scripts/clean-dist.mjs && pnpm run build"
   },
   "exports": {
     ".": {

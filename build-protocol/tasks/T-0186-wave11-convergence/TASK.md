@@ -1,6 +1,6 @@
 # T-0186: Converge, Release, And Close Wave 11
 
-Status: Security CLEAN; final cheap preflight ready
+Status: Security CLEAN; final cheap preflight package correction validating
 Start: `2026-08-14 WEST`
 End: Pending
 Baseline: `f128af42`
@@ -71,6 +71,21 @@ close the Wave.
 - correction/re-review if required;
 - cheap preflight and one converged `verify:release`;
 - integration, tag, post-merge verification, and cleanup.
+
+## Package-Build Lifecycle Correction (2026-08-14)
+
+- The clean root build previously omitted Proto Tools' authored
+  `generation-reuse.mjs` runtime companion, leaving its package export broken
+  until a manual prepack. The correction centralizes copying in the existing
+  package copy script, calls it from the package build/prepack lifecycle, and
+  invokes that lifecycle step from the root generated build.
+- The package-bin regression first observed the missing companion after a
+  clean generated build, then passed after the correction. Fresh full package,
+  generated-gate, and release-readiness validation passed: full serial Proto
+  Tools is `8` files / `199` tests and release readiness reports `82` package
+  imports, `51` assets, and `378` links. This packaging-only lifecycle change
+  adds no public TypeScript API; targeted API re-review is N/A because fresh
+  package/export validation found no export-map or declaration change.
 
 ## Coverage Closure Status (2026-08-14)
 

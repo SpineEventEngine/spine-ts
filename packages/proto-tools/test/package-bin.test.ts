@@ -20,12 +20,23 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+const repositoryRoot = join(packageRoot, "../..");
 const packageJson = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")) as {
   bin: { "spine-proto": string };
 };
 const bin = packageJson.bin["spine-proto"];
+const generationReuseRuntime = "dist/src/generation/generation-reuse.mjs";
 
 describe("spine-proto package binary", () => {
+  it("includes its authored runtime companion after the canonical clean build", () => {
+    execFileSync("pnpm", ["typecheck:build:generated"], {
+      cwd: repositoryRoot,
+      stdio: "pipe",
+    });
+
+    expect(existsSync(join(packageRoot, generationReuseRuntime))).toBe(true);
+  }, 30_000);
+
   it("exists before build and is included in the packed package", () => {
     expect(existsSync(join(packageRoot, bin))).toBe(true);
     if (process.platform !== "win32") {

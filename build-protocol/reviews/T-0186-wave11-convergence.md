@@ -13,6 +13,20 @@ explicit `gpt-5.6-terra` / medium. Desktop runtime telemetry does not expose
 independent child metadata; the immutable configured profile is the available
 evidence.
 
+## Package-build lifecycle correction (2026-08-14)
+
+- Scope is root/package build orchestration and the existing package-bin
+  regression only. The existing `implementer` is explicitly configured
+  `gpt-5.6-terra` / medium; Desktop exposes no independent runtime metadata.
+- The correction reuses the sole `copy-runtime-modules.mjs` policy rather than
+  creating a second copier. It materializes the required `.mjs` companion on
+  clean root and package builds; prepack delegates to that same package build.
+- No public declaration or export-map shape changed. TypeScript/API review is
+  N/A for this narrow fix: fresh package build/import, the packed consumer
+  suite, release readiness, and generated gates found no surface change.
+  Style/reliability and final-security verdicts remain accepted; the complete
+  generated-gates profile passed after the correction.
+
 Planned final concern-specific review wave:
 
 - TypeScript/API documentation: existing `typescript_api_docs_reviewer`,
