@@ -1,6 +1,6 @@
 # T-0182 Review Log
 
-Status: Corrections complete; targeted re-review ready
+Status: Final corrections complete; targeted confirmation ready
 
 Task log: `build-protocol/tasks/T-0182-interface-discovery/TASK.md`
 Branch: `task/T-0182-interface-discovery`
@@ -56,14 +56,19 @@ Baseline: `8f987ae8`
 
 ## Final Correction Evidence
 
-- Exact focused behavior: 5 files / 200 tests pass.
-- Coverage-enabled task profile: 97.85% lines (318/325), 91.34% branches
-  (211/231), 98.51% functions (66/67).
+- Exact focused behavior: 5 files / 203 tests pass.
+- Final focused profile: 97.57% lines (322/330), 90.55% branches (211/233),
+  98.50% functions (66/67).
 - Canonical Proto generation/current output, generated and tooling typechecks,
   full ESLint, cleanup, TSDoc, copyright, formatting/diff, TypeDoc/API,
   audience, package/assets/links readiness, and generated cleanliness pass.
-- Targeted re-review is pending. `verify:release` is intentionally reserved for
-  post-review convergence.
+- The first targeted re-review found one shared compiler-closure residual and
+  one reliability input-kind residual. Explicit tsconfig roots still own
+  declaration discovery, while every eligible regular same-module TypeScript
+  source is now captured for transitive compiler imports, parent locality, and
+  prepublication revalidation. FIFO/non-regular TypeScript inputs fail before
+  reads or hashes. Final targeted confirmation is pending; `verify:release` is
+  intentionally reserved for post-review convergence.
 
 ## Historical Pre-Review Checkpoints
 

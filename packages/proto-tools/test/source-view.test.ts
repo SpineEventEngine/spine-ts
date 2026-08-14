@@ -13,6 +13,7 @@
  */
 
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdtempSync } from "node:fs";
@@ -21,6 +22,18 @@ import { describe, expect, it } from "vitest";
 import { assertSourceViewCurrent, modelSourceView } from "../src/generation/source-view.js";
 
 describe("modelSourceView", () => {
+  it("rejects non-regular TypeScript inputs before hashing", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-source-view-nonregular-"));
+    try {
+      execFileSync("mkfifo", [join(root, "blocked.ts")]);
+      expect(() =>
+        modelSourceView(root, "src/generated", join(root, ".generated.stage/output")),
+      ).toThrow("non-regular TypeScript input");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects invalid TypeScript configuration before generation", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-source-view-invalid-config-"));
     try {

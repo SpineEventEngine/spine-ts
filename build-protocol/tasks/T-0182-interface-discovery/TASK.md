@@ -1,6 +1,6 @@
 # T-0182: Authored Interface Discovery And Conformance
 
-Status: Review corrections complete; targeted re-review pending
+Status: Final review corrections complete; targeted confirmation pending
 Start: `2026-08-14 01:01 WEST`
 End: Pending
 Baseline commit: `8f987ae8`
@@ -11,14 +11,16 @@ Authoring sub-agent: existing `implementer`, explicit `gpt-5.6-terra` / medium
 Reviewer sub-agents: existing TypeScript/API, style/maintainability,
 performance/reliability, and documentation reviewers; explicit configured
 profiles recorded below
-Implementation commit: `bb9c3174`
+Implementation commit: `db6a2fc0` plus the pending final residual checkpoint
 Final branch HEAD: Pending targeted re-review and release closure
 
-Latest checkpoint: the accepted specialist batch is corrected. Named exports,
-tsconfig-owned membership, staged generated import redirection, immutable
-compiler input snapshots, prepublication revalidation, diamond inheritance,
-and canonical containment are GREEN. Cheap preflight and the selected
-coverage-enabled `verify:task` pass; targeted re-review remains.
+Latest checkpoint: the accepted specialist batch and its targeted-review
+residuals are corrected. Named exports, tsconfig-owned discovery roots, the
+complete same-module compiler input closure, staged generated import
+redirection, immutable compiler input snapshots, prepublication revalidation,
+diamond inheritance, canonical containment, and regular-file enforcement are
+GREEN. Cheap preflight and the selected coverage profile pass; final targeted
+confirmation remains.
 
 Task classification: High-risk
 Classification reason: compiler-program discovery and conformance governs
@@ -133,15 +135,17 @@ T-0185 reader documentation, and Wave 12 behavior.
   parent fails closed while external property types remain allowed (2 files,
   17 tests and focused static gates).
 - GREEN correction convergence: provider, interface generator, source view,
-  Proto-tools transaction, and real workflow suites pass 5 files / 200 tests.
-  Source content/add/remove/rename and recursive-config mutations preserve the
-  exact prior tree and manifest.
+  Proto-tools transaction, and real workflow suites pass 5 files / 203 tests.
+  Source content/add/remove/rename, same-module transitive-import content, and
+  recursive-config mutations preserve the exact prior tree and manifest.
+  TypeScript candidates must be regular files; a FIFO is rejected before any
+  blocking read or hash.
 
 ## Coverage Result
 
-- Coverage-enabled `verify:task` LCOV: 97.85% lines (318/325), 91.34%
-  branches (211/231), and 98.51% functions (66/67) across the three changed
-  production modules. Provider branches are 92/97; no threshold was waived.
+- Final focused LCOV: 97.57% lines (322/330), 90.55% branches (211/233),
+  and 98.50% functions (66/67) across the three changed production modules.
+  The exact five-suite profile passes 203/203 tests; no threshold was waived.
 
 ## Documentation And Public API Impact
 
@@ -184,6 +188,13 @@ T-0185 reader documentation, and Wave 12 behavior.
 - Documentation (`gpt-5.6-luna` / medium): source comments clean; stale record
   statuses/evidence corrected. Runtime telemetry was unavailable for every
   reviewer, so immutable configured profiles are the recorded evidence.
+- Targeted re-review found a shared residual: same-module imports loaded
+  transitively by TypeScript but omitted from explicit `files` roots were not
+  frozen or eligible as local parents. Reliability also found that a FIFO with
+  a TypeScript suffix could block inventory reads. Discovery roots remain
+  tsconfig-owned, while the frozen compiler input closure now includes all
+  eligible regular local TypeScript sources; non-regular inputs fail closed.
+  Final targeted confirmation is pending.
 - Security: N/A for T-0182 because it adds no dependency, secret, IPC, tenant,
   deserialization, or external capability boundary; Wave 11 final security is
   owned by T-0186.

@@ -1609,6 +1609,26 @@ describe("spine proto model tooling", () => {
     );
   });
 
+  it("preserves prior output when a transitive local TypeScript import changes", () => {
+    expectSourceViewMutationRollback(
+      "transitive-source-mutation-model",
+      (model) => {
+        writeFileSync(
+          join(model, "src/child.ts"),
+          'import type { Helper } from "./helper.js";\nexport interface Child extends Helper {}\n',
+        );
+        writeFileSync(join(model, "src/helper.ts"), "export interface Helper {}\n");
+        writeJson(model, "tsconfig.json", { files: ["src/child.ts"] });
+      },
+      (model) => {
+        writeFileSync(
+          join(model, "src/helper.ts"),
+          "export interface Helper { readonly changed: string }\n",
+        );
+      },
+    );
+  });
+
   it("publishes byte-identical output across repeated staged interface phases", () => {
     const model = packageDirectory("@example/interface-repeat-model");
     try {

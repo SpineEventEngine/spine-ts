@@ -67,7 +67,6 @@ export interface PublicationSourceView extends ModelSourceView {
 
 interface ProjectConfigView {
   readonly configFiles: readonly string[];
-  readonly fileNames: ReadonlySet<string>;
 }
 
 function projectConfig(root: string): ProjectConfigView | undefined {
@@ -105,7 +104,6 @@ function projectConfig(root: string): ProjectConfigView | undefined {
   for (const file of files) if (!texts.has(file)) texts.set(file, readFileSync(file, "utf8"));
   return Object.freeze({
     configFiles: Object.freeze(files),
-    fileNames: new Set(parsed.fileNames.map((file) => resolve(file))),
   });
 }
 
@@ -137,11 +135,7 @@ function sourceInventory(root: string, generated: string): SourceInventory {
   const siblingBackup = join(generatedDirectory, `.${generatedName}.`);
   const candidates = collectAuthored(root, [...excluded, siblingStage, siblingBackup]);
   const config = projectConfig(root);
-  const authoredFiles = Object.freeze(
-    config === undefined
-      ? candidates
-      : candidates.filter((file) => config.fileNames.has(resolve(file))),
-  );
+  const authoredFiles = Object.freeze(candidates);
   return Object.freeze({
     authoredFiles,
     digest: inventoryDigest(authoredFiles, config?.configFiles),
@@ -190,13 +184,20 @@ function collectAuthored(root: string, excluded: readonly string[]): readonly st
       )
         continue;
       const entry = lstatSync(path);
-      if (entry.isSymbolicLink()) continue;
+      if (entry.isSymbolicLink()) {
+        if ([".cts", ".mts", ".ts", ".tsx"].some((extension) => name.endsWith(extension)))
+          throw new Error("spine-proto: source view contains non-regular TypeScript input");
+        continue;
+      }
       if (entry.isDirectory()) pending.push({ path, depth: current.depth + 1 });
       else if (
         [".cts", ".mts", ".ts", ".tsx"].some((extension) => name.endsWith(extension)) &&
         !name.endsWith(".d.ts")
-      )
+      ) {
+        if (!entry.isFile())
+          throw new Error("spine-proto: source view contains non-regular TypeScript input");
         files.push(path);
+      }
     }
   }
   return files.sort();

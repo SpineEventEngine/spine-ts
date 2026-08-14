@@ -49,7 +49,11 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
   ): AuthoredInterfaceDeclaration | undefined {
     if (sourceView === undefined) return undefined;
     const program = this.program(sourceView);
-    const declaration = this.declaration(program, sourceView, name);
+    const authoredSources = new Set(sourceView.authoredFiles.map((file) => resolve(file)));
+    const discoveryRoots = program
+      .getRootFileNames()
+      .filter((file) => authoredSources.has(resolve(file)));
+    const declaration = this.declaration(program, discoveryRoots, name);
     const checker = program.getTypeChecker();
     this.assertNamedModuleExport(checker, declaration, name);
     this.assertLocalParents(
@@ -57,7 +61,7 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
       declaration,
       name,
       new Set(),
-      new Set(sourceView.authoredFiles.map((file) => resolve(file))),
+      authoredSources,
     );
     const interfaceType = checker.getTypeAtLocation(declaration);
     for (const member of members) {
@@ -97,7 +101,7 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
       configuredFiles.has(resolve(file)),
     );
     const capturedAuthored = new Map(
-      authoredFiles.map((file) => [resolve(file), readFileSync(file, "utf8")] as const),
+      sourceView.authoredFiles.map((file) => [resolve(file), readFileSync(file, "utf8")] as const),
     );
     const host = ts.createCompilerHost(parsed.options);
     const redirect = (path: string) => {
@@ -163,13 +167,13 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
 
   private declaration(
     program: ts.Program,
-    sourceView: ModelSourceView,
+    discoveryRoots: readonly string[],
     name: string,
   ): ts.InterfaceDeclaration {
-    const sources = sourceView.authoredFiles
+    const sources = discoveryRoots
       .map((file) => program.getSourceFile(file))
       .filter((source): source is ts.SourceFile => source !== undefined);
-    const candidates = sourceView.authoredFiles.flatMap((file) => {
+    const candidates = discoveryRoots.flatMap((file) => {
       const source = program.getSourceFile(file);
       if (source === undefined) return [];
       return source.statements.filter(

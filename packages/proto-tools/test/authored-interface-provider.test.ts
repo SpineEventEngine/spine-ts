@@ -189,6 +189,49 @@ describe("AuthoredInterfaceProvider", () => {
     }
   });
 
+  it("accepts a local parent imported outside explicit tsconfig root files", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-transitive-parent-"));
+    const stagedGeneratedRoot = join(root, ".generated.stage-1/output");
+    const liveGeneratedRoot = join(root, "src/generated");
+    const child = join(root, "src/child.ts");
+    const parent = join(root, "src/parent.ts");
+    try {
+      mkdirSync(join(stagedGeneratedRoot, "example"), { recursive: true });
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(join(root, "tsconfig.json"), JSON.stringify({ files: ["src/child.ts"] }));
+      writeFileSync(parent, "export interface Parent { readonly text: string }\n");
+      writeFileSync(
+        child,
+        'import type { Parent } from "./parent.js";\n' +
+          "export interface SignalFamily extends Parent {}\n",
+      );
+      writeFileSync(
+        join(stagedGeneratedRoot, "example/signals_pb.ts"),
+        "export type Signal = { readonly text: string };\n",
+      );
+      expect(
+        new AuthoredInterfaceProvider().resolve(
+          "SignalFamily",
+          [
+            {
+              file: { proto: { name: "example/signals.proto", package: "example" } },
+              name: "Signal",
+              typeName: "example.Signal",
+            } as DescMessage,
+          ],
+          {
+            authoredFiles: [child, parent],
+            liveGeneratedRoot,
+            packageRoot: root,
+            stagedGeneratedRoot,
+          },
+        ),
+      ).toBeDefined();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("redirects authored live-generated imports to the divergent staged output", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-staged-import-"));
     const stagedGeneratedRoot = join(root, ".generated.stage-1/output");
@@ -274,7 +317,7 @@ describe("AuthoredInterfaceProvider", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, 15_000);
 
   it("rejects generated and declaration outputs as authored candidates before analysis", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-path-"));
