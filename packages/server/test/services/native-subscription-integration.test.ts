@@ -60,7 +60,10 @@ import {
   TaskCreatedSchema,
   type TaskCreated,
 } from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
-import { TaskIdSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 
 class NativeAggregate extends Aggregate<string, typeof NativeAggregateStateSchema, bigint> {
   assign(command: NativeAggregateState): NativeAggregateState {
@@ -325,6 +328,7 @@ function createProjectionTriggerEvent(id: string, title: string) {
     message: create(TaskCreatedSchema, {
       id: create(TaskIdSchema, { value: id }),
       title,
+      taskListId: create(TaskListIdSchema, { value: id }),
     }),
   });
 }

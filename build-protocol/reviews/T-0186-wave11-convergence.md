@@ -561,3 +561,22 @@ preflight and the one converged release profile remain pending.
   focused GREEN and mandatory cheap preflight, the corrected tree may run one
   converged release profile; the failed profile is retained as RED chronology
   and is not used as a diagnostic loop.
+
+## Release RED Test-Only Correction Disposition (2026-08-14)
+
+- Accepted as a bounded mechanical test correction under the existing
+  `implementer`, explicitly `gpt-5.6-terra` / medium. Desktop runtime telemetry
+  is unavailable; the configured profile and no visible mismatch are the
+  available assignment evidence.
+- The detached-worktree/offline-install package-bin regression proves the
+  canonical clean root lifecycle without mutating outputs imported by sibling
+  Vitest workers. It asserts both the runtime companion and worktree cleanup.
+- Manifest-v2, required generated `TaskListId`, and renderer-owned descriptor
+  cleanup expectations now match the established contract. No reviewed runtime,
+  public API, documentation, or security control changed, so specialist and
+  final-security dispositions are not reopened.
+- Evidence: direct affected suites `129/129`, isolated package-bin `2/2`, full
+  Proto Tools `199/199`, and default-parallel representative package/example/
+  server entrypoints `10/10`; tooling typecheck, exact ESLint, cleanup, TSDoc,
+  Prettier, and diff checks pass. The prior release RED is retained; this owner
+  does not run `verify:release`.

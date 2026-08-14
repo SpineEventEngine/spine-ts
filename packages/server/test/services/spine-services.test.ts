@@ -119,7 +119,10 @@ import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { spineServicesAccess } from "../../src/services/spine-services.js";
 import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections.js";
 import { TaskAlreadyDoneSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections_pb.js";
-import { TaskIdSchema as TodoIdSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import {
+  TaskIdSchema as TodoIdSchema,
+  TaskListIdSchema as TodoTaskListIdSchema,
+} from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
 import {
   TaskCreatedSchema,
   type TaskCreated,
@@ -146,10 +149,15 @@ type TaskId = Message<"spine.examples.todo.TaskId"> & {
   value: string;
 };
 
+type TaskListId = Message<"spine.examples.todo.TaskListId"> & {
+  value: string;
+};
+
 type Task = Message<"spine.examples.todo.Task"> & {
   id?: TaskId;
   title: string;
   completed: boolean;
+  taskListId?: TaskListId;
 };
 
 type ValidatedAggregateState = Message<"example.validation_refusal.ValidatedAggregateState"> & {
@@ -585,7 +593,11 @@ describe("SpineServices", () => {
       .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
     const taskId = create(TaskIdSchema, { value: "task-message-id" });
-    const task = create(TaskSchema, { id: taskId, title: "Message ID" });
+    const task = create(TaskSchema, {
+      id: taskId,
+      title: "Message ID",
+      taskListId: create(TodoTaskListIdSchema, { value: "message-id-list" }),
+    });
     await context.stand().update(TaskSchema, task);
     const handlers = registeredQueryHandlers(context);
 
@@ -4520,6 +4532,7 @@ function createProjectionEvent(id: string, entityId: string) {
     message: create(TaskCreatedSchema, {
       id: create(GeneratedTaskIdSchema, { value: entityId }),
       title: "Task",
+      taskListId: create(TodoTaskListIdSchema, { value: entityId }),
     }),
   });
 }

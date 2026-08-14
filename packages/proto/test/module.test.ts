@@ -53,6 +53,7 @@ import { spineProtoModule } from "../generated/proto-module.js";
 
 interface SpineManifest {
   readonly formatVersion: number;
+  readonly generationId: string;
   readonly packageName: string;
   readonly packageVersion: string;
   readonly protoFiles: readonly string[];
@@ -87,7 +88,7 @@ describe("spineProtoModule", () => {
     ) as unknown as SpineManifest;
 
     expect(manifest).toMatchObject({
-      formatVersion: 1,
+      formatVersion: 2,
       packageName: "@spine-event-engine/proto",
       packageVersion: (() => {
         const packageJson: unknown = JSON.parse(
@@ -101,6 +102,14 @@ describe("spineProtoModule", () => {
       moduleExport: "spineProtoModule",
     });
     expect(manifest.protoFiles).toHaveLength(47);
+    expect(manifest.generationId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu,
+    );
+    expect(
+      JSON.parse(
+        readFileSync(new URL("../generated/.spine-proto-generation.json", import.meta.url), "utf8"),
+      ),
+    ).toEqual({ generationId: manifest.generationId });
     expect(Object.keys(manifest.generatedExports)).toEqual(manifest.protoFiles);
     expect(Object.values(manifest.generatedExports)).toEqual(
       manifest.protoFiles.map((path) => `generated/${path.replace(/\.proto$/, "_pb.js")}`),

@@ -38,7 +38,7 @@ describe("generate-server-test-fixtures", () => {
     expect(result.stderr).toBe("");
   });
 
-  it("cleans descriptor and bootstrap resources when Buf descriptor generation fails", () => {
+  it("cleans descriptor resources when Buf descriptor generation fails", () => {
     const temporary = mkdtempSync(join(tmpdir(), "spine-server-fixtures-failure-"));
     expect(() =>
       renderFixtureModule({
@@ -47,11 +47,6 @@ describe("generate-server-test-fixtures", () => {
       }),
     ).toThrow("Server fixture descriptor build failed: Buf unavailable");
     expect(existsSync(temporary)).toBe(false);
-    expect(
-      readdirSync(join(repoRoot, "packages/proto-tools/node_modules/.cache"), {
-        encoding: "utf8",
-      }),
-    ).not.toContainEqual(expect.stringMatching(/^spine-proto-tools-bootstrap-/u));
   });
 
   it("runs standalone from an isolated clean proto-tools build output", () => {

@@ -400,3 +400,25 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   v2/required-field fixtures, and align the cleanup assertion with its actual
   owner. Runtime, public API, serialized behavior, and security controls do not
   change; specialist/security review is not reopened.
+
+## Release RED Test-Only Correction (2026-08-14)
+
+- The existing `implementer`, explicitly configured `gpt-5.6-terra` / medium,
+  completed the bounded test-only correction. Desktop does not expose
+  independent runtime model telemetry; the immutable configured profile and no
+  visible mismatch are the assignment evidence.
+- The package-bin regression now creates a detached temporary Git worktree,
+  performs an offline frozen install, and invokes the canonical
+  `typecheck:build` lifecycle there. It proves the runtime companion exists
+  after the clean build and proves the temporary worktree is removed. This
+  prevents shared parallel Vitest from deleting repository `dist` outputs.
+- The remaining fixtures now assert manifest v2 generation-ID/marker parity,
+  supply required `TaskListId` values in the three named server paths, and
+  limit the direct renderer failure assertion to its descriptor-temp ownership.
+  No production source, public API, serialization, or security behavior
+  changed; prior specialist/security dispositions remain applicable.
+- Focused GREEN evidence: direct residual suites `129/129`; isolated
+  package-bin `2/2`; full Proto Tools `199/199`; and a default-parallel
+  package/example/server entrypoint reproduction `10/10`. Tooling typecheck,
+  exact-file ESLint, cleanup, TSDoc, Prettier, and diff checks are GREEN.
+  The release profile remains deliberately unrerun in this correction context.

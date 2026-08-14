@@ -28,14 +28,33 @@ const bin = packageJson.bin["spine-proto"];
 const generationReuseRuntime = "dist/src/generation/generation-reuse.mjs";
 
 describe("spine-proto package binary", () => {
-  it("includes its authored runtime companion after the canonical clean build", () => {
-    execFileSync("pnpm", ["typecheck:build:generated"], {
-      cwd: repositoryRoot,
-      stdio: "pipe",
-    });
+  it("includes its authored runtime companion after an isolated canonical clean build", () => {
+    const isolated = mkdtempSync(join(tmpdir(), "spine-proto-clean-build-"));
+    const worktree = join(isolated, "repo");
+    try {
+      execFileSync("git", ["worktree", "add", "--detach", worktree, "HEAD"], {
+        cwd: repositoryRoot,
+        stdio: "pipe",
+      });
+      execFileSync("pnpm", ["install", "--offline", "--frozen-lockfile"], {
+        cwd: worktree,
+        stdio: "pipe",
+      });
+      execFileSync("pnpm", ["typecheck:build"], {
+        cwd: worktree,
+        stdio: "pipe",
+      });
 
-    expect(existsSync(join(packageRoot, generationReuseRuntime))).toBe(true);
-  }, 30_000);
+      expect(existsSync(join(worktree, "packages/proto-tools", generationReuseRuntime))).toBe(true);
+    } finally {
+      execFileSync("git", ["worktree", "remove", "--force", worktree], {
+        cwd: repositoryRoot,
+        stdio: "pipe",
+      });
+      expect(existsSync(worktree)).toBe(false);
+      rmSync(isolated, { force: true, recursive: true });
+    }
+  }, 120_000);
 
   it("exists before build and is included in the packed package", () => {
     expect(existsSync(join(packageRoot, bin))).toBe(true);
