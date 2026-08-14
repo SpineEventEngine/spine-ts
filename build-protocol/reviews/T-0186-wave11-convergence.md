@@ -538,3 +538,15 @@ All other scoped security lanes remain CLEAN. The existing reviewer used
 explicit `gpt-5.6-terra` / high configuration; Desktop exposes no independent
 runtime telemetry and no visible mismatch was reported. Mandatory cheap
 preflight and the one converged release profile remain pending.
+
+## Converged Release-Profile Readiness (2026-08-14)
+
+- Final cheap preflight is CLEAN after the mechanical cleanup and package-build
+  lifecycle corrections. The package correction changes no export map,
+  declaration contract, or public symbol, so TypeScript/API re-review is N/A;
+  its clean-build package regression and release-readiness gate are mechanical
+  evidence.
+- All affected behavior groups, two stable canonical generations, complete
+  generated/static/docs/package gates, zero residue, and clean diff/worktree
+  pass. Specialist and security verdicts remain CLEAN. Exactly one converged
+  `pnpm verify:release` is authorized next.

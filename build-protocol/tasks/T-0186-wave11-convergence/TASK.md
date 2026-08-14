@@ -1,6 +1,6 @@
 # T-0186: Converge, Release, And Close Wave 11
 
-Status: Security CLEAN; final cheap preflight package correction validating
+Status: Security and cheap preflight CLEAN; release profile ready
 Start: `2026-08-14 WEST`
 End: Pending
 Baseline: `f128af42`
@@ -371,3 +371,17 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   and bounded indexed traversal with throwing traps failing closed.
 - Specialist and security review are converged. Mandatory cheap preflight is
   next; `verify:release` has not run.
+
+## Final Cheap Preflight Closure (2026-08-14)
+
+- Package lifecycle checkpoint `c7e02d10` makes the canonical clean root build
+  materialize the Proto Tools runtime companion; `verify:generated-gates` and
+  release readiness now pass without manual prepack repair.
+- Final behavior counts are Core `95/95`, Proto Tools `138/138`, workflow
+  `94/94`, normalizer `6/6`, generated-clean `10/10`, cleanup `109/109`,
+  repository routing `244/244`, routing/runtime `46/46`, Todo short `14/14`,
+  black-box `41/41`, and local multi-process `19/19`.
+- Two canonical generations retained all-five IDs and hashes; generated/tooling
+  typechecks, ESLint, cleanup, TSDoc, copyright, format, docs API/audience/
+  snippets, Proto lint/current output, logging containment, release readiness,
+  zero residue, and diff checks are GREEN. Exactly one `verify:release` is next.
