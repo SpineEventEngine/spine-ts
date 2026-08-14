@@ -114,4 +114,48 @@ describe("AuthoredInterfaceProvider", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("reports stable declaration-shape diagnostics before compatibility analysis", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-diagnostics-"));
+    const stagedGeneratedRoot = join(root, ".generated.stage-1/output");
+    const liveGeneratedRoot = join(root, "src/generated");
+    const authored = join(root, "src/interfaces.ts");
+    const sourceView = {
+      authoredFiles: [authored],
+      liveGeneratedRoot,
+      packageRoot: root,
+      stagedGeneratedRoot,
+    };
+    const member = {
+      file: { proto: { name: "example/signals.proto", package: "example" } },
+      name: "Signal",
+      typeName: "example.Signal",
+    } as DescMessage;
+    try {
+      mkdirSync(join(stagedGeneratedRoot, "example"), { recursive: true });
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(
+        join(root, "tsconfig.json"),
+        JSON.stringify({ compilerOptions: { strict: true } }),
+      );
+      writeFileSync(
+        join(stagedGeneratedRoot, "example/signals_pb.ts"),
+        "export type Signal = {};\n",
+      );
+      const cases: readonly (readonly [string, string])[] = [
+        ["export type SignalFamily = {};\n", "not an interface"],
+        ["export interface Outer { }\n", "missing top-level interface"],
+        ["export interface SignalFamily<T> {}\n", "generic interface is unbound"],
+        ["export namespace Outer { export interface SignalFamily {} }\n", "nested interface"],
+      ];
+      for (const [source, diagnostic] of cases) {
+        writeFileSync(authored, source);
+        expect(() =>
+          new AuthoredInterfaceProvider().resolve("SignalFamily", [member], sourceView),
+        ).toThrow(diagnostic);
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

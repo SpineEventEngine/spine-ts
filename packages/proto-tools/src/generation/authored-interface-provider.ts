@@ -28,7 +28,6 @@ import type { ModelSourceView } from "./source-view.js";
  * Resolves authored TypeScript interfaces from the validated model source view.
  */
 export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
-
   /**
    * Resolves one compatible authored interface from the staged model Program.
    *
@@ -92,6 +91,9 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     sourceView: ModelSourceView,
     name: string,
   ): ts.InterfaceDeclaration {
+    const sources = sourceView.authoredFiles
+      .map((file) => program.getSourceFile(file))
+      .filter((source): source is ts.SourceFile => source !== undefined);
     const candidates = sourceView.authoredFiles.flatMap((file) => {
       const source = program.getSourceFile(file);
       if (source === undefined) return [];
@@ -100,18 +102,40 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
           ts.isInterfaceDeclaration(statement) && statement.name.text === name,
       );
     });
-    if (candidates.length === 0)
+    if (candidates.length === 0) {
+      if (
+        sources.some((source) =>
+          source.statements.some(
+            (statement) => ts.isTypeAliasDeclaration(statement) && statement.name.text === name,
+          ),
+        )
+      )
+        throw new Error(`spine-proto: authored interface ${name}: declaration is not an interface`);
+      if (sources.some((source) => this.nestedInterface(source, name)))
+        throw new Error(
+          `spine-proto: authored interface ${name}: nested interface is not supported`,
+        );
       throw new Error(`spine-proto: authored interface ${name}: missing top-level interface`);
+    }
     if (candidates.length > 1)
       throw new Error(`spine-proto: authored interface ${name}: ambiguous top-level interface`);
     const declaration = candidates[0];
     if (declaration === undefined)
       throw new Error(`spine-proto: authored interface ${name}: missing top-level interface`);
     if (declaration.typeParameters !== undefined && declaration.typeParameters.length > 0)
-      throw new Error(
-        `spine-proto: authored interface ${name}: generic interface is not supported`,
-      );
+      throw new Error(`spine-proto: authored interface ${name}: generic interface is unbound`);
     return declaration;
+  }
+
+  private nestedInterface(source: ts.SourceFile, name: string): boolean {
+    let nested = false;
+    const visit = (node: ts.Node): void => {
+      if (node !== source && ts.isInterfaceDeclaration(node) && node.name.text === name)
+        nested = true;
+      ts.forEachChild(node, visit);
+    };
+    ts.forEachChild(source, visit);
+    return nested;
   }
 
   private messageType(
@@ -154,8 +178,7 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     visited: Set<ts.Symbol>,
   ): void {
     const clauses = Object.getOwnPropertyDescriptor(declaration, "heritageClauses")?.value as
-      | ts.NodeArray<ts.HeritageClause>
-      | undefined;
+      ts.NodeArray<ts.HeritageClause> | undefined;
     if (clauses === undefined) return;
     for (const clause of clauses) {
       for (const parent of clause.types) {
@@ -176,8 +199,13 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
           throw new Error(
             `spine-proto: authored interface ${name}: extends parent must stay in the model module`,
           );
-        if (parentDeclaration.typeParameters !== undefined && parentDeclaration.typeParameters.length > 0)
-          throw new Error(`spine-proto: authored interface ${name}: generic extends parent is not supported`);
+        if (
+          parentDeclaration.typeParameters !== undefined &&
+          parentDeclaration.typeParameters.length > 0
+        )
+          throw new Error(
+            `spine-proto: authored interface ${name}: generic extends parent is not supported`,
+          );
         const localSources = new Set(sourceView.authoredFiles.map((file) => realpathSync(file)));
         if (!localSources.has(realpathSync(parentDeclaration.getSourceFile().fileName)))
           throw new Error(
