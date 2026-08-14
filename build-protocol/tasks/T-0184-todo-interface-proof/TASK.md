@@ -130,3 +130,15 @@ pending implementation continuation.
   initialization; regenerated TaskEvent routing passes. A temporary exact-route
   probe also passed and was removed after ruling routing out. This is a To-Do
   Proto modeling correction, not a shared routing change.
+
+## Durable Replay Evidence (GREEN)
+
+- A handler failure is not a valid retry fixture: local delivery acknowledges
+  that failure and marks its projection Inbox row `DELIVERED`.
+- The accepted proof admits one live TaskCreated through TaskEvent, then uses
+  public `DeliveryBuilder` to persist a second `TO_DELIVER`
+  `UPDATE_SUBSCRIBER` row in a shared backend. A fresh BlackBox context
+  materializes that row while its TaskEvent route throws if invoked; it is not
+  invoked.
+- Focused evidence is GREEN (`1/1`). The wider native matrix, coverage,
+  preflight, and bounded task verification remain pending.

@@ -71,3 +71,20 @@ least 90%, cheap preflight, and bounded `verify:task` with loopback permissions.
 - Focused black-box proof now covers zero/one/two assignee target outcomes and
   four-event read-side rebuild. Durable Inbox no-reroute is a separate existing
   repository-routing contract. Full matrix coverage and review remain pending.
+
+## Durable Replay Checkpoint
+
+- A handler failure is deliberately acknowledged and cannot serve as a
+  durable-retry fixture. The discarded RED attempt confirmed the resulting
+  projection Inbox row is `DELIVERED`.
+- The accepted public proof persists a valid pending `UPDATE_SUBSCRIBER` row
+  with `DeliveryBuilder` after one live generated-TaskEvent admission. A fresh
+  BlackBox context materializes the row while its replacement TaskEvent route
+  would throw if invoked; it remains uncalled. Focused evidence is GREEN
+  (`1/1`).
+- This is implementation evidence only; coverage, preflight, and specialist
+  review remain pending.
+- `@spine-event-engine/storage` is intentionally not added as an example
+  dependency: its public import is unresolved under Vitest. The proof imports
+  the matching built workspace entrypoint by relative path so the storage
+  factory shares server-runtime identity.

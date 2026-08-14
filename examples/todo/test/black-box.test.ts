@@ -20,6 +20,8 @@ import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core
 import {
   ErrorSchema,
   EventContextSchema,
+  EventIdSchema,
+  EventSchema,
   UserIdSchema,
   ValidationErrorSchema,
 } from "@spine-event-engine/proto";
@@ -47,7 +49,12 @@ import {
   type SubscriptionUpdate,
 } from "@spine-event-engine/proto/client";
 import { SubscriptionService } from "@spine-event-engine/proto/client";
-import { SignalMetadata } from "@spine-event-engine/server";
+import {
+  BoundedContext,
+  DeliveryBuilder,
+  EventRouting,
+  SignalMetadata,
+} from "@spine-event-engine/server";
 import { BlackBox, type BlackBoxScope } from "@spine-event-engine/testing";
 import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -58,6 +65,10 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { BuildHandlerAnalyzer } from "../../../packages/server/src/handler/build-time-handler-analyzer.js";
 import { GeneratedRegistryWriter } from "../../../packages/server/src/handler/generated-registry-writer.js";
+import {
+  InMemoryStorageBackend,
+  InMemoryStorageFactory,
+} from "../../../packages/storage/dist/index.js";
 import { generatedSource } from "../../../packages/proto-tools/src/generation/generated-source-policy.js";
 import {
   AssignTaskSchema,
@@ -75,6 +86,7 @@ import {
 } from "../generated/spine/examples/todo/task_assignee_pb.js";
 import { TaskListSchema, type TaskList } from "../generated/spine/examples/todo/task_list_pb.js";
 import { TaskAlreadyDoneSchema } from "../generated/spine/examples/todo/task_rejections_pb.js";
+import { TaskCreatedSchema } from "../generated/spine/examples/todo/task_events_pb.js";
 import { TaskSchema, type Task } from "../generated/spine/examples/todo/tasks_pb.js";
 
 type TodoModule = typeof import("../dist/src/index.js");
@@ -638,6 +650,104 @@ describe("@spine-event-engine/example-todo", () => {
       await expectTaskAssigneeEventually(fixture, context, secondAssignee, []);
     } finally {
       await context.close();
+    }
+  });
+
+  it("replays a persisted projection Inbox target without rerouting after restart", async () => {
+    const todo = await import("../dist/src/index.js");
+    const { TaskEvent } = await import("../dist/generated/interfaces/task-event.js");
+    const storageBackend = new InMemoryStorageBackend();
+    const firstRoute = vi.fn(
+      (event: { readonly taskListId?: MessageShape<typeof TaskListIdSchema> }) =>
+        event.taskListId === undefined ? [] : [event.taskListId],
+    );
+    const firstStorage = new InMemoryStorageFactory(storageBackend);
+    const first = await BoundedContext.singleTenant("Tasks")
+      .withStorageFactory(firstStorage)
+      .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
+      .add(todo.TaskAggregate)
+      .add(todo.TaskListProjection, {
+        eventRouting: EventRouting.create<TaskListId>().route(TaskEvent, firstRoute),
+      })
+      .buildAsync();
+    const listId = create(TaskListIdSchema, { value: "task-inbox-replay" });
+    const event = SignalEnvelopes.event({
+      id: create(EventIdSchema, { value: "event-inbox-replay" }),
+      context: create(EventContextSchema, {
+        timestamp: signalMetadata.timestamp(),
+        producerId: AnyMessages.pack(
+          TaskIdSchema,
+          create(TaskIdSchema, { value: "task-inbox-replay" }),
+        ),
+      }),
+      schema: TaskCreatedSchema,
+      message: create(TaskCreatedSchema, {
+        id: create(TaskIdSchema, { value: "task-inbox-replay" }),
+        taskListId: listId,
+        title: "Replay",
+      }),
+    });
+    try {
+      await first.eventBus().post(event);
+      expect(firstRoute).toHaveBeenCalledTimes(1);
+    } finally {
+      await first.close();
+    }
+
+    const targetId = AnyMessages.pack(TaskListIdSchema, listId);
+    const targetTypeUrl = TypeUrls.derive(TaskListSchema);
+    const delivery = new DeliveryBuilder()
+      .withContext({ name: "Tasks", multitenant: false })
+      .withStorageFactory(new InMemoryStorageFactory(storageBackend))
+      .withNode("todo-replay-seed")
+      .build();
+    const replayEvent = SignalEnvelopes.event({
+      id: create(EventIdSchema, { value: "event-inbox-restart" }),
+      context: create(EventContextSchema, {
+        timestamp: signalMetadata.timestamp(),
+        producerId: AnyMessages.pack(
+          TaskIdSchema,
+          create(TaskIdSchema, { value: "task-inbox-restart" }),
+        ),
+      }),
+      schema: TaskCreatedSchema,
+      message: create(TaskCreatedSchema, {
+        id: create(TaskIdSchema, { value: "task-inbox-restart" }),
+        taskListId: listId,
+        title: "Restart replay",
+      }),
+    });
+    await delivery.inbox.receive({
+      inboxId: { targetId, targetTypeUrl },
+      signalId: "event-inbox-restart",
+      signal: AnyMessages.pack(EventSchema, replayEvent),
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard: delivery.strategy.shardFor(targetId, targetTypeUrl),
+      whenReceived: new Date(),
+      version: 1n,
+    });
+
+    const replayRoute = vi.fn(() => {
+      throw new Error("durable Inbox replay must not reroute");
+    });
+    const replay = await BoundedContext.singleTenant("Tasks")
+      .withStorageFactory(new InMemoryStorageFactory(storageBackend))
+      .withGeneratedRegistryRoot(new URL("../dist/", import.meta.url))
+      .add(todo.TaskAggregate)
+      .add(todo.TaskListProjection, {
+        eventRouting: EventRouting.create<TaskListId>().route(TaskEvent, replayRoute),
+      })
+      .buildAsync();
+    const replayFixture = await createTodoBlackBox(replay);
+    try {
+      await replayFixture.eventually(
+        async () => await replay.stand().read(TaskListSchema, listId),
+        (state) => state?.tasks.some((task) => task.title === "Restart replay") === true,
+      );
+      expect(replayRoute).not.toHaveBeenCalled();
+    } finally {
+      await replayFixture.close();
     }
   });
 
