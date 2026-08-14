@@ -407,7 +407,10 @@ function assertNoSymlinksInTree(root, displayPath) {
           displayPath: entryDisplayPath,
           depth: directory.depth + 1,
         });
-      }
+      } else if (!entryStat.isFile())
+        throw new Error(
+          `Staged generated output must contain only regular files and directories: ${entryDisplayPath}`,
+        );
     }
   }
 }

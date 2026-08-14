@@ -1384,6 +1384,37 @@ describe("proto-workflow", () => {
     rmSync(external, { recursive: true, force: true });
   });
 
+  it("rejects a FIFO in staged workflow output before publication", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-workflow-fifo-"));
+    const generatedRoot = join(repoRoot, "packages/proto/generated");
+    const stageRoot = join(repoRoot, "packages/proto/.generated-fifo");
+    const stagedOutputRoot = join(stageRoot, "output");
+    try {
+      mkdirSync(generatedRoot, { recursive: true });
+      mkdirSync(stagedOutputRoot, { recursive: true });
+      writeFileSync(join(generatedRoot, "previous.txt"), "previous\n");
+      const created = spawnSync("mkfifo", [join(stagedOutputRoot, "unsafe.fifo")]);
+      if (created.status !== 0) throw new Error(created.stderr.toString());
+
+      expect(() =>
+        publishGeneratedTargets(
+          [
+            {
+              generatedRoot,
+              stagedOutputRoot,
+              stageRoot,
+              target: { displayPath: "packages/proto/generated" },
+            },
+          ],
+          repoRoot,
+        ),
+      ).toThrow("Staged generated output must contain only regular files and directories");
+      expect(readFileSync(join(generatedRoot, "previous.txt"), "utf8")).toBe("previous\n");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("fails closed when the staged Spine manifest is missing", () => {
     const repoRoot = todoTransactionFixture();
     mkdirSync(join(repoRoot, "packages/proto"), { recursive: true });
