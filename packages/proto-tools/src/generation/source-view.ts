@@ -78,6 +78,13 @@ export interface ModelSourceView {
   // prettier-ignore
 
   /**
+   * Complete same-module compiler inputs, including declarations and allowed JavaScript.
+   */
+  readonly compilerFiles?: readonly string[];
+
+  // prettier-ignore
+
+  /**
    * Absolute model package root used to resolve authored imports.
    */
   readonly packageRoot: string;
@@ -104,12 +111,20 @@ export interface PublicationSourceView extends ModelSourceView {
   // prettier-ignore
 
   /**
+   * Complete same-module compiler inputs captured by the publication transaction.
+   */
+  readonly compilerFiles: readonly string[];
+
+  // prettier-ignore
+
+  /**
    * Fingerprint of configured authored sources and recursive TypeScript configuration inputs.
    */
   readonly inventoryDigest: string;
 }
 
 interface ProjectConfigView {
+  readonly allowJs: boolean;
   readonly configFiles: readonly string[];
 }
 
@@ -148,6 +163,7 @@ function projectConfig(root: string): ProjectConfigView | undefined {
   for (const file of files)
     if (!texts.has(file)) texts.set(file, SourceViewInputs.read(file).toString("utf8"));
   return Object.freeze({
+    allowJs: parsed.options.allowJs === true,
     configFiles: Object.freeze(files),
   });
 }
@@ -169,6 +185,7 @@ function inventoryDigest(files: readonly string[], configs: readonly string[] = 
 
 interface SourceInventory {
   readonly authoredFiles: readonly string[];
+  readonly compilerFiles: readonly string[];
   readonly digest: string;
 }
 
@@ -178,12 +195,14 @@ function sourceInventory(root: string, generated: string): SourceInventory {
   const excluded = [generated, "dist"];
   const siblingStage = join(generatedDirectory, `.${generatedName}.stage-`);
   const siblingBackup = join(generatedDirectory, `.${generatedName}.`);
-  const candidates = collectAuthored(root, [...excluded, siblingStage, siblingBackup]);
   const config = projectConfig(root);
-  const authoredFiles = Object.freeze(candidates);
+  const inputs = collectAuthored(root, [...excluded, siblingStage, siblingBackup], config?.allowJs);
+  const authoredFiles = Object.freeze(inputs.authoredFiles);
+  const compilerFiles = Object.freeze(inputs.compilerFiles);
   return Object.freeze({
     authoredFiles,
-    digest: inventoryDigest(authoredFiles, config?.configFiles),
+    compilerFiles,
+    digest: inventoryDigest(compilerFiles, config?.configFiles),
   });
 }
 
@@ -203,8 +222,13 @@ export function assertSourceViewCurrent(sourceView: PublicationSourceView): void
   throw new Error("spine-proto: authored interface source view changed during generation");
 }
 
-function collectAuthored(root: string, excluded: readonly string[]): readonly string[] {
-  const files: string[] = [];
+function collectAuthored(
+  root: string,
+  excluded: readonly string[],
+  allowJs = false,
+): Readonly<{ authoredFiles: readonly string[]; compilerFiles: readonly string[] }> {
+  const authoredFiles: string[] = [];
+  const compilerFiles: string[] = [];
   const pending = [{ path: root, depth: 0 }];
   let entries = 0;
   while (pending.length > 0) {
@@ -229,22 +253,32 @@ function collectAuthored(root: string, excluded: readonly string[]): readonly st
       )
         continue;
       const entry = lstatSync(path);
+      const isTypeScript = [".cts", ".mts", ".ts", ".tsx"].some((extension) =>
+        name.endsWith(extension),
+      );
+      const isAllowedJavaScript =
+        allowJs && [".cjs", ".js", ".jsx", ".mjs"].some((extension) => name.endsWith(extension));
+      const isCompilerInput = isTypeScript || isAllowedJavaScript;
       if (entry.isSymbolicLink()) {
-        if ([".cts", ".mts", ".ts", ".tsx"].some((extension) => name.endsWith(extension)))
-          throw new Error(nonRegularInputDiagnostic);
+        if (isCompilerInput) throw new Error(nonRegularInputDiagnostic);
         continue;
       }
       if (entry.isDirectory()) pending.push({ path, depth: current.depth + 1 });
-      else if (
-        [".cts", ".mts", ".ts", ".tsx"].some((extension) => name.endsWith(extension)) &&
-        !name.endsWith(".d.ts")
-      ) {
+      else if (isCompilerInput) {
         if (!entry.isFile()) throw new Error(nonRegularInputDiagnostic);
-        files.push(path);
+        compilerFiles.push(path);
+        if (
+          isTypeScript &&
+          ![".d.cts", ".d.mts", ".d.ts"].some((extension) => name.endsWith(extension))
+        )
+          authoredFiles.push(path);
       }
     }
   }
-  return files.sort();
+  return Object.freeze({
+    authoredFiles: Object.freeze(authoredFiles.sort()),
+    compilerFiles: Object.freeze(compilerFiles.sort()),
+  });
 }
 
 /**
@@ -266,6 +300,7 @@ export function modelSourceView(
   const inventory = sourceInventory(root, generated);
   return Object.freeze({
     authoredFiles: inventory.authoredFiles,
+    compilerFiles: inventory.compilerFiles,
     inventoryDigest: inventory.digest,
     packageRoot: root,
     liveGeneratedRoot,

@@ -1630,6 +1630,46 @@ describe("spine proto model tooling", () => {
     );
   });
 
+  it("preserves prior output when a transitive local declaration changes", () => {
+    expectSourceViewMutationRollback(
+      "transitive-declaration-mutation-model",
+      (model) => {
+        writeFileSync(
+          join(model, "src/child.ts"),
+          'import type { Helper } from "./helper.js";\nexport interface Child { readonly helper: Helper }\n',
+        );
+        writeFileSync(join(model, "src/helper.d.ts"), "export interface Helper {}\n");
+        writeJson(model, "tsconfig.json", { files: ["src/child.ts"] });
+      },
+      (model) => {
+        writeFileSync(
+          join(model, "src/helper.d.ts"),
+          "export interface Helper { readonly changed: string }\n",
+        );
+      },
+    );
+  });
+
+  it("preserves prior output when a transitive allowed JavaScript helper changes", () => {
+    expectSourceViewMutationRollback(
+      "transitive-javascript-mutation-model",
+      (model) => {
+        writeFileSync(
+          join(model, "src/child.ts"),
+          'import { helper } from "./helper.js";\nexport interface Child { readonly value: typeof helper }\n',
+        );
+        writeFileSync(join(model, "src/helper.js"), "export const helper = 1;\n");
+        writeJson(model, "tsconfig.json", {
+          compilerOptions: { allowJs: true },
+          files: ["src/child.ts"],
+        });
+      },
+      (model) => {
+        writeFileSync(join(model, "src/helper.js"), "export const helper = 'changed';\n");
+      },
+    );
+  });
+
   it("preserves prior output when an authored source becomes a FIFO after capture", () => {
     const model = packageDirectory("@example/source-fifo-mutation-model");
     const authored = join(model, "src/authored.ts");

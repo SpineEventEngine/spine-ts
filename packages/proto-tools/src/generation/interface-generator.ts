@@ -44,6 +44,7 @@ export function stagedSourceView(cwd: string = process.cwd()): ModelSourceView |
     throw new Error("spine-proto: invalid staged source view");
   const view = value as {
     readonly authoredFiles?: unknown;
+    readonly compilerFiles?: unknown;
     readonly liveGeneratedRoot?: unknown;
     readonly packageRoot?: unknown;
     readonly stagedGeneratedRoot?: unknown;
@@ -57,14 +58,17 @@ export function stagedSourceView(cwd: string = process.cwd()): ModelSourceView |
     typeof view.packageRoot !== "string" ||
     typeof view.stagedGeneratedRoot !== "string" ||
     typeof view.liveGeneratedRoot !== "string" ||
-    !Array.isArray(view.authoredFiles)
+    !Array.isArray(view.authoredFiles) ||
+    !Array.isArray(view.compilerFiles)
   )
     throw new Error("spine-proto: invalid staged source view");
   const packageRoot = view.packageRoot;
   const stagedGeneratedRoot = view.stagedGeneratedRoot;
   const liveGeneratedRoot = view.liveGeneratedRoot;
   const rawAuthoredFiles = view.authoredFiles;
+  const rawCompilerFiles = view.compilerFiles;
   const authoredFiles = rawAuthoredFiles.filter((file): file is string => typeof file === "string");
+  const compilerFiles = rawCompilerFiles.filter((file): file is string => typeof file === "string");
   const liveParent = dirname(liveGeneratedRoot);
   const liveName = basename(liveGeneratedRoot);
   const transactionStage = join(liveParent, `.${liveName}.stage-`);
@@ -82,7 +86,9 @@ export function stagedSourceView(cwd: string = process.cwd()): ModelSourceView |
     resolve(liveGeneratedRoot) !== liveGeneratedRoot ||
     !within(packageRoot, liveGeneratedRoot) ||
     authoredFiles.length !== rawAuthoredFiles.length ||
-    authoredFiles.some(
+    compilerFiles.length !== rawCompilerFiles.length ||
+    authoredFiles.some((file) => !compilerFiles.includes(file)) ||
+    [...authoredFiles, ...compilerFiles].some(
       (file) =>
         !isAbsolute(file) ||
         resolve(file) !== file ||
@@ -95,6 +101,7 @@ export function stagedSourceView(cwd: string = process.cwd()): ModelSourceView |
     throw new Error("spine-proto: invalid staged source view");
   return Object.freeze({
     authoredFiles: Object.freeze(authoredFiles.map((file) => file)),
+    compilerFiles: Object.freeze(compilerFiles.map((file) => file)),
     liveGeneratedRoot,
     packageRoot,
     stagedGeneratedRoot,

@@ -128,10 +128,9 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
     const authoredFiles = sourceView.authoredFiles.filter((file) =>
       configuredFiles.has(resolve(file)),
     );
+    const compilerFiles = sourceView.compilerFiles ?? sourceView.authoredFiles;
     const capturedAuthored = new Map(
-      sourceView.authoredFiles.map(
-        (file) => [resolve(file), SourceSnapshotFiles.read(file)] as const,
-      ),
+      compilerFiles.map((file) => [resolve(file), SourceSnapshotFiles.read(file)] as const),
     );
     const host = ts.createCompilerHost(parsed.options);
     const redirect = (path: string) => {
@@ -174,7 +173,7 @@ export class AuthoredInterfaceProvider implements InterfaceDeclarationProvider {
       const pathRelative = relative(root, path);
       return pathRelative === "" || (!pathRelative.startsWith("..") && !isAbsolute(pathRelative));
     };
-    for (const file of sourceView.authoredFiles) {
+    for (const file of sourceView.compilerFiles ?? sourceView.authoredFiles) {
       const candidate = canonicalPath(file);
       if (candidate === dist || candidate.startsWith(`${dist}/`))
         throw new Error(

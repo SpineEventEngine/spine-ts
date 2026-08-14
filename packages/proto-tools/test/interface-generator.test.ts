@@ -365,6 +365,7 @@ describe("InterfaceGenerator", () => {
     };
     const valid = {
       authoredFiles: [authored],
+      compilerFiles: [authored],
       liveGeneratedRoot,
       packageRoot,
       stagedGeneratedRoot,
@@ -379,6 +380,7 @@ describe("InterfaceGenerator", () => {
         { ...valid, stagedGeneratedRoot: join(root, "wrong-output") },
         { ...valid, liveGeneratedRoot: join(root, "outside") },
         { ...valid, authoredFiles: [join(liveGeneratedRoot, "live.ts")] },
+        { ...valid, compilerFiles: [join(root, "outside.ts")] },
         { ...valid, authoredFiles: [join(packageRoot, "src/.generated.stage-1/staged.ts")] },
         { ...valid, authoredFiles: [join(packageRoot, "src/.generated.1.backup/old.ts")] },
       ]) {

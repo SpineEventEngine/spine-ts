@@ -74,7 +74,6 @@ describe("modelSourceView", () => {
   it("detects a recursively extended tsconfig byte mutation", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-source-view-tsconfig-"));
     try {
-      writeFileSync(join(root, "tsconfig.json"), "{}\n");
       mkdirSync(join(root, "src"));
       writeFileSync(join(root, "tsconfig.json"), JSON.stringify({ extends: "./base.json" }));
       writeFileSync(join(root, "base.json"), JSON.stringify({ compilerOptions: { strict: true } }));
@@ -94,7 +93,7 @@ describe("modelSourceView", () => {
   it("excludes live generated, stage, backup, and declaration trees while redirecting to stage", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-source-view-"));
     try {
-      writeFileSync(join(root, "tsconfig.json"), "{}\n");
+      writeFileSync(join(root, "tsconfig.json"), '{"compilerOptions":{"allowJs":true}}\n');
       for (const path of [
         "src",
         "src/dist",
@@ -106,6 +105,8 @@ describe("modelSourceView", () => {
         mkdirSync(join(root, path));
       writeFileSync(join(root, "src/authored.ts"), "export interface Authored {}\n");
       writeFileSync(join(root, "src/dist/local.ts"), "export interface Local {}\n");
+      writeFileSync(join(root, "src/types.d.ts"), "export interface Declared {}\n");
+      writeFileSync(join(root, "src/helper.js"), "export const helper = true;\n");
       writeFileSync(join(root, "src/generated/live.ts"), "export {};\n");
       writeFileSync(join(root, "src/.generated.stage-1/staged.ts"), "export {};\n");
       writeFileSync(join(root, "src/.generated.a.backup/backup.ts"), "export {};\n");
@@ -118,6 +119,12 @@ describe("modelSourceView", () => {
       expect(view.authoredFiles).toEqual([
         join(root, "src/authored.ts"),
         join(root, "src/dist/local.ts"),
+      ]);
+      expect(view.compilerFiles).toEqual([
+        join(root, "src/authored.ts"),
+        join(root, "src/dist/local.ts"),
+        join(root, "src/helper.js"),
+        join(root, "src/types.d.ts"),
       ]);
       expect(view.stagedGeneratedRoot).toBe(join(root, "src/.generated.stage-x/output"));
     } finally {
