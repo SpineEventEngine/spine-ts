@@ -120,3 +120,16 @@ repository ESLint run, the five focused routing suites (262/262
 tests), tooling typecheck, TypeDoc/API checks, format check, and diff check
 pass after the correction. The branch is ready for the orchestrator's final
 release attempt; this implementation context did not rerun `verify:release`.
+
+## Second Release Cleanup Correction
+
+The second `verify:release` attempt cleared full-repository ESLint and then
+stopped at cleanup, before tests, because `readOnlyMap()#1` had no exact
+standalone-function necessity disposition. The canonical T-0080F ledger now
+records its TypeScript immutable-collection boundary: it creates the frozen
+map facade required to preserve `forEach` callback identity without exposing
+mutable declaration storage. No routing behavior or API changed.
+
+`pnpm lint:cleanup`, full ESLint, and the five focused routing suites (262/262)
+pass after the ledger correction. This context did not rerun `verify:release`;
+the branch is ready for the orchestrator's next release-profile attempt.

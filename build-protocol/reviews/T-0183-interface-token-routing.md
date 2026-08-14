@@ -125,3 +125,19 @@ available acceptance evidence.
   finding. The branch is ready for the orchestrator's final `verify:release`
   attempt; this context did not rerun that profile. Correction checkpoint:
   `b6ca9ab7`.
+
+## Second Release Cleanup Correction
+
+- Release RED: the second `verify:release` attempt cleared full-repository
+  ESLint and stopped at cleanup before tests. Cleanup reported the missing
+  exact necessity disposition for
+  `packages/server/src/repository/routing-declarations.ts:53 readOnlyMap()#1`.
+- Resolution: add one exact `necessity` row to the canonical T-0080F
+  standalone-function ledger. The row documents the TypeScript
+  immutable-collection boundary: `readOnlyMap` builds the frozen facade that
+  preserves callback map identity without exposing mutable declaration state.
+- GREEN evidence: `pnpm lint:cleanup`, full `pnpm exec eslint .`, the five
+  focused routing suites (262/262), `pnpm format:check`, and `git diff --check`
+  pass. No behavior, public API, persistence, or replay semantics changed.
+- This context did not rerun `verify:release`; the branch is ready for the
+  orchestrator's next release-profile attempt.

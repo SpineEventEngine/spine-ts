@@ -478,6 +478,15 @@
   },
   {
     "rule": "standalone-function",
+    "file": "packages/server/src/repository/routing-declarations.ts",
+    "kind": "function-declaration",
+    "identity": "readOnlyMap()#1",
+    "name": "readOnlyMap",
+    "disposition": "necessity",
+    "reason": "TypeScript immutable-collection boundary: readOnlyMap creates a frozen facade that preserves callback map identity without exposing mutable declaration storage."
+  },
+  {
+    "rule": "standalone-function",
     "file": "packages/server/src/runtime/runtime-routing.ts",
     "kind": "function-declaration",
     "identity": "createContextRoutingPlan()#1",
