@@ -93,3 +93,10 @@ rerunning it here.
 The release profile again found only the interface-opening separator placement.
 Both markers now precede their first member documentation, and the exact
 post-generation formatting/TSDoc sequence passes twice.
+
+## Release Test Fixture Correction
+
+The release profile reached tests after all gates. Bootstrap tests now document
+the internal fixed options object and live-root propagation. The ordered
+MessageBoard fixture emits valid generated provenance so the production guard
+remains strict and the final verification barrier is exercised.
