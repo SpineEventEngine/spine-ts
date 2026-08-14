@@ -161,3 +161,10 @@ pending implementation continuation.
   types using `*Event` aliases and adds canonical lifecycle handler TSDoc.
   Formatting, cleanup, TSDoc, ESLint, tooling typecheck, and diff hygiene pass;
   individual black-box confirmation remains pending before coverage.
+
+## Coverage Invocation Correction
+
+- A non-authoritative coverage run named raw `src/index.ts` and omitted
+  `src/process.ts`; it was cancelled and is not evidence. The authoritative
+  source list uses compiled `dist/src/index.js`, smoke helpers, and process
+  helpers.

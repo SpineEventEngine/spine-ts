@@ -114,3 +114,9 @@ least 90%, cheap preflight, and bounded `verify:task` with loopback permissions.
 - Formatting, TSDoc before and after formatting, cleanup, ESLint, tooling
   typecheck, and diff hygiene are green. Individual black-box confirmation is
   pending before the single coverage-enabled task gate.
+
+## Superseded Coverage Invocation
+
+- A coverage task-profile invocation with raw `src/index.ts` and no
+  `src/process.ts` was cancelled before acceptance. It is non-authoritative and
+  provides no coverage evidence; the corrected source set is pending.
