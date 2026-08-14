@@ -92,9 +92,7 @@ export function writeSpineProtoArtifacts(repoRoot, generatedRoot, manifestOutput
   };
   let generationId = randomUUID();
   try {
-    const previous = JSON.parse(
-      readFileSync(join(packageRoot, "spine-proto-manifest.json"), "utf8"),
-    );
+    const previous = JSON.parse(readFileSync(manifestOutput, "utf8"));
     const { generationId: previousId, ...previousContents } = previous;
     if (
       typeof previousId === "string" &&

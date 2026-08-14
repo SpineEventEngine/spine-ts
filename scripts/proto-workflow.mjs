@@ -290,6 +290,30 @@ function generatedTreeContents(root) {
   return files.sort(([left], [right]) => left.localeCompare(right));
 }
 
+function canonicalJson(value) {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (typeof value === "object" && value !== null)
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, nested]) => [key, canonicalJson(nested)]),
+    );
+  return value;
+}
+
+function generationMarkerId(generatedRoot) {
+  try {
+    const marker = JSON.parse(
+      readFileSync(join(generatedRoot, ".spine-proto-generation.json"), "utf8"),
+    );
+    return typeof marker.generationId === "string" && marker.generationId.length > 0
+      ? marker.generationId
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function reuseStagedGenerationId(livePackageRoot, stagedPackageRoot, stagedOutputRoot) {
   const liveManifestPath = join(livePackageRoot, "spine-proto-manifest.json");
   const stagedManifestPath = join(stagedPackageRoot, "spine-proto-manifest.json");
@@ -311,13 +335,24 @@ function reuseStagedGenerationId(livePackageRoot, stagedPackageRoot, stagedOutpu
   const { generationId: liveGenerationId, ...liveContents } = liveManifest;
   const stagedContents = { ...stagedManifest };
   delete stagedContents.generationId;
+  const matches = {
+    format: liveManifest.formatVersion === 2,
+    liveId: typeof liveGenerationId === "string" && liveGenerationId.length > 0,
+    liveMarker: generationMarkerId(liveOutputRoot) === liveGenerationId,
+    stagedMarker: generationMarkerId(stagedOutputRoot) === stagedManifest.generationId,
+    manifest:
+      JSON.stringify(canonicalJson(liveContents)) === JSON.stringify(canonicalJson(stagedContents)),
+    tree:
+      JSON.stringify(generatedTreeContents(liveOutputRoot)) ===
+      JSON.stringify(generatedTreeContents(stagedOutputRoot)),
+  };
   if (
-    liveManifest.formatVersion !== 2 ||
-    typeof liveGenerationId !== "string" ||
-    liveGenerationId.length === 0 ||
-    JSON.stringify(liveContents) !== JSON.stringify(stagedContents) ||
-    JSON.stringify(generatedTreeContents(liveOutputRoot)) !==
-      JSON.stringify(generatedTreeContents(stagedOutputRoot))
+    !matches.format ||
+    !matches.liveId ||
+    !matches.liveMarker ||
+    !matches.stagedMarker ||
+    !matches.manifest ||
+    !matches.tree
   )
     return;
   stagedManifest.generationId = liveGenerationId;

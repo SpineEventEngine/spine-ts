@@ -2626,6 +2626,17 @@ describe("spine proto model tooling", () => {
     expect(() => createManifest(application)).toThrow(
       "spine-proto: @example/operation-application: manifest requires model mode",
     );
+    writeInstalledManifest(application, {
+      packageName: "@example/operation-application",
+      packageVersion: "1.2.3",
+      protoFiles: [],
+      generatedExports: {},
+      dependencies: [],
+      moduleExport: "applicationProtoModule",
+    });
+    expect(() => readManifest(application)).toThrow(
+      "spine-proto: @example/operation-application: manifest requires model mode",
+    );
     expect(() => {
       generateModel(application);
     }).toThrow("generate requires model mode");

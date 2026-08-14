@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { baselineObservesStructureEntry, movedChatBaselinePath } from "./check-cleanup-rules.mjs";
+import {
+  baselineObservesStructureEntry,
+  checkCleanupRules,
+  movedChatBaselinePath,
+} from "./check-cleanup-rules.mjs";
 
 const scriptPath = new URL("./check-cleanup-rules.mjs", import.meta.url).pathname;
 
@@ -210,6 +214,30 @@ describe("check-cleanup-rules", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("tracked generated files under packages/*/generated");
     expect(result.stderr).toContain("generated directories not ignored by Git");
+  });
+
+  it("permits only the committed generated-root publication marker", () => {
+    const repoRoot = createFixture();
+    const generatedRoot = join(repoRoot, "packages/demo/generated");
+    mkdirSync(generatedRoot, { recursive: true });
+    writeFileSync(
+      join(generatedRoot, ".spine-proto-generation.json"),
+      '{"generationId":"fixture-generation"}\n',
+    );
+    run("git", ["add", "-f", "packages/demo/generated/.spine-proto-generation.json"], repoRoot);
+    run("git", ["commit", "-m", "generated marker"], repoRoot);
+
+    expect(checkCleanupRules(repoRoot)).toEqual([]);
+
+    writeFileSync(join(generatedRoot, "owned_pb.ts"), "export {};\n");
+    run("git", ["add", "-f", "packages/demo/generated/owned_pb.ts"], repoRoot);
+    run("git", ["commit", "-m", "generated source"], repoRoot);
+
+    expect(checkCleanupRules(repoRoot)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ title: "tracked generated files under packages/*/generated" }),
+      ]),
+    );
   });
 
   it("rejects long lines, callback names, callback types, and long semantic names", () => {

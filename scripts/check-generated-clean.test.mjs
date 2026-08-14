@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import {
   checkMessageBoardRegistryFresh,
   generatedTargetsForCheck,
+  runGeneratedClean,
 } from "./check-generated-clean.mjs";
 
 const scriptPath = new URL("./check-generated-clean.mjs", import.meta.url).pathname;
@@ -165,6 +166,8 @@ describe("check-generated-clean", () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("already-generated");
+
+    expect(runGeneratedClean(["--repo-root", repoRoot, "--current-output"])).toBe(0);
   });
 
   it("compares every atomic model output by default", () => {

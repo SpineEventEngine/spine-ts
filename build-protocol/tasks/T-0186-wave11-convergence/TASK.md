@@ -74,12 +74,13 @@ close the Wave.
 
 ## Coverage Closure Status (2026-08-14)
 
-- In progress, not review-ready. Valid single-worker V8 evidence covers the
-  proto-tools changed publication behavior at 32/32 executable lines and 20/20
-  branches in `generator.ts`; `index.ts` has one remaining model-mode rejection
-  line/branch. Core descriptor validation has 27/28 changed executable lines
-  and 34/38 branches; the exact outstanding locations are retained in the work
-  log. No release or review gate has been started.
+- Closed for implementation convergence. A fresh serial seven-suite V8 run
+  passed `379/379` tests. Its retained LCOV, intersected with added executable
+  points from `origin/main` through the current worktree, covers **150/154
+  changed executable lines (97.40%)** and **120/128 changed branches (93.75%)**
+  across all nine changed production sources. Exact per-source results and the
+  bounded defensive misses are retained in the work log. No release or review
+  gate has been started.
 
 ## Convergence Evidence (2026-08-14)
 

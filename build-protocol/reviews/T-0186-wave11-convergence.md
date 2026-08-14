@@ -128,3 +128,14 @@ by this fix pass.
   tracked generated output. Focused regression: 10 checker tests passed; the
   current-output gate passed after repeated generation. No reviewer was
   dispatched; this mechanical correction is re-review-ready.
+
+## Coverage Closure Evidence (2026-08-14)
+
+- Fresh workflow verification passed `77/77`; the fresh serial affected-source
+  profile passed seven files and `379/379` tests.
+- Exact changed-source coverage from retained LCOV is **150/154 executable
+  lines (97.40%)** and **120/128 branches (93.75%)** across the nine changed
+  production sources. The remaining misses are bounded CLI/defensive fallback
+  paths, not omitted normal-transaction behavior.
+- Coverage is mechanically converged. Specialist and security review remain
+  undispatched pending the complete cheap preflight and its durable evidence.

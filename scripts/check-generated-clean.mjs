@@ -199,8 +199,8 @@ function printGeneratedDiff(diff) {
   }
 }
 
-function main() {
-  const { repoRoot, expectedGeneratedRoot, currentOutput } = parseArgs(process.argv.slice(2));
+export function runGeneratedClean(args = process.argv.slice(2)) {
+  const { repoRoot, expectedGeneratedRoot, currentOutput } = parseArgs(args);
   if (expectedGeneratedRoot !== undefined && currentOutput) {
     throw new Error("--current-output cannot be combined with --expected-generated-root.");
   }
@@ -356,7 +356,7 @@ const isMain =
 
 if (isMain) {
   try {
-    process.exit(main());
+    process.exit(runGeneratedClean());
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);

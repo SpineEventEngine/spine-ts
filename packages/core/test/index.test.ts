@@ -96,7 +96,11 @@ describe("MessageInterfaces", () => {
       const descriptor = {
         kind: "message",
         typeName: "example.Deep",
-        file: { kind: "file", messages: [] as unknown[] },
+        file: {
+          kind: "file",
+          messages: [] as unknown[],
+          proto: { $typeName: "google.protobuf.FileDescriptorProto" },
+        },
         proto: { $typeName: "google.protobuf.DescriptorProto" },
       };
       let root: object = descriptor;
@@ -107,7 +111,11 @@ describe("MessageInterfaces", () => {
     const descriptorWithMessages = (messages: unknown[]) => ({
       kind: "message",
       typeName: "example.Malicious",
-      file: { kind: "file", messages },
+      file: {
+        kind: "file",
+        messages,
+        proto: { $typeName: "google.protobuf.FileDescriptorProto" },
+      },
       proto: { $typeName: "google.protobuf.DescriptorProto" },
     });
     const cyclicDescriptorNode: { nestedMessages?: unknown[] } = {};
@@ -158,10 +166,15 @@ describe("MessageInterfaces", () => {
       {
         kind: "message",
         typeName: "example.Excessive",
-        file: { kind: "file", messages: excessiveDescriptorRoots },
+        file: {
+          kind: "file",
+          messages: excessiveDescriptorRoots,
+          proto: { $typeName: "google.protobuf.FileDescriptorProto" },
+        },
         proto: { $typeName: "google.protobuf.DescriptorProto" },
       },
       deeplyNestedDescriptor,
+      descriptorWithMessages([{}]),
       descriptorWithMessages([cyclicDescriptorNode]),
       descriptorWithMessages([{ nestedMessages: {} }]),
     ];
