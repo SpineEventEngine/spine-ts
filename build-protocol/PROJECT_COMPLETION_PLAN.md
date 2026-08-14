@@ -1,8 +1,7 @@
 # Spine TS Project Completion Plan
 
-Status: Initial release, T-0080 authored-API/example quality correction, and
-Waves 9, 10, and 11 complete, integrated, tagged, post-merge verified, and
-remotely synchronized
+Status: Waves 9, 10, and 11 complete and integrated; agentic-review remediation
+Waves 12 through 17 are active ahead of the previously deferred roadmap
 
 Plan date: 2026-07-12
 
@@ -183,9 +182,26 @@ durably closed.
   copyright headers, and beginner documentation. T-0178 owns the approved plan in
   `build-protocol/planning/WAVE_11_TS_TYPE_ROUTING_PLAN.md`; D-0113 records the
   accepted architecture decision.
-- **Wave 12:** multiple-Gateway behavior, subject to a future human Q&A and
-  planning task. Wave 11 creates no provisional Gateway API. Cloud Run remains
-  outside the initial offering.
+- **Wave 12:** correct sustained browser subscription delivery, MySQL
+  query-plan execution, finite Inbox retention, and confirmed runtime-document
+  mismatches.
+- **Wave 13:** secure distributed node reachability by default and remediate
+  current dependency advisories with an explicit networked audit lane.
+- **Wave 14:** make provider coverage and JVM interoperability claims match
+  executable release evidence.
+- **Wave 15:** add deliberate registry-integrity and tenant-admission controls.
+- **Wave 16:** establish publishable runtime/tooling/auth and cross-package SPI
+  boundaries.
+- **Wave 17:** add deliberate same-process cross-context event exchange.
+- **Wave 18:** multiple-Gateway behavior, subject to a future human Q&A and
+  planning task. Earlier Waves create no provisional multiple-Gateway API.
+  Cloud Run remains outside the initial offering.
+
+The validated findings, rejected claims, dependency reasoning, and mandatory
+ordering are frozen in
+`build-protocol/planning/AGENTIC_REVIEW_REMEDIATION_PLAN.md`. Every roadmap item
+that was previously deferred beyond Wave 11 moves behind this remediation
+sequence.
 
 Wave 6 Q&A, its original implementation, review, release verification,
 integration, and documentation closure are complete. T-0113 records the
@@ -239,12 +255,14 @@ compiler input snapshots, and rollback. T-0183 added interface-token routing
 for Command, Event, and state updates. All four are reviewed, release-verified,
 integrated, post-merge verified, tagged, and remotely synchronized. The
 T-0184A root source-view transaction prerequisite and the resumed T-0184 To-Do
-proof and beginner documentation are complete, integrated, post-merge verified,
-and tagged. T-0186 closed manifest/marker publication, bounded recovery and
+proof and beginner documentation are complete, integrated, and post-merge verified.
+T-0186 closed manifest/marker publication, bounded recovery and
 claim trust, package-build convergence, specialist/security review, repository
 coverage, release verification, and post-merge proof. Wave 11 is complete at
-tag `T-0186`; `origin/main` and the preserved task branch are remotely
-synchronized. Multiple-Gateway behavior moves wholly to Wave 12. See
+the reviewed history now contained in `origin/main`. In accordance with the
+repository cleanup policy, the remote has only `main` and no tags. The validated
+agentic-review remediation occupies Waves 12 through 17; multiple-Gateway
+behavior moves wholly to Wave 18. See
 `build-protocol/DECISION_LOG.md#d-0113-generate-typescript-message-interfaces-and-route-by-their-tokens`.
 
 ## Authored API And Example Quality Correction
