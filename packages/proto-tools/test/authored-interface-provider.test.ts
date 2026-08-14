@@ -115,6 +115,36 @@ describe("AuthoredInterfaceProvider", () => {
     }
   });
 
+  it("uses tsconfig file membership instead of the broad source-view inventory", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-tsconfig-membership-"));
+    const stagedGeneratedRoot = join(root, ".generated.stage-1/output");
+    const liveGeneratedRoot = join(root, "src/generated");
+    const authored = join(root, "src/excluded.ts");
+    try {
+      mkdirSync(join(stagedGeneratedRoot, "example"), { recursive: true });
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(join(root, "tsconfig.json"), JSON.stringify({ files: ["src/included.ts"] }));
+      writeFileSync(join(root, "src/included.ts"), "export interface Included {}\n");
+      writeFileSync(authored, "export interface SignalFamily {}\n");
+      writeFileSync(join(stagedGeneratedRoot, "example/signals_pb.ts"), "export type Signal = {};\n");
+      expect(() =>
+        new AuthoredInterfaceProvider().resolve(
+          "SignalFamily",
+          [
+            {
+              file: { proto: { name: "example/signals.proto", package: "example" } },
+              name: "Signal",
+              typeName: "example.Signal",
+            } as DescMessage,
+          ],
+          { authoredFiles: [authored], liveGeneratedRoot, packageRoot: root, stagedGeneratedRoot },
+        ),
+      ).toThrow("missing top-level interface");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("reports stable declaration-shape diagnostics before compatibility analysis", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-diagnostics-"));
     const stagedGeneratedRoot = join(root, ".generated.stage-1/output");
