@@ -515,18 +515,13 @@ export class TaskAssigneeProjection extends Projection<UserId, typeof TaskAssign
  */
 export async function createTodoContext(): Promise<BoundedContext> {
   const taskListRouting = EventRouting.create<TaskListId>()
-    .route(TaskEvent, (event) =>
-      event.taskListId === undefined ? [] : [clone(TaskListIdSchema, event.taskListId)],
-    )
+    .route(TaskEvent, (event) => [taskListIds.require(event.taskListId)])
     .route(TaskAlreadyDoneSchema, (event) => taskListIds.fromTaskId(event.id))
     .route(TaskNotDoneSchema, (event) => taskListIds.fromTaskId(event.id));
   const assigneeRouting = EventRouting.create<UserId>()
-    .route(TaskAssignmentEventToken, (event) =>
-      event.assignee === undefined ? [] : [clone(UserIdSchema, event.assignee)],
-    )
+    .route(TaskAssignmentEventToken, (event) => [assignees.require(event.assignee)])
     .route(TaskReassignedSchema, (event) => {
-      if (event.previousAssignee === undefined || event.assignee === undefined) return [];
-      return [clone(UserIdSchema, event.previousAssignee), clone(UserIdSchema, event.assignee)];
+      return [assignees.require(event.previousAssignee), assignees.require(event.assignee)];
     });
   return BoundedContext.singleTenant("Tasks")
     .withGeneratedRegistryRoot(new URL("..", import.meta.url))
