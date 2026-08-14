@@ -2028,6 +2028,34 @@ describe("spine proto model tooling", () => {
     }
   });
 
+  it("rejects a symlinked direct generation stage before it can replace committed output", () => {
+    const model = packageDirectory("@example/direct-staged-symlink");
+    try {
+      writeJson(model, "spine-proto.json", modelConfig("@example/direct-staged-symlink"));
+      mkdirSync(join(model, "proto"), { recursive: true });
+      mkdirSync(join(model, "src/generated"), { recursive: true });
+      writeFileSync(join(model, "proto/model.proto"), 'syntax = "proto3"; message Model {}\n');
+      writeFileSync(join(model, "src/generated/prior.ts"), "prior output\n");
+      writeFileSync(join(model, "spine-proto-manifest.json"), "prior manifest\n");
+      writeFileSync(join(model, "outside.ts"), "outside\n");
+
+      expect(() => {
+        generateModel(model, {
+          runBuf: (_, output) => {
+            generatedOutput("", output);
+            symlinkSync(join(model, "outside.ts"), join(output, "unsafe.ts"));
+          },
+        });
+      }).toThrow("generated source traversal must not contain symlinks");
+      expect(readFileSync(join(model, "src/generated/prior.ts"), "utf8")).toBe("prior output\n");
+      expect(readFileSync(join(model, "spine-proto-manifest.json"), "utf8")).toBe(
+        "prior manifest\n",
+      );
+    } finally {
+      rmSync(model, { recursive: true, force: true });
+    }
+  });
+
   it("fails a malformed manifest immediately when no generation claim is live", () => {
     const model = packageDirectory("@example/no-claim-manifest-read");
     try {
@@ -2050,6 +2078,29 @@ describe("spine proto model tooling", () => {
       writeFileSync(join(model, "spine-proto-manifest.json"), "not json\n");
 
       expect(() => readManifest(model)).toThrow("cannot read spine-proto-manifest.json");
+    } finally {
+      rmSync(model, { recursive: true, force: true });
+    }
+  });
+
+  it.each([1_000, 1_001])("bounds manifest-reader claim scans at %i entries", (entries) => {
+    const model = packageDirectory(`@example/manifest-claim-bound-${String(entries)}`);
+    try {
+      writeJson(
+        model,
+        "spine-proto.json",
+        modelConfig(`@example/manifest-claim-bound-${String(entries)}`),
+      );
+      for (let index = 0; index < entries; index += 1)
+        writeFileSync(
+          join(model, `.spine-proto-generate.lock.${String(index)}`),
+          JSON.stringify({ pid: 999_999_999, token: String(index) }),
+        );
+      writeFileSync(join(model, "spine-proto-manifest.json"), "not json\n");
+
+      const read = () => readManifest(model);
+      if (entries === 1_000) expect(read).toThrow("cannot read spine-proto-manifest.json");
+      else expect(read).toThrow("generation claim count exceeds 1000");
     } finally {
       rmSync(model, { recursive: true, force: true });
     }

@@ -1168,7 +1168,8 @@ export function stageMessageBoardRegistry(root, options = {}) {
     fileStageRoot = mkdtempSync(join(dirname(target), ".generated-"));
     const staged = join(fileStageRoot, "model-registry.ts");
     writeFileSync(staged, withCopyrightHeader(readFileSync(rendered, "utf8")));
-    return { stageRoot, fileStageRoot, target, staged };
+    rmSync(stageRoot, { recursive: true, force: true });
+    return { fileStageRoot, target, staged };
   } catch (error) {
     rmSync(stageRoot, { recursive: true, force: true });
     if (fileStageRoot !== undefined) rmSync(fileStageRoot, { recursive: true, force: true });
@@ -1266,8 +1267,7 @@ export function generateTargets(options = {}) {
     }
   } catch (error) {
     primaryFailure = true;
-    if (messageBoardRegistry !== undefined) {
-      rmSync(messageBoardRegistry.stageRoot, { recursive: true, force: true });
+    if (messageBoardRegistry !== undefined && !existsSync(publicationJournalPath(root))) {
       rmSync(messageBoardRegistry.fileStageRoot, { recursive: true, force: true });
       messageBoardRegistry = undefined;
     }
@@ -1284,8 +1284,7 @@ export function generateTargets(options = {}) {
       primaryFailure = true;
       status = 1;
     }
-    if (messageBoardRegistry !== undefined) {
-      rmSync(messageBoardRegistry.stageRoot, { recursive: true, force: true });
+    if (messageBoardRegistry !== undefined && !existsSync(publicationJournalPath(root))) {
       rmSync(messageBoardRegistry.fileStageRoot, { recursive: true, force: true });
     }
     try {

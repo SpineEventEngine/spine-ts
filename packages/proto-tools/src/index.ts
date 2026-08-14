@@ -27,6 +27,7 @@ export const manifestFormatVersion = 2;
 const configFormatVersion = 1;
 const manifestReadAttempts = 3;
 const manifestReadRetryDelayMs = 25;
+const generationClaimScanLimit = 1_000;
 
 function waitForManifestCommit(): void {
   Atomics.wait(
@@ -42,8 +43,12 @@ function hasLiveGenerationClaim(packageRoot: string): boolean {
     const directory = opendirSync(packageRoot, { encoding: "utf8" });
     try {
       let entry;
+      let claims = 0;
       while ((entry = directory.readSync()) !== null) {
         if (!entry.name.startsWith(".spine-proto-generate.lock.") || !entry.isFile()) continue;
+        claims += 1;
+        if (claims > generationClaimScanLimit)
+          throw new Error("generation claim count exceeds 1000");
         const owner = JSON.parse(readFileSync(join(packageRoot, entry.name), "utf8")) as {
           pid?: unknown;
         };
@@ -58,7 +63,9 @@ function hasLiveGenerationClaim(packageRoot: string): boolean {
     } finally {
       directory.closeSync();
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === "generation claim count exceeds 1000")
+      throw error;
     return false;
   }
   return false;
