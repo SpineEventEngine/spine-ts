@@ -2988,6 +2988,32 @@ describe("spine proto model tooling", () => {
     );
   });
 
+  it("rejects a symlinked generated-root marker", () => {
+    const model = packageDirectory("@example/symlink-marker-model");
+    try {
+      writeJson(model, "spine-proto.json", modelConfig("@example/symlink-marker-model"));
+      mkdirSync(join(model, "src/generated"), { recursive: true });
+      writeJson(model, "marker.json", { generationId: "generation" });
+      symlinkSync("../../marker.json", join(model, "src/generated/.spine-proto-generation.json"));
+      writeJson(model, "spine-proto-manifest.json", {
+        formatVersion: 2,
+        generationId: "generation",
+        packageName: "@example/symlink-marker-model",
+        packageVersion: "1.2.3",
+        protoFiles: [],
+        generatedExports: {},
+        dependencies: [],
+        moduleExport: "modelProtoModule",
+      });
+
+      expect(() => readManifest(model)).toThrow(
+        "spine-proto: @example/symlink-marker-model: cannot read .spine-proto-generation.json",
+      );
+    } finally {
+      rmSync(model, { recursive: true, force: true });
+    }
+  });
+
   it("distinguishes model-only and application-only operations and validates supplied ownership", () => {
     const application = packageDirectory("@example/operation-application");
     writeJson(application, "spine-proto.json", {

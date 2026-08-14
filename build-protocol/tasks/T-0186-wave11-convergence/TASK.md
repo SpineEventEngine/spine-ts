@@ -304,3 +304,8 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   without iterator invocation and reject direct staged FIFO entries before
   publication while preserving committed state. Claim-release, marker, and
   workflow-tree trust boundaries remain in progress.
+## Security Marker Descriptor Checkpoint (2026-08-14)
+
+- Strict marker reads are now descriptor-based and fail closed for a symlinked
+  marker; focused RED/GREEN evidence is retained in the work log. Claim and
+  workflow trust-boundary corrections remain in progress.

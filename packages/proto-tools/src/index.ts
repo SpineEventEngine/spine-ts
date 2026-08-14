@@ -755,10 +755,15 @@ const ProtoPackage = Object.freeze({
   },
 
   readJson(path: string, name: string): unknown {
+    let descriptor: number | undefined;
     try {
-      return JSON.parse(readFileSync(path, "utf8"));
+      descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+      if (!fstatSync(descriptor).isFile()) throw new Error("unsafe JSON input");
+      return JSON.parse(readFileSync(descriptor, "utf8"));
     } catch {
       return ProtoPackageErrors.fail(name, `cannot read ${path.split(sep).at(-1) ?? path}`);
+    } finally {
+      if (descriptor !== undefined) closeSync(descriptor);
     }
   },
 

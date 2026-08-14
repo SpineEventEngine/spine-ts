@@ -413,3 +413,8 @@ will cover only these four corrected trust boundaries.
   accepted P2 descriptor iterator exposure and direct P1 staged FIFO exposure.
   The remaining accepted claim, marker, and workflow-tree findings are still
   in progress; final security verdict remains BLOCK pending re-review.
+## Security Marker Descriptor Checkpoint (2026-08-14)
+
+- Marker P1 has a TDD correction: strict JSON reads use a no-follow,
+  nonblocking regular descriptor and close it after reading. The symlink-marker
+  regression is GREEN; claim and workflow P1s remain open.
