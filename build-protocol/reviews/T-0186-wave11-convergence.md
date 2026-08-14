@@ -62,6 +62,9 @@ before acceptance. No review has started.
   recovery, generation claims, and cleanup.
 - Cheap preflight with focused changed-source coverage passed at
   `a4ce5fa88b886e12003c9a6a9d0710c094d0a002`; no release profile was run.
+- Pre-review records head `6a41476834bd459adf428bd1a09bdd415e16f4d5` is pushed
+  and clean. Direct audience, copyright, API-documentation, owned-record
+  formatting, and diff checks also pass.
 - No specialist reviewer was dispatched in this implementation pass. The
   configured reviewer profiles and desktop runtime-telemetry limitation remain
   the immutable assignment evidence until the orchestrator starts that wave.

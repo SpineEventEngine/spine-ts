@@ -102,3 +102,5 @@ close the Wave.
   `pnpm verify:task -- --coverage scripts/normalize-generated-declarations.test.mjs
 --source scripts/normalize-generated-declarations.mjs`. It includes the
   changed-source coverage inspection; `verify:release` was not run.
+- Pre-review records head: `6a41476834bd459adf428bd1a09bdd415e16f4d5`, pushed
+  to `origin/task/T-0186-wave11-convergence` with a clean worktree.
