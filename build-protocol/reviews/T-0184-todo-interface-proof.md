@@ -65,3 +65,9 @@ least 90%, cheap preflight, and bounded `verify:task` with loopback permissions.
   tests) after typed TaskListId migration and narrowly scoped rejection routing.
 - Assignment lifecycle, target cardinality, replay, coverage, and formal review
   remain pending.
+
+## Assignment Lifecycle Checkpoint
+
+- Focused black-box proof now covers zero/one/two assignee target outcomes and
+  four-event durable read-side replay. Full matrix coverage and review remain
+  pending.

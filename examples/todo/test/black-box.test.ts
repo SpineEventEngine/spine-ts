@@ -69,7 +69,10 @@ import {
   UnassignTaskSchema,
 } from "../generated/spine/examples/todo/task_commands_pb.js";
 import { TaskIdSchema, TaskListIdSchema } from "../generated/spine/examples/todo/task_id_pb.js";
-import { TaskAssigneeSchema } from "../generated/spine/examples/todo/task_assignee_pb.js";
+import {
+  TaskAssigneeSchema,
+  type TaskAssignee,
+} from "../generated/spine/examples/todo/task_assignee_pb.js";
 import { TaskListSchema, type TaskList } from "../generated/spine/examples/todo/task_list_pb.js";
 import { TaskAlreadyDoneSchema } from "../generated/spine/examples/todo/task_rejections_pb.js";
 import { TaskSchema, type Task } from "../generated/spine/examples/todo/tasks_pb.js";
@@ -601,6 +604,41 @@ describe("@spine-event-engine/example-todo", () => {
         openTaskCount: 1,
       }),
     );
+  });
+
+  it("routes assignment lifecycle events to zero, one, and two assignee targets", async () => {
+    const context = await createTodoContext();
+    const fixture = await createTodoBlackBox(context);
+    const scope = fixture.asGuest();
+    const taskId = "task-assignment";
+    const firstAssignee = create(UserIdSchema, { value: "ada" });
+    const secondAssignee = create(UserIdSchema, { value: "lin" });
+
+    try {
+      await scope.post(CreateTaskSchema, createTask(taskId, "Assigned"));
+      await expect(
+        context.stand().read(TaskAssigneeSchema, firstAssignee),
+      ).resolves.toBeUndefined();
+
+      await scope.post(AssignTaskSchema, assignTask(taskId, "ada"));
+      await expectTaskAssigneeEventually(fixture, context, firstAssignee, [taskId]);
+
+      await scope.post(ReassignTaskSchema, reassignTask(taskId, "lin"));
+      await expectTaskAssigneeEventually(fixture, context, firstAssignee, []);
+      await expectTaskAssigneeEventually(fixture, context, secondAssignee, [taskId]);
+
+      await scope.post(UnassignTaskSchema, unassignTask(taskId));
+      await expectTaskAssigneeEventually(fixture, context, secondAssignee, []);
+
+      await expect(context.catchUpReadSide()).resolves.toMatchObject({
+        replayedEventCount: 4,
+        clearedStateTypes: [TypeUrls.derive(TaskListSchema), TypeUrls.derive(TaskAssigneeSchema)],
+      });
+      await expectTaskAssigneeEventually(fixture, context, firstAssignee, []);
+      await expectTaskAssigneeEventually(fixture, context, secondAssignee, []);
+    } finally {
+      await context.close();
+    }
   });
 
   it("reads the task list by projection ID", async () => {
@@ -1576,6 +1614,40 @@ function createReopenCommand(commandId: string, taskId: string) {
 
 function reopenTask(taskId: string) {
   return create(ReopenTaskSchema, { id: create(TaskIdSchema, { value: taskId }) });
+}
+
+function assignTask(taskId: string, assignee: string) {
+  return create(AssignTaskSchema, {
+    id: create(TaskIdSchema, { value: taskId }),
+    assignee: create(UserIdSchema, { value: assignee }),
+  });
+}
+
+function reassignTask(taskId: string, assignee: string) {
+  return create(ReassignTaskSchema, {
+    id: create(TaskIdSchema, { value: taskId }),
+    assignee: create(UserIdSchema, { value: assignee }),
+  });
+}
+
+function unassignTask(taskId: string) {
+  return create(UnassignTaskSchema, { id: create(TaskIdSchema, { value: taskId }) });
+}
+
+async function expectTaskAssigneeEventually(
+  fixture: BlackBox,
+  context: Awaited<ReturnType<TodoModule["createTodoContext"]>>,
+  assignee: MessageShape<typeof UserIdSchema>,
+  taskIds: readonly string[],
+): Promise<void> {
+  await fixture.eventually(
+    async () => await context.stand().read(TaskAssigneeSchema, assignee),
+    (state) =>
+      state?.taskIds
+        .map((taskId) => taskId.value)
+        .sort()
+        .join(",") === taskIds.join(","),
+  );
 }
 
 function createCommandMetadata(commandId: string) {
