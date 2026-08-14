@@ -218,10 +218,9 @@ export function prepareProtoToolsBootstrap(root = repoRoot, run = runCommandIn) 
         : "Proto Tools bootstrap build failed",
     );
   }
-  cpSync(
-    join(root, "packages/proto-tools/src/generation/generation-reuse.mjs"),
-    join(outputRoot, "generation/generation-reuse.mjs"),
-  );
+  const reusePolicy = join(root, "packages/proto-tools/src/generation/generation-reuse.mjs");
+  if (existsSync(reusePolicy))
+    cpSync(reusePolicy, join(outputRoot, "generation/generation-reuse.mjs"));
   bootstrappedRoots.set(root, { executable, outputRoot });
   const policy = join(outputRoot, "generation/generated-source-policy.js");
   if (existsSync(policy)) useGeneratedSourcePolicy(policy);

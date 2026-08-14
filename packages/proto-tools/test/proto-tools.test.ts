@@ -45,6 +45,7 @@ import {
   generatedSource,
   normalizeGeneratedTree,
 } from "../src/generation/generated-source-policy.js";
+import { reusableGenerationId } from "../src/generation/generation-reuse.mjs";
 import { ModelGraph } from "../src/model/model-graph.js";
 
 const readConfig = (...args: Parameters<typeof ProtoConfig.read>) => ProtoConfig.read(...args);
@@ -1915,7 +1916,12 @@ describe("spine proto model tooling", () => {
       else writeFileSync(markerPath, marker);
 
       expect(
-        ProtoGeneration.reusableGenerationId(packageRoot, liveRoot, stagedRoot, manifest),
+        reusableGenerationId(
+          join(packageRoot, "spine-proto-manifest.json"),
+          liveRoot,
+          manifest,
+          stagedRoot,
+        ),
       ).toBeUndefined();
     } finally {
       rmSync(packageRoot, { recursive: true, force: true });
@@ -1945,11 +1951,11 @@ describe("spine proto model tooling", () => {
         );
       }
       writeJson(packageRoot, "spine-proto-manifest.json", manifest);
-      const reusable = ProtoGeneration.reusableGenerationId(
-        packageRoot,
+      const reusable = reusableGenerationId(
+        join(packageRoot, "spine-proto-manifest.json"),
         liveRoot,
-        stagedRoot,
         manifest,
+        stagedRoot,
       );
       expect(reusable === undefined).toBe(rejects);
     } finally {
@@ -1976,11 +1982,11 @@ describe("spine proto model tooling", () => {
         );
       }
       writeJson(packageRoot, "spine-proto-manifest.json", manifest);
-      const reusable = ProtoGeneration.reusableGenerationId(
-        packageRoot,
+      const reusable = reusableGenerationId(
+        join(packageRoot, "spine-proto-manifest.json"),
         liveRoot,
-        stagedRoot,
         manifest,
+        stagedRoot,
       );
       expect(reusable === undefined).toBe(rejects);
     } finally {
@@ -2010,7 +2016,12 @@ describe("spine proto model tooling", () => {
       writeJson(packageRoot, "spine-proto-manifest.json", manifest);
 
       expect(
-        ProtoGeneration.reusableGenerationId(packageRoot, liveRoot, stagedRoot, manifest),
+        reusableGenerationId(
+          join(packageRoot, "spine-proto-manifest.json"),
+          liveRoot,
+          manifest,
+          stagedRoot,
+        ),
       ).toBeUndefined();
     } finally {
       rmSync(packageRoot, { recursive: true, force: true });
