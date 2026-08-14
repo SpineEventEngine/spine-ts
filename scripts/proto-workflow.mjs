@@ -274,50 +274,6 @@ function findProtoFiles(directory) {
   return files;
 }
 
-function generatedTreeContents(root) {
-  const files = [];
-  const pending = [[root, 0]];
-  let entries = 0;
-  while (pending.length > 0) {
-    const [directory, depth] = pending.pop();
-    if (depth > 64) throw new Error("generated TypeScript traversal exceeds bounded inventory");
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      entries += 1;
-      if (entries > 1_000)
-        throw new Error("generated TypeScript traversal exceeds bounded inventory");
-      const path = join(directory, entry.name);
-      if (entry.isDirectory()) pending.push([path, depth + 1]);
-      else if (entry.isFile() && entry.name !== ".spine-proto-generation.json")
-        files.push([relative(root, path).split(sep).join("/"), readFileSync(path, "utf8")]);
-    }
-  }
-  return files.sort(([left], [right]) => left.localeCompare(right));
-}
-
-function canonicalJson(value) {
-  if (Array.isArray(value)) return value.map(canonicalJson);
-  if (typeof value === "object" && value !== null)
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, nested]) => [key, canonicalJson(nested)]),
-    );
-  return value;
-}
-
-function generationMarkerId(generatedRoot) {
-  try {
-    const marker = JSON.parse(
-      readFileSync(join(generatedRoot, ".spine-proto-generation.json"), "utf8"),
-    );
-    return typeof marker.generationId === "string" && marker.generationId.length > 0
-      ? marker.generationId
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function reuseStagedGenerationId(livePackageRoot, stagedPackageRoot, stagedOutputRoot) {
   const liveManifestPath = join(livePackageRoot, "spine-proto-manifest.json");
   const stagedManifestPath = join(stagedPackageRoot, "spine-proto-manifest.json");

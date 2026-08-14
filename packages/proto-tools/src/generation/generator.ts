@@ -892,7 +892,7 @@ const protoGeneration = Object.freeze({
 
   files(root: string): string[] {
     const output: string[] = [];
-    const pending: Array<readonly [string, number]> = [[root, 0]];
+    const pending: (readonly [string, number])[] = [[root, 0]];
     let entries = 0;
     while (pending.length > 0) {
       const entry = pending.pop();

@@ -1975,7 +1975,7 @@ describe("spine proto model tooling", () => {
       for (const root of [liveRoot, stagedRoot]) {
         mkdirSync(root, { recursive: true });
         for (let entry = 0; entry < entries - 1; entry += 1)
-          writeFileSync(join(root, `entry-${entry}.txt`), "x\n");
+          writeFileSync(join(root, `entry-${String(entry)}.txt`), "x\n");
         writeFileSync(
           join(root, ".spine-proto-generation.json"),
           '{"generationId":"generation-id"}\n',
@@ -2077,9 +2077,10 @@ describe("spine proto model tooling", () => {
       expect(readManifest(model).generationId).toBe("complete");
       await new Promise<void>((resolveChild, rejectChild) => {
         writer.once("error", rejectChild);
-        writer.once("exit", (code) =>
-          code === 0 ? resolveChild() : rejectChild(new Error(String(code))),
-        );
+        writer.once("exit", (code) => {
+          if (code === 0) resolveChild();
+          else rejectChild(new Error(String(code)));
+        });
       });
       expect(existsSync(claim)).toBe(true);
     } finally {
