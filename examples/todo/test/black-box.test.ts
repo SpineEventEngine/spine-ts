@@ -615,6 +615,38 @@ describe("@spine-event-engine/example-todo", () => {
     );
   });
 
+  it("updates one task in a shared list without changing its sibling", async () => {
+    const fixture = await createTodoBlackBox();
+    const scope = fixture.asGuest();
+    const listId = "shared-list";
+    try {
+      await scope.post(CreateTaskSchema, createTaskInList("shared-first", listId, "First"));
+      await scope.post(CreateTaskSchema, createTaskInList("shared-second", listId, "Second"));
+      await scope.post(RenameTaskSchema, renameTask("shared-first", "Renamed"));
+      await scope.post(AssignTaskSchema, assignTask("shared-first", "ada"));
+      await scope.post(CompleteTaskSchema, completeTask("shared-first"));
+      await scope.post(ReopenTaskSchema, reopenTask("shared-first"));
+
+      const rows = await readTaskListsEventually(
+        fixture,
+        scope,
+        createTaskListIdQuery(listId),
+        (candidate) => candidate[0]?.tasks.some((task) => task.title === "Renamed") === true,
+      );
+      expect(rows[0]?.tasks).toMatchObject([
+        {
+          id: { value: "shared-first" },
+          title: "Renamed",
+          completed: false,
+          assignee: { value: "ada" },
+        },
+        { id: { value: "shared-second" }, title: "Second", completed: false },
+      ]);
+    } finally {
+      await fixture.close();
+    }
+  });
+
   it("routes assignment lifecycle events to zero, one, and two assignee targets", async () => {
     const context = await createTodoContext();
     const fixture = await createTodoBlackBox(context);
@@ -1673,9 +1705,13 @@ function createTaskCommand(commandId: string, taskId: string, title: string) {
 }
 
 function createTask(taskId: string, title: string) {
+  return createTaskInList(taskId, taskId, title);
+}
+
+function createTaskInList(taskId: string, taskListId: string, title: string) {
   return create(CreateTaskSchema, {
     id: create(TaskIdSchema, { value: taskId }),
-    taskListId: create(TaskListIdSchema, { value: taskId }),
+    taskListId: create(TaskListIdSchema, { value: taskListId }),
     title,
   });
 }
@@ -1704,6 +1740,10 @@ function renameTask(taskId: string, title: string) {
   });
 }
 
+function completeTask(taskId: string) {
+  return create(CompleteTaskSchema, { id: create(TaskIdSchema, { value: taskId }) });
+}
+
 function createCompleteCommand(commandId: string, taskId: string) {
   return SignalEnvelopes.command({
     ...createCommandMetadata(commandId),
@@ -1712,10 +1752,6 @@ function createCompleteCommand(commandId: string, taskId: string) {
       id: create(TaskIdSchema, { value: taskId }),
     }),
   });
-}
-
-function completeTask(taskId: string) {
-  return create(CompleteTaskSchema, { id: create(TaskIdSchema, { value: taskId }) });
 }
 
 function createReopenCommand(commandId: string, taskId: string) {
