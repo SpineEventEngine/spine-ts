@@ -45,10 +45,14 @@ describe("modelSourceView", () => {
       const record = readSourceViewPublicationRecord(stage, live, join(live, "generated"));
       expect(record.livePackageRoot).toBe(realpathSync(live));
       expect(record.liveGeneratedRoot).toBe(join(realpathSync(live), "generated"));
-      expect(() => assertSourceViewPublicationRecordCurrent(record)).not.toThrow();
+      expect(() => {
+        assertSourceViewPublicationRecordCurrent(record);
+      }).not.toThrow();
 
       writeFileSync(join(live, "src/authored.ts"), "export interface Changed {}\n");
-      expect(() => assertSourceViewPublicationRecordCurrent(record)).toThrow("source view changed");
+      expect(() => {
+        assertSourceViewPublicationRecordCurrent(record);
+      }).toThrow("source view changed");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -117,9 +121,9 @@ describe("modelSourceView", () => {
         if (mutation === "rename") renameSync(authored, join(live, "src/renamed.ts"));
         if (mutation === "config")
           writeFileSync(join(live, "tsconfig.json"), '{"include":["src/renamed.ts"]}\n');
-        expect(() => assertSourceViewPublicationRecordCurrent(record)).toThrow(
-          "source view changed",
-        );
+        expect(() => {
+          assertSourceViewPublicationRecordCurrent(record);
+        }).toThrow("source view changed");
       } finally {
         rmSync(root, { recursive: true, force: true });
       }

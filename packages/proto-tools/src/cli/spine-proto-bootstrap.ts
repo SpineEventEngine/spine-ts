@@ -47,7 +47,7 @@ function internalOption(name: string): string | undefined {
   const index = process.argv.indexOf(name);
   if (index < 0) return undefined;
   const value = process.argv[index + 1];
-  if (value === undefined || process.argv.indexOf(name, index + 1) >= 0)
+  if (value === undefined || process.argv.slice(index + 1).includes(name))
     throw new Error(`spine-proto bootstrap: missing ${name}`);
   return value;
 }

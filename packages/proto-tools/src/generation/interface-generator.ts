@@ -311,7 +311,7 @@ export const InterfaceGenerator: Readonly<{
         `export interface ${name} {}\n\n`,
         "const memberSchemas: readonly [",
         ...schemaImports.flatMap((member, index) =>
-          index === 0 ? [`typeof ${member}`] : [`, typeof ${member}`],
+          index === 0 ? ["typeof ", member] : [", typeof ", member],
         ),
         "] = [",
         ...schemaImports.flatMap((member, index) => (index === 0 ? [member] : [", ", member])),
@@ -342,7 +342,7 @@ export const InterfaceGenerator: Readonly<{
         `export type ${candidate.name} = Authored${candidate.name};\n\n`,
         "const memberSchemas: readonly [",
         ...schemaImports.flatMap((member, index) =>
-          index === 0 ? [`typeof ${member}`] : [`, typeof ${member}`],
+          index === 0 ? ["typeof ", member] : [", typeof ", member],
         ),
         "] = [",
         ...schemaImports.flatMap((member, index) => (index === 0 ? [member] : [", ", member])),
