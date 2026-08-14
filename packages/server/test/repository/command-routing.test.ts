@@ -60,7 +60,9 @@ describe("CommandRouting", () => {
   });
 
   it("declares an ordered nominal message-interface route", () => {
-    const token = MessageInterfaces.define<object, readonly [typeof CommandSchema]>([CommandSchema]);
+    const token = MessageInterfaces.define<object, readonly [typeof CommandSchema]>([
+      CommandSchema,
+    ]);
     const route = () => "target";
     const routing = CommandRouting.create<string>().route(token, route);
 
@@ -74,7 +76,9 @@ describe("CommandRouting", () => {
   });
 
   it("types interface callbacks as the member union intersected with the interface", () => {
-    type Shared = { readonly common: string };
+    interface Shared {
+      readonly common: string;
+    }
     type First = Message<"test.First"> & Shared & { readonly firstOnly: string };
     type Second = Message<"test.Second"> & Shared & { readonly secondOnly: string };
     const first = CommandSchema as unknown as GenMessage<First>;
@@ -86,13 +90,13 @@ describe("CommandRouting", () => {
 
     CommandRouting.create<string>()
       .route(CommandSchema, (message) => {
-        expectTypeOf(message).toMatchTypeOf<Message<"spine.core.Command">>();
+        expectTypeOf(message).toExtend<Message<"spine.core.Command">>();
         return "exact";
       })
       .route(token, (message) => {
         expectTypeOf(message.common).toEqualTypeOf<string>();
         // @ts-expect-error A member-only field is not safe without narrowing the member union.
-        message.firstOnly;
+        expectTypeOf(message.firstOnly).toEqualTypeOf<string>();
         return "interface";
       });
   });

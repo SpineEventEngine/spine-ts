@@ -80,10 +80,7 @@ import {
   type StateUpdateRoute,
   type StateUpdateRouting,
 } from "./state-update-routing.js";
-import {
-  RoutingDeclarations,
-  type RoutingDeclarationSnapshot,
-} from "./routing-declarations.js";
+import { RoutingDeclarations, type RoutingDeclarationSnapshot } from "./routing-declarations.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { Delivery } from "../delivery/delivery.js";
@@ -4196,7 +4193,9 @@ const RepositoryRoutes = {
     producedEvents: readonly MessageSchema[],
     commandRouting: RoutingDeclarationSnapshot<CommandRoute<RepositoryEntityId<EntityType>>>,
     eventRouting: RoutingDeclarationSnapshot<EventRoute<RepositoryEntityId<EntityType>>>,
-    stateUpdateRouting: RoutingDeclarationSnapshot<StateUpdateRoute<RepositoryEntityId<EntityType>>>,
+    stateUpdateRouting: RoutingDeclarationSnapshot<
+      StateUpdateRoute<RepositoryEntityId<EntityType>>
+    >,
     stringifiers: StringifierRegistry,
   ): RepositoryRouting<RepositoryEntityId<EntityType>> {
     const handlers = RepositoryHandlers.normalizeHandlers(handlersOption);

@@ -51,8 +51,7 @@ export interface RoutingDeclarationSnapshot<Route> {
 }
 
 function readOnlyMap<Key, Value>(source: ReadonlyMap<Key, Value>): ReadonlyMap<Key, Value> {
-  let facade: ReadonlyMap<Key, Value>;
-  facade = Object.freeze({
+  const facade = Object.freeze({
     get size() {
       return source.size;
     },
@@ -62,9 +61,12 @@ function readOnlyMap<Key, Value>(source: ReadonlyMap<Key, Value>): ReadonlyMap<K
     has: (key: Key) => source.has(key),
     keys: () => source.keys(),
     values: () => source.values(),
-    forEach: (callback: (value: Value, key: Key, map: ReadonlyMap<Key, Value>) => void) =>
-      source.forEach((value, key) => callback(value, key, facade)),
-  }) as ReadonlyMap<Key, Value>;
+    forEach: (callback: (value: Value, key: Key, map: ReadonlyMap<Key, Value>) => void) => {
+      source.forEach((value, key) => {
+        callback(value, key, facade);
+      });
+    },
+  } satisfies ReadonlyMap<Key, Value>);
   return facade;
 }
 

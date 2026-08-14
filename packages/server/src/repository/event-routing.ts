@@ -23,7 +23,6 @@ import {
   type RoutingDeclarationState,
 } from "./routing-declarations.js";
 
-
 /**
  * Calculates target Entity IDs for one Event admission.
  *
@@ -91,7 +90,10 @@ export class EventRouting<Id> {
   route<Schema extends MessageSchema>(schemaOrToken: Schema, via: EventRoute<Id, Schema>): this;
   route<TInterface extends object, Schemas extends InterfaceRouteSchemas>(
     schemaOrToken: MessageInterface<TInterface, Schemas>,
-    via: (message: InterfaceRouteMessage<TInterface, Schemas>, context: EventContext) => readonly Id[],
+    via: (
+      message: InterfaceRouteMessage<TInterface, Schemas>,
+      context: EventContext,
+    ) => readonly Id[],
   ): this;
   route(
     schemaOrToken: MessageSchema | MessageInterface<object, InterfaceRouteSchemas>,
@@ -104,7 +106,7 @@ export class EventRouting<Id> {
     } else {
       RoutingDeclarations.exact(
         state,
-        schemaOrToken as MessageSchema,
+        schemaOrToken,
         via,
         "Event routing has a duplicate exact event route.",
       );

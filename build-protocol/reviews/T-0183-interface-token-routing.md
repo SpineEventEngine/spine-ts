@@ -1,6 +1,6 @@
 # T-0183 Review Log
 
-Status: Review corrections complete; targeted re-review pending
+Status: Release lint correction complete; final release verification pending
 
 Task: `build-protocol/tasks/T-0183-interface-token-routing/TASK.md`
 Branch: `task/T-0183-interface-routing`
@@ -105,3 +105,22 @@ available acceptance evidence.
   public overload types.
 - Evidence: corrected `pnpm docs:api`, `pnpm docs:api:check`, tooling typecheck,
   262 focused routing tests, format check, and diff check pass.
+
+## Release Lint Correction
+
+- Release RED: the first post-review `verify:release` stopped at the initial
+  full-repository ESLint gate, before any tests. It reported 17 mechanical
+  violations in the T-0183 routing changes: four redundant type assertions,
+  one mutable declaration, five confusing void-expression callback forms, two
+  inconsistent type definitions, one deprecated type matcher, and three unused
+  type-test expressions.
+- Resolution: removed redundant schema assertions after the shared classifier
+  narrows the union; retained the immutable-map facade while using a `const`
+  declaration and statement-body callbacks; and normalized only test syntax.
+  No routing behavior, persistence, or public contract changed.
+- GREEN evidence: `pnpm exec eslint .`; the five focused routing suites
+  (262/262); `pnpm typecheck:tooling`; `pnpm docs:api` and
+  `pnpm docs:api:check`; `pnpm format:check`; and `git diff --check` pass.
+- This is a deterministic release-gate correction, not a specialist-review
+  finding. The branch is ready for the orchestrator's final `verify:release`
+  attempt; this context did not rerun that profile.

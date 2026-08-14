@@ -67,7 +67,9 @@ describe("StateUpdateRouting", () => {
   });
 
   it("types a state interface callback with only common member fields", () => {
-    type Shared = { readonly common: string };
+    interface Shared {
+      readonly common: string;
+    }
     type First = Message<"test.First"> & Shared & { readonly firstOnly: string };
     type Second = Message<"test.Second"> & Shared & { readonly secondOnly: string };
     const first = EntityStateChangedSchema as unknown as GenMessage<First>;
@@ -80,7 +82,7 @@ describe("StateUpdateRouting", () => {
     StateUpdateRouting.create<string>().route(token, (message) => {
       expectTypeOf(message.common).toEqualTypeOf<string>();
       // @ts-expect-error A member-only field is not safe without narrowing the member union.
-      message.firstOnly;
+      expectTypeOf(message.firstOnly).toEqualTypeOf<string>();
       return [];
     });
   });

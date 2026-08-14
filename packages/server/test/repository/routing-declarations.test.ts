@@ -20,7 +20,9 @@ import { RoutingDeclarations } from "../../src/repository/routing-declarations.j
 
 describe("RoutingDeclarations", () => {
   it("selects an exact route before registered interface routes and the default", () => {
-    const token = MessageInterfaces.define<object, readonly [typeof CommandSchema]>([CommandSchema]);
+    const token = MessageInterfaces.define<object, readonly [typeof CommandSchema]>([
+      CommandSchema,
+    ]);
     const declarations = RoutingDeclarations.create<string>();
     const exact = "exact";
     const byInterface = "interface";
@@ -37,46 +39,59 @@ describe("RoutingDeclarations", () => {
   });
 
   it("selects the first matching interface route in registration order", () => {
-    const broader = MessageInterfaces.define<object, readonly [typeof CommandSchema, typeof EventSchema]>([
+    const broader = MessageInterfaces.define<
+      object,
+      readonly [typeof CommandSchema, typeof EventSchema]
+    >([CommandSchema, EventSchema]);
+    const narrower = MessageInterfaces.define<object, readonly [typeof CommandSchema]>([
       CommandSchema,
-      EventSchema,
     ]);
-    const narrower = MessageInterfaces.define<object, readonly [typeof CommandSchema]>([CommandSchema]);
     const declarations = RoutingDeclarations.create<string>();
 
     RoutingDeclarations.routeInterface(declarations, broader, "broader", "Event routing");
     RoutingDeclarations.routeInterface(declarations, narrower, "narrower", "Event routing");
 
-    expect(RoutingDeclarations.select(RoutingDeclarations.snapshot(declarations), CommandSchema)).toBe(
-      "broader",
-    );
+    expect(
+      RoutingDeclarations.select(RoutingDeclarations.snapshot(declarations), CommandSchema),
+    ).toBe("broader");
   });
 
   it("rejects duplicate and non-nominal interface tokens", () => {
-    const token = MessageInterfaces.define<object, readonly [typeof CommandSchema]>([CommandSchema]);
+    const token = MessageInterfaces.define<object, readonly [typeof CommandSchema]>([
+      CommandSchema,
+    ]);
     const declarations = RoutingDeclarations.create<string>();
 
     RoutingDeclarations.routeInterface(declarations, token, "first", "Command routing");
 
-    expect(() => RoutingDeclarations.routeInterface(declarations, token, "second", "Command routing")).toThrow(
-      /duplicate interface route/,
-    );
-    expect(() =>
-      RoutingDeclarations.routeInterface(declarations, { schemas: token.schemas }, "copy", "Command routing"),
-    ).toThrow(/generated message interface token/);
+    expect(() => {
+      RoutingDeclarations.routeInterface(declarations, token, "second", "Command routing");
+    }).toThrow(/duplicate interface route/);
+    expect(() => {
+      RoutingDeclarations.routeInterface(
+        declarations,
+        { schemas: token.schemas },
+        "copy",
+        "Command routing",
+      );
+    }).toThrow(/generated message interface token/);
   });
 
   it("rejects an interface whose members are not all registered by a repository", () => {
-    const token = MessageInterfaces.define<object, readonly [typeof CommandSchema, typeof EventSchema]>([
-      CommandSchema,
-      EventSchema,
-    ]);
+    const token = MessageInterfaces.define<
+      object,
+      readonly [typeof CommandSchema, typeof EventSchema]
+    >([CommandSchema, EventSchema]);
     const declarations = RoutingDeclarations.create<string>();
     RoutingDeclarations.routeInterface(declarations, token, "route", "Command routing");
 
-    expect(() =>
-      RoutingDeclarations.validate(RoutingDeclarations.snapshot(declarations), [CommandSchema], "command"),
-    ).toThrow(/unregistered interface member.*spine.core.Event/);
+    expect(() => {
+      RoutingDeclarations.validate(
+        RoutingDeclarations.snapshot(declarations),
+        [CommandSchema],
+        "command",
+      );
+    }).toThrow(/unregistered interface member.*spine.core.Event/);
   });
 
   it("passes the immutable map facade to snapshot forEach callbacks", () => {
@@ -91,7 +106,9 @@ describe("RoutingDeclarations", () => {
   });
 
   it("classifies nominal and copied interface-token candidates without classifying schemas", () => {
-    const token = MessageInterfaces.define<object, readonly [typeof CommandSchema]>([CommandSchema]);
+    const token = MessageInterfaces.define<object, readonly [typeof CommandSchema]>([
+      CommandSchema,
+    ]);
 
     expect(RoutingDeclarations.isInterfaceTokenCandidate(token)).toBe(true);
     expect(RoutingDeclarations.isInterfaceTokenCandidate({ schemas: token.schemas })).toBe(true);

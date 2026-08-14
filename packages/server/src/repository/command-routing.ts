@@ -89,10 +89,7 @@ export class CommandRouting<Id> {
    * @param via Route that calculates the target Entity ID.
    * @returns These mutable route declarations.
    */
-  route<Schema extends MessageSchema>(
-    schemaOrToken: Schema,
-    via: CommandRoute<Id, Schema>,
-  ): this;
+  route<Schema extends MessageSchema>(schemaOrToken: Schema, via: CommandRoute<Id, Schema>): this;
   route<TInterface extends object, Schemas extends InterfaceRouteSchemas>(
     schemaOrToken: MessageInterface<TInterface, Schemas>,
     via: (message: InterfaceRouteMessage<TInterface, Schemas>, context: CommandContext) => Id,
@@ -109,7 +106,7 @@ export class CommandRouting<Id> {
     } else {
       RoutingDeclarations.exact(
         state,
-        schemaOrToken as MessageSchema,
+        schemaOrToken,
         via,
         "Command routing has a duplicate exact command route.",
       );
@@ -138,12 +135,16 @@ export class CommandRouting<Id> {
  */
 export const CommandRoutingInternals: Readonly<{
   state<Id>(routing: CommandRouting<Id>): CommandRoutingState<Id>;
-  snapshot<Id>(routing: CommandRouting<Id> | undefined): RoutingDeclarationSnapshot<CommandRoute<Id>>;
+  snapshot<Id>(
+    routing: CommandRouting<Id> | undefined,
+  ): RoutingDeclarationSnapshot<CommandRoute<Id>>;
 }> = Object.freeze({
   state<Id>(routing: CommandRouting<Id>): CommandRoutingState<Id> {
     return routingStates.get(routing) as CommandRoutingState<Id>;
   },
-  snapshot<Id>(routing: CommandRouting<Id> | undefined): RoutingDeclarationSnapshot<CommandRoute<Id>> {
+  snapshot<Id>(
+    routing: CommandRouting<Id> | undefined,
+  ): RoutingDeclarationSnapshot<CommandRoute<Id>> {
     if (routing === undefined) {
       return RoutingDeclarations.snapshot(RoutingDeclarations.create<CommandRoute<Id>>());
     }

@@ -3531,9 +3531,9 @@ describe("repository signal routing", () => {
         .replaceDefault(() => "default"),
     );
 
-    expect(repository.routeCommand(createAggregateCommand("command-interface", "field")).entityId).toBe(
-      "interface",
-    );
+    expect(
+      repository.routeCommand(createAggregateCommand("command-interface", "field")).entityId,
+    ).toBe("interface");
     expect(
       createRoutingRepository(
         CommandRouting.create<string>()
@@ -3549,9 +3549,9 @@ describe("repository signal routing", () => {
       readonly [typeof AggregateStateSchema, typeof ProjectionStateSchema]
     >([AggregateStateSchema, ProjectionStateSchema]);
 
-    expect(() => createRoutingRepository(CommandRouting.create<string>().route(token, () => "target"))).toThrow(
-      /unregistered interface member/,
-    );
+    expect(() =>
+      createRoutingRepository(CommandRouting.create<string>().route(token, () => "target")),
+    ).toThrow(/unregistered interface member/);
   });
 
   it("keeps the Command routing snapshot captured by repository construction", () => {
@@ -3777,9 +3777,9 @@ describe("repository signal routing", () => {
         .replaceDefault(() => ["default"]),
     );
 
-    expect(repository.routeEvent(createProjectionEvent("event-interface", "field")).entityIds).toEqual([
-      "interface",
-    ]);
+    expect(
+      repository.routeEvent(createProjectionEvent("event-interface", "field")).entityIds,
+    ).toEqual(["interface"]);
     expect(
       createRoutingRepository(
         undefined,
@@ -11639,7 +11639,8 @@ describe("Projection state-update routing", () => {
     });
 
     expect(
-      repositoryAccess.routeStateUpdate(repository, createStateChangedEvent("interface"))?.entityIds,
+      repositoryAccess.routeStateUpdate(repository, createStateChangedEvent("interface"))
+        ?.entityIds,
     ).toEqual(["interface"]);
   });
 

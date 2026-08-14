@@ -1,6 +1,6 @@
 # T-0183: Interface-Token Repository Routing
 
-Status: Review corrections complete; targeted re-review pending
+Status: Release lint correction complete; final release verification pending
 Start: `2026-08-14 03:53 WEST`
 End: Pending
 Baseline commit: `d02379f7`
@@ -105,3 +105,17 @@ the shared `schemaOrToken` parameter name named by their TSDoc. TypeDoc and API
 checks, tooling typecheck, 262 focused routing tests, formatting, and diff
 checks pass. Release verification, integration, tag, and post-merge
 verification remain pending.
+
+## Release Lint Correction
+
+The first post-review `verify:release` attempt stopped at its full-repository
+ESLint stage, before executing tests. It reported 17 mechanical findings in
+the T-0183 routing source and tests: redundant schema assertions, a mutable
+facade declaration and confusing void-expression callbacks, and test-style
+violations. This correction removes only those lint violations; routing
+selection, admission, replay, and persisted Inbox targets are unchanged.
+
+The complete repository ESLint run, the five focused routing suites (262/262
+tests), tooling typecheck, TypeDoc/API checks, format check, and diff check
+pass after the correction. The branch is ready for the orchestrator's final
+release attempt; this implementation context did not rerun `verify:release`.

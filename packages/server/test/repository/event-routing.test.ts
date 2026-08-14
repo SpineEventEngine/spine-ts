@@ -63,7 +63,9 @@ describe("EventRouting", () => {
   });
 
   it("types an Event interface callback with only common member fields", () => {
-    type Shared = { readonly common: string };
+    interface Shared {
+      readonly common: string;
+    }
     type First = Message<"test.First"> & Shared & { readonly firstOnly: string };
     type Second = Message<"test.Second"> & Shared & { readonly secondOnly: string };
     const first = EventSchema as unknown as GenMessage<First>;
@@ -76,7 +78,7 @@ describe("EventRouting", () => {
     EventRouting.create<string>().route(token, (message) => {
       expectTypeOf(message.common).toEqualTypeOf<string>();
       // @ts-expect-error A member-only field is not safe without narrowing the member union.
-      message.secondOnly;
+      expectTypeOf(message.secondOnly).toEqualTypeOf<string>();
       return [];
     });
   });

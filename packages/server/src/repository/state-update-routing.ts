@@ -23,7 +23,6 @@ import {
   type RoutingDeclarationState,
 } from "./routing-declarations.js";
 
-
 /**
  * Calculates target Entity IDs for one accepted Entity state update.
  *
@@ -87,7 +86,10 @@ export class StateUpdateRouting<Id> {
   ): this;
   route<TInterface extends object, Schemas extends InterfaceRouteSchemas>(
     schemaOrToken: MessageInterface<TInterface, Schemas>,
-    via: (message: InterfaceRouteMessage<TInterface, Schemas>, context: EventContext) => readonly Id[],
+    via: (
+      message: InterfaceRouteMessage<TInterface, Schemas>,
+      context: EventContext,
+    ) => readonly Id[],
   ): this;
   route(
     schemaOrToken: MessageSchema | MessageInterface<object, InterfaceRouteSchemas>,
@@ -101,7 +103,7 @@ export class StateUpdateRouting<Id> {
     } else {
       RoutingDeclarations.exact(
         state,
-        schemaOrToken as MessageSchema,
+        schemaOrToken,
         via,
         "State-update routing has a duplicate exact state-update route.",
       );
