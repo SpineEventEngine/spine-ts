@@ -133,3 +133,18 @@ mutable declaration storage. No routing behavior or API changed.
 `pnpm lint:cleanup`, full ESLint, and the five focused routing suites (262/262)
 pass after the ledger correction. This context did not rerun `verify:release`;
 the branch is ready for the orchestrator's next release-profile attempt.
+
+## Third Release TSDoc Correction
+
+The third `verify:release` attempt cleared ESLint and cleanup, then stopped at
+TSDoc before tests. The route overload declarations lacked their own summaries,
+parameters, and return documentation, and shared routing declaration types and
+properties lacked summaries. The correction adds concise declaration-level
+documentation while preserving the established implementation-level precedence,
+validation, and replay explanation. No routing behavior, API shape, persistence,
+or replay semantics changed.
+
+TSDoc enforcement, API documentation generation/checking, full ESLint, cleanup,
+and the five focused routing suites (262/262) pass after the correction. This
+context did not rerun `verify:release`; the branch is ready for the
+orchestrator's next release-profile attempt.

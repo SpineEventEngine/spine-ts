@@ -19,6 +19,9 @@ import {
   type MessageSchema,
 } from "@spine-event-engine/core";
 
+/**
+ * Non-empty generated message schemas carried by a nominal interface token.
+ */
 export type InterfaceRouteSchemas = readonly [MessageSchema, ...MessageSchema[]];
 type InterfaceToken = MessageInterface<object, InterfaceRouteSchemas>;
 
@@ -38,15 +41,47 @@ interface InterfaceRoute<Route> {
   readonly route: Route;
 }
 
+/**
+ * Mutable route declarations before repository construction snapshots them.
+ *
+ * @typeParam Route Signal-specific route callback type.
+ */
 export interface RoutingDeclarationState<Route> {
+  /**
+   * Exact-schema routes indexed by their generated schemas.
+   */
   readonly exact: Map<MessageSchema, Route>;
+
+  /**
+   * Nominal interface-token routes in declaration insertion order.
+   */
   readonly interfaceRoutes: Map<InterfaceToken, Route>;
+
+  /**
+   * Replacement/default route when no exact or interface route matches.
+   */
   defaultRoute: Route | undefined;
 }
 
+/**
+ * Immutable route declarations captured by repository construction.
+ *
+ * @typeParam Route Signal-specific route callback type.
+ */
 export interface RoutingDeclarationSnapshot<Route> {
+  /**
+   * Immutable exact-schema routes indexed by generated schemas.
+   */
   readonly exact: ReadonlyMap<MessageSchema, Route>;
+
+  /**
+   * Nominal interface-token routes preserved in declaration insertion order.
+   */
   readonly interfaceRoutes: readonly InterfaceRoute<Route>[];
+
+  /**
+   * Replacement/default route when no exact or interface route matches.
+   */
   readonly defaultRoute: Route | undefined;
 }
 

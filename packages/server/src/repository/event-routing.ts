@@ -70,6 +70,30 @@ export class EventRouting<Id> {
   }
 
   /**
+   * Registers a route for one exact generated Event schema.
+   *
+   * @param schemaOrToken Generated Event schema.
+   * @param via Route that calculates target Entity IDs.
+   * @returns These mutable route declarations.
+   */
+  route<Schema extends MessageSchema>(schemaOrToken: Schema, via: EventRoute<Id, Schema>): this;
+
+  /**
+   * Registers a route for a nominal Event message-interface token.
+   *
+   * @param schemaOrToken Generated Event message-interface token.
+   * @param via Route that calculates target Entity IDs.
+   * @returns These mutable route declarations.
+   */
+  route<TInterface extends object, Schemas extends InterfaceRouteSchemas>(
+    schemaOrToken: MessageInterface<TInterface, Schemas>,
+    via: (
+      message: InterfaceRouteMessage<TInterface, Schemas>,
+      context: EventContext,
+    ) => readonly Id[],
+  ): this;
+
+  /**
    * Registers an exact generated Event-schema route or a nominal message-interface route.
    *
    * A schema route receives its exact message shape. An interface route receives
@@ -87,14 +111,6 @@ export class EventRouting<Id> {
    * @param via Route that calculates target Entity IDs.
    * @returns These mutable route declarations.
    */
-  route<Schema extends MessageSchema>(schemaOrToken: Schema, via: EventRoute<Id, Schema>): this;
-  route<TInterface extends object, Schemas extends InterfaceRouteSchemas>(
-    schemaOrToken: MessageInterface<TInterface, Schemas>,
-    via: (
-      message: InterfaceRouteMessage<TInterface, Schemas>,
-      context: EventContext,
-    ) => readonly Id[],
-  ): this;
   route(
     schemaOrToken: MessageSchema | MessageInterface<object, InterfaceRouteSchemas>,
     via: EventRoute<Id>,

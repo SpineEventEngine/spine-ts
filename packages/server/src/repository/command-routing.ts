@@ -72,6 +72,27 @@ export class CommandRouting<Id> {
   }
 
   /**
+   * Registers a route for one exact generated Command schema.
+   *
+   * @param schemaOrToken Generated Command schema.
+   * @param via Route that calculates the target Entity ID.
+   * @returns These mutable route declarations.
+   */
+  route<Schema extends MessageSchema>(schemaOrToken: Schema, via: CommandRoute<Id, Schema>): this;
+
+  /**
+   * Registers a route for a nominal Command message-interface token.
+   *
+   * @param schemaOrToken Generated Command message-interface token.
+   * @param via Route that calculates the target Entity ID.
+   * @returns These mutable route declarations.
+   */
+  route<TInterface extends object, Schemas extends InterfaceRouteSchemas>(
+    schemaOrToken: MessageInterface<TInterface, Schemas>,
+    via: (message: InterfaceRouteMessage<TInterface, Schemas>, context: CommandContext) => Id,
+  ): this;
+
+  /**
    * Registers an exact generated Command-schema route or a nominal message-interface route.
    *
    * A schema route receives its exact message shape. An interface route receives
@@ -89,11 +110,6 @@ export class CommandRouting<Id> {
    * @param via Route that calculates the target Entity ID.
    * @returns These mutable route declarations.
    */
-  route<Schema extends MessageSchema>(schemaOrToken: Schema, via: CommandRoute<Id, Schema>): this;
-  route<TInterface extends object, Schemas extends InterfaceRouteSchemas>(
-    schemaOrToken: MessageInterface<TInterface, Schemas>,
-    via: (message: InterfaceRouteMessage<TInterface, Schemas>, context: CommandContext) => Id,
-  ): this;
   route(
     schemaOrToken: MessageSchema | MessageInterface<object, InterfaceRouteSchemas>,
     via: CommandRoute<Id>,

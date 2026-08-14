@@ -63,6 +63,33 @@ export class StateUpdateRouting<Id> {
   }
 
   /**
+   * Registers a route for one exact generated Entity-state schema.
+   *
+   * @param schemaOrToken Generated Entity-state schema.
+   * @param via Route that calculates target Projection IDs.
+   * @returns These mutable declarations.
+   */
+  route<Schema extends MessageSchema>(
+    schemaOrToken: Schema,
+    via: StateUpdateRoute<Id, Schema>,
+  ): this;
+
+  /**
+   * Registers a route for a nominal Entity-state message-interface token.
+   *
+   * @param schemaOrToken Generated Entity-state message-interface token.
+   * @param via Route that calculates target Projection IDs.
+   * @returns These mutable declarations.
+   */
+  route<TInterface extends object, Schemas extends InterfaceRouteSchemas>(
+    schemaOrToken: MessageInterface<TInterface, Schemas>,
+    via: (
+      message: InterfaceRouteMessage<TInterface, Schemas>,
+      context: EventContext,
+    ) => readonly Id[],
+  ): this;
+
+  /**
    * Registers an exact generated Entity-state schema route or a nominal message-interface route.
    *
    * A schema route receives its exact state shape. An interface route receives
@@ -80,17 +107,6 @@ export class StateUpdateRouting<Id> {
    * @param via Route function to invoke.
    * @returns These mutable declarations.
    */
-  route<Schema extends MessageSchema>(
-    schemaOrToken: Schema,
-    via: StateUpdateRoute<Id, Schema>,
-  ): this;
-  route<TInterface extends object, Schemas extends InterfaceRouteSchemas>(
-    schemaOrToken: MessageInterface<TInterface, Schemas>,
-    via: (
-      message: InterfaceRouteMessage<TInterface, Schemas>,
-      context: EventContext,
-    ) => readonly Id[],
-  ): this;
   route(
     schemaOrToken: MessageSchema | MessageInterface<object, InterfaceRouteSchemas>,
     via: StateUpdateRoute<Id>,

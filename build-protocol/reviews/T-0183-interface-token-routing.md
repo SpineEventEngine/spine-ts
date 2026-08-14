@@ -141,3 +141,23 @@ available acceptance evidence.
   pass. No behavior, public API, persistence, or replay semantics changed.
 - This context did not rerun `verify:release`; the branch is ready for the
   orchestrator's next release-profile attempt.
+
+## Third Release TSDoc Correction
+
+- Release RED: the third `verify:release` attempt cleared full ESLint and
+  cleanup, then stopped at `pnpm lint:tsdoc` before tests. All three routing
+  APIs needed complete per-overload TSDoc for their exact-schema and
+  interface-token declarations. The shared declaration module also lacked
+  summaries for `InterfaceRouteSchemas`, the mutable/snapshot declaration
+  interfaces, and their route properties.
+- Resolution: add concise independent summaries, `@param`, and `@returns`
+  documentation to every route overload; add concise internal declaration and
+  property summaries. The existing implementation documentation remains the
+  single complete explanation of precedence, validation, and durable replay.
+- GREEN evidence: `pnpm lint:tsdoc`; `pnpm docs:api` and
+  `pnpm docs:api:check`; full `pnpm exec eslint .`; `pnpm lint:cleanup`; the
+  five focused routing suites (262/262); `pnpm format:check`; and
+  `git diff --check` pass. No behavior, public API shape, persistence, or
+  replay semantics changed.
+- This context did not rerun `verify:release`; the branch is ready for the
+  orchestrator's next release-profile attempt.
