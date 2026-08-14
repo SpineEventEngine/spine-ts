@@ -1,6 +1,6 @@
 # T-0184 Review Log
 
-Status: Resumed — implementation and verification pending
+Status: Implementation and bounded verification complete; specialist review dispatched
 
 Task: `build-protocol/tasks/T-0184-todo-interface-proof/TASK.md`
 Branch: `task/T-0184-todo-interface-proof`
@@ -12,6 +12,19 @@ The implementation assignment uses the existing `implementer` role with
 explicit `gpt-5.6-terra` / medium. Desktop runtime telemetry does not expose
 independent model metadata; the immutable configured role/profile is the
 available evidence.
+
+The specialist review wave uses only the existing configured roles:
+
+- `typescript_api_docs_reviewer`, explicit immutable `gpt-5.6-terra` / high;
+- `style_maintainability_reviewer`, explicit immutable `gpt-5.6-terra` / high;
+- `performance_reliability_reviewer`, explicit immutable `gpt-5.6-terra` / high;
+- `documentation_reviewer`, explicit immutable `gpt-5.6-luna` / medium.
+
+All four assignments are concern-specific. Desktop runtime telemetry does not
+expose independent child model metadata, so each immutable configured role and
+explicit dispatch profile is the acceptance evidence. Security remains N/A for
+T-0184 because this example introduces no new trust boundary; the final Wave
+security review remains owned by T-0186.
 
 ## Planned Dispositions
 
