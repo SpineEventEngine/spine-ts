@@ -57,12 +57,12 @@ ignores Java-only options, and creates no semantic tags or topics.
 Generated TypeScript carries generation provenance and no copyright header.
 Do not edit it. Regenerate with `pnpm proto:generate`.
 
-| Attempt | Rejection |
-| --- | --- |
-| Any assignment operation on a completed task | `TaskAlreadyDone` |
-| Assign when already assigned | `TaskAlreadyAssigned` |
-| Reassign or unassign with no assignee | `TaskNotAssigned` |
-| Reassign to the current assignee | `TaskAlreadyAssigned` |
+| Attempt                                      | Rejection             |
+| -------------------------------------------- | --------------------- |
+| Any assignment operation on a completed task | `TaskAlreadyDone`     |
+| Assign when already assigned                 | `TaskAlreadyAssigned` |
+| Reassign or unassign with no assignee        | `TaskNotAssigned`     |
+| Reassign to the current assignee             | `TaskAlreadyAssigned` |
 
 `TaskList.id` moved to field 4 and field 1 is reserved. Snapshots reset; there
 is no automatic migration or ID inference.

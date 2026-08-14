@@ -143,19 +143,18 @@ describe("TypeScript documentation snippets", () => {
     const guide = readFileSync(resolve(root, "examples/todo/USER_GUIDE.md"), "utf8");
     const frameworkGuide = readFileSync(resolve(root, "docs/USER_GUIDE.md"), "utf8");
     const protoReference = readFileSync(resolve(root, "packages/proto/REFERENCE.md"), "utf8");
-    const toolsReference = readFileSync(
-      resolve(root, "packages/proto-tools/REFERENCE.md"),
-      "utf8",
-    );
+    const toolsReference = readFileSync(resolve(root, "packages/proto-tools/REFERENCE.md"), "utf8");
     const rootReadme = readFileSync(resolve(root, "README.md"), "utf8");
     const architecture = readFileSync(resolve(root, "docs/architecture/README.md"), "utf8");
 
-    expect(guide).toContain("option (every_is).ts_type = \"TaskEvent\";");
-    expect(guide).toContain("option (is).ts_type = \"TaskAssignmentEvent\";");
+    expect(guide).toContain('option (every_is).ts_type = "TaskEvent";');
+    expect(guide).toContain('option (is).ts_type = "TaskAssignmentEvent";');
     expect(guide).toContain("// docs-snippet-path: examples/todo/src/index.ts");
     expect(guide).toContain("TaskReassigned");
     expect(guide).toContain("zero, one, and two");
-    expect(guide).toContain("replays a persisted projection Inbox target without rerouting after restart");
+    expect(guide).toContain(
+      "replays a persisted projection Inbox target without rerouting after restart",
+    );
     expect(guide).toContain("catchUpReadSide()");
     expect(frameworkGuide).toMatch(/first registered\s+matching token/u);
     expect(frameworkGuide).toContain("stored typed targets");
@@ -168,7 +167,9 @@ describe("TypeScript documentation snippets", () => {
       expect(text).toMatch(/(?:need not be|do not need to be)\s+top-level named exports/u);
     }
     expect(rootReadme).toContain("Cloud Run and multiple Gateways are not included");
-    expect(architecture).toMatch(/Cloud Run and multiple\s+Gateways are outside this deployment model/u);
+    expect(architecture).toMatch(
+      /Cloud Run and multiple\s+Gateways are outside this deployment model/u,
+    );
   });
 
   it("keeps the Todo rejection companion in its stated source context", () => {

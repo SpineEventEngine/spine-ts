@@ -104,3 +104,12 @@ close the Wave.
   changed-source coverage inspection; `verify:release` was not run.
 - Pre-review records head: `6a41476834bd459adf428bd1a09bdd415e16f4d5`, pushed
   to `origin/task/T-0186-wave11-convergence` with a clean worktree.
+- The canonical formatter was then applied only to the three inherited
+  formatting offenders: `examples/todo/REFERENCE.md`,
+  `examples/todo/USER_GUIDE.md`, and
+  `scripts/check-typescript-snippets.test.mjs`. The inspected diff is
+  formatting-only. The wrapped runnable fence was rechecked by the focused
+  reader contract and strict snippet checks (`18` tests passed), followed by
+  repository-wide `pnpm format:check`, `git diff --check`, and
+  `pnpm verify:task -- --no-coverage scripts/check-typescript-snippets.test.mjs`.
+  All passed; no release profile or review was started.

@@ -87,10 +87,13 @@ export interface TaskAssignmentEvent {
   readonly assignee?: UserId | undefined;
 }
 
-const taskListRouting = EventRouting.create<TaskListId>()
-  .route(TaskEvent, (event) => (event.taskListId === undefined ? [] : [event.taskListId]));
+const taskListRouting = EventRouting.create<TaskListId>().route(TaskEvent, (event) =>
+  event.taskListId === undefined ? [] : [event.taskListId],
+);
 const assigneeRouting = EventRouting.create<UserId>()
-  .route(TaskAssignmentEventToken, (event) => (event.assignee === undefined ? [] : [event.assignee]))
+  .route(TaskAssignmentEventToken, (event) =>
+    event.assignee === undefined ? [] : [event.assignee],
+  )
   .route(TaskReassignedSchema, (event) =>
     event.previousAssignee === undefined || event.assignee === undefined
       ? []
@@ -221,13 +224,13 @@ Technical failures remain non-OK acknowledgements.
 
 ### Assignment rejections
 
-| Attempt | Current state | Rejection |
-| --- | --- | --- |
-| Assign, reassign, or unassign | Completed task | `TaskAlreadyDone` |
-| Assign | An assignee already exists | `TaskAlreadyAssigned` |
-| Reassign | No current assignee | `TaskNotAssigned` |
-| Reassign | Requested assignee is the current assignee | `TaskAlreadyAssigned` |
-| Unassign | No current assignee | `TaskNotAssigned` |
+| Attempt                       | Current state                              | Rejection             |
+| ----------------------------- | ------------------------------------------ | --------------------- |
+| Assign, reassign, or unassign | Completed task                             | `TaskAlreadyDone`     |
+| Assign                        | An assignee already exists                 | `TaskAlreadyAssigned` |
+| Reassign                      | No current assignee                        | `TaskNotAssigned`     |
+| Reassign                      | Requested assignee is the current assignee | `TaskAlreadyAssigned` |
+| Unassign                      | No current assignee                        | `TaskNotAssigned`     |
 
 Rejected commands preserve aggregate state and produce no normal event route
 targets. The rejection event has its own declared TaskList route where needed.

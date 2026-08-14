@@ -65,6 +65,11 @@ before acceptance. No review has started.
 - Pre-review records head `6a41476834bd459adf428bd1a09bdd415e16f4d5` is pushed
   and clean. Direct audience, copyright, API-documentation, owned-record
   formatting, and diff checks also pass.
+- The previously inherited repository-format offenders were mechanically
+  formatted in their named files only. Strict snippets and the Todo reader
+  contract passed (`18` tests); the full `pnpm format:check`, diff check, and
+  bounded no-coverage task preflight are green. This correction does not open
+  a new specialist concern.
 - No specialist reviewer was dispatched in this implementation pass. The
   configured reviewer profiles and desktop runtime-telemetry limitation remain
   the immutable assignment evidence until the orchestrator starts that wave.
