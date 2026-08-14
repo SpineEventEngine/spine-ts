@@ -32,6 +32,7 @@ const maximumSourceViewDepth = 32;
 const maximumSourceViewEntries = 10_000;
 const recordFileName = ".spine-source-view-publication.json";
 const recordFormat = 1;
+const maximumRecordBytes = 16 * 1024;
 
 const nonRegularInputDiagnostic = "spine-proto: source view contains non-regular TypeScript input";
 
@@ -289,11 +290,21 @@ export function readViewRecord(
   const canonicalRecord = realpathSync(candidate);
   if (!canonicalRecord.startsWith(`${stage}/`))
     throw new Error("spine-proto: invalid source-view publication record");
+  let descriptor: number | undefined;
   let raw: unknown;
   try {
-    raw = JSON.parse(SourceViewInputs.read(canonicalRecord).toString("utf8"));
+    descriptor = openSync(
+      canonicalRecord,
+      constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW,
+    );
+    const metadata = fstatSync(descriptor);
+    if (!metadata.isFile() || metadata.size > maximumRecordBytes)
+      throw new Error("spine-proto: invalid source-view publication record");
+    raw = JSON.parse(readFileSync(descriptor).toString("utf8"));
   } catch {
     throw new Error("spine-proto: invalid source-view publication record");
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
   }
   if (raw === null || typeof raw !== "object")
     throw new Error("spine-proto: invalid source-view publication record");
@@ -332,12 +343,7 @@ export function readViewRecord(
 export function assertViewRecordCurrent(record: SourceViewPublicationRecord): void {
   try {
     const generated = relative(record.livePackageRoot, record.liveGeneratedRoot);
-    if (
-      inventoryDigest(
-        sourceInventory(record.livePackageRoot, generated).compilerFiles,
-        projectConfig(record.livePackageRoot)?.configFiles,
-      ) === record.inventoryDigest
-    )
+    if (sourceInventory(record.livePackageRoot, generated).digest === record.inventoryDigest)
       return;
   } catch {
     // Report one stable transaction diagnostic for every inventory mutation.

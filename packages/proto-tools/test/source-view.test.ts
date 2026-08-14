@@ -95,6 +95,10 @@ describe("modelSourceView", () => {
       expect(() => readViewRecord(stage, live, join(live, "generated"))).toThrow(
         "invalid source-view publication record",
       );
+      writeFileSync(record, " ".repeat(16 * 1024 + 1));
+      expect(() => readViewRecord(stage, live, join(live, "generated"))).toThrow(
+        "invalid source-view publication record",
+      );
       rmSync(record);
       expect(() => readViewRecord(stage, live, join(live, "generated"))).toThrow(
         "invalid source-view publication record",

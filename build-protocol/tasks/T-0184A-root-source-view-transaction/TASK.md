@@ -94,7 +94,7 @@ path/special-file tests are mandatory here.
 
 ## Current Evidence
 
-Implementation is review-ready. The initial declaration-safe tuple and
+Implementation is targeted re-review-ready. The initial declaration-safe tuple and
 source-view-record RED cases are green. Focused source-view and
 interface-generator coverage is 95.03% statements, 91.06% branches, 97.77%
 functions, and 97.21% lines (29 tests). The matrix covers live source/config
@@ -106,3 +106,8 @@ declaration compilation of generated/authored single- and multi-member tuples.
 tests, `pnpm proto:generate`, `pnpm proto:check-generated:current`, and
 `git diff --check` pass. Specialist review and `verify:release` remain
 intentionally unrun.
+
+The accepted specialist correction batch moves every model handoff validation
+to the shared pre-journal boundary, after all staging and registry work, uses
+the digest from one source-inventory pass, and limits opened record descriptors
+to 16 KiB before parsing. Targeted re-review remains required.

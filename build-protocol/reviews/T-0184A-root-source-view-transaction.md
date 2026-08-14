@@ -1,6 +1,6 @@
 # T-0184A Review Log
 
-Status: Ready for specialist review
+Status: Ready for targeted re-review
 Baseline: `aed2f194`
 Branch: `task/T-0184A-root-source-view-transaction`
 
@@ -42,3 +42,21 @@ Mechanical pre-review gates pass: tooling typecheck, full ESLint, cleanup,
 TSDoc, formatting, root generation/current, focused workflow tests, and diff
 check. No specialist lane has been invoked; `verify:release` remains deferred
 to the designated final profile.
+
+## Accepted Specialist Correction Batch
+
+- TypeScript/API reviewer (`gpt-5.6-terra` / high): CLEAN; exact tuple and no
+  public CLI conclusions stand.
+- Style/maintainability reviewer (`gpt-5.6-terra` / high): accepted P1 that
+  validation was too early and P2 that digest verification parsed config twice.
+- Reliability reviewer (`gpt-5.6-terra` / high): accepted P1 pre-publication
+  transaction-boundary finding and P2 bounded-record-read finding.
+- Documentation reviewer (`gpt-5.6-luna` / medium): accepted the overlapping
+  transaction-boundary claim correction.
+- Runtime telemetry is unavailable; these immutable configured profiles are
+  recorded. Security remains deferred to T-0186.
+
+The correction retains all staged model records and invokes their validation
+after registry staging and safety checks, immediately before the publication
+journal. Record reading now checks the opened descriptor and a 16 KiB maximum
+before JSON allocation; currentness compares one `SourceInventory.digest`.
