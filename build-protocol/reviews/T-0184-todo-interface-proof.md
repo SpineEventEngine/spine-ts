@@ -1,6 +1,6 @@
 # T-0184 Review Log
 
-Status: Implementation and bounded verification complete; specialist review dispatched
+Status: Correction closure complete; targeted re-review pending
 
 Task: `build-protocol/tasks/T-0184-todo-interface-proof/TASK.md`
 Branch: `task/T-0184-todo-interface-proof`
@@ -145,3 +145,26 @@ least 90%, cheap preflight, and bounded `verify:task` with loopback permissions.
   lines `96.23%` (`204/212`), meeting the task's 90% threshold.
 - No specialist lane is dispatched by this implementer. The branch is pushed
   and ready for the planned TypeScript/API, style, reliability, and TSDoc review.
+
+## Accepted Correction Dispositions
+
+- TypeScript/API P1: resolved. Existing command/event tags are preserved;
+  TaskList field one remains reserved and its typed ID is field four. The
+  snapshot reset is an example boundary and does not claim a migration for
+  shared serialized contracts. New assignment rejections declare TaskListId and
+  route from it directly.
+- Style P1/P2: resolved. Assignment guards reject before mutation or normal
+  event production, and the focused contract test prevents new-row TaskId
+  inference from reappearing. Existing completion/reopen fallback is explicitly
+  legacy-only.
+- Performance/reliability: CLEAN. No new persistence, concurrency, or replay
+  concern was introduced; rejection admission leaves assignment projections
+  unchanged.
+- Documentation: reader documentation is stale and deferred to T-0185. Its
+  acceptance includes the assignment rejection table plus the snapshot
+  reset/no-migration explanation.
+- Splitter: the existing requirements-splitter decision used explicit
+  `gpt-5.6-sol` / high. Desktop telemetry cannot independently expose runtime
+  child metadata; the immutable configured profile is the recorded evidence.
+- Reviewer profiles remain as assigned above; telemetry has the same desktop
+  limitation. Security is N/A for T-0184 and remains T-0186 scope.

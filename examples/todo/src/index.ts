@@ -65,11 +65,15 @@ import {
   TaskNotDone,
 } from "../generated/spine/examples/todo/task_rejections.js";
 import type {
+  TaskAlreadyAssigned as TaskAlreadyAssignedMessage,
   TaskAlreadyDone as TaskAlreadyDoneMessage,
+  TaskNotAssigned as TaskNotAssignedMessage,
   TaskNotDone as TaskNotDoneMessage,
 } from "../generated/spine/examples/todo/task_rejections_pb.js";
 import {
+  TaskAlreadyAssignedSchema,
   TaskAlreadyDoneSchema,
+  TaskNotAssignedSchema,
   TaskNotDoneSchema,
 } from "../generated/spine/examples/todo/task_rejections_pb.js";
 import { TaskSchema } from "../generated/spine/examples/todo/tasks_pb.js";
@@ -232,7 +236,7 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
     const assignee = assignees.require(command.assignee);
     if (this.state.completed) throw TaskAlreadyDone.create({ id });
     if (this.state.assignee !== undefined) {
-      throw TaskAlreadyAssigned.create({ id, assignee: this.state.assignee });
+      throw TaskAlreadyAssigned.create({ id, assignee: this.state.assignee, taskListId });
     }
     this.update((draft) =>
       Object.assign(draft, create(TaskSchema, { ...draft, id, taskListId, assignee })),
@@ -252,10 +256,10 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
     const taskListId = taskListIds.require(this.state.taskListId);
     const assignee = assignees.require(command.assignee);
     if (this.state.completed) throw TaskAlreadyDone.create({ id });
-    if (this.state.assignee === undefined) throw TaskNotAssigned.create({ id });
+    if (this.state.assignee === undefined) throw TaskNotAssigned.create({ id, taskListId });
     const previousAssignee = assignees.require(this.state.assignee);
     if (previousAssignee.value === assignee.value) {
-      throw TaskAlreadyAssigned.create({ id, assignee: previousAssignee });
+      throw TaskAlreadyAssigned.create({ id, assignee: previousAssignee, taskListId });
     }
     this.update((draft) =>
       Object.assign(draft, create(TaskSchema, { ...draft, id, taskListId, assignee })),
@@ -275,7 +279,7 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
     const id = clone(TaskIdSchema, this.id);
     const taskListId = taskListIds.require(this.state.taskListId);
     if (this.state.completed) throw TaskAlreadyDone.create({ id });
-    if (this.state.assignee === undefined) throw TaskNotAssigned.create({ id });
+    if (this.state.assignee === undefined) throw TaskNotAssigned.create({ id, taskListId });
     const assignee = assignees.require(this.state.assignee);
     this.update((draft) =>
       Object.assign(draft, create(TaskSchema, { ...draft, id, taskListId, assignee: undefined })),
@@ -310,6 +314,28 @@ export class TaskListProjection extends Projection<TaskListId, typeof TaskListSc
   @Subscribe
   onTaskNotDone(rejection: TaskNotDoneMessage): void {
     void taskIds.require(rejection.id);
+  }
+
+  /**
+   * Observes an assignment request that conflicts with the current assignee.
+   *
+   * @param rejection The rejection that identifies the task, assignee, and list.
+   */
+  @Subscribe
+  onTaskAlreadyAssigned(rejection: TaskAlreadyAssignedMessage): void {
+    void taskIds.require(rejection.id);
+    void taskListIds.require(rejection.taskListId);
+  }
+
+  /**
+   * Observes an assignment operation for a task without an assignee.
+   *
+   * @param rejection The rejection that identifies the task and list.
+   */
+  @Subscribe
+  onTaskNotAssigned(rejection: TaskNotAssignedMessage): void {
+    void taskIds.require(rejection.id);
+    void taskListIds.require(rejection.taskListId);
   }
 
   /**
@@ -580,7 +606,9 @@ export async function createTodoContext(): Promise<BoundedContext> {
   const taskListRouting = EventRouting.create<TaskListId>()
     .route(TaskEvent, (event) => [taskListIds.require(event.taskListId)])
     .route(TaskAlreadyDoneSchema, (event) => taskListIds.fromTaskId(event.id))
-    .route(TaskNotDoneSchema, (event) => taskListIds.fromTaskId(event.id));
+    .route(TaskNotDoneSchema, (event) => taskListIds.fromTaskId(event.id))
+    .route(TaskAlreadyAssignedSchema, (event) => [taskListIds.require(event.taskListId)])
+    .route(TaskNotAssignedSchema, (event) => [taskListIds.require(event.taskListId)]);
   const assigneeRouting = EventRouting.create<UserId>()
     .route(TaskAssignmentEventToken, (event) => [assignees.require(event.assignee)])
     .route(TaskReassignedSchema, (event) => {

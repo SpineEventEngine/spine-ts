@@ -1,6 +1,6 @@
 # T-0184: To-Do Interface-Routing Proof
 
-Status: Resumed — implementation and verification pending
+Status: Correction closure — targeted re-review pending
 Start: `2026-08-14 WEST`
 End: Pending
 Baseline commit: `aed2f194`
@@ -176,3 +176,26 @@ pending implementation continuation.
   Fresh LCOV is branches `90.38%` (`47/52`), functions `95.59%` (`65/68`), and
   lines `96.23%` (`204/212`), meeting the required 90% threshold. The task is
   ready for the planned specialist review wave.
+
+## Review-Correction Closure
+
+- API P1 is resolved: legacy command/event tags remain unchanged, TaskList
+  field one remains reserved, and the typed TaskList ID remains field four.
+  This is a snapshot-reset example boundary, not a migration promise for shared
+  serialized contracts.
+- New assignment rejection rows carry their owning TaskListId and route from
+  that declared field. The legacy completion/reopen rejection routes retain
+  their documented TaskId compatibility fallback; no new rejection row infers a
+  list ID from a task ID.
+- Style P1 is resolved by explicit guard-before-mutation assignment rejection
+  behavior. Style P2 is resolved by focused contract coverage of the direct
+  rejection routes. Reliability is CLEAN: rejected commands do not create an
+  assignment lifecycle event or mutate projections.
+- Reader-facing documentation is stale by design after the accepted contract
+  change and is explicitly deferred to T-0185. T-0185 must include the
+  assignment-rejection table and snapshot-reset/no-migration boundary.
+- The original splitter decision remains sufficient: existing requirements
+  splitter, explicit `gpt-5.6-sol` / high for the high-risk serialized-contract
+  boundary; desktop telemetry cannot expose independent runtime metadata.
+- Security remains N/A for this example-only correction with no trust-boundary
+  change; T-0186 owns the Wave 11 security review.

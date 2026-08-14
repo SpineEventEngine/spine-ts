@@ -19,9 +19,16 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { CreateTaskSchema } from "../generated/spine/examples/todo/task_commands_pb.js";
-import { TaskCreatedSchema, TaskRenamedSchema } from "../generated/spine/examples/todo/task_events_pb.js";
+import {
+  TaskCreatedSchema,
+  TaskRenamedSchema,
+} from "../generated/spine/examples/todo/task_events_pb.js";
 import { TaskIdSchema, TaskListIdSchema } from "../generated/spine/examples/todo/task_id_pb.js";
 import { TaskListSchema } from "../generated/spine/examples/todo/task_list_pb.js";
+import {
+  TaskAlreadyAssignedSchema,
+  TaskNotAssignedSchema,
+} from "../generated/spine/examples/todo/task_rejections_pb.js";
 import { TaskSchema } from "../generated/spine/examples/todo/tasks_pb.js";
 
 const todoRoot = new URL("..", import.meta.url);
@@ -52,6 +59,22 @@ describe("To-Do interface-routing contract", () => {
     expect(application).not.toContain("TaskReassignmentEvent");
   });
 
+  it("routes new assignment rejections by their declared TaskListId without TaskId inference", () => {
+    const application = source("src/index.ts");
+    const fields = (schema: {
+      readonly fields: readonly { readonly localName: string; readonly number: number }[];
+    }) => Object.fromEntries(schema.fields.map((field) => [field.localName, field.number]));
+
+    expect(fields(TaskAlreadyAssignedSchema)).toMatchObject({ id: 1, assignee: 2, taskListId: 3 });
+    expect(fields(TaskNotAssignedSchema)).toMatchObject({ id: 1, taskListId: 2 });
+    expect(application).toContain(
+      ".route(TaskAlreadyAssignedSchema, (event) => [taskListIds.require(event.taskListId)])",
+    );
+    expect(application).toContain(
+      ".route(TaskNotAssignedSchema, (event) => [taskListIds.require(event.taskListId)])",
+    );
+  });
+
   it("allows the first Task transition to establish its task-list identity", () => {
     const id = create(TaskIdSchema, { value: "task-1" });
     const result = validateEntityStateTransition({
@@ -68,8 +91,9 @@ describe("To-Do interface-routing contract", () => {
   });
 
   it("preserves legacy task title tags while assigning list identity new tags", () => {
-    const fields = (schema: { readonly fields: readonly { readonly localName: string; readonly number: number }[] }) =>
-      Object.fromEntries(schema.fields.map((field) => [field.localName, field.number]));
+    const fields = (schema: {
+      readonly fields: readonly { readonly localName: string; readonly number: number }[];
+    }) => Object.fromEntries(schema.fields.map((field) => [field.localName, field.number]));
 
     expect(fields(CreateTaskSchema)).toMatchObject({ id: 1, title: 2, taskListId: 3 });
     expect(fields(TaskCreatedSchema)).toMatchObject({ id: 1, title: 2, taskListId: 3 });
@@ -81,8 +105,13 @@ describe("To-Do interface-routing contract", () => {
     const legacyFieldOne = new Uint8Array([0x0a, 0x03, 0x6f, 0x6c, 0x64]);
 
     expect(fromBinary(TaskListSchema, legacyFieldOne).id).toBeUndefined();
-    expect(toBinary(TaskListSchema, create(TaskListSchema, {
-      id: create(TaskListIdSchema, { value: "new" }),
-    }))[0]).toBe(0x22);
+    expect(
+      toBinary(
+        TaskListSchema,
+        create(TaskListSchema, {
+          id: create(TaskListIdSchema, { value: "new" }),
+        }),
+      )[0],
+    ).toBe(0x22);
   });
 });

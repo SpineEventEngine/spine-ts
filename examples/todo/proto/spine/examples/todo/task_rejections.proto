@@ -46,10 +46,16 @@ message TaskAlreadyAssigned {
 
   // Identifies the task's current assignee.
   spine.core.UserId assignee = 2 [(required) = true, (validate) = true];
+
+  // Identifies the task list that owns the assignment.
+  TaskListId task_list_id = 3 [(required) = true, (validate) = true];
 }
 
 // Rejects an operation that requires an assigned task.
 message TaskNotAssigned {
   // Identifies the unassigned task.
   TaskId id = 1 [(required) = true, (validate) = true];
+
+  // Identifies the task list that owns the unassigned task.
+  TaskListId task_list_id = 2 [(required) = true, (validate) = true];
 }
