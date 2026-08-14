@@ -2271,6 +2271,57 @@ describe("proto-workflow", () => {
     }
   });
 
+  it("retains the MessageBoard registry stage only while a failed publication journal owns it", () => {
+    const repoRoot = messageBoardRegistryFixture();
+    const registryDirectory = join(repoRoot, "examples/message-board/app/src");
+    const rootGenerated = join(repoRoot, "packages/proto/generated");
+    let backup;
+
+    try {
+      const status = generateTargets({
+        repoRoot,
+        runCommand: rootStageCommand,
+        runModelCommand: todoStageCommand(),
+        runCompositionCommand: messageBoardCompositionCommand(false),
+        publicationOperations: {
+          rename(from, to) {
+            if (from === rootGenerated && basename(to).startsWith(".generated.backup-")) {
+              backup = to;
+            }
+            if (from.includes(".generated-") && to === rootGenerated)
+              throw new Error("primary staged rename failed");
+            if (from === backup && to === rootGenerated) throw new Error("recovery restore failed");
+            renameSync(from, to);
+          },
+        },
+      });
+
+      expect(status).toBe(1);
+      expect(existsSync(join(repoRoot, ".spine-proto-publication.json"))).toBe(true);
+      expect(
+        readdirSync(registryDirectory).filter((entry) => entry.startsWith(".generated-")),
+      ).toHaveLength(1);
+
+      const journal = JSON.parse(
+        readFileSync(join(repoRoot, ".spine-proto-publication.json"), "utf8"),
+      );
+      backup = journal.targets.find((target) => target.target === rootGenerated).backup;
+      expect(existsSync(backup)).toBe(true);
+
+      publishGeneratedTargets([], repoRoot);
+
+      expect(readFileSync(join(rootGenerated, "previous.txt"), "utf8")).toBe(
+        "packages/proto/generated\n",
+      );
+      expect(existsSync(join(repoRoot, ".spine-proto-publication.json"))).toBe(false);
+      expect(
+        readdirSync(registryDirectory).filter((entry) => entry.startsWith(".generated-")),
+      ).toEqual([]);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("removes first-publication output when finalization fails", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
     const generatedRoot = join(repoRoot, "packages/proto/generated");

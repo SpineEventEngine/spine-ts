@@ -330,3 +330,22 @@ Final security and release verification remain pending.
   explicitly configured `gpt-5.6-terra` / medium. Desktop exposes no independent
   runtime telemetry; the immutable configured role/profile is the assignment
   evidence. Re-review remains limited to style and reliability.
+
+## Final Targeted Re-Review Correction Evidence (2026-08-14)
+
+- The existing implementer, explicitly configured `gpt-5.6-terra` / medium,
+  corrected both accepted findings. Desktop exposes no independent runtime
+  telemetry; configured profile and no visible mismatch remain the acceptance
+  evidence.
+- Claim scan collection bounds all lock-named entries before candidate-kind
+  validation. Each candidate is opened read-only with no-follow and nonblocking
+  flags, fstat-validated as a regular descriptor, read through that descriptor,
+  and closed. Public reader tests cover regular and symlinked `1,000/1,001`
+  boundaries; the test-first `1,001` symlink case was RED before the ordering
+  correction and is GREEN after it.
+- The wrapper-level MessageBoard primary-and-recovery failure regression proves
+  its registry file stage remains only while journal-owned, then later recovery
+  removes it with the journal and restores the prior root output.
+- Evidence: Proto Tools `133/133`; workflow `89/89`; generated-clean `10/10`;
+  tooling typecheck, affected ESLint, Prettier/diff, current-output, cleanup,
+  and residue checks pass. Style and reliability targeted re-review are ready.

@@ -2120,6 +2120,33 @@ describe("spine proto model tooling", () => {
     }
   });
 
+  it.each([1_000, 1_001])(
+    "bounds manifest-reader scans with %i non-regular claim candidates",
+    (entries) => {
+      const model = packageDirectory(`@example/non-regular-claim-bound-${String(entries)}`);
+      try {
+        writeJson(
+          model,
+          "spine-proto.json",
+          modelConfig(`@example/non-regular-claim-bound-${String(entries)}`),
+        );
+        writeFileSync(join(model, "claim-target"), "not a claim\n");
+        for (let index = 0; index < entries; index += 1)
+          symlinkSync(
+            "claim-target",
+            join(model, `.spine-proto-generate.lock.link-${String(index)}`),
+          );
+        writeFileSync(join(model, "spine-proto-manifest.json"), "not json\n");
+
+        const read = () => readManifest(model);
+        if (entries === 1_000) expect(read).toThrow("generation claim is unsafe");
+        else expect(read).toThrow("generation claim count exceeds 1000");
+      } finally {
+        rmSync(model, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("reads only the completed manifest when a live claim commits during a retry", async () => {
     const model = packageDirectory("@example/interleaved-manifest-read");
     const claim = join(model, ".spine-proto-generate.lock.live");

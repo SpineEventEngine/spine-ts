@@ -12,7 +12,15 @@
  * the License.
  */
 
-import { lstatSync, opendirSync, readFileSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  lstatSync,
+  openSync,
+  opendirSync,
+  readFileSync,
+} from "node:fs";
 import { randomUUID } from "node:crypto";
 import { isAbsolute, join, normalize, sep } from "node:path";
 
@@ -43,15 +51,29 @@ function hasLiveGenerationClaim(packageRoot: string): boolean {
     const directory = opendirSync(packageRoot, { encoding: "utf8" });
     try {
       let entry;
-      let claims = 0;
+      const claimPaths: string[] = [];
       while ((entry = directory.readSync()) !== null) {
-        if (!entry.name.startsWith(".spine-proto-generate.lock.") || !entry.isFile()) continue;
-        claims += 1;
-        if (claims > generationClaimScanLimit)
+        if (!entry.name.startsWith(".spine-proto-generate.lock.")) continue;
+        claimPaths.push(join(packageRoot, entry.name));
+        if (claimPaths.length > generationClaimScanLimit)
           throw new Error("generation claim count exceeds 1000");
-        const owner = JSON.parse(readFileSync(join(packageRoot, entry.name), "utf8")) as {
-          pid?: unknown;
-        };
+      }
+      for (const path of claimPaths) {
+        let descriptor: number | undefined;
+        let owner: { pid?: unknown };
+        try {
+          descriptor = openSync(
+            path,
+            constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+          );
+          if (!fstatSync(descriptor).isFile()) throw new Error("generation claim is unsafe");
+          owner = JSON.parse(readFileSync(descriptor, "utf8")) as { pid?: unknown };
+        } catch (error) {
+          if (error instanceof Error && error.message === "generation claim is unsafe") throw error;
+          throw new Error("generation claim is unsafe", { cause: error });
+        } finally {
+          if (descriptor !== undefined) closeSync(descriptor);
+        }
         if (typeof owner.pid !== "number" || owner.pid <= 0) continue;
         try {
           process.kill(owner.pid, 0);
@@ -64,7 +86,10 @@ function hasLiveGenerationClaim(packageRoot: string): boolean {
       directory.closeSync();
     }
   } catch (error) {
-    if (error instanceof Error && error.message === "generation claim count exceeds 1000")
+    if (
+      error instanceof Error &&
+      ["generation claim count exceeds 1000", "generation claim is unsafe"].includes(error.message)
+    )
       throw error;
     return false;
   }

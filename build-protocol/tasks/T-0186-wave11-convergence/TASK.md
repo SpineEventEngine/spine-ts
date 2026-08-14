@@ -274,3 +274,25 @@ vitest run packages/server/test/repository/repository-routing.test.ts` —
   Style and reliability reopen after correction. API/docs remain CLEAN unless
   the residual corrections alter their surfaces. Security/release remain
   pending.
+
+## Final Claim-Reader and Recovery Correction (2026-08-14)
+
+- The existing `implementer` completed the accepted final targeted batch under
+  explicit `gpt-5.6-terra` / medium configuration. Desktop exposes no
+  independent runtime-profile telemetry; the immutable configured profile and
+  no visible mismatch are the available evidence.
+- Claim scans now first count every lock-named directory entry to the bounded
+  `1,000` limit, then open each candidate with read-only, no-follow,
+  nonblocking flags, verify its opened descriptor is regular, read that
+  descriptor, and close it on every path. Public manifest-reader coverage
+  proves regular and symlinked `1,000/1,001` bounds; unsafe claims fail closed.
+- A wrapper-level MessageBoard transaction now proves a primary publication and
+  recovery failure retains the journal-owned registry file stage, while later
+  successful recovery restores the prior root output and removes the journal
+  and registry stage. This correction changes no public API or documentation.
+- Focused RED/GREEN evidence: the non-regular `1,001` regression first read a
+  malformed manifest instead of enforcing the bound; after collection-before-
+  validation it is green. Full Proto Tools is `133/133`, workflow `89/89`, and
+  generated-clean `10/10`; tooling typecheck, affected ESLint, Prettier,
+  diff, current-output, cleanup, and residue checks are green. Targeted
+  style/reliability re-review is ready; security/release remain pending.
