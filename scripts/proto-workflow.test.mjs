@@ -584,6 +584,9 @@ describe("proto-workflow", () => {
       expect(existsSync(join(dirname(executable), "../generation/interface-generator.js"))).toBe(
         true,
       );
+      expect(
+        existsSync(join(dirname(executable), "../generation/authored-interface-provider.js")),
+      ).toBe(true);
     } finally {
       releaseProtoToolsBootstrap(root);
     }

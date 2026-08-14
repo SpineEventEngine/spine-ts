@@ -18,9 +18,14 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from "node:pat
 import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync } from "node:fs";
 
-import { AuthoredInterfaceProvider } from "./authored-interface-provider.js";
 import type { InterfaceDeclarationProvider } from "./interface-provider.js";
 import type { ModelSourceView } from "./source-view.js";
+
+const { AuthoredInterfaceProvider } = await import(
+  import.meta.url.endsWith(".ts")
+    ? "./authored-interface-provider.ts"
+    : "./authored-interface-provider.js"
+);
 
 const typescriptIdentifier = /^[A-Za-z_$][A-Za-z0-9_$]*$/u;
 
