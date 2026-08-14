@@ -18,12 +18,33 @@ import { join } from "node:path";
 import { mkdtempSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { modelSourceView } from "../src/generation/source-view.js";
+import { assertSourceViewCurrent, modelSourceView } from "../src/generation/source-view.js";
 
 describe("modelSourceView", () => {
+  it("detects a recursively extended tsconfig byte mutation", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-source-view-tsconfig-"));
+    try {
+      writeFileSync(join(root, "tsconfig.json"), "{}\n");
+      mkdirSync(join(root, "src"));
+      writeFileSync(join(root, "tsconfig.json"), JSON.stringify({ extends: "./base.json" }));
+      writeFileSync(join(root, "base.json"), JSON.stringify({ compilerOptions: { strict: true } }));
+      writeFileSync(join(root, "src/authored.ts"), "export interface Authored {}\n");
+      const view = modelSourceView(root, "src/generated", join(root, ".generated.stage/output"));
+      writeFileSync(
+        join(root, "base.json"),
+        JSON.stringify({ compilerOptions: { strict: false } }),
+      );
+      expect(() => {
+        assertSourceViewCurrent(view);
+      }).toThrow("source view changed");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
   it("excludes live generated, stage, backup, and declaration trees while redirecting to stage", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-source-view-"));
     try {
+      writeFileSync(join(root, "tsconfig.json"), "{}\n");
       for (const path of [
         "src",
         "src/generated",
@@ -52,6 +73,7 @@ describe("modelSourceView", () => {
   it("fails closed beyond the bounded source-view directory depth", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-source-view-depth-"));
     try {
+      writeFileSync(join(root, "tsconfig.json"), "{}\n");
       let current = root;
       for (let depth = 0; depth <= 32; depth += 1) {
         current = join(current, "nested");

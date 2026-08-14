@@ -13,8 +13,9 @@
  */
 
 import { createHash } from "node:crypto";
-import { lstatSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import ts from "typescript";
 
 const maximumSourceViewDepth = 32;
 const maximumSourceViewEntries = 10_000;
@@ -50,12 +51,50 @@ export interface ModelSourceView {
    * Redirect root used when compiler imports address generated model sources.
    */
   readonly stagedGeneratedRoot: string;
+}
 
-  /** Deterministic pre-analysis inventory for publication revalidation. */
+/** Internal source view carrying the required publication revalidation digest. */
+export interface PublicationSourceView extends ModelSourceView {
   readonly inventoryDigest: string;
 }
 
-function inventoryDigest(files: readonly string[]): string {
+function configFiles(root: string): readonly string[] {
+  const configPath = join(root, "tsconfig.json");
+  if (!existsSync(configPath)) throw new Error("spine-proto: source view requires tsconfig.json");
+  const texts = new Map<string, string>();
+  const host = {
+    ...ts.sys,
+    readFile: (path: string) => {
+      const text = ts.sys.readFile(path);
+      if (text !== undefined) texts.set(resolve(path), text);
+      return text;
+    },
+  };
+  const source = ts.readJsonConfigFile(configPath, host.readFile);
+  const parsed = ts.parseJsonSourceFileConfigFileContent(
+    source,
+    host,
+    root,
+    undefined,
+    configPath,
+    undefined,
+    undefined,
+    new Map(),
+  );
+  if (parsed.errors.length > 0)
+    throw new Error("spine-proto: source view has invalid tsconfig.json");
+  const extended =
+    (source as unknown as { readonly extendedSourceFiles?: readonly string[] })
+      .extendedSourceFiles ?? [];
+  const files = [source.fileName, ...extended]
+    .map((file) => resolve(file))
+    .filter((file, index, values) => values.indexOf(file) === index)
+    .sort();
+  for (const file of files) if (!texts.has(file)) texts.set(file, readFileSync(file, "utf8"));
+  return files;
+}
+
+function inventoryDigest(files: readonly string[], configs: readonly string[] = []): string {
   const hash = createHash("sha256");
   for (const file of files) {
     hash.update(file);
@@ -63,12 +102,21 @@ function inventoryDigest(files: readonly string[]): string {
     hash.update(readFileSync(file));
     hash.update("\0");
   }
+  for (const config of configs) {
+    hash.update(config);
+    hash.update("\0");
+    hash.update(readFileSync(config));
+    hash.update("\0");
+  }
   return hash.digest("hex");
 }
 
 /** Revalidates the immutable authored-source inventory before publication. */
-export function assertSourceViewCurrent(sourceView: ModelSourceView): void {
-  if (inventoryDigest(sourceView.authoredFiles) !== sourceView.inventoryDigest)
+export function assertSourceViewCurrent(sourceView: PublicationSourceView): void {
+  if (
+    inventoryDigest(sourceView.authoredFiles, configFiles(sourceView.packageRoot)) !==
+    sourceView.inventoryDigest
+  )
     throw new Error("spine-proto: authored interface source view changed during generation");
 }
 
@@ -122,7 +170,7 @@ export function modelSourceView(
   packageRoot: string,
   generatedRoot: string,
   stagedGeneratedRoot: string,
-): ModelSourceView {
+): PublicationSourceView {
   const root = resolve(packageRoot);
   const generated = generatedRoot.replaceAll("\\", "/");
   const generatedDirectory = dirname(generated);
@@ -136,7 +184,7 @@ export function modelSourceView(
   );
   return Object.freeze({
     authoredFiles,
-    inventoryDigest: inventoryDigest(authoredFiles),
+    inventoryDigest: inventoryDigest(authoredFiles, configFiles(root)),
     packageRoot: root,
     liveGeneratedRoot,
     stagedGeneratedRoot: resolve(stagedGeneratedRoot),
