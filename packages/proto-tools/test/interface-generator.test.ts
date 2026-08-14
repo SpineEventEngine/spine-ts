@@ -89,7 +89,9 @@ describe("InterfaceGenerator", () => {
 
     expect(generated).toEqual(["interfaces/signal-family.ts"]);
     expect(printed.join("")).toContain("export interface SignalFamily {}");
-    expect(printed.join("")).toContain("[SignalSchema, NestedSchema] as const");
+    expect(printed.join("")).toContain(
+      "const memberSchemas: readonly [typeof SignalSchema, typeof NestedSchema] = [SignalSchema, NestedSchema];",
+    );
     expect(printed.join("")).toContain("export const SignalFamily");
   });
 
@@ -148,7 +150,7 @@ describe("InterfaceGenerator", () => {
     InterfaceGenerator.generateCompanions(schema);
 
     expect(printed.join("")).toContain(
-      "[example_SignalSchema, example_Signal_NestedSchema] as const",
+      "const memberSchemas: readonly [typeof example_SignalSchema, typeof example_Signal_NestedSchema] = [example_SignalSchema, example_Signal_NestedSchema];",
     );
   });
 
@@ -323,8 +325,11 @@ describe("InterfaceGenerator", () => {
       });
       expect(output.join("")).toContain("interfaces/file-signal.ts");
       expect(output.join("")).toContain("interfaces/message-signal.ts");
-      expect(output.join("")).toContain("export type FileSignal = AuthoredFileSignal");
-      expect(output.join("")).toContain("export type MessageSignal = AuthoredMessageSignal");
+    expect(output.join("")).toContain("export type FileSignal = AuthoredFileSignal");
+    expect(output.join("")).toContain("export type MessageSignal = AuthoredMessageSignal");
+    expect(output.join("")).toContain(
+      "const memberSchemas: readonly [typeof SignalSchema, typeof NestedSchema] = [SignalSchema, NestedSchema];",
+    );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
