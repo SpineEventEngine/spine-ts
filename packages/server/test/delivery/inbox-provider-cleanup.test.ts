@@ -122,5 +122,7 @@ function open(
   context: { readonly name: string; readonly multitenant: false },
   now?: () => Date,
 ): Inbox {
-  return new Inbox(new InboxStorage({ context, storageFactory: factory, now }));
+  return new Inbox(
+    new InboxStorage({ context, storageFactory: factory, ...(now === undefined ? {} : { now }) }),
+  );
 }
