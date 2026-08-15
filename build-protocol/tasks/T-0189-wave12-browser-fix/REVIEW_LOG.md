@@ -1,6 +1,6 @@
 # T-0189 Review Log
 
-Status: FINAL AFFECTED-LANE RE-REVIEW IN PROGRESS
+Status: FINAL RUNNER CORRECTION IN PROGRESS
 
 Performance/reliability and style/maintainability apply. TypeScript/API,
 documentation, and security apply only if the proven implementation boundary
@@ -225,3 +225,22 @@ Final affected-lane re-review is dispatched against production endpoint
 style/maintainability and performance/reliability reviewers, each explicitly
 `gpt-5.6-terra` / high, read-only, and forbidden to spawn subagents. Desktop
 runtime telemetry remains unavailable.
+
+## Final Re-review Result (2026-08-15)
+
+Both affected lanes completed against `fd58c1bd`. They accept the corrected
+renderer, ordinary split/coalesced marker parsing, update identity, timer,
+native cancellation, topology ownership, and cleanup behavior. One shared
+runner finding and one style-only selection finding remain:
+
+1. Await child `close`/stdio completion rather than `exit`, so trailing markers
+   and health failures are drained into the same awaited promise before
+   snapshot/settlement checks and topology cleanup. Add an exit-before-final-
+   stdout regression.
+2. Require the three passive snapshots based on explicit case selection or
+   observed protocol state, not whether a grep string literally contains
+   `passive viewer`; add a non-literal grep regression.
+
+These two corrections return as one final bounded batch to the existing
+implementer. Performance/reliability must re-review the close/settlement path;
+style re-review is limited to the snapshot-selection correction.
