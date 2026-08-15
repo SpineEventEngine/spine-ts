@@ -173,8 +173,9 @@ export class InboxStorage {
   async removeDelivered(
     message: InboxMessage,
     session: DeliveryWorkSession,
-    _options?: import("./delivery-ports.js").DeliveryOperationOptions,
+    options?: import("./delivery-ports.js").DeliveryOperationOptions,
   ): Promise<boolean> {
+    void options;
     if (session.kind !== "LEASED" || session.shard.key() !== message.shard.key()) return false;
     const expected = InboxRecords.write(message);
     if (
@@ -189,12 +190,17 @@ export class InboxStorage {
         inbox: { spec: inboxRecordSpec, id: Values.wireId(expected), expected },
         session: {
           spec: shardSessionRecordSpec,
-          id: create(ShardIndexSchema, { index: session.shard.index, ofTotal: session.shard.ofTotal }),
+          id: create(ShardIndexSchema, {
+            index: session.shard.index,
+            ofTotal: session.shard.ofTotal,
+          }),
           expected: Values.session(session),
           isCurrent: (current) => Values.sessionCurrent(current, session, Values.now(this.#now)),
         },
       });
-    } finally { cleanup.close(); }
+    } finally {
+      cleanup.close();
+    }
   }
 
   /**
@@ -386,10 +392,12 @@ const Values = Object.freeze({
     expected: import("./sharded-work-registry.js").ShardSession,
     now: number,
   ): boolean {
-    return value.index?.index === expected.shard.index &&
+    return (
+      value.index?.index === expected.shard.index &&
       value.index.ofTotal === expected.shard.ofTotal &&
       value.worker?.nodeId?.value === expected.worker?.nodeId?.value &&
       value.worker?.value === expected.worker?.value &&
-      expected.expiresAt.getTime() > now;
+      expected.expiresAt.getTime() > now
+    );
   },
 });

@@ -15,20 +15,33 @@ import { TenantRecords } from "./tenant-records.js";
 /** Provider-owned synchronous critical section for in-memory delivery cleanup. */
 export class MemoryDeliveryCleanupStorage implements DeliveryCleanupStorage {
   #open = true;
-  constructor(private readonly records: <I, R extends Message>(context: StorageContext, spec: RecordSpec<I, R>, group?: StorageGroup) => TenantRecords<I, R>) {}
-  async remove<InboxId, InboxRecord extends Message, SessionId, SessionRecord extends Message>(input: DeliveryCleanupInput<InboxId, InboxRecord, SessionId, SessionRecord>): Promise<boolean> {
-    if (!this.#open) throw new Error("Delivery cleanup storage is closed.");
+  constructor(
+    private readonly records: <I, R extends Message>(
+      context: StorageContext,
+      spec: RecordSpec<I, R>,
+      group?: StorageGroup,
+    ) => TenantRecords<I, R>,
+  ) {}
+  remove<InboxId, InboxRecord extends Message, SessionId, SessionRecord extends Message>(
+    input: DeliveryCleanupInput<InboxId, InboxRecord, SessionId, SessionRecord>,
+  ): Promise<boolean> {
+    if (!this.#open) return Promise.reject(new Error("Delivery cleanup storage is closed."));
     const sessions = this.records(input.context, input.session.spec);
     const current = sessions.read(input.session.id);
-    if (current === undefined || !input.session.isCurrent(current)) return false;
+    if (current === undefined || !input.session.isCurrent(current)) return Promise.resolve(false);
     const expectedSession = input.session.spec.materialize(input.session.expected);
-    if (!sessions.compareAndSet(input.session.id, expectedSession, expectedSession)) return false;
+    if (!sessions.compareAndSet(input.session.id, expectedSession, expectedSession))
+      return Promise.resolve(false);
     const inbox = this.records(input.context, input.inbox.spec);
-    return inbox.compareAndSet(
-      input.inbox.id,
-      input.inbox.spec.materialize(input.inbox.expected),
-      undefined,
+    return Promise.resolve(
+      inbox.compareAndSet(
+        input.inbox.id,
+        input.inbox.spec.materialize(input.inbox.expected),
+        undefined,
+      ),
     );
   }
-  close(): void { this.#open = false; }
+  close(): void {
+    this.#open = false;
+  }
 }

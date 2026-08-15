@@ -35,7 +35,9 @@ describe.skipIf(mysqlUrl === undefined)("MySQL Inbox cleanup", () => {
       .setStringifierRegistry(stringifiers)
       .build();
   });
-  afterAll(() => factory?.close());
+  afterAll(() => {
+    factory.close();
+  });
 
   it("deletes only the exact delivered snapshot under the current leased session", async () => {
     const context = { name: `t0191_mysql_${String(Date.now())}`, multitenant: false } as const;
@@ -89,17 +91,20 @@ async function removeExact(
   const stale = createMessage(`${seed}-stale`, "stale", 2n);
   await inbox.storage.write(stale);
   const staleDelivered = await inbox.markDelivered(stale);
+  if (staleDelivered === undefined) throw new Error("Expected stale delivered row.");
   now += 1_000;
   const replacement = await registry.pickUp(ShardIndex.single(), worker("replacement"));
   expect(replacement).toBeDefined();
-  await expect(inbox.removeDelivered(staleDelivered!, session)).resolves.toBe(false);
+  await expect(inbox.removeDelivered(staleDelivered, session)).resolves.toBe(false);
   await expect(inbox.readMessage(stale.id)).resolves.toMatchObject({ status: "DELIVERED" });
 
   const expired = createMessage(`${seed}-expired`, "expired", 3n);
   await inbox.storage.write(expired);
   const expiredDelivered = await inbox.markDelivered(expired);
+  if (expiredDelivered === undefined || replacement === undefined)
+    throw new Error("Expected expired row and replacement session.");
   now += 1_001;
-  await expect(inbox.removeDelivered(expiredDelivered!, replacement!)).resolves.toBe(false);
+  await expect(inbox.removeDelivered(expiredDelivered, replacement)).resolves.toBe(false);
   await expect(inbox.readMessage(expired.id)).resolves.toMatchObject({ status: "DELIVERED" });
 
   const current = await registry.pickUp(ShardIndex.single(), worker("current-again"));
@@ -108,9 +113,10 @@ async function removeExact(
   const replaced = createMessage(`${seed}-replaced`, "replaced", 4n);
   await inbox.storage.write(replaced);
   const replacedDelivered = await inbox.markDelivered(replaced);
+  if (replacedDelivered === undefined) throw new Error("Expected replaced delivered row.");
   await expect(
     inbox.removeDelivered(
-      { ...replacedDelivered!, version: replacedDelivered!.version + 1n },
+      { ...replacedDelivered, version: replacedDelivered.version + 1n },
       current,
     ),
   ).resolves.toBe(false);

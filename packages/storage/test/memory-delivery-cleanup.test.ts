@@ -6,7 +6,12 @@ import { DeliveryCleanupStorageFactories } from "../src/internal/delivery-cleanu
 import { InMemoryStorageFactory } from "../src/memory/in-memory-storage-factory.js";
 import { RecordSpec } from "../src/record/record-spec.js";
 
-const spec = new RecordSpec({ sourceType: StringValueSchema, recordType: StringValueSchema, idKind: "string", extractId: (record) => record.value });
+const spec = new RecordSpec({
+  sourceType: StringValueSchema,
+  recordType: StringValueSchema,
+  idKind: "string",
+  extractId: (record) => record.value,
+});
 
 describe("Memory delivery cleanup source graph", () => {
   it("rejects an unregistered factory", () => {
@@ -22,13 +27,47 @@ describe("Memory delivery cleanup source graph", () => {
     await sessions.write(current);
     await inbox.write(delivered);
     const cleanup = DeliveryCleanupStorageFactories.create(factory);
-    await expect(cleanup.remove({ context, inbox: { spec, id: "delivered", expected: delivered }, session: { spec, id: "session", expected: current, isCurrent: (value) => value.value === "session" } })).resolves.toBe(true);
+    await expect(
+      cleanup.remove({
+        context,
+        inbox: { spec, id: "delivered", expected: delivered },
+        session: {
+          spec,
+          id: "session",
+          expected: current,
+          isCurrent: (value) => value.value === "session",
+        },
+      }),
+    ).resolves.toBe(true);
     await expect(inbox.read("delivered")).resolves.toBeUndefined();
-    await expect(cleanup.remove({ context, inbox: { spec, id: "delivered", expected: delivered }, session: { spec, id: "session", expected: current, isCurrent: () => false } })).resolves.toBe(false);
-    await sessions.compareAndSet("session", current, create(StringValueSchema, { value: "changed" }));
-    await expect(cleanup.remove({ context, inbox: { spec, id: "delivered", expected: delivered }, session: { spec, id: "session", expected: current, isCurrent: () => true } })).resolves.toBe(false);
+    await expect(
+      cleanup.remove({
+        context,
+        inbox: { spec, id: "delivered", expected: delivered },
+        session: { spec, id: "session", expected: current, isCurrent: () => false },
+      }),
+    ).resolves.toBe(false);
+    await sessions.compareAndSet(
+      "session",
+      current,
+      create(StringValueSchema, { value: "changed" }),
+    );
+    await expect(
+      cleanup.remove({
+        context,
+        inbox: { spec, id: "delivered", expected: delivered },
+        session: { spec, id: "session", expected: current, isCurrent: () => true },
+      }),
+    ).resolves.toBe(false);
     cleanup.close();
-    await expect(cleanup.remove({ context, inbox: { spec, id: "delivered", expected: delivered }, session: { spec, id: "session", expected: current, isCurrent: () => true } })).rejects.toThrow("closed");
-    inbox.close(); sessions.close();
+    await expect(
+      cleanup.remove({
+        context,
+        inbox: { spec, id: "delivered", expected: delivered },
+        session: { spec, id: "session", expected: current, isCurrent: () => true },
+      }),
+    ).rejects.toThrow("closed");
+    inbox.close();
+    sessions.close();
   });
 });
