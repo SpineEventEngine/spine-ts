@@ -162,6 +162,18 @@ describe("StorageQueryPolicy", () => {
     expect(() => {
       StorageQueryPolicy.validate({ candidateLimit: 0 }, completeCapabilities);
     }).toThrow(/candidate limit must be a positive safe integer/);
+    expect(() => {
+      StorageQueryPolicy.validate({ candidateLimit: 10_001 }, completeCapabilities);
+    }).toThrow(/candidate limit must not exceed 10,000/);
+    expect(() => {
+      StorageQueryPolicy.validate(
+        { candidateLimit: Number.MAX_SAFE_INTEGER },
+        completeCapabilities,
+      );
+    }).toThrow(/candidate limit must not exceed 10,000/);
+    expect(() => {
+      StorageQueryPolicy.validate({ candidateLimit: 10_000 }, completeCapabilities);
+    }).not.toThrow();
   });
 
   it("detects nested groups separately from the top-level group", () => {
@@ -249,6 +261,15 @@ describe("StorageQueryPolicy", () => {
     malformed({ mask: [] }, /field mask must be an object/);
     malformed({ mask: { paths: "id" } }, /field-mask paths must be an array/);
     malformed({ mask: { paths: [1] } }, /field-mask paths must be strings/);
+  });
+
+  it.each([
+    [{ offset: 1 }, /do not support offset/],
+    [{ unexpected: true }, /query plan property must be recognized/],
+  ])("rejects unsupported normalized-plan property %o", (plan, error) => {
+    expect(() => {
+      StorageQueryPolicy.validate(plan as NormalizedQueryPlan<string>, completeCapabilities);
+    }).toThrow(error);
   });
 
   it("rejects sparse arrays and malformed descendants before capability admission", () => {

@@ -20,6 +20,7 @@ import type { RecordSpec } from "../record/record-spec.js";
 import { RecordStorage } from "../record/record-storage.js";
 import type { StorageContext } from "../storage/storage.js";
 import type { NormalizedQueryPlan, StorageQueryCapabilities } from "../query/query-policy.js";
+import { defaultQueryCandidateLimit } from "../query/query-execution.js";
 import { TenantRecords } from "./tenant-records.js";
 import { TenantBoundary } from "../internal/tenancy.js";
 
@@ -107,7 +108,7 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
   ): Promise<readonly RecordEntry<I, R>[]> {
     return Promise.resolve(
       this.records().queryEntries(this.recordSpec, {
-        ...(plan.candidateLimit === undefined ? {} : { limit: plan.candidateLimit + 1 }),
+        limit: (plan.candidateLimit ?? defaultQueryCandidateLimit) + 1,
       }),
     );
   }

@@ -432,6 +432,7 @@ const expectedStorageExports = [
   "StorageGroup",
   "StorageMode",
   "StorageQueryCapabilities",
+  "defaultQueryCandidateLimit",
   "QueryCandidateLimitError",
   "StorageQueryFeature",
   "StorageQueryEvaluator",

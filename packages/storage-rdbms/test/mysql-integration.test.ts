@@ -19,14 +19,24 @@ import {
   TimestampSchema,
   type StringValue,
 } from "@bufbuild/protobuf/wkt";
-import { EventIdSchema, EventSchema, VersionSchema } from "@spine-event-engine/proto";
+import {
+  EventIdSchema,
+  EventSchema,
+  TenantIdSchema,
+  VersionSchema,
+} from "@spine-event-engine/proto";
 import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
 import { eventStoreRecordSpec } from "@spine-event-engine/storage/internal/event-store";
-import { ColumnTypes, EventStore, type StorageContext } from "@spine-event-engine/storage";
+import {
+  ColumnTypes,
+  EventStore,
+  StorageGroup,
+  type StorageContext,
+} from "@spine-event-engine/storage";
 import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import type { RowDataPacket } from "mysql2";
 import { createPool } from "mysql2/promise";
@@ -42,7 +52,10 @@ import {
 
 const url = process.env.SPINE_TS_MYSQL_URL;
 const adminUrl = process.env.SPINE_TS_MYSQL_ADMIN_URL;
+const tenantAUrl = process.env.SPINE_TS_MYSQL_TENANT_A_URL;
+const tenantBUrl = process.env.SPINE_TS_MYSQL_TENANT_B_URL;
 const live = url === undefined ? describe.skip : describe;
+const tenantLive = tenantAUrl === undefined || tenantBUrl === undefined ? describe.skip : describe;
 
 live("MySQL-family record layout", () => {
   let factory: MysqlStorageFactory;
@@ -71,11 +84,18 @@ live("MySQL-family record layout", () => {
     const storage = factory.createRecordStorage(
       { name: `t0134_records_${String(Date.now())}`, multitenant: false },
       spec,
+      new StorageGroup(`t0134_records_${String(Date.now())}`),
+    );
+    const otherGroup = factory.createRecordStorage(
+      { name: `t0134_records_${String(Date.now())}`, multitenant: false },
+      spec,
+      new StorageGroup(`t0190_other_${String(Date.now())}`),
     );
     await storage.writeAll([
       create(StringValueSchema, { value: "b" }),
       create(StringValueSchema, { value: "a" }),
     ]);
+    await otherGroup.write(create(StringValueSchema, { value: "other" }));
     await expect(
       storage.query({
         filters: [{ column: "value", value: "a" }],
@@ -83,6 +103,20 @@ live("MySQL-family record layout", () => {
         limit: 1,
       }),
     ).resolves.toEqual([create(StringValueSchema, { value: "a" })]);
+    await expect(
+      storage.queryPlan({
+        predicate: { kind: "comparison", column: "value", operator: "greaterOrEqual", value: "a" },
+        order: [{ column: "value", direction: "desc" }],
+        limit: 1,
+      }),
+    ).resolves.toEqual([create(StringValueSchema, { value: "b" })]);
+    await expect(
+      storage.queryPlan({ predicate: { kind: "ids", ids: ["a", "other"] } }),
+    ).resolves.toEqual([create(StringValueSchema, { value: "a" })]);
+    await expect(
+      otherGroup.queryPlan({ predicate: { kind: "ids", ids: ["a", "other"] } }),
+    ).resolves.toEqual([create(StringValueSchema, { value: "other" })]);
+    otherGroup.close();
     storage.close();
   });
 
@@ -358,6 +392,59 @@ live("MySQL-family record layout", () => {
     }
   });
 });
+
+tenantLive("MySQL normalized-plan tenant containment", () => {
+  it("keeps matching IDs inside the selected tenant and storage group", async () => {
+    if (tenantAUrl === undefined || tenantBUrl === undefined) {
+      throw new Error("Dedicated MySQL tenant URLs are required.");
+    }
+    const tenantA = tenant("a");
+    const tenantB = tenant("b");
+    const group = new StorageGroup(`t0190_group_${String(Date.now())}`);
+    const factory = await MysqlStorageFactory.newBuilder()
+      .setTenantOptions([
+        { tenantId: tenantA, options: { url: tenantAUrl } },
+        { tenantId: tenantB, options: { url: tenantBUrl } },
+      ])
+      .build();
+    const spec = new RecordSpec<string, StringValue>({
+      recordType: StringValueSchema,
+      idKind: "string",
+      extractId: (record) => record.value,
+      columns: [
+        new RecordColumn("value", ColumnTypes.scalar(ScalarType.STRING), (record) => record.value),
+      ],
+    });
+    const first = factory.createRecordStorage(
+      { name: "t0190", multitenant: true, tenantId: tenantA },
+      spec,
+      group,
+    );
+    const second = factory.createRecordStorage(
+      { name: "t0190", multitenant: true, tenantId: tenantB },
+      spec,
+      group,
+    );
+    try {
+      await first.write(create(StringValueSchema, { value: "tenant-a" }));
+      await second.write(create(StringValueSchema, { value: "tenant-b" }));
+      await expect(
+        first.queryPlan({ predicate: { kind: "ids", ids: ["tenant-a", "tenant-b"] } }),
+      ).resolves.toEqual([create(StringValueSchema, { value: "tenant-a" })]);
+      await expect(
+        second.queryPlan({ predicate: { kind: "ids", ids: ["tenant-a", "tenant-b"] } }),
+      ).resolves.toEqual([create(StringValueSchema, { value: "tenant-b" })]);
+    } finally {
+      first.close();
+      second.close();
+      factory.close();
+    }
+  });
+});
+
+function tenant(value: string) {
+  return create(TenantIdSchema, { kind: { case: "value", value } });
+}
 
 function entityInput(context: StorageContext, stateHistory = true, eventHistory = true) {
   const recordSpec = new RecordSpec<string, EntityRecord>({

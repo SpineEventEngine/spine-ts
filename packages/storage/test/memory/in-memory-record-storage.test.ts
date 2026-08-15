@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { create, ScalarType } from "@bufbuild/protobuf";
+import { create, ScalarType, type Message } from "@bufbuild/protobuf";
 import {
   AnySchema,
   StringValueSchema,
@@ -24,12 +24,13 @@ import { EventIdSchema, EventSchema, TenantIdSchema } from "@spine-event-engine/
 import { describe, expect, it } from "vitest";
 
 import { InMemoryRecordStorage } from "../../src/memory/in-memory-record-storage.js";
+import { TenantRecords } from "../../src/memory/tenant-records.js";
 import { ColumnTypes } from "../../src/record/column-type.js";
 import { RecordColumn } from "../../src/record/record-column.js";
+import type { RecordQuery } from "../../src/record/record-query.js";
 import { RecordSpec } from "../../src/record/record-spec.js";
 import { RecordStorage, type RecordEntry } from "../../src/record/record-storage.js";
 import type { NormalizedQueryPlan } from "../../src/query/query-policy.js";
-import { TenantRecords } from "../../src/memory/tenant-records.js";
 import { assertQueryProviderConformance } from "../query/query-provider-conformance.js";
 import type { StorageContext } from "../../src/storage/storage.js";
 
@@ -209,6 +210,29 @@ describe("InMemoryRecordStorage", () => {
     await expect(storage.queryPlan({ candidateLimit: 2 })).rejects.toThrow(
       "Storage query exceeded the candidate limit of 2",
     );
+  });
+
+  it("orders before limiting and retains candidate overflow protection", async () => {
+    const storage = createStorage();
+    await storage.writeAll([
+      createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n),
+      createEvent("event-2", "type.spine.io/tasks.TaskCreated", 2n),
+    ]);
+
+    await expect(
+      storage.queryPlan({
+        candidateLimit: 2,
+        order: [{ column: "timestamp", direction: "desc" }],
+        limit: 1,
+      }),
+    ).resolves.toMatchObject([{ id: { value: "event-2" } }]);
+    await expect(
+      storage.queryPlan({
+        candidateLimit: 1,
+        order: [{ column: "timestamp", direction: "desc" }],
+        limit: 1,
+      }),
+    ).rejects.toThrow("candidate limit of 1");
   });
 
   it("applies query offsets after sorting and before limits", async () => {
@@ -949,6 +973,54 @@ describe("InMemoryRecordStorage", () => {
     await expect(storage.query()).resolves.toMatchObject([{ id: { value: "event-1" } }]);
     await expect(storage.index()).resolves.toMatchObject([{ value: "event-1" }]);
   });
+
+  it("fails closed for nonempty normalized plans when a provider has no plan executor", async () => {
+    const storage = new QueryEntriesStorage({ name: "Tasks", multitenant: false }, createSpec(), [
+      createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n),
+    ]);
+
+    await expect(
+      storage.queryPlan({
+        predicate: { kind: "ids", ids: [create(EventIdSchema, { value: "event-1" })] },
+      }),
+    ).rejects.toThrow("must implement normalized query-plan execution");
+    expect(storage.queries).toEqual([]);
+  });
+
+  it("bounds an empty normalized plan by its explicit candidate budget before provider access", async () => {
+    const storage = new QueryEntriesStorage({ name: "Tasks", multitenant: false }, createSpec(), [
+      createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n),
+    ]);
+
+    await expect(storage.queryPlan({ candidateLimit: 2 })).resolves.toMatchObject([
+      { id: { value: "event-1" } },
+    ]);
+    expect(storage.queries).toEqual([{ limit: 3 }]);
+  });
+
+  it("uses the 10,001 default fetch sentinel for an empty base normalized plan", async () => {
+    const storage = new QueryEntriesStorage({ name: "Tasks", multitenant: false }, createSpec(), [
+      createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n),
+    ]);
+
+    await storage.queryPlan({});
+
+    expect(storage.queries).toEqual([{ limit: 10_001 }]);
+  });
+
+  it("uses the 10,001 default fetch sentinel for an empty in-memory normalized plan", async () => {
+    const records = new ObservingTenantRecords<EventId, Event>();
+    const storage = new InMemoryRecordStorage(
+      { name: "Tasks", multitenant: false },
+      createSpec(),
+      () => records,
+    );
+    await storage.write(createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n));
+
+    await storage.queryPlan({});
+
+    expect(records.queries).toEqual([{ limit: 10_001 }]);
+  });
 });
 
 class ObservedInMemoryStorage extends InMemoryRecordStorage<string, StringValue> {
@@ -1019,6 +1091,7 @@ function collisionProneObject(value: string) {
 
 class QueryEntriesStorage extends RecordStorage<EventId, Event> {
   readonly #records: readonly Event[];
+  readonly queries: RecordQuery<EventId>[] = [];
 
   constructor(
     context: StorageContext,
@@ -1037,7 +1110,10 @@ class QueryEntriesStorage extends RecordStorage<EventId, Event> {
     return Promise.resolve(false);
   }
 
-  protected queryRecordEntries(): Promise<readonly { id: EventId; record: Event }[]> {
+  protected queryRecordEntries(
+    query: RecordQuery<EventId>,
+  ): Promise<readonly { id: EventId; record: Event }[]> {
+    this.queries.push(query);
     return Promise.resolve(
       this.#records.map((record) => ({
         id: this.recordSpec.idValueIn(record),
@@ -1056,6 +1132,18 @@ class QueryEntriesStorage extends RecordStorage<EventId, Event> {
 
   protected writeRecord(): Promise<void> {
     return Promise.resolve();
+  }
+}
+
+class ObservingTenantRecords<I, R extends Message> extends TenantRecords<I, R> {
+  readonly queries: RecordQuery<I>[] = [];
+
+  override queryEntries(
+    spec: RecordSpec<I, R>,
+    query: RecordQuery<I>,
+  ): readonly RecordEntry<I, R>[] {
+    this.queries.push(query);
+    return super.queryEntries(spec, query);
   }
 }
 

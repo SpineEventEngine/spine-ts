@@ -5507,6 +5507,10 @@ Consequences:
 
 - T-0188 through T-0194 form the dependency-ordered Wave 12 train described in
   `planning/WAVE_12_RUNTIME_CORRECTNESS_PLAN.md`.
+- T-0188 through T-0192 implemented the browser, MySQL/Datastore, and Inbox
+  decisions above; T-0193 owns the corresponding reader-facing reconciliation
+  before T-0194 release closure. This decision remains the durable contract,
+  not a future implementation proposal.
 - Browser, MySQL, and Inbox runtime slices retain independent ownership;
   documentation follows their stabilized behavior and final release closure
   owns combined provider/runtime evidence and the final security review.

@@ -108,6 +108,10 @@ generation dependency is exposed.
 permit it, including packed `Any` command/query payloads. It is explicit-only
 and has no probing or fallback behavior.
 
+Healthy browser subscription streams remain open across ordinary successive
+updates. Delivery is still best effort: reconnect and an authoritative query
+recover a real disconnect, duplicate, or possible gap, not normal termination.
+
 `ClientRequest.post()` and `send()` cover commands and raw `QueryResponse`
 queries. Commands are never retried. `createSubscription()` returns an inactive
 handle; `activate()` begins remote work, and `cancel()` is terminal and makes

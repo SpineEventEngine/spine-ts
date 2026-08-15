@@ -266,6 +266,14 @@ repository commit time, and before acknowledgement. Validation is a fence
 against an observed takeover, not a distributed transaction with handler
 storage.
 
+`keepUntil` is the optional deduplication-protection deadline, not a second
+retention setting. A delivered row is cleanup-eligible when that deadline is
+absent or elapsed. Under current shard ownership, environment delivery performs
+one bounded cleanup page, plus at most one continuation after a full protected
+page makes no removal. Each removal atomically verifies ownership and the exact
+delivered snapshot. Pending, retryable, non-delivered, and still-protected rows
+remain. There is no additional retention configuration, timer, or scheduler.
+
 `BoundedContextBuilder.withDeliveryStrategy(strategy)` snapshots a validated
 immutable strategy for its Entity Inbox; the default is one shard. For example,
 use the public builder chain:

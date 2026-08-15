@@ -19,7 +19,11 @@ import { RecordQuery } from "./record-query.js";
 import type { RecordReadOptions } from "./record-query.js";
 import type { RecordSpec } from "./record-spec.js";
 import type { Storage, StorageContext } from "../storage/storage.js";
-import { QueryCandidateLimitError, StorageQueryEvaluator } from "../query/query-execution.js";
+import {
+  defaultQueryCandidateLimit,
+  QueryCandidateLimitError,
+  StorageQueryEvaluator,
+} from "../query/query-execution.js";
 import { StorageQueryPolicy } from "../query/query-policy.js";
 import type { NormalizedQueryPlan, StorageQueryCapabilities } from "../query/query-policy.js";
 
@@ -185,8 +189,9 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     this.requireOpen();
     StorageQueryPolicy.validate(plan, this.queryCapabilities());
     const candidates = await this.queryPlanRecordEntries(plan);
-    if (plan.candidateLimit !== undefined && candidates.length > plan.candidateLimit) {
-      throw new QueryCandidateLimitError(plan.candidateLimit);
+    const candidateLimit = plan.candidateLimit ?? defaultQueryCandidateLimit;
+    if (candidates.length > candidateLimit) {
+      throw new QueryCandidateLimitError(candidateLimit);
     }
     const materialized = candidates.map((entry) => {
       const stored = this.#recordSpec.materialize(entry.record);
@@ -284,8 +289,13 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   protected queryPlanRecordEntries(
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
-    void plan;
-    return this.queryRecordEntries({});
+    if (plan.predicate !== undefined || (plan.order?.length ?? 0) > 0 || plan.limit !== undefined)
+      return Promise.reject(
+        new TypeError("Storage provider must implement normalized query-plan execution."),
+      );
+    return this.queryRecordEntries({
+      limit: (plan.candidateLimit ?? defaultQueryCandidateLimit) + 1,
+    });
   }
 
   /**

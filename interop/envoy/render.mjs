@@ -6,9 +6,19 @@ import reservedSpineRpcPaths from "../../packages/server/src/server/reserved-spi
 export function renderEnvoy(options) {
   const topology = normalize(options);
   const routes = [...spineRoutes, ...topology.authRoutes]
-    .map(
-      (route) =>
-        `                        - match: { path: ${route.path}, headers: [{ name: ":method", exact_match: ${route.method} }] }\n                          route: { cluster: gateway, timeout: ${route.timeout} }\n                          typed_per_filter_config:\n                            envoy.filters.http.buffer:\n                              "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.BufferPerRoute\n                              buffer: { max_request_bytes: ${route.maxRequestBytes} }`,
+    .flatMap((route) => [
+      route,
+      { ...route, kind: "preflight" },
+      { path: route.path, kind: "fallback" },
+    ])
+    .map((route) =>
+      route.kind === "fallback"
+        ? `                        - match: { path: ${route.path}, headers: [{ name: ":method", exact_match: OPTIONS }] }\n                          direct_response: { status: 204 }`
+        : `                        - match: { path: ${route.path}, headers: [${
+            route.kind === "preflight"
+              ? `{ name: ":method", exact_match: OPTIONS }, { name: origin, present_match: true }, { name: access-control-request-method, exact_match: ${route.method} }`
+              : `{ name: ":method", exact_match: ${route.method} }`
+          }] }\n                          route: { cluster: gateway, timeout: ${route.timeout} }\n                          typed_per_filter_config:\n                            envoy.filters.http.buffer:\n                              "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.BufferPerRoute\n                              buffer: { max_request_bytes: ${route.maxRequestBytes} }`,
     )
     .join("\n");
   return `static_resources:
@@ -30,7 +40,7 @@ export function renderEnvoy(options) {
               typed_config:
                 "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
                 stat_prefix: browser_gateway
-                stream_idle_timeout: 30s
+${topology.accessLog ? '                access_log:\n                  - name: envoy.access_loggers.stdout\n                    typed_config:\n                      "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog\n' : ""}                stream_idle_timeout: 30s
                 request_timeout: 30s
                 max_request_headers_kb: 16
                 route_config:
@@ -48,6 +58,7 @@ ${routes}
                         allow_headers: content-type,x-grpc-web,grpc-timeout,connect-protocol-version,connect-timeout-ms,authorization,x-user-agent,x-spine-csrf
                         expose_headers: grpc-status,grpc-message
                         max_age: "86400"
+                        forward_not_matching_preflights: false
                 http_filters:
                   - name: envoy.filters.http.buffer
                     typed_config:
@@ -95,6 +106,7 @@ function normalize(options) {
     browserOrigin: options.browserOrigin,
     tlsCertificate: options.tlsCertificate,
     tlsKey: options.tlsKey,
+    accessLog: options.accessLog === true,
     authRoutes: (options.authRoutes ?? []).map((route) => {
       if (reservedSpineRpcPaths.includes(route.path))
         throw new Error("auth routes must not use reserved Spine RPC paths");

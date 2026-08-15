@@ -448,7 +448,7 @@ describe("createNativeGatewayServices", () => {
     await expect(pending).resolves.toMatchObject({ done: false });
     await terminate(iterator, controller);
     release?.();
-    expect(fake.calls).toHaveLength(1);
+    expect(fake.calls).toHaveLength(_name === "context abort before an update" ? 2 : 1);
   });
 
   it("rejects an already-aborted external signal before SubscriptionGateway activation", async () => {
@@ -511,6 +511,68 @@ describe("createNativeGatewayServices", () => {
       expect(signal?.aborted).toBe(true);
     },
   );
+
+  it("cancels the retained binding when an active transport stream aborts", async () => {
+    let activeSignal: AbortSignal | undefined;
+    const fake = subscriptions(async (request) => {
+      if (request.method === "Cancel") return { kind: "cancelled" };
+      activeSignal = request.signal;
+      await new Promise<void>((resolve) =>
+        activeSignal?.addEventListener(
+          "abort",
+          () => {
+            resolve();
+          },
+          { once: true },
+        ),
+      );
+      return { kind: "activated" };
+    });
+    const controller = new AbortController();
+    const gateway = services(unary({ kind: "forwarded", value: new Uint8Array() }).fake, fake.fake);
+    const iterator = gateway.subscription
+      .activate(create(SubscriptionSchema), context(controller.signal))
+      [Symbol.asyncIterator]();
+    const pending = iterator.next();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ code: Code.Canceled });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fake.calls.map((request) => request.method)).toEqual(["Activate", "Cancel"]);
+  });
+
+  it("absorbs retained-binding cancellation failure after a transport abort", async () => {
+    let activeSignal: AbortSignal | undefined;
+    const fake = subscriptions(async (request) => {
+      if (request.method === "Cancel") throw new Error("cancel transport unavailable");
+      activeSignal = request.signal;
+      await new Promise<void>((resolve) =>
+        activeSignal?.addEventListener(
+          "abort",
+          () => {
+            resolve();
+          },
+          { once: true },
+        ),
+      );
+      return { kind: "activated" };
+    });
+    const controller = new AbortController();
+    const gateway = services(unary({ kind: "forwarded", value: new Uint8Array() }).fake, fake.fake);
+    const iterator = gateway.subscription
+      .activate(create(SubscriptionSchema), context(controller.signal))
+      [Symbol.asyncIterator]();
+    const pending = iterator.next();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ code: Code.Canceled });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fake.calls.map((request) => request.method)).toEqual(["Activate", "Cancel"]);
+  });
 
   it("maps Activate gateway rejection and backend failure through the stream terminal", async () => {
     const rejected = subscriptions(() =>

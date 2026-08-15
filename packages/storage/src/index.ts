@@ -26,7 +26,11 @@ export { InMemoryRecordStorage } from "./memory/in-memory-record-storage.js";
 export { InMemoryStorageBackend } from "./memory/in-memory-storage-backend.js";
 export { InMemoryStorageFactory } from "./memory/in-memory-storage-factory.js";
 export { StorageQueryPolicy } from "./query/query-policy.js";
-export { QueryCandidateLimitError, StorageQueryEvaluator } from "./query/query-execution.js";
+export {
+  defaultQueryCandidateLimit,
+  QueryCandidateLimitError,
+  StorageQueryEvaluator,
+} from "./query/query-execution.js";
 export type { NormalizedQueryEntry } from "./query/query-execution.js";
 export type {
   NormalizedComparisonOperator,

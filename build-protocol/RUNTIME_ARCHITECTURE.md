@@ -183,8 +183,7 @@ Requirements:
   bounded contexts, while the client sees one opaque `Subscription`;
 - read-side workers perform filtering, ordering, lifecycle filtering, and response formatting.
 
-The following is the Wave 12 target lifecycle and is not implemented at the
-T-0187 planning baseline. A healthy browser activation remains open across ordinary successive updates.
+Wave 12 implements this lifecycle: a healthy browser activation remains open across ordinary successive updates.
 The universal acceptance path is a real browser over gRPC-Web, Envoy, the
 Gateway, native subscription forwarding, and the application server. Reconnect
 and authoritative re-query recover real best-effort disconnects; they do not
@@ -217,8 +216,7 @@ native namespace. Typed ID/column mappings are identical for writes and Query
 operands; applications provide generated type metadata when compact Proto JSON
 must expand `Any`.
 
-The following is the Wave 12 target provider contract and is not implemented at
-the T-0187 planning baseline. Provider query capability is an execution promise. MySQL admits only normalized
+Wave 12 implements this provider contract. Provider query capability is an execution promise. MySQL admits only normalized
 plan features it can translate to parameterized SQL and pushes their predicate,
 ordering, and finite limit into the selected tenant database and resolved
 storage-group table. It never silently reads a whole group for Node filtering.
@@ -264,15 +262,16 @@ and transport-backed worker supervision:
 - pending and delivered `InboxMessage` rows are stored directly; delivered rows
   are the deduplication fact, with no per-message claim or separate dedup
   record;
-- Wave 12 targets the following cleanup behavior, which is not implemented at
-  the T-0187 planning baseline. `keepUntil` is the optional
+- `keepUntil` is the optional
   deduplication-protection deadline, not a second
   retention setting. A delivered row becomes cleanup-eligible when the deadline
-  is absent or has elapsed. One bounded cleanup page runs under current shard
-  ownership, validates the fence and performs each exact delete in one
+  is absent or has elapsed. Cleanup runs one bounded page under current shard
+  ownership, plus at most one continuation only after a full protected page
+  makes no removal. Each exact delete validates the fence in one
   provider-atomic operation, and
   preserves every pending, retryable, non-delivered, or still-protected row.
   The environment delivery lifecycle owns cleanup and awaits it at shutdown;
+  Wave 12 adds no second retention configuration, timer, or scheduler;
 - shard pickup, renewal, and release persist lease-backed shard sessions through
   storage compare-and-set rather than process-local locks. A complete `WorkerId`
   can pick up or renew its own unexpired session; another worker is excluded

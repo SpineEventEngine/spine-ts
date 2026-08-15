@@ -68,3 +68,56 @@ subagents and is told that other writers are active in separate worktrees.
   exists. Final task/Wave closure waits until all branches are reviewed,
   integrated, contained in `origin/main`, deleted, and the remote again exposes
   exactly `main` with no tags.
+
+## Live Coordination Record
+
+- The Inbox T-0191 RED checkpoint proved that exact removal spans the Inbox and
+  shard-ownership record families. Provider-atomic ownership validation plus
+  deletion therefore needs either the existing MySQL and Datastore
+  `record-storage.ts` implementations or owner-selected adjacent transaction
+  adapters that share their transaction/fencing boundary.
+- Query retains exclusive ownership of those existing provider files through
+  the reviewed T-0190 endpoint. Inbox continues its real RED, memory, port, and
+  lifecycle work without editing them.
+- After T-0190 review and focused verification, the orchestrator records an
+  explicit ownership handoff, advances Inbox onto that durable endpoint, and
+  only then permits the provider-atomic T-0191 implementation. A sequential
+  validate-then-delete fallback is not acceptable.
+- The coordination shape follows the existing framework-only
+  `EntityCommitStorageFactories` registration pattern: a WeakMap-registered,
+  provider-owned cleanup handle over the two exact record families. It does not
+  add a general public transaction method to `StorageFactory`; the only
+  exported port change remains optional `DeliveryInbox.removeDelivered`.
+  Provider factories register memory, Datastore, and MySQL coordinators, using
+  new adjacent files where possible so Query's `record-storage.ts` ownership
+  remains exclusive until the handoff.
+
+## Query-to-Inbox Provider Handoff — 2026-08-15
+
+- T-0190 is specialist-accepted and pushed at `3081dcc0`; its final production
+  correction is `fc39709a` and final proof endpoint is `7b7d9fb3`. Canonical
+  non-live verification, >=90% changed coverage, live MySQL group containment,
+  and live Datastore tenant/group containment are durable.
+- Query ownership of the existing MySQL and Datastore `record-storage.ts`
+  files ends at this accepted endpoint. No Query writer remains active.
+- The reviewed Query branch is merged without history rewriting into the Inbox
+  branch before provider cleanup work resumes. Inbox may add the narrow
+  provider-owned two-record-family coordinator and the minimum adjacent
+  factory/transaction integration needed for atomic session validation plus
+  exact Inbox deletion. It must preserve every accepted Query path and avoid a
+  general transaction API or sequential validate/delete gap.
+- MySQL and Datastore proof windows remain orchestrator-serialized. Provider
+  cleanup evidence must use the production coordinator and two independently
+  opened handles where required by T-0191/T-0192.
+
+## T-0193 Read-Only Documentation Inventory — 2026-08-15
+
+- Orchestrator-dispatched read-only repository scanning function; this is not a
+  new project role and owns no files.
+- Bounded scope: identify exact reader/specification/architecture/decision
+  passages that must converge after T-0189, T-0190, and T-0192 acceptance;
+  flag stale future-tense or prohibited Wave 13-19 claims; propose no product
+  behavior and make no edits.
+- Explicit profile: `gpt-5.6-luna`, reasoning `medium`; no subagents. Runtime
+  telemetry is unavailable, so the configured function/profile is the durable
+  acceptance record.

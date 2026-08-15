@@ -30,6 +30,259 @@ import { commitFenced } from "../../src/repository/commit-fence.js";
 import { ShardIndex } from "../../src/index.js";
 
 describe("Delivery direct worker", () => {
+  it("reports exact acknowledgement through the callback shorthand", async () => {
+    const shard = ShardIndex.single();
+    const target = message("target", "target", shard);
+    const rows = [target];
+    let seen = 0;
+    const delivery = createDelivery({
+      rows,
+      mark: async (row) => {
+        remove(rows, row);
+        return row;
+      },
+    });
+
+    await expect(
+      delivery.drainMessage(target, () => {
+        seen += 1;
+      }),
+    ).resolves.toMatchObject({ acknowledged: true, run: { delivered: 1 } });
+    expect(seen).toBe(1);
+  });
+
+  it("runs one owned delivered cleanup page after each delivery page and on an empty drain", async () => {
+    const shard = ShardIndex.single();
+    const pending = message("pending", "target", shard);
+    const delivered = { ...pending, status: "DELIVERED" as const };
+    let pendingReads = 0;
+    let cleanupReads = 0;
+    let removals = 0;
+    const delivery = createDelivery({
+      pageSize: 1,
+      read: async (options) => {
+        if (options?.statuses?.includes("DELIVERED")) {
+          cleanupReads += 1;
+          return cleanupReads === 1 ? [delivered] : [];
+        }
+        pendingReads += 1;
+        return pendingReads === 1 ? [pending] : [];
+      },
+      remove: async () => {
+        removals += 1;
+        return true;
+      },
+    });
+
+    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
+      status: "DRAINED",
+      delivered: 1,
+    });
+    expect(cleanupReads).toBe(2);
+    expect(removals).toBe(1);
+  });
+
+  it("stops cleanup when cancellation or ownership loss occurs and leaves the row for retry", async () => {
+    const shard = ShardIndex.single();
+    const delivered = { ...message("delivered", "target", shard), status: "DELIVERED" as const };
+    const controller = new AbortController();
+    let removals = 0;
+    const delivery = createDelivery({
+      read: async (options) => (options?.statuses?.includes("DELIVERED") ? [delivered] : []),
+      remove: async () => {
+        removals += 1;
+        controller.abort();
+        return true;
+      },
+    });
+    await expect(
+      delivery.drain(shard, {
+        onMessage: () => undefined,
+        operation: { signal: controller.signal },
+      }),
+    ).resolves.toMatchObject({ status: "STOPPED", delivered: 0 });
+    expect(removals).toBe(1);
+  });
+
+  it("leaves a delivered row retryable when cancellation arrives before cleanup deletion", async () => {
+    const shard = ShardIndex.single();
+    const delivered = { ...message("delivered", "target", shard), status: "DELIVERED" as const };
+    const controller = new AbortController();
+    let removals = 0;
+    const delivery = createDelivery({
+      read: async (options) => {
+        if (!options?.statuses?.includes("DELIVERED")) return [];
+        controller.abort();
+        return [delivered];
+      },
+      remove: async () => {
+        removals += 1;
+        return true;
+      },
+    });
+
+    await expect(
+      delivery.drain(shard, {
+        onMessage: () => undefined,
+        operation: { signal: controller.signal },
+      }),
+    ).resolves.toMatchObject({ status: "STOPPED", delivered: 0 });
+    expect(removals).toBe(0);
+  });
+
+  it("removes every delivered row returned by one bounded cleanup page", async () => {
+    const shard = ShardIndex.single();
+    const delivered = [
+      { ...message("first", "first", shard), status: "DELIVERED" as const },
+      { ...message("second", "second", shard), status: "DELIVERED" as const },
+    ];
+    const removed: string[] = [];
+    const delivery = createDelivery({
+      pageSize: 2,
+      read: async (options) => (options?.statuses?.includes("DELIVERED") ? delivered : []),
+      remove: async (row) => {
+        removed.push(row.signalId);
+        return true;
+      },
+    });
+
+    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
+      status: "DRAINED",
+    });
+    expect(removed).toEqual(["first", "second"]);
+  });
+
+  it("continues past one full protected cleanup page to remove a later eligible row", async () => {
+    const shard = ShardIndex.single();
+    const protectedRows = [
+      { ...message("protected-one", "one", shard), status: "DELIVERED" as const },
+      { ...message("protected-two", "two", shard), status: "DELIVERED" as const },
+    ];
+    const eligible = { ...message("eligible", "three", shard), status: "DELIVERED" as const };
+    const catalog = [...protectedRows, eligible];
+    const removed: string[] = [];
+    const delivery = createDelivery({
+      pageSize: 2,
+      read: async (options) => {
+        if (!options?.statuses?.includes("DELIVERED")) return [];
+        const after = options.after?.messageId;
+        const start =
+          after === undefined ? 0 : catalog.findIndex((row) => row.id.value === after) + 1;
+        return catalog.slice(start, start + 2);
+      },
+      remove: async (row) => {
+        if (row.signalId === "eligible") removed.push(row.signalId);
+        return row.signalId === "eligible";
+      },
+    });
+
+    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
+      status: "DRAINED",
+    });
+    expect(removed).toEqual(["eligible"]);
+  });
+
+  it("stops when a refused cleanup deletion is followed by lost ownership", async () => {
+    const shard = ShardIndex.single();
+    const delivered = { ...message("delivered", "target", shard), status: "DELIVERED" as const };
+    let validations = 0;
+    const delivery = createDelivery({
+      read: async (options) => (options?.statuses?.includes("DELIVERED") ? [delivered] : []),
+      remove: async () => false,
+      registry: {
+        pickUp: async () => session(shard),
+        renew: async () => (validations++ < 2 ? session(shard) : undefined),
+        release: async () => true,
+      },
+    });
+
+    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
+      status: "STOPPED",
+    });
+  });
+
+  it("omits cleanup for custom Inbox ports and forwards operation deadlines to cleanup reads", async () => {
+    const shard = ShardIndex.single();
+    const observed: number[] = [];
+    const delivery = createDelivery({
+      read: async (options) => {
+        if (options?.statuses?.includes("DELIVERED")) observed.push(options.timeoutMs!);
+        return [];
+      },
+      remove: async () => true,
+    });
+    await delivery.drain(shard, { onMessage: () => undefined, operation: { timeoutMs: 123 } });
+    expect(observed).toEqual([123]);
+
+    let customCleanupReads = 0;
+    await expect(
+      createDelivery({
+        read: async (options) => {
+          if (options?.statuses?.includes("DELIVERED")) customCleanupReads += 1;
+          return [];
+        },
+      }).drain(shard, { onMessage: () => undefined }),
+    ).resolves.toMatchObject({ status: "DRAINED" });
+    expect(customCleanupReads).toBe(0);
+  });
+
+  it("stops before cleanup deletion when the shard fence is lost", async () => {
+    const shard = ShardIndex.single();
+    let removals = 0;
+    const delivery = createDelivery({
+      read: async (options) =>
+        options?.statuses?.includes("DELIVERED")
+          ? [{ ...message("old", "target", shard), status: "DELIVERED" as const }]
+          : [],
+      remove: async () => {
+        removals += 1;
+        return true;
+      },
+      registry: {
+        pickUp: async () => session(shard),
+        renew: async () => undefined,
+        release: async () => true,
+      },
+    });
+    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
+      status: "STOPPED",
+    });
+    expect(removals).toBe(0);
+  });
+
+  it("stops after a delivery page when ownership is lost before its maintenance pass", async () => {
+    const shard = ShardIndex.single();
+    const rows = [message("one", "target", shard)];
+    let ownsShard = true;
+    let cleanupReads = 0;
+    const delivery = createDelivery({
+      rows,
+      read: async (options) => {
+        if (options?.statuses?.includes("DELIVERED")) {
+          cleanupReads += 1;
+          return [];
+        }
+        return rows;
+      },
+      mark: async (row) => {
+        remove(rows, row);
+        ownsShard = false;
+        return row;
+      },
+      remove: async () => true,
+      registry: {
+        pickUp: async () => session(shard),
+        renew: async () => (ownsShard ? session(shard) : undefined),
+        release: async () => true,
+      },
+    });
+
+    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
+      status: "STOPPED",
+      delivered: 1,
+    });
+    expect(cleanupReads).toBe(0);
+  });
   it("passes its complete opaque WorkerId to shard pickup and skips an owned shard", async () => {
     const shard = ShardIndex.single();
     const worker = workerId("node-a", "restart-a");
@@ -470,6 +723,7 @@ function createDelivery(config: {
     options?: InboxReadOptions & DeliveryOperationOptions,
   ) => Promise<DeliveryEndpointMessage[]>;
   mark?: (row: DeliveryEndpointMessage) => Promise<DeliveryEndpointMessage | undefined>;
+  remove?: (row: DeliveryEndpointMessage) => Promise<boolean>;
   monitor?: DeliveryMonitor;
   pageSize?: number;
 }): Delivery {
@@ -488,6 +742,9 @@ function createDelivery(config: {
       read: async (_shard, options) => config.read?.(options) ?? [...rows],
       readMessage: async () => undefined,
       markDelivered: async (row) => config.mark?.(row) ?? row,
+      ...(config.remove === undefined
+        ? {}
+        : { removeDelivered: async (row) => config.remove!(row) }),
     },
     workRegistry: {
       sessionKind: "LEASED",

@@ -171,9 +171,11 @@ already visible.
 
 Message Board's React UI posts `PostMessage`, queries the board for its initial
 rows, then listens for complete Projection payloads. A valid complete payload
-updates the browser locally. The UI uses an authoritative query for initial
-state, a reconnect, a possible gap, malformed data, or recovery after posting
-while disconnected.
+updates the browser locally. A healthy browser stream remains active across
+ordinary successive updates. The UI uses an authoritative query for initial
+state, a reconnect, a possible best-effort gap, malformed data, or recovery
+after posting while disconnected; those recovery paths do not make ordinary
+stream termination acceptable.
 
 For a browser, put native services behind one authenticated Gateway. The
 Gateway resolves credentials into trusted context and forwards approved browser
@@ -206,6 +208,18 @@ a `TypeRegistry` when compact Proto JSON must expand `Any` values.
 | Datastore tenancy | Select a native namespace per tenant.                                                      |
 | Physical layout   | Configure provider record families; a Bounded Context name is diagnostic, not a partition. |
 | Migration         | Plan it with the provider; Spine TS does not migrate layouts automatically.                |
+
+Normalized provider plans are capability-gated execution contracts. MySQL
+pushes every admitted filter, order, and finite bound into parameterized SQL in
+the selected tenant database and resolved storage-group table; it does not read
+a storage group for Node filtering. The default accepted query budget is
+10,000 records; an explicit query budget must be a positive safe integer no
+greater than 10,000. MySQL may fetch one additional overflow-lookahead row
+(10,001 raw rows) to reject an oversized result. Datastore accepts at most
+1,000 records and may read one additional lookahead row (1,001 raw rows).
+Normalized plans do not support offset (`RecordQuery.offset` remains a separate
+API). Datastore supports only its provider-legal overlap; see the storage
+provider references before selecting indexes or query shapes.
 
 Queries can push supported filters, sort order, IDs, limits, and continuations
 to the provider. Keep a bounded query and use the provider's documented

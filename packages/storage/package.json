@@ -18,6 +18,10 @@
       "types": "./dist/internal/entity-commit.d.ts",
       "default": "./dist/internal/entity-commit.js"
     },
+    "./internal/delivery-cleanup": {
+      "types": "./dist/internal/delivery-cleanup.d.ts",
+      "default": "./dist/internal/delivery-cleanup.js"
+    },
     "./internal/event-store": {
       "types": "./dist/internal/event-store.d.ts",
       "default": "./dist/internal/event-store.js"

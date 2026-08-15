@@ -143,8 +143,10 @@ That test persists admitted work, restarts with a route callback that would
 produce a different target, and observes delivery to the originally stored
 typed target. The replacement callback is not called: retry replays the stored
 Inbox target and does not reroute. This is intentionally different from
-`context.catchUpReadSide()`: catch-up clears projection state and rebuilds it
-from stored events, rather than retrying one accepted Inbox item.
+`context.catchUpReadSide()`: this process-local reset/replay helper clears
+projection state and rebuilds it from stored events, rather than retrying one
+accepted Inbox item. It is not durable Projection catch-up and has no
+cross-context exchange, enrichment, or historical/live coordination.
 
 The linked source is the complete executable proof:
 

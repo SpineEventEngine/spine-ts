@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createClient } from "../../../../../packages/server/node_modules/@connectrpc/connect/dist/esm/index.js";
+import { createGrpcTransport as createNativeTransport } from "../../../../../packages/server/node_modules/@connectrpc/connect-node/dist/esm/index.js";
 import { createGrpcWebTransport } from "../../../../../packages/client-web/node_modules/@connectrpc/connect-web/dist/esm/index.js";
 import {
   AuthenticationService,
@@ -178,6 +179,123 @@ test("routes gRPC-Web ResolveContext through Envoy and the native gateway", asyn
       ),
     ]);
     assert.ok(topology.counters().cancel + topology.counters().dispose > 0);
+  } finally {
+    await topology.close();
+  }
+});
+
+test("terminates accepted and missing-origin preflight without Gateway admission", async () => {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+  const topology = await startTopology();
+  try {
+    const before = topology.counters();
+    for (const [headers, allowed, status] of [
+      [
+        {
+          origin: "https://127.0.0.1:4175",
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "content-type,x-grpc-web,x-spine-csrf",
+        },
+        true,
+        200,
+      ],
+      [{ "access-control-request-method": "POST" }, false, 204],
+      [
+        {
+          origin: "https://rejected.example.test",
+          "access-control-request-method": "POST",
+        },
+        false,
+        200,
+      ],
+    ]) {
+      const response = await globalThis.fetch(
+        `${topology.baseUrl}/spine.auth.AuthenticationService/ResolveContext`,
+        { method: "OPTIONS", headers },
+      );
+      assert.equal(response.status, status);
+      assert.equal(
+        response.headers.get("access-control-allow-origin"),
+        allowed ? headers.origin : null,
+      );
+    }
+    assert.deepEqual(topology.counters(), before);
+  } finally {
+    await topology.close();
+  }
+});
+
+test("keeps a direct native passive subscription alive for three sequential writer commands", async () => {
+  const topology = await startTopology();
+  try {
+    const transport = createNativeTransport({ baseUrl: topology.nativeBaseUrl });
+    const commands = createClient(CommandService, transport);
+    const subscriptions = createClient(SubscriptionService, transport);
+    const context = create(ActorContextSchema, { actor: create(UserIdSchema, { value: "ada" }) });
+    const query = create(QuerySchema, {
+      target: create(TargetSchema, {
+        type: TypeUrls.derive(BoardMessageViewSchema),
+        criterion: {
+          case: "filters",
+          value: create(TargetFiltersSchema, {
+            filter: [
+              create(CompositeFilterSchema, {
+                operator: CompositeFilter_CompositeOperator.ALL,
+                filter: [
+                  create(FilterSchema, {
+                    fieldPath: { fieldName: ["board"] },
+                    operator: Filter_Operator.EQUAL,
+                    value: AnyMessages.pack(
+                      BoardIdSchema,
+                      create(BoardIdSchema, { value: "board-a" }),
+                    ),
+                  }),
+                ],
+              }),
+            ],
+          }),
+        },
+      }),
+      context,
+    });
+    const subscription = await subscriptions.subscribe(
+      create(TopicSchema, {
+        id: create(TopicIdSchema, { value: "native-passive-viewer" }),
+        target: query.target,
+        context,
+      }),
+    );
+    const updates = subscriptions.activate(subscription)[Symbol.asyncIterator]();
+    for (let updateNumber = 1; updateNumber <= 3; updateNumber += 1) {
+      const next = updates.next();
+      const acknowledgement = await commands.post(
+        create(CommandSchema, {
+          id: create(CommandIdSchema, { uuid: `native-passive-command-${updateNumber}` }),
+          context: create(CommandContextSchema, { actorContext: context }),
+          message: AnyMessages.pack(
+            PostMessageSchema,
+            create(PostMessageSchema, {
+              id: create(MessageIdSchema, { value: `native-passive-${updateNumber}` }),
+              board: create(BoardIdSchema, { value: "board-a" }),
+              author: create(BoardUserIdSchema, { value: "bert" }),
+              username: "Bert",
+              text: "native passive",
+              postedAt: create(TimestampSchema, { seconds: BigInt(updateNumber) }),
+            }),
+          ),
+        }),
+      );
+      assert.equal(acknowledgement.status?.status.case, "ok", JSON.stringify(acknowledgement));
+      const update = await Promise.race([
+        next,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("native update timeout")), 5_000),
+        ),
+      ]);
+      assert.equal(update.done, false);
+    }
+    await updates.return?.();
+    await subscriptions.cancel(subscription);
   } finally {
     await topology.close();
   }

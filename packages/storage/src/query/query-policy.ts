@@ -128,7 +128,8 @@ export interface NormalizedQueryPlan<Id> {
   readonly limit?: number;
 
   /**
-   * Maximum provider candidates materialized before semantic evaluation.
+   * Maximum provider rows materialized before semantic evaluation. Values must
+   * be positive safe integers; the default and inclusive maximum are 10,000.
    */
   readonly candidateLimit?: number;
 }
@@ -165,6 +166,7 @@ const knownComparisons = new Set<NormalizedComparisonOperator>([
   "lessOrEqual",
 ]);
 const knownFeatures = new Set<StorageQueryFeature>(["either", "nested", "order", "mask", "limit"]);
+const knownPlanProperties = new Set(["predicate", "order", "mask", "limit", "candidateLimit"]);
 
 /**
  * Shared fail-fast validation for normalized plans before provider execution.
@@ -178,6 +180,7 @@ export const StorageQueryPolicy: Readonly<{
       capabilities,
       "query capabilities must be an object.",
     );
+    QueryPlanValidator.validatePlanProperties(normalizedPlan);
     const comparisons = QueryCapabilities.validateComparisons(normalizedCapabilities.comparisons);
     const features = QueryCapabilities.validateFeatures(normalizedCapabilities.features);
     const requirements: QueryRequirements = {
@@ -211,6 +214,20 @@ const QueryPlanValidator = {
   // prettier-ignore
 
   /**
+   * Rejects unsupported or misspelled normalized-plan properties.
+   */
+  validatePlanProperties(plan: Record<string, unknown>): void {
+    if (Object.hasOwn(plan, "offset")) {
+      throw new TypeError("normalized query plans do not support offset.");
+    }
+    for (const property of Object.keys(plan)) {
+      if (!knownPlanProperties.has(property)) {
+        throw new TypeError("query plan property must be recognized.");
+      }
+    }
+  },
+
+  /**
    * Validates the maximum materialized candidate count.
    */
   validateCandidateLimit(value: unknown): void {
@@ -218,6 +235,7 @@ const QueryPlanValidator = {
     if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
       throw new TypeError("query candidate limit must be a positive safe integer.");
     }
+    if (value > 10_000) throw new TypeError("query candidate limit must not exceed 10,000.");
   },
 
   /**

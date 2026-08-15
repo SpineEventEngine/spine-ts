@@ -48,6 +48,25 @@ export type DeliveryEndpointMessage = InboxMessage;
 export type OnDeliveryMessage = (message: DeliveryEndpointMessage) => void | Promise<void>;
 
 /**
+ * Reports one direct drain and whether it durably acknowledged the selected message.
+ *
+ * @internal
+ */
+export interface DeliveryDirectRun {
+  // prettier-ignore
+
+  /**
+   * Contains the terminal shard-drain outcome.
+   */
+  readonly run: DeliveryRun;
+
+  /**
+   * Indicates whether this drain durably marked the selected message delivered.
+   */
+  readonly acknowledged: boolean;
+}
+
+/**
  * Summarizes one finite direct delivery run.
  */
 export interface DeliveryRun {
@@ -235,10 +254,45 @@ export class Delivery {
    */
   async drainMessage(
     message: InboxMessage,
-    input: OnDeliveryMessage | { readonly node?: string; readonly onMessage: OnDeliveryMessage },
-  ): Promise<DeliveryRun> {
+    input:
+      | OnDeliveryMessage
+      | {
+          readonly node?: string;
+          readonly onMessage: OnDeliveryMessage;
+
+          /**
+           * Observes a durable delivered transition.
+           *
+           * @param message Contains the acknowledged Inbox message.
+           * @internal
+           */
+          readonly onDelivered?: (message: InboxMessage) => void;
+
+          /**
+           * Selects messages owned by this direct callback.
+           *
+           * @param message Contains a pending Inbox message.
+           * @returns `true` when the callback owns the message.
+           * @internal
+           */
+          readonly acceptMessage?: (message: InboxMessage) => boolean;
+        },
+  ): Promise<DeliveryDirectRun> {
     const onMessage = typeof input === "function" ? input : input.onMessage;
-    return this.drain(message.shard, { onMessage });
+    const observeDelivered = typeof input === "function" ? undefined : input.onDelivered;
+    let acknowledged = false;
+    const run = await this.drain(message.shard, {
+      onMessage,
+      ...(typeof input === "function" || input.acceptMessage === undefined
+        ? {}
+        : { acceptMessage: input.acceptMessage }),
+      onDelivered: (next) => {
+        acknowledged ||=
+          next.id.value === message.id.value && next.id.shard.key() === message.id.shard.key();
+        observeDelivered?.(next);
+      },
+    });
+    return Object.freeze({ run, acknowledged });
   }
 
   /**
@@ -271,6 +325,11 @@ export class Delivery {
     }
     const statistics = counts();
     const failures: DeliveryFailure[] = [];
+    const complete = (
+      status: DeliveryRun["status"],
+      value = statistics,
+      runFailures: readonly DeliveryFailure[] = failures,
+    ): DeliveryRun => result(status, value, runFailures);
     let current = session;
     const ownership = { lost: false };
     const validate = async (): Promise<boolean> => {
@@ -285,6 +344,34 @@ export class Delivery {
       current = validated;
       return true;
     };
+    const cleanupPage = async (): Promise<boolean> => {
+      if (this.inbox.removeDelivered === undefined) return true;
+      if (!(await validate())) return false;
+      let after: import("./inbox.js").InboxReadContinuation | undefined;
+      for (let page = 0; page < 2; page += 1) {
+        let removedAny = false;
+        const delivered = await this.inbox.read(shard, {
+          statuses: ["DELIVERED"],
+          limit: this.pageSize,
+          ...(after === undefined ? {} : { after }),
+          ...(options.operation ?? {}),
+        });
+        for (const message of delivered) {
+          if (options.operation?.signal?.aborted || !(await validate())) return false;
+          const removed = await this.inbox.removeDelivered(message, current, options.operation);
+          if (options.operation?.signal?.aborted || (!removed && !(await validate()))) return false;
+          removedAny ||= removed;
+        }
+        const last = delivered.at(-1);
+        if (removedAny || last === undefined || delivered.length < this.pageSize) break;
+        after = {
+          messageId: last.id.value,
+          whenReceived: last.whenReceived,
+          version: last.version,
+        };
+      }
+      return true;
+    };
     const dispatch = (message: InboxMessage): Promise<void> =>
       withDeliveryCommitFence(
         async () => {
@@ -292,11 +379,16 @@ export class Delivery {
         },
         () => Promise.resolve(options.onMessage(message)),
       );
+    const markDelivered = async (message: InboxMessage): Promise<void> => {
+      if ((await this.inbox.markDelivered(message, options.operation)) === undefined)
+        throw new Error("Inbox message was not marked delivered.");
+      statistics.delivered += 1;
+      options.onDelivered?.(message);
+    };
     try {
       if (!(await safelyBoolean(() => this.#monitor.shouldContinueAfter("DELIVERY"))))
-        return result("STOPPED", statistics);
-      if (!(await safely(() => this.#monitor.onDeliveryStarted(shard))))
-        return result("STOPPED", statistics);
+        return complete("STOPPED");
+      if (!(await safely(() => this.#monitor.onDeliveryStarted(shard)))) return complete("STOPPED");
       const blockedTargets = new Set<string>();
       let after: import("./inbox.js").InboxReadContinuation | undefined;
       for (;;) {
@@ -306,25 +398,27 @@ export class Delivery {
           ...(after === undefined ? {} : { after }),
           ...(options.operation ?? {}),
         });
-        if (messages.length === 0) break;
+        if (messages.length === 0) {
+          if (!(await cleanupPage())) return complete("STOPPED");
+          break;
+        }
         const deliveredBefore = statistics.delivered;
         for (const message of messages) {
-          if (options.operation?.signal?.aborted) return result("STOPPED", statistics);
+          if (options.operation?.signal?.aborted) return complete("STOPPED");
           if (!isEndpointMessage(message)) continue;
+          if (options.acceptMessage !== undefined && !options.acceptMessage(message)) continue;
           const target = `${message.inboxId.targetTypeUrl}:${InboxTargets.key(message.inboxId.targetId)}`;
           if (blockedTargets.has(target)) continue;
           statistics.processed += 1;
           if (!(await safelyBoolean(() => this.#monitor.shouldContinueAfter("PAGE"))))
-            return result("STOPPED", statistics);
-          if (!(await validate())) return result("STOPPED", statistics);
+            return complete("STOPPED");
+          if (!(await validate())) return complete("STOPPED");
           try {
             statistics.accepted += 1;
             await dispatch(message);
-            if (options.operation?.signal?.aborted) return result("STOPPED", statistics);
-            if (!(await validate())) return result("STOPPED", statistics);
-            if ((await this.inbox.markDelivered(message, options.operation)) === undefined)
-              throw new Error("Inbox message was not marked delivered.");
-            statistics.delivered += 1;
+            if (options.operation?.signal?.aborted) return complete("STOPPED");
+            if (!(await validate())) return complete("STOPPED");
+            await markDelivered(message);
           } catch (error) {
             statistics.failed += 1;
             failures.push(Object.freeze({ message: snapshot(message), error }));
@@ -333,16 +427,12 @@ export class Delivery {
               error,
               async () => {
                 if (!(await validate())) throw new Error("Shard ownership was lost.");
-                if ((await this.inbox.markDelivered(message, options.operation)) === undefined)
-                  throw new Error("Inbox message was not marked delivered.");
-                statistics.delivered += 1;
+                await markDelivered(message);
               },
               async () => {
                 await dispatch(message);
                 if (!(await validate())) throw new Error("Shard ownership was lost.");
-                if ((await this.inbox.markDelivered(message, options.operation)) === undefined)
-                  throw new Error("Inbox message was not marked delivered.");
-                statistics.delivered += 1;
+                await markDelivered(message);
               },
             );
             const action = await safelyValue(
@@ -355,9 +445,10 @@ export class Delivery {
             ) {
               blockedTargets.add(target);
             }
-            if (ownership.lost) return result("STOPPED", statistics, failures);
+            if (ownership.lost) return complete("STOPPED");
           }
         }
+        if (!(await cleanupPage())) return complete("STOPPED");
         const last = messages.at(-1);
         if (statistics.delivered !== deliveredBefore) {
           after = undefined;
@@ -372,7 +463,7 @@ export class Delivery {
         // Reached a full page without progress: continue past it once. A later
         // independent target may still be actionable; exhaustion ends the run.
       }
-      return result("DRAINED", statistics, failures);
+      return complete("DRAINED");
     } finally {
       const released = await safelyValue(
         () => this.shards.release(current, options.operation),
@@ -382,7 +473,7 @@ export class Delivery {
         // The release result changes the terminal delivery outcome: a shard is
         // not complete until ownership is confirmed released.
         // eslint-disable-next-line no-unsafe-finally
-        return result("FAILED", statistics, failures);
+        return complete("FAILED");
       }
       await safely(() =>
         this.#monitor.onDeliveryCompleted(
@@ -461,6 +552,23 @@ export interface DeliveryDrainOptions {
   readonly onMessage: OnDeliveryMessage;
 
   /**
+   * Observes a durable delivered transition.
+   *
+   * @param message Contains the acknowledged Inbox message.
+   * @internal
+   */
+  readonly onDelivered?: (message: InboxMessage) => void;
+
+  /**
+   * Determines whether this drain callback owns a message.
+   *
+   * @param message Contains a pending Inbox message.
+   * @returns `true` when the callback owns the message.
+   * @internal
+   */
+  readonly acceptMessage?: (message: InboxMessage) => boolean;
+
+  /**
    * Propagates cancellation through the drain.
    */
   readonly operation?: import("./delivery-ports.js").DeliveryOperationOptions;
@@ -482,7 +590,8 @@ function result(
   value = counts(),
   failures: readonly DeliveryFailure[] = [],
 ): DeliveryRun {
-  return Object.freeze({ status, ...value, failures: Object.freeze([...failures]) });
+  const run = Object.freeze({ status, ...value, failures: Object.freeze([...failures]) });
+  return run;
 }
 function snapshot(message: InboxMessage): InboxMessage {
   return Object.freeze({

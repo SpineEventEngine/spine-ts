@@ -33,6 +33,7 @@ import type {
   EntityStorageInput,
 } from "@spine-event-engine/storage/internal/entity-history";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
+import { DeliveryCleanupStorageFactories } from "@spine-event-engine/storage/internal/delivery-cleanup";
 
 import {
   DatastoreEntityCommitStorage,
@@ -40,6 +41,7 @@ import {
   type OpenEntityRecords,
 } from "./entity-history.js";
 import { DatastoreRecordStorage } from "./record-storage.js";
+import { DatastoreDeliveryCleanupStorage } from "./delivery-cleanup.js";
 import {
   DefaultNamespaceConverter,
   NamespaceAssignments,
@@ -294,6 +296,10 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityStorage(input).commits,
     });
+    DeliveryCleanupStorageFactories.register(this, {
+      createDeliveryCleanupStorage: () =>
+        new DatastoreDeliveryCleanupStorage((context, spec) => this.cleanupStorage(context, spec)),
+    });
   }
 
   /**
@@ -360,6 +366,23 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
       this.#client,
       maxClientSideScan,
       group,
+      resolved.layout?.kind,
+      this.#namespaceConverter,
+      this.#stringifiers,
+    );
+  }
+
+  private cleanupStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): DatastoreRecordStorage<I, R> {
+    const resolved = this.resolve(recordSpec, undefined, false);
+    return new DatastoreRecordStorage(
+      context,
+      recordSpec,
+      this.#client,
+      maxClientSideScan,
+      undefined,
       resolved.layout?.kind,
       this.#namespaceConverter,
       this.#stringifiers,

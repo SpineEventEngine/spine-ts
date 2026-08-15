@@ -19,6 +19,11 @@ import type {
 } from "./query-policy.js";
 
 /**
+ * Finite default number of provider candidates a normalized plan may materialize.
+ */
+export const defaultQueryCandidateLimit = 10_000;
+
+/**
  * One materialized storage row accepted by the shared normalized evaluator.
  */
 export interface NormalizedQueryEntry<Id, Record> {

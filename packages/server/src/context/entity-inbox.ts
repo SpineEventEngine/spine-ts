@@ -42,6 +42,8 @@ export class LocalEntityInbox implements EntityInbox {
   readonly #strategy: DeliveryStrategy;
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
   readonly #inFlightBatchHandoffs = new Map<string, Promise<readonly InboxMessage[]>>();
+  readonly #inFlightMessageIds = new Set<string>();
+  readonly #acknowledgedMessageIds = new Set<string>();
   readonly #followUps = new Map<string, Promise<void>>();
   readonly #followUpScope = new AsyncLocalStorage<symbol>();
   readonly #followUpToken = Symbol("entity-inbox-follow-up");
@@ -179,11 +181,17 @@ export class LocalEntityInbox implements EntityInbox {
     await this.#followUpFor(input, deliveryTenantId);
     await this.#keepDeliveryTenant(deliveryTenantId);
     const written = await this.#writeInboxRow(delivery, input, new Date(), deliveryTenantId);
-
-    await written.handoff.complete(() =>
-      this.#drainInboxRow(delivery, written.message, deliveryTenantId, input.shard),
-    );
-    return written.message;
+    this.#trackMessage(written.message);
+    try {
+      await written.handoff.complete(() =>
+        this.#isAcknowledged(written.message)
+          ? Promise.resolve()
+          : this.#drainInboxRow(delivery, written.message, deliveryTenantId, input.shard),
+      );
+      return written.message;
+    } finally {
+      this.#untrackMessage(written.message);
+    }
   }
 
   async #receiveAndDrainAll(
@@ -236,6 +244,7 @@ export class LocalEntityInbox implements EntityInbox {
           whenReceived,
           deliveryTenantId,
         );
+        this.#trackMessage(row.owner.written.message);
       } catch (error) {
         failures.push(error);
         return;
@@ -265,7 +274,9 @@ export class LocalEntityInbox implements EntityInbox {
       }
       try {
         await written.handoff.complete(() =>
-          this.#drainInboxRow(delivery, written.message, deliveryTenantId, row.input.shard),
+          this.#isAcknowledged(written.message)
+            ? Promise.resolve()
+            : this.#drainInboxRow(delivery, written.message, deliveryTenantId, row.input.shard),
         );
         LocalEntityInbox.#resolve(row.owner, written.message);
       } catch (error) {
@@ -328,6 +339,15 @@ export class LocalEntityInbox implements EntityInbox {
           expectedShard ?? this.#expectedShard(nextMessage),
         );
       },
+      acceptMessage: (nextMessage) =>
+        InboxHandoff.sameMessageId(nextMessage.id, message.id) ||
+        ((nextMessage.label === "HANDLE_COMMAND" || nextMessage.label === "REACT_UPON_EVENT") &&
+          this.#targets
+            .get(nextMessage.inboxId.targetTypeUrl)
+            ?.labels.includes(nextMessage.label) === true),
+      onAcknowledged: (nextMessage) => {
+        this.#recordAcknowledgement(nextMessage);
+      },
       replayFailureMessage: "Entity Inbox replay failed.",
       skippedMessage: "Entity Inbox delivery was skipped before the target row was delivered.",
       unfinishedMessage:
@@ -356,10 +376,30 @@ export class LocalEntityInbox implements EntityInbox {
 
   #cleanupRows(rows: readonly BatchRow[]): void {
     for (const row of rows) {
+      if (row.owner?.written !== undefined) this.#untrackMessage(row.owner.written.message);
       if (row.owner !== undefined && this.#inFlightHandoffs.get(row.key) === row.promise) {
         this.#inFlightHandoffs.delete(row.key);
       }
     }
+  }
+
+  #trackMessage(message: InboxMessage): void {
+    this.#inFlightMessageIds.add(InboxHandoff.messageIdKey(message));
+  }
+
+  #untrackMessage(message: InboxMessage): void {
+    const key = InboxHandoff.messageIdKey(message);
+    this.#inFlightMessageIds.delete(key);
+    this.#acknowledgedMessageIds.delete(key);
+  }
+
+  #recordAcknowledgement(message: InboxMessage): void {
+    const key = InboxHandoff.messageIdKey(message);
+    if (this.#inFlightMessageIds.has(key)) this.#acknowledgedMessageIds.add(key);
+  }
+
+  #isAcknowledged(message: InboxMessage): boolean {
+    return this.#acknowledgedMessageIds.has(InboxHandoff.messageIdKey(message));
   }
 
   #takeVersion(): bigint {
