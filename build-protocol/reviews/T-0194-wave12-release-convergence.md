@@ -1,6 +1,6 @@
 # T-0194 Review Record
 
-Status: RELEASE CORRECTION REVIEW PENDING
+Status: RELEASE CORRECTION ACCEPTED
 
 Wave endpoint: `a232191c`. Applicable lanes are all four existing specialist
 concerns plus the final security reviewer. The dispatch roles/profiles and
@@ -146,3 +146,24 @@ coverage inputs are ready for review. Generated residue is absent.
   finds substantive structural complexity. Final security remains accepted:
   this correction adds no external input, trust-boundary, credential, or
   destructive-provider behavior.
+
+### Release-correction acceptance
+
+- Performance/reliability is clean at `b3407245`: exact acknowledgement follows
+  durable marking, uses full message and shard identity, retains bounded state,
+  and releases that state on every handoff completion path. Target filters and
+  post-release rejection follow-ups preserve shard ownership and cleanup order.
+- TypeScript/API is clean at `b3407245`: the result and callback seams are
+  internal, generated declarations match runtime signatures, and no root or
+  package export changes.
+- Mechanical cleanup consolidated the unchanged identity key into internal
+  `InboxHandoff.messageIdKey` at pushed endpoint `b811d724`. Both reviewers
+  confirmed the endpoint remains clean; cleanup enforcement and server
+  typecheck pass.
+- Canonical `verify:task --no-coverage` passes at `b811d724`: generation,
+  build/tooling typechecks, repository-wide ESLint and formatting, cleanup,
+  TSDoc, copyright, logging containment, API/audience, Proto current-output,
+  release readiness, and 636 tests with four expected service-gated skips.
+- Documentation and style remain accepted under their recorded N/A
+  dispositions, and final security remains accepted. The full release profile
+  may restart from this converged endpoint.
