@@ -1,6 +1,6 @@
 # T-0191 Review Record
 
-Status: REVIEW READY
+Status: CHANGES REQUESTED
 
 Planned lanes: TypeScript/API (optional source compatibility), style/
 maintainability (one cleanup seam), performance/reliability (atomic fencing,
@@ -93,3 +93,18 @@ are retained as required inputs.
 - Re-review endpoint: `4392d8ef` plus this evidence-only record update. Reopen
   TypeScript/API, style/maintainability, performance/reliability, and
   documentation only; final security remains T-0194.
+
+## Re-review Result
+
+- TypeScript/API, style, performance/reliability, and documentation independently
+  confirmed that a positive `timeoutMs` is forwarded unchanged and never
+  becomes an admission-relative deadline; only the zero sentinel is enforced.
+- Performance/reliability confirmed that the two-owner live test reads through
+  the application abstraction rather than asserting provider-native durable row
+  counts, so the record overstates that part of the proof.
+- All other reopened concerns are clean: optionality and exports, protected-page
+  progress, false-delete ownership stop, atomic fencing, narrow provider seam,
+  ledgers, and rollback/close behavior.
+- One final correction batch returns to the existing `implementer`, explicitly
+  configured `gpt-5.6-terra` / medium, with no subagents and unavailable runtime
+  telemetry. Re-review only deadline semantics and native row-count evidence.

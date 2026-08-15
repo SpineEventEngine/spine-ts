@@ -1,6 +1,6 @@
 # T-0192 Review Record
 
-Status: REVIEW READY
+Status: CHANGES REQUESTED
 
 Planned lanes: style/maintainability and performance/reliability. TypeScript/API
 is N/A unless T-0191's port changes; documentation applies only to changed
@@ -72,3 +72,14 @@ fenced mutation.
   service-gated skips.
 - Re-review endpoint: `4392d8ef` plus this evidence-only record update. Reopen
   only the four concerns substantively affected by the accepted batch.
+
+## Re-review Result
+
+- Positive deadlines are not yet admission-relative: a nonzero budget can
+  expire during provider preparation or transaction reads and deletion can
+  still proceed. This reopens bounded deadline behavior only.
+- The live two-owner tests prove cross-handle logical visibility but not the
+  claimed provider-native physical row counts. Native count assertions before
+  and after the current-owner deletion remain required.
+- Protected-page bounded progress, ownership revalidation, exact atomic
+  fencing, cancellation checks, and task ledgers are clean.
