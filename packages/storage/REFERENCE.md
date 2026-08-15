@@ -67,6 +67,16 @@ are `unknown`. Each provider documents the runtime mapping and validation it
 applies before using those inputs; callers cannot infer shared filter or sort
 name validation from the common query shape.
 
+The normalized-plan matrix is intentionally provider-specific. MySQL admits
+IDs; equality and the five comparisons on mapped orderable columns; nested
+`all` and `either`; declared-column ordering; positive limits; and masks.
+Datastore admits only IDs, equality, one provider-legal inequality column, flat
+`all`, compatible ordering, limits, and masks. Both reject unsupported shapes
+before provider access. Normalized plans never include offset: the existing
+`RecordQuery.offset` path is separate. MySQL executes every admitted predicate,
+order, and finite bound in contained parameterized SQL; Datastore executes only
+that stated overlap. See each provider reference for mappings and index needs.
+
 ## Lifecycle
 
 The base `StorageFactory.close()` prevents later record-storage creation. The

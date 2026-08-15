@@ -171,9 +171,11 @@ already visible.
 
 Message Board's React UI posts `PostMessage`, queries the board for its initial
 rows, then listens for complete Projection payloads. A valid complete payload
-updates the browser locally. The UI uses an authoritative query for initial
-state, a reconnect, a possible gap, malformed data, or recovery after posting
-while disconnected.
+updates the browser locally. A healthy browser stream remains active across
+ordinary successive updates. The UI uses an authoritative query for initial
+state, a reconnect, a possible best-effort gap, malformed data, or recovery
+after posting while disconnected; those recovery paths do not make ordinary
+stream termination acceptable.
 
 For a browser, put native services behind one authenticated Gateway. The
 Gateway resolves credentials into trusted context and forwards approved browser
@@ -203,6 +205,14 @@ a `TypeRegistry` when compact Proto JSON must expand `Any` values.
 | ----------------- | ------------------------------------------------------------------------------------------ |
 | Querying          | Mark query/sort fields with `(column)` and use declared columns.                           |
 | MySQL tenancy     | Select a configured database per tenant.                                                   |
+
+Normalized provider plans are capability-gated execution contracts. MySQL
+pushes every admitted filter, order, and finite bound into parameterized SQL in
+the selected tenant database and resolved storage-group table; it does not read
+a storage group for Node filtering. An omitted candidate limit is bounded at
+10,000 records. Normalized plans do not support offset (`RecordQuery.offset`
+remains a separate API). Datastore supports only its provider-legal overlap;
+see the storage provider references before selecting indexes or query shapes.
 | Datastore tenancy | Select a native namespace per tenant.                                                      |
 | Physical layout   | Configure provider record families; a Bounded Context name is diagnostic, not a partition. |
 | Migration         | Plan it with the provider; Spine TS does not migrate layouts automatically.                |

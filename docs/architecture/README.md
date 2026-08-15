@@ -79,7 +79,8 @@ Domain events stay on the domain EventBus and in the domain EventStore.
 facility. System-event persistence is optional and uses separate system storage
 when enabled. Stand serves authoritative queries and routes complete entity
 payloads through the Gateway. Normal complete payloads update a client locally;
-clients query only for initial state, reconnect, a possible gap, malformed
+healthy browser streams remain active across ordinary successive updates.
+Clients query only for initial state, a real reconnect, a possible gap, malformed
 payload, or another explicit recovery need. One standalone Gateway dynamically
 discovers application nodes on GKE or GCE: GKE headless-Service DNS or GCE
 leased discovery provides the authoritative complete membership. It reconciles

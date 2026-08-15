@@ -104,6 +104,10 @@ ceiling is 1,000 rows; the lower provider ceiling still rejects an oversized
 scan rather than materializing more rows. There is no public Datastore cursor
 API.
 
+This is deliberately the overlap, not MySQL parity: nested or disjunctive
+predicates and provider-illegal inequality/order shapes reject before provider
+access. Normalized plans have no offset; `RecordQuery.offset` is separate.
+
 The internal Entity commit reads current and immutable keys then applies current,
 enabled histories, and delivery events in one Datastore transaction. It rejects
 more than 25 entity groups, 500 mutations, or its conservative transaction-size
