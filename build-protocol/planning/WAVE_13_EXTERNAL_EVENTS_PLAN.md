@@ -208,14 +208,27 @@ it.
    runtime registration DSL is added.
 8. Generated handler registry version advances atomically. Analyzer, writer,
    ingestor, canonical metadata, tests, declarations, and generated fixtures
-   change in one owner-controlled task. Old generated registry versions receive
-   their existing deterministic unsupported-version failure; no dual-version
-   compatibility policy is invented for this unreleased snapshot.
-9. `EventDispatcher` exposes domestic and external event schema sets.
-   EventBus/registry coarse selection and repository handler selection both
-   honor `EventContext.external`: domestic reaches only domestic handlers;
-   imported reaches only external handlers. A repository with mixed-origin
-   handlers for the same type must filter per handler, not only per dispatcher.
+   change in one owner-controlled task. Version 3 retains the existing registry,
+   entity-group, and handler-record fields and adds required
+   `origin: "domestic" | "external"` to every generated handler record and its
+   canonical `BaseHandlerMetadata`. The analyzer always emits it: unmarked
+   inputs are domestic and a valid canonical first-parameter `External<T>` is
+   external. Ingestion validates the literal and its signal-kind compatibility.
+   Old generated registry versions receive their existing deterministic
+   unsupported-version failure; no dual-version compatibility policy is
+   invented for this unreleased snapshot.
+9. `EventDispatcher.messageSchemas()` remains the complete accepted set and an
+   optional `externalEventSchemas()` declares its external subset; omission
+   means the existing domestic default. The registry derives immutable external
+   and domestic-complement sets through one internal
+   `EventDispatcherOriginSchemas` helper. This replaces JVM's two mandatory set
+   methods because TypeScript applications structurally implement the existing
+   public interface and adding two required methods would break every domestic
+   dispatcher. EventBus/registry coarse selection and repository handler
+   selection both honor `EventContext.external`: domestic reaches only domestic
+   handlers; imported reaches only external handlers. A repository with
+   mixed-origin handlers for the same type must filter per handler, not only per
+   dispatcher.
 10. External commands are a model error. `External<Command>` on `@Assign` or a
     command-consuming `@Command` produces the TS equivalent of
     `ExternalCommandReceiverMethodError`. `External<Event>` and external
@@ -307,6 +320,22 @@ behavior receive compile/import tests. JVM `ChannelHub`, `PublisherHub`, and
 `SubscriberHub` are deliberately private: they implement broker-owned caching
 and expose no application-facing capability beyond this SPI.
 
+The transport root also exports `InMemoryTransportFactory`, constructed with no
+arguments. The existing `@spine-event-engine/transport/zeromq` entry point
+exports this distinct Node adapter factory:
+
+```ts
+function createZeroMqTransportFactory(config: ZeroMqConfig): TransportFactory;
+```
+
+Creation is synchronous because channel opening is already asynchronous in
+`createPublisher()`/`createSubscriber()`. The function accepts the existing
+validated `ZeroMqConfig` and no options or new settings. It is deliberately
+distinct from the existing `createZeroMqTransport()` SignalTransport factory;
+neither facility wraps or depends on the other. Normal applications pass the
+returned factory through `ServerEnvironment.when(type).use({ transportFactory
+})`, and the environment owns its close lifecycle.
+
 The server package exports `External<T>` and `ThirdPartyContext` from its root.
 The exact third-party surface is:
 
@@ -326,6 +355,43 @@ Both overloads retain JVM validation: the `UserId` form is single-tenant only;
 the `ActorContext` form requires a tenant exactly for multitenant and forbids it
 for single-tenant. Name validation, post-close rejection, imported producer and
 actor identity, root imports, declarations, TSDoc, and API inventory are tested.
+
+`ServerEnvironmentSettings` gains optional
+`transportFactory?: TransportFactory`, and resolved `ServerEnvironment` exposes
+readonly `transportFactory: TransportFactory`. Local/test resolution supplies
+`InMemoryTransportFactory` when omitted; Production rejects omission. This uses
+the existing `ServerEnvironment.when(type).use(settings)` lifecycle and adds no
+second configuration API. `BoundedContextBuilder.addEventDispatcher()` remains
+the application/test receptor-registration seam; there is no broker accessor.
+
+The exact additive dispatcher contract is:
+
+```ts
+interface EventDispatcher {
+  messageSchemas(): readonly MessageSchema[];
+  externalEventSchemas?(): readonly MessageSchema[];
+  accept?(event: Event): Promise<void>;
+  dispatch(event: Event): Promise<void>;
+}
+```
+
+`externalEventSchemas()` must be a subset of `messageSchemas()` and is frozen
+and validated at registration. Its absence is the compatibility-preserving
+domestic default. Context initialization derives wanted event types only from
+external subsets registered on the **domain EventBus**. System/state dispatcher
+subsets remain local classification metadata and never create a broker wanted
+type or external-state wire. Tests prove a system-only external state dispatcher
+emits no wanted document. Wanted-set replacement, withdrawal, and close are
+observed through a recording `TransportFactory`; tests do not access the
+internal broker.
+
+Generated runtime fixtures use the existing
+`BoundedContextBuilder.withGeneratedRegistryRoot(root)` discovery path and its
+existing `generated/handler/generated-handler-registry.js` module location.
+They provide version 3 with the unchanged `entities` and handler-record fields
+plus required `origin`; no registry injection overload, global runtime
+registration, or test-only builder seam is added. RED-22 builds the consumer
+repository from that discovered generated external-subscription metadata.
 
 ## Adapter-private cross-process channel substitution
 
@@ -378,6 +444,52 @@ settings:
 - late startup is recovered by the protocol itself: config/status subscribers
   exist before online publication; a new online message makes existing peers
   rebroadcast complete wanted documents.
+
+### Frozen adapter-private endpoint layout
+
+The private format is fixed only so native lifecycle/security behavior is
+testable; none of it is exported or broker-visible:
+
+- root: `<ipcDirectory>/spine-message-channels`, mode 0700, canonical,
+  effective-user-owned, no symlink;
+- channel directory: `channels/<sha256-lower-hex(target_type)>`, mode 0700;
+- subscriber manifest: `subscribers/<generation>.json`, where `generation` is
+  a lowercase UUID; publication uses an exclusive mode-0600 temporary file in
+  the same directory, `fsync`, then atomic rename;
+- subscriber socket: `ipc://<ipcDirectory>/spine-message-channels/sockets/<generation>.sock`;
+  creation rejects an address beyond the native IPC path limit before bind;
+- exact manifest v1 keys are
+  `{ version: 1, generation, adapterIdentity, ownerPid, endpoint,
+heartbeatAtMs }`; unknown/missing keys, noncanonical generation/endpoint,
+  mismatched filename/generation, noninteger/nonpositive PID/time, or a file
+  larger than 4096 bytes are invalid;
+- a scanner accepts a well-formed manifest only when `adapterIdentity` exactly
+  equals its own validated `ZeroMqConfig.adapterIdentity`. A different valid
+  identity is another logical adapter namespace sharing the directory: it is
+  ignored without connection, error, or deletion. Every peer in one integration
+  mesh therefore uses the same identity; identity is never a per-process ID;
+- one scan processes at most 1024 directory entries in lexicographic order and
+  rejects the publish/open operation if the bound is exceeded; internal
+  constants are not configuration;
+- heartbeat rewrites atomically every 1000 ms using an unref'ed timer; a
+  manifest is stale after 5000 ms or immediately when its owner PID is absent.
+  PID permission-denied means potentially live, so expiry remains decisive;
+- each startup/publish scan uses `lstat` and rejects/removes symlink,
+  malformed, oversized, expired/dead-owner, escaped-endpoint, and
+  missing/non-socket endpoint entries. It continues scanning and attempting all
+  valid endpoints, then returns one sanitized `AggregateError` after healthy
+  sends were locally accepted; diagnostics contain channel/generation only,
+  never raw manifest data;
+- publisher cache keys are `(channel target_type, generation, endpoint)`.
+  Reconciliation closes entries absent/replaced in the latest complete scan.
+  Subscriber close removes its manifest before socket close; crash cleanup is
+  performed by the next startup/publish scan.
+
+RED-21 discovers this private layout from the fixed paths, creates malformed,
+oversized, symlinked, dead-owner, and missing-socket entries using the exact v1
+schema, and proves removal, bounded failure, live-peer delivery, cache eviction,
+restart generation replacement, and same-directory/different-identity
+non-discovery. No production test hook is added.
 
 If implementation proves that dedicated PUSH-to-PULL cannot retain first-send
 delivery through the required bind/connect lifecycle without adding an
@@ -434,7 +546,7 @@ add an ack frame, proxy, peer-election protocol, or durability claim.
 | `TransportFactory` production adapter           | supplies independent typed channels and owns delivery                      | `packages/transport/src/zeromq/message-transport.ts` uses the authorized private channel directory: unique manifest-backed PULL per subscriber and dedicated cached PUSH per publisher/subscriber | `packages/transport/src/zeromq/signal-transport.ts` binds one publisher/topic and cannot carry exact non-signal `ExternalMessage` | fan-out, many status/config publishers, FIFO per pair, exact Protobuf, private discovery/cleanup; no new public config or broker policy | RED-21/22            |
 | `server/BoundedContext.java`                    | owns broker; registers external dispatchers; closes broker                 | construct/register/close internal broker in existing builder lifecycle                                                                                                                            | `bounded-context.ts` owns buses/stands/inboxes only                                                                               | builder remains assembly root; domain/system buses distinct                                                                             | RED-01/18            |
 | `server/ServerEnvironment.java`                 | owns configured transport factory; test default; close                     | add message `transportFactory` facility and close ownership                                                                                                                                       | environment owns only `SignalTransport`                                                                                           | production explicit; local memory default; singleton lifecycle                                                                          | RED-18/21/22         |
-| `event/EventDispatcher.java`                    | domestic/external sets                                                     | add immutable domestic/external schema sets                                                                                                                                                       | current interface has one `messageSchemas` set                                                                                    | origin-aware discovery and filtering                                                                                                    | RED-03/04/05         |
+| `event/EventDispatcher.java`                    | domestic/external sets                                                     | retain `messageSchemas()` as the union, add optional `externalEventSchemas()` subset, and derive the frozen domestic complement internally                                                        | mandatory new methods would break existing structural TS dispatchers; current interface has one set                               | domestic default, origin-aware discovery and filtering                                                                                  | RED-03/04/05         |
 | `event/EventDispatcherRegistry.java`            | selects dispatcher by type and `context.external`                          | index separate domestic/external type sets for coarse selection, then repository filters each handler                                                                                             | registry keys only type URL                                                                                                       | domestic/external exclusivity                                                                                                           | RED-03/04/06         |
 | `event/EventDispatcherDelegate.java`            | delegates separate event sets                                              | deepen existing repository dispatcher                                                                                                                                                             | no delegate type; repository composes dispatch                                                                                    | no new public delegate class                                                                                                            | RED-03/04            |
 | `event/AbstractEventSubscriber.java`            | reports domestic/external event classes                                    | generated metadata/readiness exposes origin sets                                                                                                                                                  | generated subscriptions lack origin                                                                                               | fan-out preserved                                                                                                                       | RED-03/04/20         |
