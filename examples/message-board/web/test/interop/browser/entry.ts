@@ -203,7 +203,7 @@ const startPassiveSubscription = async () => {
 const nextPassiveUpdate = async () => {
   if (passiveUpdates === undefined) throw new Error("passive subscription is not active");
   const update = await passiveUpdates.next();
-  return { done: update.done === true };
+  return { done: update.done === true, identity: JSON.stringify(update.value) };
 };
 const stopPassiveSubscription = async () => {
   const updates = passiveUpdates;

@@ -11,6 +11,12 @@ Implemented correction: exact OPTIONS routes accompany each bounded RPC route,
 allowing Envoy's existing origin-restricted CORS filter to answer preflight
 without forwarding it to the Gateway.
 
+Review correction: OPTIONS matches now use terminal local 204 responses rather
+than Gateway routes; accepted preflight therefore cannot inherit request or
+stream routing. Browser evidence returns a stable serialized update identity
+and the passive viewer asserts three distinct states. Cancellation is attempted
+from the test `finally` before page/context closure.
+
 Only the runtime family proven by T-0188 may be changed: native server/Stand,
 Gateway relay/bindings, or browser consumption. The regression requires a
 passive real-browser viewer to receive three writer-originated updates through

@@ -14,6 +14,12 @@ Gateway). TypeScript/API and documentation are N/A: no declarations or public
 claims changed. Security is a final-Wave lane; cookie/CSRF and origin-bound
 CORS regression evidence is available for its later disposition.
 
+Accepted correction batch: terminal local OPTIONS routes; distinct passive
+update identities; `finally` cancellation before page closure; lifecycle
+settlement remains asserted by the browser runner. Ownership is Envoy renderer
+and browser diagnostic harness only. Re-review: style/maintainability and
+performance/reliability.
+
 ## Specialist Dispatch
 
 - Style/maintainability: existing `style_maintainability_reviewer`, explicitly

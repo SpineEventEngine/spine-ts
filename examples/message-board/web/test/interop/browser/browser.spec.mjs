@@ -60,6 +60,7 @@ test("keeps a passive viewer alive for three sequential writer updates through E
   test.skip(testInfo.project.name !== "chromium", "focused Chromium passive-viewer regression");
   const viewer = await browser.newContext({ ignoreHTTPSErrors: true });
   const writer = await browser.newContext({ ignoreHTTPSErrors: true });
+  let viewerPage;
   try {
     await viewer.addCookies(
       cookies(process.env.E1_COOKIE_SET_COOKIE, process.env.E1_ENVOY_BASE_URL),
@@ -67,7 +68,7 @@ test("keeps a passive viewer alive for three sequential writer updates through E
     await writer.addCookies(
       cookies(process.env.E1_COOKIE_SET_COOKIE, process.env.E1_ENVOY_BASE_URL),
     );
-    const viewerPage = await viewer.newPage();
+    viewerPage = await viewer.newPage();
     const writerPage = await writer.newPage();
     const viewerUrl = `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF)}&actor=ada`;
     const writerUrl = `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF)}&actor=ada`;
@@ -81,13 +82,17 @@ test("keeps a passive viewer alive for three sequential writer updates through E
         `${error instanceof Error ? error.message : String(error)} browser=${JSON.stringify(failures)}`,
       );
     }
+    const identities = [];
     for (let update = 0; update < 3; update += 1) {
       const next = viewerPage.evaluate(() => window.nextPassiveUpdate());
       await writerPage.evaluate(() => window.post());
-      await expect(next).resolves.toEqual({ done: false });
+      const received = await next;
+      expect(received.done).toBe(false);
+      identities.push(received.identity);
     }
-    await viewerPage.evaluate(() => window.stopPassiveSubscription());
+    expect(new Set(identities).size).toBe(3);
   } finally {
+    await viewerPage?.evaluate(() => window.stopPassiveSubscription()).catch(() => undefined);
     await writer.close();
     await viewer.close();
   }

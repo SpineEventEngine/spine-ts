@@ -21,6 +21,8 @@ test("renders a bounded grpc-web gateway-only listener", () => {
     rendered,
     /allow_headers: content-type,x-grpc-web,grpc-timeout,connect-protocol-version,connect-timeout-ms,authorization,x-user-agent,x-spine-csrf/,
   );
+  assert.match(rendered, /exact_match: OPTIONS \}\] \}\n {26}direct_response: \{ status: 204 \}/);
+  assert.doesNotMatch(rendered, /exact_match: OPTIONS \}\] \}\n {26}route: \{ cluster: gateway/);
   assert.match(
     rendered,
     /Connect application\/json and application\/proto requests pass through unchanged/,
