@@ -58,6 +58,19 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
         }),
       ).resolves.toMatchObject([{ value: "bravo" }, { value: "beta" }]);
       await expect(
+        records.queryPlan({
+          predicate: {
+            kind: "comparison",
+            column: "value",
+            operator: "greaterOrEqual",
+            value: "b",
+          },
+          order: [{ column: "value", direction: "asc" }],
+          mask: { paths: ["value"] },
+          limit: 2,
+        }),
+      ).resolves.toEqual([message("beta"), message("bravo")]);
+      await expect(
         records.query({
           sort: [{ field: "id" }],
           after: { id: "beta", values: [{ field: "id", value: "beta" }] },
