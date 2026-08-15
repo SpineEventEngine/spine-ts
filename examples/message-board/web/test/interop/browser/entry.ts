@@ -114,6 +114,8 @@ const topic = create(TopicSchema, {
   }),
 });
 let sequence = 0;
+let passiveSubscription: Awaited<ReturnType<typeof request.createSubscription>> | undefined;
+let passiveUpdates: AsyncIterator<unknown> | undefined;
 
 const resolveContext = async () => {
   await session.reauthenticate(async ({ signal }) => {
@@ -189,6 +191,31 @@ const subscribe = async () => {
   }
 };
 
+const startPassiveSubscription = async () => {
+  if (passiveSubscription !== undefined) throw new Error("passive subscription is already active");
+  passiveSubscription = await request.createSubscription(topic, {
+    kind: "entity",
+    authoritativeQuery: () => query,
+  });
+  await passiveSubscription.activate();
+  passiveUpdates = passiveSubscription.updates[Symbol.asyncIterator]();
+};
+const nextPassiveUpdate = async () => {
+  if (passiveUpdates === undefined) throw new Error("passive subscription is not active");
+  const update = await passiveUpdates.next();
+  return { done: update.done === true };
+};
+const stopPassiveSubscription = async () => {
+  const updates = passiveUpdates;
+  const subscription = passiveSubscription;
+  passiveUpdates = undefined;
+  passiveSubscription = undefined;
+  await updates?.return?.();
+  await subscription?.cancel();
+  await client.close();
+  await session.close();
+};
+
 Object.assign(window, {
   interopProtocol: protocol,
   interopClient: request,
@@ -199,5 +226,8 @@ Object.assign(window, {
   activatePublicSubscription,
   cancelPublicSubscription,
   startActiveSubscription,
+  startPassiveSubscription,
+  nextPassiveUpdate,
+  stopPassiveSubscription,
   subscribe,
 });

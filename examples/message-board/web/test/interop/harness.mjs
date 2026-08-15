@@ -285,6 +285,7 @@ export async function startTopology({ lifecycle = {} } = {}) {
     await awaitReady(container);
     return {
       baseUrl: "https://127.0.0.1:8443",
+      nativeBaseUrl: backend.baseUrl,
       cookie: Object.freeze({
         setCookie: cookieCredentials.issue(created.credential.value),
         csrf: cookieCredentials.csrf(created.credential.value),

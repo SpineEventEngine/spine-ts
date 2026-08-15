@@ -36,6 +36,38 @@ test("runs a CSRF-protected cookie Projection subscription through the real gRPC
   await expect(page.evaluate(() => window.subscribe())).resolves.toMatchObject({ done: false });
 });
 
+test("keeps a passive viewer alive for three sequential writer updates through Envoy and Gateway", async ({
+  browser,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "focused Chromium passive-viewer regression");
+  const viewer = await browser.newContext({ ignoreHTTPSErrors: true });
+  const writer = await browser.newContext({ ignoreHTTPSErrors: true });
+  try {
+    await viewer.addCookies(
+      cookies(process.env.E1_COOKIE_SET_COOKIE, process.env.E1_ENVOY_BASE_URL),
+    );
+    await writer.addCookies(
+      cookies(process.env.E1_COOKIE_B_SET_COOKIE, process.env.E1_ENVOY_BASE_URL),
+    );
+    const viewerPage = await viewer.newPage();
+    const writerPage = await writer.newPage();
+    const viewerUrl = `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF)}&actor=ada`;
+    const writerUrl = `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF_B)}&actor=bert`;
+    await viewerPage.goto(viewerUrl);
+    await writerPage.goto(writerUrl);
+    await viewerPage.evaluate(() => window.startPassiveSubscription());
+    for (let update = 0; update < 3; update += 1) {
+      const next = viewerPage.evaluate(() => window.nextPassiveUpdate());
+      await writerPage.evaluate(() => window.post());
+      await expect(next).resolves.toEqual({ done: false });
+    }
+    await viewerPage.evaluate(() => window.stopPassiveSubscription());
+  } finally {
+    await writer.close();
+    await viewer.close();
+  }
+});
+
 test("uses the explicit Connect browser client for resolver composition, Post, and authoritative Read", async ({
   page,
 }, testInfo) => {
