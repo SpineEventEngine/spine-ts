@@ -212,7 +212,7 @@ describe("InMemoryRecordStorage", () => {
     );
   });
 
-  it("honors an exact result limit before the candidate budget overflow probe", async () => {
+  it("orders before limiting and retains candidate overflow protection", async () => {
     const storage = createStorage();
     await storage.writeAll([
       createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n),
@@ -221,11 +221,18 @@ describe("InMemoryRecordStorage", () => {
 
     await expect(
       storage.queryPlan({
-        candidateLimit: 1,
-        order: [{ column: "timestamp", direction: "asc" }],
+        candidateLimit: 2,
+        order: [{ column: "timestamp", direction: "desc" }],
         limit: 1,
       }),
-    ).resolves.toHaveLength(1);
+    ).resolves.toMatchObject([{ id: { value: "event-2" } }]);
+    await expect(
+      storage.queryPlan({
+        candidateLimit: 1,
+        order: [{ column: "timestamp", direction: "desc" }],
+        limit: 1,
+      }),
+    ).rejects.toThrow("candidate limit of 1");
   });
 
   it("applies query offsets after sorting and before limits", async () => {
