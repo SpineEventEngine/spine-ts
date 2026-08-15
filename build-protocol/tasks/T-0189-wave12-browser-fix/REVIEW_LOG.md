@@ -1,6 +1,6 @@
 # T-0189 Review Log
 
-Status: NOT STARTED
+Status: CORRECTION IN PROGRESS
 
 Performance/reliability and style/maintainability apply. TypeScript/API,
 documentation, and security apply only if the proven implementation boundary
@@ -20,10 +20,21 @@ settlement remains asserted by the browser runner. Ownership is Envoy renderer
 and browser diagnostic harness only. Re-review: style/maintainability and
 performance/reliability.
 
-Additional captured proof: accepted and missing-origin preflights are terminal
-and counter-neutral. Malformed/rejected-origin OPTIONS and explicit
-per-update counter snapshots remain outstanding evidence; this task is not
-ready for re-review until those required cases are captured.
+Additional captured proof: accepted-, missing-origin, and rejected-origin
+preflights are terminal and counter-neutral. Explicit per-update counter
+snapshots, deterministic forced-disconnect settlement, and a captured complete
+Chromium exit remain outstanding; this task is not ready for re-review until
+those required cases are captured.
+
+## Correction Ownership Transfer
+
+- The original existing `implementer` exhausted its execution window after the
+  durable `01db1632` checkpoint. It is inactive and retains no file ownership.
+- A replacement existing `implementer` owns only the remaining browser
+  lifecycle instrumentation and record corrections in the same worktree.
+  Dispatch is explicit `gpt-5.6-terra` with `medium` reasoning, no subagents,
+  and no query/Inbox ownership. Runtime model/token/latency telemetry remains
+  unavailable on Desktop; the immutable configured profile is the evidence.
 
 ## Specialist Dispatch
 
