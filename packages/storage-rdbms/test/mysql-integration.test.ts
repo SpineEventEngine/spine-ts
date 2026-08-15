@@ -86,10 +86,16 @@ live("MySQL-family record layout", () => {
       spec,
       new StorageGroup(`t0134_records_${String(Date.now())}`),
     );
+    const otherGroup = factory.createRecordStorage(
+      { name: `t0134_records_${String(Date.now())}`, multitenant: false },
+      spec,
+      new StorageGroup(`t0190_other_${String(Date.now())}`),
+    );
     await storage.writeAll([
       create(StringValueSchema, { value: "b" }),
       create(StringValueSchema, { value: "a" }),
     ]);
+    await otherGroup.write(create(StringValueSchema, { value: "other" }));
     await expect(
       storage.query({
         filters: [{ column: "value", value: "a" }],
@@ -104,6 +110,13 @@ live("MySQL-family record layout", () => {
         limit: 1,
       }),
     ).resolves.toEqual([create(StringValueSchema, { value: "b" })]);
+    await expect(
+      storage.queryPlan({ predicate: { kind: "ids", ids: ["a", "other"] } }),
+    ).resolves.toEqual([create(StringValueSchema, { value: "a" })]);
+    await expect(
+      otherGroup.queryPlan({ predicate: { kind: "ids", ids: ["a", "other"] } }),
+    ).resolves.toEqual([create(StringValueSchema, { value: "other" })]);
+    otherGroup.close();
     storage.close();
   });
 

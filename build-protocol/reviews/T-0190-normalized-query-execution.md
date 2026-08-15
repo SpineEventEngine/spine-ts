@@ -79,6 +79,28 @@ substantive restructuring beyond the requested bound derivation.
   await the checkpoint endpoint; generated build/tooling typecheck, changed-file
   ESLint, TSDoc, TypeDoc API inventory, formatting, and diff validation pass.
 
+## Live-provider evidence
+
+- The exclusive retained MySQL 8.4.10 window ran only the focused normalized
+  plan/storage-group case (1 passed, 9 skipped). It proves separate grouped
+  tables return only their own matching ID row. The resource supplied no second
+  tenant database URL, so the two-tenant case remains explicitly skipped rather
+  than fabricating tenant evidence. Datastore is still pending its own window.
+
+- The exclusive retained Datastore emulator (`127.0.0.1:8081`, project
+  `spine-wave12`) ran only its tenant/group normalized-plan containment case:
+  1 passed, 3 skipped. Distinct base/group and `Va`/`Vb` tenant IDs returned
+  only their selected physical family/namespace; cleanup removed the exact
+  seeded rows. Both provider windows are now released.
+
+## Final correction verification
+
+- Final non-live `verify:task` passed all deterministic gates and 4 focused
+  files / 114 tests. The correction endpoint is ready for the required targeted
+  TypeScript/API, performance/reliability, and documentation re-review. The
+  retained MySQL resource's missing second physical tenant URL remains the sole
+  explicitly recorded live-evidence limitation.
+
 ## Mechanical convergence evidence
 
 - Replacement existing `implementer` completed the coverage-only correction
