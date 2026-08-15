@@ -186,13 +186,14 @@ test("requires three observed passive snapshots for a non-literal grep selection
   assert.equal(closed, true);
 });
 
-test("awaits forced-disconnect settlement before closing after a late output failure", async () => {
+test("preserves a late output failure when forced-disconnect settlement and close cleanup run", async () => {
   const child = new EventEmitter();
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
   let bindings = 1;
   let activeStreams = 1;
   let closed = false;
+  const order = [];
   let childStarted;
   let settlementStarted;
   const started = new Promise((resolve) => {
@@ -208,6 +209,7 @@ test("awaits forced-disconnect settlement before closing after a late output fai
     cookieB: { setCookie: "cookie-b", csrf: "csrf-b" },
     tls: { key: "key", cert: "cert" },
     bindingCount: () => {
+      order.push("settlement");
       settlementStarted();
       return bindings;
     },
@@ -216,6 +218,8 @@ test("awaits forced-disconnect settlement before closing after a late output fai
       assert.equal(bindings, 0, "topology closes after settlement drains bindings");
       assert.equal(activeStreams, 0, "topology closes after settlement drains streams");
       closed = true;
+      order.push("close");
+      throw new Error("topology close failed");
     },
   };
   const acceptance = runBrowserAcceptance({
@@ -242,6 +246,7 @@ test("awaits forced-disconnect settlement before closing after a late output fai
 
   await rejection;
   assert.equal(closed, true);
+  assert.ok(order.indexOf("settlement") < order.indexOf("close"));
 });
 
 test("records healthy Gateway bindings and native streams after each ordered passive-viewer update", () => {

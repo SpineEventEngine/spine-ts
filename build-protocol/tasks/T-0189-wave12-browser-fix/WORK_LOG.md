@@ -259,3 +259,16 @@ failure remains the rejection. Focused runner tests pass 11/11. Project lint,
 format, and diff checks pass. Chromium was intentionally not rerun because the
 change is confined to runner error-path orchestration, with the prior 8/8
 acceptance preserved. No self-review was performed.
+
+## P2 Error-Precedence Proof (2026-08-15)
+
+Applied only the `c36fd223` test-only proof batch under the existing explicit
+`implementer` profile (`gpt-5.6-terra` / `medium`; no subagents; Desktop
+runtime telemetry unavailable). The existing combined forced-disconnect and
+late unhealthy-output regression now also makes `topology.close()` reject.
+It proves settlement is attempted before close, close occurs only after zero
+bindings and streams, and the late stdout health error remains the surfaced
+primary rejection rather than either cleanup error. No runtime behavior changed.
+
+Focused runner tests pass 11/11 with format and diff checks clean. Chromium was
+not run by instruction because this is test-only. No self-review was performed.

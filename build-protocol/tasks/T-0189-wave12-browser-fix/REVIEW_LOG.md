@@ -301,6 +301,16 @@ runner suite is 11/11 and project lint, format, and diff checks pass. Chromium
 was not rerun because this is limited to runner error orchestration. No
 self-review was performed; performance/reliability may re-review this P1 only.
 
+## P2 Error-Precedence Proof Implementation (2026-08-15)
+
+The existing implementer applied only the reviewer-requested `c36fd223`
+test-only proof, explicitly configured `gpt-5.6-terra` / `medium`, without
+subagents or exposed Desktop telemetry. The combined forced-disconnect plus
+late unhealthy-marker case now additionally rejects `topology.close()`. It
+asserts settlement starts before close and the late stdout health failure still
+surfaces as primary. The runner suite is 11/11 with format and diff checks
+clean. No Chromium or runtime behavior change; no self-review was performed.
+
 Final acceptance compares baseline `e2ab42d2` with endpoint `a5b72208`. The
 existing `performance_reliability_reviewer` is explicitly
 `gpt-5.6-terra` / high, read-only, and forbidden to spawn subagents; Desktop
