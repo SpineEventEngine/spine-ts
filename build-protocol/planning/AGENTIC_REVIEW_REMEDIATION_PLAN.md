@@ -75,125 +75,331 @@ turning a real finding into partial completion.
    JVM `Aggregate.kt` says event sourcing and `@Apply` were removed.
 6. Remove every public/framework claim that `catchUpReadSide()` is Projection
    catch-up. Describe it only as a legacy-named local reset/replay helper until
-   Wave 17 decides whether it survives under a truthful name.
+   Wave 16 decides whether it survives under a truthful name.
 
 ## Remediation Waves
 
+The Wave numbers are execution order. On 2026-08-15 the human replaced the
+earlier ordering with this binding sequence:
+
+| Wave | Feature group                                      | Review findings owned                                                      |
+| ---- | -------------------------------------------------- | -------------------------------------------------------------------------- |
+| 12   | Runtime correctness and bounded delivery           | `C-01`, `X-01`, `D-01`, current-runtime part of `P-04`                     |
+| 13   | JVM-equivalent cross-context event exchange        | `P-01`                                                                     |
+| 14   | Publishable package and SPI boundaries             | `A-01`, `A-02`, `A-03`                                                     |
+| 15   | Registry integrity and tenant admission            | `S-02`, `S-05`                                                             |
+| 16   | JVM-equivalent Projection catch-up                 | `P-02`                                                                     |
+| 17   | Secure distributed defaults and dependency hygiene | `S-01`, `S-03`                                                             |
+| 18   | Release evidence and coverage truth                | `T-01`, `I-01`, `P-03`, remaining comparative part of `P-04`               |
+| 19   | Multiple-Gateway behavior                          | Previously deferred capability; no agentic-review finding claims it exists |
+
+`S-04` has no Wave because it is false. Auth callbacks already enforce the
+Origin policy in `dispatchAuth()`, and forcing GET-only callbacks could break
+legitimate OIDC `form_post`. No roadmap work may treat `S-04` as an accepted
+defect.
+
+All roadmap work previously deferred beyond Wave 11 is subordinate to this
+sequence. It must not begin before the accepted review findings are closed
+through Wave 18. Multiple-Gateway work is the sole named Wave 19 scope; any
+other older deferral moves after Wave 19 unless the human explicitly reorders
+it.
+
 ### Wave 12 — Runtime Correctness And Bounded Delivery
 
-Fix the three confirmed operational bugs before adding capability:
+**Purpose:** repair the three confirmed operational bugs before adding another
+framework capability. This is the next Wave and the starting point for the new
+development chat.
 
-- `C-01`: sustained browser subscriptions through at least three passive-viewer
-  updates, with native-versus-Gateway fault isolation and real-browser proof;
-- `X-01`: MySQL query-plan capability and SQL execution, plus un-stubbed
-  cross-provider conformance;
-- `D-01`: finite delivered-Inbox retention and cleanup under the existing shard
-  ownership/fencing model;
-- the confirmed `P-04` documentation corrections that describe these current
-  or deferred runtime boundaries truthfully.
+**Feature 1 — sustained browser subscriptions (`C-01`):**
+
+- reproduce the reported termination on current `main` before changing runtime
+  code, using the real browser/Gateway path and a passive subscriber;
+- trace native subscription production separately from Gateway and gRPC-Web
+  forwarding so the failing lifecycle boundary is identified rather than
+  hidden by retries;
+- keep one passive viewer subscribed through at least three sequential updates
+  produced elsewhere, and include a two-tab case in which one tab only watches;
+- preserve the documented best-effort notification contract: reconnect and
+  re-query remain recovery behavior, but an otherwise healthy active stream
+  must not terminate after ordinary successive updates;
+- retain a real-browser regression, not only a mocked stream or direct native
+  client test.
+
+**Feature 2 — MySQL query-plan execution (`X-01`):**
+
+- reproduce the current feature/comparison rejection and equality full-scan
+  behavior without replacing the adapter method with a stub;
+- advertise only the query-plan capabilities the MySQL adapter really executes;
+- translate admitted equality, comparison, and supported composite plans into
+  parameterized SQL while preserving tenant and storage-group containment;
+- reject unsupported plans explicitly instead of silently fetching a whole
+  group for Node-side filtering;
+- run the same query cases against the in-memory contract and live MySQL, and
+  include Datastore where its capability model overlaps.
+
+**Feature 3 — finite Inbox retention (`D-01`):**
+
+- define a finite default retention policy for successfully delivered Inbox
+  rows, with a deliberate configuration boundary if operators may override it;
+- distinguish retention from the existing `keepUntil` deduplication window;
+- delete only eligible delivered rows in bounded pages; never delete pending,
+  claimed, retryable, or still-protected deduplication records;
+- perform cleanup under the existing shard ownership and fencing rules so a
+  stale owner cannot delete another owner's data;
+- prove crash/restart, retry, duplicate, expired-row, and multi-provider
+  behavior, including a bounded-resource test that storage stops growing under
+  sustained successful delivery.
+
+**Documentation correction (`P-04`):** update only claims touched by these
+runtime boundaries, keep unsupported behavior labeled unsupported, and do not
+call the local reset/replay helper Projection catch-up.
+
+**Done when:** each bug has a failing-before/passing-after behavior proof; the
+real browser, live MySQL, and applicable storage-provider profiles pass; cleanup
+is bounded and fence-safe; affected public docs describe only implemented
+behavior; specialist review and final Wave security review converge; one
+release verification passes after corrections; `main` is post-merge verified
+and `origin` again contains only `main` and no tags.
+
+**Excluded:** cross-context event exchange, package restructuring, Projection
+catch-up, multiple Gateways, and Cloud Run.
 
 These defects affect normal user-visible delivery, production query scale, and
 unbounded storage. They therefore precede every feature or publication cleanup.
 
-### Wave 13 — Secure Distributed Defaults And Dependency Hygiene
+### Wave 13 — JVM-Equivalent Cross-Context Event Exchange
 
-- `S-01`: ship Gateway-only/default-deny node reachability for GKE and narrower
-  role-specific GCE ingress, with explicit distributed-deployment threat
-  boundaries; add authenticated node channels or a cryptographically
-  authenticated trusted-context boundary so network reachability alone does not
-  grant arbitrary actor/tenant authority;
-- `S-03`: upgrade affected dependency chains, verify compatibility, and add a
-  networked dependency-audit release/CI lane;
-- re-run the final security review across node access, tenant context, storage
-  egress, health probes, and dependency exposure.
+**Purpose:** close `P-01`, the missing JVM-style integration capability. A
+same-process event forwarder alone is not completion.
 
-This Wave closes actual exposure and known vulnerable dependency state. It does
-not pretend that a forgeable header is node authentication.
+**Feature scope:**
 
-### Wave 14 — Release Evidence And Coverage Truth
+- inspect and pin the relevant JVM `IntegrationBroker` contract before freezing
+  the TypeScript public or serialized design;
+- define how a Bounded Context declares interest in external events and how
+  domestic events become eligible for export without exposing every event;
+- deliver the same domain contract between contexts in one process and between
+  transport-separated application processes;
+- preserve event identity, tenant context, ordering guarantees, and handler
+  semantics across the boundary;
+- provide durable delivery, bounded retry, deduplication, restart recovery,
+  loop prevention, and failure isolation appropriate to the existing Inbox and
+  delivery topology;
+- prevent an imported external event from being re-exported indefinitely;
+- prove same-process and cross-process behavior against pinned JVM semantics,
+  including duplicate, retry, unavailable-peer, and restart cases.
 
-- `T-01`: record coverage per package, surface skipped provider suites, and run
-  Datastore emulator and MySQL profiles in CI;
-- `I-01`: narrow unsupported runtime-interoperability claims, add pinned
-  bidirectional JVM/TS golden wire fixtures, then run a bounded real JVM/TS
-  service profile;
-- finish only the `P-03` and `P-04` comparative wording that the pinned JVM
-  evidence actually proves.
+**Done when:** applications can declare and execute real cross-context event
+exchange through one coherent contract in both deployment shapes; no test-only
+forwarder is counted as the feature; compatibility and reliability reviewers
+accept the semantics; security reviews tenant propagation and transport trust;
+the release gate and post-merge checks pass.
 
-This is neither defect repair nor product capability. It makes release claims
-match executable evidence before the public/package surface grows.
+**Excluded:** multiple-Gateway selection/failover and Cloud Run. Wave 13 may use
+the current package boundaries; Wave 14 must subsequently preserve or migrate
+its deliberate public/SPI contracts without changing its semantics.
 
-### Wave 15 — Publishable Package And SPI Boundaries
+### Wave 14 — Publishable Package And SPI Boundaries
 
-- `A-01`: move build-time handler analysis/codegen out of the server runtime;
-- `A-02`: replace accidental-looking internal exports with deliberate,
-  documented, versioned SPIs or corrected ownership;
-- `A-03`: split or lazily load browser/auth hosting so native server consumers
-  do not install optional auth runtime code.
+**Purpose:** close `A-01` through `A-03` before more public surface is added.
 
-These are existing package/public-surface defects. Close them before missing
-capabilities add more public contracts.
+**Feature scope:**
 
-### Wave 16 — Registry And Tenant Admission Hardening
+- move TypeScript compiler analysis and handler-code generation out of the
+  server runtime package, so runtime consumers do not install compiler tooling
+  as a production dependency;
+- preserve generated handler-registry behavior and clean-build generation while
+  correcting the dependency direction;
+- inventory all eight exported `internal/*` subpaths and, one by one, either
+  move ownership to the consuming package or replace the path with a named,
+  documented, versioned SPI;
+- prohibit cross-package imports from sibling source trees and prove package
+  consumers work from packed artifacts and declared exports only;
+- split or lazy-load browser/auth hosting so a native-only server does not load
+  or require the optional authentication runtime;
+- plan any public-type migration explicitly; do not disguise a breaking import
+  change as an internal refactor.
 
-- `S-02`: isolate registry credentials/storage and decide whether signed leases
-  are required, including rotation and Gateway verification;
-- `S-05`: define tenant provisioning, admission, retirement, and optional
-  allowlisting consistently across Datastore and MySQL;
-- consider authenticated node channels only as a designed extension of the
-  secure network defaults from Wave 13.
+**Done when:** packed native-server installation has no compiler or optional
+browser-auth runtime dependency, every cross-package seam has deliberate
+ownership, clean packed-tarball consumers build, and the package/API inventory
+contains no accidental `internal/*` public contract.
 
-These are missing defense-in-depth and admission features. They follow concrete
-bugs but precede topology expansion.
+**Excluded:** new runtime features. Wave 14 must preserve the Wave 13 event-
+exchange behavior while moving its boundaries.
 
-### Wave 17 — JVM-Equivalent Projection Catch-Up
+### Wave 15 — Registry Integrity And Tenant Admission
 
-- `P-02`: expose catch-up from the Projection repository boundary, including a
-  historical starting point, optional target IDs, catch-up-all, and a returned
-  generated `CatchUpId` operation identity;
-- execute replay as a durable, resumable job with explicit progress, overlap
-  admission, finalization, completion, and failure state;
-- page the EventStore and coordinate historical and live events through the
-  Inbox `CATCH_UP` / `TO_CATCH_UP` lifecycle so ordering, duplicate handling,
-  restart, and multiple-node behavior are explicit;
-- retain tenant isolation and define whether state-update subscriptions remain
-  excluded, as they are in the pinned JVM implementation.
-- decide whether `catchUpReadSide()` is removed, renamed as a local maintenance
-  utility, or internalized. Its implementation and tests provide no acceptance
-  credit toward Projection catch-up.
+**Purpose:** close `S-02` and `S-05` as deliberate admission and identity
+features after package/SPI ownership is stable.
 
-The feature is currently not done properly. This Wave closes the whole
-capability gap after package boundaries are stable; it does not extend or bless
-the invented local helper as the starting public contract.
+**Feature 1 — registry integrity (`S-02`):**
 
-### Wave 18 — JVM-Equivalent Cross-Context Event Exchange
+- define the trust model for GCE registry writers and readers;
+- separate registry credentials and namespace from ordinary application
+  storage access, with least-privilege IAM and deployment policy tests;
+- prevent an arbitrary storage writer from claiming a vacant or expired node
+  identity and redirecting Gateway traffic;
+- decide during architecture planning whether isolated IAM is sufficient or
+  signed leases are required; if leases are signed, specify key issuance,
+  rotation, revocation, verification, and failure behavior;
+- prove lease expiry, stale replacement, concurrent claim, restart, and
+  unauthorized-write cases.
 
-- `P-01`: define external-event interest/classification, same-process routing,
-  loop prevention, ordering, tenant propagation, duplicate semantics, and
-  failure isolation;
-- route the same domestic/external contract between transport-separated
-  Bounded Contexts, with durable delivery/retry behavior appropriate to the
-  existing runtime topology;
-- prove same-process and cross-process exchange with compatibility tests against
-  the pinned JVM Integration Broker semantics. This does not require or imply
-  multiple-Gateway support.
+**Feature 2 — tenant admission (`S-05`):**
 
-This is the other confirmed missing domain capability in the parity review. It
-comes after correctness, security, evidence, package-boundary stabilization,
-and real Projection catch-up.
+- define provider-neutral tenant provisioning, admission, retirement, and
+  optional allowlisting semantics;
+- make MySQL and Datastore enforce the same application-level tenant policy,
+  while retaining provider-native physical isolation choices;
+- ensure discovery of a structurally valid namespace is not itself permission
+  to create or access a tenant;
+- test unknown, retired, concurrently provisioned, and cross-tenant access in
+  both providers.
+
+**Done when:** registry authority is narrower than application data authority,
+node identity cannot be stolen through ordinary registry writes, tenant
+admission is consistent across providers, deployment guidance is executable,
+and the security reviewer accepts the lifecycle and trust boundaries.
+
+**Excluded:** this Wave does not by itself claim all distributed node channels
+are authenticated; Wave 17 owns secure distributed defaults.
+
+### Wave 16 — JVM-Equivalent Projection Catch-Up
+
+**Purpose:** close `P-02`. Projection catch-up is currently not implemented;
+`catchUpReadSide()` is not partial completion and must not shape the new public
+contract.
+
+**Public feature contract:**
+
+- expose catch-up from the Projection repository boundary;
+- accept a historical starting point and either selected Projection IDs or an
+  explicit catch-up-all operation;
+- return the generated `CatchUpId` operation identity used by the JVM contract;
+- define admission and overlap rules, progress observation, completion,
+  failure, cancellation only if supported by the pinned contract, and tenant
+  scope.
+
+**Runtime feature contract:**
+
+- persist catch-up jobs and their progress so work resumes after process or node
+  restart;
+- page historical events from the EventStore instead of loading an unbounded
+  history;
+- coordinate historical events with newly arriving live events through the
+  Inbox `CATCH_UP` / `TO_CATCH_UP` lifecycle;
+- define ordering, deduplication, idempotency, retry, overlap, multi-node
+  ownership, fencing, and finalization behavior;
+- preserve the pinned JVM exclusion of state-update subscriptions unless the
+  human approves a deliberate divergence.
+
+**Legacy helper disposition:** remove `catchUpReadSide()`, rename it as a local
+maintenance-only reset/replay utility, or internalize it. Its current behavior
+and tests earn zero acceptance credit for this Wave.
+
+**Done when:** catch-up survives restart and node handoff, handles live-event
+overlap without gaps or double application, exposes durable progress by
+`CatchUpId`, supports selected IDs and catch-up-all, and passes JVM comparative,
+provider-backed, reliability, API, documentation, and security review.
+
+### Wave 17 — Secure Distributed Defaults And Dependency Hygiene
+
+**Purpose:** close the actual distributed trust defect `S-01` and the verified
+supply-chain defect `S-03` after the preceding runtime capabilities have stable
+network and package surfaces.
+
+**Feature 1 — secure distributed defaults (`S-01`):**
+
+- ship Gateway-only/default-deny application-node reachability for GKE and
+  narrower role-specific ingress for GCE;
+- add authenticated node channels or a cryptographically authenticated trusted-
+  context boundary; a forgeable actor/tenant header and network policy alone do
+  not establish application identity;
+- bind actor and tenant context to authenticated Gateway authority before native
+  handlers trust it;
+- preserve required health and operations access without exposing application
+  RPCs;
+- verify direct-node denial, forged-context rejection, replay resistance,
+  credential rotation, node restart, and failure modes in deployment-level
+  tests.
+
+**Feature 2 — dependency hygiene (`S-03`):**
+
+- upgrade the parent dependency chains responsible for the confirmed seven
+  advisories, not merely transitive lockfile entries;
+- run compatibility tests for production examples, browser/auth paths, tooling,
+  generation, and packaging;
+- add a networked CI/release audit lane with recorded policy and exception
+  handling while keeping deterministic offline verification independent of
+  registry availability.
+
+**Done when:** shipped distributed modes deny unauthenticated direct node use,
+trusted context is cryptographically bound, the dependency audit meets the
+recorded policy, deployment and runtime tests pass, and final security review
+is clean or records explicit human-accepted exceptions.
+
+### Wave 18 — Release Evidence And Coverage Truth
+
+**Purpose:** close `T-01`, `I-01`, and the remaining `P-03`/`P-04` evidence and
+documentation work only after the implementation Waves are integrated.
+
+**Feature 1 — provider-backed coverage truth (`T-01`):**
+
+- report coverage by package and verification profile instead of presenting one
+  aggregate percentage as proof of every adapter;
+- make skipped MySQL and Datastore suites visible in release output;
+- run live MySQL and Datastore-emulator profiles in CI/release evidence;
+- prohibit stubbing the exact adapter method whose production behavior a test
+  claims to prove;
+- distinguish source inclusion in V8 accounting from provider-backed execution.
+
+**Feature 2 — runtime interoperability proof (`I-01`):**
+
+- keep Proto source equality as contract evidence, not runtime proof;
+- add pinned JVM-produced bytes decoded by TypeScript and TypeScript-produced
+  bytes decoded by JVM for representative contracts;
+- run at least one bounded real JVM/TypeScript service interaction through the
+  supported transport and record the pinned JVM revision;
+- fail clearly when the JVM fixture/runtime revision drifts.
+
+**Feature 3 — parity decisions and documentation (`P-03`, `P-04`):**
+
+- retain the producer-ID fallback only if the human explicitly accepts it as a
+  public TS/JVM divergence; otherwise implement the separately approved change;
+- publish comparative tests and porting guidance for the accepted behavior;
+- ensure event exchange, enrichment, first-field routing, non-event-sourced
+  aggregates, and Projection catch-up are described exactly as implemented and
+  verified—never inferred from similarly named helpers.
+
+**Done when:** every release claim points to an executable profile, live
+providers and pinned JVM interoperability run in the release evidence, public
+documentation contains no known parity fiction, repository coverage remains at
+or above the required threshold, and the fully converged release is reviewed,
+verified, integrated, post-merge verified, and remotely clean.
 
 ### Wave 19 — Multiple-Gateway Behavior
 
-The former Wave 12 is renumbered to Wave 19 without expanding its scope. It
-still requires human Q&A and a separate architecture plan. Cloud Run remains
-excluded. Multiple-Gateway work begins only after all accepted agentic-review
-defects and missing features above are integrated, release-verified, and remote
-`main` again has no extra branches or tags.
+**Purpose:** execute the previously deferred multiple-Gateway capability only
+after every accepted agentic-review finding is closed through Wave 18.
+
+**Planning boundary:** Wave 19 starts with human Q&A and a separate high-risk
+architecture plan. That planning must decide Gateway discovery, client
+selection, failover, subscription ownership, duplicate suppression,
+coordination, rollout, configuration, health, observability, and deployment
+semantics before implementation begins.
+
+**Done when:** the human-approved multiple-Gateway contract is implemented and
+proved under the repository protocol. No earlier Wave may add a provisional
+multiple-Gateway API.
+
+**Excluded:** Cloud Run remains outside the offering unless the human separately
+authorizes it.
 
 ## Explicit non-work
 
 - Do not present `catchUpReadSide()` as Projection catch-up or as partial
-  completion of it. Until Wave 17 decides its fate, describe it only as a
+  completion of it. Until Wave 16 decides its fate, describe it only as a
   legacy-named process-local whole-read-side reset/replay utility.
 - Do not change `P-03` routing behavior without new human direction.
 - Do not implement the proposed `S-04` GET-only rule.

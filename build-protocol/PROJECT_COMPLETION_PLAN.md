@@ -185,19 +185,20 @@ durably closed.
 - **Wave 12:** correct sustained browser subscription delivery, MySQL
   query-plan execution, finite Inbox retention, and confirmed runtime-document
   mismatches.
-- **Wave 13:** secure distributed node reachability by default and remediate
-  current dependency advisories with an explicit networked audit lane.
-- **Wave 14:** make provider coverage and JVM interoperability claims match
-  executable release evidence.
-- **Wave 15:** establish publishable runtime/tooling/auth and cross-package SPI
+- **Wave 13:** implement JVM-equivalent same-process and cross-process Bounded
+  Context event exchange.
+- **Wave 14:** establish publishable runtime/tooling/auth and cross-package SPI
   boundaries.
-- **Wave 16:** add deliberate registry-integrity and tenant-admission controls.
-- **Wave 17:** implement JVM-equivalent Projection catch-up with repository-level
+- **Wave 15:** add deliberate registry-integrity and tenant-admission controls.
+- **Wave 16:** implement JVM-equivalent Projection catch-up with repository-level
   targeting, durable progress, Inbox coordination, restart, and live-event
   ordering. The existing local whole-read-side reset/replay helper is not
   catch-up and provides no completion credit.
-- **Wave 18:** implement JVM-equivalent same-process and cross-process Bounded
-  Context event exchange.
+- **Wave 17:** secure distributed node reachability by default and remediate
+  current dependency advisories with an explicit networked audit lane.
+- **Wave 18:** make provider coverage and JVM interoperability claims match
+  executable release evidence, and close the remaining comparative parity
+  decisions and documentation.
 - **Wave 19:** multiple-Gateway behavior, subject to a future human Q&A and
   planning task. Earlier Waves create no provisional multiple-Gateway API.
   Cloud Run remains outside the initial offering.
@@ -206,7 +207,10 @@ The validated findings, rejected claims, dependency reasoning, and mandatory
 ordering are frozen in
 `build-protocol/planning/AGENTIC_REVIEW_REMEDIATION_PLAN.md`. Every roadmap item
 that was previously deferred beyond Wave 11 moves behind this remediation
-sequence.
+sequence. The binding execution order is runtime correctness, cross-context
+event exchange, package/SPI boundaries, registry and tenant admission,
+Projection catch-up, secure distributed defaults, release evidence, and only
+then multiple-Gateway behavior.
 
 Wave 6 Q&A, its original implementation, review, release verification,
 integration, and documentation closure are complete. T-0113 records the
@@ -671,8 +675,9 @@ Before spawning reviewers, perform a lightweight local audit and record it:
 6. Record post-merge evidence in one mainline closure update when durable
    project state must change. Never create a second follow-up solely to name
    the closure commit itself.
-7. Push the completed task branch, updated `main`, and task tags to `origin`;
-   record the remote refs.
+7. Push the completed task branch and updated `main` to `origin`, inspect and
+   reconcile every remote ref, then delete the completed branch and every tag;
+   closure requires exactly `origin/main` and no remote tags.
 8. Remove the completed worktree only when Git reports it clean.
 
 ## Runtime Execution Packets

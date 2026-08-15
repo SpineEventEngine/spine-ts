@@ -121,10 +121,12 @@ stabilize, unless a concrete changed interface requires earlier expansion.
 
 Push every feature-branch commit to `origin` immediately, including checkpoint
 and review-correction commits. After each task is complete, reviewed, merged,
-and post-merge verified, push updated `main` and any task tags. Never rewrite a
-published task branch without explicit human direction. A task is not durably
-closed until the required pushes succeed or a real remote/authentication
-blocker is recorded.
+and post-merge verified, push updated `main`, inspect every remote branch and
+tag, reconcile any unmerged work into `main`, then delete completed task
+branches and every tag. Closure requires `origin` to expose exactly one branch,
+`main`, and no tags. Never rewrite a published task branch without explicit
+human direction. A task is not durably closed until the required pushes and
+remote cleanup succeed or a real remote/authentication blocker is recorded.
 
 Do not pause for routine implementation choices. Stop only for the blockers
 listed in `build-protocol/BUILD_PROTOCOL.md` and the completion plan.

@@ -5377,7 +5377,7 @@ Decision:
 - Give generated TypeScript deterministic generated/provenance notices and no
   CodeMatters copyright header. Preserve the authored-source copyright and
   exact-one-blank-line rule.
-- Defer multiple-Gateway behavior wholly to Wave 12.
+- Defer multiple-Gateway behavior wholly to Wave 19.
 
 Alternatives considered:
 

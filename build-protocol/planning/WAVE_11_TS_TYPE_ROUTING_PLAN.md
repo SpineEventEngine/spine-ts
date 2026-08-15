@@ -569,7 +569,7 @@ Acceptance:
 
 The loopback multi-process test retains the existing supported topology: one
 Gateway connected to multiple application nodes. It is not a multiple-Gateway
-test and creates no Wave 12 behavior.
+test and creates no Wave 19 behavior.
 
 Use focused TDD and at least 90% coverage for changed example production code,
 then bounded `verify:task` with native loopback permissions. All four specialist
@@ -648,7 +648,7 @@ Completion: reviewed, final-security CLEAN, release-verified, tagged `T-0186`,
 fast-forward integrated to `origin/main`, and post-merge verified. Final release
 coverage is 94.17% statements, 90.38% branches, 94.07% functions, and 95.22%
 lines; `253` files and `4,109` tests pass. Wave 11 is COMPLETE. Multiple-Gateway
-behavior remains wholly deferred to Wave 12, and Cloud Run remains excluded.
+behavior remains wholly deferred to Wave 19, and Cloud Run remains excluded.
 
 ## Review And Verification Policy
 
@@ -675,9 +675,9 @@ reliability review. The existing final security reviewer runs in T-0186. An
 earlier security lane is opened only if implementation changes a trust boundary
 or accepts executable input outside the model module.
 
-## Explicit Wave 12 Deferral
+## Explicit Wave 19 Deferral
 
 Wave 11 does not implement multiple Gateway instances, selection, failover,
 coordination, lifecycle, configuration, or deployment guidance. It does not add
-provisional Gateway API. Multiple-Gateway work belongs wholly to Wave 12.
+provisional Gateway API. Multiple-Gateway work belongs wholly to Wave 19.
 Cloud Run remains outside the initial offering.
