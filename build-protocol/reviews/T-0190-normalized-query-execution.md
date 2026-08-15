@@ -1,6 +1,6 @@
 # T-0190 Review Log
 
-Status: Corrections in progress
+Status: Targeted re-review in progress
 
 ## Assignment evidence
 
@@ -100,6 +100,15 @@ substantive restructuring beyond the requested bound derivation.
   TypeScript/API, performance/reliability, and documentation re-review. The
   retained MySQL resource's missing second physical tenant URL remains the sole
   explicitly recorded live-evidence limitation.
+
+Targeted re-review is dispatched against correction endpoint `fc39709a`
+(baseline `e2ab42d2`): existing `typescript_api_docs_reviewer` explicitly
+`gpt-5.6-terra` / high; existing `performance_reliability_reviewer` explicitly
+`gpt-5.6-terra` / high; and existing `documentation_reviewer` explicitly
+`gpt-5.6-luna` / medium. Each is read-only, concern-specific, and forbidden to
+spawn subagents. Desktop runtime telemetry remains unavailable. Style is not
+reopened because the correction did not substantively restructure the reviewed
+compiler/provider seams.
 
 ## Mechanical convergence evidence
 
