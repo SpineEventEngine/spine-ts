@@ -33,6 +33,14 @@ describe("DatastoreDeliveryCleanupStorage", () => {
     expect(openStorage).not.toHaveBeenCalled();
   });
 
+  it("declines an expired deadline before opening provider handles", async () => {
+    const openStorage = vi.fn();
+    const cleanup = new DatastoreDeliveryCleanupStorage(openStorage as never);
+
+    await expect(cleanup.remove(input({ timeoutMs: 0 }))).resolves.toBe(false);
+    expect(openStorage).not.toHaveBeenCalled();
+  });
+
   it("rolls back when the session snapshot is not current", async () => {
     const transaction = transactionWith([entity(), entity()]);
     const cleanup = coordinator(transaction, false);
@@ -59,6 +67,22 @@ describe("DatastoreDeliveryCleanupStorage", () => {
     await expect(cleanup.remove(input())).resolves.toBe(true);
     expect(transaction.delete).toHaveBeenCalledOnce();
     expect(transaction.commit).toHaveBeenCalledOnce();
+  });
+
+  it("rolls back and preserves a provider failure", async () => {
+    const transaction = transactionWith([]);
+    transaction.run.mockRejectedValueOnce(new Error("provider unavailable"));
+    const cleanup = coordinator(transaction, true);
+
+    await expect(cleanup.remove(input())).rejects.toThrow("provider unavailable");
+    expect(transaction.rollback).toHaveBeenCalledOnce();
+  });
+
+  it("rejects removal after close", async () => {
+    const cleanup = coordinator(transactionWith([entity(), entity()]), true);
+    cleanup.close();
+
+    await expect(cleanup.remove(input())).rejects.toThrow("closed");
   });
 });
 

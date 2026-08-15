@@ -33,6 +33,14 @@ describe("MysqlDeliveryCleanupStorage", () => {
     expect(openStorage).not.toHaveBeenCalled();
   });
 
+  it("declines an expired deadline before opening provider handles", async () => {
+    const openStorage = vi.fn();
+    const cleanup = new MysqlDeliveryCleanupStorage(openStorage as never, vi.fn(), () => "key");
+
+    await expect(cleanup.remove(input({ timeoutMs: 0 }))).resolves.toBe(false);
+    expect(openStorage).not.toHaveBeenCalled();
+  });
+
   it("rechecks cancellation after preparation before entering the coordinator", async () => {
     const operation = { signal: { aborted: false } };
     const openStorage = vi.fn(() => storage(() => (operation.signal.aborted = true)));
@@ -59,6 +67,13 @@ describe("MysqlDeliveryCleanupStorage", () => {
 
     await expect(cleanup.remove(input())).resolves.toBe(true);
     expect(inbox.delete).toHaveBeenCalledWith("inbox");
+  });
+
+  it("rejects removal after close", async () => {
+    const cleanup = coordinator(storage(), storage());
+    cleanup.close();
+
+    await expect(cleanup.remove(input())).rejects.toThrow("closed");
   });
 });
 
