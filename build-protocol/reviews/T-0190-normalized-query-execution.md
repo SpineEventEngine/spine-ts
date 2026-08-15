@@ -1,6 +1,6 @@
 # T-0190 Review Log
 
-Status: Specialist review in progress
+Status: Corrections in progress
 
 ## Assignment evidence
 
@@ -38,8 +38,31 @@ immutable configured role and explicit profile are the accepted metadata.
   `gpt-5.6-luna` / medium. Scope: implemented capability and index/cost claims,
   with no future-feature or root-README leakage.
 
-No specialist result has been received yet. Mechanical validation preceded
-review, and live provider suites will not be rerun concurrently with review.
+## Complete review wave — 2026-08-15
+
+All four configured reviewers completed against `e2ab42d2..9747bd8d`. Runtime
+telemetry remained unavailable and no reviewer spawned subagents. Deterministic
+reviewer checks were green; no reviewer ran a shared live provider.
+
+- TypeScript/API requested two corrections: derive the provider fetch bound
+  from the explicit/default candidate budget at every base and memory seam; and
+  reject runtime `offset`/unknown normalized-plan keys instead of ignoring them.
+- Style/maintainability independently confirmed the candidate-bound defect and
+  otherwise found the assigned compiler/provider structure clean.
+- Performance/reliability requested four corrections: include `plan.limit` in
+  the Datastore provider fetch bound; reject undeclared Datastore order columns
+  before provider access; impose a finite documented MySQL ID/bind-work budget;
+  and add live tenant/storage-group containment evidence.
+- Documentation requested one correction: state Datastore's provider-specific
+  1,000-row scan ceiling instead of implying the shared 10,000 default overrides
+  it; all other assigned claims and links were clean.
+
+The orchestrator accepts these as one seven-item correction batch (the shared
+candidate-bound finding is counted once). Corrections return to the existing
+implementation context under the already recorded explicit
+`gpt-5.6-terra` / medium profile. Re-review is required for TypeScript/API,
+performance/reliability, and documentation; style re-review is limited to a
+substantive restructuring beyond the requested bound derivation.
 
 ## Mechanical convergence evidence
 
