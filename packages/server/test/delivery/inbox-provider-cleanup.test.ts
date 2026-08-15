@@ -10,8 +10,8 @@ import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { Datastore } from "../../../storage-datastore/node_modules/@google-cloud/datastore/build/src/index.js";
-import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
-import { MysqlStorageFactory } from "@spine-event-engine/storage-rdbms";
+import { DatastoreStorageFactory } from "../../../storage-datastore/src/datastore/storage-factory.js";
+import { MysqlStorageFactory } from "../../../storage-rdbms/src/mysql/storage-factory.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { Inbox } from "../../src/delivery/inbox.js";
