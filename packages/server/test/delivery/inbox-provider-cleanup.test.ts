@@ -259,9 +259,9 @@ async function datastoreCount(
   };
   const client = new Datastore({ projectId: process.env.DATASTORE_PROJECT_ID ?? "spine-wave12" });
   try {
-    const [entities] = await client.get(
+    const [entities] = (await client.get(
       storage.transactionEntity(InboxRecords.write(message)).key as never,
-    );
+    )) as [unknown];
     return entities === undefined ? 0 : 1;
   } finally {
     storage.close();
