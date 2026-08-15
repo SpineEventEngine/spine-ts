@@ -162,6 +162,12 @@ describe("StorageQueryPolicy", () => {
     expect(() => {
       StorageQueryPolicy.validate({ candidateLimit: 0 }, completeCapabilities);
     }).toThrow(/candidate limit must be a positive safe integer/);
+    expect(() => {
+      StorageQueryPolicy.validate({ candidateLimit: 10_001 }, completeCapabilities);
+    }).toThrow(/candidate limit must not exceed 10,000/);
+    expect(() => {
+      StorageQueryPolicy.validate({ candidateLimit: Number.MAX_SAFE_INTEGER }, completeCapabilities);
+    }).toThrow(/candidate limit must not exceed 10,000/);
   });
 
   it("detects nested groups separately from the top-level group", () => {

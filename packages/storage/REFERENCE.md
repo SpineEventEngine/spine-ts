@@ -53,12 +53,14 @@ that needs that guarantee must reject a handle that does not declare it.
 Record queries validate positive limits, non-negative offsets, and
 continuations that match the requested sort fields. Query plans are normalized
 and checked against adapter capabilities. If a provider returns more candidates
-than a plan's `candidateLimit`, or the exported
+than a plan's explicit query budget, or the exported
 `defaultQueryCandidateLimit` of 10,000 when it is omitted,
 `QueryCandidateLimitError` is thrown before
 local materialization can return a partial semantic result.
+An explicit query budget must be a positive safe integer no greater
+than 10,000.
 
-An accepted candidate ceiling is distinct from the one-row raw-provider
+An accepted query budget is distinct from the one-row raw-provider
 overflow lookahead used to detect excess: the shared default accepts 10,000
 records and can fetch 10,001 raw rows; a provider may declare a lower accepted
 ceiling, such as Datastore's 1,000 accepted / 1,001 raw rows.
