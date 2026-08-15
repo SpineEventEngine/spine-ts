@@ -171,6 +171,9 @@ describe("StorageQueryPolicy", () => {
         completeCapabilities,
       );
     }).toThrow(/candidate limit must not exceed 10,000/);
+    expect(() => {
+      StorageQueryPolicy.validate({ candidateLimit: 10_000 }, completeCapabilities);
+    }).not.toThrow();
   });
 
   it("detects nested groups separately from the top-level group", () => {
