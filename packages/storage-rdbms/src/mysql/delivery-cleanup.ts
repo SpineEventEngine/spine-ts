@@ -16,6 +16,7 @@ import { toBinary, type Message } from "@bufbuild/protobuf";
 import type { PoolConnection } from "mysql2/promise";
 import {
   cleanupOperationActive,
+  type CleanupOperation,
   type DeliveryCleanupInput,
   type DeliveryCleanupStorage,
 } from "@spine-event-engine/storage/internal/delivery-cleanup";
@@ -141,9 +142,3 @@ export class MysqlDeliveryCleanupStorage implements DeliveryCleanupStorage {
 }
 
 class CleanupExpired extends Error {}
-
-interface CleanupOperation {
-  readonly signal?: { readonly aborted: boolean };
-  readonly timeoutMs?: number;
-  readonly isActive?: () => boolean;
-}

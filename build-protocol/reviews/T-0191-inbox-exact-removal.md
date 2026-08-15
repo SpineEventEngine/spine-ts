@@ -164,3 +164,16 @@ are retained as required inputs.
 - Final narrow re-review endpoint: `2b4dd42f` plus this evidence-only update.
   Reopen TypeScript/API, style/maintainability, performance/reliability, and
   documentation only for the four accepted corrections.
+
+## Final Acceptance Review Result
+
+- Performance/reliability is clean and independently reproduced 59 focused
+  passes plus 120/128 changed lines and 109/119 changed branches.
+- TypeScript/API, style, and documentation found one shared P2: MySQL retained
+  a local `CleanupOperation` declaration instead of importing the canonical
+  internal type. MySQL now imports that type and the duplicate is removed.
+- The previously omitted unset-project Datastore command/result is now durable
+  in `build-protocol/work-logs/T-0191.md`; no provider rerun is inferred from a
+  documentation-only change.
+- Final affected-lane re-review is limited to the shared-type import and the
+  corrected evidence provenance.

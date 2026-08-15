@@ -123,3 +123,11 @@ fenced mutation.
   (91.60%). The final captured task profile exited zero after every shared gate
   and 59 focused passes with four service-gated skips.
 - Final narrow re-review endpoint: `2b4dd42f` plus this evidence-only update.
+
+## Final Acceptance Review Result
+
+- Performance/reliability is clean. The only final code finding was MySQL's
+  duplicate local cleanup-operation shape; it now imports the canonical
+  internal type and retains the shared activity predicate.
+- The final evidence log now contains the exact unset-project Datastore command
+  proving the shared fallback and native one-to-zero row counts.
