@@ -79,6 +79,7 @@ export class MysqlEntityCommitCoordinator {
     tables: readonly string[],
     key: string,
     work: (connection: PoolConnection, transactional: boolean) => Promise<T>,
+    options: { readonly requireTransaction?: boolean } = {},
   ): Promise<T> {
     const connection = await this.connections.acquire();
     let locked = false;
@@ -91,6 +92,8 @@ export class MysqlEntityCommitCoordinator {
       transactional =
         rows.length === tables.length &&
         rows.every((row) => row.engine?.toLowerCase() === "innodb");
+      if (!transactional && options.requireTransaction)
+        throw new Error("MySQL delivery cleanup requires transactional record tables.");
       if (transactional) {
         for (let attempt = 0; attempt < 2; attempt += 1) {
           try {
