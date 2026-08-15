@@ -19,22 +19,44 @@ import type { StorageContext } from "../storage/storage.js";
 import type { StorageFactory } from "../storage/storage-factory.js";
 
 /**
- * Describes provider input for one fenced exact delivered-row removal.
+ * Describes cooperative operation state at a provider safe boundary.
  */
 export interface CleanupOperation {
-  /** Cooperatively observes cancellation and the admission-relative deadline. */
+  // prettier-ignore
+
+  /**
+   * Indicates whether cancellation has been requested.
+   */
   readonly signal?: { readonly aborted: boolean };
+
+  /**
+   * Carries the admitted non-negative timeout budget.
+   */
   readonly timeoutMs?: number;
+
+  /**
+   * Determines whether the admission-relative deadline remains active.
+   *
+   * @returns Whether provider work remains within its admitted deadline.
+   */
   readonly isActive?: () => boolean;
 }
 
-/** Returns whether a cleanup operation may proceed at a safe provider boundary. */
+/**
+ * Determines whether a cleanup operation may proceed at a provider safe boundary.
+ *
+ * @param operation Supplies cooperative cancellation and deadline state.
+ * @returns Whether provider work may continue.
+ */
 export function cleanupOperationActive(operation: CleanupOperation | undefined): boolean {
   return (
     !operation?.signal?.aborted && operation?.timeoutMs !== 0 && operation?.isActive?.() !== false
   );
 }
 
+/**
+ * Describes provider input for one fenced exact delivered-row removal.
+ */
 export interface DeliveryCleanupInput<
   InboxId,
   InboxRecord extends Message,
