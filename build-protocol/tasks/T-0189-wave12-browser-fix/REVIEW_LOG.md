@@ -206,3 +206,16 @@ abort. The global coverage threshold remains inapplicable to changed-slice
 measurement because it aggregates unchanged monorepo files. The existing
 implementer profile is explicit `gpt-5.6-terra` / `medium`; Desktop runtime
 telemetry is unavailable. No re-review is requested.
+
+## Accepted Batch Implemented (2026-08-15)
+
+The `b7716b08` batch is implemented test-first: GET auth genuine preflights
+match GET and retain terminal local fallback; stream idle timeout occurs once
+in both access-log shapes; child stdout is buffered newline-delimited and
+health failures reject the awaited child promise; passive runs require exactly
+three snapshots; and passive per-update timeouts are cleared after settlement.
+Focused tests cover fragmented/coalesced records, health failure, snapshot
+cardinality, GET/fallback rendering, and both access-log shapes. Focused
+predecessor-plus-C-01 and fresh complete Chromium are green (8/8), followed by
+clean process/listener/container state. Relevant re-review lanes may now
+inspect this final endpoint; no self-review was performed.

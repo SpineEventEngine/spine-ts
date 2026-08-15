@@ -79,6 +79,24 @@ test("renders supplied auth endpoints as exact finite routes", () => {
   assert.match(rendered, /BufferPerRoute[\s\S]*max_request_bytes: 4096/);
 });
 
+test("matches genuine GET auth preflights and retains a counter-neutral OPTIONS fallback", () => {
+  const rendered = renderEnvoy({
+    browserOrigin: "https://chat.example.test",
+    tlsCertificate: "/cert",
+    tlsKey: "/key",
+    authRoutes: [{ method: "GET", path: "/auth/session", timeoutMs: 1200, maxRequestBytes: 4096 }],
+  });
+
+  assert.match(
+    rendered,
+    /path: \/auth\/session, headers: \[\{ name: ":method", exact_match: OPTIONS \}, \{ name: origin, present_match: true \}, \{ name: access-control-request-method, exact_match: GET \}\]/,
+  );
+  assert.match(
+    rendered,
+    /path: \/auth\/session, headers: \[\{ name: ":method", exact_match: OPTIONS \}\] \}\n {26}direct_response: \{ status: 204 \}/,
+  );
+});
+
 test("emits Envoy access logs only when diagnostic capture is requested", () => {
   const ordinary = renderEnvoy({
     browserOrigin: "https://chat.example.test",
@@ -94,6 +112,8 @@ test("emits Envoy access logs only when diagnostic capture is requested", () => 
 
   assert.doesNotMatch(ordinary, /envoy\.access_loggers\.stdout/);
   assert.match(diagnostic, /envoy\.access_loggers\.stdout/);
+  assert.equal((ordinary.match(/stream_idle_timeout: 30s/g) ?? []).length, 1);
+  assert.equal((diagnostic.match(/stream_idle_timeout: 30s/g) ?? []).length, 1);
 });
 
 for (const method of ["GET", "POST"]) {

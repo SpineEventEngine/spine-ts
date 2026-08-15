@@ -31,6 +31,49 @@ test("rejects when the Playwright child cannot spawn", async () => {
   assert.deepEqual(childArguments?.slice(0, 3), ["test", "-c", "playwright.config.mjs"]);
 });
 
+test("parses fragmented and coalesced child stdout records in order", async () => {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  const lines = [];
+  const running = spawnPlaywright({
+    binary: "/fixture/playwright",
+    arguments_: [],
+    cwd: "/fixture",
+    environment: {},
+    spawnChild: () => child,
+    onOutput: (line) => lines.push(line),
+  });
+
+  child.stdout.emit("data", Buffer.from("first\nPASSIVE_"));
+  child.stdout.emit("data", Buffer.from("VIEWER_UPDATE 1\nsecond\nthird"));
+  child.emit("exit", 0);
+
+  await running;
+  assert.deepEqual(lines, ["first", "PASSIVE_VIEWER_UPDATE 1", "second", "third"]);
+});
+
+test("rejects the awaited child promise when an output health marker fails", async () => {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  const running = spawnPlaywright({
+    binary: "/fixture/playwright",
+    arguments_: [],
+    cwd: "/fixture",
+    environment: {},
+    spawnChild: () => child,
+    onOutput: () => {
+      throw new Error("passive viewer topology became unhealthy");
+    },
+  });
+
+  child.stdout.emit("data", Buffer.from("PASSIVE_VIEWER_UPDATE 1\n"));
+  child.emit("exit", 0);
+
+  await assert.rejects(running, /passive viewer topology became unhealthy/);
+});
+
 test("closes the topology when the Playwright child cannot spawn", async () => {
   const child = new EventEmitter();
   let closed = false;
@@ -47,7 +90,7 @@ test("closes the topology when the Playwright child cannot spawn", async () => {
   const failure = new Error("playwright executable is unavailable");
   const promise = runBrowserAcceptance({
     start: async () => topology,
-    requestedPlaywrightArguments: ["--project", "chromium"],
+    requestedPlaywrightArguments: ["--project", "chromium", "--grep", "non-passive"],
     spawnChild: () => child,
   });
   setImmediate(() => child.emit("error", failure));
@@ -77,7 +120,7 @@ test("waits for a successful Playwright child exit before closing a drained topo
   };
   const acceptance = runBrowserAcceptance({
     start: async () => topology,
-    requestedPlaywrightArguments: ["--project", "chromium"],
+    requestedPlaywrightArguments: ["--project", "chromium", "--grep", "non-passive"],
     spawnChild: () => child,
   });
   setImmediate(() => {
@@ -86,6 +129,41 @@ test("waits for a successful Playwright child exit before closing a drained topo
   });
 
   await acceptance;
+  assert.equal(closed, true);
+});
+
+test("requires three passive snapshots before closing a successful passive-viewer run", async () => {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  let bindings = 1;
+  let activeStreams = 1;
+  let closed = false;
+  const topology = {
+    baseUrl: "https://gateway.example.test",
+    cookie: { setCookie: "cookie", csrf: "csrf" },
+    expiredCookie: { setCookie: "expired" },
+    cookieB: { setCookie: "cookie-b", csrf: "csrf-b" },
+    tls: { key: "key", cert: "cert" },
+    bindingCount: () => bindings,
+    counters: () => ({ subscribe: 1, activate: 1, activeStreams, updates: 1 }),
+    close: async () => {
+      closed = true;
+    },
+  };
+  const acceptance = runBrowserAcceptance({
+    start: async () => topology,
+    requestedPlaywrightArguments: ["--project", "chromium", "--grep", "passive viewer"],
+    spawnChild: () => child,
+  });
+  setImmediate(() => {
+    child.stdout.emit("data", Buffer.from("PASSIVE_VIEWER_UPDATE 1\n"));
+    bindings = 0;
+    activeStreams = 0;
+    child.emit("exit", 0);
+  });
+
+  await assert.rejects(acceptance, /expected exactly three passive viewer snapshots/);
   assert.equal(closed, true);
 });
 

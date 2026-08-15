@@ -62,6 +62,14 @@ export async function runBrowserAcceptance({
         `TOPOLOGY_DIAGNOSTIC ${JSON.stringify(await topology.diagnosticState())}\n`,
       );
     if (code === 0) await settleTopology(topology);
+    if (
+      code === 0 &&
+      expectsPassiveViewer(requestedPlaywrightArguments) &&
+      passiveViewerSnapshots.length !== 3
+    )
+      throw new Error(
+        `expected exactly three passive viewer snapshots: ${JSON.stringify(passiveViewerSnapshots)}`,
+      );
     const counters = topology.counters();
     if (
       code === 0 &&
@@ -107,10 +115,29 @@ export function spawnPlaywright({
     env: environment,
     stdio: ["ignore", "pipe", "pipe"],
   });
+  let buffered = "";
+  let outputError;
+  const emit = (line) => {
+    try {
+      onOutput?.(line);
+    } catch (error) {
+      outputError ??= error;
+    }
+  };
+  const drain = (final) => {
+    const records = buffered.split(/\r?\n/u);
+    buffered = records.pop() ?? "";
+    for (const record of records) emit(record);
+    if (final && buffered.length > 0) {
+      emit(buffered);
+      buffered = "";
+    }
+  };
   child.stdout?.on("data", (chunk) => {
     const output = chunk.toString();
     process.stdout.write(output);
-    for (const line of output.split(/\r?\n/u)) onOutput?.(line);
+    buffered += output;
+    drain(false);
   });
   child.stderr?.on("data", (chunk) => process.stderr.write(chunk));
   return new Promise((resolveCode, reject) => {
@@ -120,11 +147,18 @@ export function spawnPlaywright({
     };
     const resolveExit = (code) => {
       child.removeListener("error", rejectSpawn);
-      resolveCode(code);
+      drain(true);
+      if (outputError !== undefined) reject(outputError);
+      else resolveCode(code);
     };
     child.once("error", rejectSpawn);
     child.once("exit", resolveExit);
   });
+}
+
+function expectsPassiveViewer(arguments_) {
+  const grep = arguments_.indexOf("--grep");
+  return grep === -1 || arguments_[grep + 1]?.includes("passive viewer") === true;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))

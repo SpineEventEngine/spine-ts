@@ -16,7 +16,7 @@ export function renderEnvoy(options) {
         ? `                        - match: { path: ${route.path}, headers: [{ name: ":method", exact_match: OPTIONS }] }\n                          direct_response: { status: 204 }`
         : `                        - match: { path: ${route.path}, headers: [${
             route.kind === "preflight"
-              ? '{ name: ":method", exact_match: OPTIONS }, { name: origin, present_match: true }, { name: access-control-request-method, exact_match: POST }'
+              ? `{ name: ":method", exact_match: OPTIONS }, { name: origin, present_match: true }, { name: access-control-request-method, exact_match: ${route.method} }`
               : `{ name: ":method", exact_match: ${route.method} }`
           }] }\n                          route: { cluster: gateway, timeout: ${route.timeout} }\n                          typed_per_filter_config:\n                            envoy.filters.http.buffer:\n                              "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.BufferPerRoute\n                              buffer: { max_request_bytes: ${route.maxRequestBytes} }`,
     )
@@ -41,7 +41,6 @@ export function renderEnvoy(options) {
                 "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
                 stat_prefix: browser_gateway
 ${topology.accessLog ? '                access_log:\n                  - name: envoy.access_loggers.stdout\n                    typed_config:\n                      "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog\n' : ""}                stream_idle_timeout: 30s
-                stream_idle_timeout: 30s
                 request_timeout: 30s
                 max_request_headers_kb: 16
                 route_config:

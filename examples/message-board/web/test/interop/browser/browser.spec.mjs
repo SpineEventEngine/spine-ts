@@ -104,18 +104,20 @@ test("keeps a passive viewer alive for three sequential writer updates through E
       const next = viewerPage.evaluate(() => window.nextPassiveUpdate());
       await writerPage.evaluate(() => window.post());
       let received;
+      let rejectTimeout;
+      const timedOut = new Promise((_, reject) => {
+        rejectTimeout = () => reject(new Error(`passive update ${update + 1} timeout`));
+      });
+      const timeout = setTimeout(rejectTimeout, 5_000);
       try {
-        received = await Promise.race([
-          next,
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`passive update ${update + 1} timeout`)), 5_000),
-          ),
-        ]);
+        received = await Promise.race([next, timedOut]);
       } catch (error) {
         stdout.write(
           `BROWSER_PASSIVE_TIMEOUT ${JSON.stringify({ update: update + 1, grpcWeb, failures })}\n`,
         );
         throw error;
+      } finally {
+        clearTimeout(timeout);
       }
       expect(received.done).toBe(false);
       identities.push(received.identity);

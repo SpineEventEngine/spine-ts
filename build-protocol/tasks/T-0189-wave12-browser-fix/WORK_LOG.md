@@ -193,3 +193,27 @@ the entire monorepo and is not a changed-slice failure. Deterministic native,
 browser-runner, lifecycle, and renderer tests were rerun. The existing 8/8
 Chromium evidence was preserved without rerunning it; post-run resource scan
 remains clean (no runner, 9443 listener, or Envoy container).
+
+## Accepted Re-review Correction Batch (2026-08-15)
+
+Applied the complete `b7716b08` batch test-first under the existing explicit
+`implementer` profile (`gpt-5.6-terra` / `medium`; Desktop runtime telemetry
+unavailable). Genuine preflights now match each route's admitted method, so a
+GET auth route receives CORS-filter handling while its terminal OPTIONS
+fallback remains local. Renderer tests cover GET, fallback, and exactly one
+stream idle timeout in both diagnostic and ordinary shapes.
+
+The browser runner now consumes buffered newline-delimited child stdout records
+across fragmented/coalesced chunks. Marker parse/health failures reject the
+awaited child promise, preserving `finally` topology cleanup; passive runs must
+produce exactly three ordered snapshots, and forced-disconnect settlement is
+unchanged. Each passive update race clears its timeout in `finally`. Focused
+runner tests cover split/coalesced output, health rejection, exact snapshots,
+and settlement. The focused predecessor-plus-C-01 Chromium run and fresh full
+Chromium run both pass; full acceptance is 8/8 with automatic cleanup.
+
+Focused deterministic renderer/runner/lifecycle tests pass (21/21), formatting,
+lint, and whitespace checks are clean. Node V8 changed renderer coverage remains
+above 90% lines and branches; browser-harness files remain excluded by Node's
+reporter as already recorded, with focused behavior and real Chromium evidence
+as their coverage proof.
