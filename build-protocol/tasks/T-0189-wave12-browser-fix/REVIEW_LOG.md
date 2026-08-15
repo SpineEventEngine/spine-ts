@@ -1,6 +1,6 @@
 # T-0189 Review Log
 
-Status: FINAL RUNNER CORRECTION IN PROGRESS
+Status: FINAL RUNNER RE-REVIEW IN PROGRESS
 
 Performance/reliability and style/maintainability apply. TypeScript/API,
 documentation, and security apply only if the proven implementation boundary
@@ -261,3 +261,9 @@ diff checks pass; the resource scan is clean. No self-review was performed.
 Final endpoint `d9a930ae` is pushed to `origin/codex/wave-12-browser`. Re-review remains limited to
 performance/reliability for close/drain settlement and style/maintainability
 for observed snapshot selection.
+
+The final dispatch compares baseline `e2ab42d2` with production endpoint
+`d9a930ae` (`59aac37d` is evidence-only). The existing
+style/maintainability and performance/reliability reviewers are each explicitly
+`gpt-5.6-terra` / high, read-only, and forbidden to spawn subagents; Desktop
+runtime telemetry remains unavailable.
