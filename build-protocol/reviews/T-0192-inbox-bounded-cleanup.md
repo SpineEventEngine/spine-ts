@@ -1,6 +1,6 @@
 # T-0192 Review Record
 
-Status: REVIEW READY
+Status: CHANGES REQUESTED
 
 Planned lanes: style/maintainability and performance/reliability. TypeScript/API
 is N/A unless T-0191's port changes; documentation applies only to changed
@@ -99,3 +99,14 @@ fenced mutation.
   and after the current-owner deletion remain required.
 - Protected-page bounded progress, ownership revalidation, exact atomic
   fencing, cancellation checks, and task ledgers are clean.
+
+## Final Re-review Result
+
+- Deadline admission and pre-mutation checks are correct except for the MySQL
+  post-delete/pre-commit gap; expiry during delete must force transaction
+  rollback and preserve the row.
+- Datastore native-count evidence must use the same project as both storage
+  factories. Timeout validation and one shared internal activity helper are the
+  other accepted bounded corrections.
+- Documentation, protected-page progress, ownership revalidation, exact
+  coverage figures, and all remaining lifecycle/provider behavior are clean.

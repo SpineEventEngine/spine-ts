@@ -1,6 +1,6 @@
 # T-0191 Review Record
 
-Status: REVIEW READY
+Status: CHANGES REQUESTED
 
 Planned lanes: TypeScript/API (optional source compatibility), style/
 maintainability (one cleanup seam), performance/reliability (atomic fencing,
@@ -125,3 +125,19 @@ are retained as required inputs.
 - One final correction batch returns to the existing `implementer`, explicitly
   configured `gpt-5.6-terra` / medium, with no subagents and unavailable runtime
   telemetry. Re-review only deadline semantics and native row-count evidence.
+
+## Final Re-review Result
+
+- Documentation is clean, and performance/reliability independently verified
+  the current 114/121 line and 107/116 branch figures.
+- P1: MySQL checks activity before the awaited delete but not after it, so the
+  coordinator can commit a deletion whose deadline expired during that await.
+- P2: the Datastore factories and native-count helper use different fallback
+  project IDs when `DATASTORE_PROJECT_ID` is absent.
+- P2: the public non-negative safe-integer timeout promise lacks admission
+  validation for negative, non-integer, `NaN`, and infinite values.
+- P2: identical activity types/predicates are duplicated across memory, MySQL,
+  and Datastore instead of being one internal correctness policy.
+- One correction batch returns to the existing `implementer`, explicitly
+  configured `gpt-5.6-terra` / medium, with no subagents and unavailable runtime
+  telemetry. Re-review only these four corrections.
