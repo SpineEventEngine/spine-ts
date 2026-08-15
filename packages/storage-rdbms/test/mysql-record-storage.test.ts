@@ -27,7 +27,7 @@ import { MysqlTableResolver } from "../src/mysql/table-resolver.js";
 import { MysqlStorageSchemaError } from "../src/mysql/errors.js";
 
 describe("MysqlRecordStorage", () => {
-  it("pushes an admitted normalized equality plan into bound SQL without replacing production plan execution", async () => {
+  it("pushes an admitted normalized equality plan into bound SQL through production execution", async () => {
     const calls: { sql: string; values?: readonly unknown[] }[] = [];
     const storage = schemaStorage(
       readyConnection(calls, { columns: ["ID", "bytes", "value"] }) as never,
