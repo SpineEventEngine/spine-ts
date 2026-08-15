@@ -137,9 +137,10 @@ function assertZeroDelta(before, after, pattern) {
 }
 
 export function recordPassiveViewerProgress(line, topology, snapshots) {
-  const match = /^PASSIVE_VIEWER_UPDATE ([1-3])$/u.exec(line.trim());
-  if (match === null) return;
-  const update = Number(match[1]);
+  const marker = /^PASSIVE_VIEWER_UPDATE (.+)$/u.exec(line.trim());
+  if (marker === null) return;
+  const update = marker[1].startsWith("{") ? JSON.parse(marker[1]).update : Number(marker[1]);
+  if (!Number.isInteger(update) || update < 1 || update > 3) return;
   if (update !== snapshots.length + 1)
     throw new Error(`passive viewer update order is invalid: ${line.trim()}`);
   const bindings = topology.bindingCount();

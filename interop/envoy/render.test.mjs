@@ -79,6 +79,23 @@ test("renders supplied auth endpoints as exact finite routes", () => {
   assert.match(rendered, /BufferPerRoute[\s\S]*max_request_bytes: 4096/);
 });
 
+test("emits Envoy access logs only when diagnostic capture is requested", () => {
+  const ordinary = renderEnvoy({
+    browserOrigin: "https://chat.example.test",
+    tlsCertificate: "/cert",
+    tlsKey: "/key",
+  });
+  const diagnostic = renderEnvoy({
+    browserOrigin: "https://chat.example.test",
+    tlsCertificate: "/cert",
+    tlsKey: "/key",
+    accessLog: true,
+  });
+
+  assert.doesNotMatch(ordinary, /envoy\.access_loggers\.stdout/);
+  assert.match(diagnostic, /envoy\.access_loggers\.stdout/);
+});
+
 for (const method of ["GET", "POST"]) {
   test(`rejects a ${method} auth route collision with a reserved RPC path`, () => {
     assert.throws(

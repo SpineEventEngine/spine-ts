@@ -77,22 +77,6 @@ export async function startTopology({ lifecycle = {} } = {}) {
     cleanup.add("message board backend", 10, () => backend.close());
     const transport = createGrpcTransport({ baseUrl: backend.baseUrl });
     const nativeCreator = new NativeSubscriptionCreator(transport);
-    const owner = new DynamicUnaryForwarder({
-      create: () =>
-        Promise.resolve({
-          forward: (request) => nativeCreator.forward(request),
-          subscribe: (request, signal) => nativeCreator.subscribe(request, signal),
-          activate: (request, signal) => nativeCreator.activate(request, signal),
-          cancel: (request, signal) => nativeCreator.cancel(request, signal),
-          dispose: (envelope, signal) => nativeCreator.dispose(envelope, signal),
-          close: () => Promise.resolve(),
-        }),
-    });
-    await owner.reconcile([
-      new ApplicationNode({ id: "message-board", endpoint: backend.baseUrl }),
-    ]);
-    cleanup.add("native membership", 70, () => owner.close());
-    const creator = new DynamicSubscriptionCreator(owner);
     const counters = {
       forward: 0,
       subscribe: 0,
@@ -102,22 +86,81 @@ export async function startTopology({ lifecycle = {} } = {}) {
       cancel: 0,
       dispose: 0,
     };
+    const trace = [];
+    const observe = (kind, details = {}) => trace.push(Object.freeze({ kind, ...details }));
+    const observedNativeCreator = {
+      async forward(request) {
+        observe("native.forward", { method: request.method });
+        return nativeCreator.forward(request);
+      },
+      async subscribe(request, signal) {
+        observe("native.subscribe.start");
+        try {
+          const result = await nativeCreator.subscribe(request, signal);
+          observe("native.subscribe.end");
+          return result;
+        } catch (error) {
+          observe("native.subscribe.error", { error: String(error) });
+          throw error;
+        }
+      },
+      async activate(request, signal) {
+        observe("native.activate.start");
+        try {
+          const result = await nativeCreator.activate(
+            {
+              ...request,
+              updates: async (update) => {
+                observe("native.update");
+                await request.updates(update);
+              },
+            },
+            signal,
+          );
+          observe("native.activate.end");
+          return result;
+        } catch (error) {
+          observe("native.activate.error", { error: String(error) });
+          throw error;
+        }
+      },
+      async cancel(request, signal) {
+        observe("native.cancel");
+        return nativeCreator.cancel(request, signal);
+      },
+      async dispose(envelope, signal) {
+        observe("native.dispose");
+        return nativeCreator.dispose(envelope, signal);
+      },
+      close: () => Promise.resolve(),
+    };
+    const owner = new DynamicUnaryForwarder({
+      create: () => Promise.resolve(observedNativeCreator),
+    });
+    await owner.reconcile([
+      new ApplicationNode({ id: "message-board", endpoint: backend.baseUrl }),
+    ]);
+    cleanup.add("native membership", 70, () => owner.close());
+    const creator = new DynamicSubscriptionCreator(owner);
     const forwardedContexts = [];
     const observedCreator = {
       async subscribe(request, signal, maxBackendEnvelopeBytes) {
         counters.subscribe += 1;
+        observe("gateway.subscribe");
         forwardedContexts.push(contextSummary(fromBinary(TopicSchema, request.bytes).context));
         return creator.subscribe(request, signal, maxBackendEnvelopeBytes);
       },
       async activate(request, signal) {
         counters.activate += 1;
         counters.activeStreams += 1;
+        observe("gateway.activate.start");
         try {
           return await creator.activate(
             {
               ...request,
               updates: async (update) => {
                 counters.updates += 1;
+                observe("gateway.update", { updates: counters.updates });
                 await request.updates(update);
               },
             },
@@ -125,10 +168,12 @@ export async function startTopology({ lifecycle = {} } = {}) {
           );
         } finally {
           counters.activeStreams -= 1;
+          observe("gateway.activate.end");
         }
       },
       async cancel(request, signal) {
         counters.cancel += 1;
+        observe("gateway.cancel");
         return creator.cancel(request, signal);
       },
     };
@@ -181,6 +226,7 @@ export async function startTopology({ lifecycle = {} } = {}) {
       clock,
       forward: async (request) => {
         counters.forward += 1;
+        observe("gateway.forward", { method: request.method, forward: counters.forward });
         const context =
           request.method === "Post"
             ? fromBinary(CommandSchema, request.value).context?.actorContext
@@ -193,6 +239,7 @@ export async function startTopology({ lifecycle = {} } = {}) {
       nextId: () => globalThis.crypto.randomUUID(),
       dispose: (definition, signal) => {
         counters.dispose += 1;
+        observe("gateway.dispose");
         return creator.cancel({ wire: definition }, signal);
       },
     });
@@ -261,6 +308,7 @@ export async function startTopology({ lifecycle = {} } = {}) {
       join(directory, "envoy.yaml"),
       renderEnvoy({
         browserOrigin,
+        accessLog: true,
         gatewayAddress: "host.docker.internal",
         tlsCertificate: "/run/tls/cert.pem",
         tlsKey: "/run/tls/key.pem",
@@ -302,6 +350,7 @@ export async function startTopology({ lifecycle = {} } = {}) {
       bindingCount: () => bindings.size,
       counters: () => Object.freeze({ ...counters }),
       forwardedContexts: () => Object.freeze(forwardedContexts.map((context) => ({ ...context }))),
+      trace: () => Object.freeze(trace.map((event) => ({ ...event }))),
       async diagnosticState() {
         const envoy =
           container === undefined
@@ -315,7 +364,13 @@ export async function startTopology({ lifecycle = {} } = {}) {
             : await runCommand("docker", ["logs", container])
                 .then(({ stdout, stderr }) => `${stdout}${stderr}`)
                 .catch((error) => String(error));
-        return { envoy, logs, bindings: bindings.size, counters: { ...counters } };
+        return {
+          envoy,
+          logs,
+          trace: trace.map((event) => ({ ...event })),
+          bindings: bindings.size,
+          counters: { ...counters },
+        };
       },
       async close() {
         await cleanup.close();

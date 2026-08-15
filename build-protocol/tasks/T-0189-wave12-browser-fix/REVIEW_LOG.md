@@ -83,3 +83,12 @@ those required cases are captured.
   the third; cancellation cannot finish after Playwright's timeout, leaving two
   bindings for the parent settlement check. The sustained post-admission stream
   failure requires a separate root-cause correction before re-review can close.
+
+## C-01 Diagnostic Disposition
+
+The post-admission failure is not a sustained server stream defect. Captured
+browser `BigInt` serialization fails immediately after the first payload and
+causes the observed cancellation. Diagnostic Envoy access, Gateway/native trace,
+and gRPC-Web response status localize ownership to the browser test bridge.
+The next correction must start with a focused bridge RED and preserve the
+existing bounded cancellation and settlement assertions.

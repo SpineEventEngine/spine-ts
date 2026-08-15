@@ -79,3 +79,21 @@ correctly reports two residual bindings after the forced test timeout. This is
 a newly proven post-admission sustained browser-delivery failure, distinct from
 the corrected CORS regression. No healthy third-update snapshot or green
 browser acceptance is claimed at this endpoint.
+
+## C-01 Boundary Diagnosis (2026-08-15)
+
+Diagnostic capture ran from `288bfb8a` with test-only Envoy access logs,
+browser iterator/response markers, Gateway/native handoff events, and timeout
+state. The isolated passive-viewer run fails on its first received update, not
+the third: `nextPassiveUpdate()` calls `JSON.stringify(update.value)`, whose
+payload contains `BigInt`, producing `TypeError: Do not know how to serialize a
+BigInt`. Its rejected browser evaluation aborts the gRPC-Web stream. The trace
+is ordered `gateway.subscribe`, `native.subscribe`, `gateway.activate`, one
+`gateway.forward`, one `native.update`, one `gateway.update`, then activation
+end/cancel; Envoy reports successful 200 Subscribe and Activate responses with
+no transport error. This proves the owner is the browser test bridge
+`test/interop/browser/entry.ts`, not client-web, Gateway forwarding,
+subscription runtime/observer, browser-server, Envoy, or native delivery.
+
+The direct-native three-update control remains required beside the bridge RED.
+No runtime behavior is changed by this diagnostic checkpoint.

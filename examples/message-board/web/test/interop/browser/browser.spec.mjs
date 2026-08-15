@@ -27,6 +27,19 @@ function captureBrowserFailures(page) {
   return failures;
 }
 
+function captureGrpcWebResponses(page) {
+  const responses = [];
+  page.on("response", (response) => {
+    if (!response.url().includes("/spine.client.SubscriptionService/")) return;
+    responses.push({
+      path: new URL(response.url()).pathname,
+      status: response.status(),
+      grpcStatus: response.headers()["grpc-status"],
+    });
+  });
+  return responses;
+}
+
 test("runs a CSRF-protected cookie Projection subscription through the real gRPC-Web client and Envoy", async ({
   context,
   page,
@@ -76,6 +89,7 @@ test("keeps a passive viewer alive for three sequential writer updates through E
     await viewerPage.goto(viewerUrl);
     await writerPage.goto(writerUrl);
     const failures = captureBrowserFailures(viewerPage);
+    const grpcWeb = captureGrpcWebResponses(viewerPage);
     try {
       await viewerPage.evaluate(() => window.startPassiveSubscription());
     } catch (error) {
@@ -85,12 +99,28 @@ test("keeps a passive viewer alive for three sequential writer updates through E
     }
     const identities = [];
     for (let update = 0; update < 3; update += 1) {
+      stdout.write(`BROWSER_PASSIVE_ITERATOR_WAIT ${update + 1}\n`);
       const next = viewerPage.evaluate(() => window.nextPassiveUpdate());
       await writerPage.evaluate(() => window.post());
-      const received = await next;
+      let received;
+      try {
+        received = await Promise.race([
+          next,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`passive update ${update + 1} timeout`)), 5_000),
+          ),
+        ]);
+      } catch (error) {
+        stdout.write(
+          `BROWSER_PASSIVE_TIMEOUT ${JSON.stringify({ update: update + 1, grpcWeb, failures })}\n`,
+        );
+        throw error;
+      }
       expect(received.done).toBe(false);
       identities.push(received.identity);
-      stdout.write(`PASSIVE_VIEWER_UPDATE ${update + 1}\n`);
+      stdout.write(
+        `PASSIVE_VIEWER_UPDATE ${JSON.stringify({ update: update + 1, identity: received.identity, grpcWeb })}\n`,
+      );
     }
     expect(new Set(identities).size).toBe(3);
   } finally {
