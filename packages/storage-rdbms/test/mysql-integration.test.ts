@@ -71,6 +71,7 @@ live("MySQL-family record layout", () => {
     const storage = factory.createRecordStorage(
       { name: `t0134_records_${String(Date.now())}`, multitenant: false },
       spec,
+      { name: `t0134_records_${String(Date.now())}` },
     );
     await storage.writeAll([
       create(StringValueSchema, { value: "b" }),
@@ -83,6 +84,13 @@ live("MySQL-family record layout", () => {
         limit: 1,
       }),
     ).resolves.toEqual([create(StringValueSchema, { value: "a" })]);
+    await expect(
+      storage.queryPlan({
+        predicate: { kind: "comparison", column: "value", operator: "greaterOrEqual", value: "a" },
+        order: [{ column: "value", direction: "desc" }],
+        limit: 1,
+      }),
+    ).resolves.toEqual([create(StringValueSchema, { value: "b" })]);
     storage.close();
   });
 
