@@ -96,6 +96,24 @@ describe("Delivery direct worker", () => {
     await expect(createDelivery({ read: async () => [] }).drain(shard, { onMessage: () => undefined }))
       .resolves.toMatchObject({ status: "DRAINED" });
   });
+
+  it("stops before cleanup deletion when the shard fence is lost", async () => {
+    const shard = ShardIndex.single();
+    let removals = 0;
+    const delivery = createDelivery({
+      read: async (options) =>
+        options?.statuses?.includes("DELIVERED") ? [{ ...message("old", "target", shard), status: "DELIVERED" as const }] : [],
+      remove: async () => {
+        removals += 1;
+        return true;
+      },
+      registry: { pickUp: async () => session(shard), renew: async () => undefined, release: async () => true },
+    });
+    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
+      status: "STOPPED",
+    });
+    expect(removals).toBe(0);
+  });
   it("passes its complete opaque WorkerId to shard pickup and skips an owned shard", async () => {
     const shard = ShardIndex.single();
     const worker = workerId("node-a", "restart-a");
