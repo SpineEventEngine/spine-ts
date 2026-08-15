@@ -1,7 +1,7 @@
 # Spine TS Project Completion Plan
 
-Status: Waves 9, 10, and 11 complete and integrated; agentic-review remediation
-Waves 12 through 18 are active ahead of the previously deferred roadmap
+Status: Waves 9, 10, and 11 complete and integrated; Wave 12 high-risk planning
+is active as the first agentic-review remediation wave
 
 Plan date: 2026-07-12
 
@@ -184,7 +184,12 @@ durably closed.
   accepted architecture decision.
 - **Wave 12:** correct sustained browser subscription delivery, MySQL
   query-plan execution, finite Inbox retention, and confirmed runtime-document
-  mismatches.
+  mismatches. T-0187 owns the frozen baseline, Human-Imposed Requirements
+  Ledger, contract decisions, and dependency split in
+  `build-protocol/planning/WAVE_12_RUNTIME_CORRECTNESS_PLAN.md`. Its planned
+  execution is T-0188 browser RED/isolation, T-0189 the bounded browser fix,
+  T-0190 MySQL normalized query execution, T-0191 exact Inbox removal, T-0192
+  fenced cleanup, T-0193 documentation convergence, and T-0194 release closure.
 - **Wave 13:** implement JVM-equivalent same-process and cross-process Bounded
   Context event exchange.
 - **Wave 14:** establish publishable runtime/tooling/auth and cross-package SPI
@@ -273,6 +278,24 @@ repository cleanup policy, the remote has only `main` and no tags. The validated
 agentic-review remediation occupies Waves 12 through 18; multiple-Gateway
 behavior moves wholly to Wave 19. See
 `build-protocol/DECISION_LOG.md#d-0113-generate-typescript-message-interfaces-and-route-by-their-tokens`.
+
+T-0187 starts Wave 12 from the freshly fetched exact `origin/main` commit
+`7b8a631ecb33210e5da4da9ffa2d8eb8aa59d497`. It is a high-risk planning-only
+milestone: product code cannot change until the browser, MySQL, Inbox,
+configuration, persistence, and verification contracts are durable and
+reviewed. The protected human agentic-review folder in the coordination
+checkout remains outside every task worktree and mutation. Wave 12 cannot leak
+Wave 13 through 19 APIs.
+
+Wave 12 uses the accelerated autonomous execution model frozen in its plan:
+three isolated streams run browser T-0188/T-0189, query-provider T-0190, and
+Inbox T-0191/T-0192 work concurrently with non-overlapping ownership. Existing
+provider record-storage files stay exclusively with T-0190 until a recorded
+handoff. Shared live/coverage resources, integration, documentation T-0193,
+final security/release T-0194, and remote closure remain dependency-serialized.
+No parallel task is declared durably closed while another unique remote branch
+exists; all are reconciled into `origin/main` before the remote returns to only
+`main` and no tags.
 
 ## Authored API And Example Quality Correction
 
