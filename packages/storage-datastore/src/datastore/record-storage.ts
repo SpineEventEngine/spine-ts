@@ -514,7 +514,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
   protected override queryCapabilities(): StorageQueryCapabilities {
     return {
       comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
-      features: ["either", "nested", "order", "mask", "limit"],
+      features: ["order", "mask", "limit"],
     };
   }
 
@@ -526,6 +526,8 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
   protected override async queryPlanRecordEntries(
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
+    if (plan.predicate !== undefined && DatastoreQueryPushdown.legal(plan) === undefined)
+      throw new TypeError("Datastore normalized query has an illegal predicate or inequality ordering.");
     const query = this.#codec.createQuery(this.client);
     DatastoreQueryPushdown.plan(
       query,

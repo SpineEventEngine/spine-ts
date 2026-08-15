@@ -216,7 +216,7 @@ describe("DatastoreRecordStorage", () => {
     ).resolves.toMatchObject([{ value: "charlie" }]);
   });
 
-  it("keeps either predicates and oversized ID sets on the finite reconciliation path", async () => {
+  it("rejects disjunctions and oversized ID sets before an unfiltered provider read", async () => {
     const client = new FlatDatastore();
     const records = storage(client);
     await records.writeAll(["alpha", "bravo", "charlie"].map(message));
@@ -232,24 +232,24 @@ describe("DatastoreRecordStorage", () => {
         },
         order: [{ column: "value", direction: "asc" }],
       }),
-    ).resolves.toMatchObject([{ value: "alpha" }, { value: "charlie" }]);
-    expect(client.lastQuery?.filters).toHaveLength(0);
+    ).rejects.toThrow("EITHER");
+    expect(client.lastQuery).toBeUndefined();
 
-    await records.queryPlan({
+    await expect(records.queryPlan({
       predicate: {
         kind: "ids",
         ids: Array.from({ length: 31 }, (_, index) => `id-${String(index)}`),
       },
-    });
-    expect(client.lastQuery?.filters).toHaveLength(0);
+    })).rejects.toThrow("illegal predicate");
+    expect(client.lastQuery).toBeUndefined();
   });
 
-  it("keeps multi-column and wrongly ordered inequalities on the finite reconciliation path", async () => {
+  it("rejects illegal inequalities and ordering before an unfiltered provider read", async () => {
     const client = new FlatDatastore();
     const records = storage(client);
     await records.writeAll(["alpha", "bravo", "charlie"].map(message));
 
-    await records.queryPlan({
+    await expect(records.queryPlan({
       predicate: {
         kind: "all",
         predicates: [
@@ -257,10 +257,10 @@ describe("DatastoreRecordStorage", () => {
           { kind: "comparison", column: "initial", operator: "lessThan", value: "z" },
         ],
       },
-    });
-    expect(client.lastQuery?.filters).toHaveLength(0);
+    })).rejects.toThrow("inequality");
+    expect(client.lastQuery).toBeUndefined();
 
-    await records.queryPlan({
+    await expect(records.queryPlan({
       predicate: {
         kind: "comparison",
         column: "value",
@@ -268,8 +268,8 @@ describe("DatastoreRecordStorage", () => {
         value: "alpha",
       },
       order: [{ column: "initial", direction: "asc" }],
-    });
-    expect(client.lastQuery?.filters).toHaveLength(0);
+    })).rejects.toThrow("inequality");
+    expect(client.lastQuery).toBeUndefined();
   });
 
   it("uses a direct provider limit only for an unconstrained record query", async () => {

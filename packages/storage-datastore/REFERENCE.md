@@ -87,18 +87,19 @@ histories allocate no record handle or Datastore row.
 
 ## Queries and commits
 
-Queries run inside the selected native namespace. Provider-illegal plans
-reconcile a maximum of 1,000 rows; the 1,001st row throws
-`DatastoreQueryLimitError`.
+Queries run inside the selected native namespace. Normalized plans admit only
+IDs (up to Datastore's legal key filter bound), equality, one inequality column,
+flat conjunction, inequality-compatible ordering, limit, and mask. Nested or
+disjunctive predicates, oversized key sets, and illegal inequality/order shapes
+reject before provider access; they never trigger an unfiltered reconciliation
+read.
 `writeAll()` uses batches of at most 500 mutations and is not atomic across
 batches.
 
 Provider-legal ID predicates, declared-property comparisons, and ordering are
 pushed only when Datastore can execute the whole selected conjunction. Runtime
-descriptor/column validation happens before that decision. Local
-reconciliation preserves shared query semantics and never becomes an unlimited
-scan. A smaller caller-supplied reconciliation bound retains a sentinel and
-`QueryCandidateLimitError` behavior. There is no public Datastore cursor API.
+descriptor/column validation happens before that decision. An omitted candidate
+bound is 10,000, and there is no public Datastore cursor API.
 
 The internal Entity commit reads current and immutable keys then applies current,
 enabled histories, and delivery events in one Datastore transaction. It rejects

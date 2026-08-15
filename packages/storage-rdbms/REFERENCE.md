@@ -92,10 +92,15 @@ declared materialized column, and maps each filter/continuation value through
 that column's descriptor. Missing materialized columns do not match; dotted
 payload paths are rejected. Large offsets can be expensive.
 
-Normalized projection plans compile supported nested predicates and comparisons
-to parameterized SQL. The configured plan bound is sent as a sentinel SQL limit so
-overflow is detected before a semantic result limit is applied. Identifiers and
-values are bound rather than interpolated into SQL.
+Normalized projection plans compile IDs, all five comparisons, nested `all` /
+`either`, ordering, and limits to one parameterized SQL statement. The selected
+tenant pool is acquired before the resolved family table is accessed; only that
+validated table and declared columns are interpolated, while IDs, operands, and
+limits are bound. Ordering ends with `ID` for a stable tie-break. An omitted
+candidate bound is 10,000 and provider materialization is finite. The primary
+key serves ID queries; operators must add indexes for workload equality, range,
+and composite filter/order patterns. Without them MySQL may scan or sort despite
+the runtime materialization bound.
 
 ## Entity history seam
 
