@@ -91,3 +91,21 @@ subagents and is told that other writers are active in separate worktrees.
   Provider factories register memory, Datastore, and MySQL coordinators, using
   new adjacent files where possible so Query's `record-storage.ts` ownership
   remains exclusive until the handoff.
+
+## Query-to-Inbox Provider Handoff — 2026-08-15
+
+- T-0190 is specialist-accepted and pushed at `3081dcc0`; its final production
+  correction is `fc39709a` and final proof endpoint is `7b7d9fb3`. Canonical
+  non-live verification, >=90% changed coverage, live MySQL group containment,
+  and live Datastore tenant/group containment are durable.
+- Query ownership of the existing MySQL and Datastore `record-storage.ts`
+  files ends at this accepted endpoint. No Query writer remains active.
+- The reviewed Query branch is merged without history rewriting into the Inbox
+  branch before provider cleanup work resumes. Inbox may add the narrow
+  provider-owned two-record-family coordinator and the minimum adjacent
+  factory/transaction integration needed for atomic session validation plus
+  exact Inbox deletion. It must preserve every accepted Query path and avoid a
+  general transaction API or sequential validate/delete gap.
+- MySQL and Datastore proof windows remain orchestrator-serialized. Provider
+  cleanup evidence must use the production coordinator and two independently
+  opened handles where required by T-0191/T-0192.
