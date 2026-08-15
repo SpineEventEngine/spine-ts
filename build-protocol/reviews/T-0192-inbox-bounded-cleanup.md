@@ -20,9 +20,11 @@ fenced mutation.
   batch is clear; no reader-facing or future behavior claims were added.
 - Security: deferred to the Wave closure gate, with destructive fenced mutation
   and tenant/group containment retained as inputs rather than self-reviewed.
-- Evidence limitation: the six focused paths pass 40 deterministic tests, but
-  the two live-provider cases are skipped with unset MySQL and Datastore
-  endpoints. Live row-count and independent-handle claims remain open.
+- The six focused paths pass 40 deterministic tests with two expected
+  service-gated skips. Separate serialized direct-source MySQL 8.4.10 and
+  Datastore-emulator runs passed the exact deletion, stale-transfer, expiry,
+  and mismatched-snapshot preservation matrix. Those live results remain
+  separate from V8 accounting.
 - Final profile disposition: its Node, Proto, build, tooling, cleanup, and
   TSDoc gates pass; a seven-file in-scope T-0191/T-0192 copyright-header batch
   stops the shared profile before format and test dispatch. Exact template

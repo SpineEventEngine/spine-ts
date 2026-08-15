@@ -68,6 +68,10 @@ non-delivered, or changed snapshots.
   skipped because neither `SPINE_TS_MYSQL_URL` nor `DATASTORE_EMULATOR_HOST`
   was configured in this worktree; this is an explicit live-provider evidence
   limitation, not a claim of MySQL or Datastore execution.
+- Separate serialized direct-source provider runs subsequently passed the
+  exact-removal matrix on MySQL 8.4.10 and the Datastore emulator. Those live
+  results are recorded independently from the service-gated non-live profile
+  and from V8 coverage accounting.
 - Current-source coverage from the provider implementation checkpoint is
   112/115 changed executable lines (97.39%) and 69/75 changed branch outcomes
   (92.00%). Runtime model telemetry remains unavailable; the explicit existing

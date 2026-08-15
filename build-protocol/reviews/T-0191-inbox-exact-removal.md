@@ -24,9 +24,10 @@ are retained as required inputs.
 - Security: deferred to the Wave closure gate. The review input remains exact
   destructive fencing plus tenant/group containment; no closure result is
   claimed here.
-- Evidence limitation: the focused selection has 40 deterministic passes and
-  two skipped live-provider cases because MySQL and Datastore endpoints are
-  unset. No live-provider result is inferred from the skips.
+- The canonical non-live selection has 40 deterministic passes and two
+  expected service-gated skips. Separate serialized direct-source runs passed
+  the exact-removal matrix against MySQL 8.4.10 and the Datastore emulator;
+  those provider results stand separately from the skipped non-live cases.
 - Final profile disposition: the no-coverage profile passes its build, tooling,
   cleanup, and TSDoc gates but stops at seven in-scope T-0191/T-0192
   malformed/missing provider/test headers. Exact template correction and a
@@ -39,3 +40,22 @@ are retained as required inputs.
   shared gates and reported 40 passes plus two expected provider skips. This
   record is ready for the applicable TypeScript/API, style, performance/
   reliability, documentation, and deferred Wave-security lanes.
+
+## Review Dispatch
+
+- Frozen endpoint: `fcb5e4ab` plus this evidence-only correction.
+- TypeScript/API: existing `typescript_api_docs_reviewer`, explicitly
+  configured `gpt-5.6-terra` / high, read-only, bounded to public/source
+  compatibility and API documentation.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicitly
+  configured `gpt-5.6-terra` / high, read-only, bounded to the changed Inbox
+  cleanup seam and provider implementations.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicitly configured `gpt-5.6-terra` / high, read-only, bounded to atomic
+  fencing, lifecycle, persistence, and bounded-resource behavior.
+- Documentation: existing `documentation_reviewer`, explicitly configured
+  `gpt-5.6-luna` / medium, read-only, bounded to current-behavior TSDoc and task
+  claims. Final security remains deferred to T-0194.
+- Subagents may not spawn subagents. Runtime telemetry is unavailable on this
+  execution surface; the immutable configured roles and profiles above are the
+  acceptance record.

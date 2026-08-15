@@ -53,9 +53,12 @@ rows and call T-0191's provider-atomic exact removal for each eligible row.
   TSDoc and record convergence.
 - The shared six-path focused selection completed with 40 passing deterministic
   tests. Its two service-gated direct-Inbox provider cases were skipped because
-  `SPINE_TS_MYSQL_URL` and `DATASTORE_EMULATOR_HOST` are absent. Consequently,
-  live MySQL/Datastore row-count and two-handle evidence remains explicitly
-  unavailable in this worktree.
+  `SPINE_TS_MYSQL_URL` and `DATASTORE_EMULATOR_HOST` were absent for that
+  command, so it provides no live-provider evidence by itself.
+- Subsequent serialized direct-source provider commands passed against MySQL
+  8.4.10 and the Datastore emulator, including exact deletion and denial after
+  ownership transfer, lease expiry, or snapshot mismatch. The non-live skip
+  remains accurate for that command only; live evidence is no longer open.
 - Current source coverage for the combined T-0191/T-0192 changed runtime is
   112/115 lines (97.39%) and 69/75 branches (92.00%). The direct worker slice
   remains 11/11 lines and 16/16 branches. Runtime profile telemetry is not
