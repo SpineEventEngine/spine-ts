@@ -37,6 +37,8 @@ export class LocalProjectionInbox implements ProjectionInbox {
   readonly #readiness: DeliveryReadiness;
   readonly #keepTenant: (tenantId: TenantId) => Promise<void>;
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
+  readonly #inFlightMessageIds = new Set<string>();
+  readonly #acknowledgedMessageIds = new Set<string>();
   #nextVersion = 0n;
 
   /**
@@ -139,23 +141,55 @@ export class LocalProjectionInbox implements ProjectionInbox {
             this.#endpoints.get(written.message.inboxId.targetTypeUrl) ?? [],
           )
         : undefined;
+    this.#trackMessage(written.message);
+    try {
+      await this.#readiness
+        .claim(endpoint === undefined ? undefined : InboxHandoff.ready(endpoint, deliveryTenantId))
+        .complete(() =>
+          this.#isAcknowledged(written.message)
+            ? Promise.resolve()
+            : InboxHandoff.drain({
+                delivery,
+                received: written.message,
+                node: this.#contextName,
+                onReplay: (message) => this.#replay(message, deliveryTenantId),
+                acceptMessage: (message) =>
+                  InboxHandoff.sameMessageId(message.id, written.message.id) ||
+                  (message.label === "UPDATE_SUBSCRIBER" &&
+                    this.#targets.has(message.inboxId.targetTypeUrl)),
+                onAcknowledged: (message) => {
+                  this.#recordAcknowledgement(message);
+                },
+                replayFailureMessage: "Projection inbox replay failed.",
+                skippedMessage:
+                  "Projection inbox delivery was skipped before the target row was delivered.",
+                unfinishedMessage:
+                  "Projection inbox delivery did not reach the target row before the local drain finished.",
+              }),
+        );
+      return written.message;
+    } finally {
+      this.#untrackMessage(written.message);
+    }
+  }
 
-    await this.#readiness
-      .claim(endpoint === undefined ? undefined : InboxHandoff.ready(endpoint, deliveryTenantId))
-      .complete(() =>
-        InboxHandoff.drain({
-          delivery,
-          received: written.message,
-          node: this.#contextName,
-          onReplay: (message) => this.#replay(message, deliveryTenantId),
-          replayFailureMessage: "Projection inbox replay failed.",
-          skippedMessage:
-            "Projection inbox delivery was skipped before the target row was delivered.",
-          unfinishedMessage:
-            "Projection inbox delivery did not reach the target row before the local drain finished.",
-        }),
-      );
-    return written.message;
+  #trackMessage(message: InboxMessage): void {
+    this.#inFlightMessageIds.add(messageIdKey(message));
+  }
+
+  #untrackMessage(message: InboxMessage): void {
+    const key = messageIdKey(message);
+    this.#inFlightMessageIds.delete(key);
+    this.#acknowledgedMessageIds.delete(key);
+  }
+
+  #recordAcknowledgement(message: InboxMessage): void {
+    const key = messageIdKey(message);
+    if (this.#inFlightMessageIds.has(key)) this.#acknowledgedMessageIds.add(key);
+  }
+
+  #isAcknowledged(message: InboxMessage): boolean {
+    return this.#acknowledgedMessageIds.has(messageIdKey(message));
   }
 
   #takeVersion(): bigint {
@@ -191,3 +225,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
 
 type ProjectionInput = Parameters<ProjectionInbox["receive"]>[1];
 type ProjectionMessage = Parameters<ProjectionInboxTarget["replay"]>[0];
+
+function messageIdKey(message: InboxMessage): string {
+  return JSON.stringify([message.id.value, message.id.shard.index, message.id.shard.ofTotal]);
+}

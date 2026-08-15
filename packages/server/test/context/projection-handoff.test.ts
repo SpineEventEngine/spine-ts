@@ -114,7 +114,7 @@ describe("LocalProjectionInbox", () => {
     const delivered = await delivery.inbox.read(ShardIndex.single(), {
       statuses: ["DELIVERED"],
     });
-    expect(delivered.map(targetValue)).toContain("buffered");
+    expect(delivered).toEqual([]);
 
     await expect(
       inbox.receive(delivery, projectionInput(targetTypeUrl, "routed"), tenant("tenant-a")),
@@ -224,7 +224,7 @@ describe("LocalProjectionInbox", () => {
     expect(notifications).toBe(1);
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toMatchObject([{ signalId: "event-ready" }]);
+    ).resolves.toEqual([]);
   });
   it("narrows replay targets to pending subscriber updates", () => {
     type ReplayMessage = Parameters<ProjectionInboxTarget["replay"]>[0];
@@ -233,7 +233,7 @@ describe("LocalProjectionInbox", () => {
     expectTypeOf<ReplayMessage["status"]>().toEqualTypeOf<"TO_DELIVER">();
   });
 
-  it("replays existing durable subscriber rows through a delivery loop endpoint", async () => {
+  it("replays and cleans eligible durable subscriber rows through a delivery loop endpoint", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -281,13 +281,7 @@ describe("LocalProjectionInbox", () => {
     });
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toMatchObject([
-      {
-        signalId: "event-1",
-        label: "UPDATE_SUBSCRIBER",
-        status: "DELIVERED",
-      },
-    ]);
+    ).resolves.toEqual([]);
   });
 
   it("delivers an UPDATE_SUBSCRIBER event row and marks it delivered", async () => {
@@ -325,13 +319,7 @@ describe("LocalProjectionInbox", () => {
     });
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toMatchObject([
-      {
-        signalId: "event-1",
-        label: "UPDATE_SUBSCRIBER",
-        status: "DELIVERED",
-      },
-    ]);
+    ).resolves.toEqual([]);
   });
 
   it("rejects non-pending replay snapshots before projection handlers run", async () => {
@@ -420,13 +408,7 @@ describe("LocalProjectionInbox", () => {
 
     expect(duplicateMessage.id).toEqual(firstMessage.id);
     expect(seen).toHaveLength(1);
-    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
-      {
-        signalId: "event-duplicate",
-        label: "UPDATE_SUBSCRIBER",
-        status: "DELIVERED",
-      },
-    ]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
 
   it("contains a fresh-delivery duplicate replay failure", async () => {
@@ -493,9 +475,7 @@ describe("LocalProjectionInbox", () => {
     await expect(firstDelivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual(
       [],
     );
-    await expect(
-      firstDelivery.inbox.read(shard, { statuses: ["DELIVERED"] }),
-    ).resolves.toMatchObject([{ signalId: "event-failing-duplicate", label: "UPDATE_SUBSCRIBER" }]);
+    await expect(firstDelivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
 
   it("persists a valid non-projection label without readiness", async () => {
@@ -529,13 +509,7 @@ describe("LocalProjectionInbox", () => {
     ).resolves.toMatchObject({ label: "HANDLE_COMMAND" });
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toMatchObject([
-      {
-        signalId: "event-2",
-        label: "HANDLE_COMMAND",
-        status: "DELIVERED",
-      },
-    ]);
+    ).resolves.toEqual([]);
     expect(ready).toEqual([]);
   });
 
@@ -600,13 +574,7 @@ describe("LocalProjectionInbox", () => {
     ).resolves.toMatchObject({ label: "UPDATE_SUBSCRIBER" });
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).resolves.toMatchObject([
-      {
-        signalId: "event-missing",
-        label: "UPDATE_SUBSCRIBER",
-        status: "DELIVERED",
-      },
-    ]);
+    ).resolves.toEqual([]);
     expect(ready).toEqual([]);
   });
 
@@ -638,13 +606,7 @@ describe("LocalProjectionInbox", () => {
         shard,
       }),
     ).resolves.toMatchObject({ label: "UPDATE_SUBSCRIBER" });
-    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
-      {
-        signalId: "event-shard-mismatch",
-        label: "UPDATE_SUBSCRIBER",
-        status: "DELIVERED",
-      },
-    ]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
     expect(ready).toEqual([]);
   });
 
@@ -718,23 +680,7 @@ describe("LocalProjectionInbox", () => {
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
     });
-    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
-      {
-        signalId: "signal-0",
-        label: "HANDLE_COMMAND",
-        status: "DELIVERED",
-      },
-      {
-        signalId: "event-0",
-        label: "UPDATE_SUBSCRIBER",
-        status: "DELIVERED",
-      },
-      {
-        signalId: "event-1",
-        label: "UPDATE_SUBSCRIBER",
-        status: "DELIVERED",
-      },
-    ]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
 });
 

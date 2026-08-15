@@ -1,6 +1,6 @@
 # T-0194 Review Record
 
-Status: ACCEPTED
+Status: RELEASE CORRECTION REVIEW PENDING
 
 Wave endpoint: `a232191c`. Applicable lanes are all four existing specialist
 concerns plus the final security reviewer. The dispatch roles/profiles and
@@ -101,3 +101,28 @@ coverage inputs are ready for review. Generated residue is absent.
   emulator window passes both normalized-plan/tenant-group cases and both Inbox
   cases. Native physical-row/key assertions pass, all windows are released,
   and no broad provider cleanup ran.
+
+## Release-suite integration correction
+
+- The restarted release profile cleared every deterministic gate, then exposed
+  42 server integration failures. Same-drain cleanup correctly removed eligible
+  delivered rows before local Inbox handoff code could reread them as completion
+  evidence.
+- The correction introduces an internal direct-drain result that records exact
+  durable acknowledgement, keyed by the complete message ID including shard.
+  Local Entity and Projection handoffs keep only bounded in-flight acknowledgement
+  state and restrict opportunistic backlog work to labels and target types they
+  own. Exact received rows remain eligible so missing-target and malformed-row
+  containment behavior is unchanged.
+- Rejection publication is deferred until the outer command drain releases its
+  shard. This prevents a nested Projection handoff from persisting a row and
+  immediately losing the same shard lease while the command callback is active.
+- Regression evidence covers structural acknowledgement after physical cleanup,
+  refusal to infer target success from aggregate counters, exact target failure,
+  protected `keepUntil`, skipped-owner retry, cross-family isolation, and the
+  rejection-event handoff. The affected context/repository suites pass 359/359;
+  the expanded delivery/context/repository selection passes 636 tests with four
+  service-gated skips.
+- Diff-scoped coverage against `96501a07` is 83/83 executable lines (100%) and
+  56/61 branches (91.80%). Performance/reliability and TypeScript/API re-review
+  are required before the release profile restarts.

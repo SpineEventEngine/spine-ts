@@ -5494,18 +5494,17 @@ describe("repository signal routing", () => {
         queue: "Task checked",
       }),
     );
-    expect(
-      await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).toContainEqual(
+    const delivered = await delivery.inbox.read(ShardIndex.single(), {
+      statuses: ["DELIVERED"],
+    });
+    expect(delivered).not.toContainEqual(
       expect.objectContaining({
         signalId: "event-older",
         label: "REACT_UPON_EVENT",
         status: "DELIVERED",
       }),
     );
-    expect(
-      await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
-    ).toContainEqual(
+    expect(delivered).toContainEqual(
       expect.objectContaining({
         signalId: "event-pm-inbox-first",
         label: "REACT_UPON_EVENT",

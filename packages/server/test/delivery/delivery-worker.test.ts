@@ -30,6 +30,27 @@ import { commitFenced } from "../../src/repository/commit-fence.js";
 import { ShardIndex } from "../../src/index.js";
 
 describe("Delivery direct worker", () => {
+  it("reports exact acknowledgement through the callback shorthand", async () => {
+    const shard = ShardIndex.single();
+    const target = message("target", "target", shard);
+    const rows = [target];
+    let seen = 0;
+    const delivery = createDelivery({
+      rows,
+      mark: async (row) => {
+        remove(rows, row);
+        return row;
+      },
+    });
+
+    await expect(
+      delivery.drainMessage(target, () => {
+        seen += 1;
+      }),
+    ).resolves.toMatchObject({ acknowledged: true, run: { delivered: 1 } });
+    expect(seen).toBe(1);
+  });
+
   it("runs one owned delivered cleanup page after each delivery page and on an empty drain", async () => {
     const shard = ShardIndex.single();
     const pending = message("pending", "target", shard);

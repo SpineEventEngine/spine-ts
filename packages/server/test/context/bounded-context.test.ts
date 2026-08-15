@@ -940,7 +940,7 @@ describe("BoundedContext assembly", () => {
               context: descriptor.storageContext({}),
               storageFactory,
             }).inbox.readMessage(row.id),
-          ).resolves.toMatchObject({ status: "DELIVERED" });
+          ).resolves.toBeUndefined();
         }
       } finally {
         await serverEnvironmentAccess.detach(ServerEnvironment.instance(), attachment);

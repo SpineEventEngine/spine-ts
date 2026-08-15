@@ -1585,14 +1585,13 @@ class AggregateCommandExecution {
       if (!RejectionThrowable.is(error)) {
         throw error;
       }
-      RepositorySignals.postRejectionEvent(
+      return RepositorySignals.postRejectionEvent(
         this.#runtime,
         this.#repository,
         this.#command,
         route.entityId,
         error,
       );
-      return undefined;
     }
     const events = this.#bindProducedEvents(
       this.#support.normalizeProducedSignals(produced),
@@ -2541,7 +2540,7 @@ class ProcessManagerCommandExecution {
     this.#support = new ProcessManagerExecutionSupport(repository, runtime);
   }
 
-  async run(replayedRoute?: RepositoryCommandRoute): Promise<void> {
+  async run(replayedRoute?: RepositoryCommandRoute): Promise<EntityInboxFollowUp | undefined> {
     RepositorySignals.requireCommandId(this.#command);
     const commandMessage = EntityInvocation.requireSignalMessage(this.#command.message, "command");
     const commandSchema = RepositoryRoutes.schemaForTypeUrl(
@@ -2575,14 +2574,13 @@ class ProcessManagerCommandExecution {
       if (!RejectionThrowable.is(error)) {
         throw error;
       }
-      RepositorySignals.postRejectionEvent(
+      return RepositorySignals.postRejectionEvent(
         this.#runtime,
         this.#repository,
         this.#command,
         route.entityId,
         error,
       );
-      return;
     }
 
     const events = this.#bindProducedEvents(eventSignals, route.entityId);
@@ -2592,7 +2590,7 @@ class ProcessManagerCommandExecution {
       RepositorySignals.executionTimestamp(),
       events,
     );
-    if (!committed) return;
+    if (!committed) return undefined;
     if (RepositoryEntities.repositoryChanged(loaded.entity)) {
       EntityStateChangePublisher.command(
         this.#runtime,
@@ -2614,6 +2612,7 @@ class ProcessManagerCommandExecution {
       );
     }
     this.#postEvents(events);
+    return undefined;
   }
 
   async #invoke(
@@ -3371,7 +3370,7 @@ const RepositorySignals = {
     command: Command,
     entityId: unknown,
     rejection: RejectionThrowable,
-  ): void {
+  ): EntityInboxFollowUp {
     runtime.registerEventSchema(rejection.schema);
     const metadata = runtime.signalMetadata.eventFromCommand(command, 1, {});
     const event = create(EventSchema, {
@@ -3386,14 +3385,14 @@ const RepositorySignals = {
       }),
     });
 
-    try {
-      // spine-log-boundary: server.repository_rejection_follow_up
-      void runtime.postEventFollowUp(event).catch((error: unknown) => {
+    return async () => {
+      try {
+        // spine-log-boundary: server.repository_rejection_follow_up
+        await runtime.postEventFollowUp(event);
+      } catch (error) {
         runtime.recordDispatchFailure(event, error);
-      });
-    } catch (error) {
-      runtime.recordDispatchFailure(event, error);
-    }
+      }
+    };
   },
 
   requireCommandId(command: Command): NonNullable<Command["id"]> {
@@ -5355,10 +5354,14 @@ const InboxReplay = {
     routing: RepositoryRouting,
     message: InboxMessage,
     deliveryTenantId?: TenantId,
-  ): Promise<undefined> {
+  ): Promise<EntityInboxFollowUp | undefined> {
     if (message.label === "HANDLE_COMMAND") {
-      await InboxReplay.replayProcessManagerCommand(repository, routing, message, deliveryTenantId);
-      return undefined;
+      return await InboxReplay.replayProcessManagerCommand(
+        repository,
+        routing,
+        message,
+        deliveryTenantId,
+      );
     }
     if (message.label === "REACT_UPON_EVENT") {
       await InboxReplay.replayProcessManagerEvent(repository, routing, message, deliveryTenantId);
@@ -5375,7 +5378,7 @@ const InboxReplay = {
     routing: RepositoryRouting,
     message: InboxMessage,
     deliveryTenantId?: TenantId,
-  ): Promise<void> {
+  ): Promise<EntityInboxFollowUp | undefined> {
     const runtime = repositoryRuntimes.get(repository);
 
     if (runtime === undefined) {
@@ -5388,7 +5391,9 @@ const InboxReplay = {
     InboxReplay.validateReplayedCommandPayload(routing, command);
     const route = InboxReplay.replayCommandRoute(repository, routing, message, command);
 
-    await new ProcessManagerCommandExecution(repository, routing, runtime, command).run(route);
+    return await new ProcessManagerCommandExecution(repository, routing, runtime, command).run(
+      route,
+    );
   },
 
   async replayProcessManagerEvent(

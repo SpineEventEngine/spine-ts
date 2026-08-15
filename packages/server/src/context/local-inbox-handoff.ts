@@ -342,6 +342,23 @@ export interface LocalInboxDrainOptions {
   readonly onReplay: (message: InboxMessage) => Promise<void> | void;
 
   /**
+   * Determines whether the replay callback owns a message.
+   *
+   * @param message Contains a pending Inbox message.
+   * @returns `true` when the replay callback owns the message.
+   * @internal
+   */
+  readonly acceptMessage?: (message: InboxMessage) => boolean;
+
+  /**
+   * Observes exact durable acknowledgements produced by the same shard drain.
+   *
+   * @param message Contains the acknowledged Inbox message.
+   * @internal
+   */
+  readonly onAcknowledged?: (message: InboxMessage) => void;
+
+  /**
    * Explains a replay failure that lacks an Error instance.
    */
   readonly replayFailureMessage: string;
@@ -509,10 +526,14 @@ export const InboxHandoff: Readonly<{
     } = options;
 
     for (let attempt = 0; attempt < drainLimit; attempt += 1) {
-      const run = await delivery.drainMessage(received, {
+      const direct = await delivery.drainMessage(received, {
         node,
         onMessage: onReplay,
+        ...(options.acceptMessage === undefined ? {} : { acceptMessage: options.acceptMessage }),
+        ...(options.onAcknowledged === undefined ? {} : { onDelivered: options.onAcknowledged }),
       });
+      if (direct.acknowledged) return;
+      const run = direct.run;
       const target = await delivery.inbox.readMessage(received.id);
 
       if (target?.status === "DELIVERED") {

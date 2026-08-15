@@ -12,15 +12,52 @@
  * the License.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 
-import { type DeliveryReady, DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
+import {
+  type DeliveryReady,
+  DeliveryReadiness,
+  InboxHandoff,
+} from "../../src/context/local-inbox-handoff.js";
 import { Delivery } from "../../src/delivery/delivery.js";
+import type { InboxMessage } from "../../src/delivery/inbox.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { tenant } from "../tenant-fixture.js";
 
 describe("DeliveryReadiness", () => {
+  it("omits optional drain observers when exact acknowledgement needs none", async () => {
+    const received = {
+      id: { value: "target", shard: ShardIndex.single() },
+    } as InboxMessage;
+    const drainMessage = vi.fn().mockResolvedValue({
+      acknowledged: true,
+      run: {
+        status: "DRAINED",
+        processed: 1,
+        accepted: 1,
+        delivered: 1,
+        failed: 0,
+        failures: [],
+      },
+    });
+    const delivery = { drainMessage } as unknown as Delivery;
+
+    await InboxHandoff.runDrain({
+      delivery,
+      received,
+      node: "Tasks",
+      onReplay: () => undefined,
+      replayFailureMessage: "replay failed",
+      skippedMessage: "skipped",
+      unfinishedMessage: "unfinished",
+    });
+
+    expect(drainMessage).toHaveBeenCalledOnce();
+    expect(drainMessage.mock.calls[0]?.[1]).not.toHaveProperty("acceptMessage");
+    expect(drainMessage.mock.calls[0]?.[1]).not.toHaveProperty("onDelivered");
+  });
+
   it("publishes the direct gate before a readiness callback can transition", async () => {
     const scope = ready();
     const release = Promise.withResolvers<undefined>();
