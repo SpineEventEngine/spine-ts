@@ -99,10 +99,14 @@ batches.
 Provider-legal ID predicates, declared-property comparisons, and ordering are
 pushed only when Datastore can execute the whole selected conjunction. Runtime
 descriptor/column validation happens before that decision. An omitted query
-budget uses the shared 10,000-record materialization bound, but Datastore's provider scan
-ceiling is 1,000 rows; the lower provider ceiling still rejects an oversized
-scan rather than materializing more rows. There is no public Datastore cursor
-API.
+budget uses the shared 10,000-record materialization bound, but Datastore's
+accepted/provider ceiling is 1,000 rows. It may read one overflow-lookahead row
+(1,001 raw rows) to reject an oversized scan rather than materializing more
+rows. There is no public Datastore cursor API.
+
+This is deliberately the overlap, not MySQL parity: nested or disjunctive
+predicates and provider-illegal inequality/order shapes reject before provider
+access. Normalized plans have no offset; `RecordQuery.offset` is separate.
 
 The internal Entity commit reads current and immutable keys then applies current,
 enabled histories, and delivery events in one Datastore transaction. It rejects

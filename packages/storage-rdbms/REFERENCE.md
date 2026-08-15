@@ -92,12 +92,17 @@ declared materialized column, and maps each filter/continuation value through
 that column's descriptor. Missing materialized columns do not match; dotted
 payload paths are rejected. Large offsets can be expensive.
 
-Normalized projection plans compile IDs, all five comparisons, nested `all` /
-`either`, ordering, and limits to one parameterized SQL statement. The selected
+Normalized projection plans compile IDs, equality, all five comparisons, nested
+`all` / `either`, ordering, limits, and masks to one parameterized SQL statement.
+A mask is applied only after an otherwise fully bounded complete-record fetch.
+Normalized plans have no offset; `RecordQuery.offset` remains separate. The selected
 tenant pool is acquired before the resolved family table is accessed; only that
 validated table and declared columns are interpolated, while IDs, operands, and
 limits are bound. Ordering ends with `ID` for a stable tie-break. An omitted
-query budget permits at most 10,000 provider rows to be materialized. The primary
+candidate limit accepts at most 10,000 rows. The provider fetches only the
+smaller safe bound from the exact limit and candidate bound plus one, so it may
+read one overflow-lookahead row (10,001 raw rows at the default) before
+rejecting an oversized result. The primary
 key serves ID queries; operators must add indexes for workload equality, range,
 and composite filter/order patterns. Without them MySQL may scan or sort despite
 the runtime materialization bound. To keep one normalized statement finite,

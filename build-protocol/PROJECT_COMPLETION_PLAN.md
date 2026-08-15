@@ -1,7 +1,7 @@
 # Spine TS Project Completion Plan
 
-Status: Waves 9, 10, and 11 complete and integrated; Wave 12 high-risk planning
-is complete and accelerated implementation is starting
+Status: Waves 9, 10, and 11 complete and integrated; Wave 12 runtime work is
+implemented and documentation convergence is in progress
 
 Plan date: 2026-07-12
 
@@ -182,12 +182,12 @@ durably closed.
   copyright headers, and beginner documentation. T-0178 owns the approved plan in
   `build-protocol/planning/WAVE_11_TS_TYPE_ROUTING_PLAN.md`; D-0113 records the
   accepted architecture decision.
-- **Wave 12:** correct sustained browser subscription delivery, MySQL
-  query-plan execution, finite Inbox retention, and confirmed runtime-document
+- **Wave 12:** corrected sustained browser subscription delivery, MySQL
+  query-plan execution, bounded delivered-Inbox cleanup, and confirmed runtime-document
   mismatches. T-0187 owns the frozen baseline, Human-Imposed Requirements
   Ledger, contract decisions, and dependency split in
-  `build-protocol/planning/WAVE_12_RUNTIME_CORRECTNESS_PLAN.md`. Its planned
-  execution is T-0188 browser RED/isolation, T-0189 the bounded browser fix,
+  `build-protocol/planning/WAVE_12_RUNTIME_CORRECTNESS_PLAN.md`. Its execution is
+  T-0188 browser RED/isolation, T-0189 the bounded browser fix,
   T-0190 MySQL normalized query execution, T-0191 exact Inbox removal, T-0192
   fenced cleanup, T-0193 documentation convergence, and T-0194 release closure.
 - **Wave 13:** implement JVM-equivalent same-process and cross-process Bounded
@@ -288,8 +288,9 @@ checkout remains outside every task worktree and mutation. Wave 12 cannot leak
 Wave 13 through 19 APIs.
 
 T-0187 is reviewed, task-verified, merged as `1690eb7e`, post-merge verified,
-pushed, and remotely closed. Its final remote check showed only `main` and no
-tags. Wave 12 implementation now follows the three-stream model below.
+pushed, and remotely closed. T-0188 through T-0192 have since supplied the
+accepted browser, query, and Inbox behavior; T-0193 now reconciles its reader
+documentation before T-0194 release closure.
 
 The explicit stream assignments, profiles, ownership, telemetry limitation,
 and shared-resource serialization are recorded in

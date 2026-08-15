@@ -58,6 +58,11 @@ than a plan's `candidateLimit`, or the exported
 `QueryCandidateLimitError` is thrown before
 local materialization can return a partial semantic result.
 
+An accepted candidate ceiling is distinct from the one-row raw-provider
+overflow lookahead used to detect excess: the shared default accepts 10,000
+records and can fetch 10,001 raw rows; a provider may declare a lower accepted
+ceiling, such as Datastore's 1,000 accepted / 1,001 raw rows.
+
 `StorageQueryPolicy` validates normalized plans and
 `StorageQueryEvaluator` applies the portable query semantics. Provider packages
 can push down supported ID, declared-column, and sort parts of a plan, but must
@@ -66,6 +71,16 @@ statically types IDs only; filter and sort names are strings and filter values
 are `unknown`. Each provider documents the runtime mapping and validation it
 applies before using those inputs; callers cannot infer shared filter or sort
 name validation from the common query shape.
+
+The normalized-plan matrix is intentionally provider-specific. MySQL admits
+IDs; equality and the five comparisons on mapped orderable columns; nested
+`all` and `either`; declared-column ordering; positive limits; and masks.
+Datastore admits only IDs, equality, one provider-legal inequality column, flat
+`all`, compatible ordering, limits, and masks. Both reject unsupported shapes
+before provider access. Normalized plans never include offset: the existing
+`RecordQuery.offset` path is separate. MySQL executes every admitted predicate,
+order, and finite bound in contained parameterized SQL; Datastore executes only
+that stated overlap. See each provider reference for mappings and index needs.
 
 ## Lifecycle
 
