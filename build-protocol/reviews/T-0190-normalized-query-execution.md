@@ -1,6 +1,6 @@
 # T-0190 Review Log
 
-Status: Final reliability re-review in progress
+Status: ACCEPTED
 
 ## Assignment evidence
 
@@ -141,6 +141,13 @@ and is limited to the two proof gaps. The existing
 `performance_reliability_reviewer` is explicitly `gpt-5.6-terra` / high,
 read-only, and forbidden to spawn subagents; Desktop runtime telemetry remains
 unavailable.
+
+Final performance/reliability re-review is clean. It confirmed the oversized
+ID case uses production `queryPlan()` and proves zero acquisition/SQL, while
+the omitted-budget cases directly observe the 10,001 sentinel through the base
+fallback and real memory provider. Its targeted run passed 2 files / 80 tests.
+All four specialist lanes are now clean or accepted; security remains assigned
+to Wave-level final review.
 
 ## Mechanical convergence evidence
 
