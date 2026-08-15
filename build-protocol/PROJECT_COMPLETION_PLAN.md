@@ -291,6 +291,11 @@ T-0187 is reviewed, task-verified, merged as `1690eb7e`, post-merge verified,
 pushed, and remotely closed. Its final remote check showed only `main` and no
 tags. Wave 12 implementation now follows the three-stream model below.
 
+The explicit stream assignments, profiles, ownership, telemetry limitation,
+and shared-resource serialization are recorded in
+`build-protocol/tasks/T-0187-wave12-plan/STREAM_DISPATCH.md` before child
+dispatch.
+
 Wave 12 uses the accelerated autonomous execution model frozen in its plan:
 three isolated streams run browser T-0188/T-0189, query-provider T-0190, and
 Inbox T-0191/T-0192 work concurrently with non-overlapping ownership. Existing
