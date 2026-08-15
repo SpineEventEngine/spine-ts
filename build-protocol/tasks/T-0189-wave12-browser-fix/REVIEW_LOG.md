@@ -1,6 +1,6 @@
 # T-0189 Review Log
 
-Status: CORRECTION IN PROGRESS
+Status: RE-REVIEW IN PROGRESS
 
 Performance/reliability and style/maintainability apply. TypeScript/API,
 documentation, and security apply only if the proven implementation boundary
@@ -140,6 +140,29 @@ Focused V8 coverage reports 85.45% lines and 78.35% branches for the affected
 native bridge. Its nonzero exit is solely the repository-wide 90% global
 threshold applied to a single-file invocation; focused tests and all other
 mechanical checks pass.
+
+## Mechanical Re-review Endpoint (2026-08-15)
+
+Re-review endpoint: `bba0ac1b`, baseline `e2ab42d2`. The existing implementer
+remained explicitly configured `gpt-5.6-terra` / medium, used no subagents, and
+had no exposed Desktop runtime telemetry. Fresh focused tests cover the native
+transport-abort cancellation rejection. The changed native production slice is
+8/8 executable lines and 2/2 branches; the Envoy renderer reports 100% lines
+and 90.63% branches with every changed route shape exercised. Native, runner,
+lifecycle, and renderer tests plus lint, format, and diff checks pass.
+
+Node's V8 reporter excludes the browser test-harness directory, so it emits no
+file-level accounting for `entry.ts`, `run.mjs`, or `harness.mjs`. Those are
+test/runtime evidence infrastructure rather than shipped package source; their
+proof remains the captured complete Chromium 8/8 run, focused runner/lifecycle
+tests, and the clean process/listener/container scan. This evidence is not
+represented as provider-backed or package-source V8 coverage.
+
+Affected re-review lanes are the existing `style_maintainability_reviewer` and
+`performance_reliability_reviewer`, each read-only, no subagents, explicitly
+`gpt-5.6-terra` / high. Desktop telemetry remains unavailable. TypeScript/API
+and documentation remain N/A because no declaration or reader-facing claim
+changed. Security remains for final Wave review.
 
 ## Mechanical Coverage Closure (2026-08-15)
 
