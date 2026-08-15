@@ -7,7 +7,10 @@
  * https://www.apache.org/licenses/LICENSE-2.0
  */
 
+import { clone, create } from "@bufbuild/protobuf";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
 import type { Any } from "@bufbuild/protobuf/wkt";
+import { ChannelIdSchema, ExternalMessageSchema } from "@spine-event-engine/proto";
 import type { ChannelId, ExternalMessage } from "@spine-event-engine/proto";
 import type {
   ConsumerHandle,
@@ -17,54 +20,95 @@ import type {
   TransportFactory,
 } from "../message-channel.js";
 
-/** In-process typed transport factory for local and test environments. */
+/**
+ * Provides an in-process typed transport factory for local and test environments.
+ */
 export class InMemoryTransportFactory implements TransportFactory {
   readonly #subscribers = new Map<string, Set<MemorySubscriber>>();
+  readonly #publishers = new Set<MemoryPublisher>();
   #closed = false;
 
-  async createPublisher(id: ChannelId): Promise<Publisher> {
-    this.#assertOpen();
-    return new MemoryPublisher(id, this);
+  /**
+   * Creates a publisher for a validated, copied channel identity.
+   *
+   * @param id Identifies the typed message channel.
+   * @returns A publisher owned by this factory.
+   */
+  createPublisher(id: ChannelId): Promise<Publisher> {
+    return Promise.resolve().then(() => {
+      this.#assertOpen();
+      const publisher = new MemoryPublisher(copyChannel(id), this);
+      this.#publishers.add(publisher);
+      return publisher;
+    });
   }
 
-  async createSubscriber(id: ChannelId): Promise<Subscriber> {
-    this.#assertOpen();
-    const subscriber = new MemorySubscriber(id, this);
-    const group = this.#subscribers.get(id.targetType) ?? new Set<MemorySubscriber>();
-    group.add(subscriber);
-    this.#subscribers.set(id.targetType, group);
-    return subscriber;
+  /**
+   * Creates a subscriber for a validated, copied channel identity.
+   *
+   * @param id Identifies the typed message channel.
+   * @returns A subscriber owned by this factory.
+   */
+  createSubscriber(id: ChannelId): Promise<Subscriber> {
+    return Promise.resolve().then(() => {
+      this.#assertOpen();
+      const subscriber = new MemorySubscriber(copyChannel(id), this);
+      const group = this.#subscribers.get(subscriber.targetType) ?? new Set<MemorySubscriber>();
+      group.add(subscriber);
+      this.#subscribers.set(subscriber.targetType, group);
+      return subscriber;
+    });
   }
 
+  /**
+   * Closes and drains all factory-owned channels.
+   *
+   * @returns Resolves after accepted publication work and channels close.
+   */
   async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
-    await Promise.all(
-      [...this.#subscribers.values()].flatMap((group) => [...group].map((s) => s.close())),
+    const publishers = [...this.#publishers];
+    const subscribers = [...this.#subscribers.values()].flatMap((group) => [...group]);
+    const publisherResults = await Promise.allSettled(
+      publishers.map((publisher) => publisher.close()),
     );
+    const subscriberResults = await Promise.allSettled(
+      subscribers.map((subscriber) => subscriber.close()),
+    );
+    this.#publishers.clear();
     this.#subscribers.clear();
+    const failures = [...publisherResults, ...subscriberResults]
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .map((result) => result.reason as unknown);
+    if (failures.length > 0)
+      throw new AggregateError(failures, "Failed to close in-memory message transport.");
   }
 
-  async publish(id: ChannelId, message: ExternalMessage): Promise<void> {
-    this.#assertOpen();
-    for (const subscriber of [...(this.#subscribers.get(id.targetType) ?? [])])
-      await subscriber.receive(message);
+  async dispatch(channel: ChannelId, id: Any, message: ExternalMessage): Promise<void> {
+    validateFrame(id, message);
+    const snapshot = clone(ExternalMessageSchema, message);
+    for (const subscriber of [...(this.#subscribers.get(channel.targetType) ?? [])])
+      await subscriber.receive(snapshot);
   }
 
-  remove(subscriber: MemorySubscriber): void {
+  removePublisher(publisher: MemoryPublisher): void {
+    this.#publishers.delete(publisher);
+  }
+  removeSubscriber(subscriber: MemorySubscriber): void {
     const group = this.#subscribers.get(subscriber.targetType);
     if (!group) return;
     group.delete(subscriber);
     if (group.size === 0) this.#subscribers.delete(subscriber.targetType);
   }
-
   #assertOpen(): void {
     if (this.#closed) throw new Error("In-memory message transport is closed.");
   }
 }
 
 class MemoryPublisher implements Publisher {
-  #closed = false;
+  #closing = false;
+  #tail: Promise<void> = Promise.resolve();
   readonly id: ChannelId;
   readonly #factory: InMemoryTransportFactory;
   constructor(id: ChannelId, factory: InMemoryTransportFactory) {
@@ -75,14 +119,26 @@ class MemoryPublisher implements Publisher {
     return this.id.targetType;
   }
   isStale(): boolean {
-    return this.#closed;
+    return this.#closing;
   }
-  async publish(_id: Any, message: ExternalMessage): Promise<void> {
-    if (this.#closed) throw new Error("Message publisher is closed.");
-    await this.#factory.publish(this.id, message);
+  async publish(id: Any, message: ExternalMessage): Promise<void> {
+    if (this.#closing) throw new Error("Message publisher is closed.");
+    const copiedId = create(AnySchema, { typeUrl: id.typeUrl, value: new Uint8Array(id.value) });
+    const copiedMessage = clone(ExternalMessageSchema, message);
+    const accepted = this.#tail.then(() =>
+      this.#factory.dispatch(this.id, copiedId, copiedMessage),
+    );
+    this.#tail = accepted.catch(() => undefined);
+    return accepted;
   }
   async close(): Promise<void> {
-    this.#closed = true;
+    if (this.#closing) return this.#tail;
+    this.#closing = true;
+    try {
+      await this.#tail;
+    } finally {
+      this.#factory.removePublisher(this);
+    }
   }
 }
 
@@ -101,26 +157,52 @@ class MemorySubscriber implements Subscriber {
   isStale(): boolean {
     return this.#closed || this.#consumers.size === 0;
   }
-  async addConsumer(consumer: ExternalMessageConsumer): Promise<ConsumerHandle> {
-    if (this.#closed) throw new Error("Message subscriber is closed.");
-    this.#consumers.add(consumer);
-    let removed = false;
-    return {
-      close: async () => {
-        if (removed) return;
-        removed = true;
-        this.#consumers.delete(consumer);
-      },
-    };
+  addConsumer(consumer: ExternalMessageConsumer): Promise<ConsumerHandle> {
+    return Promise.resolve().then(() => {
+      if (this.#closed) throw new Error("Message subscriber is closed.");
+      this.#consumers.add(consumer);
+      let removed = false;
+      return {
+        close: () => {
+          if (removed) return Promise.resolve();
+          removed = true;
+          this.#consumers.delete(consumer);
+          return Promise.resolve();
+        },
+      };
+    });
   }
   async receive(message: ExternalMessage): Promise<void> {
     if (this.#closed) return;
-    for (const consumer of [...this.#consumers]) await consumer(message);
+    for (const consumer of [...this.#consumers])
+      await consumer(clone(ExternalMessageSchema, message));
   }
-  async close(): Promise<void> {
-    if (this.#closed) return;
+  close(): Promise<void> {
+    if (this.#closed) return Promise.resolve();
     this.#closed = true;
     this.#consumers.clear();
-    this.#factory.remove(this);
+    this.#factory.removeSubscriber(this);
+    return Promise.resolve();
   }
+}
+
+function copyChannel(id: ChannelId): ChannelId {
+  if (!/^type\.spine\.io\/[A-Za-z_][A-Za-z0-9_.]*$/u.test(id.targetType))
+    throw new Error("Message channel targetType must be a canonical type.spine.io URL.");
+  return create(ChannelIdSchema, { targetType: id.targetType });
+}
+
+function validateFrame(id: Any, message: ExternalMessage): void {
+  if (!id.typeUrl || id.value.length === 0)
+    throw new Error("External message identity must contain a type URL and bytes.");
+  if (!message.id || !message.originalMessage || !message.boundedContextName?.value)
+    throw new Error(
+      "External message must contain identity, original message, and source context.",
+    );
+  if (message.id.typeUrl !== id.typeUrl || !bytesEqual(message.id.value, id.value))
+    throw new Error("External message identity must match the supplied identity.");
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }

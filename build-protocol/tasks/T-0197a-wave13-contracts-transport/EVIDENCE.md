@@ -5,3 +5,9 @@
 - transport.proto SHA-256: 92df339007d7dda01a6df5b87c38d988bfedebabd6ac28eb7fbb874bcd5f73bd.
 - event.proto SHA-256 retained: 0c385d3fd98d68d35ce1d7887bd564b590daba47b959b99d205c2be56a737d29.
 - Proto generation verified 50 sources and descriptor digest 0844be5a0c588717932dc09da4d3fdc62c945a4f82be9bbb4e4d3d4814e42c3b.
+
+## Correction evidence
+
+- Focused Proto index/module plus memory tests: 14 assertions passed.
+- Memory adapter suite: 4 tests passed.
+- TypeScript generated build passed before the correction test additions; final full build is pending the parent integration cycle.

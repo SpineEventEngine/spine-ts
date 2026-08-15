@@ -10,45 +10,97 @@
 import type { Any } from "@bufbuild/protobuf/wkt";
 import type { ChannelId, ExternalMessage } from "@spine-event-engine/proto";
 
-/** Consumes one integration external-message frame. */
+/**
+ * Consumes one integration external-message frame.
+ *
+ * @param message Provides the received frame.
+ * @returns Completes when consumption finishes.
+ */
 export type ExternalMessageConsumer = (message: ExternalMessage) => void | Promise<void>;
 
-/** Removes one subscriber consumer. */
+/**
+ * Removes one subscriber consumer.
+ */
 export interface ConsumerHandle {
-  /** Removes the consumer. This operation is idempotent. */
+  /**
+   * Removes the consumer idempotently.
+   *
+   * @returns Completes when removal finishes.
+   */
   close(): Promise<void>;
 }
 
-/** A typed integration message channel. */
+/**
+ * Defines a typed integration message channel.
+ */
 export interface MessageChannel {
   /** Identifies the channel. */
   readonly id: ChannelId;
-  /** The canonical target type URL. */
+  /** Identifies the canonical target type URL. */
   readonly targetType: string;
-  /** Reports whether the channel no longer has active local work. */
+  /**
+   * Reports whether the channel has no active local work.
+   *
+   * @returns True when stale.
+   */
   isStale(): boolean;
-  /** Closes the channel. */
+  /**
+   * Closes the channel.
+   *
+   * @returns Completes after close.
+   */
   close(): Promise<void>;
 }
 
-/** Publishes integration external-message frames. */
+/**
+ * Publishes integration external-message frames.
+ */
 export interface Publisher extends MessageChannel {
-  /** Publishes an external-message frame with its identity. */
+  /**
+   * Publishes a frame with its wrapper identity.
+   *
+   * @param id Provides the wrapper identity.
+   * @param message Provides the external-message frame.
+   * @returns Completes after local delivery accepts the frame.
+   */
   publish(id: Any, message: ExternalMessage): Promise<void>;
 }
 
-/** Receives integration external-message frames. */
+/**
+ * Receives integration external-message frames.
+ */
 export interface Subscriber extends MessageChannel {
-  /** Attaches a consumer and returns its removal handle. */
+  /**
+   * Attaches a frame consumer.
+   *
+   * @param consumer Receives copied external-message frames.
+   * @returns An idempotent consumer-removal handle.
+   */
   addConsumer(consumer: ExternalMessageConsumer): Promise<ConsumerHandle>;
 }
 
-/** Creates typed integration channels. */
+/**
+ * Creates typed integration channels.
+ */
 export interface TransportFactory {
-  /** Creates a publisher for the supplied channel. */
+  /**
+   * Creates a publisher.
+   *
+   * @param id Identifies the typed channel.
+   * @returns A publisher for the channel.
+   */
   createPublisher(id: ChannelId): Promise<Publisher>;
-  /** Creates a subscriber for the supplied channel. */
+  /**
+   * Creates a subscriber.
+   *
+   * @param id Identifies the typed channel.
+   * @returns A subscriber for the channel.
+   */
   createSubscriber(id: ChannelId): Promise<Subscriber>;
-  /** Closes all adapter resources. */
+  /**
+   * Closes factory resources.
+   *
+   * @returns Completes after close.
+   */
   close(): Promise<void>;
 }
