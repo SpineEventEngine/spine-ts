@@ -1,6 +1,6 @@
 # T-0191 Review Record
 
-Status: REVIEW READY — TASK PROFILE BLOCKED BY COPYRIGHT DEBT
+Status: REVIEW READY — CANONICAL PROFILE PENDING
 
 Planned lanes: TypeScript/API (optional source compatibility), style/
 maintainability (one cleanup seam), performance/reliability (atomic fencing,
@@ -28,6 +28,6 @@ are retained as required inputs.
   two skipped live-provider cases because MySQL and Datastore endpoints are
   unset. No live-provider result is inferred from the skips.
 - Final profile disposition: the no-coverage profile passes its build, tooling,
-  cleanup, and TSDoc gates but stops at seven pre-existing malformed/missing
-  provider/test copyright headers. This record does not authorize unrelated
-  header repairs.
+  cleanup, and TSDoc gates but stops at seven in-scope T-0191/T-0192
+  malformed/missing provider/test headers. Exact template correction and a
+  captured canonical rerun are pending; no runtime repair is indicated.

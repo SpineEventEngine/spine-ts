@@ -1,6 +1,6 @@
 # T-0192 Review Record
 
-Status: REVIEW READY — TASK PROFILE BLOCKED BY COPYRIGHT DEBT
+Status: REVIEW READY — CANONICAL PROFILE PENDING
 
 Planned lanes: style/maintainability and performance/reliability. TypeScript/API
 is N/A unless T-0191's port changes; documentation applies only to changed
@@ -24,6 +24,6 @@ fenced mutation.
   the two live-provider cases are skipped with unset MySQL and Datastore
   endpoints. Live row-count and independent-handle claims remain open.
 - Final profile disposition: its Node, Proto, build, tooling, cleanup, and
-  TSDoc gates pass; a seven-file pre-existing copyright-header batch stops the
-  shared profile before format and test dispatch. Header repair is outside this
-  frozen-runtime mechanical scope.
+  TSDoc gates pass; a seven-file in-scope T-0191/T-0192 copyright-header batch
+  stops the shared profile before format and test dispatch. Exact template
+  correction and a captured canonical rerun are pending.
