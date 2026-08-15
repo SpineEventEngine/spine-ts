@@ -1,6 +1,6 @@
 # T-0189 Review Log
 
-Status: FINAL ERROR-PRECEDENCE RE-REVIEW IN PROGRESS
+Status: ACCEPTED
 
 Performance/reliability and style/maintainability apply. TypeScript/API,
 documentation, and security apply only if the proven implementation boundary
@@ -319,3 +319,10 @@ runtime telemetry remains unavailable.
 The final test-evidence re-review includes proof endpoint `d0925a6e`; production
 remains frozen at `a5b72208`. Reviewer role/profile and restrictions are
 unchanged.
+
+Final performance/reliability acceptance is clean. The production runner waits
+for disconnect settlement before topology close; the deterministic combined
+case proves a late stdout health failure stays primary even when close rejects.
+Runner evidence is 11/11. Style/maintainability and performance/reliability are
+accepted; TypeScript/API and documentation remain N/A for the recorded reasons,
+and security remains assigned to Wave closure.

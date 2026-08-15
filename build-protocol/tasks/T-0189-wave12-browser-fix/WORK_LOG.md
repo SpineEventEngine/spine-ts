@@ -1,6 +1,6 @@
 # T-0189 Work Log
 
-Status: CORRECTION IN PROGRESS
+Status: COMPLETE
 
 Await T-0188 ownership classification. Preserve best-effort notification
 semantics, explicit overflow termination, bounded cancellation/cleanup,

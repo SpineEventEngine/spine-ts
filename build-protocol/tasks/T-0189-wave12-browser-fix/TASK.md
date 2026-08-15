@@ -1,6 +1,6 @@
 # T-0189: Wave 12 Browser Fix At The Proven Owner
 
-Status: FINAL ERROR-PRECEDENCE PROOF IMPLEMENTED
+Status: COMPLETE
 
 T-0188 classification (2026-08-15): the owner is `interop/envoy/render.mjs`.
 The exact CORS preflight path is unmatched because its generated route set is
