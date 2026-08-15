@@ -13,3 +13,16 @@ performance/reliability (preflight remains bounded and does not forward to
 Gateway). TypeScript/API and documentation are N/A: no declarations or public
 claims changed. Security is a final-Wave lane; cookie/CSRF and origin-bound
 CORS regression evidence is available for its later disposition.
+
+## Specialist Dispatch
+
+- Style/maintainability: existing `style_maintainability_reviewer`, explicitly
+  configured as `gpt-5.6-terra` with `high` reasoning, bounded to the browser
+  stream diff `e2ab42d2..ea32b4e9`; read-only and forbidden to spawn subagents.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicitly configured as `gpt-5.6-terra` with `high` reasoning, bounded to
+  CORS preflight routing, stream lifecycle, cancellation, and topology
+  resources in the same diff; read-only and forbidden to spawn subagents.
+- Desktop dispatch does not expose runtime model, token, latency, or fallback
+  telemetry. The immutable configured role/profile is the acceptance evidence
+  unless the surface reports a visible mismatch.
