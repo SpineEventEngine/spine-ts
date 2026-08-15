@@ -124,6 +124,7 @@ export class MysqlDeliveryCleanupStorage implements DeliveryCleanupStorage {
         ) {
           return false;
         }
+        if (!input.session.isCurrent(currentSession)) return false;
         if (!MysqlDeliveryCleanupStorage.active(input)) return false;
         const removed = await inbox.delete(input.inbox.id);
         if (!MysqlDeliveryCleanupStorage.active(input)) throw new CleanupExpired();
