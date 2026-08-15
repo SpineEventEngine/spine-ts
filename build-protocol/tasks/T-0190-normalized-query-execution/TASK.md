@@ -1,7 +1,7 @@
 # T-0190: Production Normalized-Plan Execution
 
-Status: In progress  
-Baseline: `e2ab42d2`  
+Status: In progress
+Baseline: `e2ab42d2`
 Branch: `codex/wave-12-query-plans`
 
 ## Scope and acceptance
