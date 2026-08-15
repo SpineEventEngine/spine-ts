@@ -1,6 +1,6 @@
 # T-0193: Wave 12 Documentation Convergence
 
-Status: REVIEW READY
+Status: ACCEPTED
 
 Baseline: `512ecd52998529d1c43f21c084bae56c0520769d`
 

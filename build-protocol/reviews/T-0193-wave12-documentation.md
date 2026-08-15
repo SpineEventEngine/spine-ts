@@ -1,6 +1,6 @@
 # T-0193 Review Record
 
-Status: REVIEW READY
+Status: ACCEPTED
 
 Planned lanes: documentation completeness and claim truth, TypeScript/API
 contract accuracy, and performance/reliability for query-cost and bounded
@@ -52,6 +52,19 @@ failure.
   `implementer`, explicitly configured `gpt-5.6-terra` / medium, with no
   subagents and unavailable runtime telemetry. Re-review only the three
   corrected claims/layouts.
+
+## Correction And Acceptance
+
+- The provider table is contiguous; MySQL documents 10,000 accepted candidates
+  with a raw 10,001-row overflow probe, and Datastore documents 1,000 accepted
+  candidates with a raw 1,001-row probe.
+- Inbox cleanup truthfully states one page plus at most one continuation after
+  a full protected no-progress page.
+- Documentation, TypeScript/API, and performance/reliability re-reviews are
+  clean. Reliability's focused selection passed 74 tests; audience/API and
+  diff checks are clean with no worktree residue.
+- T-0193 is accepted at `d43e8868`. Final security and Wave-wide release truth
+  remain T-0194 concerns.
 
 ## Correction Evidence
 
