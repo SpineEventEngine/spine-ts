@@ -22,7 +22,7 @@ files are in scope.
 - Use production-path RED tests without replacing `queryPlanEntries()`.
 - Provider-bearing resources run sequentially and live MySQL/emulator evidence
   is recorded separately from V8 coverage. Changed executable code requires
-  >=90% lines and branches.
+  > =90% lines and branches.
 - Canonical inputs read: AGENTS, BUILD_PROTOCOL, completion/Wave 12 plans,
   T-0187 task/dispatch/handoff, and D-0098/D-0111/D-0114.
 
