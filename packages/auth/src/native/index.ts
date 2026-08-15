@@ -550,6 +550,24 @@ const NativeGatewayValues = Object.freeze({
     const relay = new SubscriptionUpdateRelay(options.relay);
     const controller = new AbortController();
     let closed = false;
+    let started = false;
+    let cancellation: Promise<void> | undefined;
+    const cancel = () => {
+      cancellation ??= options.subscriptions
+        .handle(
+          NativeGatewayValues.subscriptionRequest(
+            "Cancel",
+            toBinary(SubscriptionSchema, request),
+            context,
+            options.requests,
+          ),
+        )
+        .then(
+          () => undefined,
+          () => undefined,
+        );
+      return cancellation;
+    };
     const close = (reason: unknown, abort: boolean): void => {
       if (closed) {
         if (reason === undefined) return;
@@ -568,6 +586,7 @@ const NativeGatewayValues = Object.freeze({
     };
     const onAbort = () => {
       close(new ConnectError("subscription stream cancelled", Code.Canceled), true);
+      if (started) void cancel();
     };
     context.signal.addEventListener("abort", onAbort, { once: true });
     if (context.signal.aborted) {
@@ -576,6 +595,7 @@ const NativeGatewayValues = Object.freeze({
         close(reason, true);
       });
     }
+    started = true;
     void options.subscriptions
       .handle({
         ...NativeGatewayValues.subscriptionRequest(
