@@ -27,6 +27,23 @@ import { MysqlTableResolver } from "../src/mysql/table-resolver.js";
 import { MysqlStorageSchemaError } from "../src/mysql/errors.js";
 
 describe("MysqlRecordStorage", () => {
+  it("pushes an admitted normalized equality plan into bound SQL without replacing production plan execution", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const storage = schemaStorage(readyConnection(calls, { columns: ["ID", "bytes", "value"] }) as never);
+
+    await storage.queryPlan({
+      predicate: { kind: "comparison", column: "value", operator: "equal", value: "two" },
+      order: [{ column: "value", direction: "asc" }],
+      limit: 1,
+    });
+
+    const query = calls.find((call) => call.sql.startsWith("SELECT ID, bytes"));
+    expect(query?.sql).toContain("WHERE `value` = ?");
+    expect(query?.sql).toContain("ORDER BY `value` ASC, ID ASC");
+    expect(query?.sql).toContain("LIMIT ?");
+    expect(query?.values).toEqual(["two", 1]);
+  });
+
   it.each([
     ["missing primary key", { primary: [], columns: canonicalColumns() }, /primary key/i],
     [
@@ -807,7 +824,7 @@ function stringStorage(
 
 function readyConnection(
   calls: { sql: string; values?: readonly unknown[] }[],
-  options: { select?: () => unknown[] } = {},
+  options: { select?: () => unknown[]; columns?: readonly string[] } = {},
 ) {
   const record = (sql: string, values?: readonly unknown[]) => {
     calls.push(values === undefined ? { sql } : { sql, values });
@@ -818,7 +835,7 @@ function readyConnection(
       if (sql.startsWith("SELECT ID, bytes")) return Promise.resolve([[], []] as never);
       if (sql.includes("information_schema.columns"))
         return Promise.resolve([
-          ["ID", "bytes"].map((column_name) => ({ column_name })),
+          (options.columns ?? ["ID", "bytes"]).map((column_name) => ({ column_name })),
           [],
         ] as never);
       if (sql.includes("information_schema.statistics"))

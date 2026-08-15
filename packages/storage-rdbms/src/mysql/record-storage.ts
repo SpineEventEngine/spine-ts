@@ -18,12 +18,15 @@ import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { StringifierRegistry } from "@spine-event-engine/core";
 import type {
   ColumnMapping,
+  NormalizedQueryPlan,
+  NormalizedQueryPredicate,
   RecordEntry,
   RecordQuery,
   RecordSpec,
+  StorageQueryCapabilities,
   StorageContext,
 } from "@spine-event-engine/storage";
-import { ColumnMappings, RecordStorage } from "@spine-event-engine/storage";
+import { ColumnMappings, defaultQueryCandidateLimit, RecordStorage } from "@spine-event-engine/storage";
 
 import type { MysqlResolvedTable, MysqlTableSpec } from "./table-spec.js";
 import { resolvedMysqlTableSpec } from "./table-spec.js";
@@ -309,6 +312,32 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     return this.using(async (connection) => {
       const sql = this.querySql(query);
       const [rows] = await connection.query<Row[]>(sql.sql, sql.values);
+      try {
+        return rows.map((row) => ({
+          id: this.decodeId(row.ID),
+          record: fromBinary(this.recordSpec.recordType, row.bytes),
+        }));
+      } catch (error) {
+        throw mysqlError(MysqlStorageDataError, "Stored MySQL record data is invalid.", error);
+      }
+    });
+  }
+
+  /** Returns the normalized query features genuinely executed by MySQL. */
+  protected override queryCapabilities(): StorageQueryCapabilities {
+    return {
+      comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
+      features: ["either", "nested", "order", "mask", "limit"],
+    };
+  }
+
+  /** Executes the complete candidate selection in contained, bound MySQL SQL. */
+  protected override async queryPlanRecordEntries(
+    plan: NormalizedQueryPlan<I>,
+  ): Promise<readonly RecordEntry<I, R>[]> {
+    const compiled = this.planSql(plan);
+    return this.using(async (connection) => {
+      const [rows] = await connection.query<Row[]>(compiled.sql, compiled.values);
       try {
         return rows.map((row) => ({
           id: this.decodeId(row.ID),
@@ -724,6 +753,62 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
       values.push(query.offset);
     }
     return { sql, values };
+  }
+
+  private planSql(plan: NormalizedQueryPlan<I>): { sql: string; values: unknown[] } {
+    const values: unknown[] = [];
+    const predicate = plan.predicate === undefined ? undefined : this.planPredicate(plan.predicate, values);
+    const order = [
+      ...(plan.order ?? []).map((item) => `${this.planColumn(item.column)} ${item.direction === "desc" ? "DESC" : "ASC"}`),
+      "ID ASC",
+    ];
+    const candidateLimit = plan.candidateLimit ?? defaultQueryCandidateLimit;
+    const limit = Math.min(plan.limit ?? Number.MAX_SAFE_INTEGER, candidateLimit + 1);
+    values.push(limit);
+    return {
+      sql:
+        `SELECT ID, bytes FROM \`${this.table.tableName}\` ` +
+        (predicate === undefined ? "" : `WHERE ${predicate} `) +
+        `ORDER BY ${order.join(", ")} LIMIT ?`,
+      values,
+    };
+  }
+
+  private planPredicate(predicate: NormalizedQueryPredicate<I>, values: unknown[]): string {
+    if (predicate.kind === "ids") {
+      values.push(...predicate.ids.map((id) => this.idKey(id)));
+      return `ID IN (${predicate.ids.map(() => "?").join(", ")})`;
+    }
+    if (predicate.kind === "comparison") {
+      const column = this.planColumn(predicate.column);
+      const operator =
+        predicate.operator === "equal"
+          ? "="
+          : predicate.operator === "greaterThan"
+            ? ">"
+            : predicate.operator === "lessThan"
+              ? "<"
+              : predicate.operator === "greaterOrEqual"
+                ? ">="
+                : "<=";
+      values.push(this.planValue(predicate.column, predicate.value));
+      return `${column} ${operator} ?`;
+    }
+    const joiner = predicate.kind === "all" ? " AND " : " OR ";
+    return `(${predicate.predicates.map((child) => this.planPredicate(child, values)).join(joiner)})`;
+  }
+
+  private planColumn(column: string): string {
+    if (column === "ID") return "ID";
+    this.assertColumn(column);
+    return `\`${column}\``;
+  }
+
+  private planValue(column: string, value: unknown): unknown {
+    const declared = this.recordSpec.columns.find((candidate) => candidate.name === column);
+    if (declared === undefined)
+      throw new MysqlStorageOperationError(`MySQL query column is not declared: ${column}`);
+    return ColumnMappings.value(this.#columnMapping, declared.type, value);
   }
   private validateQuery(query: RecordQuery<I>): void {
     try {
