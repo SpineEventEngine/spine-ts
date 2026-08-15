@@ -170,6 +170,14 @@ export class InboxStorage {
     }
   }
 
+  /**
+   * Removes one eligible delivered row when the leased session remains current.
+   *
+   * @param message Supplies the exact delivered snapshot to remove.
+   * @param session Supplies the leased session that owns the message shard.
+   * @param options Propagates cancellation and a delivery deadline.
+   * @returns Whether the provider atomically removed the exact durable row.
+   */
   async removeDelivered(
     message: InboxMessage,
     session: DeliveryWorkSession,

@@ -73,6 +73,7 @@ export class MysqlEntityCommitCoordinator {
    * @param tables Lists participating physical tables.
    * @param key Identifies the advisory lock.
    * @param work Performs the connection-bound mutation.
+   * @param options Requires a transaction when the caller cannot use an advisory lock.
    * @returns Returns the work result.
    */
   async commit<T>(

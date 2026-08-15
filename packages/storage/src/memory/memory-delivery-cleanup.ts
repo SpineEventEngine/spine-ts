@@ -12,9 +12,17 @@ import type { StorageContext } from "../storage/storage.js";
 import type { StorageGroup } from "../record/storage-group.js";
 import { TenantRecords } from "./tenant-records.js";
 
-/** Provider-owned synchronous critical section for in-memory delivery cleanup. */
+/**
+ * Provides an in-memory critical section for fenced delivery cleanup.
+ */
 export class MemoryDeliveryCleanupStorage implements DeliveryCleanupStorage {
   #open = true;
+
+  /**
+   * Creates an in-memory cleanup handle.
+   *
+   * @param records Resolves a tenant-scoped record family.
+   */
   constructor(
     private readonly records: <I, R extends Message>(
       context: StorageContext,
@@ -22,6 +30,13 @@ export class MemoryDeliveryCleanupStorage implements DeliveryCleanupStorage {
       group?: StorageGroup,
     ) => TenantRecords<I, R>,
   ) {}
+
+  /**
+   * Removes an exact Inbox record while its session record remains current.
+   *
+   * @param input Describes the records and ownership predicate for deletion.
+   * @returns Whether the exact Inbox record was removed.
+   */
   remove<InboxId, InboxRecord extends Message, SessionId, SessionRecord extends Message>(
     input: DeliveryCleanupInput<InboxId, InboxRecord, SessionId, SessionRecord>,
   ): Promise<boolean> {
@@ -41,6 +56,10 @@ export class MemoryDeliveryCleanupStorage implements DeliveryCleanupStorage {
       ),
     );
   }
+
+  /**
+   * Closes this cleanup handle to further removal operations.
+   */
   close(): void {
     this.#open = false;
   }

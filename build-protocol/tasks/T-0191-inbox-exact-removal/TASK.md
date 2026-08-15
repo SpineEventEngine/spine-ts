@@ -1,6 +1,6 @@
 # T-0191: Exact Delivered Inbox Removal
 
-Status: IN PROGRESS
+Status: REVIEW READY — MECHANICAL CONVERGENCE
 Start: `2026-08-15 WEST`
 Baseline: `e2ab42d2`
 Branch: `codex/wave-12-inbox-cleanup`
@@ -50,3 +50,29 @@ non-delivered, or changed snapshots.
 - Relevant review lanes: TypeScript/API, style/maintainability,
   performance/reliability, and documentation. Security is retained for Wave
   convergence, with tenancy/group containment and destructive fencing noted.
+
+## Mechanical Convergence Evidence
+
+- `node scripts/check-tsdoc.mjs` clears the complete 42-finding cleanup batch.
+  The affected public port, direct storage/facade, internal capability, and
+  memory/MySQL/Datastore coordinators now state their current behavior and
+  parameter/return contracts without expanding the API.
+- The six focused paths completed with 40 passing deterministic tests:
+  `packages/server/test/delivery/inbox.test.ts`,
+  `packages/server/test/delivery/delivery-worker.test.ts`,
+  `packages/server/test/delivery/inbox-provider-cleanup.test.ts`,
+  `packages/storage/test/memory-delivery-cleanup.test.ts`,
+  `packages/storage-rdbms/test/mysql-delivery-cleanup.test.ts`, and
+  `packages/storage-datastore/test/datastore-delivery-cleanup.test.ts`.
+  The two conditional live cases in `inbox-provider-cleanup.test.ts` were
+  skipped because neither `SPINE_TS_MYSQL_URL` nor `DATASTORE_EMULATOR_HOST`
+  was configured in this worktree; this is an explicit live-provider evidence
+  limitation, not a claim of MySQL or Datastore execution.
+- Current-source coverage from the provider implementation checkpoint is
+  112/115 changed executable lines (97.39%) and 69/75 changed branch outcomes
+  (92.00%). Runtime model telemetry remains unavailable; the explicit existing
+  `implementer` profile is `gpt-5.6-terra` / medium.
+- The selected final profile is `pnpm verify:task -- --no-coverage` with the
+  same six focused paths. No-coverage is appropriate because current-source
+  coverage is already recorded separately; the profile reruns the shared task
+  gates and focused behavioral selection without replacing that measurement.

@@ -114,6 +114,11 @@ export class Inbox {
   /**
    * Removes one delivered message only when direct provider cleanup can prove
    * current ownership and the exact durable snapshot in one atomic operation.
+   *
+   * @param message Supplies the exact delivered snapshot to remove.
+   * @param session Supplies the leased session that owns the message shard.
+   * @param options Propagates cancellation and a delivery deadline.
+   * @returns Whether the provider atomically removed the exact durable row.
    */
   removeDelivered(
     message: InboxMessage,

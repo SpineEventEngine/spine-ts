@@ -97,7 +97,7 @@ export interface DeliveryInbox {
   ): Promise<InboxMessage | undefined>;
 
   /**
-   * Atomically removes one exact delivered snapshot while a direct shard
+   * Removes one exact delivered snapshot atomically while a direct shard
    * session remains current.
    *
    * Built-in direct Inbox storage implements this through its provider-owned

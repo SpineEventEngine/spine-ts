@@ -15,10 +15,19 @@ import type { RecordSpec, StorageContext } from "@spine-event-engine/storage";
 
 import { MysqlRecordStorage } from "./record-storage.js";
 
-/** Provider-owned MySQL coordinator for one fenced delivered Inbox deletion. */
+/**
+ * Coordinates one fenced delivered Inbox deletion in MySQL.
+ */
 export class MysqlDeliveryCleanupStorage implements DeliveryCleanupStorage {
   #open = true;
 
+  /**
+   * Creates a MySQL cleanup coordinator.
+   *
+   * @param openStorage Opens a record-storage handle for one record family.
+   * @param coordinate Runs work under the provider's two-family coordinator.
+   * @param lockKey Derives the provider coordination key from cleanup input.
+   */
   constructor(
     private readonly openStorage: <I, R extends Message>(
       context: StorageContext,
@@ -35,6 +44,12 @@ export class MysqlDeliveryCleanupStorage implements DeliveryCleanupStorage {
     ) => string,
   ) {}
 
+  /**
+   * Removes an exact Inbox row after locking and validating its session row.
+   *
+   * @param input Describes the records and ownership predicate for deletion.
+   * @returns Whether the coordinator deleted the exact Inbox row.
+   */
   async remove<InboxId, InboxRecord extends Message, SessionId, SessionRecord extends Message>(
     input: DeliveryCleanupInput<InboxId, InboxRecord, SessionId, SessionRecord>,
   ): Promise<boolean> {
@@ -55,6 +70,9 @@ export class MysqlDeliveryCleanupStorage implements DeliveryCleanupStorage {
     }
   }
 
+  /**
+   * Closes this cleanup coordinator to further removal operations.
+   */
   close(): void {
     this.#open = false;
   }

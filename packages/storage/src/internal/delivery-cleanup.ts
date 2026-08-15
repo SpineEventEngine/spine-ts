@@ -18,19 +18,34 @@ import type { RecordSpec } from "../record/record-spec.js";
 import type { StorageContext } from "../storage/storage.js";
 import type { StorageFactory } from "../storage/storage-factory.js";
 
-/** Framework-only provider input for one fenced exact delivered-row removal. */
+/**
+ * Describes provider input for one fenced exact delivered-row removal.
+ */
 export interface DeliveryCleanupInput<
   InboxId,
   InboxRecord extends Message,
   SessionId,
   SessionRecord extends Message,
 > {
+  // prettier-ignore
+
+  /**
+   * Selects the tenant and storage group containing both records.
+   */
   readonly context: StorageContext;
+
+  /**
+   * Describes the exact delivered Inbox record expected for deletion.
+   */
   readonly inbox: {
     readonly spec: RecordSpec<InboxId, InboxRecord>;
     readonly id: InboxId;
     readonly expected: InboxRecord;
   };
+
+  /**
+   * Describes the current shard-session record that fences deletion.
+   */
   readonly session: {
     readonly spec: RecordSpec<SessionId, SessionRecord>;
     readonly id: SessionId;
@@ -39,16 +54,40 @@ export interface DeliveryCleanupInput<
   };
 }
 
-/** Provider-owned handle that validates a current session and deletes an exact Inbox record atomically. */
+/**
+ * Defines a provider-owned handle for atomically deleting a fenced Inbox record.
+ */
 export interface DeliveryCleanupStorage {
+  // prettier-ignore
+
+  /**
+   * Removes an exact Inbox record after validating the current session.
+   *
+   * @param input Describes the records and ownership predicate for deletion.
+   * @returns Whether the provider deleted the exact Inbox record.
+   */
   remove<InboxId, InboxRecord extends Message, SessionId, SessionRecord extends Message>(
     input: DeliveryCleanupInput<InboxId, InboxRecord, SessionId, SessionRecord>,
   ): Promise<boolean>;
+  // prettier-ignore
+
+  /**
+   * Closes this cleanup handle to further removal operations.
+   */
   close(): void;
 }
 
-/** Provider factory capability deliberately narrower than a general transaction API. */
+/**
+ * Defines a provider factory capability narrower than a general transaction API.
+ */
 export interface DeliveryCleanupStorageFactory {
+  // prettier-ignore
+
+  /**
+   * Creates a provider-owned cleanup handle.
+   *
+   * @returns The cleanup handle bound to this provider.
+   */
   createDeliveryCleanupStorage(): DeliveryCleanupStorage;
 }
 
@@ -57,7 +96,9 @@ interface DeliveryCleanupFactoryAccess {
   create(factory: StorageFactory): DeliveryCleanupStorage;
 }
 
-/** Internal provider registration for atomic direct-delivery cleanup. */
+/**
+ * Registers and resolves provider cleanup handles for direct delivery.
+ */
 export const DeliveryCleanupStorageFactories: DeliveryCleanupFactoryAccess = Object.freeze({
   register(factory: StorageFactory, creator: DeliveryCleanupStorageFactory): void {
     creators.set(factory, creator);

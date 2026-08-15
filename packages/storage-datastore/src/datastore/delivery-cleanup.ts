@@ -14,10 +14,17 @@ import type { RecordSpec, StorageContext } from "@spine-event-engine/storage";
 
 import { DatastoreRecordStorage } from "./record-storage.js";
 
-/** Provider-owned Datastore transaction for one fenced delivered Inbox deletion. */
+/**
+ * Coordinates one fenced delivered Inbox deletion in Datastore.
+ */
 export class DatastoreDeliveryCleanupStorage implements DeliveryCleanupStorage {
   #open = true;
 
+  /**
+   * Creates a Datastore cleanup coordinator.
+   *
+   * @param openStorage Opens a record-storage handle for one record family.
+   */
   constructor(
     private readonly openStorage: <I, R extends Message>(
       context: StorageContext,
@@ -25,6 +32,12 @@ export class DatastoreDeliveryCleanupStorage implements DeliveryCleanupStorage {
     ) => DatastoreRecordStorage<I, R>,
   ) {}
 
+  /**
+   * Removes an exact Inbox entity after validating its session entity in one transaction.
+   *
+   * @param input Describes the records and ownership predicate for deletion.
+   * @returns Whether the transaction deleted the exact Inbox entity.
+   */
   async remove<InboxId, InboxRecord extends Message, SessionId, SessionRecord extends Message>(
     input: DeliveryCleanupInput<InboxId, InboxRecord, SessionId, SessionRecord>,
   ): Promise<boolean> {
@@ -68,6 +81,9 @@ export class DatastoreDeliveryCleanupStorage implements DeliveryCleanupStorage {
     }
   }
 
+  /**
+   * Closes this cleanup coordinator to further removal operations.
+   */
   close(): void {
     this.#open = false;
   }
