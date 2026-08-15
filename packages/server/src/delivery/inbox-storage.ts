@@ -177,7 +177,11 @@ export class InboxStorage {
   ): Promise<boolean> {
     if (session.kind !== "LEASED" || session.shard.key() !== message.shard.key()) return false;
     const expected = InboxRecords.write(message);
-    if (message.status !== "DELIVERED") return false;
+    if (
+      message.status !== "DELIVERED" ||
+      (message.keepUntil !== undefined && message.keepUntil.getTime() > Values.now(this.#now))
+    )
+      return false;
     const cleanup = DeliveryCleanupStorageFactories.create(this.#storageFactory);
     try {
       return await cleanup.remove({

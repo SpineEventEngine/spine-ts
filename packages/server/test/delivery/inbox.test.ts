@@ -45,6 +45,84 @@ describe("Inbox", () => {
     await expect(inbox.readMessage(message.id)).resolves.toBeUndefined();
   });
 
+  it("removes only unprotected delivered snapshots at the expiry boundary and is idempotent", async () => {
+    const now = new Date(2_000);
+    const factory = new InMemoryStorageFactory();
+    const context = { name: "T0191-eligibility", multitenant: false } as const;
+    const inbox = new Inbox(new InboxStorage({ context, storageFactory: factory, now: () => now }));
+    const registry = new ShardedWorkRegistry({ context, storageFactory: factory, now: () => now });
+    const session = await registry.pickUp(
+      ShardIndex.single(),
+      create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
+    );
+    const rows = [
+      createMessage("absent", "absent", 1n),
+      { ...createMessage("expired", "expired", 2n), keepUntil: new Date(2_000) },
+      { ...createMessage("protected", "protected", 3n), keepUntil: new Date(2_001) },
+    ];
+    for (const row of rows) {
+      await inbox.storage.write(row);
+      await inbox.markDelivered(row);
+    }
+
+    const delivered = await Promise.all(rows.map((row) => inbox.readMessage(row.id)));
+    await expect(inbox.removeDelivered(delivered[0]!, session!)).resolves.toBe(true);
+    await expect(inbox.removeDelivered(delivered[1]!, session!)).resolves.toBe(true);
+    await expect(inbox.removeDelivered(delivered[2]!, session!)).resolves.toBe(false);
+    await expect(inbox.removeDelivered(delivered[0]!, session!)).resolves.toBe(false);
+    await expect(inbox.readMessage(rows[2]!.id)).resolves.toMatchObject({ status: "DELIVERED" });
+  });
+
+  it("never removes a pending or replaced snapshot", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = { name: "T0191-exact", multitenant: false } as const;
+    const inbox = new Inbox(new InboxStorage({ context, storageFactory: factory }));
+    const registry = new ShardedWorkRegistry({ context, storageFactory: factory });
+    const session = await registry.pickUp(
+      ShardIndex.single(),
+      create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
+    );
+    const pending = createMessage("pending", "pending", 1n);
+    const delivered = createMessage("replaced", "replaced", 1n);
+    await inbox.storage.write(pending);
+    await inbox.storage.write(delivered);
+    const snapshot = await inbox.markDelivered(delivered);
+
+    await expect(inbox.removeDelivered(pending, session!)).resolves.toBe(false);
+    await expect(inbox.removeDelivered({ ...snapshot!, version: 2n }, session!)).resolves.toBe(false);
+    await expect(inbox.readMessage(pending.id)).resolves.toMatchObject({ status: "TO_DELIVER" });
+    await expect(inbox.readMessage(delivered.id)).resolves.toMatchObject({ status: "DELIVERED" });
+  });
+
+  it("cannot delete after ownership transfers at the former validate-delete gap", async () => {
+    let now = 1_000;
+    const factory = new InMemoryStorageFactory();
+    const context = { name: "T0191-transfer", multitenant: false } as const;
+    const inbox = new Inbox(new InboxStorage({ context, storageFactory: factory, now: () => new Date(now) }));
+    const registry = new ShardedWorkRegistry({
+      context,
+      storageFactory: factory,
+      leaseMs: 1_000,
+      now: () => new Date(now),
+    });
+    const first = await registry.pickUp(
+      ShardIndex.single(),
+      create(WorkerIdSchema, { nodeId: { value: "first" }, value: "worker" }),
+    );
+    const message = createMessage("transfer", "transfer", 1n);
+    await inbox.storage.write(message);
+    const delivered = await inbox.markDelivered(message);
+
+    now = 2_000;
+    const second = await registry.pickUp(
+      ShardIndex.single(),
+      create(WorkerIdSchema, { nodeId: { value: "second" }, value: "worker" }),
+    );
+    expect(second).toBeDefined();
+    await expect(inbox.removeDelivered(delivered!, first!)).resolves.toBe(false);
+    await expect(inbox.readMessage(message.id)).resolves.toMatchObject({ status: "DELIVERED" });
+  });
+
   it("receives, orders, reads, and marks a direct generated row delivered", async () => {
     const inbox = open("Tasks");
     const later = createMessage("ignored", "later", 2n, new Date("2026-07-02T08:00:01.000Z"));
