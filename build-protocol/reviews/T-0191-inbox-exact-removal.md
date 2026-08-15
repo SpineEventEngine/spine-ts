@@ -1,6 +1,6 @@
 # T-0191 Review Record
 
-Status: CHANGES REQUESTED
+Status: REVIEW READY
 
 Planned lanes: TypeScript/API (optional source compatibility), style/
 maintainability (one cleanup seam), performance/reliability (atomic fencing,
@@ -74,3 +74,22 @@ are retained as required inputs.
 - One correction batch returns to the existing `implementer`, explicitly
   configured `gpt-5.6-terra` / medium, with no subagents. Runtime telemetry is
   unavailable; the configured role/profile is immutable and recorded.
+
+## Correction Result
+
+- Direct removal now enforces already-aborted and expired operations and passes
+  operation controls into provider coordinators; deterministic timeout,
+  cancellation, rollback, and close paths are exercised.
+- Live MySQL 8.4.10 and Datastore-emulator cases pass with independently opened
+  handles, ownership transfer, exact preservation/deletion, and direct durable
+  row counts. Provider execution remains separate from coverage accounting.
+- Both task briefs now contain their applicable inherited Human-Imposed
+  Requirements Ledgers.
+- Exact diff-scoped LCOV against accepted T-0190 endpoint `3081dcc0` is 105/109
+  changed executable lines (96.33%) and 103/110 changed branches (93.64%).
+- The orchestrator-captured six-path `verify:task -- --no-coverage` passed all
+  shared, TypeDoc/API, generated-output, release-readiness, and focused-test
+  gates: 56 passed and four expected service-gated skips.
+- Re-review endpoint: `4392d8ef` plus this evidence-only record update. Reopen
+  TypeScript/API, style/maintainability, performance/reliability, and
+  documentation only; final security remains T-0194.

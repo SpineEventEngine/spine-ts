@@ -1,6 +1,6 @@
 # T-0192 Review Record
 
-Status: CHANGES REQUESTED
+Status: REVIEW READY
 
 Planned lanes: style/maintainability and performance/reliability. TypeScript/API
 is N/A unless T-0191's port changes; documentation applies only to changed
@@ -54,3 +54,21 @@ fenced mutation.
   explicitly configured `gpt-5.6-terra` / medium, with no subagents. Only the
   substantively affected TypeScript/API, style, performance/reliability, and
   documentation concerns reopen after correction.
+
+## Correction Result
+
+- Cleanup advances at most one continuation page when a full first page is
+  protected, so later eligible rows make progress without an unbounded scan,
+  second timer, retention setting, or scheduler.
+- A refused exact deletion is followed by current-ownership validation; loss
+  stops the drain instead of reporting `DRAINED`. Cancellation/deadline checks
+  bound both the lifecycle and provider operation.
+- Independent-handle MySQL 8.4.10 and Datastore-emulator cases prove two-owner
+  fencing and direct durable row counts; deterministic provider seam tests
+  cover rollback, timeout, cancellation, and close paths.
+- Exact diff-scoped LCOV is 105/109 changed executable lines (96.33%) and
+  103/110 changed branches (93.64%). The final captured no-coverage task profile
+  passed every shared gate and 56 focused tests with four expected
+  service-gated skips.
+- Re-review endpoint: `4392d8ef` plus this evidence-only record update. Reopen
+  only the four concerns substantively affected by the accepted batch.
