@@ -99,4 +99,19 @@ The one aggregated correction batch also records the human-approved accelerated
 three-stream execution model. Documentation, TypeScript/API, and reliability
 re-review are required because all three concerns changed substantively. Style
 remains N/A; no executable planning structure was introduced. Re-review is
-pending at the corrected checkpoint.
+recorded below.
+
+### Re-review results
+
+- Performance/reliability: clean at `5a05ff4b`. Atomic cleanup, RemoteInbox
+  exclusion, finite plan bounds, former-gap interleaving proof, and stream
+  ownership/serialization resolve all prior findings.
+- TypeScript/API documentation: clean at `5a05ff4b`. The optional exact method,
+  consumer compatibility, provider atomicity, and target/current wording resolve
+  all prior findings.
+- Documentation completeness: target/current wording, status mirrors, and
+  acceleration model are clean. One Important wording finding remained because
+  the plan asserted an unproven Datastore unfiltered-read baseline. Accepted:
+  T-0190 now treats current Datastore behavior as a production-path diagnostic
+  whose observed rejection/translation/read outcome must be recorded, without
+  prejudging it. Final documentation re-review is pending this narrow change.

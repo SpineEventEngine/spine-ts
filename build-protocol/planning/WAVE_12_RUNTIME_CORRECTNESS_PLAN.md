@@ -368,8 +368,10 @@ conformance, provider tests, and provider README/reference sections.
 
 **Functional acceptance:** real baseline MySQL calls—never method replacement—
 show comparison rejection and equality/ID full-group fallback. A separate
-Datastore baseline reproduction records a currently unsupported shape that is
-admitted and reaches an unfiltered read. Passing acceptance then rejects that
+Datastore diagnostic probes nested/disjunctive and provider-illegal inequality/
+order shapes through the production planner and records whether current code
+rejects, translates safely, or issues an unfiltered read; the plan does not
+prejudge that baseline result. Passing acceptance rejects every unsupported
 shape before provider access with zero provider calls. The frozen matrix becomes
 executable: MySQL supports IDs, five comparisons,
 flat/nested ALL/EITHER, ordering, limit, and mask; Datastore supports only IDs,
