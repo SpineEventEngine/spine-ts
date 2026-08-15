@@ -19,10 +19,15 @@ import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { Datastore } from "../../../storage-datastore/node_modules/@google-cloud/datastore/build/src/index.js";
 import { DatastoreStorageFactory } from "../../../storage-datastore/src/datastore/storage-factory.js";
 import { MysqlStorageFactory } from "../../../storage-rdbms/src/mysql/storage-factory.js";
+import {
+  createConnection,
+  type RowDataPacket,
+} from "../../../storage-rdbms/node_modules/mysql2/promise.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { Inbox } from "../../src/delivery/inbox.js";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
+import { InboxRecords, inboxRecordSpec } from "../../src/delivery/inbox-records.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
 import { createMessage } from "./inbox-message-fixture.js";
@@ -62,7 +67,9 @@ describe.skipIf(mysqlUrl === undefined)("MySQL Inbox cleanup", () => {
       name: `t0191_mysql_two_owner_${String(Date.now())}`,
       multitenant: false,
     } as const;
-    await expect(removeAcrossFactories(factory, secondFactory, context)).resolves.toBeUndefined();
+    await expect(
+      removeAcrossFactories(factory, secondFactory, context, () => mysqlCount(factory, context)),
+    ).resolves.toBeUndefined();
   });
 });
 
@@ -105,7 +112,9 @@ describe.skipIf(datastoreHost === undefined)("Datastore Inbox cleanup", () => {
     } as const;
     try {
       await expect(
-        removeAcrossFactories(firstFactory, secondFactory, context),
+        removeAcrossFactories(firstFactory, secondFactory, context, (message) =>
+          datastoreCount(firstFactory, context, message),
+        ),
       ).resolves.toBeUndefined();
     } finally {
       firstFactory.close();
@@ -178,6 +187,7 @@ async function removeAcrossFactories(
   firstFactory: MysqlStorageFactory | DatastoreStorageFactory,
   secondFactory: MysqlStorageFactory | DatastoreStorageFactory,
   context: { readonly name: string; readonly multitenant: false },
+  count?: (message: Parameters<Inbox["removeDelivered"]>[0]) => Promise<number>,
 ): Promise<void> {
   let now = Date.now() + 7_200_000;
   const firstInbox = open(firstFactory, context, () => new Date(now));
@@ -207,10 +217,55 @@ async function removeAcrossFactories(
   const second = await secondRegistry.pickUp(ShardIndex.single(), worker("second"));
   if (second === undefined) throw new Error("Expected replacement MySQL session.");
   await expect(firstInbox.removeDelivered(delivered, first)).resolves.toBe(false);
+  if (count !== undefined) await expect(count(delivered)).resolves.toBe(1);
   await expect(secondInbox.readMessage(message.id)).resolves.toMatchObject({ status: "DELIVERED" });
   await expect(secondInbox.removeDelivered(delivered, second)).resolves.toBe(true);
+  if (count !== undefined) await expect(count(delivered)).resolves.toBe(0);
   await expect(secondInbox.readMessage(message.id)).resolves.toBeUndefined();
   await secondRegistry.release(second);
+}
+
+async function mysqlCount(
+  factory: MysqlStorageFactory,
+  context: { readonly name: string; readonly multitenant: false },
+): Promise<number> {
+  if (mysqlUrl === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
+  const storage = factory.createRecordStorage(context, inboxRecordSpec) as unknown as {
+    tableName: string;
+    close(): void;
+  };
+  const table = storage.tableName.replaceAll("`", "``");
+  const connection = await createConnection(mysqlUrl);
+  try {
+    const [rows] = await connection.query<(RowDataPacket & { count: number })[]>(
+      `SELECT COUNT(*) AS count FROM \`${table}\` WHERE bytes LIKE ?`,
+      [`%${context.name}-row%`],
+    );
+    return rows[0]?.count ?? 0;
+  } finally {
+    storage.close();
+    await connection.end();
+  }
+}
+
+async function datastoreCount(
+  factory: DatastoreStorageFactory,
+  context: { readonly name: string; readonly multitenant: false },
+  message: Parameters<Inbox["removeDelivered"]>[0],
+): Promise<number> {
+  const storage = factory.createRecordStorage(context, inboxRecordSpec) as unknown as {
+    transactionEntity(value: ReturnType<typeof InboxRecords.write>): { key: unknown };
+    close(): void;
+  };
+  const client = new Datastore({ projectId: process.env.DATASTORE_PROJECT_ID ?? "spine-wave12" });
+  try {
+    const [entities] = await client.get(
+      storage.transactionEntity(InboxRecords.write(message)).key as never,
+    );
+    return entities === undefined ? 0 : 1;
+  } finally {
+    storage.close();
+  }
 }
 
 function open(
