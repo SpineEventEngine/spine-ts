@@ -41,7 +41,9 @@ describe("Inbox", () => {
     await inbox.storage.write(message);
     const delivered = await inbox.markDelivered(message);
     expect(delivered).toMatchObject({ status: "DELIVERED" });
-    await expect(inbox.removeDelivered(delivered!, session!)).resolves.toBe(true);
+    await expect(
+      inbox.removeDelivered(required(delivered, "delivered"), required(session, "session")),
+    ).resolves.toBe(true);
     await expect(inbox.readMessage(message.id)).resolves.toBeUndefined();
   });
 
@@ -66,11 +68,21 @@ describe("Inbox", () => {
     }
 
     const delivered = await Promise.all(rows.map((row) => inbox.readMessage(row.id)));
-    await expect(inbox.removeDelivered(delivered[0]!, session!)).resolves.toBe(true);
-    await expect(inbox.removeDelivered(delivered[1]!, session!)).resolves.toBe(true);
-    await expect(inbox.removeDelivered(delivered[2]!, session!)).resolves.toBe(false);
-    await expect(inbox.removeDelivered(delivered[0]!, session!)).resolves.toBe(false);
-    await expect(inbox.readMessage(rows[2]!.id)).resolves.toMatchObject({ status: "DELIVERED" });
+    await expect(
+      inbox.removeDelivered(required(delivered[0], "absent"), required(session, "session")),
+    ).resolves.toBe(true);
+    await expect(
+      inbox.removeDelivered(required(delivered[1], "expired"), required(session, "session")),
+    ).resolves.toBe(true);
+    await expect(
+      inbox.removeDelivered(required(delivered[2], "protected"), required(session, "session")),
+    ).resolves.toBe(false);
+    await expect(
+      inbox.removeDelivered(required(delivered[0], "absent"), required(session, "session")),
+    ).resolves.toBe(false);
+    await expect(inbox.readMessage(required(rows[2], "protected").id)).resolves.toMatchObject({
+      status: "DELIVERED",
+    });
   });
 
   it("never removes a pending or replaced snapshot", async () => {
@@ -88,8 +100,13 @@ describe("Inbox", () => {
     await inbox.storage.write(delivered);
     const snapshot = await inbox.markDelivered(delivered);
 
-    await expect(inbox.removeDelivered(pending, session!)).resolves.toBe(false);
-    await expect(inbox.removeDelivered({ ...snapshot!, version: 2n }, session!)).resolves.toBe(false);
+    await expect(inbox.removeDelivered(pending, required(session, "session"))).resolves.toBe(false);
+    await expect(
+      inbox.removeDelivered(
+        { ...required(snapshot, "snapshot"), version: 2n },
+        required(session, "session"),
+      ),
+    ).resolves.toBe(false);
     await expect(inbox.readMessage(pending.id)).resolves.toMatchObject({ status: "TO_DELIVER" });
     await expect(inbox.readMessage(delivered.id)).resolves.toMatchObject({ status: "DELIVERED" });
   });
@@ -98,7 +115,9 @@ describe("Inbox", () => {
     let now = 1_000;
     const factory = new InMemoryStorageFactory();
     const context = { name: "T0191-transfer", multitenant: false } as const;
-    const inbox = new Inbox(new InboxStorage({ context, storageFactory: factory, now: () => new Date(now) }));
+    const inbox = new Inbox(
+      new InboxStorage({ context, storageFactory: factory, now: () => new Date(now) }),
+    );
     const registry = new ShardedWorkRegistry({
       context,
       storageFactory: factory,
@@ -119,7 +138,9 @@ describe("Inbox", () => {
       create(WorkerIdSchema, { nodeId: { value: "second" }, value: "worker" }),
     );
     expect(second).toBeDefined();
-    await expect(inbox.removeDelivered(delivered!, first!)).resolves.toBe(false);
+    await expect(
+      inbox.removeDelivered(required(delivered, "delivered"), required(first, "first")),
+    ).resolves.toBe(false);
     await expect(inbox.readMessage(message.id)).resolves.toMatchObject({ status: "DELIVERED" });
   });
 
@@ -247,5 +268,9 @@ function open(name: string, factory = new InMemoryStorageFactory()): Inbox {
 function input(message: ReturnType<typeof createMessage>) {
   const { id, ...value } = message;
   void id;
+  return value;
+}
+function required<T>(value: T, name: string): NonNullable<T> {
+  if (value === undefined || value === null) throw new Error(`Expected ${name}.`);
   return value;
 }
