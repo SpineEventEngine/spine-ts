@@ -49,3 +49,23 @@ baseline policy admission (`Storage provider does not support ordering`), with
 no monkey-patched plan method. It is GREEN after the minimal MySQL capability
 and bound-SQL implementation. The clean-worktree missing-generated-package
 error was repaired by normal generation/build setup and is not RED evidence.
+
+## Coverage convergence evidence
+
+The replacement implementer adds behavior assertions only, against the existing
+public `queryPlan()` path. It does not replace `queryPlanEntries()` or the
+provider plan seam. Fresh LCOV against `e2ab42d2...HEAD` is 39/41 changed
+executable lines (95.12%) and 41/43 changed branches (95.35%). The focused
+whole-file aggregate remains a documented diagnostic when it includes
+pre-existing provider code; the exact D-0114 changed-range gate is the accepted
+coverage criterion. Canonical deterministic verification remains the next
+action.
+
+## Verification selection
+
+The bounded `verify:task --no-coverage` profile is sufficient for this
+coverage-only correction: it reruns every deterministic shared gate and all
+five focused provider/storage suites, while retained focused LCOV separately
+measures the D-0114 changed executable range. The canonical run passed 115
+tests after all shared gates; specialist review remains outside this implementer
+milestone.

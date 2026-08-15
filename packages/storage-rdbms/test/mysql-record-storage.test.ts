@@ -19,7 +19,12 @@ import {
   EntityRecordSchema,
   type EntityRecord,
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
-import { ColumnTypes, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
+import {
+  ColumnTypes,
+  RecordColumn,
+  RecordSpec,
+  type NormalizedQueryPlan,
+} from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import { MysqlRecordStorage } from "../src/mysql/record-storage.js";
@@ -44,6 +49,152 @@ describe("MysqlRecordStorage", () => {
     expect(query?.sql).toContain("ORDER BY `value` ASC, ID ASC");
     expect(query?.sql).toContain("LIMIT ?");
     expect(query?.values).toEqual(["two", 1]);
+  });
+
+  it("pushes IDs and every admitted comparison operator into bound MySQL predicates", async () => {
+    const cases: readonly [string, NormalizedQueryPlan<string>, string, readonly unknown[]][] = [
+      [
+        "IDs",
+        { predicate: { kind: "ids", ids: ["one", "two"] } },
+        "WHERE ID IN (?, ?)",
+        ["one", "two", 10_001],
+      ],
+      [
+        "equality",
+        { predicate: { kind: "comparison", column: "value", operator: "equal", value: "two" } },
+        "WHERE `value` = ?",
+        ["two", 10_001],
+      ],
+      [
+        "greater than",
+        {
+          predicate: { kind: "comparison", column: "value", operator: "greaterThan", value: "two" },
+        },
+        "WHERE `value` > ?",
+        ["two", 10_001],
+      ],
+      [
+        "less than",
+        { predicate: { kind: "comparison", column: "value", operator: "lessThan", value: "two" } },
+        "WHERE `value` < ?",
+        ["two", 10_001],
+      ],
+      [
+        "greater or equal",
+        {
+          predicate: {
+            kind: "comparison",
+            column: "value",
+            operator: "greaterOrEqual",
+            value: "two",
+          },
+        },
+        "WHERE `value` >= ?",
+        ["two", 10_001],
+      ],
+      [
+        "less or equal",
+        {
+          predicate: {
+            kind: "comparison",
+            column: "value",
+            operator: "lessOrEqual",
+            value: "two",
+          },
+        },
+        "WHERE `value` <= ?",
+        ["two", 10_001],
+      ],
+    ];
+
+    for (const [name, plan, clause, values] of cases) {
+      const calls: { sql: string; values?: readonly unknown[] }[] = [];
+      const storage = schemaStorage(
+        readyConnection(calls, { columns: ["ID", "bytes", "value"] }) as never,
+      );
+
+      await storage.queryPlan(plan);
+
+      const query = calls.find((call) => call.sql.startsWith("SELECT ID, bytes"));
+      expect(query?.sql, name).toContain(clause);
+      expect(query?.values, name).toEqual(values);
+    }
+  });
+
+  it("pushes flat and nested ALL/EITHER plans with masks into parenthesized SQL", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const storage = schemaStorage(
+      readyConnection(calls, { columns: ["ID", "bytes", "value"] }) as never,
+    );
+
+    await storage.queryPlan({
+      predicate: {
+        kind: "all",
+        predicates: [
+          { kind: "comparison", column: "value", operator: "greaterOrEqual", value: "b" },
+          {
+            kind: "either",
+            predicates: [
+              { kind: "ids", ids: ["two"] },
+              {
+                kind: "all",
+                predicates: [
+                  { kind: "comparison", column: "value", operator: "lessOrEqual", value: "z" },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      mask: { paths: ["value"] },
+      order: [{ column: "value", direction: "desc" }],
+      limit: 8,
+      candidateLimit: 2,
+    });
+
+    const query = calls.find((call) => call.sql.startsWith("SELECT ID, bytes"));
+    expect(query?.sql).toContain("WHERE (`value` >= ? AND (ID IN (?) OR (`value` <= ?)))");
+    expect(query?.sql).toContain("ORDER BY `value` DESC, ID ASC LIMIT ?");
+    expect(query?.values).toEqual(["b", "two", "z", 3]);
+  });
+
+  it.each([
+    [undefined, undefined, "ORDER BY ID ASC", 10_001],
+    [[{ column: "value", direction: "asc" }], 1, "ORDER BY `value` ASC, ID ASC", 1],
+    [[{ column: "value", direction: "desc" }], 5, "ORDER BY `value` DESC, ID ASC", 3],
+  ] as const)(
+    "bounds an unfiltered plan with order %o and limit %s",
+    async (order, limit, expectedOrder, expectedBound) => {
+      const calls: { sql: string; values?: readonly unknown[] }[] = [];
+      const storage = schemaStorage(
+        readyConnection(calls, { columns: ["ID", "bytes", "value"] }) as never,
+      );
+
+      await storage.queryPlan({
+        ...(order === undefined ? {} : { order }),
+        ...(limit === undefined ? {} : { limit }),
+        ...(limit === 5 ? { candidateLimit: 2 } : {}),
+      });
+
+      const query = calls.find((call) => call.sql.startsWith("SELECT ID, bytes"));
+      expect(query?.sql).not.toContain("WHERE");
+      expect(query?.sql).toContain(expectedOrder);
+      expect(query?.values).toEqual([expectedBound]);
+    },
+  );
+
+  it("rejects undeclared normalized columns before issuing a provider query", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const storage = schemaStorage(
+      readyConnection(calls, { columns: ["ID", "bytes", "value"] }) as never,
+    );
+
+    await expect(
+      storage.queryPlan({
+        predicate: { kind: "comparison", column: "missing", operator: "equal", value: "two" },
+      }),
+    ).rejects.toThrow("not declared");
+    expect(calls.some((call) => call.sql.startsWith("SELECT ID, bytes"))).toBe(false);
   });
 
   it.each([
