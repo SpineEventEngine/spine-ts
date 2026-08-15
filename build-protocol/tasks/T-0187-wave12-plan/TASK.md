@@ -1,6 +1,6 @@
 # T-0187: Wave 12 Runtime Correctness And Bounded Delivery Plan
 
-Status: In progress — discovery and contract freezing
+Status: In specialist review — contract freeze complete
 
 ## Objective
 
@@ -169,6 +169,11 @@ split before implementation.
     pushed, continue autonomously into the first approved implementation task
     unless a genuine protocol blocker or unresolved human contract choice
     prevents safe execution.
+48. Accelerate the Wave with three isolated, non-overlapping browser,
+    query-provider, and Inbox implementation streams; keep shared provider/
+    runtime verification and integration serialized, preserve explicit file
+    ownership, and continue autonomously until full Wave closure or a genuine
+    human blocker.
 
 ## Selected Skills And Applicability
 

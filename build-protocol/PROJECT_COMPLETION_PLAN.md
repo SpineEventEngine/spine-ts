@@ -287,6 +287,16 @@ reviewed. The protected human agentic-review folder in the coordination
 checkout remains outside every task worktree and mutation. Wave 12 cannot leak
 Wave 13 through 19 APIs.
 
+Wave 12 uses the accelerated autonomous execution model frozen in its plan:
+three isolated streams run browser T-0188/T-0189, query-provider T-0190, and
+Inbox T-0191/T-0192 work concurrently with non-overlapping ownership. Existing
+provider record-storage files stay exclusively with T-0190 until a recorded
+handoff. Shared live/coverage resources, integration, documentation T-0193,
+final security/release T-0194, and remote closure remain dependency-serialized.
+No parallel task is declared durably closed while another unique remote branch
+exists; all are reconciled into `origin/main` before the remote returns to only
+`main` and no tags.
+
 ## Authored API And Example Quality Correction
 
 T-0080 is a bounded corrective program opened after Wave 4. It does not answer

@@ -36,6 +36,52 @@ Gateways. Those remain in Waves 13 through 19 in the binding order. The root
 README remains repository-entry documentation and is not a Wave 12 feature
 manual.
 
+## Accelerated Autonomous Execution Model
+
+After T-0187 is reviewed, verified, merged, post-merge checked, pushed, and
+remotely closed, the orchestrator starts three isolated implementation streams
+from the same freshly verified `origin/main`:
+
+| Stream          | Task chain                                      | Exclusive initial ownership                                                             |
+| --------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Browser         | T-0188 RED/isolation -> T-0189 proven-owner fix | Message Board interop harness/tests, then only the runtime family proven faulty         |
+| Query providers | T-0190                                          | normalized query policy/execution, MySQL/Datastore query adapters and query conformance |
+| Inbox cleanup   | T-0191 exact atomic removal -> T-0192 lifecycle | delivery ports/lifecycle, new provider cleanup seams, cleanup/fencing conformance       |
+
+Each stream has one bounded implementation owner in its own worktree/branch,
+explicit `gpt-5.6-terra`/medium dispatch, no child subagents, and no permission
+to revert or overwrite another stream. Review-only lanes run concurrently after
+each stream's mechanical checks. The primary checkout remains coordination-only.
+
+Potential provider overlap is explicitly serialized: T-0190 owns existing
+MySQL/Datastore `record-storage.ts` query code until its reviewed endpoint is
+available. T-0191 may build provider-neutral, memory, server, and new adjacent
+provider-cleanup modules concurrently but cannot edit those owned record-storage
+files. If atomic cleanup genuinely requires them, the Inbox stream waits for
+T-0190's endpoint, rebases/merges without rewriting published history, then
+takes a recorded ownership handoff. No two production writers own one file.
+
+Every checkpoint commit is pushed. Because remote policy forbids declaring any
+task closed while another unique remote branch exists, parallel branches remain
+active/in-progress evidence until the complete reviewed train is ready. The
+orchestrator then integrates the three streams in dependency-safe order,
+reconciles every unique ref, and declares task closure only after all task
+branches are contained in `origin/main`, deleted, and the remote again exposes
+exactly `main` and no tags.
+
+Provider/runtime commands sharing generation, coverage, ports, Envoy, browsers,
+emulators, or databases remain serialized. This preserves deterministic proof
+while implementation, focused unit checks, documentation research, and
+specialist reviews consume independent capacity. T-0193 documentation begins
+as soon as all three behavior endpoints stabilize; T-0194 alone owns final
+cross-stream security/release convergence.
+
+Planning estimate at T-0187: 35-50 total agent-hours and 16-24 uninterrupted
+elapsed hours with three streams, assuming live MySQL, Datastore emulator,
+Chromium/Envoy, and remote authentication remain available. Provider/browser
+verification, dependency-safe integration, and final release/security gates are
+the irreducible serialized tail.
+
 ## Frozen Contract Decisions
 
 ### Browser subscription lifecycle
@@ -66,26 +112,27 @@ admits is pushed into one parameterized SQL statement scoped to the already
 selected tenant database and resolved storage-group table. The shared Node
 evaluator may validate provider output or apply a mask only where the provider
 cannot return a partial Protobuf body; it may not rescue a full-group fetch.
-The provider fetch bound is the smaller safe bound derived from the exact plan
-limit and `candidateLimit + 1`, so the caller can detect a candidate overflow
-without materializing an unbounded result. The base RecordStorage implementation
-must reject an unimplemented nonempty provider plan instead of inheriting the
-current full-group fallback.
+The public optional `candidateLimit` has a shared finite default of 10,000.
+The provider fetch bound is the smaller safe bound derived from an exact plan
+limit and `(candidateLimit ?? 10_000) + 1`, so the caller can detect a candidate
+overflow without materializing an unbounded result. The base RecordStorage
+implementation must reject an unimplemented nonempty provider plan instead of
+inheriting the current full-group fallback.
 
 The Wave 12 capability matrix is:
 
-| Plan feature | MySQL Wave 12 | Datastore participation | Contract |
-| --- | --- | --- | --- |
-| ID set | Admit and push down | Existing pushdown conformance | Bound placeholders; empty IDs reject |
-| Equality | Admit and push down | Existing pushdown conformance | Typed provider mapping for operands |
-| Comparisons | Admit for mapped orderable columns and push down | Existing supported operators | Reject unsupported value/column shapes before query |
-| Composite `all` | Admit and parenthesize conjunction | Existing overlap | No Node fallback |
-| Composite `either` | Admit and translate to bounded parenthesized SQL | Reject: no genuine Datastore overlap | Never issue an unfiltered provider query |
-| Ordering | Admit and push down with stable ID tie-breaker | Existing overlap | Declared mapped columns only |
-| Limit | Admit and push down | Existing overlap | Positive bound; never only a post-fetch slice |
-| Mask | Admit only with complete-record fetch plus post-fetch mask when candidate SQL is otherwise fully bounded | Existing overlap | Mask is not permission to full-scan |
-| Offset | Not a `NormalizedQueryPlan` feature | N/A to this contract | Do not add it in Wave 12; `RecordQuery.offset` remains a separate existing provider path |
-| Candidate limit | Enforce through provider fetch bound plus defensive result check | Existing overlap | Never materialize beyond the bound |
+| Plan feature       | MySQL Wave 12                                                                                            | Datastore participation              | Contract                                                                                 |
+| ------------------ | -------------------------------------------------------------------------------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------- |
+| ID set             | Admit and push down                                                                                      | Existing pushdown conformance        | Bound placeholders; empty IDs reject                                                     |
+| Equality           | Admit and push down                                                                                      | Existing pushdown conformance        | Typed provider mapping for operands                                                      |
+| Comparisons        | Admit for mapped orderable columns and push down                                                         | Existing supported operators         | Reject unsupported value/column shapes before query                                      |
+| Composite `all`    | Admit and parenthesize conjunction                                                                       | Existing overlap                     | No Node fallback                                                                         |
+| Composite `either` | Admit and translate to bounded parenthesized SQL                                                         | Reject: no genuine Datastore overlap | Never issue an unfiltered provider query                                                 |
+| Ordering           | Admit and push down with stable ID tie-breaker                                                           | Existing overlap                     | Declared mapped columns only                                                             |
+| Limit              | Admit and push down                                                                                      | Existing overlap                     | Positive bound; never only a post-fetch slice                                            |
+| Mask               | Admit only with complete-record fetch plus post-fetch mask when candidate SQL is otherwise fully bounded | Existing overlap                     | Mask is not permission to full-scan                                                      |
+| Offset             | Not a `NormalizedQueryPlan` feature                                                                      | N/A to this contract                 | Do not add it in Wave 12; `RecordQuery.offset` remains a separate existing provider path |
+| Candidate limit    | Enforce explicit value or shared 10,000 default through provider fetch bound plus defensive result check | Existing overlap                     | Never materialize beyond the finite bound                                                |
 
 This is a public TypeScript contract correction but not a serialized change.
 Unknown columns, incompatible operands, unsupported plan shapes, unsafe
@@ -119,10 +166,33 @@ deduplication interval continue to write `keepUntil`; the framework's current
 repository handoff retains its 30-second deduplication window. A direct message
 without `keepUntil` receives JVM's zero-window behavior.
 
-The exported `DeliveryInbox` persistence port gains one exact idempotent
-delivered-row removal operation. Direct Inbox storage implements it as
-exact-record CAS-to-delete. `RemoteInbox` maps it to the already existing exact
-Remove RPC behavior, so no Protobuf change is needed.
+The exported `DeliveryInbox` persistence port gains one source-compatible
+optional method:
+
+```ts
+removeDelivered?(
+  message: InboxMessage,
+  session: DeliveryWorkSession,
+  options?: DeliveryOperationOptions,
+): Promise<boolean>;
+```
+
+It returns `true` only when the exact matching delivered snapshot was removed
+under the same still-current shard session and `false` when ownership is stale,
+the row is absent/not delivered, or the snapshot no longer matches. Direct
+Inbox storage delegates to a provider-owned atomic delivery-cleanup seam modeled
+after the existing atomic Entity commit seam. Memory uses one critical section;
+Datastore uses one transaction over session and Inbox entities; transactional
+MySQL locks/verifies the session and conditionally deletes the Inbox row in one
+transaction. A supported nontransactional MySQL mode must use one provider
+advisory fence shared by pickup/renew/release and cleanup or reject cleanup
+configuration explicitly. Separate validation followed by deletion is
+forbidden.
+
+`RemoteInbox` omits the optional cleanup method because its successful
+acknowledgement already removes the pending row and leaves no delivered row to
+retain. Its existing Remove RPC therefore needs no Wave 12 semantic or
+Protobuf change.
 
 Cleanup is an internal bounded delivery phase, not a new public CleanupStation,
 Proto field, monitor action, timer, or scheduler. It:
@@ -130,8 +200,8 @@ Proto field, monitor action, timer, or scheduler. It:
 - selects one page no larger than the delivery page size for the currently
   owned shard;
 - orders deterministically for continuation;
-- deletes only an exact delivered snapshot with provider CAS/delete semantics;
-- validates the current shard fence immediately before every deletion;
+- deletes only an exact delivered snapshot while atomically proving the shard
+  session remains current;
 - stops on ownership loss, cancellation, deadline, or page bound;
 - runs within `ServerEnvironment`'s existing delivery lifecycle and is awaited
   during shutdown;
@@ -142,11 +212,16 @@ Proto field, monitor action, timer, or scheduler. It:
 Cleanup may run after a bounded delivery page while the same session is held,
 and it must also make progress on a shard that contains only already-delivered
 eligible rows after crash/restart. A stale owner cannot delete after another
-owner acquires the shard. The existing public page-size bound controls cleanup;
+owner acquires the shard, including when ownership transfer races between an
+ordinary validation point and deletion. The existing public page-size bound controls cleanup;
 no new retention or cleanup-frequency configuration is approved.
 
-This changes the internal `DeliveryInbox` persistence port and its direct
-RecordStorage implementation. It does not change Protobuf wire layout.
+The optional member preserves source compatibility for existing structural
+`DeliveryInbox` implementations. Built-in local persistence provides it and
+receives the bounded cleanup guarantee. RemoteInbox removes on acknowledgement;
+a custom implementation that omits the method remains valid but owns its own retention and is explicitly not
+advertised as receiving framework cleanup. Consumer-facing compile tests and
+TSDoc freeze this limitation. No Protobuf wire layout changes.
 
 ## Current-State Execution Traces And Test Gaps
 
@@ -292,12 +367,15 @@ MySQL plan execution, Datastore capability/pushdown correction, shared
 conformance, provider tests, and provider README/reference sections.
 
 **Functional acceptance:** real baseline MySQL calls—never method replacement—
-show comparison rejection and equality/ID full-group fallback; Datastore proof
-shows any provider-illegal admitted shape attempting an unfiltered read. The
-frozen matrix becomes executable: MySQL supports IDs, five comparisons,
+show comparison rejection and equality/ID full-group fallback. A separate
+Datastore baseline reproduction records a currently unsupported shape that is
+admitted and reaches an unfiltered read. Passing acceptance then rejects that
+shape before provider access with zero provider calls. The frozen matrix becomes
+executable: MySQL supports IDs, five comparisons,
 flat/nested ALL/EITHER, ordering, limit, and mask; Datastore supports only IDs,
 equality, one inequality column, flat ALL, compatible ordering, limit, and mask.
-Base storage rejects unimplemented nonempty provider plans. Every MySQL
+Base storage rejects unimplemented nonempty provider plans and applies the
+10,000 default when no explicit candidate bound exists. Every MySQL
 selection is bound `WHERE`, ordering is `ORDER BY`, and exact/candidate bounds
 become bound `LIMIT`; unsupported plans make zero provider calls. Tenant
 selection precedes table access, names are declared/validated, and values are
@@ -318,18 +396,24 @@ sequential provider profiles.
 
 **Dependency:** T-0187; independent of browser/MySQL implementation files.
 
-**Ownership:** `delivery-ports.ts`, `inbox-storage.ts`, `inbox.ts`,
-`packages/delivery-client/src/remote/adapters.ts`, direct Inbox/provider
-conformance, and public TSDoc/export tests.
+**Ownership:** `delivery-ports.ts`, `inbox-storage.ts`, `inbox.ts`, an internal
+provider-owned delivery-cleanup capability/registration modeled after atomic
+Entity commits, memory/MySQL/Datastore implementations, direct Inbox/provider
+conformance, and public TSDoc/export/type tests. RemoteInbox and delivery-server
+removal are evidence-only and unchanged because remote acknowledgement already
+removes pending rows.
 
 **Functional acceptance:** exact delivered snapshots delete through
 CAS-to-undefined; pending, scheduled, catch-up, changed/replaced, malformed,
 and still-protected rows never delete; `keepUntil === now` is eligible; absent
 `keepUntil` is immediately eligible after delivery; repeated removal is
-idempotent; a stale snapshot cannot delete a changed row. RemoteInbox reuses
-its exact Remove RPC without Proto change. Persisted bytes/columns stay
-unchanged. Shared conformance runs with memory, live MySQL, and Datastore
-emulator.
+idempotent; a stale snapshot cannot delete a changed row. Ownership verification
+and exact deletion are one provider-atomic operation. Tests transfer ownership
+at the former validate/delete gap and prove zero stale deletion. Persisted
+bytes/columns stay unchanged. The optional method signature above is
+source-compatible, is frozen by a consumer type test, and documents the
+custom-port retention limitation plus RemoteInbox's remove-on-ack behavior.
+Shared conformance runs with memory, live MySQL, and Datastore emulator.
 
 **Coverage/evidence:** >=90% changed lines/branches; live provider CAS/delete
 evidence separate. **Documentation:** port/storage TSDoc; full prose waits for
@@ -346,8 +430,8 @@ worker/environment wiring only if proven necessary, and fencing/worker/restart/
 retention/provider-backed tests. No scheduler or public cleanup owner.
 
 **Functional acceptance:** cleanup runs only inside an acquired shard session;
-reads bounded delivered pages; validates ownership immediately before every
-exact removal; stops on ownership loss; and supplies at least one cleanup page
+reads bounded delivered pages; invokes the provider-atomic ownership-plus-exact-
+removal operation for every row; stops on ownership loss; and supplies at least one cleanup page
 per processed delivery page plus one maintenance page for an empty owned drain.
 Failures leave eligible rows durable/retryable and do not affect pending work.
 Tests cover crash before/after delete, restart, duplicate, expiry equality,

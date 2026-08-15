@@ -5451,18 +5451,26 @@ Decision:
   deadline. A delivered row is cleanup-eligible when it is absent or no later
   than the cleanup time. Do not add an independent retention setting, new Proto
   field, or scheduler.
-- Extend the exported `DeliveryInbox` persistence port with one exact,
-  idempotent delivered-row removal operation. Direct storage uses
-  exact-snapshot CAS-to-delete and RemoteInbox reuses its existing exact Remove
-  RPC, so the persisted record and Protobuf contract do not change.
+- Extend the exported `DeliveryInbox` persistence port with the optional,
+  source-compatible
+  `removeDelivered(message, session, options?): Promise<boolean>`. It succeeds
+  only for an exact delivered snapshot while the supplied shard session remains
+  current. Direct storage delegates to a provider-owned atomic cleanup seam:
+  one memory critical section, one Datastore transaction, and one MySQL
+  transaction or provider advisory fence shared with ownership mutations.
+  Separate validation followed by deletion is forbidden. RemoteInbox omits the
+  method because acknowledgement already removes its pending row. The persisted
+  record and Protobuf layout do not change. Custom structural ports that omit
+  the optional method remain compatible and own their retention behavior.
 - Run cleanup as one page-limited operation under the existing environment
-  delivery lifecycle and shard session. Revalidate ownership immediately before
-  every exact deletion, stop after cancellation, deadline, ownership loss, or
-  the page bound, and provide cleanup capacity at least equal to successful
+  delivery lifecycle and shard session. Verify ownership and exact deletion as
+  one provider-atomic mutation, stop after cancellation, deadline, ownership
+  loss, or the page bound, and provide cleanup capacity at least equal to successful
   bounded delivery plus one maintenance page on an otherwise empty owned drain.
 - Make the base normalized provider-plan seam fail for unimplemented nonempty
   plans. Apply a provider fetch limit derived from the exact plan limit and
-  `candidateLimit + 1`. Datastore advertises only provider-legal overlap and
+  `(candidateLimit ?? 10_000) + 1`. The public optional candidate limit thus has
+  a finite shared default. Datastore advertises only provider-legal overlap and
   rejects nested/disjunctive or illegal inequality/order shapes before access.
 - Require >=90% changed executable line and branch coverage, while recording
   real browser, live MySQL, Datastore, SQL statement, and physical row-count

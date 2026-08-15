@@ -1,6 +1,6 @@
 # T-0187 Work Log
 
-Status: Requirements split in progress
+Status: Specialist review in progress
 
 - Baseline: `7b8a631ecb33210e5da4da9ffa2d8eb8aa59d497`.
 - Branch/worktree: `codex/wave-12-runtime-correctness-plan` /
@@ -31,3 +31,8 @@ Status: Requirements split in progress
   fail explicit; derive SQL fetch bounds from exact/candidate limits; narrow
   Datastore capabilities to genuine provider-legal overlap.
 - Current work: converge canonical records and prepare specialist review.
+- Human-approved acceleration: after planning closure, use three isolated
+  non-overlapping implementation streams (browser, query providers, Inbox),
+  concurrent review lanes, serialized shared live/release resources, and
+  coordinated remote closure. Estimated elapsed duration is 16-24 uninterrupted
+  hours versus 35-50 total agent-hours.
