@@ -17,15 +17,45 @@ function cookies(setCookie, url) {
   });
 }
 
-function captureBrowserFailures(page) {
+export function captureBrowserFailures(page) {
   const failures = [];
   page.on("requestfailed", (request) =>
-    failures.push({ url: request.url(), failure: request.failure(), headers: request.headers() }),
+    failures.push({
+      path: new URL(request.url()).pathname,
+      failure: request.failure(),
+      headers: safeFailureHeaders(request.headers()),
+    }),
   );
   page.on("console", (message) => {
     if (message.type() === "error") failures.push({ console: message.text() });
   });
   return failures;
+}
+
+test("redacts browser failure secrets while retaining safe transport facts", () => {
+  const handlers = new Map();
+  const failures = captureBrowserFailures({ on: (name, handler) => handlers.set(name, handler) });
+  handlers.get("requestfailed")({
+    url: () => "https://gateway.test/path?csrf=secret&token=secret#secret",
+    failure: () => ({ errorText: "net::ERR_FAILED" }),
+    headers: () => ({
+      cookie: "secret",
+      authorization: "Bearer secret",
+      "x-spine-csrf": "secret",
+      "content-type": "application/grpc-web+proto",
+      "x-grpc-web": "1",
+    }),
+  });
+  const text = JSON.stringify(failures);
+  expect(text).toContain("content-type");
+  expect(text).not.toMatch(/secret|cookie|authorization|x-spine-csrf|csrf|token/);
+});
+
+function safeFailureHeaders(headers) {
+  const allowed = ["content-type", "x-grpc-web", "x-user-agent"];
+  return Object.fromEntries(
+    allowed.flatMap((name) => (headers[name] === undefined ? [] : [[name, headers[name]]])),
+  );
 }
 
 function captureGrpcWebResponses(page) {
