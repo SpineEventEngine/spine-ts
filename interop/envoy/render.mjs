@@ -6,6 +6,7 @@ import reservedSpineRpcPaths from "../../packages/server/src/server/reserved-spi
 export function renderEnvoy(options) {
   const topology = normalize(options);
   const routes = [...spineRoutes, ...topology.authRoutes]
+    .flatMap((route) => [route, { ...route, method: "OPTIONS" }])
     .map(
       (route) =>
         `                        - match: { path: ${route.path}, headers: [{ name: ":method", exact_match: ${route.method} }] }\n                          route: { cluster: gateway, timeout: ${route.timeout} }\n                          typed_per_filter_config:\n                            envoy.filters.http.buffer:\n                              "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.BufferPerRoute\n                              buffer: { max_request_bytes: ${route.maxRequestBytes} }`,

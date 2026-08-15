@@ -7,6 +7,10 @@ The exact CORS preflight path is unmatched because its generated route set is
 POST-only. T-0189 may now make the smallest test-first renderer correction;
 native server, Gateway, and browser client code remain out of scope.
 
+Implemented correction: exact OPTIONS routes accompany each bounded RPC route,
+allowing Envoy's existing origin-restricted CORS filter to answer preflight
+without forwarding it to the Gateway.
+
 Only the runtime family proven by T-0188 may be changed: native server/Stand,
 Gateway relay/bindings, or browser consumption. The regression requires a
 passive real-browser viewer to receive three writer-originated updates through

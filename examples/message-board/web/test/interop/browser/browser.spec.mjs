@@ -65,12 +65,12 @@ test("keeps a passive viewer alive for three sequential writer updates through E
       cookies(process.env.E1_COOKIE_SET_COOKIE, process.env.E1_ENVOY_BASE_URL),
     );
     await writer.addCookies(
-      cookies(process.env.E1_COOKIE_B_SET_COOKIE, process.env.E1_ENVOY_BASE_URL),
+      cookies(process.env.E1_COOKIE_SET_COOKIE, process.env.E1_ENVOY_BASE_URL),
     );
     const viewerPage = await viewer.newPage();
     const writerPage = await writer.newPage();
     const viewerUrl = `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF)}&actor=ada`;
-    const writerUrl = `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF_B)}&actor=bert`;
+    const writerUrl = `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF)}&actor=ada`;
     await viewerPage.goto(viewerUrl);
     await writerPage.goto(writerUrl);
     const failures = captureBrowserFailures(viewerPage);

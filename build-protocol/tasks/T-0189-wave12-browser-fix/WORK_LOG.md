@@ -15,3 +15,10 @@ diagnostics; no runtime source was edited.
 owner. Chromium CORS diagnostics and a live direct OPTIONS probe both show an
 unmatched preflight (404/no CORS headers); Gateway admission remains zero. The
 smallest correction is now authorized only after a failing renderer test.
+
+GREEN: the renderer now emits an exact OPTIONS route beside each bounded public
+RPC route. `interop/envoy/render.test.mjs` passes; the unchanged Chromium
+cookie/CSRF flow passes; a passive Chromium viewer receives three sequential
+updates from a separate Ada writer tab through Envoy and Gateway; and the
+direct-native three-update comparison passes. Bert was intentionally denied as
+a writer, so the valid two-tab regression uses separate authenticated Ada tabs.

@@ -33,6 +33,11 @@ test("renders a bounded grpc-web gateway-only listener", () => {
     rendered,
     /path: \/spine\.client\.CommandService\/Post, headers: \[\{ name: ":method", exact_match: POST \}\]/,
   );
+  assert.match(
+    rendered,
+    /path: \/spine\.auth\.AuthenticationService\/ResolveContext, headers: \[\{ name: ":method", exact_match: OPTIONS \}\]/,
+    "the CORS filter needs an exact preflight route before it can add allow-origin headers",
+  );
   assert.match(rendered, /\/spine\.auth\.AuthenticationService\/ResolveContext/);
   assert.match(rendered, /\/spine\.client\.QueryService\/Read/);
   assert.match(rendered, /\/spine\.client\.SubscriptionService\/Activate/);
