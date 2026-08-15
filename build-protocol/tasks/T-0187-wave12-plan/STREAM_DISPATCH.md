@@ -109,3 +109,15 @@ subagents and is told that other writers are active in separate worktrees.
 - MySQL and Datastore proof windows remain orchestrator-serialized. Provider
   cleanup evidence must use the production coordinator and two independently
   opened handles where required by T-0191/T-0192.
+
+## T-0193 Read-Only Documentation Inventory — 2026-08-15
+
+- Orchestrator-dispatched read-only repository scanning function; this is not a
+  new project role and owns no files.
+- Bounded scope: identify exact reader/specification/architecture/decision
+  passages that must converge after T-0189, T-0190, and T-0192 acceptance;
+  flag stale future-tense or prohibited Wave 13-19 claims; propose no product
+  behavior and make no edits.
+- Explicit profile: `gpt-5.6-luna`, reasoning `medium`; no subagents. Runtime
+  telemetry is unavailable, so the configured function/profile is the durable
+  acceptance record.
