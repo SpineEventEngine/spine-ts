@@ -1,6 +1,6 @@
 # T-0189 Review Log
 
-Status: RE-REVIEW IN PROGRESS
+Status: RE-REVIEW CORRECTIONS IN PROGRESS
 
 Performance/reliability and style/maintainability apply. TypeScript/API,
 documentation, and security apply only if the proven implementation boundary
@@ -163,6 +163,35 @@ Affected re-review lanes are the existing `style_maintainability_reviewer` and
 `gpt-5.6-terra` / high. Desktop telemetry remains unavailable. TypeScript/API
 and documentation remain N/A because no declaration or reader-facing claim
 changed. Security remains for final Wave review.
+
+## Re-review Result And Accepted Batch (2026-08-15)
+
+Both affected reviewers completed read-only against `bba0ac1b` under the
+recorded explicit `gpt-5.6-terra` / high profiles, without subagents or exposed
+Desktop runtime telemetry. Deterministic reviewer evidence passed renderer
+6/6, runner 7/7, native 34/34, and diff checks. Neither reviewer ran Chromium.
+
+The complete accepted correction batch is:
+
+1. Generate genuine preflight matching from each route's admitted method so
+   supported GET auth preflights receive CORS handling; retain counter-neutral
+   local fallback behavior and add GET coverage.
+2. Parse child stdout as buffered newline-delimited records. Route parsing and
+   health-marker failures into the awaited child promise so `finally` always
+   owns cleanup, require exactly three ordered snapshots when the passive case
+   runs, and test fragmented/coalesced chunks plus disconnect settlement.
+3. Render the shared Envoy stream idle timeout exactly once, including
+   diagnostic access-log mode.
+4. Cancel each passive-update timeout after its race settles so successful
+   updates leave no test-owned timer handles.
+
+The style reviewer additionally confirmed distinct identities, idempotency
+isolation, and current task status. The performance/reliability reviewer
+confirmed the earlier malformed OPTIONS, BigInt bridge, topology lifecycle,
+idempotency, and external-abort Cancel corrections on their intended paths.
+The batch returns once to the existing implementation context; both lanes must
+re-review the final endpoint because the method and parser fixes are
+substantive.
 
 ## Mechanical Coverage Closure (2026-08-15)
 
