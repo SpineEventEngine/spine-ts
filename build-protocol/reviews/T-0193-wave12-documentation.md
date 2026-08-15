@@ -1,6 +1,6 @@
 # T-0193 Review Record
 
-Status: CHANGES REQUESTED
+Status: REVIEW READY
 
 Planned lanes: documentation completeness and claim truth, TypeScript/API
 contract accuracy, and performance/reliability for query-cost and bounded
@@ -52,3 +52,20 @@ failure.
   `implementer`, explicitly configured `gpt-5.6-terra` / medium, with no
   subagents and unavailable runtime telemetry. Re-review only the three
   corrected claims/layouts.
+
+## Correction Evidence
+
+- The `docs/USER_GUIDE.md` provider table is contiguous. Its following prose
+  distinguishes the accepted 10,000-row MySQL default from the 10,001st raw
+  overflow lookahead, and the 1,000-row Datastore ceiling from its 1,001st raw
+  lookahead.
+- The storage, MySQL, and Datastore references use the same accepted-versus-raw
+  terminology. `RUNTIME_ARCHITECTURE.md` and the server reference state exactly
+  one cleanup page plus at most one continuation after a full protected
+  no-progress page.
+- Focused claim/table scans, `pnpm docs:audience:check`, `pnpm docs:api:check`,
+  formatting, and `git diff --check` passed. The converged
+  `pnpm verify:task -- --no-tests` profile passed once; its generated-output
+  phase left no tracked residue.
+- The pre-existing unchanged Message Board snippet declaration-resolution
+  limitation remains recorded and is unrelated to this correction.

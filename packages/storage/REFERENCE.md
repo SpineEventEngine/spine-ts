@@ -58,6 +58,11 @@ than a plan's `candidateLimit`, or the exported
 `QueryCandidateLimitError` is thrown before
 local materialization can return a partial semantic result.
 
+An accepted candidate ceiling is distinct from the one-row raw-provider
+overflow lookahead used to detect excess: the shared default accepts 10,000
+records and can fetch 10,001 raw rows; a provider may declare a lower accepted
+ceiling, such as Datastore's 1,000 accepted / 1,001 raw rows.
+
 `StorageQueryPolicy` validates normalized plans and
 `StorageQueryEvaluator` applies the portable query semantics. Provider packages
 can push down supported ID, declared-column, and sort parts of a plan, but must

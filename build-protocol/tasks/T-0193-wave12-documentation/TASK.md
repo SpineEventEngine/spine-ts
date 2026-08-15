@@ -82,3 +82,9 @@ and delivered-Inbox behavior.
 - Selected final profile `pnpm verify:task -- --no-tests` passed once after
   convergence. It completed Node policy, frozen Proto verification, TypeScript
   build, runtime-copy, and declaration normalization with exit code 0.
+- Review correction: the reader and provider references distinguish accepted
+  candidate ceilings from their one-row raw overflow lookahead (10,000/10,001
+  default MySQL; 1,000/1,001 Datastore), and cleanup is documented as one page
+  plus at most one continuation after a full protected no-progress page.
+  Focused claim/table scans, audience/API, format, and diff checks passed; the
+  final no-test task profile was rerun once after this convergence.

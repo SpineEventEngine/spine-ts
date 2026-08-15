@@ -265,8 +265,9 @@ and transport-backed worker supervision:
 - `keepUntil` is the optional
   deduplication-protection deadline, not a second
   retention setting. A delivered row becomes cleanup-eligible when the deadline
-  is absent or has elapsed. One bounded cleanup page runs under current shard
-  ownership, validates the fence and performs each exact delete in one
+  is absent or has elapsed. Cleanup runs one bounded page under current shard
+  ownership, plus at most one continuation only after a full protected page
+  makes no removal. Each exact delete validates the fence in one
   provider-atomic operation, and
   preserves every pending, retryable, non-delivered, or still-protected row.
   The environment delivery lifecycle owns cleanup and awaits it at shutdown;
