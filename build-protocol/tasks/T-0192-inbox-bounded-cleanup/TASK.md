@@ -99,3 +99,7 @@ rows and call T-0191's provider-atomic exact removal for each eligible row.
 - Positive admission-relative timeout expiry, bounded protected-page progress,
   false-delete ownership revalidation, and provider-native MySQL/Datastore
   one-to-zero row counts are all retained evidence.
+- Final correction evidence supersedes those figures: 59 focused tests pass
+  with four expected service-gated skips, and exact current diff coverage is
+  120/128 lines (93.75%) plus 109/119 branches (91.60%). The captured canonical
+  no-coverage task profile exits zero.

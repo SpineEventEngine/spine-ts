@@ -1,6 +1,6 @@
 # T-0191 Review Record
 
-Status: CHANGES REQUESTED
+Status: REVIEW READY
 
 Planned lanes: TypeScript/API (optional source compatibility), style/
 maintainability (one cleanup seam), performance/reliability (atomic fencing,
@@ -141,3 +141,26 @@ are retained as required inputs.
 - One correction batch returns to the existing `implementer`, explicitly
   configured `gpt-5.6-terra` / medium, with no subagents and unavailable runtime
   telemetry. Re-review only these four corrections.
+
+## Final Correction Acceptance Packet
+
+- `timeoutMs` admission rejects negative, fractional, `NaN`, and infinite
+  values; zero is expired and positive safe integers become one captured
+  admission-relative deadline.
+- `CleanupOperation` and `cleanupOperationActive()` now define the single
+  package-internal policy reused by memory, MySQL, and Datastore. The cleanup
+  manifest records why this provider-neutral standalone helper is necessary.
+- MySQL rechecks activity after its awaited delete and throws the internal
+  expiry sentinel so the coordinator rolls back rather than committing an
+  expired deletion. Deterministic tests cover that exact interleaving.
+- Live MySQL passed after the transaction correction with native count `1` to
+  `0`. Live Datastore passed with `DATASTORE_PROJECT_ID` unset, proving both
+  factories and native counts use the same fallback project and observe `1` to
+  `0`. Both windows were released without broad cleanup.
+- Current exact diff-scoped LCOV is 120/128 changed executable lines (93.75%)
+  and 109/119 changed branches (91.60%). The orchestrator-captured canonical
+  six-path no-coverage profile exited zero with 59 passes and four expected
+  service-gated skips.
+- Final narrow re-review endpoint: `2b4dd42f` plus this evidence-only update.
+  Reopen TypeScript/API, style/maintainability, performance/reliability, and
+  documentation only for the four accepted corrections.

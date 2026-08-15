@@ -114,3 +114,8 @@ non-delivered, or changed snapshots.
   V8 accounting.
 - `timeoutMs` is captured as an admission-relative budget and rechecked through
   the internal provider activity predicate before destructive safe points.
+- Final correction evidence supersedes those figures: 59 focused tests pass
+  with four expected service-gated skips; exact current diff coverage is
+  120/128 lines (93.75%) and 109/119 branches (91.60%). Invalid timeout values
+  are rejected, MySQL rolls back expiry during delete, and live MySQL plus
+  fallback-project Datastore retain native one-to-zero row-count proof.

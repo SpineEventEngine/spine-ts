@@ -1,6 +1,6 @@
 # T-0192 Review Record
 
-Status: CHANGES REQUESTED
+Status: REVIEW READY
 
 Planned lanes: style/maintainability and performance/reliability. TypeScript/API
 is N/A unless T-0191's port changes; documentation applies only to changed
@@ -110,3 +110,16 @@ fenced mutation.
   other accepted bounded corrections.
 - Documentation, protected-page progress, ownership revalidation, exact
   coverage figures, and all remaining lifecycle/provider behavior are clean.
+
+## Final Correction Acceptance Packet
+
+- Timeout admission validation and one shared internal activity policy are
+  deterministic and provider-neutral. MySQL expiry during delete now forces
+  rollback before coordinator commit.
+- MySQL live transaction evidence remains green, and Datastore live evidence
+  with its project environment unset proves the corrected shared fallback and
+  native one-to-zero row counts.
+- Current diff-scoped LCOV is 120/128 lines (93.75%) and 109/119 branches
+  (91.60%). The final captured task profile exited zero after every shared gate
+  and 59 focused passes with four service-gated skips.
+- Final narrow re-review endpoint: `2b4dd42f` plus this evidence-only update.
