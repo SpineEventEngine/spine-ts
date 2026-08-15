@@ -27,7 +27,7 @@ export function captureBrowserFailures(page) {
     }),
   );
   page.on("console", (message) => {
-    if (message.type() === "error") failures.push({ console: message.text() });
+    if (message.type() === "error") failures.push({ console: "browser console error" });
   });
   return failures;
 }
@@ -46,8 +46,13 @@ test("redacts browser failure secrets while retaining safe transport facts", () 
       "x-grpc-web": "1",
     }),
   });
+  handlers.get("console")({
+    type: () => "error",
+    text: () => "https://gateway.test/path?csrf=secret Authorization: Bearer secret",
+  });
   const text = JSON.stringify(failures);
   expect(text).toContain("content-type");
+  expect(text).toContain("browser console error");
   expect(text).not.toMatch(/secret|cookie|authorization|x-spine-csrf|csrf|token/);
 });
 
