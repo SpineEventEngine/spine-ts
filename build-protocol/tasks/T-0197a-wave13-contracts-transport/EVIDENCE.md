@@ -1,0 +1,7 @@
+# T-0197a evidence
+
+- JVM core-jvm SHA: 0779b5fa42ca5cebd0d2935fc3a3489ab47846dc.
+- broker.proto SHA-256: 76a3b965391d989d32a1a6dbc84a4465d2f8f2386be7ed266fd201483dc9865d.
+- transport.proto SHA-256: 92df339007d7dda01a6df5b87c38d988bfedebabd6ac28eb7fbb874bcd5f73bd.
+- event.proto SHA-256 retained: 0c385d3fd98d68d35ce1d7887bd564b590daba47b959b99d205c2be56a737d29.
+- Proto generation verified 50 sources and descriptor digest 0844be5a0c588717932dc09da4d3fdc62c945a4f82be9bbb4e4d3d4814e42c3b.

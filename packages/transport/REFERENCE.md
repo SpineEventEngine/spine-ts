@@ -33,3 +33,7 @@ cluster topology, durable delivery, or a cross-machine guarantee.
 
 The adapter accepts optional request and receive timeout settings. Callers must
 close handles and the transport during shutdown.
+
+## Integration message channels
+
+The root also exports TransportFactory, MessageChannel, Publisher, Subscriber, ExternalMessageConsumer, ConsumerHandle, and InMemoryTransportFactory. These typed channels carry only generated ExternalMessage frames keyed by generated ChannelId; they are distinct from SignalTransport routing and request/respond operations. Factory, channel, and consumer-handle close methods are asynchronous and idempotent where removal is required.

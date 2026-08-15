@@ -94,3 +94,7 @@ Spine definitions preserve their original versioned Proto packages.
 - [Model-generation tools](../proto-tools/README.md)
 - [Core message tools](../core/README.md)
 - [Reference for coding agents](REFERENCE.md)
+
+## Integration wire contracts
+
+Generated root exports include the frozen external-event broker and typed message-channel Protobuf contracts. These binary Protobuf frames are shared infrastructure contracts, not JSON application messages.

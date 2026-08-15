@@ -38,7 +38,7 @@ describe("Wave 13 integration broker protobuf contract", () => {
     const externalType = contracts.ExternalEventTypeSchema;
     const online = contracts.BoundedContextOnlineSchema;
     expect(wrapper.typeName).toBe("spine.server.integration.ExternalMessage");
-    expect(wrapper.fields.map((field: any) => [field.name, field.number])).toEqual([
+    expect(wrapper.fields.map((field: any) => [field.localName, field.number])).toEqual([
       ["id", 1],
       ["originalMessage", 2],
       ["boundedContextName", 4],
@@ -46,14 +46,18 @@ describe("Wave 13 integration broker protobuf contract", () => {
     expect(wrapper.field.id.message.typeName).toBe("google.protobuf.Any");
     expect(wrapper.field.originalMessage.message.typeName).toBe("google.protobuf.Any");
     expect(wrapper.field.boundedContextName.message.typeName).toBe("spine.core.BoundedContextName");
-    expect(wrapper.file.proto.reservedRange).toEqual(
-      expect.arrayContaining([expect.objectContaining({ start: 3, end: 4 })]),
-    );
-    expect(wrapper.file.proto.reservedName).toContain("actor_context");
+    expect(
+      wrapper.file.proto.messageType.find((message: any) => message.name === "ExternalMessage")
+        .reservedRange,
+    ).toEqual(expect.arrayContaining([expect.objectContaining({ start: 3, end: 4 })]));
+    expect(
+      wrapper.file.proto.messageType.find((message: any) => message.name === "ExternalMessage")
+        .reservedName,
+    ).toContain("actor_context");
     expect(channel.typeName).toBe("spine.server.transport.ChannelId");
-    expect(channel.fields.map((field: any) => [field.name, field.number, field.scalar])).toEqual([
-      ["targetType", 1, 9],
-    ]);
+    expect(
+      channel.fields.map((field: any) => [field.localName, field.number, field.scalar]),
+    ).toEqual([["targetType", 1, 9]]);
     expect(wanted.typeName).toBe("spine.server.integration.ExternalEventsWanted");
     expect(wanted.fields).toHaveLength(1);
     expect(wanted.field.type.number).toBe(1);
@@ -61,7 +65,7 @@ describe("Wave 13 integration broker protobuf contract", () => {
     expect(wanted.field.type.message.typeName).toBe("spine.server.integration.ExternalEventType");
     expect(externalType.typeName).toBe("spine.server.integration.ExternalEventType");
     expect(
-      externalType.fields.map((field: any) => [field.name, field.number, field.scalar]),
+      externalType.fields.map((field: any) => [field.localName, field.number, field.scalar]),
     ).toEqual([["typeUrl", 1, 9]]);
     expect(online.typeName).toBe("spine.server.integration.BoundedContextOnline");
     expect(online.fields).toHaveLength(1);

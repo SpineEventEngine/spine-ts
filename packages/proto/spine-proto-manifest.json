@@ -18,6 +18,7 @@
     "spine/client/subscription_service.proto",
     "spine/core/ack.proto",
     "spine/core/actor_context.proto",
+    "spine/core/bounded_context.proto",
     "spine/core/command.proto",
     "spine/core/diagnostics.proto",
     "spine/core/enrichment.proto",
@@ -42,7 +43,9 @@
     "spine/server/delivery/inbox.proto",
     "spine/server/entity/entity.proto",
     "spine/server/entity/state_key.proto",
+    "spine/server/integration/broker.proto",
     "spine/server/server_environment.proto",
+    "spine/server/transport/transport.proto",
     "spine/string/template_string.proto",
     "spine/system/server/entity_log_events.proto",
     "spine/system/server/entity_type.proto",
@@ -67,6 +70,7 @@
     "spine/client/subscription_service.proto": "generated/spine/client/subscription_service_pb.js",
     "spine/core/ack.proto": "generated/spine/core/ack_pb.js",
     "spine/core/actor_context.proto": "generated/spine/core/actor_context_pb.js",
+    "spine/core/bounded_context.proto": "generated/spine/core/bounded_context_pb.js",
     "spine/core/command.proto": "generated/spine/core/command_pb.js",
     "spine/core/diagnostics.proto": "generated/spine/core/diagnostics_pb.js",
     "spine/core/enrichment.proto": "generated/spine/core/enrichment_pb.js",
@@ -91,7 +95,9 @@
     "spine/server/delivery/inbox.proto": "generated/spine/server/delivery/inbox_pb.js",
     "spine/server/entity/entity.proto": "generated/spine/server/entity/entity_pb.js",
     "spine/server/entity/state_key.proto": "generated/spine/server/entity/state_key_pb.js",
+    "spine/server/integration/broker.proto": "generated/spine/server/integration/broker_pb.js",
     "spine/server/server_environment.proto": "generated/spine/server/server_environment_pb.js",
+    "spine/server/transport/transport.proto": "generated/spine/server/transport/transport_pb.js",
     "spine/string/template_string.proto": "generated/spine/string/template_string_pb.js",
     "spine/system/server/entity_log_events.proto": "generated/spine/system/server/entity_log_events_pb.js",
     "spine/system/server/entity_type.proto": "generated/spine/system/server/entity_type_pb.js",
@@ -102,5 +108,5 @@
   },
   "dependencies": [],
   "moduleExport": "spineProtoModule",
-  "generationId": "32aa4024-1052-4da2-ae47-f2ec6b8b431d"
+  "generationId": "c98cc962-7394-417d-9f7b-48efe4cd0da4"
 }

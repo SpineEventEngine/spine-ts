@@ -1,0 +1,112 @@
+/*
+ * Copyright 2026, TeamDev. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Redistribution and use in source and/or binary forms, with or without
+ * modification, must retain the above copyright notice and the following
+ * disclaimer.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+syntax = "proto3";
+
+package spine.server.integration;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.io";
+option java_package = "io.spine.server.integration";
+option java_multiple_files = true;
+option java_outer_classname = "BrokerProto";
+
+import "google/protobuf/any.proto";
+
+import "spine/core/actor_context.proto";
+import "spine/core/bounded_context.proto";
+
+// A wrapper around a message, which is used to send/receive the original message
+// to/from external application components, such as other Bounded Contexts.
+message ExternalMessage {
+
+    // An ID of the original message wrapped into `Any` (e.g. an event ID).
+    google.protobuf.Any id = 1 [(required) = true];
+
+    // An original message wrapped into `Any` (e.g. a wrapped instance of `io.spine.core.Event`).
+    google.protobuf.Any original_message = 2 [(required) = true];
+
+    // `actor_context` field has been deleted, as it is impossible to populate
+    // it with meaningful values for all types of transmitted external messages.
+    //
+    reserved 3;
+    reserved "actor_context";
+
+    // Name of the Bounded Context, within which an original message was created.
+    spine.core.BoundedContextName bounded_context_name = 4 [(required) = true];
+}
+
+// A document message, describing types of events
+// that are required for consumption by some part of the system.
+//
+// One of the typical scenarios is a notification shout-out from the current Bounded Context
+// to other Bounded Contexts of the application about its `external` subscription needs.
+//
+message ExternalEventsWanted {
+
+    // Multiple types may be requested at a time.
+    repeated ExternalEventType type = 1;
+}
+
+// The type of a domain event that is emitted by one Bounded Context and consumed by
+// other Bounded Contexts as "external" event
+message ExternalEventType {
+    option (is).java_type = "ExternalEventTypeMixin";
+
+    // Type URL of the domain event (e.g. `io.spine.examples.TaskCreated`).
+    string type_url = 1 [(required) = true];
+}
+
+// The type of error that may occur during the `ExternalMessage` validation.
+enum ExternalMessageValidationError {
+
+    // Reserved value.
+    EM_UNKNOWN_REASON = 0;
+
+    // The external message type is not supported by the server.
+    UNSUPPORTED_EXTERNAL_MESSAGE = 1;
+}
+
+// Tells that some Bounded Context is connected to the shared transport.
+//
+// Used to notify other parties connected to the same transport that the external events they
+// might need may be provided by the Bounded Context that is online.
+//
+// Typically, once others receive this message, they might want to send their
+// respective `ExternalEventsWanted` messages to see if the connected Bounded Context
+// is able to provide them.
+//
+// Please note this message does not signify that some context has _just_ connected
+// to the transport. It may be sent by some context that has been using the shared transport
+// for quite some time — in which case this message may serve to notify just-connected Bounded
+// Contexts of its existence.
+//
+message BoundedContextOnline {
+
+    // The name of the Bounded Context that is connected to the transport.
+    spine.core.BoundedContextName context = 1 [(required) = true];
+}

@@ -60,3 +60,7 @@ This package supplies wire schemas and descriptors. It does not validate,
 dispatch, persist, deliver, authenticate, or start a server. Use generated
 types with `@bufbuild/protobuf` and use the appropriate Spine TS runtime
 package for those responsibilities.
+
+## Integration broker contracts
+
+The root exports generated ExternalMessage, ExternalEventsWanted, ExternalEventType, BoundedContextOnline, ChannelId, and BoundedContextName schemas and types. They are exact copied JVM wire contracts for the integration broker and typed message transport; they do not add JSON or V8 frames.
