@@ -83,3 +83,11 @@ subagents and is told that other writers are active in separate worktrees.
   explicit ownership handoff, advances Inbox onto that durable endpoint, and
   only then permits the provider-atomic T-0191 implementation. A sequential
   validate-then-delete fallback is not acceptable.
+- The coordination shape follows the existing framework-only
+  `EntityCommitStorageFactories` registration pattern: a WeakMap-registered,
+  provider-owned cleanup handle over the two exact record families. It does not
+  add a general public transaction method to `StorageFactory`; the only
+  exported port change remains optional `DeliveryInbox.removeDelivered`.
+  Provider factories register memory, Datastore, and MySQL coordinators, using
+  new adjacent files where possible so Query's `record-storage.ts` ownership
+  remains exclusive until the handoff.
