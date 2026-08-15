@@ -285,6 +285,20 @@ export class Delivery {
       current = validated;
       return true;
     };
+    const cleanupPage = async (): Promise<boolean> => {
+      if (this.inbox.removeDelivered === undefined) return true;
+      if (!(await validate())) return false;
+      const delivered = await this.inbox.read(shard, {
+        statuses: ["DELIVERED"],
+        limit: this.pageSize,
+        ...(options.operation ?? {}),
+      });
+      for (const message of delivered) {
+        if (options.operation?.signal?.aborted || !(await validate())) return false;
+        await this.inbox.removeDelivered(message, current, options.operation);
+      }
+      return true;
+    };
     const dispatch = (message: InboxMessage): Promise<void> =>
       withDeliveryCommitFence(
         async () => {
@@ -306,7 +320,10 @@ export class Delivery {
           ...(after === undefined ? {} : { after }),
           ...(options.operation ?? {}),
         });
-        if (messages.length === 0) break;
+        if (messages.length === 0) {
+          if (!(await cleanupPage())) return result("STOPPED", statistics, failures);
+          break;
+        }
         const deliveredBefore = statistics.delivered;
         for (const message of messages) {
           if (options.operation?.signal?.aborted) return result("STOPPED", statistics);
@@ -358,6 +375,7 @@ export class Delivery {
             if (ownership.lost) return result("STOPPED", statistics, failures);
           }
         }
+        if (!(await cleanupPage())) return result("STOPPED", statistics, failures);
         const last = messages.at(-1);
         if (statistics.delivered !== deliveredBefore) {
           after = undefined;

@@ -30,6 +30,36 @@ import { commitFenced } from "../../src/repository/commit-fence.js";
 import { ShardIndex } from "../../src/index.js";
 
 describe("Delivery direct worker", () => {
+  it("runs one owned delivered cleanup page after each delivery page and on an empty drain", async () => {
+    const shard = ShardIndex.single();
+    const pending = message("pending", "target", shard);
+    const delivered = { ...pending, status: "DELIVERED" as const };
+    let pendingReads = 0;
+    let cleanupReads = 0;
+    let removals = 0;
+    const delivery = createDelivery({
+      pageSize: 1,
+      read: async (options) => {
+        if (options?.statuses?.includes("DELIVERED")) {
+          cleanupReads += 1;
+          return cleanupReads === 1 ? [delivered] : [];
+        }
+        pendingReads += 1;
+        return pendingReads === 1 ? [pending] : [];
+      },
+      remove: async () => {
+        removals += 1;
+        return true;
+      },
+    });
+
+    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
+      status: "DRAINED",
+      delivered: 1,
+    });
+    expect(cleanupReads).toBe(2);
+    expect(removals).toBe(1);
+  });
   it("passes its complete opaque WorkerId to shard pickup and skips an owned shard", async () => {
     const shard = ShardIndex.single();
     const worker = workerId("node-a", "restart-a");
@@ -470,6 +500,7 @@ function createDelivery(config: {
     options?: InboxReadOptions & DeliveryOperationOptions,
   ) => Promise<DeliveryEndpointMessage[]>;
   mark?: (row: DeliveryEndpointMessage) => Promise<DeliveryEndpointMessage | undefined>;
+  remove?: (row: DeliveryEndpointMessage) => Promise<boolean>;
   monitor?: DeliveryMonitor;
   pageSize?: number;
 }): Delivery {
@@ -488,6 +519,9 @@ function createDelivery(config: {
       read: async (_shard, options) => config.read?.(options) ?? [...rows],
       readMessage: async () => undefined,
       markDelivered: async (row) => config.mark?.(row) ?? row,
+      ...(config.remove === undefined
+        ? {}
+        : { removeDelivered: async (row) => config.remove!(row as DeliveryEndpointMessage) }),
     },
     workRegistry: {
       sessionKind: "LEASED",
