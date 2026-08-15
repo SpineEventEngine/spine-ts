@@ -60,8 +60,6 @@ are retained as required inputs.
   execution surface; the immutable configured roles and profiles above are the
   acceptance record.
 
-## Review Wave Result
-
 ## Final Correction Disposition
 
 - Supersedes the earlier option-only deadline evidence: `timeoutMs` is now an
@@ -75,6 +73,11 @@ are retained as required inputs.
 - Canonical six-path `verify:task -- --no-coverage` is green: 58 passes and
   four expected service-gated skips. The no-coverage profile is authoritative
   here because the changed-location LCOV trace is retained separately.
+- Current exact diff-scoped LCOV against accepted T-0190 endpoint `3081dcc0`
+  is 114/121 changed executable lines (94.21%) and 107/116 changed branches
+  (92.24%). This supersedes every earlier coverage figure below.
+
+## Historical First Review Result
 
 - TypeScript/API and documentation confirmed one shared P2: the new public
   option contract promises cancellation/deadline propagation while direct
@@ -99,12 +102,12 @@ are retained as required inputs.
   row counts. Provider execution remains separate from coverage accounting.
 - Both task briefs now contain their applicable inherited Human-Imposed
   Requirements Ledgers.
-- Exact diff-scoped LCOV against accepted T-0190 endpoint `3081dcc0` is 105/109
-  changed executable lines (96.33%) and 103/110 changed branches (93.64%).
+- The then-current diff-scoped LCOV was 105/109 changed executable lines and
+  103/110 changed branches; the final correction disposition supersedes it.
 - The orchestrator-captured six-path `verify:task -- --no-coverage` passed all
   shared, TypeDoc/API, generated-output, release-readiness, and focused-test
   gates: 56 passed and four expected service-gated skips.
-- Re-review endpoint: `4392d8ef` plus this evidence-only record update. Reopen
+- Historical re-review endpoint: `4392d8ef` plus its evidence-only record update. Reopen
   TypeScript/API, style/maintainability, performance/reliability, and
   documentation only; final security remains T-0194.
 

@@ -39,8 +39,6 @@ fenced mutation.
   documentation, TypeScript/API-through-T-0191, and deferred Wave-security
   lanes.
 
-## Review Wave Result
-
 ## Final Correction Disposition
 
 - Supersedes the prior deadline finding: cleanup admission captures the
@@ -54,6 +52,11 @@ fenced mutation.
 - Canonical six-path `verify:task -- --no-coverage` is green: 58 passes and
   four expected service-gated skips; changed-location LCOV is retained
   separately from this no-coverage canonical profile.
+- Current exact diff-scoped LCOV against `3081dcc0` is 114/121 changed
+  executable lines (94.21%) and 107/116 changed branches (92.24%). This
+  supersedes all earlier coverage figures below.
+
+## Historical First Review Result
 
 - Performance/reliability confirmed a P1 progress bug: when protected rows
   fill the first ordered page, cleanup rereads that page forever and never
@@ -80,11 +83,10 @@ fenced mutation.
 - Independent-handle MySQL 8.4.10 and Datastore-emulator cases prove two-owner
   fencing and direct durable row counts; deterministic provider seam tests
   cover rollback, timeout, cancellation, and close paths.
-- Exact diff-scoped LCOV is 105/109 changed executable lines (96.33%) and
-  103/110 changed branches (93.64%). The final captured no-coverage task profile
-  passed every shared gate and 56 focused tests with four expected
-  service-gated skips.
-- Re-review endpoint: `4392d8ef` plus this evidence-only record update. Reopen
+- The then-current diff-scoped LCOV was 105/109 changed executable lines and
+  103/110 changed branches. The captured no-coverage task profile at that
+  checkpoint passed 56 focused tests with four expected service-gated skips.
+- Historical re-review endpoint: `4392d8ef` plus its evidence-only record update. Reopen
   only the four concerns substantively affected by the accepted batch.
 
 ## Re-review Result

@@ -100,3 +100,17 @@ non-delivered, or changed snapshots.
   Vitest reported 40 passes and two expected service-gated skips. The seven
   owned headers now match `copyrightHeader(2026)`, and the changed shard
   registry has only the required Prettier comma normalization.
+
+## Final Deadline And Provider-Evidence Correction
+
+- The earlier 40-test and coverage figures above are historical checkpoints.
+  The final six-path deterministic selection passes 58 tests with four
+  expected service-gated skips.
+- Current exact diff-scoped LCOV against `3081dcc0` is 114/121 changed
+  executable lines (94.21%) and 107/116 changed branches (92.24%).
+- Serialized live MySQL 8.4.10 and Datastore-emulator runs use independent
+  handles and provider-native counts: one durable row after stale-owner refusal
+  and zero after current-owner deletion. Provider execution is separate from
+  V8 accounting.
+- `timeoutMs` is captured as an admission-relative budget and rechecked through
+  the internal provider activity predicate before destructive safe points.

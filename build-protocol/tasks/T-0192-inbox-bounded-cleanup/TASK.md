@@ -88,3 +88,14 @@ rows and call T-0191's provider-atomic exact removal for each eligible row.
   shared task gates and focused tests (40 passed, 2 explicit service-gated
   skips). The prior seven-header and shard-registry format corrections are
   mechanical only; bounded cleanup behavior remains frozen.
+
+## Final Deadline And Provider-Evidence Correction
+
+- The earlier 40-test and coverage figures above are historical checkpoints.
+  The final focused selection passes 58 tests with four expected service-gated
+  skips; the canonical no-coverage task profile is green.
+- Current exact diff-scoped LCOV against `3081dcc0` is 114/121 changed
+  executable lines (94.21%) and 107/116 changed branches (92.24%).
+- Positive admission-relative timeout expiry, bounded protected-page progress,
+  false-delete ownership revalidation, and provider-native MySQL/Datastore
+  one-to-zero row counts are all retained evidence.
