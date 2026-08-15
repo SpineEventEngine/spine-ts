@@ -77,15 +77,17 @@ export class MysqlDeliveryCleanupStorage implements DeliveryCleanupStorage {
           currentSession === undefined ||
           !same(input.session.spec, currentSession, input.session.expected) ||
           !input.session.isCurrent(currentSession)
-        )
+        ) {
           return false;
+        }
         const currentInbox = await inbox.readLocked(input.inbox.id);
         if (
           currentInbox === undefined ||
           !same(input.inbox.spec, currentInbox, input.inbox.expected)
-        )
+        ) {
           return false;
-        return inbox.compareAndSet(input.inbox.id, input.inbox.expected, undefined);
+        }
+        return inbox.delete(input.inbox.id);
       }),
     );
   }
