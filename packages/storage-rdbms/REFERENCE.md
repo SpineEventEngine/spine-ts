@@ -99,8 +99,9 @@ Normalized plans have no offset; `RecordQuery.offset` remains separate. The sele
 tenant pool is acquired before the resolved family table is accessed; only that
 validated table and declared columns are interpolated, while IDs, operands, and
 limits are bound. Ordering ends with `ID` for a stable tie-break. An omitted
-candidate limit accepts at most 10,000 rows. The provider fetches only the
-smaller safe bound from the exact limit and candidate bound plus one, so it may
+query budget accepts at most 10,000 rows; an explicit value cannot exceed
+10,000. The provider fetches only the
+smaller safe bound from the exact limit and query budget plus one, so it may
 read one overflow-lookahead row (10,001 raw rows at the default) before
 rejecting an oversized result. The primary
 key serves ID queries; operators must add indexes for workload equality, range,

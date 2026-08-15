@@ -234,6 +234,7 @@ const QueryPlanValidator = {
     if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
       throw new TypeError("query candidate limit must be a positive safe integer.");
     }
+    if (value > 10_000) throw new TypeError("query candidate limit must not exceed 10,000.");
   },
 
   /**
