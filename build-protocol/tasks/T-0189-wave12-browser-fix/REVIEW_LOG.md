@@ -258,6 +258,6 @@ focused predecessor-plus-C-01 Chromium is 2/2, and complete Chromium is 8/8
 with three healthy snapshots and automatic cleanup. Project lint, format, and
 diff checks pass; the resource scan is clean. No self-review was performed.
 
-Final endpoint is pending commit/push. Re-review remains limited to
+Final endpoint `d9a930ae` is pushed to `origin/codex/wave-12-browser`. Re-review remains limited to
 performance/reliability for close/drain settlement and style/maintainability
 for observed snapshot selection.
