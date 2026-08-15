@@ -244,3 +244,20 @@ runner finding and one style-only selection finding remain:
 These two corrections return as one final bounded batch to the existing
 implementer. Performance/reliability must re-review the close/settlement path;
 style re-review is limited to the snapshot-selection correction.
+
+## Final Batch Implementation Evidence (2026-08-15)
+
+The existing implementer applied both accepted `b0430ca2` findings test-first
+with explicit configured profile `gpt-5.6-terra` / `medium`, no subagents, and
+no exposed Desktop runtime telemetry. The runner awaits child `close` rather
+than `exit`, so closed stdio is drained before the awaited promise resolves or
+rejects; trailing marker and health failures remain observable by the parent.
+The exact-three requirement is driven by the observed passive precondition
+marker, not textual grep selection. Deterministic runner tests are 10/10,
+focused predecessor-plus-C-01 Chromium is 2/2, and complete Chromium is 8/8
+with three healthy snapshots and automatic cleanup. Project lint, format, and
+diff checks pass; the resource scan is clean. No self-review was performed.
+
+Final endpoint is pending commit/push. Re-review remains limited to
+performance/reliability for close/drain settlement and style/maintainability
+for observed snapshot selection.

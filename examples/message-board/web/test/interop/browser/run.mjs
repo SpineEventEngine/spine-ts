@@ -15,6 +15,7 @@ export async function runBrowserAcceptance({
   const topology = await start();
   try {
     const passiveViewerSnapshots = [];
+    let passiveViewerObserved = false;
     const lifecycleSettlements = [];
     const binary = resolve(here, "../../../node_modules/.bin/playwright");
     const environment = {
@@ -36,7 +37,7 @@ export async function runBrowserAcceptance({
         environment,
         spawnChild,
         onOutput: (line) => {
-          recordPassiveViewerPrecondition(line, topology);
+          passiveViewerObserved ||= recordPassiveViewerPrecondition(line, topology);
           recordPassiveViewerProgress(line, topology, passiveViewerSnapshots);
           if (line.trim() === "FORCED_VIEWER_DISCONNECT")
             lifecycleSettlements.push(settleTopology(topology));
@@ -62,11 +63,7 @@ export async function runBrowserAcceptance({
         `TOPOLOGY_DIAGNOSTIC ${JSON.stringify(await topology.diagnosticState())}\n`,
       );
     if (code === 0) await settleTopology(topology);
-    if (
-      code === 0 &&
-      expectsPassiveViewer(requestedPlaywrightArguments) &&
-      passiveViewerSnapshots.length !== 3
-    )
+    if (code === 0 && passiveViewerObserved && passiveViewerSnapshots.length !== 3)
       throw new Error(
         `expected exactly three passive viewer snapshots: ${JSON.stringify(passiveViewerSnapshots)}`,
       );
@@ -142,23 +139,18 @@ export function spawnPlaywright({
   child.stderr?.on("data", (chunk) => process.stderr.write(chunk));
   return new Promise((resolveCode, reject) => {
     const rejectSpawn = (error) => {
-      child.removeListener("exit", resolveExit);
+      child.removeListener("close", resolveClose);
       reject(error);
     };
-    const resolveExit = (code) => {
+    const resolveClose = (code) => {
       child.removeListener("error", rejectSpawn);
       drain(true);
       if (outputError !== undefined) reject(outputError);
       else resolveCode(code);
     };
     child.once("error", rejectSpawn);
-    child.once("exit", resolveExit);
+    child.once("close", resolveClose);
   });
-}
-
-function expectsPassiveViewer(arguments_) {
-  const grep = arguments_.indexOf("--grep");
-  return grep === -1 || arguments_[grep + 1]?.includes("passive viewer") === true;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))
@@ -198,12 +190,13 @@ export function recordPassiveViewerProgress(line, topology, snapshots) {
 }
 
 export function recordPassiveViewerPrecondition(line, topology) {
-  if (line.trim() !== "PASSIVE_VIEWER_PRECONDITION") return;
+  if (line.trim() !== "PASSIVE_VIEWER_PRECONDITION") return false;
   const state = { bindings: topology.bindingCount(), counters: topology.counters() };
   if (state.bindings !== 0 || state.counters.activeStreams !== 0)
     throw new Error(
       `passive viewer started with retained topology state: ${JSON.stringify(state)}`,
     );
+  return true;
 }
 
 export async function settleTopology(

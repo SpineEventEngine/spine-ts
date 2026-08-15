@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Buffer } from "node:buffer";
 import { EventEmitter } from "node:events";
 import test from "node:test";
 import { setImmediate } from "node:timers";
@@ -31,7 +32,7 @@ test("rejects when the Playwright child cannot spawn", async () => {
   assert.deepEqual(childArguments?.slice(0, 3), ["test", "-c", "playwright.config.mjs"]);
 });
 
-test("parses fragmented and coalesced child stdout records in order", async () => {
+test("drains fragmented and coalesced stdout after child exit before close", async () => {
   const child = new EventEmitter();
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
@@ -48,9 +49,11 @@ test("parses fragmented and coalesced child stdout records in order", async () =
   child.stdout.emit("data", Buffer.from("first\nPASSIVE_"));
   child.stdout.emit("data", Buffer.from("VIEWER_UPDATE 1\nsecond\nthird"));
   child.emit("exit", 0);
+  child.stdout.emit("data", Buffer.from("\nfourth"));
+  child.emit("close", 0);
 
   await running;
-  assert.deepEqual(lines, ["first", "PASSIVE_VIEWER_UPDATE 1", "second", "third"]);
+  assert.deepEqual(lines, ["first", "PASSIVE_VIEWER_UPDATE 1", "second", "third", "fourth"]);
 });
 
 test("rejects the awaited child promise when an output health marker fails", async () => {
@@ -68,8 +71,9 @@ test("rejects the awaited child promise when an output health marker fails", asy
     },
   });
 
-  child.stdout.emit("data", Buffer.from("PASSIVE_VIEWER_UPDATE 1\n"));
   child.emit("exit", 0);
+  child.stdout.emit("data", Buffer.from("PASSIVE_VIEWER_UPDATE 1\n"));
+  child.emit("close", 0);
 
   await assert.rejects(running, /passive viewer topology became unhealthy/);
 });
@@ -99,7 +103,7 @@ test("closes the topology when the Playwright child cannot spawn", async () => {
   assert.equal(closed, true);
 });
 
-test("waits for a successful Playwright child exit before closing a drained topology", async () => {
+test("waits for a successful Playwright child close before closing a drained topology", async () => {
   const child = new EventEmitter();
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
@@ -126,19 +130,25 @@ test("waits for a successful Playwright child exit before closing a drained topo
   setImmediate(() => {
     exited = true;
     child.emit("exit", 0);
+    assert.equal(closed, false);
+    child.emit("close", 0);
   });
 
   await acceptance;
   assert.equal(closed, true);
 });
 
-test("requires three passive snapshots before closing a successful passive-viewer run", async () => {
+test("requires three observed passive snapshots for a non-literal grep selection", async () => {
   const child = new EventEmitter();
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
-  let bindings = 1;
-  let activeStreams = 1;
+  let bindings = 0;
+  let activeStreams = 0;
   let closed = false;
+  let childStarted;
+  const started = new Promise((resolve) => {
+    childStarted = resolve;
+  });
   const topology = {
     baseUrl: "https://gateway.example.test",
     cookie: { setCookie: "cookie", csrf: "csrf" },
@@ -153,14 +163,23 @@ test("requires three passive snapshots before closing a successful passive-viewe
   };
   const acceptance = runBrowserAcceptance({
     start: async () => topology,
-    requestedPlaywrightArguments: ["--project", "chromium", "--grep", "passive viewer"],
-    spawnChild: () => child,
+    requestedPlaywrightArguments: ["--project", "chromium", "--grep", "sequential writer"],
+    spawnChild: () => {
+      childStarted();
+      return child;
+    },
   });
+  await started;
+  await new Promise((resolve) => setImmediate(resolve));
+  child.stdout.emit("data", Buffer.from("PASSIVE_VIEWER_PRECONDITION\n"));
+  bindings = 1;
+  activeStreams = 1;
+  child.stdout.emit("data", Buffer.from("PASSIVE_VIEWER_UPDATE 1\n"));
   setImmediate(() => {
-    child.stdout.emit("data", Buffer.from("PASSIVE_VIEWER_UPDATE 1\n"));
     bindings = 0;
     activeStreams = 0;
     child.emit("exit", 0);
+    child.emit("close", 0);
   });
 
   await assert.rejects(acceptance, /expected exactly three passive viewer snapshots/);

@@ -217,3 +217,26 @@ lint, and whitespace checks are clean. Node V8 changed renderer coverage remains
 above 90% lines and branches; browser-harness files remain excluded by Node's
 reporter as already recorded, with focused behavior and real Chromium evidence
 as their coverage proof.
+
+## Final Runner Correction (2026-08-15)
+
+Applied the accepted `b0430ca2` batch test-first under the existing
+`implementer` assignment with explicit `gpt-5.6-terra` / `medium` configuration;
+Desktop exposes no runtime model/token/latency telemetry. The browser runner now
+settles its child only on `close`, which Node emits after the stdio streams have
+closed. Therefore final buffered stdout records, including malformed markers or
+topology-health failures arriving after `exit`, remain in the awaited rejection
+path and `finally` retains topology cleanup ownership. The passive three-update
+requirement is now activated by the observed `PASSIVE_VIEWER_PRECONDITION`
+protocol marker instead of a literal `--grep` substring.
+
+Focused runner evidence is 10/10: it covers exit-before-final-stdout drain,
+late health-failure rejection, close-before-topology shutdown, and a
+non-literal grep selection that still rejects an observed passive run with only
+one snapshot. The focused predecessor-plus-C-01 Chromium command passed 2/2;
+the complete Chromium command passed 8/8 and emitted three healthy snapshots
+(`bindings: 1`, `activeStreams: 1` for updates 1/2/3). Project lint, format,
+and diff checks passed after explicit test-only Node imports for existing
+`Buffer` and `clearTimeout` use. The post-run scan found no task-owned runner,
+no 9443 listener, and no Envoy/message-board container. No self-review was
+performed.

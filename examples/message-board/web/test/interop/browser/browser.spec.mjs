@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { stdout } from "node:process";
+import { clearTimeout } from "node:timers";
 
 function cookies(setCookie, url) {
   return JSON.parse(setCookie).map((value) => {
