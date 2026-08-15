@@ -298,9 +298,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     });
     DeliveryCleanupStorageFactories.register(this, {
       createDeliveryCleanupStorage: () =>
-        new DatastoreDeliveryCleanupStorage((context, spec) =>
-          this.createDeliveryCleanupRecordStorage(context, spec),
-        ),
+        new DatastoreDeliveryCleanupStorage((context, spec) => this.cleanupStorage(context, spec)),
     });
   }
 
@@ -374,7 +372,7 @@ export class DatastoreStorageFactory extends StorageFactory implements TenantCat
     );
   }
 
-  private createDeliveryCleanupRecordStorage<I, R extends Message>(
+  private cleanupStorage<I, R extends Message>(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
   ): DatastoreRecordStorage<I, R> {

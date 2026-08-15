@@ -19,9 +19,18 @@ import type { StorageContext } from "../storage/storage.js";
 import type { StorageFactory } from "../storage/storage-factory.js";
 
 /** Framework-only provider input for one fenced exact delivered-row removal. */
-export interface DeliveryCleanupInput<InboxId, InboxRecord extends Message, SessionId, SessionRecord extends Message> {
+export interface DeliveryCleanupInput<
+  InboxId,
+  InboxRecord extends Message,
+  SessionId,
+  SessionRecord extends Message,
+> {
   readonly context: StorageContext;
-  readonly inbox: { readonly spec: RecordSpec<InboxId, InboxRecord>; readonly id: InboxId; readonly expected: InboxRecord };
+  readonly inbox: {
+    readonly spec: RecordSpec<InboxId, InboxRecord>;
+    readonly id: InboxId;
+    readonly expected: InboxRecord;
+  };
   readonly session: {
     readonly spec: RecordSpec<SessionId, SessionRecord>;
     readonly id: SessionId;

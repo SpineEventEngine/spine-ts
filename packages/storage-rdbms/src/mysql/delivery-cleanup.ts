@@ -75,7 +75,11 @@ export class MysqlDeliveryCleanupStorage implements DeliveryCleanupStorage {
         const currentSession = await sessions.readLocked(input.session.id);
         if (
           currentSession === undefined ||
-          !same(input.session.spec, currentSession, input.session.expected) ||
+          !MysqlDeliveryCleanupStorage.same(
+            input.session.spec,
+            currentSession,
+            input.session.expected,
+          ) ||
           !input.session.isCurrent(currentSession)
         ) {
           return false;
@@ -83,7 +87,7 @@ export class MysqlDeliveryCleanupStorage implements DeliveryCleanupStorage {
         const currentInbox = await inbox.readLocked(input.inbox.id);
         if (
           currentInbox === undefined ||
-          !same(input.inbox.spec, currentInbox, input.inbox.expected)
+          !MysqlDeliveryCleanupStorage.same(input.inbox.spec, currentInbox, input.inbox.expected)
         ) {
           return false;
         }
@@ -91,10 +95,9 @@ export class MysqlDeliveryCleanupStorage implements DeliveryCleanupStorage {
       }),
     );
   }
-}
-
-function same<I, R extends Message>(spec: RecordSpec<I, R>, left: R, right: R): boolean {
-  return Buffer.from(toBinary(spec.recordType, left)).equals(
-    Buffer.from(toBinary(spec.recordType, right)),
-  );
+  private static same<I, R extends Message>(spec: RecordSpec<I, R>, left: R, right: R): boolean {
+    return Buffer.from(toBinary(spec.recordType, left)).equals(
+      Buffer.from(toBinary(spec.recordType, right)),
+    );
+  }
 }

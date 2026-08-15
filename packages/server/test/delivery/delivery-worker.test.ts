@@ -75,7 +75,10 @@ describe("Delivery direct worker", () => {
       },
     });
     await expect(
-      delivery.drain(shard, { onMessage: () => undefined, operation: { signal: controller.signal } }),
+      delivery.drain(shard, {
+        onMessage: () => undefined,
+        operation: { signal: controller.signal },
+      }),
     ).resolves.toMatchObject({ status: "STOPPED", delivered: 0 });
     expect(removals).toBe(1);
   });
@@ -98,7 +101,10 @@ describe("Delivery direct worker", () => {
     });
 
     await expect(
-      delivery.drain(shard, { onMessage: () => undefined, operation: { signal: controller.signal } }),
+      delivery.drain(shard, {
+        onMessage: () => undefined,
+        operation: { signal: controller.signal },
+      }),
     ).resolves.toMatchObject({ status: "STOPPED", delivered: 0 });
     expect(removals).toBe(0);
   });
@@ -146,8 +152,7 @@ describe("Delivery direct worker", () => {
           return [];
         },
       }).drain(shard, { onMessage: () => undefined }),
-    )
-      .resolves.toMatchObject({ status: "DRAINED" });
+    ).resolves.toMatchObject({ status: "DRAINED" });
     expect(customCleanupReads).toBe(0);
   });
 
@@ -156,12 +161,18 @@ describe("Delivery direct worker", () => {
     let removals = 0;
     const delivery = createDelivery({
       read: async (options) =>
-        options?.statuses?.includes("DELIVERED") ? [{ ...message("old", "target", shard), status: "DELIVERED" as const }] : [],
+        options?.statuses?.includes("DELIVERED")
+          ? [{ ...message("old", "target", shard), status: "DELIVERED" as const }]
+          : [],
       remove: async () => {
         removals += 1;
         return true;
       },
-      registry: { pickUp: async () => session(shard), renew: async () => undefined, release: async () => true },
+      registry: {
+        pickUp: async () => session(shard),
+        renew: async () => undefined,
+        release: async () => true,
+      },
     });
     await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
       status: "STOPPED",

@@ -34,7 +34,7 @@ export class DatastoreDeliveryCleanupStorage implements DeliveryCleanupStorage {
     const transaction = sessions.transaction();
     try {
       await transaction.run();
-      const sessionEntity = first(
+      const sessionEntity = DatastoreDeliveryCleanupStorage.first(
         await transaction.get(sessions.transactionEntity(input.session.expected).key),
       );
       if (
@@ -46,7 +46,9 @@ export class DatastoreDeliveryCleanupStorage implements DeliveryCleanupStorage {
         return false;
       }
       const expectedInbox = inbox.transactionEntity(input.inbox.expected);
-      const inboxEntity = first(await transaction.get(expectedInbox.key));
+      const inboxEntity = DatastoreDeliveryCleanupStorage.first(
+        await transaction.get(expectedInbox.key),
+      );
       if (
         inboxEntity === undefined ||
         !inbox.matchesTransactionEntity(inboxEntity, input.inbox.expected)
@@ -69,13 +71,12 @@ export class DatastoreDeliveryCleanupStorage implements DeliveryCleanupStorage {
   close(): void {
     this.#open = false;
   }
-}
-
-function first(value: unknown): Record<string | symbol, unknown> | undefined {
-  return Array.isArray(value) &&
-    value.length > 0 &&
-    typeof value[0] === "object" &&
-    value[0] !== null
-    ? (value[0] as Record<string | symbol, unknown>)
-    : undefined;
+  private static first(value: unknown): Record<string | symbol, unknown> | undefined {
+    return Array.isArray(value) &&
+      value.length > 0 &&
+      typeof value[0] === "object" &&
+      value[0] !== null
+      ? (value[0] as Record<string | symbol, unknown>)
+      : undefined;
+  }
 }

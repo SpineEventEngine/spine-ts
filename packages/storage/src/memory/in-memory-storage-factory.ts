@@ -58,7 +58,10 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
     });
     DeliveryCleanupStorageFactories.register(this, {
-      createDeliveryCleanupStorage: () => new MemoryDeliveryCleanupStorage((context, spec, group) => this.tenantRecords(context, spec, group)),
+      createDeliveryCleanupStorage: () =>
+        new MemoryDeliveryCleanupStorage((context, spec, group) =>
+          this.tenantRecords(context, spec, group),
+        ),
     });
   }
 
