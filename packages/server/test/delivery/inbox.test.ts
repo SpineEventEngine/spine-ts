@@ -15,15 +15,36 @@
 import { create } from "@bufbuild/protobuf";
 import { AnySchema, Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { AnyMessages, Identifiers } from "@spine-event-engine/core";
+import { WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import { Inbox, InboxTargets } from "../../src/delivery/inbox.js";
 import { InboxStorage } from "../../src/delivery/inbox-storage.js";
 import { InboxMessageError, ShardIndex } from "../../src/index.js";
+import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
 import { createMessage } from "./inbox-message-fixture.js";
 
 describe("Inbox", () => {
+  it("removes an eligible exact delivered snapshot only while its shard session is current", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = { name: "T0191", multitenant: false } as const;
+    const inbox = new Inbox(new InboxStorage({ context, storageFactory: factory }));
+    const registry = new ShardedWorkRegistry({ context, storageFactory: factory });
+    const message = createMessage("eligible", "signal", 1n);
+    const session = await registry.pickUp(
+      ShardIndex.single(),
+      create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
+    );
+
+    expect(session).toBeDefined();
+    await inbox.storage.write(message);
+    const delivered = await inbox.markDelivered(message);
+    expect(delivered).toMatchObject({ status: "DELIVERED" });
+    await expect(inbox.removeDelivered(delivered!, session!)).resolves.toBe(true);
+    await expect(inbox.readMessage(message.id)).resolves.toBeUndefined();
+  });
+
   it("receives, orders, reads, and marks a direct generated row delivered", async () => {
     const inbox = open("Tasks");
     const later = createMessage("ignored", "later", 2n, new Date("2026-07-02T08:00:01.000Z"));
