@@ -193,3 +193,13 @@ coverage inputs are ready for review. Generated residue is absent.
 - The final documentation-only closure commit marks Wave 12 complete and Wave
   13 next. Remote branch/tag and disposable-provider cleanup follows the push
   and is recorded in the final work log.
+
+## Remote And Resource Closure
+
+- After `main` was pushed, every remaining remote feature branch was again
+  proven to be an ancestor of `origin/main` and deleted. The final remote audit
+  exposes exactly `refs/heads/main` and no tags.
+- The dedicated `spine-wave12-mysql` MySQL 8.4 container was stopped and
+  removed. The verified `spine-wave12` Datastore emulator parent was terminated
+  normally, its Java child exited, and listener 127.0.0.1:8081 was released.
+- No protected primary-checkout content was staged, edited, stashed, or removed.
