@@ -184,6 +184,35 @@ test("routes gRPC-Web ResolveContext through Envoy and the native gateway", asyn
   }
 });
 
+test("terminates accepted and missing-origin preflight without Gateway admission", async () => {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+  const topology = await startTopology();
+  try {
+    const before = topology.counters();
+    for (const headers of [
+      {
+        origin: "https://127.0.0.1:4175",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "content-type,x-grpc-web,x-spine-csrf",
+      },
+      { "access-control-request-method": "POST" },
+      {
+        origin: "https://rejected.example.test",
+        "access-control-request-method": "POST",
+      },
+    ]) {
+      const response = await fetch(
+        `${topology.baseUrl}/spine.auth.AuthenticationService/ResolveContext`,
+        { method: "OPTIONS", headers },
+      );
+      assert.equal(response.status, 204);
+    }
+    assert.deepEqual(topology.counters(), before);
+  } finally {
+    await topology.close();
+  }
+});
+
 test("keeps a direct native passive subscription alive for three sequential writer commands", async () => {
   const topology = await startTopology();
   try {

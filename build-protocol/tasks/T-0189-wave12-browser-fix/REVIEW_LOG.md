@@ -20,6 +20,11 @@ settlement remains asserted by the browser runner. Ownership is Envoy renderer
 and browser diagnostic harness only. Re-review: style/maintainability and
 performance/reliability.
 
+Additional captured proof: accepted and missing-origin preflights are terminal
+and counter-neutral. Malformed/rejected-origin OPTIONS and explicit
+per-update counter snapshots remain outstanding evidence; this task is not
+ready for re-review until those required cases are captured.
+
 ## Specialist Dispatch
 
 - Style/maintainability: existing `style_maintainability_reviewer`, explicitly

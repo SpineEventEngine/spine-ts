@@ -31,3 +31,9 @@ from real Chromium evidence. Focused ESLint, Prettier, `git diff --check`, and
 `pnpm typecheck:build` passed. The first Vitest coverage invocation found no
 tests because the repository's Vitest include deliberately excludes MJS;
 Node's V8 runner is the applicable scoped evidence.
+
+Final correction evidence: `topology.test.mjs` proves both an accepted-origin
+and missing-origin OPTIONS request return terminal 204 and leave every Gateway
+admission counter unchanged. Chromium full-suite output could not be retained
+after its child process exceeded this surface's 30-second capture window; it
+must be treated as an evidence-capture limitation, not a passing claim.
