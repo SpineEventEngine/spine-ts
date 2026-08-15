@@ -97,3 +97,13 @@ subscription runtime/observer, browser-server, Envoy, or native delivery.
 
 The direct-native three-update control remains required beside the bridge RED.
 No runtime behavior is changed by this diagnostic checkpoint.
+
+Bridge GREEN: `nextPassiveUpdate()` now serializes only its test identity with
+a BigInt-to-decimal replacer. The isolated Chromium passive-viewer test receives
+all three distinct updates and records healthy parent snapshots for updates
+1/2/3: one binding, one active native stream, and matching Gateway update
+counters. The direct-native three-update control also passes. The test-only
+runner parent did not exit after the successful child despite bounded cleanup,
+so its two explicitly identified stale processes were stopped; that teardown
+monitoring anomaly is separate from the fixed bridge serialization path and
+requires later lifecycle investigation before final browser closure.

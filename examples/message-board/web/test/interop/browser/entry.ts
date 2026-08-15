@@ -116,6 +116,8 @@ const topic = create(TopicSchema, {
 let sequence = 0;
 let passiveSubscription: Awaited<ReturnType<typeof request.createSubscription>> | undefined;
 let passiveUpdates: AsyncIterator<unknown> | undefined;
+const bigintAsString = (_key: string, value: unknown): unknown =>
+  typeof value === "bigint" ? value.toString() : value;
 
 const resolveContext = async () => {
   await session.reauthenticate(async ({ signal }) => {
@@ -203,7 +205,10 @@ const startPassiveSubscription = async () => {
 const nextPassiveUpdate = async () => {
   if (passiveUpdates === undefined) throw new Error("passive subscription is not active");
   const update = await passiveUpdates.next();
-  return { done: update.done === true, identity: JSON.stringify(update.value) };
+  return {
+    done: update.done === true,
+    identity: JSON.stringify(update.value, bigintAsString),
+  };
 };
 const stopPassiveSubscription = async () => {
   const updates = passiveUpdates;

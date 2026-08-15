@@ -92,3 +92,9 @@ causes the observed cancellation. Diagnostic Envoy access, Gateway/native trace,
 and gRPC-Web response status localize ownership to the browser test bridge.
 The next correction must start with a focused bridge RED and preserve the
 existing bounded cancellation and settlement assertions.
+
+Bridge correction evidence: the focused Chromium viewer now consumes three
+ordered updates with healthy counter snapshots, and direct native control
+remains green. The sole remaining uncertainty from this diagnostic pass is a
+runner parent that stayed alive after its passing child; no claim of complete
+browser-suite closure is made until that separate teardown monitor is resolved.
