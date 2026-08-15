@@ -1,6 +1,6 @@
 # T-0194: Wave 12 Release Convergence
 
-Status: RELEASE VERIFIED; INTEGRATION PENDING
+Status: COMPLETE
 
 Baseline: `a232191c5ffb7a815a43b1d4380deac83692ee5e`
 

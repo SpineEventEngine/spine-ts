@@ -1,7 +1,7 @@
 # Spine TS Project Completion Plan
 
-Status: Waves 9, 10, and 11 complete and integrated; Wave 12 runtime work is
-implemented and documentation convergence is in progress
+Status: Waves 9, 10, 11, and 12 complete, release-verified, and integrated;
+Wave 13 is next
 
 Plan date: 2026-07-12
 
