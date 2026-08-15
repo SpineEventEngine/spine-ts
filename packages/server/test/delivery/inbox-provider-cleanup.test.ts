@@ -83,6 +83,33 @@ describe.skipIf(datastoreHost === undefined)("Datastore Inbox cleanup", () => {
       factory.close();
     }
   });
+
+  it("preserves a physically present row for a stale owner across independently opened factories", async () => {
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
+    const firstFactory = DatastoreStorageFactory.newBuilder()
+      .setClient(
+        new Datastore({ projectId: process.env.DATASTORE_PROJECT_ID ?? "spine-t0191-emulator" }),
+      )
+      .setStringifierRegistry(stringifiers)
+      .build();
+    const secondFactory = DatastoreStorageFactory.newBuilder()
+      .setClient(
+        new Datastore({ projectId: process.env.DATASTORE_PROJECT_ID ?? "spine-t0191-emulator" }),
+      )
+      .setStringifierRegistry(stringifiers)
+      .build();
+    const context = {
+      name: `t0191_datastore_two_owner_${String(Date.now())}`,
+      multitenant: false,
+    } as const;
+    try {
+      await expect(removeAcrossFactories(firstFactory, secondFactory, context)).resolves.toBeUndefined();
+    } finally {
+      firstFactory.close();
+      secondFactory.close();
+    }
+  });
 });
 
 async function removeExact(
@@ -146,8 +173,8 @@ async function removeExact(
 }
 
 async function removeAcrossFactories(
-  firstFactory: MysqlStorageFactory,
-  secondFactory: MysqlStorageFactory,
+  firstFactory: MysqlStorageFactory | DatastoreStorageFactory,
+  secondFactory: MysqlStorageFactory | DatastoreStorageFactory,
   context: { readonly name: string; readonly multitenant: false },
 ): Promise<void> {
   let now = Date.now() + 7_200_000;
