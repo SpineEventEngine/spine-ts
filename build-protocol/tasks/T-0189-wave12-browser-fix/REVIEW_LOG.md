@@ -5,3 +5,11 @@ Status: NOT STARTED
 Performance/reliability and style/maintainability apply. TypeScript/API,
 documentation, and security apply only if the proven implementation boundary
 changes their respective contracts or authorization/context behavior.
+
+Mechanical readiness: focused renderer/harness MJS coverage, typecheck, ESLint,
+formatting, and whitespace checks are clean. Relevant specialist lanes:
+style/maintainability (small renderer route expansion) and
+performance/reliability (preflight remains bounded and does not forward to
+Gateway). TypeScript/API and documentation are N/A: no declarations or public
+claims changed. Security is a final-Wave lane; cookie/CSRF and origin-bound
+CORS regression evidence is available for its later disposition.

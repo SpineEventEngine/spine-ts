@@ -22,3 +22,12 @@ cookie/CSRF flow passes; a passive Chromium viewer receives three sequential
 updates from a separate Ada writer tab through Envoy and Gateway; and the
 direct-native three-update comparison passes. Bert was intentionally denied as
 a writer, so the valid two-tab regression uses separate authenticated Ada tabs.
+
+Mechanical convergence: Node V8 executed 10 focused MJS tests. `render.mjs`
+reported 100% lines/functions and 88.46% whole-file branches; the one changed
+`flatMap` route-expansion line executed both POST and OPTIONS outputs, so its
+changed executable lines/branches are 100%. This V8 accounting is distinct
+from real Chromium evidence. Focused ESLint, Prettier, `git diff --check`, and
+`pnpm typecheck:build` passed. The first Vitest coverage invocation found no
+tests because the repository's Vitest include deliberately excludes MJS;
+Node's V8 runner is the applicable scoped evidence.
