@@ -1,6 +1,6 @@
 # T-0190 Review Log
 
-Status: Final test-evidence corrections in progress
+Status: Final reliability re-review in progress
 
 ## Assignment evidence
 
@@ -135,6 +135,12 @@ the clean API, documentation, and previously clean style lanes remain closed.
   focused suite passes 4 files / 116 tests. Existing exact changed-production
   LCOV remains 52/54 lines (96.30%) and 57/61 branches (93.44%) because this
   batch changes tests and records only. No live provider ran.
+
+Final re-review compares baseline `e2ab42d2` with evidence endpoint `7b7d9fb3`
+and is limited to the two proof gaps. The existing
+`performance_reliability_reviewer` is explicitly `gpt-5.6-terra` / high,
+read-only, and forbidden to spawn subagents; Desktop runtime telemetry remains
+unavailable.
 
 ## Mechanical convergence evidence
 
