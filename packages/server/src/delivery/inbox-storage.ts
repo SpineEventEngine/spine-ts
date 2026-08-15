@@ -183,6 +183,11 @@ export class InboxStorage {
     session: DeliveryWorkSession,
     options?: import("./delivery-ports.js").DeliveryOperationOptions,
   ): Promise<boolean> {
+    if (
+      options?.timeoutMs !== undefined &&
+      (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 0)
+    )
+      return false;
     const deadline =
       options?.timeoutMs === undefined ? undefined : Values.now(this.#now) + options.timeoutMs;
     const isActive = () =>

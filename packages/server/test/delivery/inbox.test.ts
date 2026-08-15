@@ -112,6 +112,14 @@ describe("Inbox", () => {
       }),
     ).resolves.toBe(false);
     await expect(inbox.readMessage(message.id)).resolves.toMatchObject({ status: "DELIVERED" });
+    for (const timeoutMs of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      await expect(
+        inbox.removeDelivered(required(delivered, "delivered"), required(session, "session"), {
+          timeoutMs,
+        }),
+      ).resolves.toBe(false);
+    }
+    await expect(inbox.readMessage(message.id)).resolves.toMatchObject({ status: "DELIVERED" });
   });
 
   it("never removes a pending or replaced snapshot", async () => {

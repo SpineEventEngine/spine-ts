@@ -13,7 +13,12 @@
  */
 
 import type { Message } from "@bufbuild/protobuf";
-import type { DeliveryCleanupInput, DeliveryCleanupStorage } from "../internal/delivery-cleanup.js";
+import {
+  cleanupOperationActive,
+  type CleanupOperation,
+  type DeliveryCleanupInput,
+  type DeliveryCleanupStorage,
+} from "../internal/delivery-cleanup.js";
 import type { RecordSpec } from "../record/record-spec.js";
 import type { StorageContext } from "../storage/storage.js";
 import type { StorageGroup } from "../record/storage-group.js";
@@ -72,16 +77,6 @@ export class MemoryDeliveryCleanupStorage implements DeliveryCleanupStorage {
     this.#open = false;
   }
   private static active(input: { readonly operation?: CleanupOperation }): boolean {
-    return (
-      !input.operation?.signal?.aborted &&
-      input.operation?.timeoutMs !== 0 &&
-      input.operation?.isActive?.() !== false
-    );
+    return cleanupOperationActive(input.operation);
   }
-}
-
-interface CleanupOperation {
-  readonly signal?: { readonly aborted: boolean };
-  readonly timeoutMs?: number;
-  readonly isActive?: () => boolean;
 }

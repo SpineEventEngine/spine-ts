@@ -21,6 +21,20 @@ import type { StorageFactory } from "../storage/storage-factory.js";
 /**
  * Describes provider input for one fenced exact delivered-row removal.
  */
+export interface CleanupOperation {
+  /** Cooperatively observes cancellation and the admission-relative deadline. */
+  readonly signal?: { readonly aborted: boolean };
+  readonly timeoutMs?: number;
+  readonly isActive?: () => boolean;
+}
+
+/** Returns whether a cleanup operation may proceed at a safe provider boundary. */
+export function cleanupOperationActive(operation: CleanupOperation | undefined): boolean {
+  return (
+    !operation?.signal?.aborted && operation?.timeoutMs !== 0 && operation?.isActive?.() !== false
+  );
+}
+
 export interface DeliveryCleanupInput<
   InboxId,
   InboxRecord extends Message,
@@ -37,11 +51,7 @@ export interface DeliveryCleanupInput<
   /**
    * Carries cooperative cancellation and an internal admission-relative activity predicate.
    */
-  readonly operation?: {
-    readonly signal?: { readonly aborted: boolean };
-    readonly timeoutMs?: number;
-    readonly isActive?: () => boolean;
-  };
+  readonly operation?: CleanupOperation;
 
   /**
    * Describes the exact delivered Inbox record expected for deletion.

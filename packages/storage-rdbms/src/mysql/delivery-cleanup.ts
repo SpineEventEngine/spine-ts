@@ -14,9 +14,10 @@
 
 import { toBinary, type Message } from "@bufbuild/protobuf";
 import type { PoolConnection } from "mysql2/promise";
-import type {
-  DeliveryCleanupInput,
-  DeliveryCleanupStorage,
+import {
+  cleanupOperationActive,
+  type DeliveryCleanupInput,
+  type DeliveryCleanupStorage,
 } from "@spine-event-engine/storage/internal/delivery-cleanup";
 import type { RecordSpec, StorageContext } from "@spine-event-engine/storage";
 
@@ -73,6 +74,9 @@ export class MysqlDeliveryCleanupStorage implements DeliveryCleanupStorage {
         this.lockKey(input as unknown as DeliveryCleanupInput<unknown, Message, unknown, Message>),
         async (connection) => this.removeOn(connection, inbox, sessions, input),
       );
+    } catch (error) {
+      if (error instanceof CleanupExpired) return false;
+      throw error;
     } finally {
       inbox.close();
       sessions.close();
@@ -120,7 +124,9 @@ export class MysqlDeliveryCleanupStorage implements DeliveryCleanupStorage {
           return false;
         }
         if (!MysqlDeliveryCleanupStorage.active(input)) return false;
-        return inbox.delete(input.inbox.id);
+        const removed = await inbox.delete(input.inbox.id);
+        if (!MysqlDeliveryCleanupStorage.active(input)) throw new CleanupExpired();
+        return removed;
       }),
     );
   }
@@ -130,13 +136,11 @@ export class MysqlDeliveryCleanupStorage implements DeliveryCleanupStorage {
     );
   }
   private static active(input: { readonly operation?: CleanupOperation }): boolean {
-    return (
-      !input.operation?.signal?.aborted &&
-      input.operation?.timeoutMs !== 0 &&
-      input.operation?.isActive?.() !== false
-    );
+    return cleanupOperationActive(input.operation);
   }
 }
+
+class CleanupExpired extends Error {}
 
 interface CleanupOperation {
   readonly signal?: { readonly aborted: boolean };

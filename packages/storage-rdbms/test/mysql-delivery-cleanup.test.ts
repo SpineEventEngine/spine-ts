@@ -80,6 +80,35 @@ describe("MysqlDeliveryCleanupStorage", () => {
     expect(inbox.delete).not.toHaveBeenCalled();
   });
 
+  it("returns false when expiry is observed after delete and the coordinator rolls back", async () => {
+    let active = true;
+    let rolledBack = false;
+    const inbox = storage();
+    inbox.delete.mockImplementation(() => {
+      active = false;
+      return Promise.resolve(true);
+    });
+    const sessions = storage();
+    const cleanup = new MysqlDeliveryCleanupStorage(
+      vi.fn(() => (sessions.prepare.mock.calls.length === 0 ? inbox : sessions)) as never,
+      async (_context, _tables, _key, work) => {
+        try {
+          return await work({} as never);
+        } catch (error) {
+          rolledBack = true;
+          throw error;
+        }
+      },
+      () => "key",
+    );
+
+    await expect(cleanup.remove(input({ timeoutMs: 10, isActive: () => active }))).resolves.toBe(
+      false,
+    );
+    expect(inbox.delete).toHaveBeenCalledOnce();
+    expect(rolledBack).toBe(true);
+  });
+
   it("deletes only after locked snapshots and current ownership match", async () => {
     const inbox = storage();
     const sessions = storage();

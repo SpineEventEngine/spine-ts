@@ -34,6 +34,7 @@ import { createMessage } from "./inbox-message-fixture.js";
 
 const mysqlUrl = process.env.SPINE_TS_MYSQL_URL;
 const datastoreHost = process.env.DATASTORE_EMULATOR_HOST;
+const datastoreProject = process.env.DATASTORE_PROJECT_ID ?? "spine-wave12";
 
 describe.skipIf(mysqlUrl === undefined)("MySQL Inbox cleanup", () => {
   let factory: MysqlStorageFactory;
@@ -78,9 +79,7 @@ describe.skipIf(datastoreHost === undefined)("Datastore Inbox cleanup", () => {
     const stringifiers = new StringifierRegistry();
     stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
     const factory = DatastoreStorageFactory.newBuilder()
-      .setClient(
-        new Datastore({ projectId: process.env.DATASTORE_PROJECT_ID ?? "spine-t0191-emulator" }),
-      )
+      .setClient(new Datastore({ projectId: datastoreProject }))
       .setStringifierRegistry(stringifiers)
       .build();
     const context = { name: `t0191_datastore_${String(Date.now())}`, multitenant: false } as const;
@@ -95,15 +94,11 @@ describe.skipIf(datastoreHost === undefined)("Datastore Inbox cleanup", () => {
     const stringifiers = new StringifierRegistry();
     stringifiers.setTypeRegistry(new TypeRegistry([StringValueSchema]));
     const firstFactory = DatastoreStorageFactory.newBuilder()
-      .setClient(
-        new Datastore({ projectId: process.env.DATASTORE_PROJECT_ID ?? "spine-t0191-emulator" }),
-      )
+      .setClient(new Datastore({ projectId: datastoreProject }))
       .setStringifierRegistry(stringifiers)
       .build();
     const secondFactory = DatastoreStorageFactory.newBuilder()
-      .setClient(
-        new Datastore({ projectId: process.env.DATASTORE_PROJECT_ID ?? "spine-t0191-emulator" }),
-      )
+      .setClient(new Datastore({ projectId: datastoreProject }))
       .setStringifierRegistry(stringifiers)
       .build();
     const context = {
@@ -257,7 +252,7 @@ async function datastoreCount(
     transactionEntity(value: ReturnType<typeof InboxRecords.write>): { key: unknown };
     close(): void;
   };
-  const client = new Datastore({ projectId: process.env.DATASTORE_PROJECT_ID ?? "spine-wave12" });
+  const client = new Datastore({ projectId: datastoreProject });
   try {
     const [entities] = (await client.get(
       storage.transactionEntity(InboxRecords.write(message)).key as never,

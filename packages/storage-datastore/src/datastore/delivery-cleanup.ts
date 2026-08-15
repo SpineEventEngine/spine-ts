@@ -13,9 +13,11 @@
  */
 
 import type { Message } from "@bufbuild/protobuf";
-import type {
-  DeliveryCleanupInput,
-  DeliveryCleanupStorage,
+import {
+  cleanupOperationActive,
+  type CleanupOperation,
+  type DeliveryCleanupInput,
+  type DeliveryCleanupStorage,
 } from "@spine-event-engine/storage/internal/delivery-cleanup";
 import type { RecordSpec, StorageContext } from "@spine-event-engine/storage";
 
@@ -116,16 +118,6 @@ export class DatastoreDeliveryCleanupStorage implements DeliveryCleanupStorage {
       : undefined;
   }
   private static active(input: { readonly operation?: CleanupOperation }): boolean {
-    return (
-      !input.operation?.signal?.aborted &&
-      input.operation?.timeoutMs !== 0 &&
-      input.operation?.isActive?.() !== false
-    );
+    return cleanupOperationActive(input.operation);
   }
-}
-
-interface CleanupOperation {
-  readonly signal?: { readonly aborted: boolean };
-  readonly timeoutMs?: number;
-  readonly isActive?: () => boolean;
 }
