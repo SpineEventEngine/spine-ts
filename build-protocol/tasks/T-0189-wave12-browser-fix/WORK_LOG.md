@@ -240,3 +240,22 @@ and diff checks passed after explicit test-only Node imports for existing
 `Buffer` and `clearTimeout` use. The post-run scan found no task-owned runner,
 no 9443 listener, and no Envoy/message-board container. No self-review was
 performed.
+
+## P1 Error-Path Settlement Correction (2026-08-15)
+
+Applied only the accepted P1 from `4e570240` test-first under the existing
+`implementer` profile (`gpt-5.6-terra` / `medium`; no subagents; Desktop
+runtime telemetry unavailable). If child close-time output fails after a
+forced-disconnect settlement has begun, runner cleanup now awaits every
+started settlement before `topology.close()`. Error precedence is deterministic:
+the original runner/output failure is rethrown; otherwise a settlement failure
+is reported; otherwise a topology-close failure is reported. Thus cleanup
+failure cannot mask the primary diagnostic.
+
+The new deterministic combined regression emits `FORCED_VIEWER_DISCONNECT`,
+then a late unhealthy update between child `exit` and `close`; it proves
+topology close waits for zero bindings and streams and the original health
+failure remains the rejection. Focused runner tests pass 11/11. Project lint,
+format, and diff checks pass. Chromium was intentionally not rerun because the
+change is confined to runner error-path orchestration, with the prior 8/8
+acceptance preserved. No self-review was performed.

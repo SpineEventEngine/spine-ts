@@ -281,3 +281,16 @@ The final dispatch compares baseline `e2ab42d2` with production endpoint
 style/maintainability and performance/reliability reviewers are each explicitly
 `gpt-5.6-terra` / high, read-only, and forbidden to spawn subagents; Desktop
 runtime telemetry remains unavailable.
+
+## P1 Settlement Correction Implementation (2026-08-15)
+
+The existing implementer applied only the P1 from `4e570240`, explicitly
+configured `gpt-5.6-terra` / `medium`, without subagents or available Desktop
+runtime telemetry. The runner now always awaits started forced-disconnect
+settlements before topology closure, even when close-time stdout causes the
+awaited Playwright operation to reject. It preserves the primary output failure
+over settlement and close cleanup failures. The deterministic combined
+forced-disconnect plus late unhealthy-marker regression passes; the focused
+runner suite is 11/11 and project lint, format, and diff checks pass. Chromium
+was not rerun because this is limited to runner error orchestration. No
+self-review was performed; performance/reliability may re-review this P1 only.

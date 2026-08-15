@@ -186,6 +186,64 @@ test("requires three observed passive snapshots for a non-literal grep selection
   assert.equal(closed, true);
 });
 
+test("awaits forced-disconnect settlement before closing after a late output failure", async () => {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  let bindings = 1;
+  let activeStreams = 1;
+  let closed = false;
+  let childStarted;
+  let settlementStarted;
+  const started = new Promise((resolve) => {
+    childStarted = resolve;
+  });
+  const settling = new Promise((resolve) => {
+    settlementStarted = resolve;
+  });
+  const topology = {
+    baseUrl: "https://gateway.example.test",
+    cookie: { setCookie: "cookie", csrf: "csrf" },
+    expiredCookie: { setCookie: "expired" },
+    cookieB: { setCookie: "cookie-b", csrf: "csrf-b" },
+    tls: { key: "key", cert: "cert" },
+    bindingCount: () => {
+      settlementStarted();
+      return bindings;
+    },
+    counters: () => ({ subscribe: 0, activate: 0, activeStreams, updates: 0 }),
+    close: async () => {
+      assert.equal(bindings, 0, "topology closes after settlement drains bindings");
+      assert.equal(activeStreams, 0, "topology closes after settlement drains streams");
+      closed = true;
+    },
+  };
+  const acceptance = runBrowserAcceptance({
+    start: async () => topology,
+    requestedPlaywrightArguments: ["--project", "chromium", "--grep", "disconnect"],
+    spawnChild: () => {
+      childStarted();
+      return child;
+    },
+  });
+
+  await started;
+  await new Promise((resolve) => setImmediate(resolve));
+  child.stdout.emit("data", Buffer.from("FORCED_VIEWER_DISCONNECT\n"));
+  await settling;
+  child.emit("exit", 0);
+  child.stdout.emit("data", Buffer.from("PASSIVE_VIEWER_UPDATE 1\n"));
+  child.emit("close", 0);
+  const rejection = assert.rejects(acceptance, /passive viewer topology became unhealthy/);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(closed, false);
+  bindings = 0;
+  activeStreams = 0;
+
+  await rejection;
+  assert.equal(closed, true);
+});
+
 test("records healthy Gateway bindings and native streams after each ordered passive-viewer update", () => {
   const counters = { subscribe: 1, activate: 1, activeStreams: 1, updates: 0 };
   const topology = {

@@ -13,10 +13,11 @@ export async function runBrowserAcceptance({
   requestedPlaywrightArguments = process.argv.slice(2),
 } = {}) {
   const topology = await start();
+  const lifecycleSettlements = [];
+  let primaryFailure;
   try {
     const passiveViewerSnapshots = [];
     let passiveViewerObserved = false;
-    const lifecycleSettlements = [];
     const binary = resolve(here, "../../../node_modules/.bin/playwright");
     const environment = {
       ...process.env,
@@ -94,9 +95,24 @@ export async function runBrowserAcceptance({
       throw new Error("gateway did not forward a resolver-owned Ada context");
     if (passiveViewerSnapshots.length > 0)
       process.stdout.write(`TOPOLOGY_SNAPSHOTS ${JSON.stringify(passiveViewerSnapshots)}\n`);
-  } finally {
-    await topology.close();
+  } catch (error) {
+    primaryFailure = error;
   }
+  let settlementFailure;
+  try {
+    await Promise.all(lifecycleSettlements);
+  } catch (error) {
+    settlementFailure = error;
+  }
+  let closeFailure;
+  try {
+    await topology.close();
+  } catch (error) {
+    closeFailure = error;
+  }
+  if (primaryFailure !== undefined) throw primaryFailure;
+  if (settlementFailure !== undefined) throw settlementFailure;
+  if (closeFailure !== undefined) throw closeFailure;
 }
 
 export function spawnPlaywright({
