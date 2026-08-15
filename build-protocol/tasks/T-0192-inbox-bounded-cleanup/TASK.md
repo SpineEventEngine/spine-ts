@@ -1,6 +1,6 @@
 # T-0192: Shard-Fenced Bounded Delivered Inbox Cleanup
 
-Status: REVIEW READY
+Status: ACCEPTED
 Baseline: `e2ab42d2`
 Branch: `codex/wave-12-inbox-cleanup`
 Worktree: `.worktrees/wave-12-inbox-cleanup`

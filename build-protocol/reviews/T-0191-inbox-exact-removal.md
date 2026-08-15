@@ -1,6 +1,6 @@
 # T-0191 Review Record
 
-Status: REVIEW READY
+Status: ACCEPTED
 
 Planned lanes: TypeScript/API (optional source compatibility), style/
 maintainability (one cleanup seam), performance/reliability (atomic fencing,
@@ -177,3 +177,7 @@ are retained as required inputs.
   documentation-only change.
 - Final affected-lane re-review is limited to the shared-type import and the
   corrected evidence provenance.
+- Final micro re-review is clean in TypeScript/API, style/maintainability, and
+  documentation. Performance/reliability remained clean and was not reopened
+  by the type-only import/evidence correction. T-0191 is accepted at
+  `315b6789`; final security remains a T-0194 Wave concern.

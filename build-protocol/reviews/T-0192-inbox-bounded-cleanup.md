@@ -1,6 +1,6 @@
 # T-0192 Review Record
 
-Status: REVIEW READY
+Status: ACCEPTED
 
 Planned lanes: style/maintainability and performance/reliability. TypeScript/API
 is N/A unless T-0191's port changes; documentation applies only to changed
@@ -131,3 +131,7 @@ fenced mutation.
   internal type and retains the shared activity predicate.
 - The final evidence log now contains the exact unset-project Datastore command
   proving the shared fallback and native one-to-zero row counts.
+- Final TypeScript/API-through-T-0191, style/maintainability, and documentation
+  micro re-review is clean; performance/reliability remained clean and was not
+  reopened by the type-only import/evidence correction. T-0192 is accepted at
+  `315b6789`; destructive-fencing security remains a T-0194 Wave concern.

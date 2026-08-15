@@ -1,6 +1,6 @@
 # T-0191: Exact Delivered Inbox Removal
 
-Status: REVIEW READY
+Status: ACCEPTED
 Start: `2026-08-15 WEST`
 Baseline: `e2ab42d2`
 Branch: `codex/wave-12-inbox-cleanup`
