@@ -501,6 +501,7 @@ describe("BoundedContext assembly", () => {
             signalSchema: AggregateStateSchema,
             emittedSchemas: [ProjectionStateSchema],
             parameterCount: 1,
+            origin: "domestic",
           },
         ],
       },
@@ -514,6 +515,7 @@ describe("BoundedContext assembly", () => {
             signalSchema: ProcessManagerStateSchema,
             emittedSchemas: [],
             parameterCount: 1,
+            origin: "domestic",
           },
         ],
       },
@@ -581,6 +583,7 @@ describe("BoundedContext assembly", () => {
             signalSchema: ProcessManagerStateSchema,
             emittedSchemas: [],
             parameterCount: 1,
+            origin: "domestic",
           },
         ],
       },
@@ -623,6 +626,7 @@ describe("BoundedContext assembly", () => {
             signalSchema: AggregateStateSchema,
             emittedSchemas: [ProjectionStateSchema],
             parameterCount: 1,
+            origin: "domestic",
           },
         ],
       },
@@ -655,6 +659,7 @@ describe("BoundedContext assembly", () => {
             signalSchema: AggregateStateSchema,
             emittedSchemas: [ProjectionStateSchema],
             parameterCount: 1,
+            origin: "domestic",
           },
         ],
       },
@@ -1269,6 +1274,7 @@ describe("BoundedContext assembly", () => {
             signalSchema: ProjectionStateSchema,
             emittedSchemas: [ProjectionStateSchema],
             parameterCount: 1,
+            origin: "domestic",
           },
         ],
       },
@@ -1282,6 +1288,7 @@ describe("BoundedContext assembly", () => {
             signalSchema: AggregateStateSchema,
             emittedSchemas: [],
             parameterCount: 1,
+            origin: "domestic",
           },
         ],
       },
@@ -1318,6 +1325,7 @@ describe("BoundedContext assembly", () => {
             signalSchema: AggregateStateSchema,
             emittedSchemas: [ProjectionStateSchema],
             parameterCount: 1,
+            origin: "domestic",
           },
         ],
       },
@@ -1383,6 +1391,7 @@ describe("BoundedContext assembly", () => {
             signalSchema: AggregateStateSchema,
             emittedSchemas: [ProjectionStateSchema],
             parameterCount: 1,
+            origin: "domestic",
           },
         ],
       },
@@ -2482,6 +2491,7 @@ function createGeneratedRegistryFixture(
       readonly signalSchema: GenMessage<Message>;
       readonly emittedSchemas: readonly GenMessage<Message>[];
       readonly parameterCount: 1 | 2;
+      readonly origin: "domestic" | "external";
     }[];
   }[],
 ): { readonly root: URL; readonly registryPath: string } {
@@ -2492,7 +2502,7 @@ function createGeneratedRegistryFixture(
   const values = globalThis as Record<string, unknown>;
 
   mkdirSync(moduleDir, { recursive: true });
-  values[slot] = Object.freeze({ version: 2, entities });
+  values[slot] = Object.freeze({ version: 3, entities });
   writeFileSync(
     registryPath,
     `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,
@@ -2524,6 +2534,7 @@ function processManagerRegistry(
         signalSchema: AggregateStateSchema,
         emittedSchemas: [ProjectionStateSchema],
         parameterCount: 1 as const,
+        origin: "domestic" as const,
       },
     ],
   };
@@ -2540,6 +2551,7 @@ function aggregateReplayRegistry(entityType: typeof ReplayTaskAggregate) {
         signalSchema: ProjectionStateSchema,
         emittedSchemas: [AggregateStateSchema],
         parameterCount: 1 as const,
+        origin: "domestic" as const,
       },
     ],
   };
@@ -2556,6 +2568,7 @@ function replayProcessManagerRegistry(entityType: typeof ReplayTaskProcessManage
         signalSchema: AggregateStateSchema,
         emittedSchemas: [AggregateStateSchema],
         parameterCount: 1 as const,
+        origin: "domestic" as const,
       },
       {
         kind: "event-reaction" as const,
@@ -2563,6 +2576,7 @@ function replayProcessManagerRegistry(entityType: typeof ReplayTaskProcessManage
         signalSchema: ProjectionStateSchema,
         emittedSchemas: [AggregateStateSchema],
         parameterCount: 1 as const,
+        origin: "domestic" as const,
       },
     ],
   };

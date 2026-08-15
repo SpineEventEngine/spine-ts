@@ -370,10 +370,15 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
         `Generated handler "${handler.methodName}" declares an invalid signal origin.`,
       );
     }
-    if (handler.origin === "external" && handler.kind === "command-assignment") {
+    if (
+      handler.origin === "external" &&
+      (handler.kind === "command-assignment" ||
+        (handler.kind === "command-reaction" &&
+          !GeneratedRegistry.isEventInputSchema(handler.signalSchema)))
+    ) {
       throw new HandlerRegistryIngestionError(
         "EXTERNAL_COMMAND_RECEIVER",
-        `Generated command assignment handler "${handler.methodName}" cannot accept external commands.`,
+        `Generated command receiver "${handler.methodName}" cannot accept external commands.`,
       );
     }
 

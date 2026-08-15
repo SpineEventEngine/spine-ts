@@ -5,7 +5,7 @@ import { create, toBinary } from "@bufbuild/protobuf";
 import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { EventContextSchema, EventIdSchema } from "@spine-event-engine/proto";
-import { TypeUrls } from "@spine-event-engine/core";
+import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
@@ -100,10 +100,7 @@ function event(externalOrigin: boolean) {
     $typeName: "spine.core.Event",
     id: create(EventIdSchema, { value }),
     context: create(EventContextSchema, { external: externalOrigin } as never),
-    message: {
-      typeUrl: TypeUrls.derive(StringValueSchema),
-      value: toBinary(StringValueSchema, create(StringValueSchema, { value })),
-    },
+    message: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value })),
   } as never;
 }
 

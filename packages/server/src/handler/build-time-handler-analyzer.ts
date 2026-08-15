@@ -778,12 +778,12 @@ const HandlerSources = Object.freeze({
     if (origin === undefined) return true;
     const signal = HandlerSources.schemaUseFromType(origin.type, scope.imports);
     if (signal !== undefined && HandlerSources.acceptsSignalKind(decorator, signal.kind)) {
-      if (origin.value === "external" && decorator === "Assign") {
+      if (origin.value === "external" && signal.kind === "command") {
         HandlerTypes.pushDiagnostic(
           scope,
           "EXTERNAL_COMMAND_RECEIVER",
           node.parameters[0].type,
-          "@Assign command receivers cannot declare External<T>.",
+          "Command receivers cannot declare External<Command>.",
           className,
           method,
         );
@@ -1308,7 +1308,14 @@ const HandlerSources = Object.freeze({
           ? false
           : HandlerSources.containsExternalMarker(parameter.type, scope.imports),
       );
-    if (laterMarker || (marker !== undefined && !marker.direct)) {
+    const nestedMarker =
+      marker === undefined && HandlerSources.containsExternalMarker(first, scope.imports);
+    const localAlias =
+      marker === undefined &&
+      ts.isTypeReferenceNode(first) &&
+      ts.isIdentifier(first.typeName) &&
+      scope.imports.localTypeAliases.has(first.typeName.text);
+    if (laterMarker || nestedMarker || (marker !== undefined && !marker.direct) || localAlias) {
       HandlerTypes.pushDiagnostic(
         scope,
         "INVALID_EXTERNAL_ORIGIN",

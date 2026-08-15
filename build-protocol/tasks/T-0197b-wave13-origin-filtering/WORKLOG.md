@@ -44,3 +44,20 @@ The frozen v3 decision deliberately rejects v2 generated registries. Existing
 test fixtures still declaring `version: 2` must be migrated atomically with
 their handler records gaining explicit domestic origin; accepting v2 would
 create the forbidden dual-version compatibility policy.
+
+## Consolidated correction batch
+
+The follow-up review found that the initial checkpoint had not advanced the
+writer/discovery contract atomically and selected domestic dispatchers too
+broadly. The correction advances writer and discovery to v3, migrates affected
+fixtures to explicit domestic origin, snapshots dispatcher schema methods once,
+and indexes domestic complements separately from external subsets. A private
+dispatcher-origin companion keeps a generated repository's mixed same-type
+handlers visible to both paths without exposing another registration API.
+
+Repository event, command-reaction, and state-subscription candidates now filter
+on `EventContext.external`. State has no external wire; the change only prevents
+domestic `EntityStateChanged` updates from reaching an external state receptor.
+External command validation now depends on the inferred input signal kind, so
+both `@Assign External<Command>` and command-input `@Command` fail while event
+and rejection command handlers remain valid.

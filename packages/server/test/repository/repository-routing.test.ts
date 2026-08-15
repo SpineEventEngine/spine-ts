@@ -6593,6 +6593,7 @@ describe("repository signal routing", () => {
           kind: "event-subscription",
           methodName: "subscribeState",
           parameterCount: 1,
+          origin: "domestic",
           where: { eventField: "id", equals: "id:42" },
         },
       ],
@@ -9313,12 +9314,14 @@ function createFilteredProjectionRepository(): Repository<typeof FilteredTaskPro
         kind: "event-subscription",
         methodName: "subscribeAnnouncements",
         parameterCount: 1,
+        origin: "domestic",
         where: { eventField: "name", equals: "announcements" },
       },
       {
         kind: "event-subscription",
         methodName: "subscribeFallback",
         parameterCount: 1,
+        origin: "domestic",
       },
     ],
   );
@@ -9343,6 +9346,7 @@ function createFilteredAggregateRepository(): Repository<typeof FilteredEventAgg
         kind: "event-reaction",
         methodName: "reactAnnouncements",
         parameterCount: 1,
+        origin: "domestic",
         emittedSchemas: [AggregateStateSchema],
         where: { eventField: "name", equals: "announcements" },
       },
@@ -9350,6 +9354,7 @@ function createFilteredAggregateRepository(): Repository<typeof FilteredEventAgg
         kind: "event-reaction",
         methodName: "reactFallback",
         parameterCount: 1,
+        origin: "domestic",
         emittedSchemas: [AggregateStateSchema],
       },
     ],
@@ -9377,17 +9382,20 @@ function createFilteredProcessManagerRepository(): Repository<typeof FilteredPro
         kind: "event-reaction",
         methodName: "reactAnnouncements",
         parameterCount: 1,
+        origin: "domestic",
         where: { eventField: "name", equals: "announcements" },
       },
       {
         kind: "event-reaction",
         methodName: "reactFallback",
         parameterCount: 1,
+        origin: "domestic",
       },
       {
         kind: "command-reaction",
         methodName: "commandAnnouncements",
         parameterCount: 1,
+        origin: "domestic",
         emittedSchemas: [AggregateStateSchema],
         where: { eventField: "name", equals: "announcements" },
       },
@@ -9395,6 +9403,7 @@ function createFilteredProcessManagerRepository(): Repository<typeof FilteredPro
         kind: "command-reaction",
         methodName: "commandFallback",
         parameterCount: 1,
+        origin: "domestic",
         emittedSchemas: [AggregateStateSchema],
       },
     ],
@@ -9475,7 +9484,7 @@ function createGeneratedTwoArgProjectionRepository(
   eventRouting?: EventRouting<string>,
 ): Repository<typeof GeneratedTwoArgProjection> {
   const handlers = new HandlerRegistryIngestor().ingest({
-    version: 2,
+    version: 3,
     entities: [
       {
         entityType: GeneratedTwoArgProjection,
@@ -9487,6 +9496,7 @@ function createGeneratedTwoArgProjectionRepository(
             signalSchema: ProjectionEventSchema,
             emittedSchemas: [],
             parameterCount: 2,
+            origin: "domestic",
           },
         ],
       },
@@ -9503,7 +9513,7 @@ function createGeneratedTwoArgProjectionRepository(
 
 function createRejectionObservingRepository(): Repository<typeof RejectionObservingProjection> {
   const handlers = new HandlerRegistryIngestor().ingest({
-    version: 2,
+    version: 3,
     entities: [
       {
         entityType: RejectionObservingProjection,
@@ -9515,6 +9525,7 @@ function createRejectionObservingRepository(): Repository<typeof RejectionObserv
             signalSchema: TaskAlreadyDoneSchema,
             emittedSchemas: [],
             parameterCount: 2,
+            origin: "domestic",
           },
           {
             kind: "event-subscription",
@@ -9522,6 +9533,7 @@ function createRejectionObservingRepository(): Repository<typeof RejectionObserv
             signalSchema: TaskAlreadyDoneSchema,
             emittedSchemas: [],
             parameterCount: 2,
+            origin: "domestic",
           },
         ],
       },
@@ -9539,7 +9551,7 @@ function createContextMutatingGeneratedProjectionRepository(): Repository<
   typeof ContextMutatingGeneratedProjection
 > {
   const handlers = new HandlerRegistryIngestor().ingest({
-    version: 2,
+    version: 3,
     entities: [
       {
         entityType: ContextMutatingGeneratedProjection,
@@ -9551,6 +9563,7 @@ function createContextMutatingGeneratedProjectionRepository(): Repository<
             signalSchema: ProjectionEventSchema,
             emittedSchemas: [],
             parameterCount: 2,
+            origin: "domestic",
           },
           {
             kind: "event-subscription",
@@ -9558,6 +9571,7 @@ function createContextMutatingGeneratedProjectionRepository(): Repository<
             signalSchema: ProjectionEventSchema,
             emittedSchemas: [],
             parameterCount: 2,
+            origin: "domestic",
           },
         ],
       },
@@ -9778,7 +9792,7 @@ function createMessageIdRejectingRepository(): Repository<typeof MessageIdReject
 
 function createGeneratedTwoArgAggregateRepository(): Repository<typeof GeneratedTwoArgAggregate> {
   const handlers = new HandlerRegistryIngestor().ingest({
-    version: 2,
+    version: 3,
     entities: [
       {
         entityType: GeneratedTwoArgAggregate,
@@ -9790,6 +9804,7 @@ function createGeneratedTwoArgAggregateRepository(): Repository<typeof Generated
             signalSchema: AggregateStateSchema,
             emittedSchemas: [AggregateStateSchema],
             parameterCount: 2,
+            origin: "domestic",
           },
         ],
       },
@@ -9808,7 +9823,7 @@ function createGeneratedReactorRepository(
   guarded = false,
 ): Repository<typeof GeneratedReactorAggregate> {
   const handlers = new HandlerRegistryIngestor().ingest({
-    version: 2,
+    version: 3,
     entities: [
       {
         entityType: GeneratedReactorAggregate,
@@ -9820,6 +9835,7 @@ function createGeneratedReactorRepository(
             signalSchema: ProjectionEventSchema,
             emittedSchemas: [AggregateStateSchema],
             parameterCount: 2,
+            origin: "domestic",
           },
         ],
       },
@@ -9846,6 +9862,7 @@ function createGuardedAggregateRepository(
         kind: "event-reaction",
         methodName: "reactProjection",
         parameterCount: 1,
+        origin: "domestic",
         emittedSchemas: [AggregateStateSchema],
       },
     ],
@@ -9870,6 +9887,7 @@ function createProducingGuardedAggregateRepository(): Repository<typeof Producin
         kind: "event-reaction",
         methodName: "reactProjection",
         parameterCount: 1,
+        origin: "domestic",
         emittedSchemas: [AggregateStateSchema],
       },
     ],
@@ -9898,7 +9916,7 @@ function routeAggregateTargets(
 
 function createGeneratedCommandingRepository(): Repository<typeof GeneratedCommandingAggregate> {
   const handlers = new HandlerRegistryIngestor().ingest({
-    version: 2,
+    version: 3,
     entities: [
       {
         entityType: GeneratedCommandingAggregate,
@@ -9910,6 +9928,7 @@ function createGeneratedCommandingRepository(): Repository<typeof GeneratedComma
             signalSchema: ProjectionEventSchema,
             emittedSchemas: [AggregateStateSchema],
             parameterCount: 2,
+            origin: "domestic",
           },
         ],
       },
@@ -9991,6 +10010,7 @@ function createValidatingProcessManagerRepository(): Repository<typeof Validatin
         kind: "command-assignment",
         methodName: "assignTask",
         parameterCount: 1,
+        origin: "domestic",
         emittedSchemas: [ProjectionEventSchema],
       },
     ],
@@ -10110,6 +10130,7 @@ function createProcessManagerAssignRepository(
         kind: "command-assignment",
         methodName: "assignTask",
         parameterCount: 1,
+        origin: "domestic",
         emittedSchemas: [ProjectionEventSchema],
       },
     ],
@@ -10154,12 +10175,14 @@ function createProcessManagerCommandAndReactRepository(): Repository<typeof Rout
         kind: "command-assignment",
         methodName: "assignTask",
         parameterCount: 1,
+        origin: "domestic",
         emittedSchemas: [ProjectionEventSchema],
       },
       {
         kind: "event-reaction",
         methodName: "reactTask",
         parameterCount: 1,
+        origin: "domestic",
       },
     ],
   );
@@ -10183,6 +10206,7 @@ function createDiagnosticOnlyProcessManagerRepository(): Repository<
         kind: "command-assignment",
         methodName: "assignTask",
         parameterCount: 1,
+        origin: "domestic",
         emittedSchemas: [ProjectionEventSchema],
       },
     ],
@@ -10304,11 +10328,13 @@ function createProcessManagerEventRepository(): Repository<typeof RoutingProcess
         kind: "event-reaction",
         methodName: "reactTask",
         parameterCount: 1,
+        origin: "domestic",
       },
       {
         kind: "command-reaction",
         methodName: "commandTask",
         parameterCount: 1,
+        origin: "domestic",
         emittedSchemas: [AggregateStateSchema],
       },
     ],
@@ -10331,6 +10357,7 @@ function createProcessManagerEventProducingRepository(): Repository<typeof Routi
         kind: "event-reaction",
         methodName: "reactTaskWithEvent",
         parameterCount: 1,
+        origin: "domestic",
         emittedSchemas: [AggregateStateSchema],
       },
     ],
@@ -10353,6 +10380,7 @@ function createProcessManagerCommandOnlyRepository(): Repository<typeof RoutingP
         kind: "command-reaction",
         methodName: "commandTask",
         parameterCount: 1,
+        origin: "domestic",
         emittedSchemas: [AggregateStateSchema],
       },
     ],
@@ -10377,6 +10405,7 @@ function createGuardedProcessManagerCommandOnlyRepository(): Repository<
         kind: "command-reaction",
         methodName: "commandTask",
         parameterCount: 1,
+        origin: "domestic",
         emittedSchemas: [AggregateStateSchema],
       },
     ],
@@ -10404,12 +10433,14 @@ function createProcessManagerMixedEventRepository(): Repository<typeof RoutingPr
         kind: "event-reaction",
         methodName: "reactTaskWithEvent",
         parameterCount: 1,
+        origin: "domestic",
         emittedSchemas: [AggregateStateSchema],
       },
       {
         kind: "command-reaction",
         methodName: "commandTask",
         parameterCount: 1,
+        origin: "domestic",
         emittedSchemas: [AggregateStateSchema],
       },
     ],

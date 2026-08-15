@@ -26,7 +26,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { file_spine_options, type EventContext } from "@spine-event-engine/proto";
-import { EventRouting, Projection } from "@spine-event-engine/server";
+import { EventRouting, Projection } from "../../src/index.js";
 
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 

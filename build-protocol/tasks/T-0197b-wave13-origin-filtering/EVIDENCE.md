@@ -8,3 +8,13 @@
 - Static TypeScript invocation likewise reports the pre-existing stale workspace
   package graph; after filtering diagnostics, no error pointed at the modified
   handler-origin or bus-filtering code.
+
+## Correction evidence
+
+- `pnpm install --offline --frozen-lockfile`: passed.
+- `pnpm proto:generate`: passed; only regenerated volatile generation IDs, which
+  were restored because no serialized contract changed.
+- `pnpm typecheck:build:generated`: passed.
+- Handler/origin focused suites: 67 passed.
+- EventBus, state-update routing, repository routing, and bounded-context suites:
+  359 passed.

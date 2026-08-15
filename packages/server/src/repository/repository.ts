@@ -83,6 +83,7 @@ import {
 import { RoutingDeclarations, type RoutingDeclarationSnapshot } from "./routing-declarations.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
+import { EventDispatcherOriginSchemas } from "../bus/event-dispatcher-origin-schemas.js";
 import { Delivery } from "../delivery/delivery.js";
 import { commitFenced } from "./commit-fence.js";
 import { InboxTargets, type InboxMessage, type InboxMessageInput } from "../delivery/inbox.js";
@@ -789,6 +790,7 @@ interface RepositoryStateUpdateRoute<Id = unknown> extends RepositoryEventRoute<
    * Unpacked source Entity state selected from `EntityStateChanged.newState`.
    */
   readonly state: Message;
+  readonly subscribers: RepositoryStateSubscribers;
 }
 
 const repositorySnapshots = new WeakMap<RepositoryView, RepositoryIdentitySnapshot>();
@@ -4561,7 +4563,13 @@ const RepositoryRoutes = {
       schemas,
       "Repository state-update routing",
     );
-    if (update === undefined || (subscriptions.get(update.schema.typeName)?.length ?? 0) === 0) {
+    const interested = Object.freeze(
+      (subscriptions.get(update?.schema.typeName ?? "") ?? []).filter(
+        (subscriber) =>
+          (subscriber.handler.origin === "external") === (event.context?.external === true),
+      ),
+    );
+    if (update === undefined || interested.length === 0) {
       return undefined;
     }
     const { schema, state } = update;
@@ -4574,6 +4582,7 @@ const RepositoryRoutes = {
       entityIds: Object.freeze([...candidateIds]),
       messageFullTypeName: schema.typeName,
       state,
+      subscribers: interested,
       invocation: "deferred",
     });
   },
@@ -5558,7 +5567,7 @@ const InboxReplay = {
     InboxReplay.validateProjectionReplayTenant(runtime.context, deliveryTenantId, event);
     const route = InboxReplay.replayStateUpdateRoute(repository, routing, message, event);
     const [entityId] = route.entityIds;
-    const subscribers = routing.stateSubscriptions.get(route.messageFullTypeName) ?? [];
+    const subscribers = route.subscribers;
     await ProjectionEventExecution.runStateTarget(
       repository,
       routing,
@@ -5763,7 +5772,12 @@ const InboxReplay = {
     );
     if (
       update === undefined ||
-      (routing.stateSubscriptions.get(update.schema.typeName)?.length ?? 0) === 0
+      (routing.stateSubscriptions
+        .get(update.schema.typeName)
+        ?.some(
+          (subscriber) =>
+            (subscriber.handler.origin === "external") === (event.context?.external === true),
+        ) ?? false) === false
     ) {
       throw new Error("Projection inbox replay requires a readable stored Entity state update.");
     }
@@ -5774,6 +5788,12 @@ const InboxReplay = {
       entityIds,
       messageFullTypeName: schema.typeName,
       state,
+      subscribers: Object.freeze(
+        (routing.stateSubscriptions.get(schema.typeName) ?? []).filter(
+          (subscriber) =>
+            (subscriber.handler.origin === "external") === (event.context?.external === true),
+        ),
+      ),
       invocation: "deferred",
     });
   },
@@ -5941,27 +5961,32 @@ const RepositoryDispatch = {
               dispatch: (command: Command): Promise<void> =>
                 RepositoryDispatch.dispatchRepositoryCommand(repository, routing, command),
             }),
-      event:
-        routing.eventSchemas.length === 0
-          ? undefined
-          : Object.freeze({
-              messageSchemas: () => routing.eventSchemas,
-              externalEventSchemas: () => routing.externalEventSchemas,
-              accept: (event: Event): Promise<void> => {
-                acceptedEventRoutes.set(event, repository.routeEvent(event));
-                return Promise.resolve();
-              },
-              dispatch: (event: Event): Promise<void> => {
-                const acceptedRoute = acceptedEventRoutes.get(event);
-                acceptedEventRoutes.delete(event);
-                return RepositoryDispatch.dispatchRepositoryEvent(
-                  repository,
-                  routing,
-                  event,
-                  acceptedRoute,
-                );
-              },
-            }),
+      event: (() => {
+        if (routing.eventSchemas.length === 0) return undefined;
+        const dispatcher = Object.freeze({
+          messageSchemas: () => routing.eventSchemas,
+          externalEventSchemas: () => routing.externalEventSchemas,
+          accept: (event: Event): Promise<void> => {
+            acceptedEventRoutes.set(event, repository.routeEvent(event));
+            return Promise.resolve();
+          },
+          dispatch: (event: Event): Promise<void> => {
+            const acceptedRoute = acceptedEventRoutes.get(event);
+            acceptedEventRoutes.delete(event);
+            return RepositoryDispatch.dispatchRepositoryEvent(
+              repository,
+              routing,
+              event,
+              acceptedRoute,
+            );
+          },
+        });
+        return EventDispatcherOriginSchemas.define(
+          dispatcher,
+          routing.eventSchemas,
+          routing.externalEventSchemas,
+        );
+      })(),
       systemEvent:
         routing.stateSchemas.length === 0
           ? undefined

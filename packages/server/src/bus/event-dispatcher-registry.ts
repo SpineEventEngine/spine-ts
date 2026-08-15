@@ -15,6 +15,7 @@
 import { type MessageSchema, TypeUrls } from "@spine-event-engine/core";
 
 import type { EventDispatcher } from "./event-dispatcher.js";
+import { EventDispatcherOriginSchemas } from "./event-dispatcher-origin-schemas.js";
 
 /**
  * Internal multicast registry keyed by canonical Spine event type URL.
@@ -22,6 +23,7 @@ import type { EventDispatcher } from "./event-dispatcher.js";
 export class EventDispatcherRegistry {
   readonly #dispatchers = new Set<EventDispatcher>();
   readonly #byTypeUrl = new Map<string, EventDispatcher[]>();
+  readonly #domesticByTypeUrl = new Map<string, EventDispatcher[]>();
   readonly #externalByTypeUrl = new Map<string, EventDispatcher[]>();
   readonly #dispatcherSchemasByTypeUrl = new Map<string, MessageSchema>();
   readonly #schemasByTypeUrl = new Map<string, MessageSchema>();
@@ -36,7 +38,7 @@ export class EventDispatcherRegistry {
       return;
     }
 
-    const registrations = EventDispatcherRegistry.#registrations(dispatcher);
+    const snapshot = EventDispatcherRegistry.#snapshot(dispatcher);
 
     if (this.#dispatchers.has(dispatcher)) {
       return;
@@ -44,27 +46,28 @@ export class EventDispatcherRegistry {
 
     this.#dispatchers.add(dispatcher);
 
-    const external = new Set(
-      EventDispatcherRegistry.#schemaRegistrations(dispatcher.externalEventSchemas?.() ?? []).map(
-        ({ typeUrl }) => typeUrl,
-      ),
-    );
-    for (const { schema, typeUrl } of registrations) {
+    for (const { schema, typeUrl } of snapshot.all) {
       const registered = this.#byTypeUrl.get(typeUrl);
 
       if (registered === undefined) {
         this.#byTypeUrl.set(typeUrl, [dispatcher]);
         this.#dispatcherSchemasByTypeUrl.set(typeUrl, schema);
         this.#schemasByTypeUrl.set(typeUrl, this.#schemasByTypeUrl.get(typeUrl) ?? schema);
-        if (external.has(typeUrl)) this.#externalByTypeUrl.set(typeUrl, [dispatcher]);
+        if (snapshot.external.has(typeUrl)) this.#externalByTypeUrl.set(typeUrl, [dispatcher]);
+        if (snapshot.domestic.has(typeUrl)) this.#domesticByTypeUrl.set(typeUrl, [dispatcher]);
         continue;
       }
 
       registered.push(dispatcher);
-      if (external.has(typeUrl)) {
+      if (snapshot.external.has(typeUrl)) {
         const externalDispatchers = this.#externalByTypeUrl.get(typeUrl) ?? [];
         externalDispatchers.push(dispatcher);
         this.#externalByTypeUrl.set(typeUrl, externalDispatchers);
+      }
+      if (snapshot.domestic.has(typeUrl)) {
+        const domesticDispatchers = this.#domesticByTypeUrl.get(typeUrl) ?? [];
+        domesticDispatchers.push(dispatcher);
+        this.#domesticByTypeUrl.set(typeUrl, domesticDispatchers);
       }
     }
   }
@@ -90,7 +93,7 @@ export class EventDispatcherRegistry {
    */
   find(typeUrl: string, external = false): readonly EventDispatcher[] {
     return Object.freeze([
-      ...((external ? this.#externalByTypeUrl : this.#byTypeUrl).get(typeUrl) ?? []),
+      ...((external ? this.#externalByTypeUrl : this.#domesticByTypeUrl).get(typeUrl) ?? []),
     ]);
   }
 
@@ -112,19 +115,37 @@ export class EventDispatcherRegistry {
   schemas(): readonly MessageSchema[] {
     return Object.freeze([...this.#dispatcherSchemasByTypeUrl.values()]);
   }
-  static #registrations(dispatcher: EventDispatcher): readonly EventDispatcherRegistration[] {
-    const registrations = EventDispatcherRegistry.#schemaRegistrations(dispatcher.messageSchemas());
-    const schemas = new Set(registrations.map(({ typeUrl }) => typeUrl));
-    for (const external of EventDispatcherRegistry.#schemaRegistrations(
+  static #snapshot(dispatcher: EventDispatcher): DispatcherOriginSnapshot {
+    const all = EventDispatcherRegistry.#schemaRegistrations(dispatcher.messageSchemas());
+    const externalRegistrations = EventDispatcherRegistry.#schemaRegistrations(
       dispatcher.externalEventSchemas?.() ?? [],
-    )) {
+    );
+    const schemas = new Set(all.map(({ typeUrl }) => typeUrl));
+    for (const external of externalRegistrations) {
       if (!schemas.has(external.typeUrl)) {
         throw new Error(
           "EventDispatcher.externalEventSchemas() must be a subset of messageSchemas().",
         );
       }
     }
-    return registrations;
+    const privateOrigins = EventDispatcherOriginSchemas.get(dispatcher);
+    const domesticRegistrations = EventDispatcherRegistry.#schemaRegistrations(
+      privateOrigins?.domestic ??
+        all
+          .filter(
+            ({ typeUrl }) => !externalRegistrations.some((entry) => entry.typeUrl === typeUrl),
+          )
+          .map(({ schema }) => schema),
+    );
+    for (const domestic of domesticRegistrations) {
+      if (!schemas.has(domestic.typeUrl))
+        throw new Error("Event dispatcher origin schemas must be a subset of messageSchemas().");
+    }
+    return Object.freeze({
+      all,
+      domestic: new Set(domesticRegistrations.map(({ typeUrl }) => typeUrl)),
+      external: new Set(externalRegistrations.map(({ typeUrl }) => typeUrl)),
+    });
   }
 
   static #schemaRegistrations(
@@ -149,4 +170,10 @@ export class EventDispatcherRegistry {
 interface EventDispatcherRegistration {
   readonly schema: MessageSchema;
   readonly typeUrl: string;
+}
+
+interface DispatcherOriginSnapshot {
+  readonly all: readonly EventDispatcherRegistration[];
+  readonly domestic: ReadonlySet<string>;
+  readonly external: ReadonlySet<string>;
 }
