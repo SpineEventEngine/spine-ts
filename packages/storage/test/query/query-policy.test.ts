@@ -166,7 +166,10 @@ describe("StorageQueryPolicy", () => {
       StorageQueryPolicy.validate({ candidateLimit: 10_001 }, completeCapabilities);
     }).toThrow(/candidate limit must not exceed 10,000/);
     expect(() => {
-      StorageQueryPolicy.validate({ candidateLimit: Number.MAX_SAFE_INTEGER }, completeCapabilities);
+      StorageQueryPolicy.validate(
+        { candidateLimit: Number.MAX_SAFE_INTEGER },
+        completeCapabilities,
+      );
     }).toThrow(/candidate limit must not exceed 10,000/);
   });
 
