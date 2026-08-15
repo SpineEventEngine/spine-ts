@@ -26,6 +26,15 @@ files are in scope.
 - Canonical inputs read: AGENTS, BUILD_PROTOCOL, completion/Wave 12 plans,
   T-0187 task/dispatch/handoff, and D-0098/D-0111/D-0114.
 
+## Coverage Ownership Transfer
+
+The initial existing `implementer` exhausted its execution window after the
+durable live-provider and contract endpoint `33fccfce`. It is inactive. A
+replacement existing `implementer` continues the same query/provider file
+ownership with explicit `gpt-5.6-terra` / medium dispatch, no subagents, and
+no Inbox/browser scope. Desktop runtime model/token/latency telemetry remains
+unavailable; the immutable configured profile is the evidence.
+
 ## Initial evidence and next action
 
 Records created before product edits. Next: frozen dependency install and a
