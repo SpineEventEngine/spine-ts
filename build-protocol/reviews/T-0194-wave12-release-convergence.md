@@ -93,3 +93,11 @@ coverage inputs are ready for review. Generated residue is absent.
   (139 reliability, 77 security, 65 TypeScript/API). Style remains accepted
   from the complete review wave because no subsequent correction restructured
   production code.
+- Final live runtime evidence is separately green. Real Chromium passes all
+  nine acceptance cases through Vite, Envoy, Gateway, and the native service;
+  the passive viewer retains one healthy binding/stream across three distinct
+  writer updates and forced disconnect cleanup. Live MySQL 8.4 passes the
+  production normalized-plan case and both Inbox cases. The separate Datastore
+  emulator window passes both normalized-plan/tenant-group cases and both Inbox
+  cases. Native physical-row/key assertions pass, all windows are released,
+  and no broad provider cleanup ran.
