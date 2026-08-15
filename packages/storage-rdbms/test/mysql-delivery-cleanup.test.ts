@@ -44,7 +44,7 @@ describe("MysqlDeliveryCleanupStorage", () => {
   it("rechecks cancellation after preparation before entering the coordinator", async () => {
     const operation = { signal: { aborted: false } };
     const openStorage = vi.fn(() => storage(() => (operation.signal.aborted = true)));
-    const coordinate = vi.fn(async (_context, _tables, _key, work) => work({} as never));
+    const coordinate = vi.fn(coordinateWork);
     const cleanup = new MysqlDeliveryCleanupStorage(openStorage as never, coordinate, () => "key");
 
     await expect(cleanup.remove(input(operation))).resolves.toBe(false);
@@ -102,11 +102,11 @@ function input(operation?: { signal?: { aborted: boolean }; timeoutMs?: number }
 function storage(onPrepare?: () => void) {
   return {
     tableName: "records",
-    prepare: vi.fn(async () => onPrepare?.()),
+    prepare: vi.fn(() => Promise.resolve(onPrepare?.())),
     close: vi.fn(),
-    withConnection: vi.fn(async (_connection, work) => work()),
-    readLocked: vi.fn(async () => expected),
-    delete: vi.fn(async () => true),
+    withConnection: vi.fn((_connection: unknown, work: () => Promise<unknown>) => work()),
+    readLocked: vi.fn(() => Promise.resolve(expected)),
+    delete: vi.fn(() => Promise.resolve(true)),
   };
 }
 
@@ -114,7 +114,16 @@ function coordinator(inbox: ReturnType<typeof storage>, sessions: ReturnType<typ
   let opened = 0;
   return new MysqlDeliveryCleanupStorage(
     vi.fn(() => (opened++ === 0 ? inbox : sessions)) as never,
-    async (_context, _tables, _key, work) => work({} as never),
+    coordinateWork,
     () => "key",
   );
+}
+
+async function coordinateWork<T>(
+  _context: unknown,
+  _tables: readonly string[],
+  _key: string,
+  work: (connection: never) => Promise<T>,
+): Promise<T> {
+  return await work({} as never);
 }

@@ -114,11 +114,11 @@ function entity() {
 
 function transactionWith(entities: ReturnType<typeof entity>[]) {
   return {
-    run: vi.fn(async () => undefined),
-    get: vi.fn(async () => (entities.shift() === undefined ? [] : [entity()])),
-    rollback: vi.fn(async () => undefined),
+    run: vi.fn(() => Promise.resolve()),
+    get: vi.fn(() => Promise.resolve(entities.shift() === undefined ? [] : [entity()])),
+    rollback: vi.fn(() => Promise.resolve()),
     delete: vi.fn(),
-    commit: vi.fn(async () => undefined),
+    commit: vi.fn(() => Promise.resolve()),
   };
 }
 
