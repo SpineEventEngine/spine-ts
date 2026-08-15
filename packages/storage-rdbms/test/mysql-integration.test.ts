@@ -26,7 +26,7 @@ import {
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
 import { eventStoreRecordSpec } from "@spine-event-engine/storage/internal/event-store";
-import { ColumnTypes, EventStore, type StorageContext } from "@spine-event-engine/storage";
+import { ColumnTypes, EventStore, StorageGroup, type StorageContext } from "@spine-event-engine/storage";
 import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import type { RowDataPacket } from "mysql2";
 import { createPool } from "mysql2/promise";
@@ -71,7 +71,7 @@ live("MySQL-family record layout", () => {
     const storage = factory.createRecordStorage(
       { name: `t0134_records_${String(Date.now())}`, multitenant: false },
       spec,
-      { name: `t0134_records_${String(Date.now())}` },
+      new StorageGroup(`t0134_records_${String(Date.now())}`),
     );
     await storage.writeAll([
       create(StringValueSchema, { value: "b" }),
