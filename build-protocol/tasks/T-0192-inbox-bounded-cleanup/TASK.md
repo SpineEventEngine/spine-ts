@@ -1,6 +1,6 @@
 # T-0192: Shard-Fenced Bounded Delivered Inbox Cleanup
 
-Status: BLOCKED BY T-0191
+Status: IN PROGRESS — PROVIDER HANDOFF PENDING
 Baseline: `e2ab42d2`
 Branch: `codex/wave-12-inbox-cleanup`
 Worktree: `.worktrees/wave-12-inbox-cleanup`
@@ -10,6 +10,11 @@ Implementation owner: existing `implementer`, explicitly configured as
 `gpt-5.6-terra` with `medium` reasoning. Runtime telemetry is unavailable on
 this surface; the immutable configured role/profile and explicit dispatch are
 the available evidence.
+
+The initial owner became inactive after durable checkpoint `a39d0e3b`. A
+replacement existing `implementer` continues changed-branch lifecycle tests
+under the same explicit profile and no-subagent rule. It has no provider file
+ownership until the orchestrator completes T-0190 review and records handoff.
 
 ## Objective
 

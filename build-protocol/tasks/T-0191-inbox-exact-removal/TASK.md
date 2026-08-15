@@ -12,6 +12,12 @@ Implementation owner: existing `implementer`, explicitly configured as
 this surface; the immutable configured role/profile and explicit dispatch are
 the available evidence.
 
+The initial owner became inactive after durable checkpoint `a39d0e3b`. A
+replacement existing `implementer` continues the same non-provider coverage
+scope with explicit `gpt-5.6-terra` / medium dispatch and no subagents. Existing
+MySQL/Datastore provider ownership still waits for the orchestrator's recorded
+T-0190 handoff, so no overlapping writer is introduced.
+
 ## Objective
 
 Add the optional source-compatible `DeliveryInbox.removeDelivered(message,
