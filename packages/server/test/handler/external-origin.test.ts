@@ -5,7 +5,7 @@ import { create, toBinary } from "@bufbuild/protobuf";
 import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { EventContextSchema, EventIdSchema } from "@spine-event-engine/proto";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyMessages } from "@spine-event-engine/core";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
@@ -66,7 +66,7 @@ describe("Wave 13 external receptor origin", () => {
     );
     expect(records).not.toContainEqual(expect.objectContaining({ methodName: "assign" }));
   });
-  it("RED-19 emits first-parameter External<T> origin metadata and rejects untrusted shapes", async () => {
+  it("RED-19 emits first-parameter External<T> origin metadata and rejects untrusted shapes", () => {
     const result = BuildHandlerAnalyzer.analyze(programWithSource(externalOriginSource));
     const records = result.entities[0]?.handlers as
       readonly { readonly methodName: string; readonly origin?: string }[] | undefined;
@@ -99,7 +99,7 @@ function event(externalOrigin: boolean) {
   return {
     $typeName: "spine.core.Event",
     id: create(EventIdSchema, { value }),
-    context: create(EventContextSchema, { external: externalOrigin } as never),
+    context: create(EventContextSchema, { external: externalOrigin }),
     message: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value })),
   } as never;
 }

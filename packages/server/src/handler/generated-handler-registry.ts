@@ -364,7 +364,8 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
       );
     }
 
-    if (handler.origin !== "domestic" && handler.origin !== "external") {
+    const origin: unknown = handler.origin;
+    if (origin !== "domestic" && origin !== "external") {
       throw new HandlerRegistryIngestionError(
         "INVALID_SIGNAL_ORIGIN",
         `Generated handler "${handler.methodName}" declares an invalid signal origin.`,

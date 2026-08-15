@@ -1219,6 +1219,7 @@ interface RepositoryDispatchers {
 interface RepositoryRouting<Id = unknown> {
   readonly commandSchemas: readonly MessageSchema[];
   readonly eventSchemas: readonly MessageSchema[];
+  readonly domesticEventSchemas: readonly MessageSchema[];
   readonly externalEventSchemas: readonly MessageSchema[];
   readonly producedEventSchemas: readonly MessageSchema[];
   readonly producedCommandSchemas: readonly MessageSchema[];
@@ -4265,6 +4266,19 @@ const RepositoryRoutes = {
           .map((candidate) => candidate.schema),
       ),
     );
+    const domesticEventSchemas = RepositoryHandlers.uniqueSchemas(
+      handlers.flatMap((handler) =>
+        handler.handlers
+          .filter(
+            (candidate) =>
+              candidate.origin === "domestic" &&
+              (candidate.kind === "event-subscription" ||
+                candidate.kind === "event-reaction" ||
+                candidate.kind === "command-reaction"),
+          )
+          .map((candidate) => candidate.schema),
+      ),
+    );
     const stateSchemas = RepositoryHandlers.uniqueSchemas(
       handlers.flatMap((handler) =>
         handler.stateSubscriptions.map((subscription) => subscription.schema),
@@ -4330,6 +4344,7 @@ const RepositoryRoutes = {
     return Object.freeze({
       commandSchemas,
       eventSchemas,
+      domesticEventSchemas,
       externalEventSchemas,
       producedEventSchemas,
       producedCommandSchemas,
@@ -4563,12 +4578,7 @@ const RepositoryRoutes = {
       schemas,
       "Repository state-update routing",
     );
-    const interested = Object.freeze(
-      (subscriptions.get(update?.schema.typeName ?? "") ?? []).filter(
-        (subscriber) =>
-          (subscriber.handler.origin === "external") === (event.context?.external === true),
-      ),
-    );
+    const interested = Object.freeze([...(subscriptions.get(update?.schema.typeName ?? "") ?? [])]);
     if (update === undefined || interested.length === 0) {
       return undefined;
     }
@@ -5772,12 +5782,7 @@ const InboxReplay = {
     );
     if (
       update === undefined ||
-      (routing.stateSubscriptions
-        .get(update.schema.typeName)
-        ?.some(
-          (subscriber) =>
-            (subscriber.handler.origin === "external") === (event.context?.external === true),
-        ) ?? false) === false
+      (routing.stateSubscriptions.get(update.schema.typeName)?.length ?? 0) === 0
     ) {
       throw new Error("Projection inbox replay requires a readable stored Entity state update.");
     }
@@ -5788,12 +5793,7 @@ const InboxReplay = {
       entityIds,
       messageFullTypeName: schema.typeName,
       state,
-      subscribers: Object.freeze(
-        (routing.stateSubscriptions.get(schema.typeName) ?? []).filter(
-          (subscriber) =>
-            (subscriber.handler.origin === "external") === (event.context?.external === true),
-        ),
-      ),
+      subscribers: Object.freeze([...(routing.stateSubscriptions.get(schema.typeName) ?? [])]),
       invocation: "deferred",
     });
   },
@@ -5983,7 +5983,7 @@ const RepositoryDispatch = {
         });
         return EventDispatcherOriginSchemas.define(
           dispatcher,
-          routing.eventSchemas,
+          routing.domesticEventSchemas,
           routing.externalEventSchemas,
         );
       })(),

@@ -89,6 +89,7 @@ export class EventDispatcherRegistry {
    * Finds dispatchers registered for a canonical event type URL.
    *
    * @param typeUrl the canonical event type URL.
+   * @param external whether the event was imported from another context.
    * @returns a frozen dispatcher snapshot.
    */
   find(typeUrl: string, external = false): readonly EventDispatcher[] {

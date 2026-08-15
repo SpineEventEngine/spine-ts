@@ -1310,12 +1310,7 @@ const HandlerSources = Object.freeze({
       );
     const nestedMarker =
       marker === undefined && HandlerSources.containsExternalMarker(first, scope.imports);
-    const localAlias =
-      marker === undefined &&
-      ts.isTypeReferenceNode(first) &&
-      ts.isIdentifier(first.typeName) &&
-      scope.imports.localTypeAliases.has(first.typeName.text);
-    if (laterMarker || nestedMarker || (marker !== undefined && !marker.direct) || localAlias) {
+    if (laterMarker || nestedMarker || (marker !== undefined && !marker.direct)) {
       HandlerTypes.pushDiagnostic(
         scope,
         "INVALID_EXTERNAL_ORIGIN",
@@ -1336,8 +1331,15 @@ const HandlerSources = Object.freeze({
     type: ts.TypeNode,
     imports: ImportState,
   ): { readonly direct: boolean; readonly type?: ts.TypeNode } | undefined {
-    if (!ts.isTypeReferenceNode(type) || !ts.isIdentifier(type.typeName)) return undefined;
-    if (imports.serverSymbols.get(type.typeName.text) !== "External") return undefined;
+    if (!ts.isTypeReferenceNode(type)) return undefined;
+    const canonical =
+      (ts.isIdentifier(type.typeName) &&
+        imports.serverSymbols.get(type.typeName.text) === "External") ||
+      (ts.isQualifiedName(type.typeName) &&
+        ts.isIdentifier(type.typeName.left) &&
+        type.typeName.right.text === "External" &&
+        imports.serverNamespaces.has(type.typeName.left.text));
+    if (!canonical) return undefined;
     const argument = type.typeArguments?.[0];
     return argument === undefined
       ? { direct: false }

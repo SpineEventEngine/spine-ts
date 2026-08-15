@@ -36,7 +36,8 @@ const set = fromBinary(
   FileDescriptorSetSchema,
   Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
 );
-const descriptor = set.file[0]!;
+const descriptor = set.file[0];
+if (descriptor === undefined) throw new Error("Wave 13 origin fixture has no descriptor.");
 export const Wave13OriginStateSchema = messageDesc(
   fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
     file_spine_options,
@@ -126,7 +127,7 @@ export function createWave13OriginRegistry(): { readonly clear: () => void; read
   return {
     root: pathToFileURL(root),
     clear: () => {
-      delete (globalThis as Record<string, unknown>)[slot];
+      Reflect.deleteProperty(globalThis, slot);
       rmSync(root, { force: true, recursive: true });
     },
   };
