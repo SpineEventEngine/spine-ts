@@ -35,7 +35,7 @@ export interface DeliveryOperationOptions {
   readonly signal?: AbortSignal;
 
   /**
-   * Positive safe-integer operation deadline in milliseconds, measured from admission.
+   * Non-negative safe-integer operation budget in milliseconds, measured from admission; zero is expired.
    */
   readonly timeoutMs?: number;
 }
@@ -95,6 +95,26 @@ export interface DeliveryInbox {
     message: InboxMessage,
     options?: DeliveryOperationOptions,
   ): Promise<InboxMessage | undefined>;
+
+  /**
+   * Removes one exact delivered snapshot atomically while a direct shard
+   * session remains current.
+   *
+   * Built-in direct Inbox storage implements this through its provider-owned
+   * ownership-and-delete operation. Custom structural ports may omit this
+   * optional retention capability. RemoteInbox omits it because acknowledgement
+   * already removes its pending row.
+   *
+   * @param message Supplies the expected delivered row snapshot.
+   * @param session Supplies the currently owned shard session.
+   * @param options Propagates cancellation and a delivery deadline.
+   * @returns `true` only when the exact snapshot was removed under current ownership.
+   */
+  removeDelivered?(
+    message: InboxMessage,
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<boolean>;
 }
 
 /**

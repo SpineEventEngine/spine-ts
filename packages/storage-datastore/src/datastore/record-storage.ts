@@ -385,6 +385,30 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
   }
 
   /**
+   * Decodes one entity read by a provider-owned multi-record transaction.
+   *
+   * @param entity The raw Datastore entity returned inside that transaction.
+   * @returns The decoded record.
+   * @internal
+   */
+  decodeTransactionEntity(entity: Record<string | symbol, unknown>): R {
+    return this.#codec.decode(entity);
+  }
+
+  /**
+   * Checks whether one transaction-read entity is the exact expected record.
+   *
+   * @param entity The raw Datastore entity returned inside that transaction.
+   * @param expected The expected record snapshot.
+   * @returns Whether the persisted payload exactly matches the snapshot.
+   * @internal
+   */
+  matchesTransactionEntity(entity: Record<string | symbol, unknown>, expected: R): boolean {
+    const expectedData = this.transactionEntity(expected).data[payloadProperty];
+    return RecordValues.payloadEqual(entity[payloadProperty], expectedData);
+  }
+
+  /**
    * Reads one bounded, fully provider-executed page.
    *
    * Entity history uses this internal seam for records that would otherwise

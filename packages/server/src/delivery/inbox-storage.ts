@@ -19,7 +19,9 @@ import type {
   InboxMessageId as WireInboxMessageId,
 } from "@spine-event-engine/proto/delivery";
 import { InboxMessageIdSchema } from "@spine-event-engine/proto/delivery";
+import { ShardIndexSchema, ShardSessionRecordSchema } from "@spine-event-engine/proto/delivery";
 import type { RecordStorage, StorageContext, StorageFactory } from "@spine-event-engine/storage";
+import { DeliveryCleanupStorageFactories } from "@spine-event-engine/storage/internal/delivery-cleanup";
 
 import {
   InboxMessageError,
@@ -32,6 +34,8 @@ import {
 } from "./inbox.js";
 import { InboxRecords, inboxRecordSpec } from "./inbox-records.js";
 import { ShardIndex } from "./shard-index.js";
+import { shardSessionRecordSpec } from "./sharded-work-registry.js";
+import type { DeliveryWorkSession } from "./delivery-ports.js";
 
 const defaultReadLimit = 100;
 const maxReadLimit = 1_000;
@@ -163,6 +167,57 @@ export class InboxStorage {
         : undefined;
     } finally {
       storage.close();
+    }
+  }
+
+  /**
+   * Removes one eligible delivered row when the leased session remains current.
+   *
+   * @param message Supplies the exact delivered snapshot to remove.
+   * @param session Supplies the leased session that owns the message shard.
+   * @param options Propagates cancellation and a delivery deadline.
+   * @returns Whether the provider atomically removed the exact durable row.
+   */
+  async removeDelivered(
+    message: InboxMessage,
+    session: DeliveryWorkSession,
+    options?: import("./delivery-ports.js").DeliveryOperationOptions,
+  ): Promise<boolean> {
+    if (
+      options?.timeoutMs !== undefined &&
+      (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 0)
+    )
+      return false;
+    const deadline =
+      options?.timeoutMs === undefined ? undefined : Values.now(this.#now) + options.timeoutMs;
+    const isActive = () =>
+      !options?.signal?.aborted && (deadline === undefined || Values.now(this.#now) < deadline);
+    if (!isActive()) return false;
+    if (session.kind !== "LEASED" || session.shard.key() !== message.shard.key()) return false;
+    const expected = InboxRecords.write(message);
+    if (
+      message.status !== "DELIVERED" ||
+      (message.keepUntil !== undefined && message.keepUntil.getTime() > Values.now(this.#now))
+    )
+      return false;
+    const cleanup = DeliveryCleanupStorageFactories.create(this.#storageFactory);
+    try {
+      return await cleanup.remove({
+        context: Values.context(this.#context),
+        ...(options === undefined ? {} : { operation: { ...options, isActive } }),
+        inbox: { spec: inboxRecordSpec, id: Values.wireId(expected), expected },
+        session: {
+          spec: shardSessionRecordSpec,
+          id: create(ShardIndexSchema, {
+            index: session.shard.index,
+            ofTotal: session.shard.ofTotal,
+          }),
+          expected: Values.session(session),
+          isCurrent: (current) => Values.sessionCurrent(current, session, Values.now(this.#now)),
+        },
+      });
+    } finally {
+      cleanup.close();
     }
   }
 
@@ -342,5 +397,25 @@ const Values = Object.freeze({
           tenantId: context.tenantId,
         }
       : { name: `${context.name}.delivery.inbox`, multitenant: false };
+  },
+  session(value: import("./sharded-work-registry.js").ShardSession) {
+    return create(ShardSessionRecordSchema, {
+      index: { index: value.shard.index, ofTotal: value.shard.ofTotal },
+      whenLastPicked: Values.timestamp(value.pickedUpAt.getTime()),
+      worker: value.worker,
+    });
+  },
+  sessionCurrent(
+    value: import("@spine-event-engine/proto/delivery").ShardSessionRecord,
+    expected: import("./sharded-work-registry.js").ShardSession,
+    now: number,
+  ): boolean {
+    return (
+      value.index?.index === expected.shard.index &&
+      value.index.ofTotal === expected.shard.ofTotal &&
+      value.worker?.nodeId?.value === expected.worker?.nodeId?.value &&
+      value.worker?.value === expected.worker?.value &&
+      expected.expiresAt.getTime() > now
+    );
   },
 });

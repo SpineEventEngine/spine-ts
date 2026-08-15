@@ -76,7 +76,12 @@ export class ShardedWorkRegistry {
     this.#factory = options.storageFactory;
     this.#lease = DeliveryLeases.requireMs("ShardedWorkRegistry", options.leaseMs ?? leaseDefault);
     this.#now = options.now ?? (() => new Date());
-    configs.set(this, { context: this.#context, storageFactory: this.#factory });
+    configs.set(this, {
+      context: this.#context,
+      storageFactory: this.#factory,
+      lease: this.#lease,
+      now: this.#now,
+    });
     Object.freeze(this);
   }
 
@@ -280,7 +285,7 @@ export interface ShardedWorkRegistryOptions {
 }
 const configs = new WeakMap<
   ShardedWorkRegistry,
-  { context: StorageContext; storageFactory: StorageFactory }
+  { context: StorageContext; storageFactory: StorageFactory; lease: number; now: () => Date }
 >();
 
 /**

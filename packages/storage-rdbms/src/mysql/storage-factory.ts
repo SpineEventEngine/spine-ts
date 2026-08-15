@@ -29,6 +29,7 @@ import {
   EntityCommitStorageFactories,
   type EntityCommitStorage,
 } from "@spine-event-engine/storage/internal/entity-commit";
+import { DeliveryCleanupStorageFactories } from "@spine-event-engine/storage/internal/delivery-cleanup";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
 import { eventStoreRecordSpec } from "@spine-event-engine/storage/internal/event-store";
 import type { TenantId } from "@spine-event-engine/proto";
@@ -41,6 +42,7 @@ import { MysqlRecordStorage, type MysqlRecordLifecycle } from "./record-storage.
 import { MysqlTableResolver } from "./table-resolver.js";
 import { MysqlEntityStorage } from "./entity-history.js";
 import { mysqlEntityLockKey, MysqlEntityCommitCoordinator } from "./entity-commit.js";
+import { MysqlDeliveryCleanupStorage } from "./delivery-cleanup.js";
 import { resolvedMysqlTableSpec, type MysqlTableSpec } from "./table-spec.js";
 import { MysqlStorageOperationError, mysqlError } from "./errors.js";
 
@@ -263,6 +265,22 @@ export class MysqlStorageFactory extends StorageFactory {
     });
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
+    });
+    DeliveryCleanupStorageFactories.register(this, {
+      createDeliveryCleanupStorage: () =>
+        new MysqlDeliveryCleanupStorage(
+          (context, spec) => this.createMysqlRecordStorage(context, spec),
+          (context, tables, key, work) => {
+            const database = this.database(context);
+            return new MysqlEntityCommitCoordinator(this.connections(database)).commit(
+              tables,
+              key,
+              (connection) => work(connection),
+              { requireTransaction: true },
+            );
+          },
+          () => "spine-delivery-cleanup",
+        ),
     });
   }
 

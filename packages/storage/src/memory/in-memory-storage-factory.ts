@@ -34,6 +34,8 @@ import {
   EntityCommitStorageFactories,
   type EntityCommitStorage,
 } from "../internal/entity-commit.js";
+import { DeliveryCleanupStorageFactories } from "../internal/delivery-cleanup.js";
+import { MemoryDeliveryCleanupStorage } from "./memory-delivery-cleanup.js";
 
 /**
  * In-memory factory for record storages and framework delegates such as the event store.
@@ -54,6 +56,12 @@ export class InMemoryStorageFactory extends StorageFactory implements TenantCata
     this.#catalog = new MemoryTenantCatalog(backend);
     EntityCommitStorageFactories.register(this, {
       createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
+    });
+    DeliveryCleanupStorageFactories.register(this, {
+      createDeliveryCleanupStorage: () =>
+        new MemoryDeliveryCleanupStorage((context, spec, group) =>
+          this.tenantRecords(context, spec, group),
+        ),
     });
   }
 
