@@ -293,7 +293,9 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
       return Promise.reject(
         new TypeError("Storage provider must implement normalized query-plan execution."),
       );
-    return this.queryRecordEntries({ limit: defaultQueryCandidateLimit + 1 });
+    return this.queryRecordEntries({
+      limit: (plan.candidateLimit ?? defaultQueryCandidateLimit) + 1,
+    });
   }
 
   /**

@@ -197,6 +197,20 @@ describe("MysqlRecordStorage", () => {
     expect(calls.some((call) => call.sql.startsWith("SELECT ID, bytes"))).toBe(false);
   });
 
+  it("rejects an oversized normalized SQL bind budget before acquiring a connection", async () => {
+    const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    const storage = schemaStorage(
+      readyConnection(calls, { columns: ["ID", "bytes", "value"] }) as never,
+    );
+
+    await expect(
+      storage.queryPlan({
+        predicate: { kind: "ids", ids: Array.from({ length: 1_000 }, (_, index) => String(index)) },
+      }),
+    ).rejects.toThrow("bind budget");
+    expect(calls).toEqual([]);
+  });
+
   it.each([
     ["missing primary key", { primary: [], columns: canonicalColumns() }, /primary key/i],
     [

@@ -69,3 +69,12 @@ five focused provider/storage suites, while retained focused LCOV separately
 measures the D-0114 changed executable range. The canonical run passed 115
 tests after all shared gates; specialist review remains outside this implementer
 milestone.
+
+## Accepted correction batch
+
+The seven-item specialist batch preserves the frozen public contract: normalized
+plans still have no `offset`, now reject unsupported runtime keys, and no broad
+MySQL configuration is introduced. Provider-side bounds remain finite and
+detectable, with Datastore's physical 1,000-row ceiling explicitly distinct from
+the shared 10,000-candidate default. Live tenant/storage-group proof is prepared
+but must wait for an orchestrator-granted exclusive provider window.

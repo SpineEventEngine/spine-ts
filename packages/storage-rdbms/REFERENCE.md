@@ -100,7 +100,10 @@ limits are bound. Ordering ends with `ID` for a stable tie-break. An omitted
 query budget permits at most 10,000 provider rows to be materialized. The primary
 key serves ID queries; operators must add indexes for workload equality, range,
 and composite filter/order patterns. Without them MySQL may scan or sort despite
-the runtime materialization bound.
+the runtime materialization bound. To keep one normalized statement finite,
+MySQL accepts at most 1,000 bound parameters including its provider limit;
+oversized ID sets or composite predicate bind work reject before a connection is
+acquired.
 
 ## Entity history seam
 

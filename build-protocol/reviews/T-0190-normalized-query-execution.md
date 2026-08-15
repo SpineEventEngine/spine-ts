@@ -64,6 +64,21 @@ implementation context under the already recorded explicit
 performance/reliability, and documentation; style re-review is limited to a
 substantive restructuring beyond the requested bound derivation.
 
+## Correction implementation evidence
+
+- The existing implementer addressed the complete accepted batch under the
+  recorded `gpt-5.6-terra` / medium profile. Focused RED tests failed for all
+  six deterministic behavior gaps before the minimal corrections; focused GREEN
+  suites pass 4 files / 114 tests.
+- Exact working-tree LCOV against `e2ab42d2` reports 52/54 changed executable
+  lines (96.30%) and 57/61 branches (93.44%). Whole-file aggregate coverage is
+  diagnostic because it includes pre-existing provider paths.
+- Live MySQL and Datastore tenant/storage-group query-plan tests are present but
+  unexecuted pending an orchestrator-granted exclusive provider window. The
+  TypeScript/API, performance/reliability, and documentation re-review inputs
+  await the checkpoint endpoint; generated build/tooling typecheck, changed-file
+  ESLint, TSDoc, TypeDoc API inventory, formatting, and diff validation pass.
+
 ## Mechanical convergence evidence
 
 - Replacement existing `implementer` completed the coverage-only correction

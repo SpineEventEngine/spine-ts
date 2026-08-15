@@ -165,6 +165,7 @@ const knownComparisons = new Set<NormalizedComparisonOperator>([
   "lessOrEqual",
 ]);
 const knownFeatures = new Set<StorageQueryFeature>(["either", "nested", "order", "mask", "limit"]);
+const knownPlanProperties = new Set(["predicate", "order", "mask", "limit", "candidateLimit"]);
 
 /**
  * Shared fail-fast validation for normalized plans before provider execution.
@@ -178,6 +179,7 @@ export const StorageQueryPolicy: Readonly<{
       capabilities,
       "query capabilities must be an object.",
     );
+    QueryPlanValidator.validatePlanProperties(normalizedPlan);
     const comparisons = QueryCapabilities.validateComparisons(normalizedCapabilities.comparisons);
     const features = QueryCapabilities.validateFeatures(normalizedCapabilities.features);
     const requirements: QueryRequirements = {
@@ -209,6 +211,20 @@ interface QueryRequirements {
  */
 const QueryPlanValidator = {
   // prettier-ignore
+
+  /**
+   * Rejects unsupported or misspelled normalized-plan properties.
+   */
+  validatePlanProperties(plan: Record<string, unknown>): void {
+    if (Object.hasOwn(plan, "offset")) {
+      throw new TypeError("normalized query plans do not support offset.");
+    }
+    for (const property of Object.keys(plan)) {
+      if (!knownPlanProperties.has(property)) {
+        throw new TypeError("query plan property must be recognized.");
+      }
+    }
+  },
 
   /**
    * Validates the maximum materialized candidate count.

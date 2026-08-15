@@ -309,6 +309,30 @@ describe("DatastoreRecordStorage", () => {
     ]);
   });
 
+  it("uses the smaller exact plan limit for a normalized provider fetch", async () => {
+    const client = new FlatDatastore();
+    const records = storage(client);
+    await records.writeAll(["alpha", "bravo", "charlie"].map(message));
+
+    await records.queryPlan({
+      order: [{ column: "value", direction: "asc" }],
+      limit: 1,
+      candidateLimit: 500,
+    });
+
+    expect(client.lastQuery?.limitValue).toBe(1);
+  });
+
+  it("rejects an undeclared normalized order column before provider access", async () => {
+    const client = new FlatDatastore();
+    const records = storage(client);
+
+    await expect(
+      records.queryPlan({ order: [{ column: "missing", direction: "asc" }] }),
+    ).rejects.toThrow("not declared");
+    expect(client.lastQuery).toBeUndefined();
+  });
+
   it("rejects corrupted payloads and oversized supported IDs before provider writes", async () => {
     const client = new FlatDatastore();
     const records = storage(client);

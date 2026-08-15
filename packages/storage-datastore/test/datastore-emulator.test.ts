@@ -134,6 +134,15 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       await expect(group.read("same")).resolves.toMatchObject({ value: "same" });
       await expect(tenantA.read("same")).resolves.toMatchObject({ value: "same" });
       await expect(tenantB.read("same")).resolves.toMatchObject({ value: "same" });
+      await expect(
+        tenantA.queryPlan({ predicate: { kind: "ids", ids: ["same"] } }),
+      ).resolves.toEqual([message("same")]);
+      await expect(
+        tenantB.queryPlan({ predicate: { kind: "ids", ids: ["same"] } }),
+      ).resolves.toEqual([message("same")]);
+      await expect(group.queryPlan({ predicate: { kind: "ids", ids: ["same"] } })).resolves.toEqual(
+        [message("same")],
+      );
       expect(await rows(client, StringValueSchema.typeName)).toHaveLength(1);
       expect(await rows(client, StringValueSchema.typeName, "Va")).toHaveLength(1);
       expect(await rows(client, StringValueSchema.typeName, "Vb")).toHaveLength(1);

@@ -964,13 +964,15 @@ describe("InMemoryRecordStorage", () => {
     expect(storage.queries).toEqual([]);
   });
 
-  it("bounds an empty normalized plan by the shared default before provider access", async () => {
+  it("bounds an empty normalized plan by its explicit candidate budget before provider access", async () => {
     const storage = new QueryEntriesStorage({ name: "Tasks", multitenant: false }, createSpec(), [
       createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n),
     ]);
 
-    await expect(storage.queryPlan({})).resolves.toMatchObject([{ id: { value: "event-1" } }]);
-    expect(storage.queries).toEqual([{ limit: 10_001 }]);
+    await expect(storage.queryPlan({ candidateLimit: 2 })).resolves.toMatchObject([
+      { id: { value: "event-1" } },
+    ]);
+    expect(storage.queries).toEqual([{ limit: 3 }]);
   });
 });
 

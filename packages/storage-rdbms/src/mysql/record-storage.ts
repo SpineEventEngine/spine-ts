@@ -43,6 +43,8 @@ import {
 import { MysqlColumnMapping } from "./column-mapping.js";
 import { MysqlIdColumn } from "./id-column.js";
 
+const maximumNormalizedPlanBinds = 1_000;
+
 /**
  * Describes the private connection lifecycle for a record-family handle.
  */
@@ -770,6 +772,11 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     const values: unknown[] = [];
     const predicate =
       plan.predicate === undefined ? undefined : this.planPredicate(plan.predicate, values);
+    if (values.length >= maximumNormalizedPlanBinds) {
+      throw new MysqlStorageOperationError(
+        `MySQL normalized query exceeds the ${String(maximumNormalizedPlanBinds)}-parameter bind budget.`,
+      );
+    }
     const order = [
       ...(plan.order ?? []).map(
         (item) => `${this.planColumn(item.column)} ${item.direction === "desc" ? "DESC" : "ASC"}`,
