@@ -126,3 +126,23 @@ coverage inputs are ready for review. Generated residue is absent.
 - Diff-scoped coverage against `96501a07` is 83/83 executable lines (100%) and
   56/61 branches (91.80%). Performance/reliability and TypeScript/API re-review
   are required before the release profile restarts.
+
+### Release-correction re-review assignment
+
+- Frozen pushed endpoint: `b3407245`.
+- Existing `performance_reliability_reviewer`, explicitly configured
+  `gpt-5.6-terra` / high, reviews acknowledgement identity, bounded in-flight
+  state, concurrent batch/single handoffs, shard ownership, post-release
+  follow-up ordering, and cleanup lifecycle. No subagents.
+- Existing `typescript_api_docs_reviewer`, explicitly configured
+  `gpt-5.6-terra` / high, reviews internal/public surface placement, structural
+  compatibility, return contracts, TSDoc, and generated API exposure. No
+  subagents.
+- Runtime telemetry is unavailable on this surface; the immutable configured
+  role/profile and this limitation are the durable acceptance record.
+- Documentation is N/A because the correction changes no user-facing behavior
+  claim; it makes the already documented cleanup and local handoff behavior
+  coexist. Style/maintainability is reopened only if either affected reviewer
+  finds substantive structural complexity. Final security remains accepted:
+  this correction adds no external input, trust-boundary, credential, or
+  destructive-provider behavior.
