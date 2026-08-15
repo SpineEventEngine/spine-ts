@@ -39,16 +39,17 @@ Phase 1 — discovery and current-state tracing.
 
 - [x] Run the cheap planning preflight.
 - [x] Run `pnpm verify:task -- --no-tests` after convergence.
-- [ ] Integrate, post-merge verify proportionately, push, reconcile remote refs,
+- [x] Integrate, post-merge verify proportionately, push, reconcile remote refs,
       and prove exactly `origin/main` with no tags.
-- **Status:** in_progress
+- **Status:** completed
 
-### Phase 5: First Wave 12 implementation task
+### Phase 5: Accelerated Wave 12 implementation handoff
 
-- [ ] Create its isolated branch/worktree from verified `origin/main`.
-- [ ] Start the approved failing-before implementation packet unless blocked by
-      a genuine unresolved contract choice.
-- **Status:** pending
+- [x] Freeze the approved three-stream worktree/ownership model.
+- [x] Confirm no genuine unresolved contract choice blocks implementation.
+- [x] Hand off creation of the three isolated branches/worktrees and bounded
+      owner dispatches to the autonomous Wave executor after this closure record.
+- **Status:** completed
 
 ## Decisions Made
 

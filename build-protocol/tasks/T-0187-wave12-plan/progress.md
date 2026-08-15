@@ -43,6 +43,8 @@
 | Isolated worktree branch/status                            | Pass; clean before task-record creation                                                                                   |
 | `pnpm proto:generate`                                      | Pass; 47 source checks and 52 frozen descriptors                                                                          |
 | `pnpm verify:task -- --no-tests`                           | Pass after recorded generated-state and evidence-format corrections; release readiness 82 imports / 51 assets / 377 links |
+| Detached integration and post-merge task profile           | Pass at `1690eb7e`; frozen install plus identical task profile                                                            |
+| Remote closure                                             | Pass; only `origin/main@1690eb7e`, zero tags after branch deletion                                                        |
 
 ## Error Log
 
@@ -55,5 +57,5 @@
 
 ## Immediate Next Action
 
-Commit the verified endpoint, integrate through a clean worktree, post-merge
-verify, close remote refs, and start the three implementation streams.
+Push this record-only closure commit, then create and dispatch the three
+accelerated implementation streams from refreshed `origin/main`.

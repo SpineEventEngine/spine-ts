@@ -1,6 +1,6 @@
 # T-0187 Work Log
 
-Status: Specialist review and task verification clean; integration pending
+Status: COMPLETE
 
 - Baseline: `7b8a631ecb33210e5da4da9ffa2d8eb8aa59d497`.
 - Branch/worktree: `codex/wave-12-runtime-correctness-plan` /
@@ -44,3 +44,11 @@ Status: Specialist review and task verification clean; integration pending
   correction to the evidence row, the unchanged
   `pnpm verify:task -- --no-tests` profile passed every selected gate. Release
   readiness counted 82 package imports, 51 assets, and 377 Markdown links.
+- Reviewed branch endpoint `17bd6130` merged through detached integration commit
+  `1690eb7e` without touching the protected primary checkout.
+- Clean integration worktree passed frozen install, generation, and the complete
+  post-merge `verify:task -- --no-tests` profile with the same release-readiness
+  inventory.
+- Pushed `1690eb7e` to `origin/main`, deleted the contained completed planning
+  branch, confirmed zero tags, and freshly proved the remote exposed exactly
+  `main`.

@@ -146,4 +146,19 @@ Status: all applicable specialist concerns clean; final verification pending.
   readiness. The final readiness inventory was 82 package imports, 51 package
   assets, and 377 relative Markdown links.
 
-Verification status: clean; integration pending.
+Verification status: clean.
+
+## Integration And Remote Closure
+
+- Reviewed task endpoint: `17bd6130`.
+- Merge commit: `1690eb7e` in a detached clean integration worktree.
+- Post-merge: frozen install, `pnpm proto:generate`, and
+  `pnpm verify:task -- --no-tests` passed with 82 imports, 51 assets, and 377
+  links in release readiness.
+- `origin/main` pushed to `1690eb7e`; completed planning branch deleted; zero
+  tags; fresh `ls-remote` showed only `refs/heads/main`.
+- This record-only closure update does not reopen a specialist lane or the
+  already passed merged-tree profile. Formatting, diff, and documentation
+  audience checks apply before its final push.
+
+Status: COMPLETE.

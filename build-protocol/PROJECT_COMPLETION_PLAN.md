@@ -1,7 +1,7 @@
 # Spine TS Project Completion Plan
 
 Status: Waves 9, 10, and 11 complete and integrated; Wave 12 high-risk planning
-is active as the first agentic-review remediation wave
+is complete and accelerated implementation is starting
 
 Plan date: 2026-07-12
 
@@ -286,6 +286,10 @@ configuration, persistence, and verification contracts are durable and
 reviewed. The protected human agentic-review folder in the coordination
 checkout remains outside every task worktree and mutation. Wave 12 cannot leak
 Wave 13 through 19 APIs.
+
+T-0187 is reviewed, task-verified, merged as `1690eb7e`, post-merge verified,
+pushed, and remotely closed. Its final remote check showed only `main` and no
+tags. Wave 12 implementation now follows the three-stream model below.
 
 Wave 12 uses the accelerated autonomous execution model frozen in its plan:
 three isolated streams run browser T-0188/T-0189, query-provider T-0190, and

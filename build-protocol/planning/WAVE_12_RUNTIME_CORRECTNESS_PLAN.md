@@ -1,6 +1,7 @@
 # Wave 12: Runtime Correctness And Bounded Delivery
 
-Status: Requirements split accepted; pending specialist review
+Status: ACCEPTED — T-0187 reviewed, verified, merged, post-merge verified, and
+remotely closed; accelerated implementation is next
 
 ## Authority And Baseline
 
