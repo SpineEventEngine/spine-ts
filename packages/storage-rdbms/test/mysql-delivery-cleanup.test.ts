@@ -118,6 +118,18 @@ describe("MysqlDeliveryCleanupStorage", () => {
     expect(inbox.delete).toHaveBeenCalledWith("inbox");
   });
 
+  it("does not delete when the locked lease expires after the Inbox read", async () => {
+    const inbox = storage();
+    const sessions = storage();
+    const request = input();
+    let checks = 0;
+    request.session.isCurrent = () => ++checks === 1;
+    const cleanup = coordinator(inbox, sessions);
+
+    await expect(cleanup.remove(request)).resolves.toBe(false);
+    expect(inbox.delete).not.toHaveBeenCalled();
+  });
+
   it("rejects removal after close", async () => {
     const cleanup = coordinator(storage(), storage());
     cleanup.close();
