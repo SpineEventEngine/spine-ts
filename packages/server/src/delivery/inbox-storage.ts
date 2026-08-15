@@ -19,7 +19,9 @@ import type {
   InboxMessageId as WireInboxMessageId,
 } from "@spine-event-engine/proto/delivery";
 import { InboxMessageIdSchema } from "@spine-event-engine/proto/delivery";
+import { ShardIndexSchema, ShardSessionRecordSchema } from "@spine-event-engine/proto/delivery";
 import type { RecordStorage, StorageContext, StorageFactory } from "@spine-event-engine/storage";
+import { DeliveryCleanupStorageFactories } from "@spine-event-engine/storage/internal/delivery-cleanup";
 
 import {
   InboxMessageError,
@@ -32,6 +34,8 @@ import {
 } from "./inbox.js";
 import { InboxRecords, inboxRecordSpec } from "./inbox-records.js";
 import { ShardIndex } from "./shard-index.js";
+import { shardSessionRecordSpec } from "./sharded-work-registry.js";
+import type { DeliveryWorkSession } from "./delivery-ports.js";
 
 const defaultReadLimit = 100;
 const maxReadLimit = 1_000;
@@ -164,6 +168,29 @@ export class InboxStorage {
     } finally {
       storage.close();
     }
+  }
+
+  async removeDelivered(
+    message: InboxMessage,
+    session: DeliveryWorkSession,
+    _options?: import("./delivery-ports.js").DeliveryOperationOptions,
+  ): Promise<boolean> {
+    if (session.kind !== "LEASED" || session.shard.key() !== message.shard.key()) return false;
+    const expected = InboxRecords.write(message);
+    if (message.status !== "DELIVERED") return false;
+    const cleanup = DeliveryCleanupStorageFactories.create(this.#storageFactory);
+    try {
+      return await cleanup.remove({
+        context: Values.context(this.#context),
+        inbox: { spec: inboxRecordSpec, id: Values.wireId(expected), expected },
+        session: {
+          spec: shardSessionRecordSpec,
+          id: create(ShardIndexSchema, { index: session.shard.index, ofTotal: session.shard.ofTotal }),
+          expected: Values.session(session),
+          isCurrent: (current) => Values.sessionCurrent(current, session, Values.now(this.#now)),
+        },
+      });
+    } finally { cleanup.close(); }
   }
 
   /**
@@ -342,5 +369,23 @@ const Values = Object.freeze({
           tenantId: context.tenantId,
         }
       : { name: `${context.name}.delivery.inbox`, multitenant: false };
+  },
+  session(value: import("./sharded-work-registry.js").ShardSession) {
+    return create(ShardSessionRecordSchema, {
+      index: { index: value.shard.index, ofTotal: value.shard.ofTotal },
+      whenLastPicked: Values.timestamp(value.pickedUpAt.getTime()),
+      worker: value.worker,
+    });
+  },
+  sessionCurrent(
+    value: import("@spine-event-engine/proto/delivery").ShardSessionRecord,
+    expected: import("./sharded-work-registry.js").ShardSession,
+    now: number,
+  ): boolean {
+    return value.index?.index === expected.shard.index &&
+      value.index.ofTotal === expected.shard.ofTotal &&
+      value.worker?.nodeId?.value === expected.worker?.nodeId?.value &&
+      value.worker?.value === expected.worker?.value &&
+      expected.expiresAt.getTime() > now;
   },
 });

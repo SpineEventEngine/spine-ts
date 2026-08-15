@@ -19,6 +19,7 @@ import { AnySchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { fromBinary } from "@bufbuild/protobuf";
 
 import type { InboxStorage } from "./inbox-storage.js";
+import type { DeliveryOperationOptions, DeliveryWorkSession } from "./delivery-ports.js";
 import type { ShardIndex } from "./shard-index.js";
 
 /**
@@ -108,6 +109,18 @@ export class Inbox {
    */
   markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
     return this.storage.markDelivered(message);
+  }
+
+  /**
+   * Removes one delivered message only when direct provider cleanup can prove
+   * current ownership and the exact durable snapshot in one atomic operation.
+   */
+  removeDelivered(
+    message: InboxMessage,
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<boolean> {
+    return this.storage.removeDelivered(message, session, options);
   }
 
   #inputObject(value: unknown, label: string): Record<string, unknown> {

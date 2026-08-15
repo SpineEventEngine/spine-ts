@@ -1,0 +1,34 @@
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ */
+
+import type { Message } from "@bufbuild/protobuf";
+import type { DeliveryCleanupInput, DeliveryCleanupStorage } from "../internal/delivery-cleanup.js";
+import type { RecordSpec } from "../record/record-spec.js";
+import type { StorageContext } from "../storage/storage.js";
+import type { StorageGroup } from "../record/storage-group.js";
+import { TenantRecords } from "./tenant-records.js";
+
+/** Provider-owned synchronous critical section for in-memory delivery cleanup. */
+export class MemoryDeliveryCleanupStorage implements DeliveryCleanupStorage {
+  #open = true;
+  constructor(private readonly records: <I, R extends Message>(context: StorageContext, spec: RecordSpec<I, R>, group?: StorageGroup) => TenantRecords<I, R>) {}
+  async remove<InboxId, InboxRecord extends Message, SessionId, SessionRecord extends Message>(input: DeliveryCleanupInput<InboxId, InboxRecord, SessionId, SessionRecord>): Promise<boolean> {
+    if (!this.#open) throw new Error("Delivery cleanup storage is closed.");
+    const sessions = this.records(input.context, input.session.spec);
+    const current = sessions.read(input.session.id);
+    if (current === undefined || !input.session.isCurrent(current)) return false;
+    const expectedSession = input.session.spec.materialize(input.session.expected);
+    if (!sessions.compareAndSet(input.session.id, expectedSession, expectedSession)) return false;
+    const inbox = this.records(input.context, input.inbox.spec);
+    return inbox.compareAndSet(
+      input.inbox.id,
+      input.inbox.spec.materialize(input.inbox.expected),
+      undefined,
+    );
+  }
+  close(): void { this.#open = false; }
+}
