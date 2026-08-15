@@ -4,6 +4,7 @@ import test from "node:test";
 import { setImmediate } from "node:timers";
 
 import {
+  recordPassiveViewerPrecondition,
   recordPassiveViewerProgress,
   runBrowserAcceptance,
   settleTopology,
@@ -106,6 +107,18 @@ test("records healthy Gateway bindings and native streams after each ordered pas
     { update: 2, bindings: 1, activeStreams: 1, updates: 2 },
     { update: 3, bindings: 1, activeStreams: 1, updates: 3 },
   ]);
+});
+
+test("rejects a passive viewer that starts with a leaked binding or native stream", () => {
+  const topology = {
+    bindingCount: () => 1,
+    counters: () => ({ activeStreams: 1 }),
+  };
+
+  assert.throws(
+    () => recordPassiveViewerPrecondition("PASSIVE_VIEWER_PRECONDITION", topology),
+    /passive viewer started with retained topology state/,
+  );
 });
 
 test("rejects a passive-viewer marker when the Gateway stream is no longer healthy", () => {

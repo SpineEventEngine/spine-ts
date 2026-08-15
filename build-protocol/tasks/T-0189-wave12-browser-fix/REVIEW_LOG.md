@@ -117,3 +117,26 @@ The deterministic runner regression requires successful child exit before it
 may close a drained topology; the existing settlement regression requires zero
 Gateway bindings and active native streams. The focused post-run process scan
 found no task-owned runner, 9443 listener, or Envoy container.
+
+## Full-Suite Correction Evidence (2026-08-15)
+
+The minimal order-dependent pair is the first CSRF subscription test followed
+by C-01. Its only retained relevant state is the idempotent message entity:
+both used `browser-interop-1`; the parent topology reports zero bindings and
+active streams before C-01 begins. A C-01-specific message prefix eliminates
+that collision, and a new parent marker rejects any nonzero pre-subscription
+binding or stream state. The pair passes with all three causal updates.
+
+The full green run localized the final disconnect residue to
+`createNativeGatewayServices.activate`: external transport abort aborted native
+work but did not submit logical Cancel. The bridge now performs one Cancel only
+for a started activation and external transport abort. Focused native tests
+prove the added Cancel and preserve the one-call behavior for iterator return,
+throw, and relay overflow. Complete Chromium acceptance is now 8/8, exits 0,
+settles forced disconnect to zero, and leaves no task-owned process/listener/
+container. Re-review is not requested in this correction turn.
+
+Focused V8 coverage reports 85.45% lines and 78.35% branches for the affected
+native bridge. Its nonzero exit is solely the repository-wide 90% global
+threshold applied to a single-file invocation; focused tests and all other
+mechanical checks pass.

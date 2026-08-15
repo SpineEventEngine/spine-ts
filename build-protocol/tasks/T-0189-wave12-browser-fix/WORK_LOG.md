@@ -135,3 +135,35 @@ The runner unit regression also proves a successful Playwright child exits
 before a drained topology is closed; the existing settlement regression requires
 zero bindings and zero active native streams. The final focused process scan
 found no task-owned runner, no listener on 9443, and no Envoy container.
+
+## Full-Suite Ordering And Disconnect Correction (2026-08-15)
+
+Incremental Chromium selection isolates the minimal contaminating predecessor:
+the initial CSRF-protected subscription test followed by C-01 fails, while C-01
+alone passes. Pre-C-01 topology state is clean (zero bindings and zero active
+native streams), and auth session, page, and client contexts are independent.
+The persistent board state instead contains the predecessor's
+`browser-interop-1`; C-01 reset its page-local counter and posted the same
+message ID, so command idempotency emitted no first update. Browser test pages
+now use an explicit C-01 `messageIdPrefix`, while every other page defaults to
+a fresh UUID prefix. The two-test predecessor-plus-C-01 regression passes with
+zero preexisting binding/stream state and all three causal updates.
+
+The first green 8/8 run then exposed one genuine disconnect defect: a browser
+transport abort left an inactive Gateway binding despite zero native streams.
+The native bridge propagated stream abort to active backend work but did not
+issue the authenticated logical `Cancel`. It now issues exactly one bounded
+Cancel only after an activation has started and the external transport signal
+aborts; iterator-local termination and relay overflow retain their former
+one-call behavior. Focused native tests cover that cancellation, and forced
+Chromium disconnect now reaches zero bindings and native streams before
+topology close. Fresh complete Chromium acceptance exits 0 with 8/8 tests,
+three healthy ordered snapshots, no runner process, no 9443 listener, and no
+Envoy container.
+
+Focused V8 coverage exercised `packages/auth/src/native/index.ts` at 85.45%
+lines and 78.35% branches. The command exits nonzero only because this
+repository applies its 90% global threshold to the entire monorepo even for a
+single-file Vitest invocation; it is recorded as a tooling limitation rather
+than a test failure. Native behavior tests, browser runner tests, formatting,
+lint, whitespace, and build typechecking are green.

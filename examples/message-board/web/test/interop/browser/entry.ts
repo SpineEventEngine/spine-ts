@@ -52,6 +52,7 @@ if (protocol !== "connect" && protocol !== "grpc-web")
 const actor = parameters.get("actor") ?? "ada";
 const tenant = parameters.get("tenant");
 const board = parameters.get("board") ?? "board-a";
+const messageIdPrefix = parameters.get("messageIdPrefix") ?? crypto.randomUUID();
 
 const session = csrf === null ? BrowserSession.bearer({ token: bearer }) : BrowserSession.cookie();
 const sessionFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -158,7 +159,9 @@ const post = () =>
   request.post(
     PostMessageSchema,
     create(PostMessageSchema, {
-      id: create(MessageIdSchema, { value: `browser-interop-${String(++sequence)}` }),
+      id: create(MessageIdSchema, {
+        value: `browser-interop-${messageIdPrefix}-${String(++sequence)}`,
+      }),
       board: create(BoardIdSchema, { value: board }),
       author: create(BoardUserIdSchema, { value: "ada" }),
       username: "Ada",

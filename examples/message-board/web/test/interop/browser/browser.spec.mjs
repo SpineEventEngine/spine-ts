@@ -84,12 +84,13 @@ test("keeps a passive viewer alive for three sequential writer updates through E
     );
     viewerPage = await viewer.newPage();
     const writerPage = await writer.newPage();
-    const viewerUrl = `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF)}&actor=ada`;
-    const writerUrl = `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF)}&actor=ada`;
+    const viewerUrl = `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF)}&actor=ada&messageIdPrefix=passive-viewer`;
+    const writerUrl = `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF)}&actor=ada&messageIdPrefix=passive-viewer`;
     await viewerPage.goto(viewerUrl);
     await writerPage.goto(writerUrl);
     const failures = captureBrowserFailures(viewerPage);
     const grpcWeb = captureGrpcWebResponses(viewerPage);
+    stdout.write("PASSIVE_VIEWER_PRECONDITION\n");
     try {
       await viewerPage.evaluate(() => window.startPassiveSubscription());
     } catch (error) {

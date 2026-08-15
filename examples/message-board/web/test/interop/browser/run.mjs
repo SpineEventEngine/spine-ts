@@ -36,6 +36,7 @@ export async function runBrowserAcceptance({
         environment,
         spawnChild,
         onOutput: (line) => {
+          recordPassiveViewerPrecondition(line, topology);
           recordPassiveViewerProgress(line, topology, passiveViewerSnapshots);
           if (line.trim() === "FORCED_VIEWER_DISCONNECT")
             lifecycleSettlements.push(settleTopology(topology));
@@ -160,6 +161,15 @@ export function recordPassiveViewerProgress(line, topology, snapshots) {
   )
     throw new Error(`passive viewer topology became unhealthy: ${JSON.stringify(snapshot)}`);
   snapshots.push(snapshot);
+}
+
+export function recordPassiveViewerPrecondition(line, topology) {
+  if (line.trim() !== "PASSIVE_VIEWER_PRECONDITION") return;
+  const state = { bindings: topology.bindingCount(), counters: topology.counters() };
+  if (state.bindings !== 0 || state.counters.activeStreams !== 0)
+    throw new Error(
+      `passive viewer started with retained topology state: ${JSON.stringify(state)}`,
+    );
 }
 
 export async function settleTopology(
