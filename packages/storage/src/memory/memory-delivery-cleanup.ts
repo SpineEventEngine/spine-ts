@@ -48,6 +48,8 @@ export class MemoryDeliveryCleanupStorage implements DeliveryCleanupStorage {
     input: DeliveryCleanupInput<InboxId, InboxRecord, SessionId, SessionRecord>,
   ): Promise<boolean> {
     if (!this.#open) return Promise.reject(new Error("Delivery cleanup storage is closed."));
+    if (input.operation?.signal?.aborted || input.operation?.timeoutMs === 0)
+      return Promise.resolve(false);
     const sessions = this.records(input.context, input.session.spec);
     const current = sessions.read(input.session.id);
     if (current === undefined || !input.session.isCurrent(current)) return Promise.resolve(false);

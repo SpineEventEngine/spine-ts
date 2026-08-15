@@ -35,6 +35,14 @@ export interface DeliveryCleanupInput<
   readonly context: StorageContext;
 
   /**
+   * Carries cooperative cancellation and the remaining operation deadline.
+   */
+  readonly operation?: {
+    readonly signal?: { readonly aborted: boolean };
+    readonly timeoutMs?: number;
+  };
+
+  /**
    * Describes the exact delivered Inbox record expected for deletion.
    */
   readonly inbox: {

@@ -131,6 +131,55 @@ describe("Delivery direct worker", () => {
     expect(removed).toEqual(["first", "second"]);
   });
 
+  it("continues past one full protected cleanup page to remove a later eligible row", async () => {
+    const shard = ShardIndex.single();
+    const protectedRows = [
+      { ...message("protected-one", "one", shard), status: "DELIVERED" as const },
+      { ...message("protected-two", "two", shard), status: "DELIVERED" as const },
+    ];
+    const eligible = { ...message("eligible", "three", shard), status: "DELIVERED" as const };
+    const catalog = [...protectedRows, eligible];
+    const removed: string[] = [];
+    const delivery = createDelivery({
+      pageSize: 2,
+      read: async (options) => {
+        if (!options?.statuses?.includes("DELIVERED")) return [];
+        const after = options.after?.messageId;
+        const start =
+          after === undefined ? 0 : catalog.findIndex((row) => row.id.value === after) + 1;
+        return catalog.slice(start, start + 2);
+      },
+      remove: async (row) => {
+        if (row.signalId === "eligible") removed.push(row.signalId);
+        return row.signalId === "eligible";
+      },
+    });
+
+    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
+      status: "DRAINED",
+    });
+    expect(removed).toEqual(["eligible"]);
+  });
+
+  it("stops when a refused cleanup deletion is followed by lost ownership", async () => {
+    const shard = ShardIndex.single();
+    const delivered = { ...message("delivered", "target", shard), status: "DELIVERED" as const };
+    let validations = 0;
+    const delivery = createDelivery({
+      read: async (options) => (options?.statuses?.includes("DELIVERED") ? [delivered] : []),
+      remove: async () => false,
+      registry: {
+        pickUp: async () => session(shard),
+        renew: async () => (validations++ < 2 ? session(shard) : undefined),
+        release: async () => true,
+      },
+    });
+
+    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
+      status: "STOPPED",
+    });
+  });
+
   it("omits cleanup for custom Inbox ports and forwards operation deadlines to cleanup reads", async () => {
     const shard = ShardIndex.single();
     const observed: number[] = [];

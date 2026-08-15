@@ -51,6 +51,21 @@ non-delivered, or changed snapshots.
   performance/reliability, and documentation. Security is retained for Wave
   convergence, with tenancy/group containment and destructive fencing noted.
 
+## Human-Imposed Requirements Ledger
+
+- Preserve source compatibility and exact provider-owned atomic fencing.
+- Use behavior-focused TDD: establish and observe RED before each runtime fix.
+- Keep cleanup bounded; do not add an unbounded scan, timer, scheduler, or
+  retention configuration.
+- Propagate cancellation/deadline controls through direct removal and provider
+  cleanup seams; cancellation must prevent a successful deletion result.
+- Do not add Wave 13+ APIs, serialized fields, or generated-contract changes.
+- Run live MySQL and Datastore evidence serially only after the orchestrator
+  grants each exclusive provider window; use independently opened handles and
+  record physical row counts separately from coverage.
+- Update task, work, and review records with each correction and preserve the
+  existing implementer profile (`gpt-5.6-terra` / medium) with no subagents.
+
 ## Mechanical Convergence Evidence
 
 - `node scripts/check-tsdoc.mjs` clears the complete 42-finding cleanup batch.

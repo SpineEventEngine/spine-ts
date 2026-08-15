@@ -32,6 +32,7 @@ const datastoreHost = process.env.DATASTORE_EMULATOR_HOST;
 
 describe.skipIf(mysqlUrl === undefined)("MySQL Inbox cleanup", () => {
   let factory: MysqlStorageFactory;
+  let secondFactory: MysqlStorageFactory;
 
   beforeAll(async () => {
     if (mysqlUrl === undefined) throw new Error("SPINE_TS_MYSQL_URL is required.");
@@ -41,14 +42,27 @@ describe.skipIf(mysqlUrl === undefined)("MySQL Inbox cleanup", () => {
       .setOptions({ url: mysqlUrl })
       .setStringifierRegistry(stringifiers)
       .build();
+    secondFactory = await MysqlStorageFactory.newBuilder()
+      .setOptions({ url: mysqlUrl })
+      .setStringifierRegistry(stringifiers)
+      .build();
   });
   afterAll(() => {
     factory.close();
+    secondFactory.close();
   });
 
   it("deletes only the exact delivered snapshot under the current leased session", async () => {
     const context = { name: `t0191_mysql_${String(Date.now())}`, multitenant: false } as const;
     await expect(removeExact(factory, context)).resolves.toBeUndefined();
+  });
+
+  it("preserves a physically present row for a stale owner across independently opened factories", async () => {
+    const context = {
+      name: `t0191_mysql_two_owner_${String(Date.now())}`,
+      multitenant: false,
+    } as const;
+    await expect(removeAcrossFactories(factory, secondFactory, context)).resolves.toBeUndefined();
   });
 });
 
@@ -75,7 +89,7 @@ async function removeExact(
   factory: Parameters<typeof open>[0],
   context: { readonly name: string; readonly multitenant: false },
 ): Promise<void> {
-  let now = Date.now();
+  let now = Date.now() + 7_200_000;
   const inbox = open(factory, context, () => new Date(now));
   const registry = new ShardedWorkRegistry({
     context,
@@ -128,6 +142,46 @@ async function removeExact(
     ),
   ).resolves.toBe(false);
   await expect(inbox.readMessage(replaced.id)).resolves.toMatchObject({ status: "DELIVERED" });
+  await registry.release(current);
+}
+
+async function removeAcrossFactories(
+  firstFactory: MysqlStorageFactory,
+  secondFactory: MysqlStorageFactory,
+  context: { readonly name: string; readonly multitenant: false },
+): Promise<void> {
+  let now = Date.now() + 7_200_000;
+  const firstInbox = open(firstFactory, context, () => new Date(now));
+  const secondInbox = open(secondFactory, context, () => new Date(now));
+  const firstRegistry = new ShardedWorkRegistry({
+    context,
+    storageFactory: firstFactory,
+    leaseMs: 1_000,
+    now: () => new Date(now),
+  });
+  const secondRegistry = new ShardedWorkRegistry({
+    context,
+    storageFactory: secondFactory,
+    leaseMs: 1_000,
+    now: () => new Date(now),
+  });
+  const worker = (node: string) =>
+    create(WorkerIdSchema, { nodeId: { value: node }, value: "two-owner" });
+  const first = await firstRegistry.pickUp(ShardIndex.single(), worker("first"));
+  if (first === undefined) throw new Error("Expected first MySQL session.");
+  const message = createMessage(`${context.name}-row`, "two-owner", 1n);
+  await firstInbox.storage.write(message);
+  const delivered = await firstInbox.markDelivered(message);
+  if (delivered === undefined) throw new Error("Expected MySQL delivered row.");
+
+  now += 1_000;
+  const second = await secondRegistry.pickUp(ShardIndex.single(), worker("second"));
+  if (second === undefined) throw new Error("Expected replacement MySQL session.");
+  await expect(firstInbox.removeDelivered(delivered, first)).resolves.toBe(false);
+  await expect(secondInbox.readMessage(message.id)).resolves.toMatchObject({ status: "DELIVERED" });
+  await expect(secondInbox.removeDelivered(delivered, second)).resolves.toBe(true);
+  await expect(secondInbox.readMessage(message.id)).resolves.toBeUndefined();
+  await secondRegistry.release(second);
 }
 
 function open(

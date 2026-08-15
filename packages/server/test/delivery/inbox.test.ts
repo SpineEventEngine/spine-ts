@@ -85,6 +85,35 @@ describe("Inbox", () => {
     });
   });
 
+  it("does not remove an eligible delivered snapshot after cancellation or expired preflight", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = { name: "T0191-cancelled", multitenant: false } as const;
+    const inbox = new Inbox(new InboxStorage({ context, storageFactory: factory }));
+    const registry = new ShardedWorkRegistry({ context, storageFactory: factory });
+    const session = await registry.pickUp(
+      ShardIndex.single(),
+      create(WorkerIdSchema, { nodeId: { value: "node" }, value: "cancelled" }),
+    );
+    const message = createMessage("cancelled", "target", 1n);
+    await inbox.storage.write(message);
+    const delivered = await inbox.markDelivered(message);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      inbox.removeDelivered(required(delivered, "delivered"), required(session, "session"), {
+        signal: controller.signal,
+      }),
+    ).resolves.toBe(false);
+    await expect(inbox.readMessage(message.id)).resolves.toMatchObject({ status: "DELIVERED" });
+    await expect(
+      inbox.removeDelivered(required(delivered, "delivered"), required(session, "session"), {
+        timeoutMs: 0,
+      }),
+    ).resolves.toBe(false);
+    await expect(inbox.readMessage(message.id)).resolves.toMatchObject({ status: "DELIVERED" });
+  });
+
   it("never removes a pending or replaced snapshot", async () => {
     const factory = new InMemoryStorageFactory();
     const context = { name: "T0191-exact", multitenant: false } as const;

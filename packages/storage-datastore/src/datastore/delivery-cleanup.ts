@@ -49,6 +49,7 @@ export class DatastoreDeliveryCleanupStorage implements DeliveryCleanupStorage {
     input: DeliveryCleanupInput<InboxId, InboxRecord, SessionId, SessionRecord>,
   ): Promise<boolean> {
     if (!this.#open) throw new Error("Delivery cleanup storage is closed.");
+    if (input.operation?.signal?.aborted || input.operation?.timeoutMs === 0) return false;
     const inbox = this.openStorage(input.context, input.inbox.spec);
     const sessions = this.openStorage(input.context, input.session.spec);
     const transaction = sessions.transaction();
@@ -73,6 +74,10 @@ export class DatastoreDeliveryCleanupStorage implements DeliveryCleanupStorage {
         inboxEntity === undefined ||
         !inbox.matchesTransactionEntity(inboxEntity, input.inbox.expected)
       ) {
+        await transaction.rollback();
+        return false;
+      }
+      if (input.operation?.signal?.aborted || input.operation?.timeoutMs === 0) {
         await transaction.rollback();
         return false;
       }

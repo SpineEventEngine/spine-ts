@@ -36,6 +36,22 @@ rows and call T-0191's provider-atomic exact removal for each eligible row.
 - Focused changed executable line and branch coverage is at least 90%; live
   provider and row-count evidence is recorded separately.
 
+## Human-Imposed Requirements Ledger
+
+- Preserve T-0191 exact provider-owned atomic fencing and optional-port source
+  compatibility.
+- Use behavior-focused TDD for runtime corrections and retain the observed RED
+  evidence in the work log.
+- Cleanup may advance only through bounded ordered continuation; no unbounded
+  scan, new timer, scheduler, configuration, or Wave 13+ API is allowed.
+- A refused deletion requires current-ownership validation before a drain can
+  report completion; cancellation/deadline must stop cleanup safely.
+- Live MySQL and Datastore proof requires independently opened handles,
+  two-owner fencing, and physical row-count evidence in separate, orchestrator-
+  granted serialized windows.
+- Keep durable records current and retain the existing `implementer` profile
+  (`gpt-5.6-terra` / medium) with no subagents.
+
 ## Coverage convergence evidence
 
 - The direct worker suite covers cancellation before deletion, bounded

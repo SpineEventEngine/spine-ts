@@ -61,6 +61,7 @@ export class MysqlDeliveryCleanupStorage implements DeliveryCleanupStorage {
     input: DeliveryCleanupInput<InboxId, InboxRecord, SessionId, SessionRecord>,
   ): Promise<boolean> {
     if (!this.#open) throw new Error("Delivery cleanup storage is closed.");
+    if (input.operation?.signal?.aborted || input.operation?.timeoutMs === 0) return false;
     const inbox = this.openStorage(input.context, input.inbox.spec);
     const sessions = this.openStorage(input.context, input.session.spec);
     try {
@@ -95,6 +96,7 @@ export class MysqlDeliveryCleanupStorage implements DeliveryCleanupStorage {
     sessions: MysqlRecordStorage<SessionId, SessionRecord>,
     input: DeliveryCleanupInput<InboxId, InboxRecord, SessionId, SessionRecord>,
   ): Promise<boolean> {
+    if (input.operation?.signal?.aborted || input.operation?.timeoutMs === 0) return false;
     return sessions.withConnection(connection, () =>
       inbox.withConnection(connection, async () => {
         const currentSession = await sessions.readLocked(input.session.id);
@@ -116,6 +118,7 @@ export class MysqlDeliveryCleanupStorage implements DeliveryCleanupStorage {
         ) {
           return false;
         }
+        if (input.operation?.signal?.aborted || input.operation?.timeoutMs === 0) return false;
         return inbox.delete(input.inbox.id);
       }),
     );

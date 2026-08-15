@@ -288,15 +288,28 @@ export class Delivery {
     const cleanupPage = async (): Promise<boolean> => {
       if (this.inbox.removeDelivered === undefined) return true;
       if (!(await validate())) return false;
-      const delivered = await this.inbox.read(shard, {
-        statuses: ["DELIVERED"],
-        limit: this.pageSize,
-        ...(options.operation ?? {}),
-      });
-      for (const message of delivered) {
-        if (options.operation?.signal?.aborted || !(await validate())) return false;
-        await this.inbox.removeDelivered(message, current, options.operation);
-        if (options.operation?.signal?.aborted) return false;
+      let after: import("./inbox.js").InboxReadContinuation | undefined;
+      for (let page = 0; page < 2; page += 1) {
+        let removedAny = false;
+        const delivered = await this.inbox.read(shard, {
+          statuses: ["DELIVERED"],
+          limit: this.pageSize,
+          ...(after === undefined ? {} : { after }),
+          ...(options.operation ?? {}),
+        });
+        for (const message of delivered) {
+          if (options.operation?.signal?.aborted || !(await validate())) return false;
+          const removed = await this.inbox.removeDelivered(message, current, options.operation);
+          if (options.operation?.signal?.aborted || (!removed && !(await validate()))) return false;
+          removedAny ||= removed;
+        }
+        const last = delivered.at(-1);
+        if (removedAny || last === undefined || delivered.length < this.pageSize) break;
+        after = {
+          messageId: last.id.value,
+          whenReceived: last.whenReceived,
+          version: last.version,
+        };
       }
       return true;
     };
