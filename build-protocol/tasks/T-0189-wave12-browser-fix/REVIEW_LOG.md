@@ -1,6 +1,6 @@
 # T-0189 Review Log
 
-Status: FINAL RELIABILITY ACCEPTANCE IN PROGRESS
+Status: FINAL ERROR-PRECEDENCE PROOF IN PROGRESS
 
 Performance/reliability and style/maintainability apply. TypeScript/API,
 documentation, and security apply only if the proven implementation boundary
@@ -225,6 +225,12 @@ Final affected-lane re-review is dispatched against production endpoint
 style/maintainability and performance/reliability reviewers, each explicitly
 `gpt-5.6-terra` / high, read-only, and forbidden to spawn subagents. Desktop
 runtime telemetry remains unavailable.
+
+The final reliability reviewer accepts the production settlement-before-close
+ordering and primary-failure logic, but requests one P2 proof addition: make a
+started settlement and/or topology close reject in the combined late-output
+case, then assert the late stdout health failure remains primary. This is a
+test-only batch; reliability alone re-reviews it.
 
 ## Final runner acceptance result (2026-08-15)
 
