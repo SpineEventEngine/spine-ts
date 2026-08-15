@@ -46,3 +46,26 @@ coverage inputs are ready for review. Generated residue is absent.
   unavailable; configured profiles are the durable record.
 - Re-review only performance/reliability and security, plus TypeScript/API or
   documentation if the query cap changes a public/current claim.
+
+## Correction Convergence
+
+- Converged correction endpoint: `fc88a494` on the pushed integration branch.
+- Browser diagnostics retain only a path-only request location and a bounded
+  non-sensitive header allowlist. The focused browser correction and tooling
+  typecheck pass.
+- The normalized candidate budget rejects values above 10,000 before provider
+  access while admitting the exact 10,000 boundary. The focused policy suite
+  passes 11 tests; scoped coverage is 97.76% lines and 96.85% branches, with
+  both arms of the new maximum check executed.
+- MySQL and Datastore recheck the same locked ownership session after the Inbox
+  read and immediately before mutation/commit. Focused deterministic provider
+  tests pass 20 cases. Separate live MySQL and Datastore runs each pass both
+  provider cases and their native physical-row assertions.
+- The converged deterministic preflight passes 221 tests with four expected
+  service-gated skips and 25 browser runner/Envoy/harness/native-topology tests.
+  Build and tooling typechecks, cleanup, TSDoc, API/audience, formatting, and
+  diff gates pass. Diff-scoped executable correction lines and branch arms are
+  fully exercised; live runtime/provider evidence remains separate.
+- Affected re-review lanes are performance/reliability, final security,
+  documentation, and TypeScript/API. Style/maintainability remains closed
+  because the correction batch does not restructure the implementation.
