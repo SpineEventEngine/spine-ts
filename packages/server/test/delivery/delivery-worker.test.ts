@@ -80,6 +80,51 @@ describe("Delivery direct worker", () => {
     expect(removals).toBe(1);
   });
 
+  it("leaves a delivered row retryable when cancellation arrives before cleanup deletion", async () => {
+    const shard = ShardIndex.single();
+    const delivered = { ...message("delivered", "target", shard), status: "DELIVERED" as const };
+    const controller = new AbortController();
+    let removals = 0;
+    const delivery = createDelivery({
+      read: async (options) => {
+        if (!options?.statuses?.includes("DELIVERED")) return [];
+        controller.abort();
+        return [delivered];
+      },
+      remove: async () => {
+        removals += 1;
+        return true;
+      },
+    });
+
+    await expect(
+      delivery.drain(shard, { onMessage: () => undefined, operation: { signal: controller.signal } }),
+    ).resolves.toMatchObject({ status: "STOPPED", delivered: 0 });
+    expect(removals).toBe(0);
+  });
+
+  it("removes every delivered row returned by one bounded cleanup page", async () => {
+    const shard = ShardIndex.single();
+    const delivered = [
+      { ...message("first", "first", shard), status: "DELIVERED" as const },
+      { ...message("second", "second", shard), status: "DELIVERED" as const },
+    ];
+    const removed: string[] = [];
+    const delivery = createDelivery({
+      pageSize: 2,
+      read: async (options) => (options?.statuses?.includes("DELIVERED") ? delivered : []),
+      remove: async (row) => {
+        removed.push(row.signalId);
+        return true;
+      },
+    });
+
+    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
+      status: "DRAINED",
+    });
+    expect(removed).toEqual(["first", "second"]);
+  });
+
   it("omits cleanup for custom Inbox ports and forwards operation deadlines to cleanup reads", async () => {
     const shard = ShardIndex.single();
     const observed: number[] = [];
@@ -93,8 +138,17 @@ describe("Delivery direct worker", () => {
     await delivery.drain(shard, { onMessage: () => undefined, operation: { timeoutMs: 123 } });
     expect(observed).toEqual([123]);
 
-    await expect(createDelivery({ read: async () => [] }).drain(shard, { onMessage: () => undefined }))
+    let customCleanupReads = 0;
+    await expect(
+      createDelivery({
+        read: async (options) => {
+          if (options?.statuses?.includes("DELIVERED")) customCleanupReads += 1;
+          return [];
+        },
+      }).drain(shard, { onMessage: () => undefined }),
+    )
       .resolves.toMatchObject({ status: "DRAINED" });
+    expect(customCleanupReads).toBe(0);
   });
 
   it("stops before cleanup deletion when the shard fence is lost", async () => {
@@ -113,6 +167,40 @@ describe("Delivery direct worker", () => {
       status: "STOPPED",
     });
     expect(removals).toBe(0);
+  });
+
+  it("stops after a delivery page when ownership is lost before its maintenance pass", async () => {
+    const shard = ShardIndex.single();
+    const rows = [message("one", "target", shard)];
+    let ownsShard = true;
+    let cleanupReads = 0;
+    const delivery = createDelivery({
+      rows,
+      read: async (options) => {
+        if (options?.statuses?.includes("DELIVERED")) {
+          cleanupReads += 1;
+          return [];
+        }
+        return rows;
+      },
+      mark: async (row) => {
+        remove(rows, row);
+        ownsShard = false;
+        return row;
+      },
+      remove: async () => true,
+      registry: {
+        pickUp: async () => session(shard),
+        renew: async () => (ownsShard ? session(shard) : undefined),
+        release: async () => true,
+      },
+    });
+
+    await expect(delivery.drain(shard, { onMessage: () => undefined })).resolves.toMatchObject({
+      status: "STOPPED",
+      delivered: 1,
+    });
+    expect(cleanupReads).toBe(0);
   });
   it("passes its complete opaque WorkerId to shard pickup and skips an owned shard", async () => {
     const shard = ShardIndex.single();
@@ -575,7 +663,7 @@ function createDelivery(config: {
       markDelivered: async (row) => config.mark?.(row) ?? row,
       ...(config.remove === undefined
         ? {}
-        : { removeDelivered: async (row) => config.remove!(row as DeliveryEndpointMessage) }),
+        : { removeDelivered: async (row) => config.remove!(row) }),
     },
     workRegistry: {
       sessionKind: "LEASED",

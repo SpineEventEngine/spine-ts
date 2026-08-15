@@ -35,3 +35,13 @@ rows and call T-0191's provider-atomic exact removal for each eligible row.
   row counts. Live providers use independently opened handles serially.
 - Focused changed executable line and branch coverage is at least 90%; live
   provider and row-count evidence is recorded separately.
+
+## Coverage convergence evidence
+
+- The direct worker suite covers cancellation before deletion, bounded
+  multi-row maintenance, custom-port omission, deadline forwarding,
+  ownership loss before maintenance, and existing release-failure behavior.
+- Focused V8 LCOV records 11/11 changed executable lines and 16/16 changed
+  branch outcomes in `delivery.ts` (100%/100%) for the Wave 12 additions
+  relative to `e2ab42d2`. The repository-global threshold from the one-file
+  command is intentionally not a scoped changed-code measure.
