@@ -45,7 +45,11 @@ describe("MysqlDeliveryCleanupStorage", () => {
     const operation = { signal: { aborted: false } };
     const openStorage = vi.fn(() => storage(() => (operation.signal.aborted = true)));
     const coordinate = vi.fn(coordinateWork);
-    const cleanup = new MysqlDeliveryCleanupStorage(openStorage as never, coordinate as never, () => "key");
+    const cleanup = new MysqlDeliveryCleanupStorage(
+      openStorage as never,
+      coordinate as never,
+      () => "key",
+    );
 
     await expect(cleanup.remove(input(operation))).resolves.toBe(false);
     expect(coordinate).toHaveBeenCalledOnce();
