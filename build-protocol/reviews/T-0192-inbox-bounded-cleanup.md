@@ -1,6 +1,6 @@
 # T-0192 Review Record
 
-Status: REVIEW READY
+Status: CHANGES REQUESTED
 
 Planned lanes: style/maintainability and performance/reliability. TypeScript/API
 is N/A unless T-0191's port changes; documentation applies only to changed
@@ -38,3 +38,19 @@ fenced mutation.
   record is ready for the applicable style, performance/reliability,
   documentation, TypeScript/API-through-T-0191, and deferred Wave-security
   lanes.
+
+## Review Wave Result
+
+- Performance/reliability confirmed a P1 progress bug: when protected rows
+  fill the first ordered page, cleanup rereads that page forever and never
+  reaches later eligible rows.
+- Style confirmed a P1 ownership result bug: a refused exact removal can still
+  let the drain report `DRAINED` without revalidating current ownership.
+- Cancellation/deadline enforcement and the independent-handle/live-row-count
+  provider proof are shared accepted corrections from T-0191.
+- Style confirmed the task brief lacks its mandatory inherited
+  Human-Imposed Requirements Ledger.
+- One combined TDD correction batch returns to the existing `implementer`,
+  explicitly configured `gpt-5.6-terra` / medium, with no subagents. Only the
+  substantively affected TypeScript/API, style, performance/reliability, and
+  documentation concerns reopen after correction.

@@ -1,6 +1,6 @@
 # T-0191 Review Record
 
-Status: REVIEW READY
+Status: CHANGES REQUESTED
 
 Planned lanes: TypeScript/API (optional source compatibility), style/
 maintainability (one cleanup seam), performance/reliability (atomic fencing,
@@ -59,3 +59,18 @@ are retained as required inputs.
 - Subagents may not spawn subagents. Runtime telemetry is unavailable on this
   execution surface; the immutable configured roles and profiles above are the
   acceptance record.
+
+## Review Wave Result
+
+- TypeScript/API and documentation confirmed one shared P2: the new public
+  option contract promises cancellation/deadline propagation while direct
+  `InboxStorage.removeDelivered()` discards the options.
+- Performance/reliability confirmed the same defect at P1 because an in-flight
+  provider deletion can outlive shard cancellation/deadline.
+- Performance/reliability also confirmed that the live provider test does not
+  yet prove independent handles/two-owner fencing or physical row counts.
+- Style confirmed the task brief lacks its mandatory inherited
+  Human-Imposed Requirements Ledger.
+- One correction batch returns to the existing `implementer`, explicitly
+  configured `gpt-5.6-terra` / medium, with no subagents. Runtime telemetry is
+  unavailable; the configured role/profile is immutable and recorded.
