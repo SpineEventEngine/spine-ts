@@ -18,7 +18,9 @@ import type {
   NormalizedQueryPredicate,
 } from "./query-policy.js";
 
-/** Finite default number of provider candidates a normalized plan may materialize. */
+/**
+ * Finite default number of provider candidates a normalized plan may materialize.
+ */
 export const defaultQueryCandidateLimit = 10_000;
 
 /**

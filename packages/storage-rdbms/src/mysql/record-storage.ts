@@ -327,7 +327,10 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     });
   }
 
-  /** Returns the normalized query features genuinely executed by MySQL. */
+  /**
+   * Returns the normalized query features genuinely executed by MySQL.
+   * @returns The normalized features executed by this provider.
+   */
   protected override queryCapabilities(): StorageQueryCapabilities {
     return {
       comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
@@ -335,7 +338,11 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
     };
   }
 
-  /** Executes the complete candidate selection in contained, bound MySQL SQL. */
+  /**
+   * Executes the complete candidate selection in contained, bound MySQL SQL.
+   * @param plan The validated normalized query plan.
+   * @returns The selected record entries.
+   */
   protected override async queryPlanRecordEntries(
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
