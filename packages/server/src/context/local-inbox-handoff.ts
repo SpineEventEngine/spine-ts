@@ -434,6 +434,7 @@ export const InboxHandoff: Readonly<{
       readonly shard: { readonly index: number; readonly ofTotal: number };
     },
   ): boolean;
+  messageIdKey(message: Pick<InboxMessage, "id">): string;
   endpoint(input: {
     readonly label: SupportedDeliveryLabel;
     readonly inboxId: { readonly targetTypeUrl: string };
@@ -587,6 +588,10 @@ export const InboxHandoff: Readonly<{
       left.shard.index === right.shard.index &&
       left.shard.ofTotal === right.shard.ofTotal
     );
+  },
+
+  messageIdKey(message: Pick<InboxMessage, "id">): string {
+    return JSON.stringify([message.id.value, message.id.shard.index, message.id.shard.ofTotal]);
   },
 
   endpoint(input: {

@@ -384,22 +384,22 @@ export class LocalEntityInbox implements EntityInbox {
   }
 
   #trackMessage(message: InboxMessage): void {
-    this.#inFlightMessageIds.add(messageIdKey(message));
+    this.#inFlightMessageIds.add(InboxHandoff.messageIdKey(message));
   }
 
   #untrackMessage(message: InboxMessage): void {
-    const key = messageIdKey(message);
+    const key = InboxHandoff.messageIdKey(message);
     this.#inFlightMessageIds.delete(key);
     this.#acknowledgedMessageIds.delete(key);
   }
 
   #recordAcknowledgement(message: InboxMessage): void {
-    const key = messageIdKey(message);
+    const key = InboxHandoff.messageIdKey(message);
     if (this.#inFlightMessageIds.has(key)) this.#acknowledgedMessageIds.add(key);
   }
 
   #isAcknowledged(message: InboxMessage): boolean {
-    return this.#acknowledgedMessageIds.has(messageIdKey(message));
+    return this.#acknowledgedMessageIds.has(InboxHandoff.messageIdKey(message));
   }
 
   #takeVersion(): bigint {
@@ -533,8 +533,4 @@ interface BatchRow {
   readonly input: RoutedEntityInput;
   readonly promise: Promise<InboxMessage>;
   readonly owner?: InboxDeferred;
-}
-
-function messageIdKey(message: InboxMessage): string {
-  return JSON.stringify([message.id.value, message.id.shard.index, message.id.shard.ofTotal]);
 }
