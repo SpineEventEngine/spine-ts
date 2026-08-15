@@ -518,7 +518,13 @@ describe("createNativeGatewayServices", () => {
       if (request.method === "Cancel") return { kind: "cancelled" };
       activeSignal = request.signal;
       await new Promise<void>((resolve) =>
-        activeSignal?.addEventListener("abort", () => resolve(), { once: true }),
+        activeSignal?.addEventListener(
+          "abort",
+          () => {
+            resolve();
+          },
+          { once: true },
+        ),
       );
       return { kind: "activated" };
     });
@@ -543,7 +549,13 @@ describe("createNativeGatewayServices", () => {
       if (request.method === "Cancel") throw new Error("cancel transport unavailable");
       activeSignal = request.signal;
       await new Promise<void>((resolve) =>
-        activeSignal?.addEventListener("abort", () => resolve(), { once: true }),
+        activeSignal?.addEventListener(
+          "abort",
+          () => {
+            resolve();
+          },
+          { once: true },
+        ),
       );
       return { kind: "activated" };
     });
