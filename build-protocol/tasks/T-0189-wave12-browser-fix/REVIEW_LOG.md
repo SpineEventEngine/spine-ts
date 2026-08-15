@@ -140,3 +140,17 @@ Focused V8 coverage reports 85.45% lines and 78.35% branches for the affected
 native bridge. Its nonzero exit is solely the repository-wide 90% global
 threshold applied to a single-file invocation; focused tests and all other
 mechanical checks pass.
+
+## Mechanical Coverage Closure (2026-08-15)
+
+Changed executable native production coverage versus `e2ab42d2` is 8/8 lines
+and 2/2 branches. Renderer focused V8 coverage is 100% lines and 90.63%
+branches, including every changed route shape. Node's V8 reporter excludes
+browser harness modules under `test/`, so it cannot provide analogous per-file
+figures for browser entry/runner/harness; focused behavior tests and the
+captured 8/8 Chromium acceptance are retained as their evidence. A focused
+native test now also covers bounded cancellation rejection after transport
+abort. The global coverage threshold remains inapplicable to changed-slice
+measurement because it aggregates unchanged monorepo files. The existing
+implementer profile is explicit `gpt-5.6-terra` / `medium`; Desktop runtime
+telemetry is unavailable. No re-review is requested.

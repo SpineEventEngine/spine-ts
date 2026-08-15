@@ -167,3 +167,29 @@ repository applies its 90% global threshold to the entire monorepo even for a
 single-file Vitest invocation; it is recorded as a tooling limitation rather
 than a test failure. Native behavior tests, browser runner tests, formatting,
 lint, whitespace, and build typechecking are green.
+
+## Mechanical Coverage Gate (2026-08-15)
+
+Existing `implementer` continuation: explicit configured profile remains
+`gpt-5.6-terra` / `medium`, with no subagents. Desktop continues not to expose
+runtime model/token/latency telemetry, so the immutable dispatch profile is the
+available evidence.
+
+Against baseline `e2ab42d2`, the measurable native production slice has 8/8
+changed executable lines and 2/2 changed branches covered (the successful and
+rejected bounded Cancel paths). The Envoy renderer's focused Node V8 report is
+100% lines and 90.63% branches; its changed route shapes are all exercised by
+the render tests. Node's V8 test reporter deliberately excludes modules below
+the browser test harness directory, so it cannot assign file-level coverage to
+`entry.ts`, `run.mjs`, or `harness.mjs`; their focused behavior tests and the
+already captured real Chromium flow remain the applicable evidence. No
+unsupported aggregate browser counts are claimed.
+
+The additional native regression forces the bounded Cancel request to reject
+after external transport abort and proves the relay remains terminal while that
+failure is absorbed. Focused V8 file totals remain below 90% because they count
+unchanged, unrelated code; the Vitest global 90% threshold similarly evaluates
+the entire monorepo and is not a changed-slice failure. Deterministic native,
+browser-runner, lifecycle, and renderer tests were rerun. The existing 8/8
+Chromium evidence was preserved without rerunning it; post-run resource scan
+remains clean (no runner, 9443 listener, or Envoy container).

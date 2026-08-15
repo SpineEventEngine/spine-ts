@@ -537,6 +537,31 @@ describe("createNativeGatewayServices", () => {
     expect(fake.calls.map((request) => request.method)).toEqual(["Activate", "Cancel"]);
   });
 
+  it("absorbs retained-binding cancellation failure after a transport abort", async () => {
+    let activeSignal: AbortSignal | undefined;
+    const fake = subscriptions(async (request) => {
+      if (request.method === "Cancel") throw new Error("cancel transport unavailable");
+      activeSignal = request.signal;
+      await new Promise<void>((resolve) =>
+        activeSignal?.addEventListener("abort", resolve, { once: true }),
+      );
+      return { kind: "activated" };
+    });
+    const controller = new AbortController();
+    const gateway = services(unary({ kind: "forwarded", value: new Uint8Array() }).fake, fake.fake);
+    const iterator = gateway.subscription
+      .activate(create(SubscriptionSchema), context(controller.signal))
+      [Symbol.asyncIterator]();
+    const pending = iterator.next();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ code: Code.Canceled });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fake.calls.map((request) => request.method)).toEqual(["Activate", "Cancel"]);
+  });
+
   it("maps Activate gateway rejection and backend failure through the stream terminal", async () => {
     const rejected = subscriptions(() =>
       Promise.resolve({ kind: "rejected", reason: "binding-busy" }),
