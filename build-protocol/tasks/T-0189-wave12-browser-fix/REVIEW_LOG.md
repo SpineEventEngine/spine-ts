@@ -71,3 +71,15 @@ those required cases are captured.
   on this endpoint. Re-review remains blocked on restoring browser CORS
   admission at the existing Envoy production boundary; no query, Inbox, or
   provider files were changed here.
+
+## CORS Correction And New Browser Finding (2026-08-15)
+
+- Corrected renderer ordering: genuine CORS preflights select a bounded normal
+  route so the CORS filter owns their response; a following exact OPTIONS local
+  response handles missing-Origin/malformed/non-preflight requests. Neither
+  shape reaches Gateway admission.
+- Fresh complete Chromium acceptance: 7/8 pass. This disproves CORS as the
+  remaining blocker. The passive viewer receives two updates and times out on
+  the third; cancellation cannot finish after Playwright's timeout, leaving two
+  bindings for the parent settlement check. The sustained post-admission stream
+  failure requires a separate root-cause correction before re-review can close.

@@ -189,23 +189,35 @@ test("terminates accepted and missing-origin preflight without Gateway admission
   const topology = await startTopology();
   try {
     const before = topology.counters();
-    for (const headers of [
-      {
-        origin: "https://127.0.0.1:4175",
-        "access-control-request-method": "POST",
-        "access-control-request-headers": "content-type,x-grpc-web,x-spine-csrf",
-      },
-      { "access-control-request-method": "POST" },
-      {
-        origin: "https://rejected.example.test",
-        "access-control-request-method": "POST",
-      },
+    for (const [headers, allowed, status] of [
+      [
+        {
+          origin: "https://127.0.0.1:4175",
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "content-type,x-grpc-web,x-spine-csrf",
+        },
+        true,
+        200,
+      ],
+      [{ "access-control-request-method": "POST" }, false, 204],
+      [
+        {
+          origin: "https://rejected.example.test",
+          "access-control-request-method": "POST",
+        },
+        false,
+        200,
+      ],
     ]) {
-      const response = await fetch(
+      const response = await globalThis.fetch(
         `${topology.baseUrl}/spine.auth.AuthenticationService/ResolveContext`,
         { method: "OPTIONS", headers },
       );
-      assert.equal(response.status, 204);
+      assert.equal(response.status, status);
+      assert.equal(
+        response.headers.get("access-control-allow-origin"),
+        allowed ? headers.origin : null,
+      );
     }
     assert.deepEqual(topology.counters(), before);
   } finally {

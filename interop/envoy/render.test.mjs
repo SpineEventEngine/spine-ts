@@ -21,8 +21,16 @@ test("renders a bounded grpc-web gateway-only listener", () => {
     rendered,
     /allow_headers: content-type,x-grpc-web,grpc-timeout,connect-protocol-version,connect-timeout-ms,authorization,x-user-agent,x-spine-csrf/,
   );
-  assert.match(rendered, /exact_match: OPTIONS \}\] \}\n {26}direct_response: \{ status: 204 \}/);
-  assert.doesNotMatch(rendered, /exact_match: OPTIONS \}\] \}\n {26}route: \{ cluster: gateway/);
+  assert.match(
+    rendered,
+    /path: \/spine\.auth\.AuthenticationService\/ResolveContext, headers: \[\{ name: ":method", exact_match: OPTIONS \}, \{ name: origin, present_match: true \}, \{ name: access-control-request-method, exact_match: POST \}\] \}\n {26}route: \{ cluster: gateway, timeout: 30s \}/,
+    "genuine preflights must select the CORS-filtered bounded route",
+  );
+  assert.match(
+    rendered,
+    /path: \/spine\.auth\.AuthenticationService\/ResolveContext, headers: \[\{ name: ":method", exact_match: OPTIONS \}\] \}\n {26}direct_response: \{ status: 204 \}/,
+    "malformed or non-preflight OPTIONS must remain terminal and local",
+  );
   assert.match(
     rendered,
     /Connect application\/json and application\/proto requests pass through unchanged/,
@@ -50,6 +58,7 @@ test("renders a bounded grpc-web gateway-only listener", () => {
   assert.doesNotMatch(rendered, /backend/);
   assert.doesNotMatch(rendered, /match: \{ prefix:/);
   assert.match(rendered, /name: envoy\.filters\.http\.buffer/);
+  assert.match(rendered, /forward_not_matching_preflights: false/);
   assert.doesNotMatch(rendered, /route: \{[^}]*max_request_bytes/);
 });
 

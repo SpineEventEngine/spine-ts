@@ -59,3 +59,23 @@ reports zero bindings and all Gateway counters zero. Therefore no real-browser
 per-update snapshot can truthfully be claimed from this attempt. This is the
 same Envoy CORS boundary previously assigned to the completed production owner,
 not a harness-induced lifecycle failure.
+
+2026-08-15 CORS correction: terminal direct-response OPTIONS routes cannot
+receive the virtual-host CORS headers. The renderer now orders a first exact
+genuine-preflight route for each public RPC path (OPTIONS plus present Origin
+and `Access-Control-Request-Method: POST`) through the ordinary bounded route,
+where Envoy's CORS filter intercepts it. A second exact OPTIONS-only terminal
+204 route remains the local fallback for missing-Origin, malformed, and
+non-preflight OPTIONS. `forward_not_matching_preflights: false` keeps rejected
+genuine preflights local. Renderer and live-topology tests prove allowlisted
+preflight returns 200 with `Access-Control-Allow-Origin`, rejected genuine
+preflight returns local 200 without that header, and missing-Origin fallback
+returns 204; all leave Gateway counters unchanged.
+
+Fresh complete Chromium output is captured: CORS admission is now healthy and
+7 of 8 tests pass. The passive viewer receives only two of its three ordered
+writer updates, then reaches Playwright's 30-second timeout; the parent cleanup
+correctly reports two residual bindings after the forced test timeout. This is
+a newly proven post-admission sustained browser-delivery failure, distinct from
+the corrected CORS regression. No healthy third-update snapshot or green
+browser acceptance is claimed at this endpoint.

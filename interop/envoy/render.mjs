@@ -6,11 +6,19 @@ import reservedSpineRpcPaths from "../../packages/server/src/server/reserved-spi
 export function renderEnvoy(options) {
   const topology = normalize(options);
   const routes = [...spineRoutes, ...topology.authRoutes]
-    .flatMap((route) => [route, { ...route, method: "OPTIONS" }])
+    .flatMap((route) => [
+      route,
+      { ...route, kind: "preflight" },
+      { path: route.path, kind: "fallback" },
+    ])
     .map((route) =>
-      route.method === "OPTIONS"
+      route.kind === "fallback"
         ? `                        - match: { path: ${route.path}, headers: [{ name: ":method", exact_match: OPTIONS }] }\n                          direct_response: { status: 204 }`
-        : `                        - match: { path: ${route.path}, headers: [{ name: ":method", exact_match: ${route.method} }] }\n                          route: { cluster: gateway, timeout: ${route.timeout} }\n                          typed_per_filter_config:\n                            envoy.filters.http.buffer:\n                              "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.BufferPerRoute\n                              buffer: { max_request_bytes: ${route.maxRequestBytes} }`,
+        : `                        - match: { path: ${route.path}, headers: [${
+            route.kind === "preflight"
+              ? '{ name: ":method", exact_match: OPTIONS }, { name: origin, present_match: true }, { name: access-control-request-method, exact_match: POST }'
+              : `{ name: ":method", exact_match: ${route.method} }`
+          }] }\n                          route: { cluster: gateway, timeout: ${route.timeout} }\n                          typed_per_filter_config:\n                            envoy.filters.http.buffer:\n                              "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.BufferPerRoute\n                              buffer: { max_request_bytes: ${route.maxRequestBytes} }`,
     )
     .join("\n");
   return `static_resources:
@@ -50,6 +58,7 @@ ${routes}
                         allow_headers: content-type,x-grpc-web,grpc-timeout,connect-protocol-version,connect-timeout-ms,authorization,x-user-agent,x-spine-csrf
                         expose_headers: grpc-status,grpc-message
                         max_age: "86400"
+                        forward_not_matching_preflights: false
                 http_filters:
                   - name: envoy.filters.http.buffer
                     typed_config:
