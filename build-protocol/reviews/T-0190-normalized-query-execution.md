@@ -1,6 +1,6 @@
 # T-0190 Review Log
 
-Status: Pending implementation evidence
+Status: Specialist review in progress
 
 ## Assignment evidence
 
@@ -17,7 +17,29 @@ profile is retained. No subagents are permitted.
 - Security: relevant at Wave closure — bound values, validated identifiers,
   tenant/group containment, and fail-closed unsupported plans.
 
-No specialist result has been received. Mechanical validation precedes review.
+## Specialist dispatches
+
+The review endpoint is `9747bd8d`, compared with baseline `e2ab42d2`. Each
+review is read-only, concern-specific, and forbids subagent delegation. The
+Desktop execution surface does not expose child runtime telemetry, so the
+immutable configured role and explicit profile are the accepted metadata.
+
+- TypeScript/API: existing `typescript_api_docs_reviewer`, explicitly
+  `gpt-5.6-terra` / high. Scope: public default limit, normalized-plan
+  compatibility, base seam, declarations, exports, and API documentation.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicitly
+  `gpt-5.6-terra` / high. Scope: query compiler structure, provider boundaries,
+  and test maintainability.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicitly `gpt-5.6-terra` / high. Scope: finite bounds, pushdown,
+  fail-closed behavior, containment, supported Datastore shapes, and query
+  cost.
+- Documentation/TSDoc: existing `documentation_reviewer`, explicitly
+  `gpt-5.6-luna` / medium. Scope: implemented capability and index/cost claims,
+  with no future-feature or root-README leakage.
+
+No specialist result has been received yet. Mechanical validation preceded
+review, and live provider suites will not be rerun concurrently with review.
 
 ## Mechanical convergence evidence
 
