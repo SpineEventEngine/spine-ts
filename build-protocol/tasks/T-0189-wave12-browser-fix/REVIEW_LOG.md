@@ -1,6 +1,6 @@
 # T-0189 Review Log
 
-Status: FINAL RUNNER RE-REVIEW IN PROGRESS
+Status: FINAL ERROR-PATH SETTLEMENT CORRECTION
 
 Performance/reliability and style/maintainability apply. TypeScript/API,
 documentation, and security apply only if the proven implementation boundary
@@ -225,6 +225,20 @@ Final affected-lane re-review is dispatched against production endpoint
 style/maintainability and performance/reliability reviewers, each explicitly
 `gpt-5.6-terra` / high, read-only, and forbidden to spawn subagents. Desktop
 runtime telemetry remains unavailable.
+
+## Final runner acceptance result (2026-08-15)
+
+- Style/maintainability: clean. Observed precondition state, rather than grep
+  text, owns exact-three enforcement; its non-literal regression passes.
+- Performance/reliability: one P1 interaction remains. When forced-disconnect
+  settlement has started and a later close-time stdout marker rejects, control
+  can bypass the normal settlement await and enter topology cleanup. Cleanup
+  must unconditionally await all already-started settlements while preserving
+  the original output failure. Add the combined late-failure/forced-disconnect
+  ordering regression.
+
+This single correction returns to the existing implementer. Only
+performance/reliability is reopened; style and all earlier lanes remain clean.
 
 ## Final Re-review Result (2026-08-15)
 
