@@ -19,6 +19,7 @@ import {
   type EntityClass,
   type EntityHandlersMetadata,
   type HandlerMethodName,
+  type HandlerOrigin,
   type HandlerMetadata,
   type HandlerRegistrationBuilder,
   type WhereOptions,
@@ -36,7 +37,7 @@ export interface GeneratedHandlerRegistry {
   /**
    * Generated registry contract version.
    */
-  readonly version: 2;
+  readonly version: 3;
 
   /**
    * Entity handler groups declared by the generated module.
@@ -94,6 +95,8 @@ export type RegistryIngestionErrorCode =
   | "UNSUPPORTED_HANDLER_KIND"
   | "INVALID_PARAMETER_COUNT"
   | "INVALID_SCHEMA"
+  | "INVALID_SIGNAL_ORIGIN"
+  | "EXTERNAL_COMMAND_RECEIVER"
   | "MISSING_EMITTED_SCHEMAS"
   | "UNEXPECTED_EMITTED_SCHEMAS";
 
@@ -225,6 +228,9 @@ export interface GeneratedHandlerRecordInput {
    */
   readonly parameterCount: GeneratedHandlerParameterCount;
 
+  /** Required origin inferred from the receptor's first parameter. */
+  readonly origin: HandlerOrigin;
+
   /**
    * Optional generated Event field equality filter.
    */
@@ -247,7 +253,7 @@ export interface GeneratedHandlerRecord<
   readonly methodName: HandlerMethodName<Instance>;
 }
 
-const registryVersion = 2;
+const registryVersion = 3;
 
 interface GeneratedRegistryOperations {
   assert(registry: unknown): asserts registry is GeneratedHandlerRegistry;
@@ -306,6 +312,7 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
           ? {}
           : { emittedSchemas: Object.freeze([...handler.emittedSchemas]) }),
         parameterCount: handler.parameterCount,
+        origin: handler.origin,
         ...(handler.where === undefined ? {} : { where: Object.freeze({ ...handler.where }) }),
       })),
     );
@@ -354,6 +361,19 @@ const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
       throw new HandlerRegistryIngestionError(
         "UNSUPPORTED_HANDLER_KIND",
         `Generated handler kind "${String(handler.kind)}" is not supported.`,
+      );
+    }
+
+    if (handler.origin !== "domestic" && handler.origin !== "external") {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SIGNAL_ORIGIN",
+        `Generated handler "${handler.methodName}" declares an invalid signal origin.`,
+      );
+    }
+    if (handler.origin === "external" && handler.kind === "command-assignment") {
+      throw new HandlerRegistryIngestionError(
+        "EXTERNAL_COMMAND_RECEIVER",
+        `Generated command assignment handler "${handler.methodName}" cannot accept external commands.`,
       );
     }
 

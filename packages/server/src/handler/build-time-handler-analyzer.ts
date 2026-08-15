@@ -118,6 +118,9 @@ export interface BuildHandlerRecord {
    */
   readonly parameterCount: GeneratedHandlerParameterCount;
 
+  /** Origin declared on the first receptor parameter. */
+  readonly origin: "domestic" | "external";
+
   /**
    * Optional statically declared Event field filter.
    */
@@ -152,6 +155,8 @@ export type BuildHandlerDiagnosticCode =
   | "INVALID_HANDLER_VISIBILITY"
   | "INVALID_PARAMETER_COUNT"
   | "INVALID_SIGNAL_TYPE"
+  | "INVALID_EXTERNAL_ORIGIN"
+  | "EXTERNAL_COMMAND_RECEIVER"
   | "INVALID_SUBSCRIBE_RETURN"
   | "INVALID_WHERE"
   | "MISSING_EMITTED_SCHEMAS"
@@ -475,7 +480,9 @@ const HandlerSources = Object.freeze({
       return undefined;
     }
 
-    const signal = HandlerSources.schemaUseFromType(node.parameters[0]?.type, scope.imports);
+    const origin = HandlerSources.externalOrigin(node.parameters, scope, className, method);
+    if (origin === undefined) return undefined;
+    const signal = HandlerSources.schemaUseFromType(origin.type, scope.imports);
     const signalSchema = signal?.reference;
     const emittedSchemas = HandlerSources.emittedSchemaUses(
       node.type,
@@ -503,6 +510,7 @@ const HandlerSources = Object.freeze({
       signalSchema,
       emittedSchemas,
       parameterCount: node.parameters.length as GeneratedHandlerParameterCount,
+      origin: origin.value,
       ...(where === undefined ? {} : { where }),
     };
   },
@@ -766,8 +774,21 @@ const HandlerSources = Object.freeze({
       return true;
     }
 
-    const signal = HandlerSources.schemaUseFromType(node.parameters[0].type, scope.imports);
+    const origin = HandlerSources.externalOrigin(node.parameters, scope, className, method);
+    if (origin === undefined) return true;
+    const signal = HandlerSources.schemaUseFromType(origin.type, scope.imports);
     if (signal !== undefined && HandlerSources.acceptsSignalKind(decorator, signal.kind)) {
+      if (origin.value === "external" && decorator === "Assign") {
+        HandlerTypes.pushDiagnostic(
+          scope,
+          "EXTERNAL_COMMAND_RECEIVER",
+          node.parameters[0].type,
+          "@Assign command receivers cannot declare External<T>.",
+          className,
+          method,
+        );
+        return true;
+      }
       return false;
     }
 
@@ -1271,6 +1292,66 @@ const HandlerSources = Object.freeze({
     return undefined;
   },
 
+  externalOrigin(
+    parameters: readonly ts.ParameterDeclaration[],
+    scope: AnalyzerScope,
+    className: string,
+    method: string | undefined,
+  ): { readonly value: "domestic" | "external"; readonly type: ts.TypeNode } | undefined {
+    const first = parameters[0]?.type;
+    if (first === undefined) return undefined;
+    const marker = HandlerSources.externalMarker(first, scope.imports);
+    const laterMarker = parameters
+      .slice(1)
+      .some((parameter) =>
+        parameter.type === undefined
+          ? false
+          : HandlerSources.containsExternalMarker(parameter.type, scope.imports),
+      );
+    if (laterMarker || (marker !== undefined && !marker.direct)) {
+      HandlerTypes.pushDiagnostic(
+        scope,
+        "INVALID_EXTERNAL_ORIGIN",
+        laterMarker ? (parameters[1]?.type ?? first) : first,
+        "External<T> is valid only as the direct first receptor parameter type.",
+        className,
+        method,
+      );
+      return undefined;
+    }
+    if (marker?.direct === true && marker.type !== undefined) {
+      return { value: "external", type: marker.type };
+    }
+    return { value: "domestic", type: first };
+  },
+
+  externalMarker(
+    type: ts.TypeNode,
+    imports: ImportState,
+  ): { readonly direct: boolean; readonly type?: ts.TypeNode } | undefined {
+    if (!ts.isTypeReferenceNode(type) || !ts.isIdentifier(type.typeName)) return undefined;
+    if (imports.serverSymbols.get(type.typeName.text) !== "External") return undefined;
+    const argument = type.typeArguments?.[0];
+    return argument === undefined
+      ? { direct: false }
+      : { direct: type.typeArguments?.length === 1, type: argument };
+  },
+
+  containsExternalMarker(type: ts.TypeNode, imports: ImportState): boolean {
+    if (HandlerSources.externalMarker(type, imports) !== undefined) return true;
+    let found = false;
+    const visit = (node: ts.Node): void => {
+      if (found) return;
+      if (ts.isTypeNode(node) && HandlerSources.externalMarker(node, imports) !== undefined) {
+        found = true;
+        return;
+      }
+      ts.forEachChild(node, visit);
+    };
+    ts.forEachChild(type, visit);
+    return found;
+  },
+
   newTypeWalk(): TypeWalk {
     return { remaining: maxAliasDepth, seen: new Set() };
   },
@@ -1347,10 +1428,7 @@ const HandlerSources = Object.freeze({
     if (bindings === undefined) {
       return;
     }
-    if (
-      moduleSpecifier === "@spine-event-engine/server" &&
-      statement.importClause?.phaseModifier !== ts.SyntaxKind.TypeKeyword
-    ) {
+    if (moduleSpecifier === "@spine-event-engine/server") {
       HandlerSources.recordServerImport(bindings, state);
     }
     if (moduleSpecifier === "@spine-event-engine/proto") {
@@ -1375,9 +1453,7 @@ const HandlerSources = Object.freeze({
     }
 
     for (const element of bindings.elements) {
-      if (!element.isTypeOnly) {
-        state.serverSymbols.set(element.name.text, element.propertyName?.text ?? element.name.text);
-      }
+      state.serverSymbols.set(element.name.text, element.propertyName?.text ?? element.name.text);
     }
   },
 

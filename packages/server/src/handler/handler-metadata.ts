@@ -46,6 +46,9 @@ export type HandlerKind =
  */
 export type HandlerParameterCount = 1 | 2;
 
+/** Origin declared by a generated receptor's first parameter. */
+export type HandlerOrigin = "domestic" | "external";
+
 /**
  * Compile-time approximation of entity callable member names.
  *
@@ -132,6 +135,9 @@ export interface BaseHandlerMetadata<
    * Public method arity: `handler(signal)` or `handler(signal, context)`.
    */
   readonly parameterCount: HandlerParameterCount;
+
+  /** Whether this receptor accepts domestic or imported external signals. */
+  readonly origin: HandlerOrigin;
 
   /**
    * Optional Event field equality filter generated for this handler.
@@ -743,6 +749,9 @@ export interface HandlerArity {
    */
   readonly parameterCount: HandlerParameterCount;
 
+  /** Origin carried by generated receptor metadata. */
+  readonly origin?: HandlerOrigin;
+
   /**
    * Generated Protobuf-ES schemas emitted by the handler return type.
    */
@@ -932,6 +941,7 @@ class EntityHandlersOwner {
       messageFullTypeName: schema.typeName,
       methodName,
       parameterCount: generated?.parameterCount ?? 1,
+      origin: generated?.origin ?? "domestic",
       ...(generated?.where === undefined ? {} : { where: Object.freeze({ ...generated.where }) }),
     });
     if (generated?.emittedSchemas !== undefined) {
@@ -948,6 +958,7 @@ class EntityHandlersOwner {
         this.#arityKey(arity.kind, arity.methodName),
         Object.freeze({
           parameterCount: this.#parameterCount(arity.parameterCount),
+          origin: arity.origin ?? "domestic",
           ...(arity.emittedSchemas === undefined
             ? {}
             : { emittedSchemas: Object.freeze([...arity.emittedSchemas]) }),
@@ -1062,6 +1073,7 @@ export const EntityHandlers: Readonly<EntityHandlerDefinitions> = Object.freeze(
 
 interface HandlerGeneratedData {
   readonly parameterCount: HandlerParameterCount;
+  readonly origin: HandlerOrigin;
   readonly emittedSchemas?: readonly DescriptorMessageSchema[];
   readonly where?: WhereOptions;
 }

@@ -1217,6 +1217,7 @@ interface RepositoryDispatchers {
 interface RepositoryRouting<Id = unknown> {
   readonly commandSchemas: readonly MessageSchema[];
   readonly eventSchemas: readonly MessageSchema[];
+  readonly externalEventSchemas: readonly MessageSchema[];
   readonly producedEventSchemas: readonly MessageSchema[];
   readonly producedCommandSchemas: readonly MessageSchema[];
   readonly commandReadiness: CommandRegistrationReadinessLookup | undefined;
@@ -1229,12 +1230,18 @@ interface RepositoryRouting<Id = unknown> {
   commandReactions(
     eventFullTypeName: string,
     message: unknown,
+    external: boolean,
   ): readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[];
   eventReactors(
     eventFullTypeName: string,
     message: unknown,
+    external: boolean,
   ): readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
-  eventSubscribers(eventFullTypeName: string, message: unknown): RepositoryEventSubscribers;
+  eventSubscribers(
+    eventFullTypeName: string,
+    message: unknown,
+    external: boolean,
+  ): RepositoryEventSubscribers;
   routeCommand(command: Command): RepositoryCommandRoute<Id>;
   routeEvent(event: Event): RepositoryEventRoute<Id>;
   routeStateUpdate(event: Event): RepositoryStateUpdateRoute<Id> | undefined;
@@ -1777,9 +1784,13 @@ class AggregateEventExecution {
     const message = EntityInvocation.unpackRequired(eventMessage, eventSchema, "event");
     const route = acceptedRoute;
     const reactors = this.#routing
-      .eventReactors(route.messageFullTypeName, message)
+      .eventReactors(route.messageFullTypeName, message, this.#event.context?.external === true)
       .filter((reactor) => RepositoryHandlers.handlerEmittedSchemas(reactor.handler).length > 0);
-    const commanders = this.#routing.commandReactions(route.messageFullTypeName, message);
+    const commanders = this.#routing.commandReactions(
+      route.messageFullTypeName,
+      message,
+      this.#event.context?.external === true,
+    );
 
     return Object.freeze({
       message,
@@ -2133,7 +2144,11 @@ class ProjectionEventExecution {
       "event",
     );
     const message = EntityInvocation.unpackRequired(packedMessage, eventSchema, "event");
-    const subscribers = this.#routing.eventSubscribers(route.messageFullTypeName, message);
+    const subscribers = this.#routing.eventSubscribers(
+      route.messageFullTypeName,
+      message,
+      this.#event.context?.external === true,
+    );
 
     return Object.freeze({
       route,
@@ -2774,8 +2789,16 @@ class ProcessManagerEventExecution {
     );
     const message = EntityInvocation.unpackRequired(eventMessage, eventSchema, "event");
     const route = acceptedRoute;
-    const reactors = this.#routing.eventReactors(route.messageFullTypeName, message);
-    const commanders = this.#routing.commandReactions(route.messageFullTypeName, message);
+    const reactors = this.#routing.eventReactors(
+      route.messageFullTypeName,
+      message,
+      this.#event.context?.external === true,
+    );
+    const commanders = this.#routing.commandReactions(
+      route.messageFullTypeName,
+      message,
+      this.#event.context?.external === true,
+    );
 
     return Object.freeze({
       message,
@@ -4120,6 +4143,15 @@ const RepositoryHandlers = {
     return plans;
   },
 
+  forOrigin<Value extends { readonly handler: { readonly origin: "domestic" | "external" } }>(
+    values: readonly Value[],
+    external: boolean,
+  ): readonly Value[] {
+    return Object.freeze(
+      values.filter((value) => (value.handler.origin === "external") === external),
+    );
+  },
+
   readinessMap<Value>(
     schemas: readonly MessageSchema[],
     find: (typeName: string) => readonly Value[],
@@ -4218,6 +4250,19 @@ const RepositoryRoutes = {
         ...handler.eventApplications.map((application) => application.schema),
       ]),
     );
+    const externalEventSchemas = RepositoryHandlers.uniqueSchemas(
+      handlers.flatMap((handler) =>
+        handler.handlers
+          .filter(
+            (candidate) =>
+              candidate.origin === "external" &&
+              (candidate.kind === "event-subscription" ||
+                candidate.kind === "event-reaction" ||
+                candidate.kind === "command-reaction"),
+          )
+          .map((candidate) => candidate.schema),
+      ),
+    );
     const stateSchemas = RepositoryHandlers.uniqueSchemas(
       handlers.flatMap((handler) =>
         handler.stateSubscriptions.map((subscription) => subscription.schema),
@@ -4283,18 +4328,28 @@ const RepositoryRoutes = {
     return Object.freeze({
       commandSchemas,
       eventSchemas,
+      externalEventSchemas,
       producedEventSchemas,
       producedCommandSchemas,
       commandReadiness,
       eventReadiness,
       stateSchemas,
       stateSubscriptions,
-      commandReactions: (eventFullTypeName: string, message: unknown) =>
-        commandReactionFilters.get(eventFullTypeName)?.select(message) ?? Object.freeze([]),
-      eventReactors: (eventFullTypeName: string, message: unknown) =>
-        eventReactorFilters.get(eventFullTypeName)?.select(message) ?? Object.freeze([]),
-      eventSubscribers: (eventFullTypeName: string, message: unknown) =>
-        eventSubscriberFilters.get(eventFullTypeName)?.select(message) ?? Object.freeze([]),
+      commandReactions: (eventFullTypeName: string, message: unknown, external: boolean) =>
+        RepositoryHandlers.forOrigin(
+          commandReactionFilters.get(eventFullTypeName)?.select(message) ?? Object.freeze([]),
+          external,
+        ),
+      eventReactors: (eventFullTypeName: string, message: unknown, external: boolean) =>
+        RepositoryHandlers.forOrigin(
+          eventReactorFilters.get(eventFullTypeName)?.select(message) ?? Object.freeze([]),
+          external,
+        ),
+      eventSubscribers: (eventFullTypeName: string, message: unknown, external: boolean) =>
+        RepositoryHandlers.forOrigin(
+          eventSubscriberFilters.get(eventFullTypeName)?.select(message) ?? Object.freeze([]),
+          external,
+        ),
       routeCommand: (command: Command) =>
         RepositoryRoutes.routeCommand<RepositoryEntityId<EntityType>>(
           command,
@@ -5891,6 +5946,7 @@ const RepositoryDispatch = {
           ? undefined
           : Object.freeze({
               messageSchemas: () => routing.eventSchemas,
+              externalEventSchemas: () => routing.externalEventSchemas,
               accept: (event: Event): Promise<void> => {
                 acceptedEventRoutes.set(event, repository.routeEvent(event));
                 return Promise.resolve();

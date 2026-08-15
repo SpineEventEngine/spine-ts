@@ -33,6 +33,12 @@ export interface EventDispatcher {
   messageSchemas(): readonly MessageSchema[];
 
   /**
+   * Optional subset of accepted schemas whose receptors accept imported events.
+   * Omission preserves the established domestic-only default.
+   */
+  externalEventSchemas?(): readonly MessageSchema[];
+
+  /**
    * Performs dispatcher-specific acceptance before dispatch.
    *
    * The bus gives each dispatcher its own Event snapshot. After successful

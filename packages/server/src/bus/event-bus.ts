@@ -226,7 +226,7 @@ export class EventBus {
       throw new Error("EventBus requires event.message.typeUrl.");
     }
 
-    const dispatchers = this.#registry.find(typeUrl);
+    const dispatchers = this.#registry.find(typeUrl, event.context?.external === true);
 
     if (forgettingBuses.has(this)) {
       this.#validate(event, typeUrl);
@@ -299,7 +299,7 @@ export class EventBus {
       throw new Error("EventBus requires event.message.typeUrl.");
     }
 
-    const dispatchers = this.#registry.find(typeUrl);
+    const dispatchers = this.#registry.find(typeUrl, event.context?.external === true);
     this.#validate(event, typeUrl);
     const accepted = await this.#accept(event, dispatchers);
 

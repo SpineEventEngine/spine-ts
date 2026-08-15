@@ -316,6 +316,7 @@ const RegistrySource = Object.freeze({
         `          signalSchema: ${signalSchema},`,
         `          emittedSchemas: [${emitted}],`,
         `          parameterCount: ${String(handler.parameterCount)},`,
+        `          origin: ${RegistrySource.stringLiteral(handler.origin)},`,
         ...(handler.where === undefined
           ? []
           : [
