@@ -5411,7 +5411,7 @@ Consequences:
 
 ## D-0114: Bound Wave 12 Streams, Provider Queries, And Delivered Inbox Rows
 
-Status: Proposed pending T-0187 specialist review
+Status: Accepted
 
 Date: 2026-08-15
 

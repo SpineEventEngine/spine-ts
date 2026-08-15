@@ -30,10 +30,10 @@ Phase 1 — discovery and current-state tracing.
 
 ### Phase 3: Planning review and corrections
 
-- [ ] Run mechanical pre-review lint.
-- [ ] Collect the complete relevant specialist review wave.
-- [ ] Aggregate, correct, and converge accepted findings.
-- **Status:** in_progress
+- [x] Run mechanical pre-review lint.
+- [x] Collect the complete relevant specialist review wave.
+- [x] Aggregate, correct, and converge accepted findings.
+- **Status:** completed
 
 ### Phase 4: Verification, integration, and remote closure
 
@@ -41,7 +41,7 @@ Phase 1 — discovery and current-state tracing.
 - [ ] Run `pnpm verify:task -- --no-tests` once after convergence.
 - [ ] Integrate, post-merge verify proportionately, push, reconcile remote refs,
       and prove exactly `origin/main` with no tags.
-- **Status:** pending
+- **Status:** in_progress
 
 ### Phase 5: First Wave 12 implementation task
 

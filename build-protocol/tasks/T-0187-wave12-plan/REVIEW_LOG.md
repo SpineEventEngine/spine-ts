@@ -114,4 +114,6 @@ recorded below.
   the plan asserted an unproven Datastore unfiltered-read baseline. Accepted:
   T-0190 now treats current Datastore behavior as a production-path diagnostic
   whose observed rejection/translation/read outcome must be recorded, without
-  prejudging it. Final documentation re-review is pending this narrow change.
+  prejudging it. Final narrow documentation re-review at `e39f4c33` is clean.
+
+Status: all applicable specialist concerns clean; final verification pending.
