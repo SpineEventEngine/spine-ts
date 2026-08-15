@@ -68,3 +68,18 @@ subagents and is told that other writers are active in separate worktrees.
   exists. Final task/Wave closure waits until all branches are reviewed,
   integrated, contained in `origin/main`, deleted, and the remote again exposes
   exactly `main` with no tags.
+
+## Live Coordination Record
+
+- The Inbox T-0191 RED checkpoint proved that exact removal spans the Inbox and
+  shard-ownership record families. Provider-atomic ownership validation plus
+  deletion therefore needs either the existing MySQL and Datastore
+  `record-storage.ts` implementations or owner-selected adjacent transaction
+  adapters that share their transaction/fencing boundary.
+- Query retains exclusive ownership of those existing provider files through
+  the reviewed T-0190 endpoint. Inbox continues its real RED, memory, port, and
+  lifecycle work without editing them.
+- After T-0190 review and focused verification, the orchestrator records an
+  explicit ownership handoff, advances Inbox onto that durable endpoint, and
+  only then permits the provider-atomic T-0191 implementation. A sequential
+  validate-then-delete fallback is not acceptable.
