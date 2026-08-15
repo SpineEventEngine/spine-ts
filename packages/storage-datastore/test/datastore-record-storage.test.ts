@@ -235,12 +235,14 @@ describe("DatastoreRecordStorage", () => {
     ).rejects.toThrow("EITHER");
     expect(client.lastQuery).toBeUndefined();
 
-    await expect(records.queryPlan({
-      predicate: {
-        kind: "ids",
-        ids: Array.from({ length: 31 }, (_, index) => `id-${String(index)}`),
-      },
-    })).rejects.toThrow("illegal predicate");
+    await expect(
+      records.queryPlan({
+        predicate: {
+          kind: "ids",
+          ids: Array.from({ length: 31 }, (_, index) => `id-${String(index)}`),
+        },
+      }),
+    ).rejects.toThrow("illegal predicate");
     expect(client.lastQuery).toBeUndefined();
   });
 
@@ -249,26 +251,30 @@ describe("DatastoreRecordStorage", () => {
     const records = storage(client);
     await records.writeAll(["alpha", "bravo", "charlie"].map(message));
 
-    await expect(records.queryPlan({
-      predicate: {
-        kind: "all",
-        predicates: [
-          { kind: "comparison", column: "value", operator: "greaterThan", value: "alpha" },
-          { kind: "comparison", column: "initial", operator: "lessThan", value: "z" },
-        ],
-      },
-    })).rejects.toThrow("inequality");
+    await expect(
+      records.queryPlan({
+        predicate: {
+          kind: "all",
+          predicates: [
+            { kind: "comparison", column: "value", operator: "greaterThan", value: "alpha" },
+            { kind: "comparison", column: "initial", operator: "lessThan", value: "z" },
+          ],
+        },
+      }),
+    ).rejects.toThrow("inequality");
     expect(client.lastQuery).toBeUndefined();
 
-    await expect(records.queryPlan({
-      predicate: {
-        kind: "comparison",
-        column: "value",
-        operator: "greaterThan",
-        value: "alpha",
-      },
-      order: [{ column: "initial", direction: "asc" }],
-    })).rejects.toThrow("inequality");
+    await expect(
+      records.queryPlan({
+        predicate: {
+          kind: "comparison",
+          column: "value",
+          operator: "greaterThan",
+          value: "alpha",
+        },
+        order: [{ column: "initial", direction: "asc" }],
+      }),
+    ).rejects.toThrow("inequality");
     expect(client.lastQuery).toBeUndefined();
   });
 

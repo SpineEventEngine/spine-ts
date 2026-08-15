@@ -26,7 +26,12 @@ import {
 } from "@spine-event-engine/proto/generated/spine/server/entity/entity_pb.js";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
 import { eventStoreRecordSpec } from "@spine-event-engine/storage/internal/event-store";
-import { ColumnTypes, EventStore, StorageGroup, type StorageContext } from "@spine-event-engine/storage";
+import {
+  ColumnTypes,
+  EventStore,
+  StorageGroup,
+  type StorageContext,
+} from "@spine-event-engine/storage";
 import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import type { RowDataPacket } from "mysql2";
 import { createPool } from "mysql2/promise";

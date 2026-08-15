@@ -527,7 +527,9 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
     if (plan.predicate !== undefined && DatastoreQueryPushdown.legal(plan) === undefined)
-      throw new TypeError("Datastore normalized query has an illegal predicate or inequality ordering.");
+      throw new TypeError(
+        "Datastore normalized query has an illegal predicate or inequality ordering.",
+      );
     const query = this.#codec.createQuery(this.client);
     DatastoreQueryPushdown.plan(
       query,

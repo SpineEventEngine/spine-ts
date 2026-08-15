@@ -290,7 +290,9 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
     if (plan.predicate !== undefined || (plan.order?.length ?? 0) > 0 || plan.limit !== undefined)
-      return Promise.reject(new TypeError("Storage provider must implement normalized query-plan execution."));
+      return Promise.reject(
+        new TypeError("Storage provider must implement normalized query-plan execution."),
+      );
     return this.queryRecordEntries({ limit: defaultQueryCandidateLimit + 1 });
   }
 
