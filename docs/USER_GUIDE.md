@@ -213,7 +213,8 @@ Normalized provider plans are capability-gated execution contracts. MySQL
 pushes every admitted filter, order, and finite bound into parameterized SQL in
 the selected tenant database and resolved storage-group table; it does not read
 a storage group for Node filtering. The default accepted query budget is
-10,000 records, and MySQL may fetch one additional overflow-lookahead row
+10,000 records; an explicit query budget must be a positive safe integer no
+greater than 10,000. MySQL may fetch one additional overflow-lookahead row
 (10,001 raw rows) to reject an oversized result. Datastore accepts at most
 1,000 records and may read one additional lookahead row (1,001 raw rows).
 Normalized plans do not support offset (`RecordQuery.offset` remains a separate
