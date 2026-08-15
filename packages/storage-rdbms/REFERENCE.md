@@ -97,7 +97,7 @@ Normalized projection plans compile IDs, all five comparisons, nested `all` /
 tenant pool is acquired before the resolved family table is accessed; only that
 validated table and declared columns are interpolated, while IDs, operands, and
 limits are bound. Ordering ends with `ID` for a stable tie-break. An omitted
-candidate bound is 10,000 and provider materialization is finite. The primary
+query budget permits at most 10,000 provider rows to be materialized. The primary
 key serves ID queries; operators must add indexes for workload equality, range,
 and composite filter/order patterns. Without them MySQL may scan or sort despite
 the runtime materialization bound.

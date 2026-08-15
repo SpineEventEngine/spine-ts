@@ -98,8 +98,9 @@ batches.
 
 Provider-legal ID predicates, declared-property comparisons, and ordering are
 pushed only when Datastore can execute the whole selected conjunction. Runtime
-descriptor/column validation happens before that decision. An omitted candidate
-bound is 10,000, and there is no public Datastore cursor API.
+descriptor/column validation happens before that decision. An omitted query
+budget permits at most 10,000 provider rows to be materialized, and there is no
+public Datastore cursor API.
 
 The internal Entity commit reads current and immutable keys then applies current,
 enabled histories, and delivery events in one Datastore transaction. It rejects
