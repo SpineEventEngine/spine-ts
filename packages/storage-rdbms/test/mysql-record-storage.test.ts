@@ -29,7 +29,9 @@ import { MysqlStorageSchemaError } from "../src/mysql/errors.js";
 describe("MysqlRecordStorage", () => {
   it("pushes an admitted normalized equality plan into bound SQL without replacing production plan execution", async () => {
     const calls: { sql: string; values?: readonly unknown[] }[] = [];
-    const storage = schemaStorage(readyConnection(calls, { columns: ["ID", "bytes", "value"] }) as never);
+    const storage = schemaStorage(
+      readyConnection(calls, { columns: ["ID", "bytes", "value"] }) as never,
+    );
 
     await storage.queryPlan({
       predicate: { kind: "comparison", column: "value", operator: "equal", value: "two" },

@@ -26,7 +26,11 @@ import type {
   StorageQueryCapabilities,
   StorageContext,
 } from "@spine-event-engine/storage";
-import { ColumnMappings, defaultQueryCandidateLimit, RecordStorage } from "@spine-event-engine/storage";
+import {
+  ColumnMappings,
+  defaultQueryCandidateLimit,
+  RecordStorage,
+} from "@spine-event-engine/storage";
 
 import type { MysqlResolvedTable, MysqlTableSpec } from "./table-spec.js";
 import { resolvedMysqlTableSpec } from "./table-spec.js";
@@ -757,9 +761,12 @@ export class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R
 
   private planSql(plan: NormalizedQueryPlan<I>): { sql: string; values: unknown[] } {
     const values: unknown[] = [];
-    const predicate = plan.predicate === undefined ? undefined : this.planPredicate(plan.predicate, values);
+    const predicate =
+      plan.predicate === undefined ? undefined : this.planPredicate(plan.predicate, values);
     const order = [
-      ...(plan.order ?? []).map((item) => `${this.planColumn(item.column)} ${item.direction === "desc" ? "DESC" : "ASC"}`),
+      ...(plan.order ?? []).map(
+        (item) => `${this.planColumn(item.column)} ${item.direction === "desc" ? "DESC" : "ASC"}`,
+      ),
       "ID ASC",
     ];
     const candidateLimit = plan.candidateLimit ?? defaultQueryCandidateLimit;
