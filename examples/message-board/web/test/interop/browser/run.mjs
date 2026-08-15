@@ -14,6 +14,8 @@ export async function runBrowserAcceptance({
 } = {}) {
   const topology = await start();
   try {
+    const passiveViewerSnapshots = [];
+    const lifecycleSettlements = [];
     const binary = resolve(here, "../../../node_modules/.bin/playwright");
     const environment = {
       ...process.env,
@@ -33,6 +35,11 @@ export async function runBrowserAcceptance({
         cwd: here,
         environment,
         spawnChild,
+        onOutput: (line) => {
+          recordPassiveViewerProgress(line, topology, passiveViewerSnapshots);
+          if (line.trim() === "FORCED_VIEWER_DISCONNECT")
+            lifecycleSettlements.push(settleTopology(topology));
+        },
       });
     if (requestedPlaywrightArguments.length === 0) {
       for (const pattern of [
@@ -47,12 +54,13 @@ export async function runBrowserAcceptance({
       }
     }
     const code = await playwright(requestedPlaywrightArguments);
+    await Promise.all(lifecycleSettlements);
     if (code !== 0) process.exitCode = code ?? 1;
     if (code !== 0 && topology.diagnosticState !== undefined)
       process.stderr.write(
         `TOPOLOGY_DIAGNOSTIC ${JSON.stringify(await topology.diagnosticState())}\n`,
       );
-    if (code === 0) await settled(topology);
+    if (code === 0) await settleTopology(topology);
     const counters = topology.counters();
     if (
       code === 0 &&
@@ -78,17 +86,32 @@ export async function runBrowserAcceptance({
         )
     )
       throw new Error("gateway did not forward a resolver-owned Ada context");
+    if (passiveViewerSnapshots.length > 0)
+      process.stdout.write(`TOPOLOGY_SNAPSHOTS ${JSON.stringify(passiveViewerSnapshots)}\n`);
   } finally {
     await topology.close();
   }
 }
 
-export function spawnPlaywright({ binary, arguments_, cwd, environment, spawnChild = spawn }) {
+export function spawnPlaywright({
+  binary,
+  arguments_,
+  cwd,
+  environment,
+  spawnChild = spawn,
+  onOutput,
+}) {
   const child = spawnChild(binary, ["test", "-c", "playwright.config.mjs", ...arguments_], {
     cwd,
     env: environment,
-    stdio: "inherit",
+    stdio: ["ignore", "pipe", "pipe"],
   });
+  child.stdout?.on("data", (chunk) => {
+    const output = chunk.toString();
+    process.stdout.write(output);
+    for (const line of output.split(/\r?\n/u)) onOutput?.(line);
+  });
+  child.stderr?.on("data", (chunk) => process.stderr.write(chunk));
   return new Promise((resolveCode, reject) => {
     const rejectSpawn = (error) => {
       child.removeListener("exit", resolveExit);
@@ -113,11 +136,39 @@ function assertZeroDelta(before, after, pattern) {
     throw new Error(`negative browser group forwarded work: ${pattern} ${JSON.stringify(delta)}`);
 }
 
-async function settled(topology) {
-  const deadline = Date.now() + 5_000;
+export function recordPassiveViewerProgress(line, topology, snapshots) {
+  const match = /^PASSIVE_VIEWER_UPDATE ([1-3])$/u.exec(line.trim());
+  if (match === null) return;
+  const update = Number(match[1]);
+  if (update !== snapshots.length + 1)
+    throw new Error(`passive viewer update order is invalid: ${line.trim()}`);
+  const bindings = topology.bindingCount();
+  const counters = topology.counters();
+  const snapshot = {
+    update,
+    bindings,
+    activeStreams: counters.activeStreams,
+    updates: counters.updates,
+  };
+  if (
+    bindings !== 1 ||
+    counters.subscribe < 1 ||
+    counters.activate < 1 ||
+    counters.activeStreams !== 1 ||
+    counters.updates < update
+  )
+    throw new Error(`passive viewer topology became unhealthy: ${JSON.stringify(snapshot)}`);
+  snapshots.push(snapshot);
+}
+
+export async function settleTopology(
+  topology,
+  { timeoutMilliseconds = 5_000, delayMilliseconds = 20 } = {},
+) {
+  const deadline = Date.now() + timeoutMilliseconds;
   while (Date.now() < deadline) {
     if (topology.bindingCount() === 0 && topology.counters().activeStreams === 0) return;
-    await delay(20);
+    await delay(delayMilliseconds);
   }
   const state = { bindings: topology.bindingCount(), counters: topology.counters() };
   throw new Error(`browser exit retained topology state: ${JSON.stringify(state)}`);

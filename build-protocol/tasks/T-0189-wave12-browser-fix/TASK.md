@@ -1,6 +1,6 @@
 # T-0189: Wave 12 Browser Fix At The Proven Owner
 
-Status: BLOCKED ON T-0188 CLASSIFICATION
+Status: CORRECTION IN PROGRESS
 
 T-0188 classification (2026-08-15): the owner is `interop/envoy/render.mjs`.
 The exact CORS preflight path is unmatched because its generated route set is
@@ -22,3 +22,9 @@ Gateway relay/bindings, or browser consumption. The regression requires a
 passive real-browser viewer to receive three writer-originated updates through
 Envoy and Gateway. The changed lifecycle branches require >=90% line and
 branch coverage, with real-browser evidence recorded separately from V8.
+
+Remaining acceptance evidence is limited to the browser harness: it must record
+one healthy binding/native-stream snapshot after each of three distinct ordered
+external-writer updates, and the forced viewer-disconnect case must wait for
+zero bindings and active native streams before topology closure. A fresh
+complete Chromium run is required to capture the final result.

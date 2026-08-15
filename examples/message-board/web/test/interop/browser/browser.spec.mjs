@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { stdout } from "node:process";
 
 function cookies(setCookie, url) {
   return JSON.parse(setCookie).map((value) => {
@@ -89,6 +90,7 @@ test("keeps a passive viewer alive for three sequential writer updates through E
       const received = await next;
       expect(received.done).toBe(false);
       identities.push(received.identity);
+      stdout.write(`PASSIVE_VIEWER_UPDATE ${update + 1}\n`);
     }
     expect(new Set(identities).size).toBe(3);
   } finally {
@@ -216,6 +218,7 @@ test("releases the native subscription after an abrupt browser disconnect", asyn
   await expect(page.evaluate(() => window.startActiveSubscription())).resolves.toBe(true);
   await page.close();
   await context.close();
+  stdout.write("FORCED_VIEWER_DISCONNECT\n");
 });
 
 test("rejects unauthorized board and fabricated actor or tenant before public operations", async ({

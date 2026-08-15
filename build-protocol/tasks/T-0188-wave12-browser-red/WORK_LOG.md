@@ -1,6 +1,6 @@
 # T-0188 Work Log
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 - Baseline: `e2ab42d2`; branch/worktree: `codex/wave-12-browser` /
   `.worktrees/wave-12-browser`.
@@ -40,3 +40,6 @@ Status: IN PROGRESS
   CORS filter therefore has no matching OPTIONS route. Owner proven: Envoy
   reference renderer. This is product transport configuration, not an
   environment/harness failure.
+- Closure: the ownership finding authorized the bounded T-0189 Envoy correction
+  and no longer leaves T-0188 active. T-0189 separately owns its remaining
+  browser-harness evidence and re-review readiness.

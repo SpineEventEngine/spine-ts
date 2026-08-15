@@ -3,7 +3,12 @@ import { EventEmitter } from "node:events";
 import test from "node:test";
 import { setImmediate } from "node:timers";
 
-import { runBrowserAcceptance, spawnPlaywright } from "./run.mjs";
+import {
+  recordPassiveViewerProgress,
+  runBrowserAcceptance,
+  settleTopology,
+  spawnPlaywright,
+} from "./run.mjs";
 
 test("rejects when the Playwright child cannot spawn", async () => {
   const expected = new Error("playwright executable is unavailable");
@@ -48,4 +53,47 @@ test("closes the topology when the Playwright child cannot spawn", async () => {
 
   await assert.rejects(promise, failure);
   assert.equal(closed, true);
+});
+
+test("records healthy Gateway bindings and native streams after each ordered passive-viewer update", () => {
+  const counters = { subscribe: 1, activate: 1, activeStreams: 1, updates: 0 };
+  const topology = {
+    bindingCount: () => 1,
+    counters: () => ({ ...counters }),
+  };
+  const snapshots = [];
+
+  for (const update of [1, 2, 3]) {
+    counters.updates = update;
+    recordPassiveViewerProgress(`PASSIVE_VIEWER_UPDATE ${update}`, topology, snapshots);
+  }
+
+  assert.deepEqual(snapshots, [
+    { update: 1, bindings: 1, activeStreams: 1, updates: 1 },
+    { update: 2, bindings: 1, activeStreams: 1, updates: 2 },
+    { update: 3, bindings: 1, activeStreams: 1, updates: 3 },
+  ]);
+});
+
+test("rejects a passive-viewer marker when the Gateway stream is no longer healthy", () => {
+  const topology = {
+    bindingCount: () => 1,
+    counters: () => ({ subscribe: 1, activate: 1, activeStreams: 0, updates: 1 }),
+  };
+
+  assert.throws(
+    () => recordPassiveViewerProgress("PASSIVE_VIEWER_UPDATE 1", topology, []),
+    /passive viewer topology became unhealthy/,
+  );
+});
+
+test("waits for a forced viewer disconnect to release bindings and native streams", async () => {
+  let probes = 0;
+  const topology = {
+    bindingCount: () => (probes++ < 2 ? 1 : 0),
+    counters: () => ({ activeStreams: probes < 3 ? 1 : 0 }),
+  };
+
+  await settleTopology(topology, { timeoutMilliseconds: 100, delayMilliseconds: 0 });
+  assert.ok(probes >= 3);
 });

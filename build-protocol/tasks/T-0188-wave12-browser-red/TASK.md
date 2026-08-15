@@ -1,6 +1,6 @@
 # T-0188: Wave 12 Browser RED And Boundary Isolation
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Classification
 
@@ -28,3 +28,6 @@ proven-owner T-0189 fix. Explicit configured profile: `gpt-5.6-terra`,
 reasoning `medium`. Desktop runtime model/token/latency telemetry is
 unavailable; immutable configured profile is the acceptance evidence. No
 subagents are permitted. Other Wave writers use separate worktrees.
+
+T-0188 closed by proving the Envoy renderer as the production owner. The
+subsequent browser-harness correction belongs to T-0189.

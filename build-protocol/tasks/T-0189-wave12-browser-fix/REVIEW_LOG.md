@@ -48,3 +48,26 @@ those required cases are captured.
 - Desktop dispatch does not expose runtime model, token, latency, or fallback
   telemetry. The immutable configured role/profile is the acceptance evidence
   unless the surface reports a visible mismatch.
+
+## Replacement Implementer Correction (2026-08-15)
+
+- Assigned existing role: `implementer`; explicit configured profile
+  `gpt-5.6-terra` / `medium`; no subagents. Desktop runtime telemetry remains
+  unavailable, so the immutable dispatch profile is the acceptance evidence.
+- The parent harness now receives three ordered real-browser progress markers
+  and records `{ update, bindings, activeStreams, updates }` immediately after
+  each. It requires one binding, one active native stream, prior subscription
+  and activation, and an update counter at least equal to the causal marker.
+  Unit tests prove healthy ordered snapshots and reject a dropped stream.
+- The deterministic abrupt-disconnect scenario closes page and context before
+  it marks completion. The parent consumes that marker, waits for binding and
+  active-stream counters to reach zero, and only then enters topology cleanup.
+  Unit evidence proves the bounded wait.
+- Complete focused Chromium acceptance was captured, not inferred: exit `1`,
+  8 tests, 3 passed, 5 failed. Every failing positive flow reports CORS
+  preflight without `Access-Control-Allow-Origin`; runner diagnostics show
+  `bindings: 0` and every Gateway counter at zero. Because no browser request
+  reaches the Gateway, the new per-update browser snapshots cannot be captured
+  on this endpoint. Re-review remains blocked on restoring browser CORS
+  admission at the existing Envoy production boundary; no query, Inbox, or
+  provider files were changed here.
