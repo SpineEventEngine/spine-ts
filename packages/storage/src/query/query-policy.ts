@@ -128,7 +128,8 @@ export interface NormalizedQueryPlan<Id> {
   readonly limit?: number;
 
   /**
-   * Maximum provider candidates materialized before semantic evaluation.
+   * Maximum provider rows materialized before semantic evaluation. Values must
+   * be positive safe integers; the default and inclusive maximum are 10,000.
    */
   readonly candidateLimit?: number;
 }

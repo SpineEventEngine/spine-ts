@@ -212,6 +212,22 @@ describe("InMemoryRecordStorage", () => {
     );
   });
 
+  it("honors an exact result limit before the candidate budget overflow probe", async () => {
+    const storage = createStorage();
+    await storage.writeAll([
+      createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n),
+      createEvent("event-2", "type.spine.io/tasks.TaskCreated", 2n),
+    ]);
+
+    await expect(
+      storage.queryPlan({
+        candidateLimit: 1,
+        order: [{ column: "timestamp", direction: "asc" }],
+        limit: 1,
+      }),
+    ).resolves.toHaveLength(1);
+  });
+
   it("applies query offsets after sorting and before limits", async () => {
     const storage = createStorage();
 

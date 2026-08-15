@@ -108,7 +108,13 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
   ): Promise<readonly RecordEntry<I, R>[]> {
     return Promise.resolve(
       this.records().queryEntries(this.recordSpec, {
-        limit: (plan.candidateLimit ?? defaultQueryCandidateLimit) + 1,
+        limit:
+          plan.predicate === undefined
+            ? Math.min(
+                plan.limit ?? Number.MAX_SAFE_INTEGER,
+                (plan.candidateLimit ?? defaultQueryCandidateLimit) + 1,
+              )
+            : (plan.candidateLimit ?? defaultQueryCandidateLimit) + 1,
       }),
     );
   }
