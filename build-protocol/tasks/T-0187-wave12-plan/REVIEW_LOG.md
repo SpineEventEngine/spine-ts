@@ -117,3 +117,33 @@ recorded below.
   prejudging it. Final narrow documentation re-review at `e39f4c33` is clean.
 
 Status: all applicable specialist concerns clean; final verification pending.
+
+## Verification
+
+- First `pnpm verify:task -- --no-tests` attempt: failed in
+  `typecheck:build:generated` because the clean isolated worktree lacked ignored
+  generated Proto outputs. The Markdown-only diff intentionally classifies
+  Proto generation as unnecessary, while the build still consumes those
+  ignored modules. This is the same clean-worktree precondition documented by
+  T-0129, not a T-0187 changed-source failure.
+- Root-cause evidence: `scripts/verify-task.mjs` omits `proto:generate` for an
+  all-Markdown diff, `packages/proto/generated` contained only its generation
+  marker after the failed cleanup/build, and errors consistently named missing
+  generated modules.
+- Resolution sequence: run the canonical `pnpm proto:generate` prerequisite,
+  then repeat the unchanged selected task profile.
+- `pnpm proto:generate`: passed all 47 source checks, authored/example quality,
+  rejection naming, and 52 frozen descriptors.
+- Second task-profile attempt: cleared generation, full build, tooling,
+  cleanup, TSDoc, copyright, and logging, then stopped because the newly added
+  progress-log failure row had not yet been formatted. Repository Prettier is
+  the deterministic correction; no contract/product file changes.
+- Next: format the record and repeat the unchanged profile. Result pending.
+- Third unchanged `pnpm verify:task -- --no-tests` attempt: pass. It completed
+  Proto generation/source/style/descriptor checks, the full TypeScript build,
+  tooling typecheck, ESLint, cleanup/TSDoc/copyright/logging checks, formatting,
+  documentation audience/API, Buf lint, generated cleanliness, and release
+  readiness. The final readiness inventory was 82 package imports, 51 package
+  assets, and 377 relative Markdown links.
+
+Verification status: clean; integration pending.

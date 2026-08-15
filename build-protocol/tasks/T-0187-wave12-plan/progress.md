@@ -37,19 +37,23 @@
 
 ## Verification Results
 
-| Check                                                      | Result                                                          |
-| ---------------------------------------------------------- | --------------------------------------------------------------- |
-| `git fetch --prune origin` and `git rev-parse origin/main` | Pass; exact baseline `7b8a631ecb33210e5da4da9ffa2d8eb8aa59d497` |
-| Isolated worktree branch/status                            | Pass; clean before task-record creation                         |
+| Check                                                      | Result                                                                                                                    |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `git fetch --prune origin` and `git rev-parse origin/main` | Pass; exact baseline `7b8a631ecb33210e5da4da9ffa2d8eb8aa59d497`                                                           |
+| Isolated worktree branch/status                            | Pass; clean before task-record creation                                                                                   |
+| `pnpm proto:generate`                                      | Pass; 47 source checks and 52 frozen descriptors                                                                          |
+| `pnpm verify:task -- --no-tests`                           | Pass after recorded generated-state and evidence-format corrections; release readiness 82 imports / 51 assets / 377 links |
 
 ## Error Log
 
-| Timestamp            | Error                                                              | Attempt | Resolution                                                                   |
-| -------------------- | ------------------------------------------------------------------ | ------- | ---------------------------------------------------------------------------- |
-| 2026-08-15T12:38:07Z | macOS BSD `find` has no `-printf`                                  | 1       | Used portable `find` with `sed` on the next inventory command.               |
-| 2026-08-15T13:21:00Z | Combined adapter-source inspection exceeded the tool output budget | 1       | Split subsequent JVM adapter inspection into narrow, file-targeted commands. |
+| Timestamp            | Error                                                                                     | Attempt | Resolution                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------- |
+| 2026-08-15T12:38:07Z | macOS BSD `find` has no `-printf`                                                         | 1       | Used portable `find` with `sed` on the next inventory command.                                                        |
+| 2026-08-15T13:21:00Z | Combined adapter-source inspection exceeded the tool output budget                        | 1       | Split subsequent JVM adapter inspection into narrow, file-targeted commands.                                          |
+| 2026-08-15T15:42:00Z | First `verify:task -- --no-tests` lacked ignored generated Proto modules                  | 1       | Confirmed Markdown-only classification and T-0129 precedent; run `proto:generate`, then repeat the unchanged profile. |
+| 2026-08-15T15:47:00Z | Second task profile reached formatting and found the newly added progress row unformatted | 2       | Apply repository Prettier to the evidence records, then repeat the unchanged profile.                                 |
 
 ## Immediate Next Action
 
-Run the selected converged planning task profile, then integrate, post-merge
+Commit the verified endpoint, integrate through a clean worktree, post-merge
 verify, close remote refs, and start the three implementation streams.

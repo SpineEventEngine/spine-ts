@@ -1,6 +1,6 @@
 # T-0187 Work Log
 
-Status: Specialist review clean; final verification pending
+Status: Specialist review and task verification clean; integration pending
 
 - Baseline: `7b8a631ecb33210e5da4da9ffa2d8eb8aa59d497`.
 - Branch/worktree: `codex/wave-12-runtime-correctness-plan` /
@@ -40,3 +40,7 @@ Status: Specialist review clean; final verification pending
   after deduplication; one aggregated correction batch resolved them.
 - Targeted re-review is clean for documentation completeness, TypeScript/API
   documentation, and performance/reliability. Style remains a justified N/A.
+- After the recorded clean-worktree generation precondition and one formatting
+  correction to the evidence row, the unchanged
+  `pnpm verify:task -- --no-tests` profile passed every selected gate. Release
+  readiness counted 82 package imports, 51 assets, and 377 Markdown links.

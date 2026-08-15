@@ -37,8 +37,8 @@ Phase 1 — discovery and current-state tracing.
 
 ### Phase 4: Verification, integration, and remote closure
 
-- [ ] Run the cheap planning preflight.
-- [ ] Run `pnpm verify:task -- --no-tests` once after convergence.
+- [x] Run the cheap planning preflight.
+- [x] Run `pnpm verify:task -- --no-tests` after convergence.
 - [ ] Integrate, post-merge verify proportionately, push, reconcile remote refs,
       and prove exactly `origin/main` with no tags.
 - **Status:** in_progress
