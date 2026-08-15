@@ -104,7 +104,9 @@ describe.skipIf(datastoreHost === undefined)("Datastore Inbox cleanup", () => {
       multitenant: false,
     } as const;
     try {
-      await expect(removeAcrossFactories(firstFactory, secondFactory, context)).resolves.toBeUndefined();
+      await expect(
+        removeAcrossFactories(firstFactory, secondFactory, context),
+      ).resolves.toBeUndefined();
     } finally {
       firstFactory.close();
       secondFactory.close();

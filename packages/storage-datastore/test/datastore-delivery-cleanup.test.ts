@@ -12,7 +12,11 @@
  * the License.
  */
 
-import { describe, expect, it } from "vitest";
+import { create } from "@bufbuild/protobuf";
+import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { describe, expect, it, vi } from "vitest";
+
+import { RecordSpec } from "@spine-event-engine/storage";
 
 import { DatastoreDeliveryCleanupStorage } from "../src/datastore/delivery-cleanup.js";
 
@@ -20,4 +24,106 @@ describe("DatastoreDeliveryCleanupStorage", () => {
   it("is available as the provider-owned exact-cleanup coordinator", () => {
     expect(DatastoreDeliveryCleanupStorage).toBeTypeOf("function");
   });
+
+  it("declines cancellation before opening provider handles", async () => {
+    const openStorage = vi.fn();
+    const cleanup = new DatastoreDeliveryCleanupStorage(openStorage as never);
+
+    await expect(cleanup.remove(input({ signal: { aborted: true } }))).resolves.toBe(false);
+    expect(openStorage).not.toHaveBeenCalled();
+  });
+
+  it("rolls back when the session snapshot is not current", async () => {
+    const transaction = transactionWith([entity(), entity()]);
+    const cleanup = coordinator(transaction, false);
+
+    await expect(cleanup.remove(input())).resolves.toBe(false);
+    expect(transaction.rollback).toHaveBeenCalledOnce();
+    expect(transaction.commit).not.toHaveBeenCalled();
+  });
+
+  it("rolls back a cancelled transaction before deleting the Inbox entity", async () => {
+    const transaction = transactionWith([entity(), entity()]);
+    const operation = { signal: { aborted: false } };
+    const cleanup = coordinator(transaction, true, () => (operation.signal.aborted = true));
+
+    await expect(cleanup.remove(input(operation))).resolves.toBe(false);
+    expect(transaction.delete).not.toHaveBeenCalled();
+    expect(transaction.rollback).toHaveBeenCalledOnce();
+  });
+
+  it("commits only after exact current snapshots are present", async () => {
+    const transaction = transactionWith([entity(), entity()]);
+    const cleanup = coordinator(transaction, true);
+
+    await expect(cleanup.remove(input())).resolves.toBe(true);
+    expect(transaction.delete).toHaveBeenCalledOnce();
+    expect(transaction.commit).toHaveBeenCalledOnce();
+  });
 });
+
+const spec = new RecordSpec({
+  sourceType: StringValueSchema,
+  recordType: StringValueSchema,
+  idKind: "string",
+  extractId: (record) => record.value,
+});
+const expected = create(StringValueSchema, { value: "expected" });
+
+function input(operation?: { signal?: { aborted: boolean }; timeoutMs?: number }) {
+  return {
+    context: { name: "cleanup", multitenant: false } as const,
+    ...(operation === undefined ? {} : { operation }),
+    inbox: { spec, id: "inbox", expected },
+    session: {
+      spec,
+      id: "session",
+      expected,
+      isCurrent: (value: typeof expected) => value.value === expected.value,
+    },
+  };
+}
+
+function entity() {
+  return { key: {} };
+}
+
+function transactionWith(entities: ReturnType<typeof entity>[]) {
+  return {
+    run: vi.fn(async () => undefined),
+    get: vi.fn(async () => (entities.shift() === undefined ? [] : [entity()])),
+    rollback: vi.fn(async () => undefined),
+    delete: vi.fn(),
+    commit: vi.fn(async () => undefined),
+  };
+}
+
+function coordinator(
+  transaction: ReturnType<typeof transactionWith>,
+  current: boolean,
+  onInboxEntity?: () => void,
+) {
+  let opened = 0;
+  const storage = () => ({
+    transaction: () => transaction,
+    transactionEntity: () => ({ key: {} }),
+    matchesTransactionEntity: () => true,
+    decodeTransactionEntity: () => expected,
+    close: vi.fn(),
+  });
+  return new DatastoreDeliveryCleanupStorage(
+    vi.fn(() => {
+      const result = storage();
+      const inbox = opened++ === 0;
+      if (inbox && onInboxEntity !== undefined)
+        result.matchesTransactionEntity = () => {
+          onInboxEntity();
+          return true;
+        };
+      if (!inbox)
+        result.decodeTransactionEntity = () =>
+          current ? expected : create(StringValueSchema, { value: "other" });
+      return result;
+    }) as never,
+  );
+}
