@@ -5408,3 +5408,99 @@ Consequences:
 - D-0112 remains authoritative for logging, `@Where`, implicit IDs,
   rejections, default routing, and durable replay. Its Java-semantic routing
   clause was superseded by T-0167A and this `ts_type` decision.
+
+## D-0114: Bound Wave 12 Streams, Provider Queries, And Delivered Inbox Rows
+
+Status: Proposed pending T-0187 specialist review
+
+Date: 2026-08-15
+
+Task: T-0187 planning and the Wave 12 implementation train
+
+Context:
+
+- A real Message Board browser subscription can terminate after ordinary
+  successive updates; current acceptance proves only one update written by the
+  subscribing page.
+- MySQL inherits the normalized query-plan fallback that can read a whole
+  storage group and filter in Node, while positive nearby tests replace the
+  production method.
+- Delivered Inbox rows remain durable forever. `keepUntil` is already a
+  deduplication boundary and cannot honestly double as infinite retention.
+- Pinned Spine JVM delivery cleanup removes delivered rows when `keepUntil` is
+  absent or elapsed, and its builder exposes a deduplication window rather than
+  a second delivered-retention duration.
+
+Decision:
+
+- Preserve best-effort browser subscriptions as healthy long-lived streams:
+  gaps or duplicates may occur and real disconnects may reconnect/re-query, but
+  ordinary successive updates cannot complete the stream. Prove the correction
+  with a passive real-browser viewer and another actor through the complete
+  Gateway/gRPC-Web topology, isolating native production from forwarding before
+  choosing the implementation boundary.
+- Treat every advertised storage query capability as provider execution.
+  MySQL must push every admitted normalized predicate, ordering, and limit into
+  parameterized SQL contained by the selected tenant database and resolved
+  storage-group table. It must reject unsupported plans before provider access
+  and must never rescue an admitted plan with a full-group Node filter.
+- Do not add offset to `NormalizedQueryPlan` in Wave 12. Its absence is an
+  explicit unsupported matrix entry; the separate `RecordQuery.offset`
+  behavior remains unchanged.
+- Keep `keepUntil` as the optional serialized deduplication-protection
+  deadline. A delivered row is cleanup-eligible when it is absent or no later
+  than the cleanup time. Do not add an independent retention setting, new Proto
+  field, or scheduler.
+- Extend the exported `DeliveryInbox` persistence port with one exact,
+  idempotent delivered-row removal operation. Direct storage uses
+  exact-snapshot CAS-to-delete and RemoteInbox reuses its existing exact Remove
+  RPC, so the persisted record and Protobuf contract do not change.
+- Run cleanup as one page-limited operation under the existing environment
+  delivery lifecycle and shard session. Revalidate ownership immediately before
+  every exact deletion, stop after cancellation, deadline, ownership loss, or
+  the page bound, and provide cleanup capacity at least equal to successful
+  bounded delivery plus one maintenance page on an otherwise empty owned drain.
+- Make the base normalized provider-plan seam fail for unimplemented nonempty
+  plans. Apply a provider fetch limit derived from the exact plan limit and
+  `candidateLimit + 1`. Datastore advertises only provider-legal overlap and
+  rejects nested/disjunctive or illegal inequality/order shapes before access.
+- Require >=90% changed executable line and branch coverage, while recording
+  real browser, live MySQL, Datastore, SQL statement, and physical row-count
+  evidence separately from V8 accounting.
+
+Alternatives considered:
+
+- Repair the first plausible browser component before a boundary trace:
+  rejected because the observed termination crosses browser, Envoy, Gateway,
+  native service, Stand, and harness lifecycles.
+- Advertise weak MySQL capabilities and retain Node filtering: rejected because
+  even equality admission can have unbounded group cost and is not provider
+  execution.
+- Add normalized offset now: rejected because it broadens a public contract
+  unnecessarily; the review asks for an explicit capability disposition, not a
+  new feature.
+- Add a separate delivered-retention duration: rejected because it invents a
+  second concept absent from pinned JVM behavior and delays the required finite
+  default.
+- Delete delivered rows without fencing or in an unbounded maintenance sweep:
+  rejected because a stale owner could delete another owner's records and a
+  sustained backlog could monopolize resources.
+
+Security impact:
+
+- Subscription cleanup and bounded queues protect session/listener resources;
+  authentication and authorization contracts do not change.
+- SQL values remain bound parameters, identifiers remain schema-derived, and
+  tenant/storage-group containment is mandatory for every statement.
+- Inbox cleanup cannot cross tenant, shard, or current ownership boundaries and
+  deletes only an exact eligible delivered snapshot.
+
+Consequences:
+
+- T-0188 through T-0194 form the dependency-ordered Wave 12 train described in
+  `planning/WAVE_12_RUNTIME_CORRECTNESS_PLAN.md`.
+- Browser, MySQL, and Inbox runtime slices retain independent ownership;
+  documentation follows their stabilized behavior and final release closure
+  owns combined provider/runtime evidence and the final security review.
+- Wave 13 through 19 features and Cloud Run receive no provisional API or
+  implementation from this decision.

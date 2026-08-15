@@ -16,6 +16,16 @@ The framework provides a TypeScript/Node.js implementation of the core server-si
 
 The framework does not need source-level compatibility with Spine JVM. It should feel familiar to JVM Spine users by preserving names, concepts, message contracts, and domain modeling conventions.
 
+For Wave 12, a healthy browser subscription remains active across ordinary
+successive updates through the supported Gateway/gRPC-Web topology. Best-effort
+delivery permits reconnect/re-query after a real disconnect and does not
+promise gap-free notifications; it does not redefine normal successive updates
+as a disconnect. Normalized provider plans are capability-gated execution
+contracts: MySQL pushes every admitted filter, order, and bound into contained,
+parameterized SQL instead of fetching a storage group for Node filtering.
+Delivered Inbox rows are removed in bounded, currently fenced cleanup pages
+after their optional `keepUntil` deduplication protection ends.
+
 ## Corrected Implementation Order
 
 Human review on `2026-07-01` reset the roadmap. The framework must now be

@@ -183,6 +183,14 @@ Requirements:
   bounded contexts, while the client sees one opaque `Subscription`;
 - read-side workers perform filtering, ordering, lifecycle filtering, and response formatting.
 
+A healthy browser activation remains open across ordinary successive updates.
+The universal acceptance path is a real browser over gRPC-Web, Envoy, the
+Gateway, native subscription forwarding, and the application server. Reconnect
+and authoritative re-query recover real best-effort disconnects; they do not
+make normal stream termination acceptable. Cancellation and shutdown are
+bounded and release every iterator, relay, Stand attachment, session, and
+listener.
+
 ## Storage Boundaries
 
 The framework starts storage with one adapter seam:
@@ -207,6 +215,15 @@ MySQL selects a configured database per complete tenant and Datastore selects a
 native namespace. Typed ID/column mappings are identical for writes and Query
 operands; applications provide generated type metadata when compact Proto JSON
 must expand `Any`.
+
+Provider query capability is an execution promise. MySQL admits only normalized
+plan features it can translate to parameterized SQL and pushes their predicate,
+ordering, and finite limit into the selected tenant database and resolved
+storage-group table. It never silently reads a whole group for Node filtering.
+Datastore joins common conformance for its overlapping pushdown features.
+Normalized plans do not gain offset in Wave 12; the separate `RecordQuery`
+offset remains unchanged. Native provider runs, statement/parameter evidence,
+and V8 coverage are reported independently.
 
 ## Delivery and Reliability
 
@@ -245,6 +262,12 @@ and transport-backed worker supervision:
 - pending and delivered `InboxMessage` rows are stored directly; delivered rows
   are the deduplication fact, with no per-message claim or separate dedup
   record;
+- `keepUntil` is the optional deduplication-protection deadline, not a second
+  retention setting. A delivered row becomes cleanup-eligible when the deadline
+  is absent or has elapsed. One bounded cleanup page runs under current shard
+  ownership, validates the fence immediately before each exact delete, and
+  preserves every pending, retryable, non-delivered, or still-protected row.
+  The environment delivery lifecycle owns cleanup and awaits it at shutdown;
 - shard pickup, renewal, and release persist lease-backed shard sessions through
   storage compare-and-set rather than process-local locks. A complete `WorkerId`
   can pick up or renew its own unexpired session; another worker is excluded

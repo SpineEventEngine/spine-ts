@@ -136,7 +136,28 @@
 
 ## Remaining Discovery
 
-- Record the exact live MySQL and Datastore commands, shared-resource
-  sequencing, index expectations, and adapter-side comparative query evidence.
-- Inventory the precise Wave 12 documentation claims and freeze executable
-  reproduction commands.
+- Live MySQL is an explicit opt-in through `SPINE_TS_MYSQL_URL` and
+  `SPINE_TS_MYSQL_ADMIN_URL`; `pnpm --filter
+@spine-event-engine/storage-rdbms test:mysql` runs the provider script then
+  `mysql-integration.test.ts`. Its current query case exercises `RecordQuery`,
+  not the normalized plan path.
+- Datastore emulator proof requires `DATASTORE_EMULATOR_HOST` and runs through
+  `pnpm --filter @spine-event-engine/storage-datastore test:emulator`.
+  Emulator and MySQL suites must run sequentially because they own provider,
+  generated, and coverage resources.
+- MySQL table creation currently defines only the declared primary key; any
+  admitted pushdown over native columns needs documented operator index
+  expectations rather than a claim that every workload is automatically
+  indexed.
+- Current architecture/API documentation correctly calls domestic/external
+  events and enrichment unimplemented and correctly denies Projection catch-up
+  equivalence. Wave 12 must preserve that wording.
+- Inbox prose says accepted rows follow their lifecycle but does not define the
+  finite cleanup boundary. `InboxStorageOptions.now` inaccurately calls its
+  current deduplication-time use a delivered-retention evaluation. Both become
+  T-0193 documentation/API ownership after runtime behavior stabilizes.
+- Local JVM adapter checkouts are dirty human worktrees. Comparative adapter
+  evidence is read from immutable Git objects at exact local revisions
+  `cf3b603b89ea71eb555a6ae081bd1043e2a89f22` (JDBC) and
+  `219d606bbf403b6a9b331b41cf99616fa2ee0606` (GCloud); no files there are
+  mutated and these adapter revisions are supporting, not canonical, evidence.

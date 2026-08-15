@@ -70,14 +70,17 @@ split before implementation.
    owning lifecycle boundary is not assumed before native/Gateway isolation.
 2. MySQL's current production plan method—not a test replacement—admits or
    rejects the reviewed plan shapes as reported.
-3. Delivered Inbox rows remain durable indefinitely and `keepUntil` protects
-   deduplication rather than defining retention eligibility.
+3. Delivered Inbox rows remain durable indefinitely; `keepUntil` is a
+   deduplication-protection deadline rather than a retention duration, and its
+   absence or expiry can define cleanup eligibility without inventing another
+   serialized field.
 4. Existing shard leases, claims, version checks, and fencing supply the only
    legal cleanup ownership boundary unless code/JVM evidence proves a smaller
    compatible extension is required.
-5. A finite default Inbox retention value and any operator override can be
-   resolved from current repository or pinned JVM evidence; otherwise the
-   unresolved choice is a human blocker before implementation.
+5. Pinned JVM evidence can resolve the finite default as immediate cleanup
+   eligibility after deduplication protection ends and can resolve that no
+   independent operator retention override is warranted; contrary repository
+   evidence would make the choice a human blocker before implementation.
 
 ## Human-Imposed Requirements Ledger
 
@@ -227,4 +230,3 @@ over all skill advice.
   N/A if the plan introduces no executable structure. Security is a final Wave
   convergence gate, not a per-planning-task reviewer; security-sensitive task
   boundaries and dispositions must nevertheless be frozen in the plan.
-
