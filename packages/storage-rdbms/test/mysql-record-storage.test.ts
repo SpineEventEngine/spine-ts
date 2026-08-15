@@ -199,8 +199,12 @@ describe("MysqlRecordStorage", () => {
 
   it("rejects an oversized normalized SQL bind budget before acquiring a connection", async () => {
     const calls: { sql: string; values?: readonly unknown[] }[] = [];
+    let acquires = 0;
     const storage = schemaStorage(
       readyConnection(calls, { columns: ["ID", "bytes", "value"] }) as never,
+      () => {
+        acquires += 1;
+      },
     );
 
     await expect(
@@ -208,6 +212,7 @@ describe("MysqlRecordStorage", () => {
         predicate: { kind: "ids", ids: Array.from({ length: 1_000 }, (_, index) => String(index)) },
       }),
     ).rejects.toThrow("bind budget");
+    expect(acquires).toBe(0);
     expect(calls).toEqual([]);
   });
 
@@ -1103,7 +1108,10 @@ function schemaConnection(calls: string[], layout: SchemaLayout) {
   };
 }
 
-function schemaStorage(connection: ReturnType<typeof schemaConnection>) {
+function schemaStorage(
+  connection: ReturnType<typeof schemaConnection>,
+  onAcquire: () => void = () => undefined,
+) {
   const spec = new RecordSpec<string, StringValue>({
     recordType: StringValueSchema,
     idKind: "string",
@@ -1122,7 +1130,7 @@ function schemaStorage(connection: ReturnType<typeof schemaConnection>) {
     new MysqlTableResolver().resolve(StringValueSchema.typeName, undefined),
     {
       databaseName: "test",
-      acquire: () => Promise.resolve(connection as never),
+      acquire: () => Promise.resolve((onAcquire(), connection) as never),
       release: () => undefined,
     },
     () => undefined,

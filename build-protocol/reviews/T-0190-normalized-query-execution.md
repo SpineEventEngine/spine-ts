@@ -125,6 +125,17 @@ The two test-only findings are accepted as one final bounded batch returned to
 the existing implementer. Only performance/reliability re-review is reopened;
 the clean API, documentation, and previously clean style lanes remain closed.
 
+## Final reliability evidence implementation
+
+- The existing implementer added no runtime code. The oversized MySQL bind test
+  now observes zero lifecycle acquisitions as well as zero SQL calls. Base and
+  real in-memory empty-plan tests directly observe the 10,001 omitted-budget
+  fetch sentinel without replacing `queryPlanEntries()`.
+- Focused evidence tests pass 3 assertions / 2 files; the complete non-live
+  focused suite passes 4 files / 116 tests. Existing exact changed-production
+  LCOV remains 52/54 lines (96.30%) and 57/61 branches (93.44%) because this
+  batch changes tests and records only. No live provider ran.
+
 ## Mechanical convergence evidence
 
 - Replacement existing `implementer` completed the coverage-only correction
