@@ -1,6 +1,6 @@
 # T-0189 Review Log
 
-Status: FINAL ERROR-PRECEDENCE PROOF IN PROGRESS
+Status: FINAL ERROR-PRECEDENCE RE-REVIEW IN PROGRESS
 
 Performance/reliability and style/maintainability apply. TypeScript/API,
 documentation, and security apply only if the proven implementation boundary
@@ -315,3 +315,7 @@ Final acceptance compares baseline `e2ab42d2` with endpoint `a5b72208`. The
 existing `performance_reliability_reviewer` is explicitly
 `gpt-5.6-terra` / high, read-only, and forbidden to spawn subagents; Desktop
 runtime telemetry remains unavailable.
+
+The final test-evidence re-review includes proof endpoint `d0925a6e`; production
+remains frozen at `a5b72208`. Reviewer role/profile and restrictions are
+unchanged.
