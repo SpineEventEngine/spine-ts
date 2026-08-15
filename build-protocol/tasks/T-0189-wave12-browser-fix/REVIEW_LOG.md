@@ -112,3 +112,8 @@ Chromium command also exits automatically on its currently failing C-01
 full-ordering test. Re-review may assess lifecycle ownership and bounded
 cleanup, but full browser acceptance remains blocked on that distinct C-01
 ordering failure.
+
+The deterministic runner regression requires successful child exit before it
+may close a drained topology; the existing settlement regression requires zero
+Gateway bindings and active native streams. The focused post-run process scan
+found no task-owned runner, 9443 listener, or Envoy container.

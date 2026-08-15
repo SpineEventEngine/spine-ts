@@ -130,3 +130,8 @@ C-01 passive-viewer timeout on update 1 while the other seven browser cases
 pass. The failure path reports bounded post-child settlement state and leaves
 no task-owned runner process. This is distinct from the lifecycle leak, which
 is corrected; complete-suite browser behavior remains unresolved.
+
+The runner unit regression also proves a successful Playwright child exits
+before a drained topology is closed; the existing settlement regression requires
+zero bindings and zero active native streams. The final focused process scan
+found no task-owned runner, no listener on 9443, and no Envoy container.

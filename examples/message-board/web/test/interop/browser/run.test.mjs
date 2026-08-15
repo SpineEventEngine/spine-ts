@@ -55,6 +55,39 @@ test("closes the topology when the Playwright child cannot spawn", async () => {
   assert.equal(closed, true);
 });
 
+test("waits for a successful Playwright child exit before closing a drained topology", async () => {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  let exited = false;
+  let closed = false;
+  const topology = {
+    baseUrl: "https://gateway.example.test",
+    cookie: { setCookie: "cookie", csrf: "csrf" },
+    expiredCookie: { setCookie: "expired" },
+    cookieB: { setCookie: "cookie-b", csrf: "csrf-b" },
+    tls: { key: "key", cert: "cert" },
+    bindingCount: () => 0,
+    counters: () => ({ activeStreams: 0 }),
+    close: async () => {
+      assert.equal(exited, true);
+      closed = true;
+    },
+  };
+  const acceptance = runBrowserAcceptance({
+    start: async () => topology,
+    requestedPlaywrightArguments: ["--project", "chromium"],
+    spawnChild: () => child,
+  });
+  setImmediate(() => {
+    exited = true;
+    child.emit("exit", 0);
+  });
+
+  await acceptance;
+  assert.equal(closed, true);
+});
+
 test("records healthy Gateway bindings and native streams after each ordered passive-viewer update", () => {
   const counters = { subscribe: 1, activate: 1, activeStreams: 1, updates: 0 };
   const topology = {
