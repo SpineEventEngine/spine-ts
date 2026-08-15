@@ -58,6 +58,19 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
         }),
       ).resolves.toMatchObject([{ value: "bravo" }, { value: "beta" }]);
       await expect(
+        records.queryPlan({
+          predicate: {
+            kind: "comparison",
+            column: "value",
+            operator: "greaterOrEqual",
+            value: "b",
+          },
+          order: [{ column: "value", direction: "asc" }],
+          mask: { paths: ["value"] },
+          limit: 2,
+        }),
+      ).resolves.toEqual([message("beta"), message("bravo")]);
+      await expect(
         records.query({
           sort: [{ field: "id" }],
           after: { id: "beta", values: [{ field: "id", value: "beta" }] },
@@ -116,20 +129,40 @@ describe.skipIf(emulatorHost === undefined)("Datastore emulator", () => {
       await single.write(message("same"));
       await otherContext.write(message("same"));
       await Promise.all([group, tenantA, tenantB].map((storage) => storage.write(message("same"))));
+      await single.write(message("single"));
+      await group.write(message("group"));
+      await tenantA.write(message("tenant-a"));
+      await tenantB.write(message("tenant-b"));
       await expect(single.read("same")).resolves.toMatchObject({ value: "same" });
       await expect(otherContext.read("same")).resolves.toMatchObject({ value: "same" });
       await expect(group.read("same")).resolves.toMatchObject({ value: "same" });
       await expect(tenantA.read("same")).resolves.toMatchObject({ value: "same" });
       await expect(tenantB.read("same")).resolves.toMatchObject({ value: "same" });
-      expect(await rows(client, StringValueSchema.typeName)).toHaveLength(1);
-      expect(await rows(client, StringValueSchema.typeName, "Va")).toHaveLength(1);
-      expect(await rows(client, StringValueSchema.typeName, "Vb")).toHaveLength(1);
+      await expect(
+        tenantA.queryPlan({ predicate: { kind: "ids", ids: ["tenant-a", "tenant-b"] } }),
+      ).resolves.toEqual([message("tenant-a")]);
+      await expect(
+        tenantB.queryPlan({ predicate: { kind: "ids", ids: ["tenant-a", "tenant-b"] } }),
+      ).resolves.toEqual([message("tenant-b")]);
+      await expect(
+        group.queryPlan({ predicate: { kind: "ids", ids: ["single", "group"] } }),
+      ).resolves.toEqual([message("group")]);
+      await expect(
+        single.queryPlan({ predicate: { kind: "ids", ids: ["single", "group"] } }),
+      ).resolves.toEqual([message("single")]);
+      expect(await rows(client, StringValueSchema.typeName)).toHaveLength(2);
+      expect(await rows(client, StringValueSchema.typeName, "Va")).toHaveLength(2);
+      expect(await rows(client, StringValueSchema.typeName, "Vb")).toHaveLength(2);
       await Promise.all(
-        [single, otherContext, group, tenantA, tenantB].map((storage) => storage.delete("same")),
+        [single, otherContext, group, tenantA, tenantB].flatMap((storage) =>
+          ["same", "single", "group", "tenant-a", "tenant-b"].map((id) => storage.delete(id)),
+        ),
       );
     } finally {
       await Promise.all(
-        [single, otherContext, group, tenantA, tenantB].map((storage) => storage.delete("same")),
+        [single, otherContext, group, tenantA, tenantB].flatMap((storage) =>
+          ["same", "single", "group", "tenant-a", "tenant-b"].map((id) => storage.delete(id)),
+        ),
       );
     }
   });

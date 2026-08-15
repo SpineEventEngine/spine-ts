@@ -17,6 +17,7 @@ import { and, Datastore, or, PropertyFilter } from "@google-cloud/datastore";
 import { StringifierRegistry } from "@spine-event-engine/core";
 import {
   ColumnMappings,
+  defaultQueryCandidateLimit,
   RecordStorage,
   TenantBoundary,
   type NormalizedQueryPlan,
@@ -217,6 +218,9 @@ class FlatEntityCodec<I, R extends Message> {
   }
 
   columnProperty(column: string): string {
+    if (!this.recordSpec.columns.some((candidate) => candidate.name === column)) {
+      throw new Error(`Datastore record column "${column}" is not declared.`);
+    }
     return column;
   }
 
@@ -514,7 +518,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
   protected override queryCapabilities(): StorageQueryCapabilities {
     return {
       comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
-      features: ["either", "nested", "order", "mask", "limit"],
+      features: ["order", "mask", "limit"],
     };
   }
 
@@ -526,6 +530,11 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
   protected override async queryPlanRecordEntries(
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
+    if (plan.predicate !== undefined && DatastoreQueryPushdown.legal(plan) === undefined)
+      throw new TypeError(
+        "Datastore normalized query has an illegal predicate or inequality ordering.",
+      );
+    for (const order of plan.order ?? []) this.#codec.columnProperty(order.column);
     const query = this.#codec.createQuery(this.client);
     DatastoreQueryPushdown.plan(
       query,
@@ -536,7 +545,8 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     );
     const providerLimit = Math.min(
       this.#codec.queryLimit(),
-      plan.candidateLimit === undefined ? Number.POSITIVE_INFINITY : plan.candidateLimit + 1,
+      plan.limit ?? Number.POSITIVE_INFINITY,
+      (plan.candidateLimit ?? defaultQueryCandidateLimit) + 1,
     );
     query.limit(providerLimit);
     const entities = DatastoreResults.entities(

@@ -216,7 +216,7 @@ describe("DatastoreRecordStorage", () => {
     ).resolves.toMatchObject([{ value: "charlie" }]);
   });
 
-  it("keeps either predicates and oversized ID sets on the finite reconciliation path", async () => {
+  it("rejects disjunctions and oversized ID sets before an unfiltered provider read", async () => {
     const client = new FlatDatastore();
     const records = storage(client);
     await records.writeAll(["alpha", "bravo", "charlie"].map(message));
@@ -232,44 +232,50 @@ describe("DatastoreRecordStorage", () => {
         },
         order: [{ column: "value", direction: "asc" }],
       }),
-    ).resolves.toMatchObject([{ value: "alpha" }, { value: "charlie" }]);
-    expect(client.lastQuery?.filters).toHaveLength(0);
+    ).rejects.toThrow("EITHER");
+    expect(client.lastQuery).toBeUndefined();
 
-    await records.queryPlan({
-      predicate: {
-        kind: "ids",
-        ids: Array.from({ length: 31 }, (_, index) => `id-${String(index)}`),
-      },
-    });
-    expect(client.lastQuery?.filters).toHaveLength(0);
+    await expect(
+      records.queryPlan({
+        predicate: {
+          kind: "ids",
+          ids: Array.from({ length: 31 }, (_, index) => `id-${String(index)}`),
+        },
+      }),
+    ).rejects.toThrow("illegal predicate");
+    expect(client.lastQuery).toBeUndefined();
   });
 
-  it("keeps multi-column and wrongly ordered inequalities on the finite reconciliation path", async () => {
+  it("rejects illegal inequalities and ordering before an unfiltered provider read", async () => {
     const client = new FlatDatastore();
     const records = storage(client);
     await records.writeAll(["alpha", "bravo", "charlie"].map(message));
 
-    await records.queryPlan({
-      predicate: {
-        kind: "all",
-        predicates: [
-          { kind: "comparison", column: "value", operator: "greaterThan", value: "alpha" },
-          { kind: "comparison", column: "initial", operator: "lessThan", value: "z" },
-        ],
-      },
-    });
-    expect(client.lastQuery?.filters).toHaveLength(0);
+    await expect(
+      records.queryPlan({
+        predicate: {
+          kind: "all",
+          predicates: [
+            { kind: "comparison", column: "value", operator: "greaterThan", value: "alpha" },
+            { kind: "comparison", column: "initial", operator: "lessThan", value: "z" },
+          ],
+        },
+      }),
+    ).rejects.toThrow("inequality");
+    expect(client.lastQuery).toBeUndefined();
 
-    await records.queryPlan({
-      predicate: {
-        kind: "comparison",
-        column: "value",
-        operator: "greaterThan",
-        value: "alpha",
-      },
-      order: [{ column: "initial", direction: "asc" }],
-    });
-    expect(client.lastQuery?.filters).toHaveLength(0);
+    await expect(
+      records.queryPlan({
+        predicate: {
+          kind: "comparison",
+          column: "value",
+          operator: "greaterThan",
+          value: "alpha",
+        },
+        order: [{ column: "initial", direction: "asc" }],
+      }),
+    ).rejects.toThrow("inequality");
+    expect(client.lastQuery).toBeUndefined();
   });
 
   it("uses a direct provider limit only for an unconstrained record query", async () => {
@@ -301,6 +307,30 @@ describe("DatastoreRecordStorage", () => {
       { name: "__key__", op: "=" },
       { name: "value", op: ">=", value: "bravo" },
     ]);
+  });
+
+  it("uses the smaller exact plan limit for a normalized provider fetch", async () => {
+    const client = new FlatDatastore();
+    const records = storage(client);
+    await records.writeAll(["alpha", "bravo", "charlie"].map(message));
+
+    await records.queryPlan({
+      order: [{ column: "value", direction: "asc" }],
+      limit: 1,
+      candidateLimit: 500,
+    });
+
+    expect(client.lastQuery?.limitValue).toBe(1);
+  });
+
+  it("rejects an undeclared normalized order column before provider access", async () => {
+    const client = new FlatDatastore();
+    const records = storage(client);
+
+    await expect(
+      records.queryPlan({ order: [{ column: "missing", direction: "asc" }] }),
+    ).rejects.toThrow("not declared");
+    expect(client.lastQuery).toBeUndefined();
   });
 
   it("rejects corrupted payloads and oversized supported IDs before provider writes", async () => {
