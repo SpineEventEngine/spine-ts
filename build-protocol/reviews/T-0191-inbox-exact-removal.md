@@ -1,6 +1,6 @@
 # T-0191 Review Record
 
-Status: REVIEW READY — CANONICAL PROFILE PENDING
+Status: REVIEW READY
 
 Planned lanes: TypeScript/API (optional source compatibility), style/
 maintainability (one cleanup seam), performance/reliability (atomic fencing,
@@ -31,3 +31,11 @@ are retained as required inputs.
   cleanup, and TSDoc gates but stops at seven in-scope T-0191/T-0192
   malformed/missing provider/test headers. Exact template correction and a
   captured canonical rerun are pending; no runtime repair is indicated.
+- Correction disposition: all seven headers now match the canonical 2026
+  template. A one-line Prettier-only change in the changed shard-registry slice
+  resolves the subsequent shared format gate; a final captured profile is
+  pending.
+- Final profile disposition: the exact six-path no-coverage profile passed all
+  shared gates and reported 40 passes plus two expected provider skips. This
+  record is ready for the applicable TypeScript/API, style, performance/
+  reliability, documentation, and deferred Wave-security lanes.

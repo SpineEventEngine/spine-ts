@@ -1,6 +1,6 @@
 # T-0191: Exact Delivered Inbox Removal
 
-Status: REVIEW READY — MECHANICAL CONVERGENCE
+Status: REVIEW READY
 Start: `2026-08-15 WEST`
 Baseline: `e2ab42d2`
 Branch: `codex/wave-12-inbox-cleanup`
@@ -76,3 +76,8 @@ non-delivered, or changed snapshots.
   same six focused paths. No-coverage is appropriate because current-source
   coverage is already recorded separately; the profile reruns the shared task
   gates and focused behavioral selection without replacing that measurement.
+- Final profile result: the exact six-path no-coverage command passed every
+  shared gate, TypeDoc/API check, generated-output check, and focused test.
+  Vitest reported 40 passes and two expected service-gated skips. The seven
+  owned headers now match `copyrightHeader(2026)`, and the changed shard
+  registry has only the required Prettier comma normalization.

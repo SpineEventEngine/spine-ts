@@ -1,6 +1,6 @@
 # T-0192: Shard-Fenced Bounded Delivered Inbox Cleanup
 
-Status: REVIEW READY — MECHANICAL CONVERGENCE
+Status: REVIEW READY
 Baseline: `e2ab42d2`
 Branch: `codex/wave-12-inbox-cleanup`
 Worktree: `.worktrees/wave-12-inbox-cleanup`
@@ -65,3 +65,7 @@ rows and call T-0191's provider-atomic exact removal for each eligible row.
   same six exact paths, after the recorded coverage run. It is intended to
   revalidate shared task gates and the focused behavior without conflating the
   task profile with the separate current-source coverage evidence.
+- Final profile result: the exact six-path no-coverage command passed all
+  shared task gates and focused tests (40 passed, 2 explicit service-gated
+  skips). The prior seven-header and shard-registry format corrections are
+  mechanical only; bounded cleanup behavior remains frozen.
