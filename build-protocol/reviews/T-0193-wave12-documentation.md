@@ -1,6 +1,6 @@
 # T-0193 Review Record
 
-Status: REVIEW READY
+Status: CHANGES REQUESTED
 
 Planned lanes: documentation completeness and claim truth, TypeScript/API
 contract accuracy, and performance/reliability for query-cost and bounded
@@ -33,3 +33,22 @@ failure.
   Security is deferred to T-0194 except truthful tenant/trust wording.
 - Subagents may not spawn subagents. Runtime telemetry is unavailable; these
   immutable configured roles/profiles are the acceptance record.
+
+## Review Wave Result
+
+- Documentation and TypeScript/API confirmed that the new normalized-plan
+  paragraph splits the provider Markdown table in `docs/USER_GUIDE.md`.
+- TypeScript/API and performance/reliability confirmed that provider work uses
+  one overflow-probe row beyond the accepted candidate ceiling: 10,001 for the
+  default normalized plan and 1,001 for Datastore's provider ceiling. Current
+  materialization/scan wording understates that bounded work.
+- Performance/reliability confirmed that delivered cleanup reads one page plus
+  at most one continuation after a full protected no-progress page; “one page”
+  alone is not the exact bound.
+- All browser lifecycle, capability-matrix, parameterization, containment,
+  index, Inbox fencing/deadline, no-config/timer, catch-up, deferred-feature,
+  root README, link, and audience claims are otherwise clean.
+- One documentation-only correction batch returns to the existing
+  `implementer`, explicitly configured `gpt-5.6-terra` / medium, with no
+  subagents and unavailable runtime telemetry. Re-review only the three
+  corrected claims/layouts.
