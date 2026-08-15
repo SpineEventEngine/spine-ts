@@ -98,3 +98,17 @@ ordered updates with healthy counter snapshots, and direct native control
 remains green. The sole remaining uncertainty from this diagnostic pass is a
 runner parent that stayed alive after its passing child; no claim of complete
 browser-suite closure is made until that separate teardown monitor is resolved.
+
+## Lifecycle Correction Evidence (2026-08-15)
+
+The remaining runner-retention owner was the test topology: it created a
+`SubscriptionGateway` but did not own its `close()`. Active-timeout stack capture
+identified `SubscriptionGateway.scheduleExpiry()` as the retained resource.
+The correction registers Gateway cleanup ahead of bindings and destroys tracked
+HTTP/2 sessions before listener closure. `harness.lifecycle.test.mjs` proves
+the deterministic close and cleanup order. The focused Chromium passive viewer
+passes and exits automatically with three healthy snapshots; the complete
+Chromium command also exits automatically on its currently failing C-01
+full-ordering test. Re-review may assess lifecycle ownership and bounded
+cleanup, but full browser acceptance remains blocked on that distinct C-01
+ordering failure.

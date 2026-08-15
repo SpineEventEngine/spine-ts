@@ -107,3 +107,26 @@ runner parent did not exit after the successful child despite bounded cleanup,
 so its two explicitly identified stale processes were stopped; that teardown
 monitoring anomaly is separate from the fixed bridge serialization path and
 requires later lifecycle investigation before final browser closure.
+
+## Lifecycle Correction (2026-08-15)
+
+Async-handle capture proved the post-child parent hang was neither a Playwright
+child nor an HTTP/2 listener: only stdio pipes and an active timeout remained.
+The timeout's creation stack is `SubscriptionGateway.scheduleExpiry()`. The
+topology constructed that Gateway but had not registered it as a cleanup owner,
+so its finite expiry timer could retain Node after a successful test. The
+harness now closes the subscription Gateway (thereby clearing expiry timers)
+before closing its bindings; it also tracks and destroys live Gateway HTTP/2
+sessions before awaiting `server.close()`. Focused lifecycle tests prove this
+ordering on both success-adjacent and startup-failure paths, including container,
+listener, binding, and native-owned cleanup attempts.
+
+Fresh focused Chromium acceptance for the passive viewer exits automatically
+with status 0 and records three ordered healthy snapshots: each has one binding,
+one active native stream, and the matching update counter. A fresh full
+Chromium command now also exits automatically (status 1 in 15 seconds) rather
+than retaining the runner; it exposes the separate, pre-existing full-ordering
+C-01 passive-viewer timeout on update 1 while the other seven browser cases
+pass. The failure path reports bounded post-child settlement state and leaves
+no task-owned runner process. This is distinct from the lifecycle leak, which
+is corrected; complete-suite browser behavior remains unresolved.

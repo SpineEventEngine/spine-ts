@@ -63,6 +63,8 @@ export async function startTopology({ lifecycle = {} } = {}) {
         .add(await application.createContext())
         .start());
   const createGateway = lifecycle.createGateway;
+  const createSubscriptions =
+    lifecycle.createSubscriptions ?? ((options) => new SubscriptionGateway(options));
   const listenGateway = lifecycle.listen ?? listen;
   const closeGateway = lifecycle.closeGateway ?? close;
   const createDirectory = lifecycle.mkdtemp ?? mkdtemp;
@@ -244,7 +246,7 @@ export async function startTopology({ lifecycle = {} } = {}) {
       },
     });
     cleanup.add("subscription bindings", 80, () => bindings.close());
-    const subscriptions = new SubscriptionGateway({
+    const subscriptions = createSubscriptions({
       bindings,
       sessions,
       authorize: policy.authorize.bind(policy),
@@ -252,6 +254,7 @@ export async function startTopology({ lifecycle = {} } = {}) {
       clock,
       creator: observedCreator,
     });
+    cleanup.add("subscription gateway", 85, () => subscriptions.close());
     const services = createNativeGatewayServices({
       unary,
       subscriptions,
@@ -460,13 +463,22 @@ function contextSummary(context) {
     language: context?.language !== 0,
   });
 }
-function listen(server, port) {
+const gatewaySessions = new WeakMap();
+
+export function listen(server, port) {
+  const sessions = new Set();
+  gatewaySessions.set(server, sessions);
+  server.on("session", (session) => {
+    sessions.add(session);
+    session.once("close", () => sessions.delete(session));
+  });
   return new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(port, "127.0.0.1", resolve);
   });
 }
-function close(server) {
+export function close(server) {
+  for (const session of gatewaySessions.get(server) ?? []) session.destroy();
   return new Promise((resolve, reject) =>
     server.close((error) => (error ? reject(error) : resolve())),
   );
