@@ -1,6 +1,6 @@
 # T-0190 Review Log
 
-Status: Targeted re-review in progress
+Status: Final test-evidence corrections in progress
 
 ## Assignment evidence
 
@@ -109,6 +109,21 @@ Targeted re-review is dispatched against correction endpoint `fc39709a`
 spawn subagents. Desktop runtime telemetry remains unavailable. Style is not
 reopened because the correction did not substantively restructure the reviewed
 compiler/provider seams.
+
+## Targeted re-review result
+
+- TypeScript/API: clean. It confirmed source compatibility, runtime rejection,
+  base/memory bounds, declarations, TSDoc, and no new Proto/config contract.
+- Documentation: clean. It confirmed provider-specific limits, the MySQL bind
+  budget/capability/index claims, links, and no future-feature leakage.
+- Performance/reliability: production behavior is sound, with two P2 proof
+  gaps. The oversized-MySQL-ID test must assert zero connection acquisition,
+  not only zero SQL, and omitted candidate limits must directly observe the
+  10,001 sentinel bound at both the base fallback and memory provider seams.
+
+The two test-only findings are accepted as one final bounded batch returned to
+the existing implementer. Only performance/reliability re-review is reopened;
+the clean API, documentation, and previously clean style lanes remain closed.
 
 ## Mechanical convergence evidence
 
