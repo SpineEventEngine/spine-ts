@@ -183,7 +183,11 @@ export class InboxStorage {
     session: DeliveryWorkSession,
     options?: import("./delivery-ports.js").DeliveryOperationOptions,
   ): Promise<boolean> {
-    if (options?.signal?.aborted || options?.timeoutMs === 0) return false;
+    const deadline =
+      options?.timeoutMs === undefined ? undefined : Values.now(this.#now) + options.timeoutMs;
+    const isActive = () =>
+      !options?.signal?.aborted && (deadline === undefined || Values.now(this.#now) < deadline);
+    if (!isActive()) return false;
     if (session.kind !== "LEASED" || session.shard.key() !== message.shard.key()) return false;
     const expected = InboxRecords.write(message);
     if (
@@ -195,7 +199,7 @@ export class InboxStorage {
     try {
       return await cleanup.remove({
         context: Values.context(this.#context),
-        ...(options === undefined ? {} : { operation: options }),
+        ...(options === undefined ? {} : { operation: { ...options, isActive } }),
         inbox: { spec: inboxRecordSpec, id: Values.wireId(expected), expected },
         session: {
           spec: shardSessionRecordSpec,

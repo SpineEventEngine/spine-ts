@@ -60,6 +60,18 @@ describe("DatastoreDeliveryCleanupStorage", () => {
     expect(transaction.rollback).toHaveBeenCalledOnce();
   });
 
+  it("rolls back when a positive admitted deadline expires before commit", async () => {
+    let active = true;
+    const transaction = transactionWith([entity(), entity()]);
+    const cleanup = coordinator(transaction, true, () => (active = false));
+
+    await expect(cleanup.remove(input({ timeoutMs: 10, isActive: () => active }))).resolves.toBe(
+      false,
+    );
+    expect(transaction.commit).not.toHaveBeenCalled();
+    expect(transaction.rollback).toHaveBeenCalledOnce();
+  });
+
   it("commits only after exact current snapshots are present", async () => {
     const transaction = transactionWith([entity(), entity()]);
     const cleanup = coordinator(transaction, true);
@@ -94,7 +106,11 @@ const spec = new RecordSpec({
 });
 const expected = create(StringValueSchema, { value: "expected" });
 
-function input(operation?: { signal?: { aborted: boolean }; timeoutMs?: number }) {
+function input(operation?: {
+  signal?: { aborted: boolean };
+  timeoutMs?: number;
+  isActive?: () => boolean;
+}) {
   return {
     context: { name: "cleanup", multitenant: false } as const,
     ...(operation === undefined ? {} : { operation }),

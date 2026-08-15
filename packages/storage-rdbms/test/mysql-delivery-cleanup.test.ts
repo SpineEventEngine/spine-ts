@@ -52,7 +52,7 @@ describe("MysqlDeliveryCleanupStorage", () => {
     );
 
     await expect(cleanup.remove(input(operation))).resolves.toBe(false);
-    expect(coordinate).toHaveBeenCalledOnce();
+    expect(coordinate).not.toHaveBeenCalled();
   });
 
   it("keeps the row when the locked session no longer matches", async () => {
@@ -62,6 +62,22 @@ describe("MysqlDeliveryCleanupStorage", () => {
 
     await expect(cleanup.remove(input())).resolves.toBe(false);
     expect(sessions.readLocked).toHaveBeenCalledOnce();
+  });
+
+  it("does not delete when a positive admitted deadline expires while locked reads are blocked", async () => {
+    let active = true;
+    const inbox = storage();
+    const sessions = storage();
+    sessions.readLocked.mockImplementation(() => {
+      active = false;
+      return Promise.resolve(expected);
+    });
+    const cleanup = coordinator(inbox, sessions);
+
+    await expect(cleanup.remove(input({ timeoutMs: 10, isActive: () => active }))).resolves.toBe(
+      false,
+    );
+    expect(inbox.delete).not.toHaveBeenCalled();
   });
 
   it("deletes only after locked snapshots and current ownership match", async () => {
@@ -89,7 +105,11 @@ const spec = new RecordSpec({
 });
 const expected = create(StringValueSchema, { value: "expected" });
 
-function input(operation?: { signal?: { aborted: boolean }; timeoutMs?: number }) {
+function input(operation?: {
+  signal?: { aborted: boolean };
+  timeoutMs?: number;
+  isActive?: () => boolean;
+}) {
   return {
     context: { name: "cleanup", multitenant: false } as const,
     ...(operation === undefined ? {} : { operation }),

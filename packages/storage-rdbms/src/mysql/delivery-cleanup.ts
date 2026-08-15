@@ -61,11 +61,12 @@ export class MysqlDeliveryCleanupStorage implements DeliveryCleanupStorage {
     input: DeliveryCleanupInput<InboxId, InboxRecord, SessionId, SessionRecord>,
   ): Promise<boolean> {
     if (!this.#open) throw new Error("Delivery cleanup storage is closed.");
-    if (input.operation?.signal?.aborted || input.operation?.timeoutMs === 0) return false;
+    if (!MysqlDeliveryCleanupStorage.active(input)) return false;
     const inbox = this.openStorage(input.context, input.inbox.spec);
     const sessions = this.openStorage(input.context, input.session.spec);
     try {
       await Promise.all([inbox.prepare(), sessions.prepare()]);
+      if (!MysqlDeliveryCleanupStorage.active(input)) return false;
       return await this.coordinate(
         input.context,
         [inbox.tableName, sessions.tableName],
@@ -96,7 +97,7 @@ export class MysqlDeliveryCleanupStorage implements DeliveryCleanupStorage {
     sessions: MysqlRecordStorage<SessionId, SessionRecord>,
     input: DeliveryCleanupInput<InboxId, InboxRecord, SessionId, SessionRecord>,
   ): Promise<boolean> {
-    if (input.operation?.signal?.aborted || input.operation?.timeoutMs === 0) return false;
+    if (!MysqlDeliveryCleanupStorage.active(input)) return false;
     return sessions.withConnection(connection, () =>
       inbox.withConnection(connection, async () => {
         const currentSession = await sessions.readLocked(input.session.id);
@@ -118,7 +119,7 @@ export class MysqlDeliveryCleanupStorage implements DeliveryCleanupStorage {
         ) {
           return false;
         }
-        if (input.operation?.signal?.aborted || input.operation?.timeoutMs === 0) return false;
+        if (!MysqlDeliveryCleanupStorage.active(input)) return false;
         return inbox.delete(input.inbox.id);
       }),
     );
@@ -128,4 +129,17 @@ export class MysqlDeliveryCleanupStorage implements DeliveryCleanupStorage {
       Buffer.from(toBinary(spec.recordType, right)),
     );
   }
+  private static active(input: { readonly operation?: CleanupOperation }): boolean {
+    return (
+      !input.operation?.signal?.aborted &&
+      input.operation?.timeoutMs !== 0 &&
+      input.operation?.isActive?.() !== false
+    );
+  }
+}
+
+interface CleanupOperation {
+  readonly signal?: { readonly aborted: boolean };
+  readonly timeoutMs?: number;
+  readonly isActive?: () => boolean;
 }

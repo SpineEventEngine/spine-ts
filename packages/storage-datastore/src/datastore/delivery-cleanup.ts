@@ -49,7 +49,7 @@ export class DatastoreDeliveryCleanupStorage implements DeliveryCleanupStorage {
     input: DeliveryCleanupInput<InboxId, InboxRecord, SessionId, SessionRecord>,
   ): Promise<boolean> {
     if (!this.#open) throw new Error("Delivery cleanup storage is closed.");
-    if (input.operation?.signal?.aborted || input.operation?.timeoutMs === 0) return false;
+    if (!DatastoreDeliveryCleanupStorage.active(input)) return false;
     const inbox = this.openStorage(input.context, input.inbox.spec);
     const sessions = this.openStorage(input.context, input.session.spec);
     const transaction = sessions.transaction();
@@ -58,6 +58,10 @@ export class DatastoreDeliveryCleanupStorage implements DeliveryCleanupStorage {
       const sessionEntity = DatastoreDeliveryCleanupStorage.first(
         await transaction.get(sessions.transactionEntity(input.session.expected).key),
       );
+      if (!DatastoreDeliveryCleanupStorage.active(input)) {
+        await transaction.rollback();
+        return false;
+      }
       if (
         sessionEntity === undefined ||
         !sessions.matchesTransactionEntity(sessionEntity, input.session.expected) ||
@@ -77,11 +81,15 @@ export class DatastoreDeliveryCleanupStorage implements DeliveryCleanupStorage {
         await transaction.rollback();
         return false;
       }
-      if (input.operation?.signal?.aborted || input.operation?.timeoutMs === 0) {
+      if (!DatastoreDeliveryCleanupStorage.active(input)) {
         await transaction.rollback();
         return false;
       }
       transaction.delete(expectedInbox.key);
+      if (!DatastoreDeliveryCleanupStorage.active(input)) {
+        await transaction.rollback();
+        return false;
+      }
       await transaction.commit();
       return true;
     } catch (error) {
@@ -107,4 +115,17 @@ export class DatastoreDeliveryCleanupStorage implements DeliveryCleanupStorage {
       ? (value[0] as Record<string | symbol, unknown>)
       : undefined;
   }
+  private static active(input: { readonly operation?: CleanupOperation }): boolean {
+    return (
+      !input.operation?.signal?.aborted &&
+      input.operation?.timeoutMs !== 0 &&
+      input.operation?.isActive?.() !== false
+    );
+  }
+}
+
+interface CleanupOperation {
+  readonly signal?: { readonly aborted: boolean };
+  readonly timeoutMs?: number;
+  readonly isActive?: () => boolean;
 }

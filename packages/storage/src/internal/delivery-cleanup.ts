@@ -35,11 +35,12 @@ export interface DeliveryCleanupInput<
   readonly context: StorageContext;
 
   /**
-   * Carries cooperative cancellation and the remaining operation deadline.
+   * Carries cooperative cancellation and an internal admission-relative activity predicate.
    */
   readonly operation?: {
     readonly signal?: { readonly aborted: boolean };
     readonly timeoutMs?: number;
+    readonly isActive?: () => boolean;
   };
 
   /**

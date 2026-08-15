@@ -48,8 +48,7 @@ export class MemoryDeliveryCleanupStorage implements DeliveryCleanupStorage {
     input: DeliveryCleanupInput<InboxId, InboxRecord, SessionId, SessionRecord>,
   ): Promise<boolean> {
     if (!this.#open) return Promise.reject(new Error("Delivery cleanup storage is closed."));
-    if (input.operation?.signal?.aborted || input.operation?.timeoutMs === 0)
-      return Promise.resolve(false);
+    if (!MemoryDeliveryCleanupStorage.active(input)) return Promise.resolve(false);
     const sessions = this.records(input.context, input.session.spec);
     const current = sessions.read(input.session.id);
     if (current === undefined || !input.session.isCurrent(current)) return Promise.resolve(false);
@@ -72,4 +71,17 @@ export class MemoryDeliveryCleanupStorage implements DeliveryCleanupStorage {
   close(): void {
     this.#open = false;
   }
+  private static active(input: { readonly operation?: CleanupOperation }): boolean {
+    return (
+      !input.operation?.signal?.aborted &&
+      input.operation?.timeoutMs !== 0 &&
+      input.operation?.isActive?.() !== false
+    );
+  }
+}
+
+interface CleanupOperation {
+  readonly signal?: { readonly aborted: boolean };
+  readonly timeoutMs?: number;
+  readonly isActive?: () => boolean;
 }

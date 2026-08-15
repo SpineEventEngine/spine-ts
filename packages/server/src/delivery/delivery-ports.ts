@@ -35,7 +35,7 @@ export interface DeliveryOperationOptions {
   readonly signal?: AbortSignal;
 
   /**
-   * Positive safe-integer operation deadline in milliseconds, measured from admission.
+   * Non-negative safe-integer operation budget in milliseconds, measured from admission; zero is expired.
    */
   readonly timeoutMs?: number;
 }
