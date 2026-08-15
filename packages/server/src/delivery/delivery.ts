@@ -296,6 +296,7 @@ export class Delivery {
       for (const message of delivered) {
         if (options.operation?.signal?.aborted || !(await validate())) return false;
         await this.inbox.removeDelivered(message, current, options.operation);
+        if (options.operation?.signal?.aborted) return false;
       }
       return true;
     };

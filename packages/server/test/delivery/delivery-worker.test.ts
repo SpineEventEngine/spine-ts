@@ -60,6 +60,42 @@ describe("Delivery direct worker", () => {
     expect(cleanupReads).toBe(2);
     expect(removals).toBe(1);
   });
+
+  it("stops cleanup when cancellation or ownership loss occurs and leaves the row for retry", async () => {
+    const shard = ShardIndex.single();
+    const delivered = { ...message("delivered", "target", shard), status: "DELIVERED" as const };
+    const controller = new AbortController();
+    let removals = 0;
+    const delivery = createDelivery({
+      read: async (options) => (options?.statuses?.includes("DELIVERED") ? [delivered] : []),
+      remove: async () => {
+        removals += 1;
+        controller.abort();
+        return true;
+      },
+    });
+    await expect(
+      delivery.drain(shard, { onMessage: () => undefined, operation: { signal: controller.signal } }),
+    ).resolves.toMatchObject({ status: "STOPPED", delivered: 0 });
+    expect(removals).toBe(1);
+  });
+
+  it("omits cleanup for custom Inbox ports and forwards operation deadlines to cleanup reads", async () => {
+    const shard = ShardIndex.single();
+    const observed: number[] = [];
+    const delivery = createDelivery({
+      read: async (options) => {
+        if (options?.statuses?.includes("DELIVERED")) observed.push(options.timeoutMs!);
+        return [];
+      },
+      remove: async () => true,
+    });
+    await delivery.drain(shard, { onMessage: () => undefined, operation: { timeoutMs: 123 } });
+    expect(observed).toEqual([123]);
+
+    await expect(createDelivery({ read: async () => [] }).drain(shard, { onMessage: () => undefined }))
+      .resolves.toMatchObject({ status: "DRAINED" });
+  });
   it("passes its complete opaque WorkerId to shard pickup and skips an owned shard", async () => {
     const shard = ShardIndex.single();
     const worker = workerId("node-a", "restart-a");
