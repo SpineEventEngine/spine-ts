@@ -48,6 +48,10 @@ export async function runBrowserAcceptance({
     }
     const code = await playwright(requestedPlaywrightArguments);
     if (code !== 0) process.exitCode = code ?? 1;
+    if (code !== 0 && topology.diagnosticState !== undefined)
+      process.stderr.write(
+        `TOPOLOGY_DIAGNOSTIC ${JSON.stringify(await topology.diagnosticState())}\n`,
+      );
     if (code === 0) await settled(topology);
     const counters = topology.counters();
     if (

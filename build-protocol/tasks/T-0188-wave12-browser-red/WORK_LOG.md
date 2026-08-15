@@ -30,3 +30,13 @@ Status: IN PROGRESS
 - `pnpm typecheck:build` was invoked to prepare the focused tests, but shared
   concurrent Wave compilation was active; generated manifest IDs were restored
   because they are verification byproducts, not task changes.
+- Systematic transport diagnosis (serialized topology): Chromium captured the
+  exact `OPTIONS https://127.0.0.1:8443/spine.auth.AuthenticationService/ResolveContext`
+  request, `net::ERR_FAILED`, and the browser CORS message that no
+  `Access-Control-Allow-Origin` header was present. While live, Envoy reported
+  running, Gateway counters remained all zero, and a direct host probe returned
+  `404`, null allow-origin, and null allow-methods. Native direct activation
+  remains green. `interop/envoy/render.mjs` emits only POST route matches; the
+  CORS filter therefore has no matching OPTIONS route. Owner proven: Envoy
+  reference renderer. This is product transport configuration, not an
+  environment/harness failure.

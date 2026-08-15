@@ -302,6 +302,21 @@ export async function startTopology({ lifecycle = {} } = {}) {
       bindingCount: () => bindings.size,
       counters: () => Object.freeze({ ...counters }),
       forwardedContexts: () => Object.freeze(forwardedContexts.map((context) => ({ ...context }))),
+      async diagnosticState() {
+        const envoy =
+          container === undefined
+            ? { container: undefined }
+            : await runCommand("docker", ["inspect", "-f", "{{.State.Running}}", container])
+                .then(({ stdout }) => ({ container, running: stdout.trim() }))
+                .catch((error) => ({ container, inspectError: String(error) }));
+        const logs =
+          container === undefined
+            ? ""
+            : await runCommand("docker", ["logs", container])
+                .then(({ stdout, stderr }) => `${stdout}${stderr}`)
+                .catch((error) => String(error));
+        return { envoy, logs, bindings: bindings.size, counters: { ...counters } };
+      },
       async close() {
         await cleanup.close();
       },

@@ -15,6 +15,17 @@ function cookies(setCookie, url) {
   });
 }
 
+function captureBrowserFailures(page) {
+  const failures = [];
+  page.on("requestfailed", (request) =>
+    failures.push({ url: request.url(), failure: request.failure(), headers: request.headers() }),
+  );
+  page.on("console", (message) => {
+    if (message.type() === "error") failures.push({ console: message.text() });
+  });
+  return failures;
+}
+
 test("runs a CSRF-protected cookie Projection subscription through the real gRPC-Web client and Envoy", async ({
   context,
   page,
@@ -25,10 +36,17 @@ test("runs a CSRF-protected cookie Projection subscription through the real gRPC
   await page.goto(
     `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF)}`,
   );
+  const failures = captureBrowserFailures(page);
   await expect.poll(() => page.evaluate(() => Boolean(window.interopClient))).toBe(true);
-  await expect(page.evaluate(() => window.resolveContext())).resolves.toMatchObject({
-    actor: "ada",
-  });
+  try {
+    await expect(page.evaluate(() => window.resolveContext())).resolves.toMatchObject({
+      actor: "ada",
+    });
+  } catch (error) {
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)} browser=${JSON.stringify(failures)}`,
+    );
+  }
   await page.evaluate(() => window.post());
   await expect
     .poll(() => page.evaluate(async () => (await window.read()).message.length))
@@ -55,7 +73,14 @@ test("keeps a passive viewer alive for three sequential writer updates through E
     const writerUrl = `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF_B)}&actor=bert`;
     await viewerPage.goto(viewerUrl);
     await writerPage.goto(writerUrl);
-    await viewerPage.evaluate(() => window.startPassiveSubscription());
+    const failures = captureBrowserFailures(viewerPage);
+    try {
+      await viewerPage.evaluate(() => window.startPassiveSubscription());
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)} browser=${JSON.stringify(failures)}`,
+      );
+    }
     for (let update = 0; update < 3; update += 1) {
       const next = viewerPage.evaluate(() => window.nextPassiveUpdate());
       await writerPage.evaluate(() => window.post());
