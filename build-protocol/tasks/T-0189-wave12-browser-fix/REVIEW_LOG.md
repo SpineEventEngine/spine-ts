@@ -1,6 +1,6 @@
 # T-0189 Review Log
 
-Status: FINAL ERROR-PATH SETTLEMENT CORRECTION
+Status: FINAL RELIABILITY ACCEPTANCE IN PROGRESS
 
 Performance/reliability and style/maintainability apply. TypeScript/API,
 documentation, and security apply only if the proven implementation boundary
@@ -294,3 +294,8 @@ forced-disconnect plus late unhealthy-marker regression passes; the focused
 runner suite is 11/11 and project lint, format, and diff checks pass. Chromium
 was not rerun because this is limited to runner error orchestration. No
 self-review was performed; performance/reliability may re-review this P1 only.
+
+Final acceptance compares baseline `e2ab42d2` with endpoint `a5b72208`. The
+existing `performance_reliability_reviewer` is explicitly
+`gpt-5.6-terra` / high, read-only, and forbidden to spawn subagents; Desktop
+runtime telemetry remains unavailable.
