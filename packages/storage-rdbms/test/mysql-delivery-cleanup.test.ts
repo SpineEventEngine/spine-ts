@@ -130,6 +130,35 @@ describe("MysqlDeliveryCleanupStorage", () => {
     expect(inbox.delete).not.toHaveBeenCalled();
   });
 
+  it("rolls back when the locked lease expires during the exact delete", async () => {
+    let current = true;
+    let rolledBack = false;
+    const inbox = storage();
+    inbox.delete.mockImplementation(() => {
+      current = false;
+      return Promise.resolve(true);
+    });
+    const sessions = storage();
+    const cleanup = new MysqlDeliveryCleanupStorage(
+      vi.fn(() => (sessions.prepare.mock.calls.length === 0 ? inbox : sessions)) as never,
+      async (_context, _tables, _key, work) => {
+        try {
+          return await work({} as never);
+        } catch (error) {
+          rolledBack = true;
+          throw error;
+        }
+      },
+      () => "key",
+    );
+    const request = input();
+    request.session.isCurrent = () => current;
+
+    await expect(cleanup.remove(request)).resolves.toBe(false);
+    expect(inbox.delete).toHaveBeenCalledOnce();
+    expect(rolledBack).toBe(true);
+  });
+
   it("rejects removal after close", async () => {
     const cleanup = coordinator(storage(), storage());
     cleanup.close();

@@ -94,6 +94,20 @@ describe("DatastoreDeliveryCleanupStorage", () => {
     expect(transaction.rollback).toHaveBeenCalledOnce();
   });
 
+  it("rolls back when the locked lease expires after the exact delete", async () => {
+    let current = true;
+    const transaction = transactionWith([entity(), entity()]);
+    transaction.delete.mockImplementation(() => (current = false));
+    const cleanup = coordinator(transaction, true);
+    const request = input();
+    request.session.isCurrent = () => current;
+
+    await expect(cleanup.remove(request)).resolves.toBe(false);
+    expect(transaction.delete).toHaveBeenCalledOnce();
+    expect(transaction.commit).not.toHaveBeenCalled();
+    expect(transaction.rollback).toHaveBeenCalledOnce();
+  });
+
   it("rolls back and preserves a provider failure", async () => {
     const transaction = transactionWith([]);
     transaction.run.mockRejectedValueOnce(new Error("provider unavailable"));

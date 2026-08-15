@@ -92,6 +92,10 @@ export class DatastoreDeliveryCleanupStorage implements DeliveryCleanupStorage {
         return false;
       }
       transaction.delete(expectedInbox.key);
+      if (!input.session.isCurrent(sessions.decodeTransactionEntity(sessionEntity))) {
+        await transaction.rollback();
+        return false;
+      }
       if (!DatastoreDeliveryCleanupStorage.active(input)) {
         await transaction.rollback();
         return false;
