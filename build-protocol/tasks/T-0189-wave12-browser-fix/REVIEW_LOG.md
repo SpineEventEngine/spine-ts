@@ -1,6 +1,6 @@
 # T-0189 Review Log
 
-Status: RE-REVIEW CORRECTIONS IN PROGRESS
+Status: FINAL AFFECTED-LANE RE-REVIEW IN PROGRESS
 
 Performance/reliability and style/maintainability apply. TypeScript/API,
 documentation, and security apply only if the proven implementation boundary
@@ -219,3 +219,9 @@ cardinality, GET/fallback rendering, and both access-log shapes. Focused
 predecessor-plus-C-01 and fresh complete Chromium are green (8/8), followed by
 clean process/listener/container state. Relevant re-review lanes may now
 inspect this final endpoint; no self-review was performed.
+
+Final affected-lane re-review is dispatched against production endpoint
+`fd58c1bd` (baseline `e2ab42d2`) to the already recorded existing
+style/maintainability and performance/reliability reviewers, each explicitly
+`gpt-5.6-terra` / high, read-only, and forbidden to spawn subagents. Desktop
+runtime telemetry remains unavailable.
