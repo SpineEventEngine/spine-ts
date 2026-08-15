@@ -1,6 +1,6 @@
 # T-0191 Review Record
 
-Status: CHANGES REQUESTED
+Status: REVIEW READY
 
 Planned lanes: TypeScript/API (optional source compatibility), style/
 maintainability (one cleanup seam), performance/reliability (atomic fencing,
@@ -61,6 +61,20 @@ are retained as required inputs.
   acceptance record.
 
 ## Review Wave Result
+
+## Final Correction Disposition
+
+- Supersedes the earlier option-only deadline evidence: `timeoutMs` is now an
+  admission-relative non-negative budget, with an internal activity predicate
+  rechecked after provider awaits and before destructive work.
+- Deterministic MySQL and Datastore seams prove a positive budget that expires
+  while work is blocked prevents removal; cancellation remains cooperative.
+- Serialized live MySQL and Datastore two-handle runs each asserted native
+  durable count `1` after stale-owner refusal and `0` after current-owner
+  deletion. Both exclusive windows were released without broad cleanup.
+- Canonical six-path `verify:task -- --no-coverage` is green: 58 passes and
+  four expected service-gated skips. The no-coverage profile is authoritative
+  here because the changed-location LCOV trace is retained separately.
 
 - TypeScript/API and documentation confirmed one shared P2: the new public
   option contract promises cancellation/deadline propagation while direct

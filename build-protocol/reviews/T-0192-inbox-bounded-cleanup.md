@@ -1,6 +1,6 @@
 # T-0192 Review Record
 
-Status: CHANGES REQUESTED
+Status: REVIEW READY
 
 Planned lanes: style/maintainability and performance/reliability. TypeScript/API
 is N/A unless T-0191's port changes; documentation applies only to changed
@@ -40,6 +40,20 @@ fenced mutation.
   lanes.
 
 ## Review Wave Result
+
+## Final Correction Disposition
+
+- Supersedes the prior deadline finding: cleanup admission captures the
+  non-negative timeout budget and providers recheck its internal activity
+  predicate at bounded safe points before mutation or commit.
+- Deterministic blocked-provider expiry tests cover MySQL and Datastore;
+  cancellation and ownership-fencing behaviors remain covered.
+- Serialized live MySQL and Datastore two-owner tests now use provider-native
+  physical count assertions (`1` stale refusal, `0` current deletion), and
+  both exclusive windows were released without broad cleanup.
+- Canonical six-path `verify:task -- --no-coverage` is green: 58 passes and
+  four expected service-gated skips; changed-location LCOV is retained
+  separately from this no-coverage canonical profile.
 
 - Performance/reliability confirmed a P1 progress bug: when protected rows
   fill the first ordered page, cleanup rereads that page forever and never
