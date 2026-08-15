@@ -251,6 +251,15 @@ describe("StorageQueryPolicy", () => {
     malformed({ mask: { paths: [1] } }, /field-mask paths must be strings/);
   });
 
+  it.each([
+    [{ offset: 1 }, /do not support offset/],
+    [{ unexpected: true }, /query plan property must be recognized/],
+  ])("rejects unsupported normalized-plan property %o", (plan, error) => {
+    expect(() => {
+      StorageQueryPolicy.validate(plan as NormalizedQueryPlan<string>, completeCapabilities);
+    }).toThrow(error);
+  });
+
   it("rejects sparse arrays and malformed descendants before capability admission", () => {
     const sparseIds = Array<string>(1);
     expect(() => {

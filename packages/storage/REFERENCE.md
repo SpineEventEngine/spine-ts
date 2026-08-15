@@ -53,7 +53,9 @@ that needs that guarantee must reject a handle that does not declare it.
 Record queries validate positive limits, non-negative offsets, and
 continuations that match the requested sort fields. Query plans are normalized
 and checked against adapter capabilities. If a provider returns more candidates
-than a plan's `candidateLimit`, `QueryCandidateLimitError` is thrown before
+than a plan's `candidateLimit`, or the exported
+`defaultQueryCandidateLimit` of 10,000 when it is omitted,
+`QueryCandidateLimitError` is thrown before
 local materialization can return a partial semantic result.
 
 `StorageQueryPolicy` validates normalized plans and
