@@ -2758,11 +2758,18 @@ describe("repository signal routing", () => {
       .withStorageFactory(factory)
       .build();
     const storage = new CurrentRecordTestStorage({
-      context: { name: "Tasks", multitenant: true },
+      context: {
+        name: "Tasks",
+        multitenant: true,
+        tenantId: createTenantId("tenant-b"),
+      },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
     });
-    const eventStore = new EventStore({ name: "Tasks", multitenant: true }, factory);
+    const eventStore = new EventStore(
+      { name: "Tasks", multitenant: true, tenantId: createTenantId("tenant-b") },
+      factory,
+    );
 
     await context.eventBus().post(
       createProjectionEvent("event-reactor-source", "task-reactor", {
