@@ -1300,16 +1300,16 @@ const HandlerSources = Object.freeze({
   ): { readonly value: "domestic" | "external"; readonly type: ts.TypeNode } | undefined {
     const first = parameters[0]?.type;
     if (first === undefined) return undefined;
-    const marker = HandlerSources.externalMarker(first, scope.imports);
+    const marker = HandlerSources.externalMarker(first, scope);
     const laterMarker = parameters
       .slice(1)
       .some((parameter) =>
         parameter.type === undefined
           ? false
-          : HandlerSources.containsExternalMarker(parameter.type, scope.imports),
+          : HandlerSources.containsExternalMarker(parameter.type, scope),
       );
     const nestedMarker =
-      marker === undefined && HandlerSources.containsExternalMarker(first, scope.imports);
+      marker === undefined && HandlerSources.containsExternalMarker(first, scope);
     if (laterMarker || nestedMarker || (marker !== undefined && !marker.direct)) {
       HandlerTypes.pushDiagnostic(
         scope,
@@ -1329,33 +1329,34 @@ const HandlerSources = Object.freeze({
 
   externalMarker(
     type: ts.TypeNode,
-    imports: ImportState,
+    scope: AnalyzerScope,
   ): { readonly direct: boolean; readonly type?: ts.TypeNode } | undefined {
     if (!ts.isTypeReferenceNode(type)) return undefined;
     const canonical =
       (ts.isIdentifier(type.typeName) &&
-        imports.serverSymbols.get(type.typeName.text) === "External") ||
+        scope.imports.serverSymbols.get(type.typeName.text) === "External") ||
       (ts.isQualifiedName(type.typeName) &&
         ts.isIdentifier(type.typeName.left) &&
         type.typeName.right.text === "External" &&
-        imports.serverNamespaces.has(type.typeName.left.text));
-    if (!canonical) return undefined;
+        scope.imports.serverNamespaces.has(type.typeName.left.text));
+    if (!canonical || !HandlerSources.isCanonicalExternal(type.typeName, scope.program))
+      return undefined;
     const argument = type.typeArguments?.[0];
     return argument === undefined
       ? { direct: false }
       : { direct: type.typeArguments?.length === 1, type: argument };
   },
 
-  containsExternalMarker(type: ts.TypeNode, imports: ImportState): boolean {
-    if (HandlerSources.externalMarker(type, imports) !== undefined) return true;
+  containsExternalMarker(type: ts.TypeNode, scope: AnalyzerScope): boolean {
+    if (HandlerSources.externalMarker(type, scope) !== undefined) return true;
     if (ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName)) {
-      const alias = imports.localTypeAliases.get(type.typeName.text);
-      if (alias !== undefined && HandlerSources.containsExternalMarker(alias, imports)) return true;
+      const alias = scope.imports.localTypeAliases.get(type.typeName.text);
+      if (alias !== undefined && HandlerSources.containsExternalMarker(alias, scope)) return true;
     }
     let found = false;
     const visit = (node: ts.Node): void => {
       if (found) return;
-      if (ts.isTypeNode(node) && HandlerSources.externalMarker(node, imports) !== undefined) {
+      if (ts.isTypeNode(node) && HandlerSources.externalMarker(node, scope) !== undefined) {
         found = true;
         return;
       }
@@ -1363,6 +1364,22 @@ const HandlerSources = Object.freeze({
     };
     ts.forEachChild(type, visit);
     return found;
+  },
+
+  isCanonicalExternal(name: ts.EntityName, program: ts.Program): boolean {
+    const checker = program.getTypeChecker();
+    const location = ts.isQualifiedName(name) ? name.right : name;
+    let symbol = checker.getSymbolAtLocation(location);
+    if (symbol === undefined) return false;
+    if (symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0) {
+      symbol = checker.getAliasedSymbol(symbol);
+    }
+    return (symbol?.declarations ?? []).some(
+      (declaration) =>
+        ts.isTypeAliasDeclaration(declaration) &&
+        declaration.name.text === "External" &&
+        /(?:^|[/\\])handler[/\\]external(?:\.d)?\.ts$/u.test(declaration.getSourceFile().fileName),
+    );
   },
 
   newTypeWalk(): TypeWalk {

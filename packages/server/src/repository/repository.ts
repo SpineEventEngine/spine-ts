@@ -4579,14 +4579,11 @@ const RepositoryRoutes = {
       "Repository state-update routing",
     );
     const candidates = subscriptions.get(update?.schema.typeName ?? "") ?? [];
-    const mixedOrigins = candidates.some((subscriber) => subscriber.handler.origin === "external");
     const interested = Object.freeze(
-      mixedOrigins
-        ? candidates.filter(
-            (subscriber) =>
-              (subscriber.handler.origin === "external") === (event.context?.external === true),
-          )
-        : [...candidates],
+      candidates.filter(
+        (subscriber) =>
+          (subscriber.handler.origin === "external") === (event.context?.external === true),
+      ),
     );
     if (update === undefined || interested.length === 0) {
       return undefined;
@@ -5805,12 +5802,10 @@ const InboxReplay = {
       subscribers: Object.freeze(
         (() => {
           const candidates = routing.stateSubscriptions.get(schema.typeName) ?? [];
-          return candidates.some((subscriber) => subscriber.handler.origin === "external")
-            ? candidates.filter(
-                (subscriber) =>
-                  (subscriber.handler.origin === "external") === (event.context?.external === true),
-              )
-            : [...candidates];
+          return candidates.filter(
+            (subscriber) =>
+              (subscriber.handler.origin === "external") === (event.context?.external === true),
+          );
         })(),
       ),
       invocation: "deferred",

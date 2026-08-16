@@ -124,10 +124,12 @@ function programWithSource(source: string): ts.Program {
     ),
   };
   const options: ts.CompilerOptions = {
+    baseUrl: process.cwd(),
     experimentalDecorators: true,
     module: ts.ModuleKind.NodeNext,
     moduleResolution: ts.ModuleResolutionKind.NodeNext,
     noEmit: true,
+    paths: { "@spine-event-engine/server": ["packages/server/src/index.ts"] },
     target: ts.ScriptTarget.ES2024,
   };
   const host = ts.createCompilerHost(options);
