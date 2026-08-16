@@ -36,6 +36,7 @@ const maxManifestEntries = 1024;
 const staleAfterMs = 5000;
 const heartbeatIntervalMs = 1000;
 const unixSocketPathLimit = 104;
+const maxRetainedFailures = 16;
 const generationPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
 interface SubscriberManifest {
@@ -72,8 +73,10 @@ class ZeroMqMessageTransport implements TransportFactory {
     return Promise.resolve().then(() => {
       if (this.#closePromise !== undefined) throw new Error("ZeroMQ message transport is closed.");
       const publisher = new NativePublisher(id, this.#config, this);
-      this.#publishers.add(publisher);
-      return publisher;
+      return discoverSubscribers(this.#config, publisher.targetType).then(() => {
+        this.#publishers.add(publisher);
+        return publisher;
+      });
     });
   }
 
@@ -156,7 +159,7 @@ class NativePublisher implements Publisher {
     const copiedMessage = clone(ExternalMessageSchema, message);
     const accepted = this.#tail.then(() => this.#publish(copiedMessage));
     this.#tail = accepted.catch((error: unknown) => {
-      this.#failures.push(error);
+      retainFailure(this.#failures, error);
     });
     return accepted;
   }
@@ -265,6 +268,7 @@ class NativeSubscriber implements Subscriber {
   ): Promise<NativeSubscriber> {
     const channel = canonicalChannelId(id);
     const layout = await prepareLayout(config, channel.targetType);
+    await discoverSubscribers(config, channel.targetType);
     const generation = randomUUID();
     const socketPath = path.join(layout.sockets, `${generation}.sock`);
     const endpoint = `ipc://${socketPath}`;
@@ -345,7 +349,7 @@ class NativeSubscriber implements Subscriber {
     try {
       await writeManifest(this.#manifestPath, { ...this.#manifest, heartbeatAtMs: Date.now() });
     } catch (error) {
-      this.#backgroundFailures.push(error);
+      retainFailure(this.#backgroundFailures, error);
     }
   }
 
@@ -356,12 +360,12 @@ class NativeSubscriber implements Subscriber {
         const message = fromBinary(ExternalMessageSchema, bytes);
         const work = this.#deliver(message);
         this.#receiveWork = work.catch((error: unknown) => {
-          this.#backgroundFailures.push(error);
+          retainFailure(this.#backgroundFailures, error);
         });
         await work;
       }
     } catch (error) {
-      if (this.#closePromise === undefined) this.#backgroundFailures.push(error);
+      if (this.#closePromise === undefined) retainFailure(this.#backgroundFailures, error);
     }
   }
 
@@ -582,4 +586,13 @@ function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
 
 function isErrorCode(error: unknown, code: string): boolean {
   return error instanceof Error && "code" in error && (error as { code?: unknown }).code === code;
+}
+
+function retainFailure(failures: unknown[], error: unknown): void {
+  if (failures.length < maxRetainedFailures) {
+    failures.push(error);
+    return;
+  }
+  if (failures.length === maxRetainedFailures)
+    failures.push({ overflow: true, retained: maxRetainedFailures });
 }
