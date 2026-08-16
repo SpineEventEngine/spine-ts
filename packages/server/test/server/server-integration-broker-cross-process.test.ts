@@ -58,7 +58,10 @@ interface Stopped {
 type ChildMessage = Ready | Delivered | ProbeDelivered | Failure | Stopped;
 
 describe("Wave 13 IntegrationBroker across normal Node applications", () => {
-  it("RED-22 delivers a domestic Event across two configured application processes without a forwarding shortcut", async () => {
+  // prettier-ignore
+  it(
+    "RED-22 delivers a domestic Event across two configured application processes without a forwarding shortcut",
+    async () => {
     const fixtureSource = await readFile(childPath, "utf8");
     expect(fixtureSource).toContain("createZeroMqTransportFactory");
     expect(fixtureSource).toContain("ZeroMqConfig.create");

@@ -73,7 +73,10 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
     });
   });
 
-  it("removes malformed, symlinked, stale, and dead manifests while leaving valid foreign identity untouched", async () => {
+  // prettier-ignore
+  it(
+    "removes malformed, symlinked, stale, and dead manifests while leaving valid foreign identity untouched",
+    async () => {
     await withIpcDirectory(async (ipcDirectory) => {
       const factory = createZeroMqTransportFactory(config(ipcDirectory));
       const subscriber = await factory.createSubscriber(channel());

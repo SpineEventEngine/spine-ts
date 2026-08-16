@@ -228,7 +228,11 @@ describe("Wave 13 ThirdPartyContext", () => {
     }
   });
 
-  it("RED-20 classifies every supported external receptor, keeps system/state subsets out of wanted documents, and preserves ThirdPartyContext import semantics", async () => {
+  // prettier-ignore
+  it(
+    "RED-20 classifies every supported external receptor, keeps system/state subsets out of wanted" +
+      " documents, and preserves ThirdPartyContext import semantics",
+    async () => {
     expectWave13ContractToCompile(thirdPartyPublicContract);
     const server = await import("@spine-event-engine/server");
     const ThirdPartyContext = server.ThirdPartyContext as

@@ -334,6 +334,22 @@ unavailable.` after normal close. The context now retains only its weakly
 - Next: canonical `verify:task --no-coverage` over the same direct and
   package-boundary selection, including API-doc, copyright, and TSDoc checks.
 
+## Cleanup-policy convergence — 2026-08-16
+
+- Canonical no-coverage verification passed exact Proto generation, generated
+  build, strict tooling typecheck, and full ESLint after the final assertion
+  cleanup. It then exposed accumulated Wave 13 cleanup-policy debt: six long
+  test lines, the new flat transport SPI file, the frozen Node ZeroMQ factory
+  name, and exact standalone-function necessity records for broker/transport
+  functions introduced in T-0197a/T-0198/T-0199.
+- One bounded cleanup **implementer** receives explicit
+  `gpt-5.6-terra` / `medium` configuration, unavailable runtime telemetry, and
+  no subagent authority. It owns a non-public transport source move, line wraps,
+  one Spine-JVM compatibility-name record, and precise function-necessity
+  ledger entries. It may not rename the frozen public factory or change product
+  behavior, and it must rerun cleanup policy tests plus canonical task
+  verification before checkpointing.
+
 ## Canonical no-coverage verification — 2026-08-16
 
 - Invoked the canonical profile once: `pnpm verify:task -- --no-coverage`
@@ -348,3 +364,44 @@ unavailable.` after normal close. The context now retains only its weakly
   formatting/diff checks, and the observed pre-terminal canonical stages. A
   surface with retained terminal status must supply the final canonical-gate
   disposition before T-0200 closure.
+
+## Cleanup-policy correction — 2026-08-16
+
+- Cleanup correction owner: existing `implementer`, explicitly configured
+  `gpt-5.6-terra` / `medium`. Runtime self-inspection is unavailable on this
+  surface, so immutable configured role/profile is the recorded metadata; no
+  subagents were used.
+- Moved the non-public typed message-channel declarations beneath the transport
+  internal source directory and updated all package-local imports while retaining
+  the exact root type exports. This removes flat-source debt without changing
+  the public transport contract.
+- Wrapped the six reported Wave 13 test declarations without changing their
+  assertions or selected behavior. The frozen public
+  `createZeroMqTransportFactory` name remains necessary for the typed
+  TransportFactory boundary and is recorded as an exact Spine JVM compatibility
+  exception rather than renamed.
+- Added every reported Wave 13 server and transport standalone declaration to
+  its owning necessity ledger. Each record states its distinct Protobuf,
+  filesystem, lifecycle, binary-wire, native-error, or public factory boundary;
+  no declaration already belongs to an existing class or named object without
+  widening its callers.
+- Next: run cleanup tests and policy check, then focused behavior/type/lint/
+  format/diff verification. Work continues.
+
+## Cleanup checkpoint verification — 2026-08-16
+
+- The cleanup-policy suite passed 109/109. The production cleanup checker,
+  scoped Prettier check, and `git diff --check` all passed after the two
+  overlength descriptions were split by exact string concatenation; the test
+  descriptions and assertions are unchanged.
+- Fresh package-boundary behavior evidence passed 8 files / 94 tests. An
+  attempted expansion with `server-environment-singleton.test.ts` was not used
+  as task evidence because it fails its unassigned production configuration
+  expectation before its test-specific assertion: production now requires the
+  T-0200 `transportFactory` setting.
+- Canonical `verify:task --no-coverage` passed Node policy, frozen Proto,
+  generated build, strict tooling typecheck, and cleanup. It stopped at the
+  pre-existing accumulated T-0200 TSDoc debt in broker/context/ZeroMQ sources;
+  this bounded cleanup correction does not widen into that separate TSDoc
+  remediation. The old moved source path is also transiently reported by TSDoc
+  before the rename is staged; staging is the next checkpoint action.

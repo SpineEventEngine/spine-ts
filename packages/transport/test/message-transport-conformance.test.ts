@@ -303,7 +303,10 @@ async function assertNativeManifestContract(directory: string, factory: Factory)
 }
 
 describe("Wave 13 message transport conformance", () => {
-  it("RED-21 gives memory and ZeroMQ factories one typed channel, fan-out, stale, FIFO, and close contract", async () => {
+  // prettier-ignore
+  it(
+    "RED-21 gives memory and ZeroMQ factories one typed channel, fan-out, stale, FIFO, and close contract",
+    async () => {
     expectTransportContractToCompile();
     await assertConformance(await discoverFactory("../src/index.js", "InMemoryTransportFactory"));
     const zeroMqRoot = (await import("../src/zeromq/index.js")) as Record<string, unknown>;

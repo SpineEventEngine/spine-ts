@@ -23,7 +23,7 @@ import type {
   Publisher,
   Subscriber,
   TransportFactory,
-} from "../message-channel.js";
+} from "../internal/message-channel.js";
 
 /**
  * Provides an in-process typed transport factory for local and test environments.

@@ -23,7 +23,11 @@ import { RecordingTransportFactory } from "../integration/wave13-red-support.js"
 describe("Wave 13 broker lifecycle", () => {
   beforeEach(async () => resetServerEnvironmentForTest());
   afterEach(async () => resetServerEnvironmentForTest());
-  it("RED-18 gives every BoundedContext one broker that withdraws, detaches, closes, aggregates failures, and supports retry cleanup", async () => {
+  // prettier-ignore
+  it(
+    "RED-18 gives every BoundedContext one broker that withdraws, detaches, closes, aggregates failures," +
+      " and supports retry cleanup",
+    async () => {
     const factory = new RecordingTransportFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
     const first = await BoundedContext.singleTenant(`Wave13LifecycleA${crypto.randomUUID()}`)

@@ -26,7 +26,7 @@ import type {
   Publisher,
   Subscriber,
   TransportFactory,
-} from "../message-channel.js";
+} from "../internal/message-channel.js";
 import type { ZeroMqConfig } from "./adapter-config.js";
 import { ChannelEndpoints } from "./channel-endpoints.js";
 

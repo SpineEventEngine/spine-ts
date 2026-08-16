@@ -259,7 +259,10 @@ describe("Wave 13 IntegrationBroker", () => {
       await ServerEnvironment.instance().close();
     }
   });
-  it("RED-09 removes publication after the final requester withdraws without losing the prior set on failure", async () => {
+  // prettier-ignore
+  it(
+    "RED-09 removes publication after the final requester withdraws without losing the prior set on failure",
+    async () => {
     await broker("last withdrawal rollback");
     await assertFailedReplacementKeepsPriorWantedSet();
   });
