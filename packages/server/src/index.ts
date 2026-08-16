@@ -296,6 +296,8 @@ export {
   materializeDecoratedEntityHandlers,
 } from "./handler/handler-decorators.js";
 
+export type { External } from "./handler/external.js";
+
 export {
   GeneratedRegistryDiscovery,
   GeneratedRegistryDiscoveryError,
@@ -321,6 +323,7 @@ export {
   type EventSubscriptionHandlerMetadata,
   type StateSubscriptionHandlerMetadata,
   type HandlerKind,
+  type HandlerOrigin,
   type HandlerMetadata,
   EntityHandlers,
   HandlerMetadataError,

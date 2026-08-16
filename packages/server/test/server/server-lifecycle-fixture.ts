@@ -449,7 +449,7 @@ function generatedRegistry(
   const moduleDirectory = join(directory, "generated/handler");
   const registryPath = join(moduleDirectory, "generated-handler-registry.js");
   mkdirSync(moduleDirectory, { recursive: true });
-  (globalThis as Record<string, unknown>)[slot] = Object.freeze({ version: 2, entities });
+  (globalThis as Record<string, unknown>)[slot] = Object.freeze({ version: 3, entities });
   writeFileSync(
     registryPath,
     `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,

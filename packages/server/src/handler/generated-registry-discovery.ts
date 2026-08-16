@@ -24,7 +24,7 @@ import { HandlerMetadataRegistry } from "./handler-metadata.js";
 const defaultExportName = "generatedHandlerRegistry";
 const generatedRegistryFile = "generated/handler/generated-handler-registry.js";
 const moduleSchemeRe = /^[A-Za-z][A-Za-z\d+.-]*:/;
-const registryVersion = 2;
+const registryVersion = 3;
 
 /**
  * Stable error code for generated registry discovery failures.

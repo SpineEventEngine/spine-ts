@@ -1,11 +1,24 @@
-/* Copyright 2026, CodeMatters. All rights reserved. Licensed under Apache-2.0. */
+/*
+ * Copyright 2026, CodeMatters. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
 import { Buffer } from "node:buffer";
 
 import { create, toBinary } from "@bufbuild/protobuf";
 import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { EventContextSchema, EventIdSchema } from "@spine-event-engine/proto";
-import { TypeUrls } from "@spine-event-engine/core";
+import { AnyMessages } from "@spine-event-engine/core";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
@@ -66,7 +79,7 @@ describe("Wave 13 external receptor origin", () => {
     );
     expect(records).not.toContainEqual(expect.objectContaining({ methodName: "assign" }));
   });
-  it("RED-19 emits first-parameter External<T> origin metadata and rejects untrusted shapes", async () => {
+  it("RED-19 emits first-parameter External<T> origin metadata and rejects untrusted shapes", () => {
     const result = BuildHandlerAnalyzer.analyze(programWithSource(externalOriginSource));
     const records = result.entities[0]?.handlers as
       readonly { readonly methodName: string; readonly origin?: string }[] | undefined;
@@ -92,6 +105,14 @@ describe("Wave 13 external receptor origin", () => {
     expect(generated).toContain('origin: "domestic"');
     void EventIdSchema;
   });
+
+  it("rejects a same-spelled External from a resolved counterfeit module", () => {
+    const result = BuildHandlerAnalyzer.analyze(programWithSource(externalOriginSource, true));
+    expect(result.diagnostics.map(({ code }) => code)).toContain("INVALID_SIGNAL_TYPE");
+    expect(result.entities.flatMap((entity) => entity.handlers)).not.toContainEqual(
+      expect.objectContaining({ origin: "external" }),
+    );
+  });
 });
 
 function event(externalOrigin: boolean) {
@@ -99,15 +120,12 @@ function event(externalOrigin: boolean) {
   return {
     $typeName: "spine.core.Event",
     id: create(EventIdSchema, { value }),
-    context: create(EventContextSchema, { external: externalOrigin } as never),
-    message: {
-      typeUrl: TypeUrls.derive(StringValueSchema),
-      value: toBinary(StringValueSchema, create(StringValueSchema, { value })),
-    },
+    context: create(EventContextSchema, { external: externalOrigin }),
+    message: AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value })),
   } as never;
 }
 
-function programWithSource(source: string): ts.Program {
+function programWithSource(source: string, counterfeit = false): ts.Program {
   const sources: Record<string, string> = {
     "src/external.ts": source,
     "generated/task_pb.ts": generatedModule("spine/wave13/task.proto", "Task"),
@@ -125,12 +143,19 @@ function programWithSource(source: string): ts.Program {
       "spine/wave13/task_rejections.proto",
       "TaskAlreadyDone",
     ),
+    "counterfeit/handler/external.ts": "export type External<T> = T;",
   };
   const options: ts.CompilerOptions = {
+    baseUrl: process.cwd(),
     experimentalDecorators: true,
     module: ts.ModuleKind.NodeNext,
     moduleResolution: ts.ModuleResolutionKind.NodeNext,
     noEmit: true,
+    paths: {
+      "@spine-event-engine/server": [
+        counterfeit ? "counterfeit/handler/external.ts" : "packages/server/src/index.ts",
+      ],
+    },
     target: ts.ScriptTarget.ES2024,
   };
   const host = ts.createCompilerHost(options);
@@ -177,7 +202,8 @@ const externalOriginSource = `
   import { type TaskCreated, type TaskRenamed } from "../generated/task_events_pb.js";
   import { type TaskAlreadyDone } from "../generated/task_rejections_pb.js";
 
-  type Forged<T> = T;
+  type IndirectExternal<T> = External<T>;
+  type LocalEvent = TaskCreated;
   export class TaskProjection extends Projection<string, typeof TaskSchema, number> {
     @Subscribe externalEvent(event: External<TaskCreated>): void { void event; }
     @Subscribe domesticEvent(event: TaskRenamed): void { void event; }
@@ -185,7 +211,8 @@ const externalOriginSource = `
     @Command externalRejection(rejection: External<TaskAlreadyDone>): RenameTask { throw new Error(String(rejection)); }
     @Subscribe nested(event: Array<External<TaskCreated>>): void { void event; }
     @Subscribe second(event: TaskCreated, context: External<unknown>): void { void event; void context; }
-    @Subscribe forged(event: Forged<TaskCreated>): void { void event; }
+    @Subscribe indirect(event: IndirectExternal<TaskCreated>): void { void event; }
+    @Subscribe local(event: LocalEvent): void { void event; }
   }
 `;
 

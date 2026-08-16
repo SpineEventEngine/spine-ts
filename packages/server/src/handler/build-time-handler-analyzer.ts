@@ -16,6 +16,7 @@ import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import type * as Protobuf from "@bufbuild/protobuf";
 import type * as ProtobufWkt from "@bufbuild/protobuf/wkt";
@@ -119,6 +120,11 @@ export interface BuildHandlerRecord {
   readonly parameterCount: GeneratedHandlerParameterCount;
 
   /**
+   * Origin declared on the first receptor parameter.
+   */
+  readonly origin: "domestic" | "external";
+
+  /**
    * Optional statically declared Event field filter.
    */
   readonly where?: BuildWhereOptions;
@@ -152,6 +158,8 @@ export type BuildHandlerDiagnosticCode =
   | "INVALID_HANDLER_VISIBILITY"
   | "INVALID_PARAMETER_COUNT"
   | "INVALID_SIGNAL_TYPE"
+  | "INVALID_EXTERNAL_ORIGIN"
+  | "EXTERNAL_COMMAND_RECEIVER"
   | "INVALID_SUBSCRIBE_RETURN"
   | "INVALID_WHERE"
   | "MISSING_EMITTED_SCHEMAS"
@@ -354,6 +362,7 @@ interface HandlerDecoratorUse extends DecoratorUse {
 const handlerDecorators = new Set<HandlerDecorator>(["Assign", "Command", "React", "Subscribe"]);
 const entityBaseNames = new Set(["Aggregate", "Projection", "ProcessManager"]);
 const maxAliasDepth = 50;
+const handlerModuleDirectory = dirname(fileURLToPath(import.meta.url));
 // `spine.options.entity` in the frozen `spine/options.proto` contract.
 const entityOptionFieldNumber = 73903;
 const protobuf = requirePackage("@bufbuild/protobuf") as typeof Protobuf;
@@ -475,7 +484,9 @@ const HandlerSources = Object.freeze({
       return undefined;
     }
 
-    const signal = HandlerSources.schemaUseFromType(node.parameters[0]?.type, scope.imports);
+    const origin = HandlerSources.externalOrigin(node.parameters, scope, className, method);
+    if (origin === undefined) return undefined;
+    const signal = HandlerSources.schemaUseFromType(origin.type, scope.imports);
     const signalSchema = signal?.reference;
     const emittedSchemas = HandlerSources.emittedSchemaUses(
       node.type,
@@ -503,6 +514,7 @@ const HandlerSources = Object.freeze({
       signalSchema,
       emittedSchemas,
       parameterCount: node.parameters.length as GeneratedHandlerParameterCount,
+      origin: origin.value,
       ...(where === undefined ? {} : { where }),
     };
   },
@@ -766,8 +778,21 @@ const HandlerSources = Object.freeze({
       return true;
     }
 
-    const signal = HandlerSources.schemaUseFromType(node.parameters[0].type, scope.imports);
+    const origin = HandlerSources.externalOrigin(node.parameters, scope, className, method);
+    if (origin === undefined) return true;
+    const signal = HandlerSources.schemaUseFromType(origin.type, scope.imports);
     if (signal !== undefined && HandlerSources.acceptsSignalKind(decorator, signal.kind)) {
+      if (origin.value === "external" && signal.kind === "command") {
+        HandlerTypes.pushDiagnostic(
+          scope,
+          "EXTERNAL_COMMAND_RECEIVER",
+          node.parameters[0].type,
+          "Command receivers cannot declare External<Command>.",
+          className,
+          method,
+        );
+        return true;
+      }
       return false;
     }
 
@@ -1271,6 +1296,108 @@ const HandlerSources = Object.freeze({
     return undefined;
   },
 
+  externalOrigin(
+    parameters: readonly ts.ParameterDeclaration[],
+    scope: AnalyzerScope,
+    className: string,
+    method: string | undefined,
+  ): { readonly value: "domestic" | "external"; readonly type: ts.TypeNode } | undefined {
+    const first = parameters[0]?.type;
+    if (first === undefined) return undefined;
+    const marker = HandlerSources.externalMarker(first, scope);
+    const laterMarker = parameters
+      .slice(1)
+      .some((parameter) =>
+        parameter.type === undefined
+          ? false
+          : HandlerSources.containsExternalMarker(parameter.type, scope),
+      );
+    const nestedMarker =
+      marker === undefined && HandlerSources.containsExternalMarker(first, scope);
+    if (laterMarker || nestedMarker || (marker !== undefined && !marker.direct)) {
+      HandlerTypes.pushDiagnostic(
+        scope,
+        "INVALID_EXTERNAL_ORIGIN",
+        laterMarker ? (parameters[1]?.type ?? first) : first,
+        "External<T> is valid only as the direct first receptor parameter type.",
+        className,
+        method,
+      );
+      return undefined;
+    }
+    if (marker?.direct === true && marker.type !== undefined) {
+      return { value: "external", type: marker.type };
+    }
+    return { value: "domestic", type: first };
+  },
+
+  externalMarker(
+    type: ts.TypeNode,
+    scope: AnalyzerScope,
+  ): { readonly direct: boolean; readonly type?: ts.TypeNode } | undefined {
+    if (!ts.isTypeReferenceNode(type)) return undefined;
+    const canonical =
+      (ts.isIdentifier(type.typeName) &&
+        scope.imports.serverSymbols.get(type.typeName.text) === "External") ||
+      (ts.isQualifiedName(type.typeName) &&
+        ts.isIdentifier(type.typeName.left) &&
+        type.typeName.right.text === "External" &&
+        scope.imports.serverNamespaces.has(type.typeName.left.text));
+    if (!canonical || !HandlerSources.isCanonicalExternal(type.typeName, scope.program))
+      return undefined;
+    const argument = type.typeArguments?.[0];
+    return argument === undefined
+      ? { direct: false }
+      : { direct: type.typeArguments?.length === 1, type: argument };
+  },
+
+  containsExternalMarker(
+    type: ts.TypeNode,
+    scope: AnalyzerScope,
+    seen: ReadonlySet<string> = new Set(),
+  ): boolean {
+    if (HandlerSources.externalMarker(type, scope) !== undefined) return true;
+    if (ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName)) {
+      const alias = scope.imports.localTypeAliases.get(type.typeName.text);
+      if (alias !== undefined && !seen.has(type.typeName.text)) {
+        const next = new Set(seen);
+        next.add(type.typeName.text);
+        if (HandlerSources.containsExternalMarker(alias, scope, next)) return true;
+      }
+    }
+    let found = false;
+    const visit = (node: ts.Node): void => {
+      if (found) return;
+      if (ts.isTypeNode(node) && HandlerSources.externalMarker(node, scope) !== undefined) {
+        found = true;
+        return;
+      }
+      ts.forEachChild(node, visit);
+    };
+    ts.forEachChild(type, visit);
+    return found;
+  },
+
+  isCanonicalExternal(name: ts.EntityName, program: ts.Program): boolean {
+    const checker = program.getTypeChecker();
+    const location = ts.isQualifiedName(name) ? name.right : name;
+    let symbol = checker.getSymbolAtLocation(location);
+    if (symbol === undefined) return false;
+    if ((symbol.flags & ts.SymbolFlags.Alias) !== 0) {
+      symbol = checker.getAliasedSymbol(symbol);
+    }
+    return (symbol.declarations ?? []).some(
+      (declaration) =>
+        ts.isTypeAliasDeclaration(declaration) &&
+        declaration.name.text === "External" &&
+        resolve(dirname(declaration.getSourceFile().fileName)) ===
+          resolve(handlerModuleDirectory) &&
+        /^external(?:\.d)?\.ts$/u.test(
+          declaration.getSourceFile().fileName.split(/[\\/]/u).at(-1) ?? "",
+        ),
+    );
+  },
+
   newTypeWalk(): TypeWalk {
     return { remaining: maxAliasDepth, seen: new Set() };
   },
@@ -1347,10 +1474,7 @@ const HandlerSources = Object.freeze({
     if (bindings === undefined) {
       return;
     }
-    if (
-      moduleSpecifier === "@spine-event-engine/server" &&
-      statement.importClause?.phaseModifier !== ts.SyntaxKind.TypeKeyword
-    ) {
+    if (moduleSpecifier === "@spine-event-engine/server") {
       HandlerSources.recordServerImport(bindings, state);
     }
     if (moduleSpecifier === "@spine-event-engine/proto") {
@@ -1375,9 +1499,7 @@ const HandlerSources = Object.freeze({
     }
 
     for (const element of bindings.elements) {
-      if (!element.isTypeOnly) {
-        state.serverSymbols.set(element.name.text, element.propertyName?.text ?? element.name.text);
-      }
+      state.serverSymbols.set(element.name.text, element.propertyName?.text ?? element.name.text);
     }
   },
 

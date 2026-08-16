@@ -83,6 +83,7 @@ import {
 import { RoutingDeclarations, type RoutingDeclarationSnapshot } from "./routing-declarations.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
+import { EventDispatcherOriginSchemas } from "../bus/event-dispatcher-origin-schemas.js";
 import { Delivery } from "../delivery/delivery.js";
 import { commitFenced } from "./commit-fence.js";
 import { InboxTargets, type InboxMessage, type InboxMessageInput } from "../delivery/inbox.js";
@@ -789,6 +790,7 @@ interface RepositoryStateUpdateRoute<Id = unknown> extends RepositoryEventRoute<
    * Unpacked source Entity state selected from `EntityStateChanged.newState`.
    */
   readonly state: Message;
+  readonly subscribers: RepositoryStateSubscribers;
 }
 
 const repositorySnapshots = new WeakMap<RepositoryView, RepositoryIdentitySnapshot>();
@@ -1217,6 +1219,8 @@ interface RepositoryDispatchers {
 interface RepositoryRouting<Id = unknown> {
   readonly commandSchemas: readonly MessageSchema[];
   readonly eventSchemas: readonly MessageSchema[];
+  readonly domesticEventSchemas: readonly MessageSchema[];
+  readonly externalEventSchemas: readonly MessageSchema[];
   readonly producedEventSchemas: readonly MessageSchema[];
   readonly producedCommandSchemas: readonly MessageSchema[];
   readonly commandReadiness: CommandRegistrationReadinessLookup | undefined;
@@ -1229,12 +1233,18 @@ interface RepositoryRouting<Id = unknown> {
   commandReactions(
     eventFullTypeName: string,
     message: unknown,
+    external: boolean,
   ): readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[];
   eventReactors(
     eventFullTypeName: string,
     message: unknown,
+    external: boolean,
   ): readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
-  eventSubscribers(eventFullTypeName: string, message: unknown): RepositoryEventSubscribers;
+  eventSubscribers(
+    eventFullTypeName: string,
+    message: unknown,
+    external: boolean,
+  ): RepositoryEventSubscribers;
   routeCommand(command: Command): RepositoryCommandRoute<Id>;
   routeEvent(event: Event): RepositoryEventRoute<Id>;
   routeStateUpdate(event: Event): RepositoryStateUpdateRoute<Id> | undefined;
@@ -1777,9 +1787,13 @@ class AggregateEventExecution {
     const message = EntityInvocation.unpackRequired(eventMessage, eventSchema, "event");
     const route = acceptedRoute;
     const reactors = this.#routing
-      .eventReactors(route.messageFullTypeName, message)
+      .eventReactors(route.messageFullTypeName, message, this.#event.context?.external === true)
       .filter((reactor) => RepositoryHandlers.handlerEmittedSchemas(reactor.handler).length > 0);
-    const commanders = this.#routing.commandReactions(route.messageFullTypeName, message);
+    const commanders = this.#routing.commandReactions(
+      route.messageFullTypeName,
+      message,
+      this.#event.context?.external === true,
+    );
 
     return Object.freeze({
       message,
@@ -2133,7 +2147,11 @@ class ProjectionEventExecution {
       "event",
     );
     const message = EntityInvocation.unpackRequired(packedMessage, eventSchema, "event");
-    const subscribers = this.#routing.eventSubscribers(route.messageFullTypeName, message);
+    const subscribers = this.#routing.eventSubscribers(
+      route.messageFullTypeName,
+      message,
+      this.#event.context?.external === true,
+    );
 
     return Object.freeze({
       route,
@@ -2774,8 +2792,16 @@ class ProcessManagerEventExecution {
     );
     const message = EntityInvocation.unpackRequired(eventMessage, eventSchema, "event");
     const route = acceptedRoute;
-    const reactors = this.#routing.eventReactors(route.messageFullTypeName, message);
-    const commanders = this.#routing.commandReactions(route.messageFullTypeName, message);
+    const reactors = this.#routing.eventReactors(
+      route.messageFullTypeName,
+      message,
+      this.#event.context?.external === true,
+    );
+    const commanders = this.#routing.commandReactions(
+      route.messageFullTypeName,
+      message,
+      this.#event.context?.external === true,
+    );
 
     return Object.freeze({
       message,
@@ -4120,6 +4146,15 @@ const RepositoryHandlers = {
     return plans;
   },
 
+  forOrigin<Value extends { readonly handler: { readonly origin: "domestic" | "external" } }>(
+    values: readonly Value[],
+    external: boolean,
+  ): readonly Value[] {
+    return Object.freeze(
+      values.filter((value) => (value.handler.origin === "external") === external),
+    );
+  },
+
   readinessMap<Value>(
     schemas: readonly MessageSchema[],
     find: (typeName: string) => readonly Value[],
@@ -4218,6 +4253,32 @@ const RepositoryRoutes = {
         ...handler.eventApplications.map((application) => application.schema),
       ]),
     );
+    const externalEventSchemas = RepositoryHandlers.uniqueSchemas(
+      handlers.flatMap((handler) =>
+        handler.handlers
+          .filter(
+            (candidate) =>
+              candidate.origin === "external" &&
+              (candidate.kind === "event-subscription" ||
+                candidate.kind === "event-reaction" ||
+                candidate.kind === "command-reaction"),
+          )
+          .map((candidate) => candidate.schema),
+      ),
+    );
+    const domesticEventSchemas = RepositoryHandlers.uniqueSchemas(
+      handlers.flatMap((handler) =>
+        handler.handlers
+          .filter(
+            (candidate) =>
+              candidate.origin === "domestic" &&
+              (candidate.kind === "event-subscription" ||
+                candidate.kind === "event-reaction" ||
+                candidate.kind === "command-reaction"),
+          )
+          .map((candidate) => candidate.schema),
+      ),
+    );
     const stateSchemas = RepositoryHandlers.uniqueSchemas(
       handlers.flatMap((handler) =>
         handler.stateSubscriptions.map((subscription) => subscription.schema),
@@ -4283,18 +4344,29 @@ const RepositoryRoutes = {
     return Object.freeze({
       commandSchemas,
       eventSchemas,
+      domesticEventSchemas,
+      externalEventSchemas,
       producedEventSchemas,
       producedCommandSchemas,
       commandReadiness,
       eventReadiness,
       stateSchemas,
       stateSubscriptions,
-      commandReactions: (eventFullTypeName: string, message: unknown) =>
-        commandReactionFilters.get(eventFullTypeName)?.select(message) ?? Object.freeze([]),
-      eventReactors: (eventFullTypeName: string, message: unknown) =>
-        eventReactorFilters.get(eventFullTypeName)?.select(message) ?? Object.freeze([]),
-      eventSubscribers: (eventFullTypeName: string, message: unknown) =>
-        eventSubscriberFilters.get(eventFullTypeName)?.select(message) ?? Object.freeze([]),
+      commandReactions: (eventFullTypeName: string, message: unknown, external: boolean) =>
+        RepositoryHandlers.forOrigin(
+          commandReactionFilters.get(eventFullTypeName)?.select(message) ?? Object.freeze([]),
+          external,
+        ),
+      eventReactors: (eventFullTypeName: string, message: unknown, external: boolean) =>
+        RepositoryHandlers.forOrigin(
+          eventReactorFilters.get(eventFullTypeName)?.select(message) ?? Object.freeze([]),
+          external,
+        ),
+      eventSubscribers: (eventFullTypeName: string, message: unknown, external: boolean) =>
+        RepositoryHandlers.forOrigin(
+          eventSubscriberFilters.get(eventFullTypeName)?.select(message) ?? Object.freeze([]),
+          external,
+        ),
       routeCommand: (command: Command) =>
         RepositoryRoutes.routeCommand<RepositoryEntityId<EntityType>>(
           command,
@@ -4506,7 +4578,14 @@ const RepositoryRoutes = {
       schemas,
       "Repository state-update routing",
     );
-    if (update === undefined || (subscriptions.get(update.schema.typeName)?.length ?? 0) === 0) {
+    const candidates = subscriptions.get(update?.schema.typeName ?? "") ?? [];
+    const interested = Object.freeze(
+      candidates.filter(
+        (subscriber) =>
+          (subscriber.handler.origin === "external") === (event.context?.external === true),
+      ),
+    );
+    if (update === undefined || interested.length === 0) {
       return undefined;
     }
     const { schema, state } = update;
@@ -4519,6 +4598,7 @@ const RepositoryRoutes = {
       entityIds: Object.freeze([...candidateIds]),
       messageFullTypeName: schema.typeName,
       state,
+      subscribers: interested,
       invocation: "deferred",
     });
   },
@@ -5503,7 +5583,7 @@ const InboxReplay = {
     InboxReplay.validateProjectionReplayTenant(runtime.context, deliveryTenantId, event);
     const route = InboxReplay.replayStateUpdateRoute(repository, routing, message, event);
     const [entityId] = route.entityIds;
-    const subscribers = routing.stateSubscriptions.get(route.messageFullTypeName) ?? [];
+    const subscribers = route.subscribers;
     await ProjectionEventExecution.runStateTarget(
       repository,
       routing,
@@ -5719,6 +5799,15 @@ const InboxReplay = {
       entityIds,
       messageFullTypeName: schema.typeName,
       state,
+      subscribers: Object.freeze(
+        (() => {
+          const candidates = routing.stateSubscriptions.get(schema.typeName) ?? [];
+          return candidates.filter(
+            (subscriber) =>
+              (subscriber.handler.origin === "external") === (event.context?.external === true),
+          );
+        })(),
+      ),
       invocation: "deferred",
     });
   },
@@ -5886,47 +5975,66 @@ const RepositoryDispatch = {
               dispatch: (command: Command): Promise<void> =>
                 RepositoryDispatch.dispatchRepositoryCommand(repository, routing, command),
             }),
-      event:
-        routing.eventSchemas.length === 0
-          ? undefined
-          : Object.freeze({
-              messageSchemas: () => routing.eventSchemas,
-              accept: (event: Event): Promise<void> => {
-                acceptedEventRoutes.set(event, repository.routeEvent(event));
-                return Promise.resolve();
-              },
-              dispatch: (event: Event): Promise<void> => {
-                const acceptedRoute = acceptedEventRoutes.get(event);
-                acceptedEventRoutes.delete(event);
-                return RepositoryDispatch.dispatchRepositoryEvent(
-                  repository,
-                  routing,
-                  event,
-                  acceptedRoute,
-                );
-              },
-            }),
-      systemEvent:
-        routing.stateSchemas.length === 0
-          ? undefined
-          : Object.freeze({
-              messageSchemas: () => Object.freeze([EntityLog.EntityStateChangedSchema]),
-              accept: (event: Event): Promise<void> => {
-                acceptedStateRoutes.set(event, routing.routeStateUpdate(event) ?? null);
-                return Promise.resolve();
-              },
-              dispatch: (event: Event): Promise<void> => {
-                const route = acceptedStateRoutes.get(event);
-                acceptedStateRoutes.delete(event);
-                if (route === null) return Promise.resolve();
-                return RepositoryDispatch.dispatchRepositoryStateUpdate(
-                  repository,
-                  routing,
-                  event,
-                  route,
-                );
-              },
-            }),
+      event: (() => {
+        if (routing.eventSchemas.length === 0) return undefined;
+        const dispatcher = Object.freeze({
+          messageSchemas: () => routing.eventSchemas,
+          externalEventSchemas: () => routing.externalEventSchemas,
+          accept: (event: Event): Promise<void> => {
+            acceptedEventRoutes.set(event, repository.routeEvent(event));
+            return Promise.resolve();
+          },
+          dispatch: (event: Event): Promise<void> => {
+            const acceptedRoute = acceptedEventRoutes.get(event);
+            acceptedEventRoutes.delete(event);
+            return RepositoryDispatch.dispatchRepositoryEvent(
+              repository,
+              routing,
+              event,
+              acceptedRoute,
+            );
+          },
+        });
+        return EventDispatcherOriginSchemas.define(
+          dispatcher,
+          routing.domesticEventSchemas,
+          routing.externalEventSchemas,
+        );
+      })(),
+      systemEvent: (() => {
+        if (routing.stateSchemas.length === 0) return undefined;
+        const hasDomestic = [...routing.stateSubscriptions.values()].some((values) =>
+          values.some((value) => value.handler.origin === "domestic"),
+        );
+        const hasExternal = [...routing.stateSubscriptions.values()].some((values) =>
+          values.some((value) => value.handler.origin === "external"),
+        );
+        const schema = EntityLog.EntityStateChangedSchema;
+        const dispatcher = Object.freeze({
+          messageSchemas: () => Object.freeze([EntityLog.EntityStateChangedSchema]),
+          externalEventSchemas: () => (hasExternal ? Object.freeze([schema]) : Object.freeze([])),
+          accept: (event: Event): Promise<void> => {
+            acceptedStateRoutes.set(event, routing.routeStateUpdate(event) ?? null);
+            return Promise.resolve();
+          },
+          dispatch: (event: Event): Promise<void> => {
+            const route = acceptedStateRoutes.get(event);
+            acceptedStateRoutes.delete(event);
+            if (route === null) return Promise.resolve();
+            return RepositoryDispatch.dispatchRepositoryStateUpdate(
+              repository,
+              routing,
+              event,
+              route,
+            );
+          },
+        });
+        return EventDispatcherOriginSchemas.define(
+          dispatcher,
+          hasDomestic ? [schema] : [],
+          hasExternal ? [schema] : [],
+        );
+      })(),
     });
   },
 

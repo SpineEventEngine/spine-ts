@@ -74,19 +74,19 @@ describe("generated registry discovery", () => {
   it("loads generated registries from explicit file URLs", async () => {
     const module = createModuleFixture(
       "generated-registry.js",
-      "export const generatedHandlerRegistry = { version: 2, entities: [] };\n",
+      "export const generatedHandlerRegistry = { version: 3, entities: [] };\n",
     );
     const discovery = new GeneratedRegistryDiscovery();
 
     const registries = await discovery.load({ modules: [module.moduleUrl] });
 
-    expect(registries).toEqual([{ version: 2, entities: [] }]);
+    expect(registries).toEqual([{ version: 3, entities: [] }]);
   });
 
   it("loads generated registries with a custom export and cache-busting token", async () => {
     const module = createModuleFixture(
       "custom-export.js",
-      "export const customRegistry = { version: 2, entities: [] };\n",
+      "export const customRegistry = { version: 3, entities: [] };\n",
     );
     const discovery = new GeneratedRegistryDiscovery();
 
@@ -96,7 +96,7 @@ describe("generated registry discovery", () => {
       cacheBust: "coverage",
     });
 
-    expect(registries).toEqual([{ version: 2, entities: [] }]);
+    expect(registries).toEqual([{ version: 3, entities: [] }]);
   });
 
   it("loads the conventional generated registry module from a package root path", async () => {
@@ -106,13 +106,13 @@ describe("generated registry discovery", () => {
 
     writeFileSync(
       modulePath,
-      "export const generatedHandlerRegistry = { version: 2, entities: [] };\n",
+      "export const generatedHandlerRegistry = { version: 3, entities: [] };\n",
       "utf8",
     );
 
     const registries = await discovery.load({ modules: [modulePath] });
 
-    expect(registries).toEqual([{ version: 2, entities: [] }]);
+    expect(registries).toEqual([{ version: 3, entities: [] }]);
     expect(GeneratedRegistryDiscovery.conventionalModuleUrl(packageRoot).href).toBe(
       pathToFileURL(modulePath).href,
     );
@@ -144,7 +144,7 @@ describe("generated registry discovery", () => {
   it("rejects modules whose exported registry uses an unsupported version", async () => {
     const module = createModuleFixture(
       "unsupported-version.js",
-      "export const generatedHandlerRegistry = { version: 3, entities: [] };\n",
+      "export const generatedHandlerRegistry = { version: 2, entities: [] };\n",
     );
     const discovery = new GeneratedRegistryDiscovery();
 
@@ -169,7 +169,7 @@ describe("generated registry discovery", () => {
     const slot = `__spineBlockedDataModule_${Math.random().toString(36).slice(2)}`;
     const source = [
       `globalThis[${JSON.stringify(slot)}] = true;`,
-      "export const generatedHandlerRegistry = { version: 2, entities: [] };",
+      "export const generatedHandlerRegistry = { version: 3, entities: [] };",
     ].join(" ");
     const moduleUrl = new URL(`data:text/javascript,${encodeURIComponent(source)}`);
     const discovery = new GeneratedRegistryDiscovery();
@@ -184,7 +184,7 @@ describe("generated registry discovery", () => {
   it("rejects file URL query aliases before importing them", async () => {
     const module = createModuleFixture(
       "query-alias.js",
-      "export const generatedHandlerRegistry = { version: 2, entities: [] };\n",
+      "export const generatedHandlerRegistry = { version: 3, entities: [] };\n",
     );
     const moduleUrl = new URL(module.moduleUrl.href);
     const discovery = new GeneratedRegistryDiscovery();
@@ -200,7 +200,7 @@ describe("generated registry discovery", () => {
   it("rejects file URL hash aliases before importing them", async () => {
     const module = createModuleFixture(
       "hash-alias.js",
-      "export const generatedHandlerRegistry = { version: 2, entities: [] };\n",
+      "export const generatedHandlerRegistry = { version: 3, entities: [] };\n",
     );
     const moduleUrl = new URL(module.moduleUrl.href);
     const discovery = new GeneratedRegistryDiscovery();
@@ -244,7 +244,7 @@ describe("generated registry discovery", () => {
   it("rejects duplicate normalized generated registry module refs", async () => {
     const module = createModuleFixture(
       "duplicate-registry.js",
-      "export const generatedHandlerRegistry = { version: 2, entities: [] };\n",
+      "export const generatedHandlerRegistry = { version: 3, entities: [] };\n",
     );
     const discovery = new GeneratedRegistryDiscovery();
 
@@ -258,7 +258,7 @@ describe("generated registry discovery", () => {
 
   it("registers discovered generated registries into a new handler metadata registry", async () => {
     const module = createRegistryValueModule({
-      version: 2,
+      version: 3,
       entities: [
         {
           entityType: DiscoveredProjection,
@@ -270,6 +270,7 @@ describe("generated registry discovery", () => {
               signalSchema: CommandSchema,
               emittedSchemas: [EventSchema],
               parameterCount: 1,
+              origin: "domestic",
             },
           ],
         },
@@ -292,7 +293,7 @@ describe("generated registry discovery", () => {
 
   it("wraps ingestion failures in a deterministic discovery error", async () => {
     const module = createRegistryValueModule({
-      version: 2,
+      version: 3,
       entities: [
         {
           entityType: DiscoveredProjection,

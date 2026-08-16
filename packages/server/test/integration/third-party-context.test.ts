@@ -83,6 +83,7 @@ function generatedStateRegistryRoot(): {
             signalSchema: StateSchema,
             emittedSchemas: [],
             parameterCount: 1,
+            origin: "domestic",
             origin: "external",
           },
         ],
@@ -134,7 +135,7 @@ describe("Wave 13 ThirdPartyContext", () => {
     ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory } as never);
     const stateRegistry = generatedStateRegistryRoot();
     const ingestor = new HandlerRegistryIngestor();
-    expect(() => ingestor.ingest({ version: 2, entities: [] })).toThrow(/version 2/u);
+    expect(() => ingestor.ingest({ version: 3, entities: [] })).toThrow(/version 3/u);
     expect(() =>
       ingestor.ingest({
         ...stateRegistry.registry,
