@@ -207,7 +207,16 @@ export class IntegrationBroker {
         acquired.push(publisher);
       }
     } catch (error) {
-      await Promise.allSettled(acquired.map((publisher) => publisher.close()));
+      const settled = await Promise.allSettled(acquired.map((publisher) => publisher.close()));
+      const failures: unknown[] = [];
+      for (const [index, result] of settled.entries()) {
+        if (result.status !== "rejected") continue;
+        const publisher = acquired[index];
+        if (publisher !== undefined) this.#retainedPublishers.push(publisher);
+        failures.push(result.reason);
+      }
+      if (failures.length)
+        throw new AggregateError([error, ...failures], "Integration publisher acquisition failed.");
       throw error;
     }
     const errors: unknown[] = [];

@@ -13,7 +13,7 @@
  */
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { BoolValueSchema, Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   BoundedContextNameSchema,
@@ -283,6 +283,34 @@ describe("IntegrationBroker module", () => {
       publishWanted(factory, "requester", [StringValueSchema, Int32ValueSchema]),
     ).rejects.toThrow(/injected publisher creation failure/u);
     expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(StringValueSchema));
+    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(Int32ValueSchema));
+  });
+
+  it("retains an acquired publisher when expansion cleanup also fails and retries it on close", async () => {
+    const factory = new RecordingTransportFactory();
+    const bus = eventBusAccess.createForgettingBus();
+    eventBusAccess.registerSchemas(bus, [StringValueSchema, Int32ValueSchema, BoolValueSchema]);
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "acquisition-cleanup" }),
+      transportFactory: factory,
+      eventBus: bus,
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    brokers.push(broker);
+    await broker.open();
+    await publishWanted(factory, "requester", [StringValueSchema]);
+    factory.failPublisherCreationAfter(1, (channel) =>
+      [TypeUrls.derive(Int32ValueSchema), TypeUrls.derive(BoolValueSchema)].includes(
+        (channel as { targetType?: string }).targetType ?? "",
+      ),
+    );
+    factory.failNextClose();
+    await expect(
+      publishWanted(factory, "requester", [StringValueSchema, Int32ValueSchema, BoolValueSchema]),
+    ).rejects.toThrow(/Integration publisher acquisition failed/u);
+    expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(Int32ValueSchema));
+    await expect(broker.close()).resolves.toBeUndefined();
     expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(Int32ValueSchema));
   });
 
@@ -725,7 +753,7 @@ async function publishExternal(
 async function publishWanted(
   factory: RecordingTransportFactory,
   source: string,
-  schemas: readonly (typeof StringValueSchema | typeof Int32ValueSchema)[],
+  schemas: readonly (typeof StringValueSchema | typeof Int32ValueSchema | typeof BoolValueSchema)[],
 ): Promise<void> {
   const publisher = await factory.createPublisher(
     create(ChannelIdSchema, { targetType: TypeUrls.derive(ExternalEventsWantedSchema) }),
