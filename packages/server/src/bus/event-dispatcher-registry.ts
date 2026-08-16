@@ -130,6 +130,9 @@ export class EventDispatcherRegistry {
       }
     }
     const privateOrigins = EventDispatcherOriginSchemas.get(dispatcher);
+    const effectiveExternal = EventDispatcherRegistry.#schemaRegistrations(
+      privateOrigins?.external ?? externalRegistrations.map(({ schema }) => schema),
+    );
     const domesticRegistrations = EventDispatcherRegistry.#schemaRegistrations(
       privateOrigins?.domestic ??
         all
@@ -145,7 +148,7 @@ export class EventDispatcherRegistry {
     return Object.freeze({
       all,
       domestic: new Set(domesticRegistrations.map(({ typeUrl }) => typeUrl)),
-      external: new Set(externalRegistrations.map(({ typeUrl }) => typeUrl)),
+      external: new Set(effectiveExternal.map(({ typeUrl }) => typeUrl)),
     });
   }
 

@@ -6001,27 +6001,40 @@ const RepositoryDispatch = {
           routing.externalEventSchemas,
         );
       })(),
-      systemEvent:
-        routing.stateSchemas.length === 0
-          ? undefined
-          : Object.freeze({
-              messageSchemas: () => Object.freeze([EntityLog.EntityStateChangedSchema]),
-              accept: (event: Event): Promise<void> => {
-                acceptedStateRoutes.set(event, routing.routeStateUpdate(event) ?? null);
-                return Promise.resolve();
-              },
-              dispatch: (event: Event): Promise<void> => {
-                const route = acceptedStateRoutes.get(event);
-                acceptedStateRoutes.delete(event);
-                if (route === null) return Promise.resolve();
-                return RepositoryDispatch.dispatchRepositoryStateUpdate(
-                  repository,
-                  routing,
-                  event,
-                  route,
-                );
-              },
-            }),
+      systemEvent: (() => {
+        if (routing.stateSchemas.length === 0) return undefined;
+        const hasDomestic = [...routing.stateSubscriptions.values()].some((values) =>
+          values.some((value) => value.handler.origin === "domestic"),
+        );
+        const hasExternal = [...routing.stateSubscriptions.values()].some((values) =>
+          values.some((value) => value.handler.origin === "external"),
+        );
+        const schema = EntityLog.EntityStateChangedSchema;
+        const dispatcher = Object.freeze({
+          messageSchemas: () => Object.freeze([EntityLog.EntityStateChangedSchema]),
+          externalEventSchemas: () => (hasExternal ? Object.freeze([schema]) : Object.freeze([])),
+          accept: (event: Event): Promise<void> => {
+            acceptedStateRoutes.set(event, routing.routeStateUpdate(event) ?? null);
+            return Promise.resolve();
+          },
+          dispatch: (event: Event): Promise<void> => {
+            const route = acceptedStateRoutes.get(event);
+            acceptedStateRoutes.delete(event);
+            if (route === null) return Promise.resolve();
+            return RepositoryDispatch.dispatchRepositoryStateUpdate(
+              repository,
+              routing,
+              event,
+              route,
+            );
+          },
+        });
+        return EventDispatcherOriginSchemas.define(
+          dispatcher,
+          hasDomestic ? [schema] : [],
+          hasExternal ? [schema] : [],
+        );
+      })(),
     });
   },
 
