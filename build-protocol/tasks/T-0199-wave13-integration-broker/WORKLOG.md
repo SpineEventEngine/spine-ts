@@ -162,3 +162,8 @@ packages/server/test/integration/integration-broker-module.test.ts
   passed; direct wrapper/broker/EventBus/registry regression run passed 70 tests.
 - Registry unregister regression proves target domestic/external route removal,
   unrelated route retention, schema-only admission retention, and idempotency.
+
+- Final P1 correction retains failed acquired domestic publishers for broker-close
+  retry and aggregates their cleanup failure with the original acquisition error.
+  Final focused V8: wrappers 96.00% lines / 94.44% branches; broker 100.00% /
+  94.33%; integration aggregate 99.53% / 94.36% (27 tests).

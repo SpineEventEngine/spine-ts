@@ -55,7 +55,7 @@ export class IntegrationBroker {
   readonly #wantedByOrigin = new Map<string, ReadonlySet<string>>();
   readonly #publishers = new Map<string, DomesticPublisher>();
   readonly #resources: Closeable[] = [];
-  readonly #retainedPublishers: Publisher[] = [];
+  readonly #retainedCloseables: Closeable[] = [];
   readonly #externalSchemas: readonly MessageSchema[];
   readonly #acceptedCallbacks = new Set<Promise<void>>();
   #transition = Promise.resolve();
@@ -160,25 +160,24 @@ export class IntegrationBroker {
   async #onOnline(message: ExternalMessage): Promise<void> {
     if (this.#closed) return;
     const online = unpackOnline(message);
-    if (this.#ignored(online.context)) return;
+    if (!this.#accepts(online.context)) return;
     await this.#publishWanted();
   }
 
   async #onWanted(message: ExternalMessage): Promise<void> {
     if (this.#closed) return;
-    if (this.#ignored(message.boundedContextName)) return;
+    if (!this.#accepts(message.boundedContextName)) return;
     const wanted = unpackWanted(message);
     const requested = new Set<string>(
       wanted.type.map((entry: { typeUrl: string }) => entry.typeUrl).filter(Boolean),
     );
-    const origin = message.boundedContextName?.value;
-    if (origin === undefined) return;
+    const origin = message.boundedContextName.value;
     await this.#enqueueTransition(async () => this.#replaceWanted(origin, requested));
   }
 
   async #onEvent(message: ExternalMessage): Promise<void> {
     if (this.#closed) return;
-    if (this.#ignored(message.boundedContextName)) return;
+    if (!this.#accepts(message.boundedContextName)) return;
     const original = unpackExternalEvent(message);
     await this.#input.postImported(toExternalEvent(original));
   }
@@ -207,13 +206,21 @@ export class IntegrationBroker {
         acquired.push(publisher);
       }
     } catch (error) {
-      const settled = await Promise.allSettled(acquired.map((publisher) => publisher.close()));
+      const settled = await Promise.all(
+        acquired.map(async (publisher) => {
+          try {
+            await publisher.close();
+          } catch (reason) {
+            return { publisher, reason };
+          }
+          return undefined;
+        }),
+      );
       const failures: unknown[] = [];
-      for (const [index, result] of settled.entries()) {
-        if (result.status !== "rejected") continue;
-        const publisher = acquired[index];
-        if (publisher !== undefined) this.#retainedPublishers.push(publisher);
-        failures.push(result.reason);
+      for (const failure of settled) {
+        if (failure === undefined) continue;
+        this.#retainedCloseables.push(failure.publisher);
+        failures.push(failure.reason);
       }
       if (failures.length)
         throw new AggregateError([error, ...failures], "Integration publisher acquisition failed.");
@@ -270,12 +277,14 @@ export class IntegrationBroker {
     }
   }
 
-  #ignored(origin: BoundedContextName | undefined): boolean {
+  #accepts(
+    origin: BoundedContextName | undefined,
+  ): origin is BoundedContextName & { readonly value: string } {
     const value = origin?.value;
-    return (
-      !value ||
-      value === this.#input.contextName.value ||
-      value === this.#input.pairedContextName?.value
+    return Boolean(
+      value &&
+      value !== this.#input.contextName.value &&
+      value !== this.#input.pairedContextName?.value,
     );
   }
 
@@ -287,7 +296,7 @@ export class IntegrationBroker {
     await Promise.allSettled([...this.#acceptedCallbacks]);
     await this.#transition;
     await collect(() => this.#publishEmptyWanted(), errors);
-    const publisherFailures = await closeRetained(this.#retainedPublishers);
+    const publisherFailures = await closeRetained(this.#retainedCloseables);
     errors.push(...publisherFailures);
     for (const [type, publisher] of this.#publishers) {
       const failures: unknown[] = [];
@@ -319,7 +328,7 @@ export class IntegrationBroker {
     try {
       await publisher.close();
     } catch (error) {
-      this.#retainedPublishers.push(publisher);
+      this.#retainedCloseables.push(publisher);
       throw error;
     }
   }
@@ -385,7 +394,6 @@ class DomesticPublisher implements Closeable {
     this.#dispatcher = {
       messageSchemas: () => [schema],
       dispatch: async (event) => {
-        if (event.context?.external) return;
         const frame = wrapExternalEvent(event, origin);
         await publisher.publish(frame.id, frame);
       },

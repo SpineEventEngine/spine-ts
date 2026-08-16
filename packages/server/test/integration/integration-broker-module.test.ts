@@ -314,6 +314,30 @@ describe("IntegrationBroker module", () => {
     expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(Int32ValueSchema));
   });
 
+  it("closes an acquired publisher when a later expansion acquisition fails", async () => {
+    const factory = new RecordingTransportFactory();
+    const bus = eventBusAccess.createForgettingBus();
+    eventBusAccess.registerSchemas(bus, [StringValueSchema, Int32ValueSchema]);
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "acquisition-clean" }),
+      transportFactory: factory,
+      eventBus: bus,
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    brokers.push(broker);
+    await broker.open();
+    factory.failPublisherCreationAfter(1, (channel) =>
+      [TypeUrls.derive(StringValueSchema), TypeUrls.derive(Int32ValueSchema)].includes(
+        (channel as { targetType?: string }).targetType ?? "",
+      ),
+    );
+    await expect(
+      publishWanted(factory, "requester", [StringValueSchema, Int32ValueSchema]),
+    ).rejects.toThrow(/injected publisher creation failure/u);
+    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(StringValueSchema));
+  });
+
   it("serializes overlapping complete wanted replacements to the final authority", async () => {
     const factory = new RecordingTransportFactory();
     const bus = eventBusAccess.createForgettingBus();
