@@ -150,3 +150,15 @@ packages/server/test/integration/integration-broker-module.test.ts
   EventBus, and registry regressions: 67 tests passed. Focused ESLint and
   `git diff --check` passed. The coverage report directory remains untracked
   because this execution surface rejected its requested removal; it is not staged.
+
+## Final re-review convergence — 2026-08-16
+
+- Accepted reliability findings resolved: rollback now attempts all resources,
+  retains failed closes for retry, releases a failed open cache after rollback,
+  and retains failed ephemeral publishers for original-instance close retry.
+- Direct regression evidence: focused V8 25 tests; `external-messages.ts`
+  96.00% lines / 94.44% branches, `integration-broker.ts` 100.00% lines /
+  90.56% branches, aggregate 99.50% lines / 91.54% branches. Generated build
+  passed; direct wrapper/broker/EventBus/registry regression run passed 70 tests.
+- Registry unregister regression proves target domestic/external route removal,
+  unrelated route retention, schema-only admission retention, and idempotency.

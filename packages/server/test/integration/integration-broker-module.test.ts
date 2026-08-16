@@ -597,9 +597,13 @@ describe("IntegrationBroker module", () => {
       postImported: () => Promise.resolve(),
     });
     await expect(broker.open()).rejects.toThrow(/IntegrationBroker open failed/u);
-    expect(factory.operations.filter((operation) => operation === "subscriber:close")).toHaveLength(2);
+    expect(factory.operations.filter((operation) => operation === "subscriber:close")).toHaveLength(
+      2,
+    );
     await expect(broker.close()).resolves.toBeUndefined();
-    expect(factory.operations.filter((operation) => operation === "subscriber:close")).toHaveLength(3);
+    expect(factory.operations.filter((operation) => operation === "subscriber:close")).toHaveLength(
+      3,
+    );
   });
 
   it("retains an original failed online publisher until broker close retries it", async () => {

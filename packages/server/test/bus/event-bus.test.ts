@@ -196,16 +196,20 @@ describe("EventBus", () => {
 
   it("unregisters only target origin routes while preserving admission and unrelated dispatchers", async () => {
     const bus = eventBusAccess.createForgettingBus();
-    const target = createEventDispatcher([ProjectionStateSchema, AggregateStateSchema], () => {});
+    const target = createEventDispatcher([ProjectionStateSchema, AggregateStateSchema], () =>
+      Promise.resolve(),
+    );
     target.externalEventSchemas = () => [ProjectionStateSchema];
-    const unrelated = createEventDispatcher([ProjectionStateSchema], () => {});
+    const unrelated = createEventDispatcher([ProjectionStateSchema], () => Promise.resolve());
     unrelated.externalEventSchemas = () => [ProjectionStateSchema];
     const seen: string[] = [];
-    target.dispatch = async () => {
+    target.dispatch = () => {
       seen.push("target");
+      return Promise.resolve();
     };
-    unrelated.dispatch = async () => {
+    unrelated.dispatch = () => {
       seen.push("unrelated");
+      return Promise.resolve();
     };
     bus.register(target);
     bus.register(unrelated);
