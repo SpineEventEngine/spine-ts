@@ -728,3 +728,22 @@ scripts/check-tsdoc.test.mjs` process exited after its run banner, but this
 - Wrapped that comment without changing behavior. Focused Prettier, ESLint,
   cleanup, TSDoc, and diff checks pass. Canonical verification is being rerun
   from this correction checkpoint.
+
+## Final canonical and coverage evidence — 2026-08-16
+
+- The retained canonical `pnpm verify:task -- --no-coverage` profile passed in
+  full: Node policy, exact Proto checks and generation, generated and tooling
+  TypeScript builds, cleanup, TSDoc, copyright, log containment, formatting,
+  documentation audience and API inventory, Buf lint, generated-output
+  cleanliness, release readiness, and the selected 9 files / 157 tests.
+- Fresh V8 LCOV is retained at `/tmp/t0200-lcov-final.AcmKhA`. The expanded
+  direct-source selection included the final ZeroMQ manifest and SignalTransport
+  regressions and passed 11 files / 235 tests.
+- Exact `git diff --unified=0 origin/main...HEAD` intersection with LCOV `DA`
+  and `BRDA` records covers 115/121 changed executable lines (95.04%) and
+  73/81 changed executable branches (90.12%). Both exceed the required 90%.
+  Current ZeroMQ helper changes beyond the covered in-memory source are
+  documentation or import-path-only and introduce no changed executable
+  `DA`/`BRDA` records.
+- T-0200 is converged and ready for isolated integration and post-merge
+  verification.
