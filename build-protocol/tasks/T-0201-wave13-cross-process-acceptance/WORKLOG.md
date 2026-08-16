@@ -98,3 +98,17 @@ typecheck:build:generated` (exit 0). The generation run left no tracked
 - The guard now enumerates every prohibited shortcut explicitly, including
   those two APIs. This deterministic test-only correction reopens only the
   maintainability review lane.
+
+## Review correction refinement — 2026-08-16
+
+- Maintainability re-review confirmed the two missing API names were added but
+  found that the list-based correction had made the previously case-insensitive
+  scan case-sensitive. A differently cased alias could therefore evade the
+  durable regression guard even though the current fixture is clean.
+- Each explicit prohibited term is now checked with its own Unicode-aware,
+  case-insensitive regular expression. The complete names remain readable while
+  preserving the original guard strength.
+- The canonical task profile on the preceding correction passed every
+  policy/build/documentation/release-readiness gate and 3 files / 29 tests. The
+  final guard-only tree receives a focused native/lint/format check and the
+  reopened maintainability re-review before closure.

@@ -84,7 +84,7 @@ describe("Wave 13 IntegrationBroker across normal Node applications", () => {
       "externalEventSchemas",
       "addEventDispatcher",
     ]) {
-      expect(fixtureSource).not.toContain(forbiddenShortcut);
+      expect(fixtureSource).not.toMatch(new RegExp(forbiddenShortcut, "iu"));
     }
     await expect(execFileAsync(process.execPath, ["--check", childPath])).resolves.toBeDefined();
 
