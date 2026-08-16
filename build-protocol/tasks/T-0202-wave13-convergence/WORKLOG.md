@@ -229,3 +229,10 @@ packages/server/test/server/server-integration-broker-cross-process.test.ts`
 packages/transport/test/zeromq/message-transport-manifest.test.ts
 packages/server/test/integration/integration-broker-module.test.ts` passed
   2 files / 58 tests. Scoped ESLint, Prettier, and `git diff --check` pass.
+
+## Test-only type preflight reconciliation — 2026-08-16
+
+- Preflight correctly rejected constructing an intentionally structurally
+  invalid manifest through the typed production test seam. The fixture now uses
+  raw filesystem JSON plus exact `0600` permissions, preserving the same
+  invalid-schema behavior without an unsafe cast or production seam widening.

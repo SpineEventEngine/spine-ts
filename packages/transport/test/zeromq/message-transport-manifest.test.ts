@@ -113,10 +113,11 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
         "00000000-0000-4000-8000-000000000006.sock",
       );
       await writeFile(bad, "{");
-      await zeroMqMessageAccess.writeManifest(structural, {
-        ...sourceManifest,
-        generation: structural.slice(-41, -5),
-      });
+      await writeFile(
+        structural,
+        JSON.stringify({ ...sourceManifest, generation: structural.slice(-41, -5) }),
+      );
+      await chmod(structural, 0o600);
       await symlink(path.join(subscriberDirectory, source), linked);
       await writeFile(
         stale,
