@@ -163,6 +163,53 @@ describe("IntegrationBroker module", () => {
     expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(StringValueSchema));
     expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(Int32ValueSchema));
   });
+
+  it("serializes overlapping complete wanted replacements to the final authority", async () => {
+    const factory = new RecordingTransportFactory();
+    const bus = eventBusAccess.createForgettingBus();
+    eventBusAccess.registerSchemas(bus, [StringValueSchema, Int32ValueSchema]);
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "overlap" }),
+      transportFactory: factory as never,
+      eventBus: bus,
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    brokers.push(broker);
+    await broker.open();
+    await Promise.all([
+      publishWanted(factory, "requester", [StringValueSchema]),
+      publishWanted(factory, "requester", [Int32ValueSchema]),
+    ]);
+    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(StringValueSchema));
+    expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(Int32ValueSchema));
+    expect(eventPublisherCreations(factory, StringValueSchema)).toHaveLength(1);
+    expect(eventPublisherCreations(factory, Int32ValueSchema)).toHaveLength(1);
+  });
+
+  it("retains failed final removal and retries it without duplicate registration", async () => {
+    const factory = new RecordingTransportFactory();
+    const bus = eventBusAccess.createForgettingBus();
+    eventBusAccess.registerSchemas(bus, [StringValueSchema]);
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "retry" }),
+      transportFactory: factory as never,
+      eventBus: bus,
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    brokers.push(broker);
+    await broker.open();
+    await publishWanted(factory, "requester", [StringValueSchema]);
+    factory.failNextClose();
+    await expect(publishWanted(factory, "requester", [])).rejects.toThrow(
+      /Failed to remove domestic publisher/u,
+    );
+    expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(StringValueSchema));
+    await publishWanted(factory, "requester", []);
+    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(StringValueSchema));
+    expect(eventPublisherCreations(factory, StringValueSchema)).toHaveLength(1);
+  });
 });
 
 async function publishWanted(

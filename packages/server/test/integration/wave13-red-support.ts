@@ -41,6 +41,11 @@ export class RecordingTransportFactory {
     this.#remainingCloseFailures = options.failCloseAttempts ?? 0;
   }
 
+  /** Makes the next adapter close operation fail. */
+  failNextClose(): void {
+    this.#remainingCloseFailures = 1;
+  }
+
   #close(operation: string): void {
     this.operations.push(operation);
     if (this.#remainingCloseFailures-- > 0) throw new Error(`${operation} failed`);
