@@ -174,7 +174,8 @@ const externalOriginSource = `
   import { type TaskCreated, type TaskRenamed } from "../generated/task_events_pb.js";
   import { type TaskAlreadyDone } from "../generated/task_rejections_pb.js";
 
-  type Forged<T> = T;
+  type IndirectExternal<T> = External<T>;
+  type LocalEvent = TaskCreated;
   export class TaskProjection extends Projection<string, typeof TaskSchema, number> {
     @Subscribe externalEvent(event: External<TaskCreated>): void { void event; }
     @Subscribe domesticEvent(event: TaskRenamed): void { void event; }
@@ -182,7 +183,8 @@ const externalOriginSource = `
     @Command externalRejection(rejection: External<TaskAlreadyDone>): RenameTask { throw new Error(String(rejection)); }
     @Subscribe nested(event: Array<External<TaskCreated>>): void { void event; }
     @Subscribe second(event: TaskCreated, context: External<unknown>): void { void event; void context; }
-    @Subscribe forged(event: Forged<TaskCreated>): void { void event; }
+    @Subscribe indirect(event: IndirectExternal<TaskCreated>): void { void event; }
+    @Subscribe local(event: LocalEvent): void { void event; }
   }
 `;
 

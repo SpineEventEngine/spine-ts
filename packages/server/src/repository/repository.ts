@@ -4578,7 +4578,16 @@ const RepositoryRoutes = {
       schemas,
       "Repository state-update routing",
     );
-    const interested = Object.freeze([...(subscriptions.get(update?.schema.typeName ?? "") ?? [])]);
+    const candidates = subscriptions.get(update?.schema.typeName ?? "") ?? [];
+    const mixedOrigins = candidates.some((subscriber) => subscriber.handler.origin === "external");
+    const interested = Object.freeze(
+      mixedOrigins
+        ? candidates.filter(
+            (subscriber) =>
+              (subscriber.handler.origin === "external") === (event.context?.external === true),
+          )
+        : [...candidates],
+    );
     if (update === undefined || interested.length === 0) {
       return undefined;
     }
@@ -5793,7 +5802,17 @@ const InboxReplay = {
       entityIds,
       messageFullTypeName: schema.typeName,
       state,
-      subscribers: Object.freeze([...(routing.stateSubscriptions.get(schema.typeName) ?? [])]),
+      subscribers: Object.freeze(
+        (() => {
+          const candidates = routing.stateSubscriptions.get(schema.typeName) ?? [];
+          return candidates.some((subscriber) => subscriber.handler.origin === "external")
+            ? candidates.filter(
+                (subscriber) =>
+                  (subscriber.handler.origin === "external") === (event.context?.external === true),
+              )
+            : [...candidates];
+        })(),
+      ),
       invocation: "deferred",
     });
   },

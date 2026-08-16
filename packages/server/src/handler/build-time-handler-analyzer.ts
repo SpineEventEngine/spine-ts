@@ -1348,6 +1348,10 @@ const HandlerSources = Object.freeze({
 
   containsExternalMarker(type: ts.TypeNode, imports: ImportState): boolean {
     if (HandlerSources.externalMarker(type, imports) !== undefined) return true;
+    if (ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName)) {
+      const alias = imports.localTypeAliases.get(type.typeName.text);
+      if (alias !== undefined && HandlerSources.containsExternalMarker(alias, imports)) return true;
+    }
     let found = false;
     const visit = (node: ts.Node): void => {
       if (found) return;
