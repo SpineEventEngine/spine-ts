@@ -87,7 +87,7 @@ describe("IntegrationBroker module", () => {
     const channel = create(ChannelIdSchema, {
       targetType: TypeUrls.derive(BoundedContextOnlineSchema),
     });
-    const publisher = await factory.createPublisher(channel as never);
+    const publisher = await factory.createPublisher(channel);
     for (const name of ["left", "left_System", "peer"]) {
       const frame = wrapBoundedContextOnline(
         create(BoundedContextOnlineSchema, {
@@ -312,9 +312,9 @@ describe("IntegrationBroker module", () => {
       value: toBinary(EventIdSchema, create(EventIdSchema, { value: "other" })),
     };
     const publisher = await factory.createPublisher(
-      create(ChannelIdSchema, { targetType: TypeUrls.derive(StringValueSchema) }) as never,
+      create(ChannelIdSchema, { targetType: TypeUrls.derive(StringValueSchema) }),
     );
-    await expect(publisher.publish(frame.id!, frame)).rejects.toThrow(/identity/u);
+    await expect(publisher.publish(frame.id, frame)).rejects.toThrow(/identity/u);
     expect(calls).toBe(0);
   });
 
@@ -443,7 +443,7 @@ describe("IntegrationBroker module", () => {
         TypeUrls.derive(ExternalEventsWantedSchema),
     );
     const publisher = await factory.createPublisher(
-      create(ChannelIdSchema, { targetType: TypeUrls.derive(BoundedContextOnlineSchema) }) as never,
+      create(ChannelIdSchema, { targetType: TypeUrls.derive(BoundedContextOnlineSchema) }),
     );
     const frame = wrapBoundedContextOnline(
       create(BoundedContextOnlineSchema, {
@@ -498,7 +498,7 @@ async function publishExternal(
   source: string,
 ): Promise<void> {
   const publisher = await factory.createPublisher(
-    create(ChannelIdSchema, { targetType: TypeUrls.derive(StringValueSchema) }) as never,
+    create(ChannelIdSchema, { targetType: TypeUrls.derive(StringValueSchema) }),
   );
   const frame = wrapExternalEvent(value, create(BoundedContextNameSchema, { value: source }));
   try {
@@ -514,7 +514,7 @@ async function publishWanted(
   schemas: readonly (typeof StringValueSchema | typeof Int32ValueSchema)[],
 ): Promise<void> {
   const publisher = await factory.createPublisher(
-    create(ChannelIdSchema, { targetType: TypeUrls.derive(ExternalEventsWantedSchema) }) as never,
+    create(ChannelIdSchema, { targetType: TypeUrls.derive(ExternalEventsWantedSchema) }),
   );
   const id = {
     typeUrl: TypeUrls.derive(StringValueSchema),
@@ -522,7 +522,7 @@ async function publishWanted(
   };
   try {
     await publisher.publish(
-      id as never,
+      id,
       create(ExternalMessageSchema, {
         id,
         originalMessage: {

@@ -397,7 +397,7 @@ function unpackControl<Output>(schema: MessageSchema, message: ExternalMessage):
   if (!message.boundedContextName?.value || message.originalMessage?.typeUrl !== typeUrl(schema))
     throw new Error("Malformed integration control message.");
   try {
-    return fromBinary(schema as never, message.originalMessage.value) as Output;
+    return fromBinary(schema as never, message.originalMessage.value);
   } catch {
     throw new Error("Malformed integration control message.");
   }
