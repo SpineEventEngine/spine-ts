@@ -16,7 +16,7 @@ import type { Any } from "@bufbuild/protobuf/wkt";
 import type { ChannelId, ExternalMessage } from "@spine-event-engine/proto";
 
 /**
- * Receives one integration external-message frame.
+ * Accepts one integration external-message frame.
  *
  * @param message Provides the received frame.
  * @returns Completes when consumption finishes.
@@ -29,7 +29,12 @@ export type ExternalMessageConsumer = (message: ExternalMessage) => void | Promi
  *
  */
 export interface ConsumerHandle {
+  // prettier-ignore
+
+  // prettier-ignore
+
   /**
+   *
    * Removes the consumer idempotently.
    *
    * @returns Completes when removal finishes.
@@ -42,26 +47,40 @@ export interface ConsumerHandle {
  *
  */
 export interface MessageChannel {
+  // prettier-ignore
+
+  // prettier-ignore
+
   /**
+   *
    * Identifies the channel.
    *
    */
   readonly id: ChannelId;
 
+  // prettier-ignore
+
   /**
+   *
    * Identifies the canonical target type URL.
    *
    */
   readonly targetType: string;
 
+  // prettier-ignore
+
   /**
+   *
    * Checks whether the channel has no active local work.
    *
    * @returns True when stale.
    */
   isStale(): boolean;
 
+  // prettier-ignore
+
   /**
+   *
    * Closes the channel.
    *
    * @returns Completes after close.
@@ -74,7 +93,12 @@ export interface MessageChannel {
  *
  */
 export interface Publisher extends MessageChannel {
+  // prettier-ignore
+
+  // prettier-ignore
+
   /**
+   *
    * Publishes a frame with its wrapper identity.
    *
    * @param id Provides the wrapper identity.
@@ -89,7 +113,12 @@ export interface Publisher extends MessageChannel {
  *
  */
 export interface Subscriber extends MessageChannel {
+  // prettier-ignore
+
+  // prettier-ignore
+
   /**
+   *
    * Attaches a frame consumer.
    *
    * @param consumer Receives copied external-message frames.
@@ -103,7 +132,12 @@ export interface Subscriber extends MessageChannel {
  *
  */
 export interface TransportFactory {
+  // prettier-ignore
+
+  // prettier-ignore
+
   /**
+   *
    * Creates a publisher.
    *
    * @param id Identifies the typed channel.
@@ -111,7 +145,10 @@ export interface TransportFactory {
    */
   createPublisher(id: ChannelId): Promise<Publisher>;
 
+  // prettier-ignore
+
   /**
+   *
    * Creates a subscriber.
    *
    * @param id Identifies the typed channel.
@@ -119,7 +156,10 @@ export interface TransportFactory {
    */
   createSubscriber(id: ChannelId): Promise<Subscriber>;
 
+  // prettier-ignore
+
   /**
+   *
    * Closes factory resources.
    *
    * @returns Completes after close.
