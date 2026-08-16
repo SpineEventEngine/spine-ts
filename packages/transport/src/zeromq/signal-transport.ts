@@ -85,6 +85,7 @@ const closeDelayMs = 0;
 const nativeMessageMaxBytes = 8_388_608;
 const requestHandlerFailureMessage = "ZeroMQ request handler failed.";
 const privateDirectoryMode = 0o700;
+
 /**
  * Exposes package-private native socket and filesystem operations for tests.
  */

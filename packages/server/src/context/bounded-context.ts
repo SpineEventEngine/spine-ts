@@ -2870,7 +2870,11 @@ const ContextParts = Object.freeze({
   },
 });
 
-/** @internal */
+/**
+ * Exposes broker-only operations for the owning integration package.
+ *
+ * @internal
+ */
 export const boundedContextIntegrationAccess: Readonly<{
   publishImported(context: BoundedContext, event: Event): Promise<void>;
   ready(context: BoundedContext): Promise<void>;

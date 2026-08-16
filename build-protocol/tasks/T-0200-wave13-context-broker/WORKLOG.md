@@ -350,6 +350,42 @@ unavailable.` after normal close. The context now retains only its weakly
   behavior, and it must rerun cleanup policy tests plus canonical task
   verification before checkpointing.
 
+## API-documentation convergence — 2026-08-16
+
+- Cleanup checkpoint `f249768d` is pushed and the worktree is clean. Cleanup
+  tests passed 109/109, cleanup enforcement passed, and focused behavior passed
+  94/94. Canonical verification now reaches TSDoc.
+- The remaining diagnostics are bounded to Wave 13 internal/public additions in
+  context integration, IntegrationBroker/ThirdPartyContext, ChannelEndpoints,
+  ZeroMQ message access, and one inherited SignalTransport blank-line layout.
+- A documentation **implementer** receives explicit `gpt-5.6-terra` / `medium`
+  configuration, unavailable runtime telemetry, and no subagent authority. It
+  owns only semantic TSDoc additions/layout, API inventory if the public
+  declaration changes, and verification; it may not alter runtime behavior.
+
+## TSDoc remediation — 2026-08-16
+
+- Documentation implementer retained the explicitly configured `gpt-5.6-terra`
+  / `medium` profile. Runtime self-inspection is unavailable on this surface,
+  so the immutable configured role/profile is the recorded metadata; no
+  subagents were used.
+- Added only semantic public/internal TSDoc and required blank-line layout for
+  the private broker access seam, `IntegrationBroker`, `ThirdPartyContext`,
+  environment message factory, ZeroMQ IPC helpers, and the inherited signal
+  transport layout. Descriptions state close, rejection, tenancy, filesystem,
+  and JVM lifecycle responsibility; executable behavior and public declarations
+  are unchanged.
+- `node scripts/check-tsdoc.mjs` passed. Generated build, tooling typecheck,
+  ESLint, cleanup policy, scoped Prettier, and `git diff --check` passed.
+  `pnpm docs:api:generated` and `pnpm docs:api:check` also passed.
+- `node --test scripts/check-tsdoc.test.mjs` is not a valid invocation because
+  that suite imports Vitest collection APIs; it fails before its assertions
+  with an undefined runner configuration. The subsequent `pnpm exec vitest run
+scripts/check-tsdoc.test.mjs` process exited after its run banner, but this
+  execution surface detached the terminal result, so no pass claim is recorded.
+- The canonical no-coverage task profile remains for the orchestrator: this
+  bounded documentation correction does not change executable behavior.
+
 ## Canonical no-coverage verification — 2026-08-16
 
 - Invoked the canonical profile once: `pnpm verify:task -- --no-coverage`

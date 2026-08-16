@@ -48,12 +48,31 @@ interface SubscriberManifest {
   readonly heartbeatAtMs: number;
 }
 
-/** Package-private filesystem seam for deterministic native lifecycle tests. */
+/**
+ * Exposes package-private filesystem operations for deterministic native lifecycle tests.
+ *
+ * @internal
+ */
 export const zeroMqMessageAccess = {
+  // prettier-ignore
+
+  /**
+   * Removes a filesystem entry when it exists.
+   *
+   * @param filePath Identifies the entry to remove.
+   * @returns Completes after removal or after confirming the entry is absent.
+   */
   async remove(filePath: string): Promise<void> {
     await rm(filePath, { force: true });
   },
 
+  /**
+   * Writes one subscriber manifest through the production manifest encoder.
+   *
+   * @param manifestPath Identifies the manifest destination.
+   * @param manifest Supplies the complete subscriber state to persist.
+   * @returns Completes after the manifest becomes available to discovery.
+   */
   async writeManifest(manifestPath: string, manifest: SubscriberManifest): Promise<void> {
     await writeManifest(manifestPath, manifest);
   },

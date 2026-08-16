@@ -105,6 +105,9 @@ export class IntegrationBroker {
   /**
    * Publishes a third-party imported event through this context's private broker.
    *
+   * @param event Contains the original event envelope to publish.
+   * @returns Completes after publication is accepted or rejects when the broker is closed or the
+   * event has no message type URL.
    * @internal
    */
   async publishImported(event: Event): Promise<void> {

@@ -29,7 +29,10 @@ import {
 import { BoundedContext, boundedContextIntegrationAccess } from "../context/bounded-context.js";
 
 /**
- * A hidden bounded context that imports third-party events through its broker.
+ * Represents a hidden bounded context that imports third-party events through its private broker.
+ *
+ * The JVM-owned integration lifecycle remains private: this facade only creates the context,
+ * publishes generated events, observes availability, and closes it.
  */
 export class ThirdPartyContext {
   readonly #context: BoundedContext;
@@ -41,17 +44,34 @@ export class ThirdPartyContext {
     this.#multitenant = multitenant;
   }
 
-  /** Creates a third-party context that forbids actor tenants. */
+  /**
+   * Creates a third-party context that forbids actor tenants.
+   *
+   * @param name Identifies the hidden bounded context.
+   * @returns Resolves to an open single-tenant context.
+   */
   static singleTenant(name: string): Promise<ThirdPartyContext> {
     return Promise.resolve(new ThirdPartyContext(BoundedContext.singleTenant(name).build(), false));
   }
 
-  /** Creates a third-party context that requires actor tenants. */
+  /**
+   * Creates a third-party context that requires actor tenants.
+   *
+   * @param name Identifies the hidden bounded context.
+   * @returns Resolves to an open multitenant context.
+   */
   static multitenant(name: string): Promise<ThirdPartyContext> {
     return Promise.resolve(new ThirdPartyContext(BoundedContext.multitenant(name).build(), true));
   }
 
-  /** Publishes one imported event with the supplied actor identity. */
+  /**
+   * Publishes one generated event with its importing actor identity.
+   *
+   * @param event Supplies the generated event message to import unchanged.
+   * @param actor Supplies a user or actor context that satisfies this context's tenancy policy.
+   * @returns Completes when the private broker accepts the imported event, or rejects for a closed
+   * context, an unsupported message, or incompatible actor tenancy.
+   */
   async emittedEvent(event: Message, actor: ActorContext | UserId): Promise<void> {
     if (this.#closed) throw new Error("ThirdPartyContext is closed.");
     const actorContext = this.#actorContext(actor);
@@ -77,12 +97,20 @@ export class ThirdPartyContext {
     await boundedContextIntegrationAccess.publishImported(this.#context, envelope);
   }
 
-  /** Returns whether the hidden bounded context is still available. */
+  /**
+   * Returns whether the hidden bounded context remains available for imports.
+   *
+   * @returns `true` until a successful close; `false` after it closes.
+   */
   isOpen(): boolean {
     return !this.#closed;
   }
 
-  /** Closes the hidden bounded context. */
+  /**
+   * Closes the hidden bounded context and its private broker resources.
+   *
+   * @returns Completes after shutdown; repeated calls after a successful close do nothing.
+   */
   async close(): Promise<void> {
     if (this.#closed) return;
     await this.#context.close();

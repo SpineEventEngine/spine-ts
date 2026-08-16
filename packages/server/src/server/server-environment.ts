@@ -100,7 +100,9 @@ export interface ServerEnvironmentSettings {
    */
   readonly transport?: SignalTransport;
 
-  /** Message-channel factory used by private bounded-context integration brokers. */
+  /**
+   * Message-channel factory used by private bounded-context integration brokers.
+   */
   readonly transportFactory?: TransportFactory;
 
   /**
@@ -157,7 +159,9 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
    */
   readonly transport: SignalTransport;
 
-  /** Message-channel factory selected for private bounded-context integration. */
+  /**
+   * Message-channel factory selected for private bounded-context integration.
+   */
   readonly transportFactory: TransportFactory;
 
   /**
