@@ -77,3 +77,17 @@
   approved schema-provisioning public substitution. The remaining lifecycle,
   timestamp, wanted-interest, and readiness corrections are fully identified
   and queued behind that decision.
+
+## 2026-08-16 — Schema decision resolved
+
+- The human confirmed the application schema-universe rule: the server
+  application knows the domain Proto models of every assembled Bounded Context.
+  The generated application TypeRegistry is therefore the approved process-wide
+  read-only schema catalog supplied by ServerEnvironment to all contexts,
+  including ThirdPartyContext.
+- A local unknown ThirdParty message rejects publication. A received unknown or
+  undecodable external event is logged at ERROR and dropped without failing the
+  broker or application. Schemas remain out of the wire contract.
+- The P0 substitution gate is resolved. T-0200 resumes with the single
+  consolidated specialist correction batch before focused re-review and
+  integration.

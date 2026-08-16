@@ -518,3 +518,33 @@ scripts/check-tsdoc.test.mjs` process exited after its run banner, but this
   pending a human choice of schema-provisioning substitution. The P1 correction
   batch remains queued and will be applied only after that choice fixes the
   public ThirdParty contract direction.
+
+## Human schema-universe decision and correction dispatch — 2026-08-16
+
+- The human established that the server application knows the domain Proto
+  models of every assembled Bounded Context. Application-mode Proto generation
+  already produces the deterministic complete `TypeRegistry` from every
+  declared model package. `ServerEnvironment` will own/provide that registry as
+  one read-only application lookup to all context brokers and the hidden
+  ThirdPartyContext. This is the approved Node replacement for JVM generated
+  message self-serialization/classpath lookup; it introduces no schema wire
+  exchange and preserves `emittedEvent(event, actor)`.
+- ThirdPartyContext resolves the generated schema by `event.$typeName`, derives
+  the canonical URL from that schema, and encodes with the same schema. A local
+  registry miss rejects `emittedEvent()` and publishes nothing. On transport
+  reception, an unknown type or undecodable payload is a corrupted external
+  event: write an `ERROR` log with safe identity/type/context fields, drop only
+  that event, resolve the consumer callback, and continue serving later events.
+  The broker/application must not fail because a corrupt external event was
+  received.
+- The prior P0 decision gate is resolved. The consolidated correction remains
+  one writer because registry ownership, broker interest, context readiness,
+  and ThirdParty event construction overlap. The existing lifecycle
+  **implementer** receives explicit `gpt-5.6-terra` / `medium` configuration,
+  unavailable runtime telemetry, and no subagent authority. It owns RED-first
+  proofs and the smallest product corrections for: application registry
+  provision; arbitrary generated ThirdParty encoding/canonical URL; local
+  unknown rejection; received-corruption log/drop/continuation; actor timestamp;
+  wanted-only imported publication; factory readiness/failed-open cleanup; and
+  close-before-await intake gating. It must preserve the original public
+  ThirdParty signature and every broker/wire exclusion.
