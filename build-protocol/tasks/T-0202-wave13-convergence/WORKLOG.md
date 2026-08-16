@@ -323,3 +323,25 @@ packages/server/test/integration/integration-broker-module.test.ts` passed
 - All five final concern dispositions are PASS: style/maintainability,
   performance/reliability, TypeScript/API, documentation, and security. No
   public, serialized, conceptual, or accepted residual remains.
+
+## Integration and remote closure — 2026-08-16
+
+- A fresh fetch confirmed `origin/main` remained at the T-0201 baseline
+  `c9082938f12b33eb75eb666d935e13b164bd66fe`. The isolated integration branch
+  fast-forwarded to the release-evidence tip `476d2120fce094621696795d19a22c606db258f3`;
+  its tree hash `60250b21b2f925dddb11150544df4f798ed55306` exactly matched the
+  convergence branch.
+- Post-merge verification regenerated all pinned Proto sources, rebuilt the
+  generated repository, and passed native manifest plus same-process broker
+  tests 60/60. The separately serialized real two-process broker acceptance
+  passed 1/1 in 671 ms with clean application and IPC-resource shutdown.
+- `origin/main` was fast-forwarded to the integrated tip. `git cherry` proved
+  each analyzer, lifecycle, and repository correction branch patch-equivalent
+  to `main`; the convergence and integration tips were identical to `main`.
+  All five completed remote branches were deleted without discarding unique
+  work. A fresh prune and remote inspection then showed exactly `main` and no
+  tags.
+- The primary checkout remained coordination-only throughout. Its protected
+  human-owned tracked and untracked state, including
+  `agentic-review-of-main-branch-14-Aug-2026`, was not edited, staged, stashed,
+  formatted, committed, or removed.

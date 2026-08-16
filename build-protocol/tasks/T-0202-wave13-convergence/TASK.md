@@ -1,5 +1,7 @@
 # T-0202 — Wave 13 convergence and release closure
 
+**Status:** Complete.
+
 ## Objective
 
 Converge the completed JVM-aligned cross-context external-event subsystem:
@@ -56,3 +58,6 @@ release profile, integrate from isolation, push, and leave the remote with only
 6. Isolated integration and post-merge checks pass; `main` is pushed; completed
    branches/tags are reconciled without discarding unique work; origin exposes
    exactly `main` and no tags.
+
+All six acceptance conditions are satisfied. Wave 13 is complete; the next
+planned milestone is Wave 14.
