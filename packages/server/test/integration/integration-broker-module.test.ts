@@ -407,6 +407,24 @@ describe("IntegrationBroker module", () => {
       2,
     );
   });
+
+  it("retains failed teardown ownership and retries close", async () => {
+    const factory = new RecordingTransportFactory();
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "close-retry" }),
+      transportFactory: factory as never,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [StringValueSchema],
+      postImported: () => Promise.resolve(),
+    });
+    await broker.open();
+    factory.failNextClose();
+    await expect(broker.close()).rejects.toThrow(/close failed/u);
+    await expect(broker.close()).resolves.toBeUndefined();
+    expect(
+      factory.operations.filter((operation) => operation === "subscriber:close").length,
+    ).toBeGreaterThan(0);
+  });
 });
 
 function event(id: string) {

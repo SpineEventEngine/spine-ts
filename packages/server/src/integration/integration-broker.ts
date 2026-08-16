@@ -269,7 +269,16 @@ export class IntegrationBroker {
       if (failures.length === 0) this.#publishers.delete(type);
       else errors.push(...failures);
     }
-    await Promise.all(this.#resources.map((resource) => collect(() => resource.close(), errors)));
+    const retained: Closeable[] = [];
+    for (const resource of this.#resources) {
+      const failures: unknown[] = [];
+      await collect(() => resource.close(), failures);
+      if (failures.length) {
+        errors.push(...failures);
+        retained.push(resource);
+      }
+    }
+    this.#resources.splice(0, this.#resources.length, ...retained);
     if (errors.length) {
       this.#close = undefined;
       throw new AggregateError(errors, "IntegrationBroker close failed.");
