@@ -38,3 +38,6 @@
   `git diff --check` passed. Copyright checking reports only the two inherited
   Wave 13 RED fixtures owned by later broker/ThirdParty work; all T-0197b-owned
   headers pass.
+- Final performance/reliability re-review passed with 250 focused assertions.
+  Final TypeScript/API re-review passed 313 focused assertions after correcting
+  its sole P2: the writer documentation now names the emitted registry v3.
