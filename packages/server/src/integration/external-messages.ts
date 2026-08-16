@@ -137,7 +137,10 @@ function wrapControl(
   }) as WrappedExternalMessage;
 }
 
-/** @internal An ExternalMessage constructed locally with its required wrapper identity. */
+/**
+ * @internal
+ * An ExternalMessage constructed locally with its required wrapper identity.
+ */
 type WrappedExternalMessage = ExternalMessage & { readonly id: Any };
 
 function spineTypeUrl(schema: MessageSchema): string {

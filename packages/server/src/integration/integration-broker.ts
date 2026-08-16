@@ -55,6 +55,7 @@ export class IntegrationBroker {
   readonly #wantedByOrigin = new Map<string, ReadonlySet<string>>();
   readonly #publishers = new Map<string, DomesticPublisher>();
   readonly #resources: Closeable[] = [];
+  readonly #retainedPublishers: Publisher[] = [];
   readonly #externalSchemas: readonly MessageSchema[];
   readonly #acceptedCallbacks = new Set<Promise<void>>();
   #transition = Promise.resolve();
@@ -116,8 +117,10 @@ export class IntegrationBroker {
       await this.#publishOnline();
       await this.#publishWanted();
     } catch (error) {
-      await closeAll(this.#resources);
-      this.#resources.length = 0;
+      const failures = await closeRetained(this.#resources);
+      this.#open = undefined;
+      if (failures.length)
+        throw new AggregateError([error, ...failures], "IntegrationBroker open failed.");
       throw error;
     }
   }
@@ -204,7 +207,7 @@ export class IntegrationBroker {
         acquired.push(publisher);
       }
     } catch (error) {
-      await closeAll(acquired);
+      await Promise.allSettled(acquired.map((publisher) => publisher.close()));
       throw error;
     }
     const errors: unknown[] = [];
@@ -212,7 +215,7 @@ export class IntegrationBroker {
       await collect(() => publisher.close(), errors);
     }
     if (errors.length) {
-      await closeAll(acquired);
+      await Promise.allSettled(acquired.map((publisher) => publisher.close()));
       throw new AggregateError(errors, "Failed to remove domestic publisher.");
     }
     this.#wantedByOrigin.set(origin, new Set(next));
@@ -240,7 +243,7 @@ export class IntegrationBroker {
       );
       await publisher.publish(frame.id, frame);
     } finally {
-      await publisher.close();
+      await this.#closeEphemeral(publisher);
     }
   }
 
@@ -254,7 +257,7 @@ export class IntegrationBroker {
       );
       await publisher.publish(frame.id, frame);
     } finally {
-      await publisher.close();
+      await this.#closeEphemeral(publisher);
     }
   }
 
@@ -275,22 +278,15 @@ export class IntegrationBroker {
     await Promise.allSettled([...this.#acceptedCallbacks]);
     await this.#transition;
     await collect(() => this.#publishEmptyWanted(), errors);
+    const publisherFailures = await closeRetained(this.#retainedPublishers);
+    errors.push(...publisherFailures);
     for (const [type, publisher] of this.#publishers) {
       const failures: unknown[] = [];
       await collect(() => publisher.close(), failures);
       if (failures.length === 0) this.#publishers.delete(type);
       else errors.push(...failures);
     }
-    const retained: Closeable[] = [];
-    for (const resource of this.#resources) {
-      const failures: unknown[] = [];
-      await collect(() => resource.close(), failures);
-      if (failures.length) {
-        errors.push(...failures);
-        retained.push(resource);
-      }
-    }
-    this.#resources.splice(0, this.#resources.length, ...retained);
+    errors.push(...(await closeRetained(this.#resources)));
     if (errors.length) {
       this.#close = undefined;
       throw new AggregateError(errors, "IntegrationBroker close failed.");
@@ -306,7 +302,16 @@ export class IntegrationBroker {
       );
       await publisher.publish(frame.id, frame);
     } finally {
+      await this.#closeEphemeral(publisher);
+    }
+  }
+
+  async #closeEphemeral(publisher: Publisher): Promise<void> {
+    try {
       await publisher.close();
+    } catch (error) {
+      this.#retainedPublishers.push(publisher);
+      throw error;
     }
   }
 }
@@ -410,8 +415,13 @@ class SubscriberResource implements Closeable {
     if (errors.length) throw new AggregateError(errors, "Integration subscriber close failed.");
   }
 }
-async function closeAll(resources: readonly Closeable[]): Promise<void> {
-  await Promise.all(resources.map((resource) => resource.close()));
+async function closeRetained(resources: Closeable[]): Promise<unknown[]> {
+  const settled = await Promise.allSettled(resources.map((resource) => resource.close()));
+  const retained = resources.filter((_, index) => settled[index]?.status === "rejected");
+  resources.splice(0, resources.length, ...retained);
+  const failures: unknown[] = [];
+  for (const result of settled) if (result.status === "rejected") failures.push(result.reason);
+  return failures;
 }
 async function collect(work: () => Promise<void>, errors: unknown[]): Promise<void> {
   try {
