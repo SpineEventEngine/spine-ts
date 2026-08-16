@@ -307,10 +307,44 @@ packages/transport/test/memory/message-transport.test.ts` — 5 files, 126
   cleanup removed the private EventBus reference before the close-state path
   could preserve `server runtime is closed`.
 - The direct-source regression was observed RED with `Context EventBus is
-  unavailable.` after normal close. The context now retains only its weakly
+unavailable.` after normal close. The context now retains only its weakly
   held private EventBus pair after metadata cleanup so close-state rejection can
   delegate to the closed EventBus; all other internal metadata remains cleared.
 - Targeted RED/GREEN evidence passed: the direct-source multitenant import and
   normal-close rejection test passed (1 selected test), as did the broker-close,
   production-factory, and identity-mismatch behavior tests. Next: rerun the
   complete LCOV selection and exact intersection.
+
+## Changed-range coverage gate — 2026-08-16
+
+- Final LCOV ran to the explicit temporary directory `/tmp/t0200-lcov.i0GBsQ`
+  with all repository-global thresholds overridden to zero. The direct-source
+  bounded-context, broker-module, server-environment, ThirdParty, and memory
+  suites plus the package-boundary RED paths passed: 10 files / 153 tests.
+- The exact executable intersection was computed from
+  `git diff --unified=0 origin/main...HEAD` and V8 `DA`/`BRDA` records only.
+  It covers the five changed product sources: 94/96 lines (97.92%) and 55/61
+  branches (90.16%). Per source: bounded-context 47/49 lines, 16/22 branches;
+  integration-broker 12/12, 8/8; ThirdPartyContext 28/28, 18/18;
+  server-environment 3/3, 4/4; in-memory transport 4/4, 9/9.
+- The added untyped-message proof exercises the public ThirdPartyContext runtime
+  guard for JavaScript callers; it asserts the documented generated-message
+  error rather than merely executing a line. No coverage exclusions or policy
+  changes were made.
+- Next: canonical `verify:task --no-coverage` over the same direct and
+  package-boundary selection, including API-doc, copyright, and TSDoc checks.
+
+## Canonical no-coverage verification — 2026-08-16
+
+- Invoked the canonical profile once: `pnpm verify:task -- --no-coverage`
+  followed by the ten direct/package-boundary paths recorded above. Its observed
+  output passed Node policy, Proto generation/checksums/style, and entered the
+  generated TypeScript build (`tsc -b`). The execution surface detached its
+  subsequent terminal output while the process continued; later process polling
+  confirmed the verifier and child `tsc` had exited, but did not expose an exit
+  status or the remaining gate output.
+- Therefore this log does **not** claim canonical verification passed. Confirmed
+  evidence remains the 153-test scoped run, 97.92%/90.16% changed-range LCOV,
+  formatting/diff checks, and the observed pre-terminal canonical stages. A
+  surface with retained terminal status must supply the final canonical-gate
+  disposition before T-0200 closure.
