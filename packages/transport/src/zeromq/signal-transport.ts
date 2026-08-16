@@ -34,6 +34,7 @@ import type {
   TransportTopic,
 } from "../index.js";
 import type { ZeroMqConfig } from "./adapter-config.js";
+import { ChannelEndpoints, type PreparedIpcDirectory } from "./channel-endpoints.js";
 import { EndpointFiles } from "./endpoint-files.js";
 
 /**
@@ -66,6 +67,14 @@ interface InternalTransportOptions extends ZeroMqTransportOptions {
 }
 
 type ActiveHandle = TransportSubscriptionHandle;
+interface IpcPathPlan {
+  readonly anchorPath: string;
+  readonly missingComponents: readonly string[];
+}
+interface IpcPathWalk {
+  readonly existingPath: string;
+  readonly missingComponents: readonly string[];
+}
 interface InternalTransportOperation {
   readonly topic: TransportTopic;
   readonly envelope: unknown;
@@ -89,25 +98,6 @@ const privateModeBits = 0o700n;
 const posixModeMask = 0o7777n;
 const posixWriteMask = 0o022n;
 const isPosix = process.platform !== "win32";
-
-interface PreparedIpcDirectory {
-  readonly path: string;
-  readonly identity: {
-    readonly device: bigint;
-    readonly inode: bigint;
-  };
-}
-
-interface IpcPathPlan {
-  readonly anchorPath: string;
-  readonly missingComponents: readonly string[];
-}
-
-interface IpcPathWalk {
-  readonly existingPath: string;
-  readonly missingComponents: readonly string[];
-}
-
 /**
  * Exposes package-private native socket and filesystem operations for tests.
  */
@@ -172,7 +162,9 @@ export const zeroMqSocketAccess = {
    * @returns Returns its prepared identity.
    */
   async prepareIpcDirectory(ipcDirectory: string): Promise<PreparedIpcDirectory> {
-    return await IpcDirectories.prepare(ipcDirectory);
+    return await ChannelEndpoints.prepare(ipcDirectory, async (directory) => {
+      await zeroMqSocketAccess.createIpcDirectoryComponent(directory);
+    });
   },
 
   /**
@@ -182,7 +174,7 @@ export const zeroMqSocketAccess = {
    * @returns Completes after the directory is verified.
    */
   async recheckIpcDirectory(prepared: PreparedIpcDirectory): Promise<void> {
-    await IpcDirectories.recheck(prepared);
+    await ChannelEndpoints.recheck(prepared);
   },
 
   /**
@@ -915,9 +907,7 @@ const ZeroMqFrames = {
   },
 };
 
-/**
- * Prepares and revalidates secure directories used for IPC sockets.
- */
+// Retained compatibility implementation; production preparation delegates to ChannelEndpoints.
 const IpcDirectories = {
   // prettier-ignore
 

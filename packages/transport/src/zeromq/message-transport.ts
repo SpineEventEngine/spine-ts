@@ -28,7 +28,7 @@ import type {
   TransportFactory,
 } from "../message-channel.js";
 import type { ZeroMqConfig } from "./adapter-config.js";
-import { zeroMqSocketAccess } from "./signal-transport.js";
+import { ChannelEndpoints } from "./channel-endpoints.js";
 
 const manifestVersion = 1;
 const maxManifestBytes = 4096;
@@ -408,7 +408,7 @@ async function prepareLayout(
   readonly subscribers: string;
   readonly sockets: string;
 }> {
-  await zeroMqSocketAccess.prepareIpcDirectory(config.ipcDirectory);
+  await ChannelEndpoints.prepare(config.ipcDirectory);
   const root = path.join(config.ipcDirectory, "spine-message-channels");
   await ensurePrivateDirectory(root);
   const channel = path.join(

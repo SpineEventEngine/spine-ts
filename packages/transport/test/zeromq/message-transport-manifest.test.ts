@@ -28,9 +28,10 @@ import path from "node:path";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { ChannelIdSchema, ExternalMessageSchema } from "@spine-event-engine/proto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ZeroMqConfig } from "../../src/zeromq/adapter-config.js";
+import { ChannelEndpoints } from "../../src/zeromq/channel-endpoints.js";
 import { createZeroMqTransportFactory } from "../../src/zeromq/message-transport.js";
 
 const targetType = "type.spine.io/wave13.Manifest";
@@ -158,6 +159,118 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
       const factoryClose = factory.close();
       expect(factory.close()).toBe(factoryClose);
       await factoryClose;
+    });
+  });
+
+  it("withdraws its manifest and socket when its final consumer handle closes", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const subscriber = await factory.createSubscriber(channel());
+      const manifestPath = await manifestPathFor(ipcDirectory);
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { generation: string };
+      const socketPath = path.join(
+        ipcDirectory,
+        "spine-message-channels",
+        "sockets",
+        `${manifest.generation}.sock`,
+      );
+      const handle = await subscriber.addConsumer(() => undefined);
+
+      await handle.close();
+
+      await expect(access(manifestPath)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
+      await factory.close();
+    });
+  });
+
+  it("drains a gated subscriber open when factory close races it without leaving endpoints", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const prepare = ChannelEndpoints.prepare.bind(ChannelEndpoints);
+      let entered!: () => void;
+      const started = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const preparation = vi
+        .spyOn(ChannelEndpoints, "prepare")
+        .mockImplementationOnce(async (directory, createComponent) => {
+          entered();
+          await gate;
+          return await prepare(directory, createComponent);
+        });
+      try {
+        const factory = createZeroMqTransportFactory(config(ipcDirectory));
+        const opening = factory.createSubscriber(channel());
+        await started;
+        const close = factory.close();
+        let settled = false;
+        void close.then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
+          },
+        );
+        await Promise.resolve();
+        expect(settled).toBe(false);
+        release();
+        await expect(opening).rejects.toThrow(/closed while subscriber opened/iu);
+        await close;
+        expect(await readdir(path.join(ipcDirectory, "spine-message-channels", "sockets"))).toEqual(
+          [],
+        );
+      } finally {
+        preparation.mockRestore();
+      }
+    });
+  });
+
+  it("reports an accepted consumer failure when subscriber close drains delivery", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const subscriber = await factory.createSubscriber(channel());
+      const publisher = await factory.createPublisher(channel());
+      let entered!: () => void;
+      const started = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await subscriber.addConsumer(async () => {
+        entered();
+        await gate;
+        throw new Error("consumer failed after close");
+      });
+      const message = frame();
+      if (message.id === undefined)
+        throw new Error("Expected an external-message wrapper identity.");
+      const publication = publisher.publish(message.id, message);
+      await started;
+
+      const close = subscriber.close();
+      let settled = false;
+      void close.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      release();
+      await expect(close).rejects.toThrow(/background processing failed/iu);
+      await publication;
+
+      await Promise.allSettled([publisher.close(), factory.close()]);
     });
   });
 

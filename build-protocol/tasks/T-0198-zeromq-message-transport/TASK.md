@@ -50,3 +50,36 @@
   filtering manifests. These changes are green in the focused suite (7/7).
 - Remaining batch items: deterministic injected proofs, shared IPC helper
   extraction, bounded failure samples, startup sweep, and final API-doc check.
+
+## Ownership transfer — 2026-08-16
+
+- The original implementer context exhausted its turn budget after pushed head
+  `c9abfe5f`. The replacement is the existing `implementer` role, assigned the
+  bounded consolidated-review remainder on `wave13-t0198-zeromq`.
+- Dispatch profile: explicitly configured `gpt-5.6-terra` / `medium`.
+  Runtime telemetry is unavailable; the immutable configured role/profile is
+  the available evidence.
+- Acceptance work: remove the MessageTransport-to-SignalTransport dependency
+  by extracting the intact private IPC preparation seam, add deterministic
+  lifecycle/failure regression proofs, and record their focused validation and
+  reviewer dispositions here before the next review boundary.
+
+## Correction evidence — 2026-08-16
+
+- Accepted dependency-boundary finding: resolved by package-local
+  `channel-endpoints.ts`; MessageTransport imports that helper directly, while
+  SignalTransport retains its native/test seam as a delegating compatibility
+  path. No public export, configuration, or endpoint layout changed.
+- Lifecycle evidence added: final consumer closure removes its manifest and
+  socket; factory close drains a gated pending subscriber open and leaves no
+  socket entry; subscriber close waits for accepted consumer delivery and
+  exposes that consumer failure. Focused native plus shared transport tests
+  passed 74 tests, and generated typecheck passed.
+- TypeScript/API reviewer disposition: accepted boundary correction is
+  implemented; final reviewer confirmation remains pending the complete
+  correction batch. Performance/reliability disposition: accepted close-race
+  and drain proofs are implemented; heartbeat/write race and injected cleanup
+  proof remain open. Other required open proofs: heartbeat cannot recreate a
+  manifest after close, attempt-all cleanup after manifest-unlink injection,
+  bounded non-JSON directory entries, and asynchronous invalid/closed SPI
+  rejections. Final API-doc checks remain pending.
