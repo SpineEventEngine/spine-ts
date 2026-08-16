@@ -46,7 +46,9 @@ export type HandlerKind =
  */
 export type HandlerParameterCount = 1 | 2;
 
-/** Origin declared by a generated receptor's first parameter. */
+/**
+ * Origin declared by a generated receptor's first parameter.
+ */
 export type HandlerOrigin = "domestic" | "external";
 
 /**
@@ -136,7 +138,9 @@ export interface BaseHandlerMetadata<
    */
   readonly parameterCount: HandlerParameterCount;
 
-  /** Whether this receptor accepts domestic or imported external signals. */
+  /**
+   * Whether this receptor accepts domestic or imported external signals.
+   */
   readonly origin: HandlerOrigin;
 
   /**
@@ -749,7 +753,9 @@ export interface HandlerArity {
    */
   readonly parameterCount: HandlerParameterCount;
 
-  /** Origin carried by generated receptor metadata. */
+  /**
+   * Origin carried by generated receptor metadata.
+   */
   readonly origin?: HandlerOrigin;
 
   /**

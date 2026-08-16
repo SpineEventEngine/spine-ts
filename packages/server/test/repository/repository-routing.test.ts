@@ -1556,6 +1556,22 @@ class StateObservingProjection extends Projection<string, typeof ProjectionState
   }
 }
 
+class OriginStateProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  static calls: string[] = [];
+
+  static reset(): void {
+    this.calls = [];
+  }
+
+  domesticState(state: AggregateState): void {
+    OriginStateProjection.calls.push(`domestic:${state.id}`);
+  }
+
+  externalState(state: AggregateState): void {
+    OriginStateProjection.calls.push(`external:${state.id}`);
+  }
+}
+
 class NeutralStateObservingProjection extends Projection<
   string,
   typeof NeutralProjectionStateSchema,
@@ -11850,6 +11866,73 @@ describe("Projection state-update routing", () => {
         name: "Source (projected)",
         priority: 1,
       });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("selects state subscribers exclusively by EntityStateChanged origin during delivery and replay", async () => {
+    OriginStateProjection.reset();
+    const factory = new InMemoryStorageFactory();
+    const handlers = HandlerMetadataValues.defineArity(
+      OriginStateProjection,
+      ProjectionStateSchema,
+      (builder) => [
+        builder.subscribe(AggregateStateSchema, "domesticState"),
+        builder.subscribe(AggregateStateSchema, "externalState"),
+      ],
+      [
+        {
+          kind: "state-subscription",
+          methodName: "domesticState",
+          parameterCount: 1,
+          origin: "domestic",
+        },
+        {
+          kind: "state-subscription",
+          methodName: "externalState",
+          parameterCount: 1,
+          origin: "external",
+        },
+      ],
+    );
+    const repository = new Repository({
+      entityType: OriginStateProjection,
+      schema: ProjectionStateSchema,
+      handlers,
+    });
+    const context = BoundedContext.singleTenant("State origins")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const domestic = createStateChangedEvent("domestic-state");
+    const external = createStateChangedEvent("external-state");
+    external.context = create(EventContextSchema, { external: true });
+
+    try {
+      await boundedContextAccess.postSystemEvent(context, domestic);
+      await boundedContextAccess.postSystemEvent(context, external);
+
+      expect(OriginStateProjection.calls).toEqual([
+        "domestic:domestic-state",
+        "external:external-state",
+      ]);
+
+      const delivery = new Delivery({
+        context: { name: "State origins", multitenant: false },
+        storageFactory: factory,
+      });
+      const stored = await delivery.inbox.read(ShardIndex.single(), {
+        statuses: ["TO_DELIVER", "DELIVERED"],
+      });
+      const target = requireProjectionInboxTarget(repository);
+      OriginStateProjection.reset();
+      for (const message of stored) await target.replay(message);
+
+      expect(OriginStateProjection.calls.toSorted()).toEqual([
+        "domestic:domestic-state",
+        "external:external-state",
+      ]);
     } finally {
       await context.close();
     }

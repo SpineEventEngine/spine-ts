@@ -33,7 +33,8 @@ export interface EventDispatcher {
   messageSchemas(): readonly MessageSchema[];
 
   /**
-   * Optional subset of accepted schemas whose receptors accept imported events.
+   * Lists accepted schemas whose receptors accept imported events.
+   *
    * Omission preserves the established domestic-only default.
    *
    * @returns schemas accepted when `EventContext.external` is true.

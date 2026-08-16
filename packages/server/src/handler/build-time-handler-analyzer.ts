@@ -119,7 +119,9 @@ export interface BuildHandlerRecord {
    */
   readonly parameterCount: GeneratedHandlerParameterCount;
 
-  /** Origin declared on the first receptor parameter. */
+  /**
+   * Origin declared on the first receptor parameter.
+   */
   readonly origin: "domestic" | "external";
 
   /**
@@ -1381,10 +1383,10 @@ const HandlerSources = Object.freeze({
     const location = ts.isQualifiedName(name) ? name.right : name;
     let symbol = checker.getSymbolAtLocation(location);
     if (symbol === undefined) return false;
-    if (symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0) {
+    if ((symbol.flags & ts.SymbolFlags.Alias) !== 0) {
       symbol = checker.getAliasedSymbol(symbol);
     }
-    return (symbol?.declarations ?? []).some(
+    return (symbol.declarations ?? []).some(
       (declaration) =>
         ts.isTypeAliasDeclaration(declaration) &&
         declaration.name.text === "External" &&

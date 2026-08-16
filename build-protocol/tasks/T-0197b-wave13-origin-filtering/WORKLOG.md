@@ -72,3 +72,12 @@ and rejection command handlers remain valid.
   `gpt-5.6-terra` / `high`, no child spawning, runtime telemetry unavailable.
   Accepted correction: v3 origin is required, the marker remains type-only,
   and canonical identity uses the analyzer package's own declaration directory.
+
+## State-origin closure
+
+Repository System Event dispatch now classifies the local
+`EntityStateChanged` dispatcher from its domestic and external state receptor
+sets. These local sets never enter domain EventBus broker discovery and add no
+state wire. Handler selection applies the same origin predicate during initial
+delivery and inbox replay. A mixed-origin behavioral fixture proves exclusive
+delivery in both paths.

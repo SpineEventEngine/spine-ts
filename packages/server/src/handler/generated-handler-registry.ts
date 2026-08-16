@@ -228,7 +228,9 @@ export interface GeneratedHandlerRecordInput {
    */
   readonly parameterCount: GeneratedHandlerParameterCount;
 
-  /** Required origin inferred from the receptor's first parameter. */
+  /**
+   * Required origin inferred from the receptor's first parameter.
+   */
   readonly origin: HandlerOrigin;
 
   /**
