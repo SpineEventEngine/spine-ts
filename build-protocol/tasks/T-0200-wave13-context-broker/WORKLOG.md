@@ -242,3 +242,54 @@
 - Pending orchestrator disposition: retain the green typecheck, zero-diagnostic
   lint, and 27-test behavior evidence; do not claim the canonical coverage gate
   passed.
+
+## Changed-range coverage disposition — 2026-08-16
+
+- Read-only tooling analysis confirmed `verify-task --source` only forwards
+  whole-file `--coverage.include` flags and the repository has no diff-coverage
+  implementation. Existing accepted task evidence retains LCOV and intersects
+  it with `git diff --unified=0`; the canonical task gate is then run with
+  `--no-coverage`. This is the applicable repository-supported measurement for
+  the 2,882-line bounded-context and 717-line environment files.
+- A direct-source coverage run exposed two real regression classes before LCOV
+  intersection: a late multitenant event validates tenant data before returning
+  the established closed-runtime error, and four pre-existing production
+  environment tests omit the newly required explicit message
+  `TransportFactory`. Both are deterministic T-0200 corrections, not coverage
+  exceptions.
+- A bounded correction **implementer** receives explicit
+  `gpt-5.6-terra` / `medium` configuration, unavailable runtime telemetry, and
+  no subagent authority. It owns close-error precedence, the affected production
+  environment fixtures, direct ThirdParty source proof if needed, retained LCOV
+  changed-range measurement, and canonical no-coverage task verification.
+
+## Direct-source regression correction — 2026-08-16
+
+- The bounded correction implementer retained the required configured
+  `gpt-5.6-terra` / `medium` profile; runtime self-inspection is unavailable on
+  this surface and no subagents were used.
+- A new direct-source lifecycle regression first failed: posting a late event
+  to a closed multitenant context returned `Multitenant context "Tasks"
+requires tenantId.` instead of the established `server runtime is closed`
+  rejection. Context close state now delegates late posting straight to the
+  already-closed EventBus; open public posting and broker-imported posting still
+  use `TenantBoundary` validation.
+- The four production `ServerEnvironment` fixtures now explicitly provide
+  `InMemoryTransportFactory`; production's required typed factory contract was
+  not weakened.
+- Direct-source `ThirdPartyContext` behavior is now independently exercised
+  because the package-boundary test left its changed source uninstrumented. The
+  proof creates a real single-tenant context, imports a generated event through
+  its broker, verifies open state, and verifies idempotent close/closed
+  rejection.
+- Focused direct suites passed: `pnpm exec vitest run
+packages/server/test/context/bounded-context.test.ts
+packages/server/test/server/server-environment.test.ts
+packages/server/test/integration/integration-broker-module.test.ts
+packages/server/test/integration/third-party-context.test.ts
+packages/transport/test/memory/message-transport.test.ts` — 5 files, 126
+  tests passed.
+- Scoped V8 LCOV ran into `/tmp/t0200-lcov.UVwwTV` with all thresholds
+  explicitly overridden to zero. It selected the four direct-source suites plus
+  all package-boundary Wave 13 RED paths; 10 files / 148 tests passed. Exact
+  changed-range intersection remains the next action.

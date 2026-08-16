@@ -43,6 +43,8 @@ import {
 import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testing";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { ThirdPartyContext as DirectSourceThirdPartyContext } from "../../src/integration/third-party-context.js";
+import { resetServerEnvironmentForTest as resetDirectSourceServerEnvironment } from "../../src/testing/index.js";
 import { RecordingTransportFactory } from "./wave13-red-support.js";
 import { expectWave13ContractToCompile } from "./wave13-compile-contract.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
@@ -119,6 +121,25 @@ function generatedStateRegistryRoot(): {
 describe("Wave 13 ThirdPartyContext", () => {
   beforeEach(async () => resetServerEnvironmentForTest());
   afterEach(async () => resetServerEnvironmentForTest());
+  it("publishes generated events through its direct-source broker and closes idempotently", async () => {
+    await resetDirectSourceServerEnvironment();
+    const context = await DirectSourceThirdPartyContext.singleTenant("DirectSourceThirdParty");
+    const event = create(StringValueSchema, { value: "direct-source" });
+    const user = create(UserIdSchema, { value: "actor" });
+
+    try {
+      await context.emittedEvent(event, user);
+      expect(context.isOpen()).toBe(true);
+    } finally {
+      await context.close();
+      await context.close();
+      await resetDirectSourceServerEnvironment();
+    }
+
+    expect(context.isOpen()).toBe(false);
+    await expect(context.emittedEvent(event, user)).rejects.toThrow("ThirdPartyContext is closed.");
+  });
+
   it("RED-20 classifies every supported external receptor, keeps system/state subsets out of wanted documents, and preserves ThirdPartyContext import semantics", async () => {
     expectWave13ContractToCompile(thirdPartyPublicContract);
     const server = await import("@spine-event-engine/server");

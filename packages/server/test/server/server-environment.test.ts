@@ -14,6 +14,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InMemoryStorageFactory, type StorageContext } from "@spine-event-engine/storage";
+import { InMemoryTransportFactory } from "@spine-event-engine/transport";
 
 import {
   ServerEnvironment,
@@ -223,6 +224,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
+      transportFactory: new InMemoryTransportFactory(),
       ...{ logger: logger as unknown as ILogLayer },
     });
     const production = ServerEnvironment.instance();
@@ -255,6 +257,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
+      transportFactory: new InMemoryTransportFactory(),
       ...{ logger: logger as unknown as ILogLayer },
     });
     const environment = ServerEnvironment.instance();
@@ -309,6 +312,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
+      transportFactory: new InMemoryTransportFactory(),
       ...{ logger: logger as unknown as ILogLayer },
     });
     const environment = ServerEnvironment.instance();
@@ -337,6 +341,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
+      transportFactory: new InMemoryTransportFactory(),
       ...{ logger: logger as unknown as ILogLayer },
     });
     const context = BoundedContext.singleTenant("Tasks")

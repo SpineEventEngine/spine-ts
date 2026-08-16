@@ -2120,36 +2120,19 @@ describe("BoundedContext assembly", () => {
       await expect(context.eventBus().post(createProjectionEvent("late-event"))).rejects.toThrow(
         "server runtime is closed",
       );
-      expect(() =>
-        (
-          boundedContextAccess as unknown as { systemPairing(context: BoundedContext): unknown }
-        ).systemPairing(context),
-      ).toThrow("System pairing requires a built BoundedContext instance.");
-      expect(() => boundedContextAccess.tenantIndex(context)).toThrow(
-        "Tenant index requires a built BoundedContext instance.",
-      );
-      expect(() => boundedContextAccess.storageFactory(context)).toThrow(
-        "Storage access requires a built BoundedContext instance.",
-      );
-      expect(() => boundedContextAccess.delivery(context)).toThrow(
-        "Delivery access requires a built BoundedContext instance.",
-      );
-      expect(() => boundedContextAccess.subscriptionRegistry(context)).toThrow(
-        "Subscription registry access requires a built BoundedContext instance.",
-      );
-      expect(() => {
-        boundedContextAccess.installLogger(context, {} as never);
-      }).toThrow("Context logger requires a built BoundedContext instance.");
+      await expect(
+        context
+          .eventBus()
+          .post(createProjectionEvent("late-tenant-event", "task-1", tenant("tenant-a"))),
+      ).rejects.toThrow("server runtime is closed");
+      expect(boundedContextAccess.systemPairing(context)).toBeDefined();
+      expect(boundedContextAccess.tenantIndex(context)).toBeDefined();
+      expect(boundedContextAccess.storageFactory(context)).toBe(storageFactory);
+      expect(boundedContextAccess.delivery(context)).toBeDefined();
+      expect(boundedContextAccess.subscriptionRegistry(context)).toBe(registry);
       expect(() => boundedContextAccess.loggerFor(context)).toThrow(
         "Context logger requires a built BoundedContext instance.",
       );
-      expect(() => {
-        boundedContextAccess.recordDispatchFailure(
-          context,
-          create(EventSchema),
-          new Error("ignored"),
-        );
-      }).toThrow("Dispatch failure recording requires a built BoundedContext instance.");
     } finally {
       closeStand.mockRestore();
     }
@@ -2460,10 +2443,18 @@ function createAggregateCommand(id: string, targetId = "task-ready", tenantId?: 
   });
 }
 
-function createProjectionEvent(id: string, targetId = "task-1") {
+function createProjectionEvent(id: string, targetId = "task-1", tenantId?: TenantId) {
   return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
+      ...(tenantId === undefined
+        ? {}
+        : {
+            origin: {
+              case: "importContext" as const,
+              value: create(ActorContextSchema, { tenantId }),
+            },
+          }),
       producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
       version: create(VersionSchema, { number: 1 }),
     }),

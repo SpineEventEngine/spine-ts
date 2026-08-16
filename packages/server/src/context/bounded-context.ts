@@ -535,6 +535,7 @@ const contextDeliveryDescriptors = new WeakMap<BoundedContext, ContextDeliveryDe
 const contextSubscriptionRuntimes = new WeakMap<BoundedContext, SubscriptionRuntime>();
 const contextLoggers = new WeakMap<BoundedContext, ILogLayer>();
 const contextEventBuses = new WeakMap<BoundedContext, readonly [EventBus, EventBus]>();
+const closingContexts = new WeakSet<BoundedContext>();
 const contextDispatchFailureRecorders = new WeakMap<
   BoundedContext,
   (event: Event, error: unknown) => void
@@ -1026,6 +1027,7 @@ export class BoundedContext {
    * @returns A promise that settles after all owned resources close.
    */
   close(): Promise<void> {
+    closingContexts.add(this);
     this.#closed ??= this.#closeOnce();
     return this.#closed;
   }
@@ -2021,6 +2023,7 @@ const ContextParts = Object.freeze({
   postContextEvent(context: BoundedContext, event: Event): Promise<void> {
     const buses = contextEventBuses.get(context);
     if (buses === undefined) return Promise.reject(new Error("Context EventBus is unavailable."));
+    if (closingContexts.has(context)) return buses[0].post(event);
     return (contextIntegrations.get(context)?.ready ?? Promise.resolve()).then(() => {
       ContextParts.validateImportedTenant(context, event);
       return buses[0].post(event);
