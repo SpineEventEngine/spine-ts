@@ -97,4 +97,24 @@ Spine definitions preserve their original versioned Proto packages.
 
 ## Integration wire contracts
 
-Generated root exports include the frozen external-event broker and typed message-channel Protobuf contracts. These binary Protobuf frames are shared infrastructure contracts, not JSON application messages.
+Generated root exports include the frozen external-event broker and typed
+message-channel Protobuf contracts. `ExternalMessage`, `ExternalEventsWanted`,
+`ExternalEventType`, `BoundedContextOnline`, `ChannelId`, and
+`BoundedContextName` are binary infrastructure frames, not JSON application
+messages. Empty control payloads are valid where the contract defines no
+fields; consumers must not reject a valid zero-byte frame merely because it is
+empty.
+
+The broker uses the complete application schema universe through the server's
+`TypeRegistry`; the core registry alone is only a local/test fallback. Imported
+events are decoded from their generated schema and retain their explicit
+tenant/origin metadata.
+
+The exact copied contracts are recorded in
+[`proto/spine-sources.json`](proto/spine-sources.json):
+
+| Contract                                 | Upstream revision                                    | SHA-256                                                            |
+| ---------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------ |
+| `spine/server/integration/broker.proto`  | `core-jvm@0779b5fa42ca5cebd0d2935fc3a3489ab47846dc`  | `76a3b965391d989d32a1a6dbc84a4465d2f8f2386be7ed266fd201483dc9865d` |
+| `spine/server/transport/transport.proto` | `core-jvm@0779b5fa42ca5cebd0d2935fc3a3489ab47846dc`  | `92df339007d7dda01a6df5b87c38d988bfedebabd6ac28eb7fbb874bcd5f73bd` |
+| `spine/core/event.proto`                 | `core-java@a408b0d70dafd603efc55b89c8b4b6f3e8c19d3b` | `0c385d3fd98d68d35ce1d7887bd564b590daba47b959b99d205c2be56a737d29` |

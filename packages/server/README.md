@@ -405,3 +405,44 @@ re-query entity state after reconnecting.
 - [Browser client](../client-web/README.md)
 - [Message Board application](../../examples/message-board/README.md)
 - [Reference for coding agents](REFERENCE.md)
+
+## Cross-context external events
+
+Every built `BoundedContext` owns one private integration broker. It publishes
+domestic events only when another context has requested them, and an imported
+event is delivered only to handlers declared with `External<T>`. The marker is
+type-only and transparent at runtime:
+
+```ts
+import { Subscribe, type External } from "@spine-event-engine/server";
+import type { TaskCreated } from "./generated/task_events_pb.js";
+
+class TaskProjection {
+  @Subscribe
+  onImported(event: External<TaskCreated>): void {
+    void event;
+  }
+}
+```
+
+`External<T>` must be the direct first receptor parameter. External commands
+are invalid; external events, rejections, and supported state subscriptions
+are valid. A context publishes only the event types requested by interested
+contexts. This requested-only export, plus domestic/external filtering, is the
+loop-prevention rule: there is no hop counter, broker Inbox, retry, replay,
+deduplication, or producer election. Delivery is best effort; many consumers
+may observe one domain producer at a time.
+
+The broker uses `TransportFactory` message channels, not `SignalTransport`.
+Local and test contexts use `InMemoryTransportFactory`. Production
+`ServerEnvironment` resolution requires `storageFactory`, `transport`,
+`transportFactory`, and the complete application `typeRegistry`; production
+does not silently fall back to memory or to the core-only registry. See the
+[transport reference](../transport/REFERENCE.md) for same-host ZeroMQ setup.
+
+`ThirdPartyContext.singleTenant(name)` or `.multitenant(name)` creates the
+public import facade. `emittedEvent(event, actor)` requires a generated event,
+preserves the actor tenant policy, and uses the actor timestamp (or fills one
+for a `UserId`). An unknown local event schema rejects before publication; a
+valid event with no current interested context is a successful no-op. Close the
+hidden context when imports are finished.

@@ -88,6 +88,13 @@ commands, events, and entity state there. A command says what a caller wants;
 an event records a fact that happened; entity state is the current readable
 form of an Aggregate, Projection, or Process Manager.
 
+Keep each Bounded Context's domain language in its own model package. The server
+application composes the top-level Proto modules for all assembled contexts
+into one deterministic application `TypeRegistry`; a client application
+depends on and composes the published context model modules it needs. This is
+explicit build/application composition, not runtime package scanning or mutable
+global schema registration.
+
 Keep the identifier as the first field of a command and the entity state. That
 is the implicit default target ID for Spine TS: it needs no extra routing
 annotation. A missing or invalid default command ID is rejected before a
@@ -260,6 +267,62 @@ their own focused tests.
 
 Continue with the [testing reference](../packages/testing/REFERENCE.md) for
 the complete BlackBox contract and limits.
+
+## 7a. Connect bounded contexts with external events
+
+An integration broker is created privately for every bounded context. Declare
+an external receptor with the type-only `External<T>` marker on its first
+parameter; the generated registry then filters imported events to that
+handler:
+
+```ts
+import { Subscribe, type External } from "@spine-event-engine/server";
+import type { MessagePosted } from "./generated/message_events_pb.js";
+
+class ImportedBoard {
+  @Subscribe
+  onMessage(event: External<MessagePosted>): void {
+    void event;
+  }
+}
+```
+
+The exporting context publishes only requested event types. Domestic events go
+to domestic handlers and imported events go to external handlers; this
+origin/tenant filtering prevents loops. External commands are not supported.
+Received unknown or malformed broker frames are logged safely, dropped, and
+the broker continues. The transport is best effort: it has no broker retry,
+replay, deduplication, or durable queue, so consumers should re-query or make
+effects idempotent when appropriate.
+
+For one process, the default `InMemoryTransportFactory` is sufficient. For two
+Node processes on one host, call `createZeroMqTransportFactory()` with
+`ZeroMqConfig.create({ ipcDirectory })` in both applications; this is local IPC,
+not a multi-machine transport. In production, configure `ServerEnvironment`
+with storage, signal transport, message `transportFactory`, and the complete
+application `typeRegistry`.
+
+To import an event from a third-party producer, use `ThirdPartyContext`. The
+single-tenant form forbids an actor tenant, the multitenant form requires one,
+and the actor timestamp is preserved:
+
+```ts
+import { ThirdPartyContext } from "@spine-event-engine/server";
+import type { ActorContext } from "@spine-event-engine/proto";
+import type { MessagePosted } from "./generated/message_events_pb.js";
+
+declare const messagePosted: MessagePosted;
+declare const actorContext: ActorContext;
+
+const imported = await ThirdPartyContext.multitenant("Partner");
+await imported.emittedEvent(messagePosted, actorContext);
+await imported.close();
+```
+
+Unknown local event schemas fail clearly; a valid event with no interested
+external receptor is simply not delivered. See the [server reference](../packages/server/REFERENCE.md)
+and [transport reference](../packages/transport/REFERENCE.md) for exact
+contracts.
 
 ## 8. Run and observe it
 

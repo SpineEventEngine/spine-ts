@@ -156,6 +156,51 @@ metadata. Core `TypeRegistry` and descriptor-derived entity metadata do not
 register or expose those tags, and repository routing and runtime topics do not
 consume them.
 
+`TypeRegistry` is the application schema universe used by integration boundaries.
+`TypeRegistry.from(...modules)` composes generated Proto modules in deterministic
+dependency-first order, while `TypeRegistry.spineCore()` supplies the curated
+Spine closure. A production `ServerEnvironment` must receive the application's
+read-only `typeRegistry`; local and test environments default to
+`spineCoreRegistry`. This registry is used to validate and encode generated
+third-party events, so application event schemas must be included in production.
+
+## External-event integration boundary
+
+Each `BoundedContext` owns one private `IntegrationBroker`, created from the
+environment's `TransportFactory` and closed with the context. The broker keeps
+status, configuration, and event exchanges separate. Status/configuration use
+their canonical singleton `ChannelId`; each wanted event type has its own event
+channel. Contexts publish complete `ExternalEventsWanted` documents, and producer
+registration is reference-counted by requesting context. The public application
+surface does not construct or access the broker.
+
+Handler origin is build-time metadata. The server exports the type-only marker
+`External<T>`; on the first receptor parameter, the canonical marker unwraps to
+`T` and generated registry v3 emits `origin: "external"`. Unmarked handlers emit
+`origin: "domestic"`. `EventDispatcher.messageSchemas()` remains the complete
+schema universe; optional `externalEventSchemas()` declares its external subset,
+from which the domestic complement is derived. Event-bus and repository dispatch
+filter by `EventContext.external`, including mixed-origin handlers for one event
+type. External commands are rejected; external events, rejections, and supported
+state subscriptions use the origin-aware handler path.
+
+Incoming broker frames are the exact generated `ExternalMessage` Protobuf. The
+receiver validates wrapper identity and payload, obtains the tenant from the
+complete Event origin through the existing `TenantBoundary`, copies only the
+external flag, and posts through the ordinary domain `EventBus`. Corrupt intake
+is logged and dropped. Imported events are delivered to external handlers and
+are never republished as domestic events, which is the loop-prevention boundary.
+The integration broker does not add Inbox persistence, retry, replay,
+deduplication, fencing, or producer election; delivery strength belongs to the
+configured message transport. Many bounded contexts may consume an event, while
+one domain producer publishes it for each requesting origin.
+
+`ThirdPartyContext` is the public import facade. Its single-tenant form accepts a
+`UserId`; its multitenant form requires an `ActorContext` with a tenant. It
+creates a hidden context, validates actor tenancy, encodes the generated event
+using the environment schema registry, publishes through that context's broker,
+and closes the private context and broker resources.
+
 ## Core Validation Facade
 
 `@spine-event-engine/core` provides the validation interface exposed to framework users.
@@ -648,7 +693,7 @@ and the last run-managed retirement closes that environment. Mixed active
 caller-managed/run-managed admission rejects before listener open. A failed
 final close stays reachable for explicit or later-signal retry without
 rerunning completed close hooks. It still does not export a production transport endpoint runner,
-integration broker, durable retry owner, process supervisor, event storage
+durable retry owner, process supervisor, event storage
 policy beyond existing seams, retained active-stream/update replay storage, or
 worker topology as part of this closure.
 
@@ -664,12 +709,11 @@ not introduced, and the seam does not discover handlers, load generated
 registries, materialize application handlers, or widen into transport,
 storage, tracing, or application handler APIs.
 
-The architectural consequence is that remaining collaborators need explicit
-seams. Event intake and broader
-transport integration can consume the existing readiness views and
-runtime-routing plan, but must still design event-side validation, filtering,
-storage-before-dispatch, dispatch outcomes, delivery, and integration behavior
-separately.
+The architectural consequence is that the integration broker consumes the
+origin-aware readiness views through its private broker adapter, while the
+ordinary runtime continues to consume the existing readiness views and
+runtime-routing plan independently. Broker intake and runtime signal intake are
+separate responsibilities.
 
 ## Storage Boundary
 
@@ -790,6 +834,15 @@ objects and interfaces that adapters can implement:
 - `SignalTransport` plus publish/request handler contracts define the minimal
   adapter seam for runtime integration and graceful async close behavior.
 
+The same package also exports the distinct message-channel SPI used only by the
+integration broker: `Publisher`, `Subscriber`, `MessageChannel`,
+`ExternalMessageConsumer`, and `TransportFactory`. The generated `ChannelId`
+comes from `@spine-event-engine/proto`. A factory creates typed channels for
+exact `ExternalMessage` frames and owns their asynchronous close.
+These interfaces do not expose signal kinds, routing plans, subscriber IDs,
+request/reply, sockets, manifests, or paths. The broker never depends on
+`SignalTransport`.
+
 The boundary is intentionally smaller than a bus implementation. It does not
 choose durable delivery, retry loops or timers, process supervision, readiness
 probes over IPC, repository dispatch, storage lifecycle, read-side execution
@@ -801,7 +854,7 @@ The transport package pins the maintained official `zeromq@6.5.0` line for
 the local IPC adapter. The package root stays adapter-neutral, while the
 `@spine-event-engine/transport/zeromq` subpath exposes exactly
 `ZeroMqConfig`, `ZeroMqConfigInput`, `createZeroMqTransport`,
-`ZeroMqTransportScope`, and
+`createZeroMqTransportFactory`, `ZeroMqTransportScope`, and
 `ZeroMqTransportOptions`. The adapter derives compact deterministic IPC socket
 paths from `ZeroMqConfig` plus transport routing descriptors and keeps
 endpoint strings, multipart frames, socket classes, and native module types out
@@ -816,14 +869,24 @@ one private same-host IPC directory. This bounded test does not establish a
 general exactly-once guarantee for durable redelivery, retries, process
 restarts, or remote transport.
 
-The implementation does not add remote transport, broker topology, worker
-registration handshakes, delivery retries, process supervision, or broad health
-checks. The workspace explicitly approves the `zeromq` install script in pnpm
+The runtime signal adapter does not add remote transport, worker registration
+handshakes, delivery retries, process supervision, or broad health checks. The
+workspace explicitly approves the `zeromq` install script in pnpm
 configuration, so dependency restoration must run in an environment that
 permits native package build/install scripts. Managed sandboxes may reject
 ZeroMQ `ipc://` binds with `EPERM`, so live local IPC tests can require native
-IPC filesystem/socket permissions outside the sandbox. This adapter path is
-limited to same-host IPC; remote and multi-host transport are excluded.
+IPC filesystem/socket permissions outside the sandbox. This signal adapter path
+is limited to same-host IPC; remote and multi-host signal transport are
+excluded. Integration message transport has its own same-host ZeroMQ adapter:
+each subscriber binds a unique manifest-backed PULL endpoint, publishers retain
+dedicated PUSH connections to discovered endpoints, and endpoint bind/remove
+ordering protects discovery during lifecycle changes. The manifest is private
+adapter discovery metadata, not a broker frame or durable record. PUSH/PULL
+delivery is best effort (FIFO per publisher/subscriber pair where accepted),
+with no exactly-once or durable-redelivery claim. A real two-process application
+fixture proves the complete broker path with distinct processes and contexts,
+generated origin metadata, status/config discovery, and exact Protobuf event
+delivery.
 
 The ZeroMQ adapter uses generated Buf Protobuf binary for `command` and `event`
 envelopes, dispatching by the transport topic's signal kind. Its reserved

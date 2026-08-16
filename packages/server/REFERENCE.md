@@ -2,6 +2,95 @@
 
 This reference describes the public server contracts for coding agents.
 
+## Integration broker and event origin
+
+Each `BoundedContext` creates and closes exactly one private integration broker.
+The broker has distinct status, configuration, and event exchanges. Event
+export is requested-only: a context installs a domestic publisher only for
+event types requested by another context, and withdrawal removes only that
+requester's interest. The broker does not enforce ownership; the supported
+shape is many consumers and one domain producer per event type at a time.
+
+The status exchange announces `BoundedContextOnline`; observing a foreign
+announcement resends the local complete wanted-event document. The
+configuration exchange treats each `ExternalEventsWanted` as a complete
+replacement, installs producer publication on the first requester, avoids
+duplicate unchanged broadcasts, and removes publication after the last
+withdrawal. The event exchange uses one logical channel per event message type
+and retains the original Event ID and complete Event. Self-origin and paired
+domain/System Context messages are ignored.
+
+`External<T>` is exported as a transparent type alias (`type External<T> = T`)
+and has no runtime value or brand. The build-time handler analyzer recognizes
+the canonical server declaration only when it is the direct first receptor
+parameter. Missing markers mean `domestic`; a valid marker means `external`.
+External commands are rejected, while external event/rejection handlers and
+the supported state-subscription path are filtered by `EventContext.external`.
+Repository selection applies the filter per handler, including mixed-origin
+repositories. This is also the loop rule: domestic publication and origin
+filtering prevent self-origin and paired-context traffic; no hop count, origin
+ledger, Inbox, retry, replay, deduplication, cursor, fencing, or election is
+added.
+
+Incoming broker frames must contain a valid `ExternalMessage` wrapper and a
+complete `Event`. The server unpacks and validates the event, obtains the
+tenant from its explicit event origin, validates that tenant at the existing
+boundary, copies only `EventContext.external = true`, and posts the ordinary
+domain `EventBus`. Unknown or malformed received payloads are logged safely,
+dropped, and do not stop the broker loop. Zero-byte control messages are valid
+where the Proto contract permits an empty payload.
+
+Malformed, unknown-schema, or undecodable received events emit the fixed ERROR
+message `Dropped corrupt external event.` with safe `contextName`, `eventType`,
+`operation: external-event-intake`, and
+`reasonCode: corrupt_external_event`; the callback resolves, the event is
+dropped, and later valid events continue. Application intake failures after a
+valid decode remain observable.
+
+Context readiness includes broker open. Close gates new EventBus intake before
+awaiting transport work, broadcasts an empty wanted document, detaches domestic
+publishers and external subscribers, drains accepted work, and closes acquired
+channels. Failed cleanup remains retryable and concurrent close callers share
+one attempt.
+
+`ThirdPartyContext` is the sole public third-party import API. Its
+`singleTenant()` form forbids an actor tenant; `multitenant()` requires one.
+`emittedEvent(event, actor)` accepts a generated event and `ActorContext` (or a
+`UserId` in the single-tenant form), preserves actor identity and timestamp,
+and publishes through its hidden context. An unknown local schema throws; a
+valid event with no interested external receptor is simply not delivered.
+
+## Server environment facilities
+
+`ServerEnvironment.instance()` is a process-wide singleton. Production
+resolution requires all four application facilities:
+
+```ts
+import { EnvironmentType, ServerEnvironment } from "@spine-event-engine/server";
+import type { TypeRegistryLookup } from "@spine-event-engine/core";
+import type { SignalTransport, TransportFactory } from "@spine-event-engine/transport";
+import type { StorageFactory } from "@spine-event-engine/storage";
+
+declare const storageFactory: StorageFactory;
+declare const transport: SignalTransport;
+declare const transportFactory: TransportFactory;
+declare const typeRegistry: TypeRegistryLookup;
+
+ServerEnvironment.when(EnvironmentType.Production).use({
+  storageFactory,
+  transport,
+  transportFactory,
+  typeRegistry,
+});
+```
+
+`storageFactory` supplies records and events, `transport` is the existing
+signal/runtime transport, `transportFactory` supplies private integration
+message channels, and `typeRegistry` is the complete application schema
+universe used to decode imported events. Local and test environments default
+storage and message channels in memory and use the core registry only as a
+fallback; those defaults are not production configuration.
+
 ## Routing lifecycle
 
 Event, command, and state-update routing accepts exact schemas and nominal

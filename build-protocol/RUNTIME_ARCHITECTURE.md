@@ -114,6 +114,22 @@ registrations before the runtime. It deliberately does not manage the transport
 instance, choose IPC endpoint names, expose ZeroMQ, supervise processes, retain
 delivery attempts, retry work, or create a JVM-style server environment.
 
+This signal-routing authority is separate from cross-context external events.
+Every built `BoundedContext` owns an internal `IntegrationBroker`, which obtains
+a typed `TransportFactory` from `ServerEnvironment`. The factory creates typed
+publisher/subscriber channels carrying only generated `ExternalMessage`
+Protobuf frames. It has no signal kind, subscriber ID, routing plan,
+request/respond operation, or command/query/subscription responsibility.
+
+The broker keeps three logical exchanges distinct: status announces a context
+online; configuration replaces each foreign context's complete wanted-event
+set and withdraws the local set at close; events use one logical channel per
+domain-event type. Local/test environments use `InMemoryTransportFactory`.
+Production supplies an explicit factory, such as the same-host ZeroMQ
+`createZeroMqTransportFactory()` adapter. Delivery, retry, replay, and
+durability remain transport responsibilities; the broker adds no Inbox,
+deduplication record, cursor, or retry queue.
+
 ## ZeroMQ Same-Host Adapter
 
 ZeroMQ provides local IPC between application-composed Node.js processes on one
@@ -164,8 +180,11 @@ eligible subscribers/reactors/projections.
 Requirements:
 
 - topic matching by concrete event type URL and semantic tags;
-- domestic/external event distinction (required for future cross-context event
-  exchange and not implemented by the current TypeScript runtime);
+- domestic/external distinction from generated handler `origin` metadata and
+  `EventContext.external`; a dispatcher may declare an external schema subset,
+  and mixed repository routes filter individual receptors by origin;
+- producer-side integration observes only requested domestic events, while
+  imported events reach only external receptors, preventing re-export loops;
 - event enrichment before delivery where configured (not implemented by the
   current TypeScript runtime);
 - delivery through inbox-like durable records when persistence is enabled;

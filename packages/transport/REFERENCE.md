@@ -41,4 +41,38 @@ requests, or subscriptions.
 
 ## Integration message channels
 
-The root also exports TransportFactory, MessageChannel, Publisher, Subscriber, ExternalMessageConsumer, ConsumerHandle, and InMemoryTransportFactory. These typed channels carry only generated ExternalMessage frames keyed by generated ChannelId; they are distinct from SignalTransport routing and request/respond operations. Factory, channel, and consumer-handle close methods are asynchronous and idempotent where removal is required.
+The root also exports `TransportFactory`, `MessageChannel`, `Publisher`,
+`Subscriber`, `ExternalMessageConsumer`, `ConsumerHandle`, and
+`InMemoryTransportFactory`. These typed channels carry only generated
+`ExternalMessage` Protobuf frames keyed by generated `ChannelId`; they are
+distinct from `SignalTransport` routing and request/respond operations.
+
+`TransportFactory.createPublisher(id)` and `.createSubscriber(id)` create
+typed channels. A publisher calls `publish(id, message)`; a subscriber adds
+consumers and receives copied frames. Channel, factory, and consumer-handle
+close methods are asynchronous; consumer removal and close are idempotent.
+Each publisher preserves FIFO order. Publication attempts every currently
+discovered subscriber and rejects with an aggregate failure only after those
+attempts finish. Subscriber consumers run serially. Close drains accepted work
+and reports retained send, receive, consumer, or heartbeat failures. This is
+local acceptance, not a remote acknowledgement.
+
+The transport is best effort and has no broker retry, replay, deduplication,
+fencing, durable queue, or exactly-once guarantee. Many subscribers can consume
+one producer's event; the broker does not elect or enforce a producer.
+
+`InMemoryTransportFactory` is the one-process local/test implementation.
+`createZeroMqTransportFactory(ZeroMqConfig.create({ ipcDirectory }))` provides
+the same typed channel seam over private same-host IPC for separate Node
+processes. Both adapters exchange binary Protobuf frames, never JSON or V8
+serialization. Neither adapter provides a cross-machine guarantee.
+
+The ZeroMQ factory uses adapter-private PUSH/PULL endpoints and subscriber
+manifests so multiple contexts may publish status and configuration channels.
+It creates owner-checked `0700` directories and atomic `0600` manifests, bounds
+each manifest to 4096 bytes and discovery to 1024 entries, and rechecks
+directory identity before use. Five-second heartbeat age plus process/socket
+liveness identifies stale entries. Malformed, oversized, symlink, non-file, or
+stale manifests are removed and skipped; valid foreign adapter identities are
+ignored rather than deleted. These manifests are discovery metadata, never
+event persistence.

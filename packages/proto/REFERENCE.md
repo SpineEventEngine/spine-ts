@@ -63,4 +63,21 @@ package for those responsibilities.
 
 ## Integration broker contracts
 
-The root exports generated ExternalMessage, ExternalEventsWanted, ExternalEventType, BoundedContextOnline, ChannelId, and BoundedContextName schemas and types. They are exact copied JVM wire contracts for the integration broker and typed message transport; they do not add JSON or V8 frames.
+The root exports generated `ExternalMessage`, `ExternalEventsWanted`,
+`ExternalEventType`, `ExternalMessageValidationError`,
+`BoundedContextOnline`, `ChannelId`, and `BoundedContextName` schemas and types.
+They are exact copied JVM wire contracts for the integration broker and typed
+message transport; they add no JSON, V8 frames, TypeScript-only fields, or
+runtime schema document. `ExternalMessage.id` carries the original `Event.id`
+and `original_message` packs the complete original `Event`; control messages
+use a generated UUID packed as `StringValue`. Valid control messages may have a
+zero-byte serialized payload.
+
+The copied-source [`spine-sources.json`](proto/spine-sources.json) manifest is
+the provenance authority. The three exact broker
+contracts are `broker.proto` (`core-jvm@0779b5fa42ca5cebd0d2935fc3a3489ab47846dc`,
+SHA-256 `76a3b965391d989d32a1a6dbc84a4465d2f8f2386be7ed266fd201483dc9865d`),
+`transport.proto` (same revision, SHA-256
+`92df339007d7dda01a6df5b87c38d988bfedebabd6ac28eb7fbb874bcd5f73bd`), and
+`core/event.proto` (`core-java@a408b0d70dafd603efc55b89c8b4b6f3e8c19d3b`,
+SHA-256 `0c385d3fd98d68d35ce1d7887bd564b590daba47b959b99d205c2be56a737d29`).

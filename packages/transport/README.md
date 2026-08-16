@@ -73,4 +73,24 @@ responsibilities.
 
 ## Integration channels
 
-The package also supplies the typed TransportFactory channel seam for external-event integration. InMemoryTransportFactory is the local/test implementation; it is separate from SignalTransport and carries generated ExternalMessage frames only.
+The package also supplies the typed `TransportFactory` channel seam for
+external-event integration. It is separate from `SignalTransport`: these
+channels carry generated `ExternalMessage` frames keyed by `ChannelId`, while
+`SignalTransport` carries routed command/event/query/subscription operations
+and request/respond traffic.
+
+Use the in-memory factory for one-process tests and local development. For two
+processes on one host, configure the message-channel adapter with the same
+absolute IPC directory in both processes:
+
+```ts
+import { createZeroMqTransportFactory, ZeroMqConfig } from "@spine-event-engine/transport/zeromq";
+
+const transportFactory = createZeroMqTransportFactory(
+  ZeroMqConfig.create({ ipcDirectory: "/tmp/spine-ipc" }),
+);
+```
+
+This is same-host IPC, not a multi-machine transport. Delivery is best effort;
+the adapter provides no broker retry, replay, deduplication, or durable queue.
+Close the factory with the owning `ServerEnvironment`.

@@ -35,13 +35,13 @@ The second validation applies these stricter rules:
 
 ## Finding ledger
 
-Strict result: 16 findings are true in substance and remain open; `S-04` is the
-only false finding. Qualifiers below correct scope or remediation without
-turning a real finding into partial completion.
+Strict result: `P-01` is resolved by Wave 13; 15 findings remain open in
+substance, and `S-04` is the only false finding. Qualifiers below correct scope
+or remediation without turning a real finding into partial completion.
 
 | ID     | Verdict                      | Kind                      | Opinion and required disposition                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ------ | ---------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `P-01` | **True**                     | Missing feature           | Bounded Contexts own isolated event buses and no integration broker consumes external-event intent. This is a material DDD capability gap, although the public API reference already records the broker exclusion. Implement JVM-equivalent domestic/external event exchange across both same-process and transport-separated contexts; a same-process forwarder alone does not complete the feature.                                                                                                                                                                            |
+| `P-01` | **Resolved by Wave 13**      | Missing feature           | T-0195 through T-0201 implement JVM-equivalent domestic/external event exchange across isolated Bounded Contexts, exact typed Protobuf channels, same-process in-memory transport, and a genuine two-process ZeroMQ application flow. T-0202 owns final documentation, review, security, release, and remote closure; no test-only forwarder receives credit.                                                                                                                                                                                                                    |
 | `P-02` | **True — not done properly** | Missing feature           | Spine TS does not implement Projection catch-up. `BoundedContext.catchUpReadSide()` is a legacy-named, context-wide, process-local clear-and-replay maintenance helper. It offers no Projection repository boundary, target IDs, starting time, `CatchUpId`, durable progress, Inbox `CATCH_UP` delivery, historical/live coordination, overlap guard, restart, resumption, or multi-instance execution. It is not credited as partial completion. Build the real capability from the JVM contract and separately decide whether to remove, rename, or internalize the helper.   |
 | `P-03` | **True**                     | Intentional divergence    | TypeScript falls back to the first field when the producer ID is type-incompatible; JVM uses the producer and its unchecked cast fails. This is a real observable compatibility difference. The TS behavior may be preferable, but tests and an internal decision do not erase the divergence. Retain it only as an explicit human-approved public divergence, with comparative documentation and porting tests.                                                                                                                                                                 |
 | `P-04` | **True**                     | Documentation defect      | Current framework documents contain stale or false runtime/parity claims: domestic/external event handling and event enrichment are requirements that TS does not implement; the reduction inventory wrongly doubts verified JVM first-field routing; the technical spec frames non-event-sourced aggregates as TS-specific although current JVM matches; and several public docs mislabel the local reset/replay helper as catch-up. One review subclaim is rejected: the architecture README's enrichment list is explicitly Proto-contract-only, not a runtime-support claim. |
@@ -182,18 +182,21 @@ same-process event forwarder alone is not completion.
   transport-separated application processes;
 - preserve event identity, tenant context, ordering guarantees, and handler
   semantics across the boundary;
-- provide durable delivery, bounded retry, deduplication, restart recovery,
-  loop prevention, and failure isolation appropriate to the existing Inbox and
-  delivery topology;
+- delegate delivery strength, reconnect behavior, and bounded adapter queues to
+  the selected transport; add no broker Inbox, retry queue, deduplication,
+  replay cursor, restart checkpoint, or fencing policy;
 - prevent an imported external event from being re-exported indefinitely;
 - prove same-process and cross-process behavior against pinned JVM semantics,
-  including duplicate, retry, unavailable-peer, and restart cases.
+  including wanted-interest changes, context close, malformed intake, and one
+  normal application event crossing real Node processes.
 
 **Done when:** applications can declare and execute real cross-context event
 exchange through one coherent contract in both deployment shapes; no test-only
 forwarder is counted as the feature; compatibility and reliability reviewers
 accept the semantics; security reviews tenant propagation and transport trust;
-the release gate and post-merge checks pass.
+the release gate and post-merge checks pass. T-0195 through T-0201 are complete;
+T-0202 is the current documentation, review, security, release, and remote
+closure task.
 
 **Excluded:** multiple-Gateway selection/failover and Cloud Run. Wave 13 may use
 the current package boundaries; Wave 14 must subsequently preserve or migrate

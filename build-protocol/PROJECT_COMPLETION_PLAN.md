@@ -1,7 +1,8 @@
 # Spine TS Project Completion Plan
 
 Status: Waves 9, 10, 11, and 12 complete, release-verified, and integrated;
-Wave 13 is next
+Wave 13 implementation and live acceptance are integrated; T-0202 convergence
+is current
 
 Plan date: 2026-07-12
 
@@ -190,8 +191,16 @@ durably closed.
   T-0188 browser RED/isolation, T-0189 the bounded browser fix,
   T-0190 MySQL normalized query execution, T-0191 exact Inbox removal, T-0192
   fenced cleanup, T-0193 documentation convergence, and T-0194 release closure.
-- **Wave 13:** implement JVM-equivalent same-process and cross-process Bounded
-  Context event exchange.
+- **Wave 13:** JVM-equivalent same-process and cross-process Bounded Context
+  event exchange. T-0195 froze the
+  [behavior/substitution plan](planning/WAVE_13_EXTERNAL_EVENTS_PLAN.md), T-0196
+  retained 22 failing acceptance designs, T-0197a/b/c established exact wire,
+  typed transport, handler-origin, and child-process seams, T-0198 supplied the
+  same-host ZeroMQ message transport, T-0199/T-0200 integrated the broker into
+  context/environment lifecycle and ThirdParty import, and T-0201 closed the
+  [real two-process proof](tasks/T-0201-wave13-cross-process-acceptance/TASK.md).
+  T-0202 owns documentation, final reviews/security, release verification,
+  integration, and remote closure.
 - **Wave 14:** establish publishable runtime/tooling/auth and cross-package SPI
   boundaries.
 - **Wave 15:** add deliberate registry-integrity and tenant-admission controls.

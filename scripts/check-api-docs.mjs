@@ -106,6 +106,25 @@ const expectedProtoExports = [
   "ValidationErrorSchema",
   "ConstraintViolationSchema",
 ];
+const expectedIntegrationProtoExports = [
+  "BoundedContextName",
+  "BoundedContextNameSchema",
+  "BoundedContextOnline",
+  "BoundedContextOnlineSchema",
+  "ChannelId",
+  "ChannelIdSchema",
+  "ExternalEventsWanted",
+  "ExternalEventsWantedSchema",
+  "ExternalEventType",
+  "ExternalEventTypeSchema",
+  "ExternalMessage",
+  "ExternalMessageSchema",
+  "ExternalMessageValidationError",
+  "ExternalMessageValidationErrorSchema",
+  "file_spine_core_bounded_context",
+  "file_spine_server_integration_broker",
+  "file_spine_server_transport_transport",
+];
 const expectedProtoToolsExports = [
   "manifestFormatVersion",
   "ModelConfig",
@@ -472,11 +491,18 @@ const expectedRdbmsStorageExports = [
 ];
 const expectedTransportExports = [
   "AsyncCloseable",
+  "ConsumerHandle",
+  "ExternalMessageConsumer",
+  "InMemoryTransportFactory",
+  "MessageChannel",
   "PublishTransportHandler",
   "PublishTransportOperation",
+  "Publisher",
   "RequestTransportHandler",
   "RequestTransportOperation",
   "SignalTransport",
+  "Subscriber",
+  "TransportFactory",
   "TransportRoutingDescriptor",
   "TransportSignalEnvelope",
   "TransportSignalKind",
@@ -489,7 +515,6 @@ const expectedTransportExports = [
   "TransportSubscriptions",
   "TransportTopics",
   "TransportOperations",
-  "TransportTopics",
 ];
 const expectedZeroMqExports = [
   "ZeroMqConfig",
@@ -764,6 +789,32 @@ const expectedServerExports = [
   "validateEntityStateTransition",
 ];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
+const boundedContextProtoPath = join(
+  "packages",
+  "proto",
+  "generated",
+  "spine",
+  "core",
+  "bounded_context_pb.ts",
+);
+const brokerProtoPath = join(
+  "packages",
+  "proto",
+  "generated",
+  "spine",
+  "server",
+  "integration",
+  "broker_pb.ts",
+);
+const transportProtoPath = join(
+  "packages",
+  "proto",
+  "generated",
+  "spine",
+  "server",
+  "transport",
+  "transport_pb.ts",
+);
 const protoToolsIndexPath = join("packages", "proto-tools", "src", "index.ts");
 const authIndexPath = join("packages", "auth", "src", "index.ts");
 const clientIndexPath = join("packages", "client-node", "src", "index.ts");
@@ -779,6 +830,7 @@ const datastoreStorageIndexPath = join("packages", "storage-datastore", "src", "
 const rdbmsStorageIndexPath = join("packages", "storage-rdbms", "src", "index.ts");
 const serverIndexPath = join("packages", "server", "src", "index.ts");
 const testingIndexPath = join("packages", "testing", "src", "index.ts");
+const transportIndexPath = join("packages", "transport", "src", "index.ts");
 const zeroMqIndexPath = join("packages", "transport", "src", "zeromq", "index.ts");
 
 const typedocExecutable = process.platform === "win32" ? "typedoc.cmd" : "typedoc";
@@ -823,6 +875,7 @@ const datastoreStorageModuleNames = collectDirectModuleNames(
 );
 const rdbmsStorageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage-rdbms/src");
 const testingModuleNames = collectDirectModuleNames(apiDocs, "packages/testing/src");
+const transportModuleNames = collectDirectModuleNames(apiDocs, "packages/transport/src");
 const zeroMqModuleNames = collectDirectModuleNames(apiDocs, "packages/transport/src/zeromq");
 
 function collectNames(value) {
@@ -1100,11 +1153,7 @@ function collectForbiddenMembers(value, ownerName, matches) {
 const forbiddenMatches = [];
 collectForbiddenMembers(apiDocs, undefined, forbiddenMatches);
 
-const missingExports = expectedProtoExports.filter((name) => !documentedNames.has(name));
 const missingCoreExports = expectedCoreExports.filter((name) => !documentedNames.has(name));
-const missingTransportExports = expectedTransportExports.filter(
-  (name) => !documentedNames.has(name),
-);
 const forbiddenTypeDocNames = [
   "BuiltInEntityConstructor",
   "BuiltInEntityConstructorBase",
@@ -1154,7 +1203,28 @@ const declaredStorageExports = collectNamedExports(storageIndexPath);
 const declaredDatastoreStorageExports = collectNamedExports(datastoreStorageIndexPath);
 const declaredRdbmsStorageExports = collectNamedExports(rdbmsStorageIndexPath);
 const declaredTestingExports = collectNamedExports(testingIndexPath);
+const declaredTransportExports = collectNamedExports(transportIndexPath);
 const declaredZeroMqExports = collectNamedExports(zeroMqIndexPath);
+const declaredIntegrationProtoExports = new Set([
+  ...collectNamedExports(boundedContextProtoPath),
+  ...collectNamedExports(brokerProtoPath),
+  ...collectNamedExports(transportProtoPath),
+]);
+const missingIntegrationProtoExports = expectedIntegrationProtoExports.filter(
+  (name) => !declaredIntegrationProtoExports.has(name),
+);
+const unexpectedIntegrationProtoExports = [...declaredIntegrationProtoExports].filter(
+  (name) => !expectedIntegrationProtoExports.includes(name),
+);
+const missingTransportExports = expectedTransportExports.filter(
+  (name) => !transportModuleNames.has(name),
+);
+const missingDeclaredTransportExports = expectedTransportExports.filter(
+  (name) => !declaredTransportExports.includes(name),
+);
+const unexpectedTransportExports = declaredTransportExports.filter(
+  (name) => !expectedTransportExports.includes(name),
+);
 const missingServerExports = expectedServerExports.filter((name) => !serverModuleNames.has(name));
 const missingAuthExports = expectedAuthExports.filter((name) => !authModuleNames.has(name));
 const missingDeclaredAuthExports = expectedAuthExports.filter(
@@ -1302,9 +1372,27 @@ const unexpectedZeroMqExports = declaredZeroMqExports.filter(
   (name) => !expectedZeroMqExports.includes(name),
 );
 
+const missingExports = expectedProtoExports.filter((name) => !documentedNames.has(name));
+
 if (missingExports.length > 0) {
   console.error(
     `TypeDoc JSON is missing expected @spine-event-engine/proto exports: ${missingExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (missingIntegrationProtoExports.length > 0) {
+  console.error(
+    "Generated integration Proto modules are missing expected root exports: " +
+      missingIntegrationProtoExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (unexpectedIntegrationProtoExports.length > 0) {
+  console.error(
+    "Generated integration Proto module exports changed without updating docs expectations: " +
+      unexpectedIntegrationProtoExports.join(", "),
   );
   process.exit(1);
 }
@@ -1580,6 +1668,22 @@ if (missingTransportExports.length > 0) {
   process.exit(1);
 }
 
+if (missingDeclaredTransportExports.length > 0) {
+  console.error(
+    "@spine-event-engine/transport root is missing expected exports: " +
+      missingDeclaredTransportExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (unexpectedTransportExports.length > 0) {
+  console.error(
+    "@spine-event-engine/transport root exports changed without updating docs expectations: " +
+      unexpectedTransportExports.join(", "),
+  );
+  process.exit(1);
+}
+
 if (missingZeroMqExports.length > 0) {
   console.error(
     "TypeDoc JSON is missing expected @spine-event-engine/transport/zeromq exports: " +
@@ -1668,6 +1772,18 @@ if (forbiddenTypeDocNameMatches.length > 0 || forbiddenTypeDocPatternMatches.len
 }
 
 const protoIndexSource = readFileSync(protoIndexPath, "utf8");
+const requiredIntegrationProtoReexports = [
+  "../generated/spine/core/bounded_context_pb.js",
+  "../generated/spine/server/integration/broker_pb.js",
+  "../generated/spine/server/transport/transport_pb.js",
+];
+
+for (const modulePath of requiredIntegrationProtoReexports) {
+  if (!protoIndexSource.includes(`export * from "${modulePath}";`)) {
+    console.error(`@spine-event-engine/proto root is missing exact re-export ${modulePath}.`);
+    process.exit(1);
+  }
+}
 
 if (/export\s+\*\s+from\s+["']\.\/generated\//.test(protoIndexSource)) {
   console.error(
@@ -1679,6 +1795,7 @@ if (/export\s+\*\s+from\s+["']\.\/generated\//.test(protoIndexSource)) {
 console.log(
   [
     `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-event-engine/proto exports`,
+    `${expectedIntegrationProtoExports.length} exact generated integration Proto exports`,
     `${expectedAuthExports.length} expected @spine-event-engine/auth exports`,
     `${expectedCoreExports.length} expected @spine-event-engine/core exports`,
     `${expectedClientExports.length} expected @spine-event-engine/client-node exports`,

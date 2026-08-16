@@ -29,19 +29,22 @@ registration.
 Use one detailed source for each subject rather than treating this page as a
 tutorial:
 
-| Need                                                     | Canonical detail                                                         |
-| -------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Runtime and Bounded Context boundaries                   | [Architecture notes](../architecture/README.md)                          |
-| Server assembly, handlers, routing, filters, and logging | [Server reference](../../packages/server/REFERENCE.md)                   |
-| Node client contract                                     | [Node client reference](../../packages/client-node/REFERENCE.md)         |
-| Browser client contract                                  | [Browser client reference](../../packages/client-web/REFERENCE.md)       |
-| React client contract                                    | [React client reference](../../packages/client-react/REFERENCE.md)       |
-| Storage, queries, provider layouts, and tenancy          | [Storage reference](../../packages/storage/REFERENCE.md)                 |
-| Remote delivery client and coordination contract         | [Delivery client reference](../../packages/delivery-client/REFERENCE.md) |
-| Local in-memory Delivery server limits and lifecycle     | [Delivery server reference](../../packages/delivery-server/REFERENCE.md) |
-| Common deployment and discovery contract                 | [Deployment reference](../../packages/deployment/REFERENCE.md)           |
-| GCE deployment operation                                 | [GCE deployment reference](../../packages/deployment-gce/REFERENCE.md)   |
-| GKE deployment operation                                 | [GKE deployment reference](../../packages/deployment-gke/REFERENCE.md)   |
+| Need                                                     | Canonical detail                                                                             |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Runtime and Bounded Context boundaries                   | [Architecture notes](../architecture/README.md)                                              |
+| Server assembly, handlers, routing, filters, and logging | [Server reference](../../packages/server/REFERENCE.md)                                       |
+| Cross-context external-event exchange                    | [Server external-event guide](../../packages/server/README.md#cross-context-external-events) |
+| Integration message transport                            | [Transport reference](../../packages/transport/REFERENCE.md)                                 |
+| Exact integration Protobuf contracts                     | [Proto reference](../../packages/proto/REFERENCE.md#integration-broker-contracts)            |
+| Node client contract                                     | [Node client reference](../../packages/client-node/REFERENCE.md)                             |
+| Browser client contract                                  | [Browser client reference](../../packages/client-web/REFERENCE.md)                           |
+| React client contract                                    | [React client reference](../../packages/client-react/REFERENCE.md)                           |
+| Storage, queries, provider layouts, and tenancy          | [Storage reference](../../packages/storage/REFERENCE.md)                                     |
+| Remote delivery client and coordination contract         | [Delivery client reference](../../packages/delivery-client/REFERENCE.md)                     |
+| Local in-memory Delivery server limits and lifecycle     | [Delivery server reference](../../packages/delivery-server/REFERENCE.md)                     |
+| Common deployment and discovery contract                 | [Deployment reference](../../packages/deployment/REFERENCE.md)                               |
+| GCE deployment operation                                 | [GCE deployment reference](../../packages/deployment-gce/REFERENCE.md)                       |
+| GKE deployment operation                                 | [GKE deployment reference](../../packages/deployment-gke/REFERENCE.md)                       |
 
 For the end-to-end browser/authentication extension contract, including the
 exact trust-boundary limitations that TypeDoc declarations cannot convey, see
@@ -157,6 +160,12 @@ FileDescriptorSet against its frozen digest, removing only `source_code_info`
 while preserving custom options and all other wire-relevant descriptor fields.
 Proto package configuration is read through `ProtoConfig.read()`; manifest
 creation and reading remain on the `ProtoManifest` API.
+
+The curated Proto root also exports the integration wire contracts
+`ChannelId`, `ExternalMessage`, `ExternalEventsWanted`, and
+`BoundedContextOnline`, including their generated schemas and descriptors.
+Broker channels carry these exact Protobuf messages; they do not use JSON or
+V8 serialization.
 
 Core exports include deterministic type URL derivation, registry and metadata
 types, the default registry for the curated Spine schema set, single-message
@@ -470,8 +479,8 @@ through `Server` use the environment storage factory unless
 `withStorageFactory()` already selected a more specific local factory.
 `Server.atPort(port)` defaults to local-only `127.0.0.1`; broader hosts are
 explicit through `ServerOptions`. All servers share the lazily resolved
-singleton; production configuration requires `storageFactory` and `transport`
-before first resolution, and production selection itself requires
+singleton; production configuration requires `storageFactory`, `transport`,
+`transportFactory`, and `typeRegistry` before first resolution, and production selection itself requires
 `NODE_ENV=production` before that first resolution. `RunningServer` exposes
 `host`, `port`, `baseUrl`, and
 idempotent `close()`. Close stops listener intake and active HTTP/2 sessions,
@@ -485,6 +494,34 @@ close retries only unfinished cleanup. The API deliberately hides ZeroMQ, IPC
 endpoint names, worker/process supervision, durable scheduling, and Java-style
 delivery-topology configuration; it intentionally exposes this one JVM-style
 global process environment configuration.
+
+`ServerEnvironmentSettings` also accepts `transportFactory` and `typeRegistry`.
+The former is the message-channel factory used by each context-owned integration
+broker; the latter is the complete application schema lookup used by
+`ThirdPartyContext`. Local/test resolution supplies `InMemoryTransportFactory`
+and `spineCoreRegistry` when omitted. Production resolution rejects either
+omission, so production applications must compose and configure their own
+schema universe (for example with `TypeRegistry.from(...)`) and message
+transport. The existing `transport: SignalTransport` setting remains separate
+and continues to configure runtime command/event intake.
+
+The server root exports `External<T>` (a type-only alias), `HandlerOrigin`,
+`ThirdPartyContext`, and the generated registry v3 contract. The canonical
+`External<T>` marker is recognized on a receptor's first parameter and produces
+external metadata; unmarked handlers are domestic. `EventDispatcher` retains
+the complete `messageSchemas()` set and may provide `externalEventSchemas()` as
+the external subset. EventBus and repository dispatch select handlers by the
+incoming `EventContext.external` flag, including per-handler filtering when a
+repository mixes origins for one event type. External command inputs are
+invalid; external events, rejections, and supported state subscriptions are
+valid. See the [server reference](../../packages/server/REFERENCE.md) for
+decorator and generated-registry details.
+
+`ThirdPartyContext.singleTenant(name)` and `.multitenant(name)` create the
+JVM-aligned hidden import context. `emittedEvent()` accepts a generated event
+and a `UserId` (single-tenant) or `ActorContext` (multitenant), validates actor
+tenancy, and publishes through the private broker. `close()` releases that
+context and its broker resources.
 `DurableSubscriptionBindings` and `DurableSubscriptionBindingsOptions` configure
 the gateway storage registry used by production browser access.
 `isDurableSubscriptionBindings` lets hosting code check that a supplied
@@ -696,9 +733,11 @@ policy. It reports deterministic registered event message full type names and
 frozen copy-safe metadata for event subscribers, event reactors, and event
 applications grouped by event type. Subscriber and reactor lookups preserve
 Spine fan-out semantics and do not reject multiple receivers for the same event
-type. Domestic/external event classification and integration-broker
-wanted-event publication remain outside this surface because TypeScript
-handler metadata has no external-event marker. It is not an event bus, integration
+type. Origin classification is retained in each handler record: unmarked
+handlers are domestic and canonical first-parameter `External<T>` handlers are
+external. The readiness view exposes the complete event schema set and the
+external subset used by the context-owned integration broker to publish wanted
+events. It is not an event bus, integration
 broker, import bus, event store, delivery mechanism, stand, subscription
 service, command-result subscription, dispatcher, router, event posting API,
 validator, repository dispatcher, storage writer, transport adapter, handler
@@ -885,17 +924,31 @@ production endpoint topology, broker processes, child process supervision,
 participant lifecycle values, worker registrations, delivery attempt/result
 values, retry policy, durable storage, runtime handler invocation, or server
 runtime wiring.
+
+The same root also exports the separate integration message-channel contracts:
+`MessageChannel`, `Publisher`, `Subscriber`, `ExternalMessageConsumer`, and
+`TransportFactory`, plus `InMemoryTransportFactory`; generated `ChannelId`
+comes from `@spine-event-engine/proto`, and the ZeroMQ adapter subpath exports
+`createZeroMqTransportFactory()`. These channels carry only exact generated
+`ExternalMessage` Protobuf frames for the private context-owned integration
+broker. They are not `SignalTransport` and expose no routing plans, signal
+kinds, request/reply operations, subscriber IDs, sockets, endpoint paths, or
+manifests. The ZeroMQ message adapter uses a unique manifest-backed PULL
+endpoint per subscriber and dedicated PUSH connections for discovered
+subscribers. Bind-before-manifest and remove-before-close ordering protects
+discovery; delivery is best effort, not durable or exactly once. The private
+manifest is discovery metadata, never a wire frame or broker persistence.
 The transport package pins `zeromq@6.5.0` for local IPC adapter work, but that
 native dependency remains outside the root TypeDoc entry point. The
 adapter-scoped `@spine-event-engine/transport/zeromq` subpath exports exactly
 `ZeroMqConfig`, `ZeroMqConfigInput`, `createZeroMqTransport()`,
-`ZeroMqTransportScope`, and
+`createZeroMqTransportFactory()`, `ZeroMqTransportScope`, and
 `ZeroMqTransportOptions` for local IPC deployments. It derives deterministic
 IPC endpoints from adapter config and transport routing descriptors internally,
 then exposes only the
 `SignalTransport` contract to runtime binding code. Socket creation, endpoint
 strings, multipart frames, and native binding types remain absent from the root
-API; remote transport, broker topology, process supervision, worker
+API; remote signal transport, process supervision, worker
 registration handshakes, delivery retries, and broad health checks are outside
 this API. The adapter provides no exactly-once, durable-redelivery,
 retry, restart, or remote-delivery guarantee. For transport topics marked

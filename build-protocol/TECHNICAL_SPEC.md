@@ -264,15 +264,23 @@ flowchart LR
   Services --> Runtime["Bounded Context Runtime"]
   Runtime --> WriteBus["Write-side buses"]
   Runtime --> ReadSide["Read-side Stand"]
-  WriteBus --> Broker["Signal Transport Abstraction"]
-  Broker --> ZeroMQ["ZeroMQ local IPC adapter"]
+  WriteBus --> Signal["SignalTransport runtime binding"]
+  Runtime --> Integration["Context-owned IntegrationBroker"]
+  Integration --> Channels["Typed ExternalMessage channels"]
+  Signal --> ZeroMQ["ZeroMQ signal adapter"]
+  Channels --> ZeroMQChannels["ZeroMQ message-channel adapter"]
   ZeroMQ --> Workers["Node worker processes"]
+  ZeroMQChannels --> Peers["Peer Bounded Context processes"]
   Workers --> Storage["Storage adapters"]
   Storage --> ReadSide
   ReadSide --> Services
 ```
 
-The gRPC services remain the public remote API. Internally, the runtime may dispatch work to local worker processes through the transport abstraction. The transport contract deals in Spine signal envelopes and type URL topics; ZeroMQ is only one implementation.
+The gRPC services remain the public remote API. Runtime command/event routing
+uses `SignalTransport`; JVM-aligned cross-context external events use the
+separate typed message-channel SPI and exact integration Protobuf contracts.
+ZeroMQ supplies same-host implementations for both authorities without merging
+their routing or lifecycle concepts.
 
 ## Package Boundaries
 
@@ -281,7 +289,8 @@ The exact package manager and build tooling are deferred to the build protocol, 
 - `proto`: copied Spine `.proto` definitions, Buf configuration, and generated Protobuf-ES schemas.
 - `core`: signal envelopes, type URL registry, metadata registry, validation facade, actor/tenant context, and common errors.
 - `server`: bounded context, repositories, entities, buses, delivery, read-side stand, lifecycle, and gRPC service implementations.
-- `transport`: bus transport interfaces and the ZeroMQ adapter.
+- `transport`: distinct SignalTransport routing and typed integration
+  message-channel interfaces, with in-memory and same-host ZeroMQ adapters.
 - `storage`: record storage abstractions and initial in-memory storage.
 - `testing`: black-box bounded-context testing utilities.
 - `example-todo`: standalone server-side to-do list example.
@@ -294,11 +303,10 @@ The generated Protobuf-ES output for each package belongs in that package's
 - Main service process: provides gRPC endpoints, server assembly, process supervision, and public API routing.
 - Command worker: subscribes to command types and executes command assignees/receptors.
 - Event worker: subscribes to event types, executes supported subscribers and
-  reactors, and delivers supported event inbox rows. Event import/importer work
-  is removed from the active plan under ADR 0001 D1; `IMPORT_EVENT` is no longer
-  a supported public delivery label for new inbox writes. Legacy stored/wire
-  `IMPORT_EVENT` rows are recognized only as deprecated compatibility data and
-  fail closed before delivery.
+  reactors, and delivers supported event inbox rows. Legacy stored/wire
+  `IMPORT_EVENT` delivery rows remain deprecated compatibility data and fail
+  closed; Wave 13 external-event import is instead context-owned broker work
+  that enters the normal EventBus with `EventContext.external = true`.
 - Projection worker: maintains read-side projections from delivered events.
 - Query worker: serves read-side queries when query workload is moved out of the main process.
 - Subscription worker: maintains subscription streams and fan-out state.

@@ -9,9 +9,11 @@ transport responsibility. This is the single H-021 requirements-splitting
 pass. No product code may precede the committed T-0195 planning package and the
 complete committed RED gate in T-0196.
 
-The requirements split is **complete and not blocked; review acceptance is
-pending**. The initially demonstrated ZeroMQ single-binder mismatch is resolved
-by the human-authorized, adapter-private
+The requirements split and T-0195 through T-0201 implementation/acceptance are
+**complete and not blocked**. RED-22 is green through two normal Node
+application processes, and T-0202 owns final documentation, review, security,
+release, integration, and remote closure. The initially demonstrated ZeroMQ
+single-binder mismatch is resolved by the human-authorized, adapter-private
 per-channel endpoint-directory substitution recorded below. That substitution
 does not change broker semantics, public configuration, or the Protobuf wire.
 Any implementation need outside the frozen decisions in this document is an

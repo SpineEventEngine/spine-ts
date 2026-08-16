@@ -117,7 +117,8 @@ Initial decorator set:
   declare explicit `void` return types.
 - `@React` for reactors that emit generated domain event messages or explicitly
   emit nothing with `void`.
-- `@External()` option for external event/command handlers.
+- `External<T>` as a type-only first-parameter marker for an external event or
+  rejection receptor. Event receptors are domestic when the marker is absent.
 - Field-filter options equivalent to Spine handler filtering.
 
 Decorators define model metadata. They must not perform runtime registration by
@@ -153,6 +154,9 @@ observeTaskCompleted(event: TaskCompleted): void;
 
 @Subscribe
 onTaskRenamed(event: TaskRenamed, context: EventContext): void;
+
+@Subscribe
+onTaskCreatedElsewhere(event: External<TaskCreated>, context: EventContext): void;
 ```
 
 The generated registry must reject unsupported signatures, missing explicit
@@ -160,6 +164,15 @@ return types on emitting handlers, `@Subscribe` handlers without explicit
 `void`, and ordinary end-user handlers that expose framework envelopes.
 It must also reject missing first-parameter type annotations because signal
 schema inference depends on that explicit type.
+
+Generated registry version 3 records `origin: "domestic" | "external"` for
+every handler. The analyzer accepts only the canonical exported `External<T>`
+marker (including namespace and marker-containing aliases), rejects counterfeit
+or unresolved markers, and rejects external command receivers. Event dispatch
+selects domestic receptors for ordinary events and external receptors for
+events whose `EventContext.external` flag is set. A method that produces a
+command may consume an external event or rejection; the integration broker does
+not carry external commands or state updates.
 
 ## Command Target Routing
 
