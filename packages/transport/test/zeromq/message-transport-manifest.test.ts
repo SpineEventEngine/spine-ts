@@ -147,6 +147,19 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
       await Promise.all([publisher.close(), subscriber.close(), factory.close()]);
     });
   });
+
+  it("shares publisher and factory close completion across racing callers", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const publisher = await factory.createPublisher(channel());
+      const publisherClose = publisher.close();
+      expect(publisher.close()).toBe(publisherClose);
+      await publisherClose;
+      const factoryClose = factory.close();
+      expect(factory.close()).toBe(factoryClose);
+      await factoryClose;
+    });
+  });
 });
 
 function config(ipcDirectory: string): ZeroMqConfig {

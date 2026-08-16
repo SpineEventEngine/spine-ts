@@ -112,7 +112,7 @@ class NativePublisher implements Publisher {
   readonly #id: ChannelId;
   readonly #config: ZeroMqConfig;
   readonly #factory: ZeroMqMessageTransport;
-  readonly #sockets = new Map<string, Push>();
+  readonly #sockets = new Map<string, { readonly endpoint: string; readonly socket: Push }>();
   #closing = false;
   #tail: Promise<void> = Promise.resolve();
   readonly #failures: unknown[] = [];
@@ -165,7 +165,7 @@ class NativePublisher implements Publisher {
   }
 
   #closeSockets(): void {
-    for (const socket of this.#sockets.values()) socket.close();
+    for (const { socket } of this.#sockets.values()) socket.close();
     this.#sockets.clear();
   }
 
@@ -189,20 +189,22 @@ class NativePublisher implements Publisher {
   }
 
   async #send(manifest: SubscriberManifest, frame: Uint8Array): Promise<void> {
-    let socket = this.#sockets.get(manifest.generation);
-    if (socket === undefined) {
-      socket = new Push({ linger: 100, immediate: true, sendTimeout: 250 });
+    let cached = this.#sockets.get(manifest.generation);
+    if (cached?.endpoint !== manifest.endpoint) {
+      cached?.socket.close();
+      const socket = new Push({ linger: 100, immediate: true, sendTimeout: 250 });
       socket.connect(manifest.endpoint);
-      this.#sockets.set(manifest.generation, socket);
+      cached = { endpoint: manifest.endpoint, socket };
+      this.#sockets.set(manifest.generation, cached);
     }
-    await socket.send(frame);
+    await cached.socket.send(frame);
   }
 
   #reconcile(manifests: readonly SubscriberManifest[]): void {
     const active = new Set(manifests.map((manifest) => manifest.generation));
-    for (const [generation, socket] of this.#sockets) {
+    for (const [generation, cached] of this.#sockets) {
       if (active.has(generation)) continue;
-      socket.close();
+      cached.socket.close();
       this.#sockets.delete(generation);
     }
   }
@@ -217,6 +219,7 @@ class NativeSubscriber implements Subscriber {
   readonly #factory: ZeroMqMessageTransport;
   readonly #consumers = new Set<ExternalMessageConsumer>();
   readonly #heartbeat: NodeJS.Timeout;
+  readonly #backgroundFailures: unknown[] = [];
   #closePromise: Promise<void> | undefined;
 
   private constructor(
@@ -312,14 +315,19 @@ class NativeSubscriber implements Subscriber {
     await rm(this.#socketPath, { force: true });
     this.#consumers.clear();
     this.#factory.removeSubscriber(this);
+    if (this.#backgroundFailures.length > 0)
+      throw new AggregateError(
+        this.#backgroundFailures,
+        "ZeroMQ message subscriber background processing failed.",
+      );
   }
 
   async #refreshHeartbeat(): Promise<void> {
     if (this.#closePromise !== undefined) return;
     try {
       await writeManifest(this.#manifestPath, { ...this.#manifest, heartbeatAtMs: Date.now() });
-    } catch {
-      // Publication removes stale entries; no retry worker belongs in this adapter.
+    } catch (error) {
+      this.#backgroundFailures.push(error);
     }
   }
 
@@ -330,8 +338,8 @@ class NativeSubscriber implements Subscriber {
         const message = fromBinary(ExternalMessageSchema, bytes);
         for (const consumer of this.#consumers) await consumer(message);
       }
-    } catch {
-      // Socket closure terminates the async iterator.
+    } catch (error) {
+      if (this.#closePromise === undefined) this.#backgroundFailures.push(error);
     }
   }
 }

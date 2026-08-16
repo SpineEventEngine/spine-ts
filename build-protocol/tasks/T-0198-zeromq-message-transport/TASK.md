@@ -26,7 +26,10 @@
   return one close completion after draining. Accepted failures remain
   observable as an AggregateError at close. PUSH sockets are cached per live
   subscriber generation and evicted on manifest reconciliation.
-- The focused suite now proves concurrent per-publisher FIFO plus mismatched
-  identity rejection (5/5 tests with shared RED-21). Outstanding before task
-  completion: dedicated multipublisher/close-race/background-failure proofs,
-  cache identity endpoint replacement, and final lifecycle review.
+- Cache entries retain both generation and endpoint, so endpoint replacement
+  closes and replaces the old PUSH socket. Subscriber run/heartbeat failures
+  are retained and made observable through close; publisher and factory close
+  calls share their in-flight completion. The focused suite now proves these
+  close races in addition to FIFO/identity behavior (6/6 tests with shared
+  RED-21). Outstanding before task completion: dedicated multipublisher and
+  injected background-failure proofs, plus final lifecycle review.
