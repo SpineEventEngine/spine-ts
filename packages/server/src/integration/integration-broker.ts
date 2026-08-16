@@ -4,7 +4,7 @@
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License. You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under the License
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
@@ -45,7 +45,11 @@ import {
 const onlineType = typeUrl(BoundedContextOnlineSchema);
 const wantedType = typeUrl(ExternalEventsWantedSchema);
 
-/** @internal Private context-owned exchange coordinator. */
+/**
+ * Coordinates private context-owned integration exchanges.
+ *
+ * @internal
+ */
 export class IntegrationBroker {
   readonly #input: IntegrationBrokerInput;
   readonly #wantedByOrigin = new Map<string, ReadonlySet<string>>();
@@ -59,6 +63,11 @@ export class IntegrationBroker {
   #closed = false;
   #lastWanted: string | undefined;
 
+  /**
+   * Creates an exchange coordinator from context-owned integration resources.
+   *
+   * @param input Provides the context assembly inputs.
+   */
   constructor(input: IntegrationBrokerInput) {
     this.#input = input;
     this.#externalSchemas = Object.freeze(
@@ -71,14 +80,22 @@ export class IntegrationBroker {
     );
   }
 
-  /** Starts the three exchanges once; callers share the same readiness promise. */
+  /**
+   * Starts the three exchanges once; callers share the same readiness promise.
+   *
+   * @returns Completes when all exchanges are ready.
+   */
   open(): Promise<void> {
     if (this.#closed) return Promise.reject(new Error("IntegrationBroker is closed."));
     this.#open ??= this.#openOnce();
     return this.#open;
   }
 
-  /** Stops intake, withdraws interests, drains accepted work, and attempts every cleanup. */
+  /**
+   * Stops intake, withdraws interests, drains accepted work, and attempts every cleanup.
+   *
+   * @returns Completes when all retained resources close.
+   */
   close(): Promise<void> {
     this.#close ??= this.#closeOnce();
     return this.#close;
@@ -299,19 +316,43 @@ export class IntegrationBroker {
   }
 }
 
-/** @internal Minimal context-assembly handoff; it is not a public application API. */
+/**
+ * Provides the minimal context-assembly handoff; it is not a public application API.
+ *
+ * @internal
+ */
 export interface IntegrationBrokerInput {
-  /** Name of the owning bounded context. */
+  /**
+   * Name of the owning bounded context.
+   */
   readonly contextName: BoundedContextName;
-  /** Optional system context whose frames share this broker's transport. */
+
+  /**
+   * Optional system context whose frames share this broker's transport.
+   */
   readonly pairedContextName?: BoundedContextName;
-  /** Transport resource factory owned by the context environment. */
+
+  /**
+   * Transport resource factory owned by the context environment.
+   */
   readonly transportFactory: TransportFactory;
-  /** Local EventBus used for domestic publication and schema lookup. */
+
+  /**
+   * Local EventBus used for domestic publication and schema lookup.
+   */
   readonly eventBus: EventBus;
-  /** Schemas whose external event channels this context consumes. */
+
+  /**
+   * Schemas whose external event channels this context consumes.
+   */
   readonly externalEventSchemas: Iterable<MessageSchema>;
-  /** Context-owned intake seam for a validated imported Event. */
+
+  /**
+   * Posts a validated imported Event through the owning context.
+   *
+   * @param event Provides the imported Event.
+   * @returns Completes when the context has accepted the Event.
+   */
   readonly postImported: (event: Event) => Promise<void>;
 }
 

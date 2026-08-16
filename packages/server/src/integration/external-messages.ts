@@ -6,8 +6,6 @@
  *
  * https://www.apache.org/licenses/LICENSE-2.0
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
  * Unless required by applicable law or agreed to in writing, software distributed under the License
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
  * or implied. See the License for the specific language governing permissions and limitations under
@@ -31,7 +29,13 @@ import {
   type ExternalMessage,
 } from "@spine-event-engine/proto";
 
-/** Wraps an exact domain Event for an event channel. */
+/**
+ * Wraps an exact domain Event for an event channel.
+ *
+ * @param event Provides the complete Event.
+ * @param origin Provides the publishing bounded context.
+ * @returns The external event frame.
+ */
 export function wrapExternalEvent(event: Event, origin: BoundedContextName): ExternalMessage {
   if (!event.id?.value) throw new Error("External Event requires an EventId.");
   return create(ExternalMessageSchema, {
@@ -41,7 +45,13 @@ export function wrapExternalEvent(event: Event, origin: BoundedContextName): Ext
   });
 }
 
-/** Wraps a complete wanted-event document using a non-event UUID identity. */
+/**
+ * Wraps a complete wanted-event document using a non-event UUID identity.
+ *
+ * @param wanted Provides the requested external types.
+ * @param origin Provides the publishing bounded context.
+ * @returns The external control frame.
+ */
 export function wrapExternalEventsWanted(
   wanted: ExternalEventsWanted,
   origin: BoundedContextName,
@@ -55,7 +65,12 @@ export function wrapExternalEventsWanted(
   );
 }
 
-/** Wraps online discovery using a non-event UUID identity. */
+/**
+ * Wraps online discovery using a non-event UUID identity.
+ *
+ * @param online Provides the online announcement.
+ * @returns The external control frame.
+ */
 export function wrapBoundedContextOnline(online: BoundedContextOnline): ExternalMessage {
   return wrapControl(
     {
@@ -66,7 +81,12 @@ export function wrapBoundedContextOnline(online: BoundedContextOnline): External
   );
 }
 
-/** Validates and recovers the complete original Event. */
+/**
+ * Validates and recovers the complete original Event.
+ *
+ * @param message Provides the received external frame.
+ * @returns The validated complete Event.
+ */
 export function unpackExternalEvent(message: ExternalMessage): Event {
   if (!message.boundedContextName?.value) throw new Error("External message requires an origin.");
   if (message.id?.typeUrl !== spineTypeUrl(EventIdSchema))
@@ -86,7 +106,13 @@ export function unpackExternalEvent(message: ExternalMessage): Event {
   return event;
 }
 
-/** @internal Copies an imported Event while changing only its external origin flag. */
+/**
+ * Copies an imported Event while changing only its external origin flag.
+ *
+ * @internal
+ * @param event Provides the received Event.
+ * @returns A copied Event marked external.
+ */
 export function toExternalEvent(event: Event): Event {
   const imported = clone(EventSchema, event);
   imported.context = clone(EventContextSchema, imported.context ?? create(EventContextSchema));

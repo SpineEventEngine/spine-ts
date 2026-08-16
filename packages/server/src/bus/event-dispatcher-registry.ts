@@ -74,7 +74,11 @@ export class EventDispatcherRegistry {
     }
   }
 
-  /** Removes dispatch routes while retaining schema admission for other routes and schema-only users. */
+  /**
+   * Removes dispatch routes while retaining schema admission for other routes and schema-only users.
+   *
+   * @param dispatcher Provides the dispatcher to remove.
+   */
   unregister(dispatcher: EventDispatcher): void {
     const snapshot = this.#snapshots.get(dispatcher);
     if (snapshot === undefined) return;

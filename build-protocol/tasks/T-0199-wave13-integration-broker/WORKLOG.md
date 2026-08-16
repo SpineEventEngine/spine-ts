@@ -110,10 +110,10 @@ lease, cursor, or ownership mechanism in the broker.
   tests, Wave 13 transport support, and wrapper-contract paths: passed with
   zero diagnostics.
 - Focused direct verification passed: `pnpm exec vitest run
-  packages/proto/test/integration-broker-contract.test.ts
-  packages/server/test/bus/event-bus.test.ts
-  packages/server/test/integration/integration-broker-module.test.ts
-  --reporter=dot` — 61 tests passed.
+packages/proto/test/integration-broker-contract.test.ts
+packages/server/test/bus/event-bus.test.ts
+packages/server/test/integration/integration-broker-module.test.ts
+--reporter=dot` — 61 tests passed.
 - Broader direct regression invocation added `integration-broker.test.ts`, the
   registry test path, and the Wave 13 repository-routing test path. It retained
   the already-recorded 13 T-0196 whole-context failures: no T-0200 broker/context
