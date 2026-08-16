@@ -307,3 +307,19 @@ packages/server/test/integration/integration-broker-module.test.ts` passed
   neither publishes a transport frame directly nor adds a sleep assumption.
   Standalone native acceptance passes, and the formerly failing concurrent
   11-file matrix passes 542/542 tests.
+
+## Converged release evidence — 2026-08-16
+
+- The final cheap preflight passed every deterministic generation, build,
+  tooling, lint, formatting, documentation, API, Buf, generated-cleanliness,
+  logging, and release-readiness gate. Its non-live focused matrix passed 10
+  files / 541 tests; the separately serialized real two-process acceptance
+  passed 1/1 in 635 ms with clean child and IPC-resource shutdown.
+- `pnpm verify:release` passed on `aab395e8`: 266 test files passed and 4 were
+  skipped; 4,268 tests passed and 19 were skipped. Repository-wide V8 coverage
+  is 95.20% lines and 90.30% branches. The retained exact changed-production
+  intersection remains 87/91 executable lines (95.60%) and 61/67 branches
+  (91.04%); subsequent changes are documentation or test-harness-only.
+- All five final concern dispositions are PASS: style/maintainability,
+  performance/reliability, TypeScript/API, documentation, and security. No
+  public, serialized, conceptual, or accepted residual remains.
