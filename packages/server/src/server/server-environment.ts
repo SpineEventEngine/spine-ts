@@ -171,7 +171,9 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
    */
   readonly transportFactory: TransportFactory;
 
-  /** Read-only application schema lookup used by private integration boundaries. */
+  /**
+   * Read-only application schema lookup used by private integration boundaries.
+   */
   readonly typeRegistry: TypeRegistryLookup;
 
   /**

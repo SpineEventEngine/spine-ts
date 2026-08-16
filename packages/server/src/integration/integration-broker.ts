@@ -221,7 +221,7 @@ export class IntegrationBroker {
         throw new Error("External event message type is not accepted.");
       fromBinary(schema, original.message.value);
       imported = toExternalEvent(original);
-    } catch (error) {
+    } catch {
       emitServerError(
         serverEnvironmentAccess.loggerFor(ServerEnvironment.instance()),
         "Dropped corrupt external event.",

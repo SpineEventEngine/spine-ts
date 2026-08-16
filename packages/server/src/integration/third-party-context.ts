@@ -65,6 +65,8 @@ export class ThirdPartyContext {
     return new ThirdPartyContext(await BoundedContext.multitenant(name).buildAsync(), true);
   }
 
+  /* eslint-disable @typescript-eslint/unified-signatures -- Frozen JVM public contract requires distinct actor overloads. */
+
   /**
    * Publishes one generated event with its importing actor identity.
    *
@@ -74,7 +76,23 @@ export class ThirdPartyContext {
    * context, an unsupported message, or incompatible actor tenancy.
    */
   emittedEvent(event: Message, actor: ActorContext): Promise<void>;
+
+  /**
+   * Publishes one generated event with a user identity in a single-tenant context.
+   *
+   * @param event Supplies the generated event message to import unchanged.
+   * @param actor Supplies the importing user identity.
+   * @returns Completes when the private broker accepts the imported event.
+   */
   emittedEvent(event: Message, actor: UserId): Promise<void>;
+
+  /**
+   * Publishes one generated event with its importing actor identity.
+   *
+   * @param event Supplies the generated event message to import unchanged.
+   * @param actor Supplies a user or actor context that satisfies this context's tenancy policy.
+   * @returns Completes when the private broker accepts the imported event.
+   */
   async emittedEvent(event: Message, actor: ActorContext | UserId): Promise<void> {
     if (this.#closed) throw new Error("ThirdPartyContext is closed.");
     const actorContext = this.#actorContext(actor);
@@ -99,6 +117,7 @@ export class ThirdPartyContext {
     });
     await boundedContextIntegrationAccess.publishImported(this.#context, envelope);
   }
+  /* eslint-enable @typescript-eslint/unified-signatures */
 
   /**
    * Returns whether the hidden bounded context remains available for imports.

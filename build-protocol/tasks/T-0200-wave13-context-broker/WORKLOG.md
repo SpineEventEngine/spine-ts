@@ -666,3 +666,15 @@ scripts/check-tsdoc.test.mjs` process exited after its run banner, but this
   the curated fallback. ThirdParty no-interest publication resolves without
   allocating a publisher/frame, and normal online/wanted synchronization
   remains deterministic after the harness fix.
+
+## Deterministic lint correction — 2026-08-16
+
+- Retained the error binding in broker-open cleanup, where it remains part of
+  the propagated failure, and removed only the unused binding from corrupt
+  event containment.
+- Preserved the frozen JVM two-overload `emittedEvent` public contract with a
+  narrow, documented `unified-signatures` suppression. The public registry
+  property TSDoc now follows the project block style.
+- Fresh evidence: `pnpm lint:tsdoc`, `pnpm exec eslint .`, and the focused
+  IntegrationBroker/ThirdParty Vitest run passed (2 files / 33 tests);
+  Prettier and `git diff --check` passed.
