@@ -240,6 +240,48 @@ describe("IntegrationBroker module", () => {
     await online.close();
   });
 
+  it("rejects forged control identity and mismatched online source before accepting a later peer", async () => {
+    const factory = new RecordingTransportFactory();
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "validation-later-peer" }),
+      transportFactory: factory,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    brokers.push(broker);
+    await broker.open();
+    const publisher = await factory.createPublisher(
+      create(ChannelIdSchema, { targetType: TypeUrls.derive(BoundedContextOnlineSchema) }),
+    );
+    const valid = wrapBoundedContextOnline(
+      create(BoundedContextOnlineSchema, {
+        context: create(BoundedContextNameSchema, { value: "later-peer" }),
+      }),
+    );
+    const forged = create(ExternalMessageSchema, {
+      ...valid,
+      id: create(AnySchema, {
+        typeUrl: TypeUrls.derive(StringValueSchema),
+        value: toBinary(StringValueSchema, create(StringValueSchema, { value: "not-a-uuid" })),
+      }),
+    });
+    await expect(publisher.publish(required(forged.id, "forged identity"), forged)).rejects.toThrow(
+      /Malformed integration control message/u,
+    );
+    const mismatched = create(ExternalMessageSchema, {
+      ...valid,
+      boundedContextName: create(BoundedContextNameSchema, { value: "forged-peer" }),
+    });
+    await expect(
+      publisher.publish(required(mismatched.id, "mismatched identity"), mismatched),
+    ).rejects.toThrow(/Malformed integration control message/u);
+    const before = factory.published.length;
+    await publisher.publish(required(valid.id, "valid identity"), valid);
+    expect(factory.published).toHaveLength(before + 2);
+    await publisher.close();
+  });
+
   it("retries close after its final wanted publication cleanup fails", async () => {
     const factory = new RecordingTransportFactory();
     const broker = new IntegrationBroker({

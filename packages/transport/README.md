@@ -94,3 +94,8 @@ const transportFactory = createZeroMqTransportFactory(
 This is same-host IPC, not a multi-machine transport. Delivery is best effort;
 the adapter provides no broker retry, replay, deduplication, or durable queue.
 Close the factory with the owning `ServerEnvironment`.
+
+The ZeroMQ adapter bounds one encoded `ExternalMessage` frame to 1 MiB on both
+publication and intake. Raw undecodable or oversized frames are dropped so a
+later valid frame can continue; consumer failures remain observable when the
+subscriber closes.

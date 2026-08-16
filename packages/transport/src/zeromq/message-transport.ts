@@ -13,6 +13,7 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
+import { constants } from "node:fs";
 import { lstat, mkdir, open, opendir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
@@ -37,6 +38,8 @@ const staleAfterMs = 5000;
 const heartbeatIntervalMs = 1000;
 const unixSocketPathLimit = 104;
 const maxRetainedFailures = 16;
+/** One complete encoded ExternalMessage, including its nested Any/Event payload. */
+const maxNativeFrameBytes = 1024 * 1024;
 const generationPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
 interface SubscriberManifest {
@@ -94,7 +97,8 @@ class ZeroMqMessageTransport implements TransportFactory {
   readonly #pendingPublishers = new Set<Promise<Publisher>>();
   readonly #pendingSubscribers = new Set<Promise<Subscriber>>();
   readonly #config: ZeroMqConfig;
-  #closePromise: Promise<void> | undefined;
+  #closeAttempt: Promise<void> | undefined;
+  #closedForCreation = false;
 
   constructor(config: ZeroMqConfig) {
     this.#config = config;
@@ -102,7 +106,7 @@ class ZeroMqMessageTransport implements TransportFactory {
 
   createPublisher(id: ChannelId): Promise<Publisher> {
     const creating = Promise.resolve().then(() => {
-      if (this.#closePromise !== undefined) throw new Error("ZeroMQ message transport is closed.");
+      if (this.#closedForCreation) throw new Error("ZeroMQ message transport is closed.");
       const publisher = new NativePublisher(id, this.#config, this);
       return discoverSubscribers(this.#config, publisher.targetType).then(() => {
         if (this.#isClosing())
@@ -139,8 +143,11 @@ class ZeroMqMessageTransport implements TransportFactory {
   }
 
   close(): Promise<void> {
-    this.#closePromise ??= this.#close();
-    return this.#closePromise;
+    this.#closedForCreation = true;
+    this.#closeAttempt ??= this.#close().finally(() => {
+      this.#closeAttempt = undefined;
+    });
+    return this.#closeAttempt;
   }
 
   removePublisher(publisher: NativePublisher): void {
@@ -152,7 +159,7 @@ class ZeroMqMessageTransport implements TransportFactory {
   }
 
   #isClosing(): boolean {
-    return this.#closePromise !== undefined;
+    return this.#closedForCreation;
   }
 
   async #close(): Promise<void> {
@@ -238,6 +245,8 @@ class NativePublisher implements Publisher {
     const manifests = await discoverSubscribers(this.#config, this.targetType);
     this.#reconcile(manifests);
     const frame = toBinary(ExternalMessageSchema, message);
+    if (frame.byteLength > maxNativeFrameBytes)
+      throw new Error("ZeroMQ message frame exceeds the native frame-size limit.");
     const attempts = await Promise.allSettled(
       manifests.map((manifest) => this.#send(manifest, frame)),
     );
@@ -257,7 +266,12 @@ class NativePublisher implements Publisher {
     let cached = this.#sockets.get(manifest.generation);
     if (cached?.endpoint !== manifest.endpoint) {
       cached?.socket.close();
-      const socket = new Push({ linger: 100, immediate: true, sendTimeout: 250 });
+      const socket = new Push({
+        linger: 100,
+        immediate: true,
+        sendTimeout: 250,
+        maxMessageSize: maxNativeFrameBytes,
+      });
       socket.connect(manifest.endpoint);
       cached = { endpoint: manifest.endpoint, socket };
       this.#sockets.set(manifest.generation, cached);
@@ -289,7 +303,8 @@ class NativeSubscriber implements Subscriber {
   #heartbeatTail: Promise<void> = Promise.resolve();
   #heartbeatRunning = false;
   #heartbeatQueued = false;
-  #closePromise: Promise<void> | undefined;
+  #closeAttempt: Promise<void> | undefined;
+  #closing = false;
 
   private constructor(
     id: ChannelId,
@@ -334,7 +349,7 @@ class NativeSubscriber implements Subscriber {
       endpoint,
       heartbeatAtMs: Date.now(),
     };
-    const socket = new Pull({ linger: 0 });
+    const socket = new Pull({ linger: 0, maxMessageSize: maxNativeFrameBytes });
     try {
       await socket.bind(endpoint);
       await zeroMqMessageAccess.writeManifest(manifestPath, manifest);
@@ -355,12 +370,12 @@ class NativeSubscriber implements Subscriber {
   }
 
   isStale(): boolean {
-    return this.#closePromise !== undefined || this.#consumers.size === 0;
+    return this.#closing || this.#consumers.size === 0;
   }
 
   addConsumer(consumer: ExternalMessageConsumer): Promise<ConsumerHandle> {
     return Promise.resolve().then(() => {
-      if (this.#closePromise !== undefined) throw new Error("ZeroMQ message subscriber is closed.");
+      if (this.#closing) throw new Error("ZeroMQ message subscriber is closed.");
       this.#consumers.add(consumer);
       let removed = false;
       const handle: ConsumerHandle = {
@@ -376,12 +391,15 @@ class NativeSubscriber implements Subscriber {
   }
 
   close(): Promise<void> {
-    this.#closePromise ??= this.#close();
-    return this.#closePromise;
+    this.#closing = true;
+    this.#closeAttempt ??= this.#close().finally(() => {
+      this.#closeAttempt = undefined;
+    });
+    return this.#closeAttempt;
   }
 
   #isClosing(): boolean {
-    return this.#closePromise !== undefined;
+    return this.#closing;
   }
 
   async #close(): Promise<void> {
@@ -398,17 +416,18 @@ class NativeSubscriber implements Subscriber {
       ),
     );
     this.#consumers.clear();
-    this.#factory.removeSubscriber(this);
     const failures: unknown[] = [...this.#backgroundFailures];
     for (const result of [...heartbeats, ...results]) {
       if (result.status === "rejected") failures.push(result.reason);
     }
+    const cleanupFailed = results[0].status === "rejected" || results[2].status === "rejected";
+    if (!cleanupFailed) this.#factory.removeSubscriber(this);
     if (failures.length > 0)
       throw new AggregateError(failures, "ZeroMQ message subscriber background processing failed.");
   }
 
   async #refreshHeartbeat(): Promise<void> {
-    if (this.#closePromise !== undefined) return;
+    if (this.#closing) return;
     try {
       await zeroMqMessageAccess.writeManifest(this.#manifestPath, {
         ...this.#manifest,
@@ -440,15 +459,25 @@ class NativeSubscriber implements Subscriber {
     try {
       for await (const [bytes] of this.#socket) {
         if (bytes === undefined) continue;
-        const message = fromBinary(ExternalMessageSchema, bytes);
+        if (bytes.byteLength > maxNativeFrameBytes) continue;
+        let message: ExternalMessage;
+        try {
+          message = fromBinary(ExternalMessageSchema, bytes);
+        } catch {
+          continue;
+        }
         const work = this.#deliver(message);
         this.#receiveWork = work.catch((error: unknown) => {
           retainFailure(this.#backgroundFailures, error);
         });
-        await work;
+        try {
+          await work;
+        } catch {
+          // One application consumer cannot terminate a native receive loop.
+        }
       }
     } catch (error) {
-      if (this.#closePromise === undefined) retainFailure(this.#backgroundFailures, error);
+      if (!this.#closing) retainFailure(this.#backgroundFailures, error);
     }
   }
 
@@ -559,15 +588,40 @@ async function readManifest(
       await rm(manifestPath, { force: true });
       return undefined;
     }
-    const handle = await open(manifestPath, "r");
+    const handle = await open(manifestPath, constants.O_RDONLY | constants.O_NOFOLLOW);
     let text: string;
+    let openedUid = -1;
+    let openedMode = 0;
     try {
+      const opened = await handle.stat();
+      openedUid = opened.uid;
+      openedMode = opened.mode;
+      if (
+        !opened.isFile() ||
+        opened.dev !== file.dev ||
+        opened.ino !== file.ino ||
+        opened.size !== file.size ||
+        opened.size > maxManifestBytes
+      ) {
+        await rm(manifestPath, { force: true });
+        return undefined;
+      }
       text = await handle.readFile({ encoding: "utf8" });
     } finally {
       await handle.close();
     }
     const parsed: unknown = JSON.parse(text);
     if (hasForeignIdentity(parsed, adapterIdentity)) return undefined;
+    if (
+      process.platform !== "win32" &&
+      (file.uid !== process.geteuid?.() ||
+        openedUid !== process.geteuid() ||
+        (file.mode & 0o777) !== 0o600 ||
+        (openedMode & 0o777) !== 0o600)
+    ) {
+      await rm(manifestPath, { force: true });
+      return undefined;
+    }
     if (!isManifest(parsed, layout, entry)) {
       await rm(manifestPath, { force: true });
       return undefined;

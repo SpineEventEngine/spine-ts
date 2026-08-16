@@ -304,7 +304,9 @@ application `typeRegistry`.
 
 To import an event from a third-party producer, use `ThirdPartyContext`. The
 single-tenant form forbids an actor tenant, the multitenant form requires one,
-and the actor timestamp is preserved:
+and the actor timestamp is preserved. This assumes `ServerEnvironment` was
+configured first with the complete application `typeRegistry` that contains
+`MessagePosted`:
 
 ```ts
 import { ThirdPartyContext } from "@spine-event-engine/server";
@@ -319,7 +321,7 @@ await imported.emittedEvent(messagePosted, actorContext);
 await imported.close();
 ```
 
-Unknown local event schemas fail clearly; a valid event with no interested
+Unknown local generated message schemas fail clearly; a valid event with no interested
 external receptor is simply not delivered. See the [server reference](../packages/server/REFERENCE.md)
 and [transport reference](../packages/transport/REFERENCE.md) for exact
 contracts.

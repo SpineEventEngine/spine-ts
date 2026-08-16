@@ -105,9 +105,10 @@ messages. Empty control payloads are valid where the contract defines no
 fields; consumers must not reject a valid zero-byte frame merely because it is
 empty.
 
-The broker uses the complete application schema universe through the server's
-`TypeRegistry`; the core registry alone is only a local/test fallback. Imported
-events are decoded from their generated schema and retain their explicit
+`ThirdPartyContext` uses the complete application schema universe through the
+server's `TypeRegistry` to encode outgoing imported events; the core registry
+alone is only a local/test fallback. Incoming events are decoded using the
+destination EventBus's admitted generated schemas and retain their explicit
 tenant/origin metadata.
 
 The exact copied contracts are recorded in

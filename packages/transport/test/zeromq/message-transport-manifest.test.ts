@@ -15,6 +15,7 @@
 import { createHash } from "node:crypto";
 import {
   access,
+  chmod,
   lstat,
   mkdtemp,
   readFile,
@@ -33,6 +34,7 @@ import {
   ExternalMessageSchema,
 } from "@spine-event-engine/proto";
 import { describe, expect, it, vi } from "vitest";
+import { Push } from "zeromq";
 
 import { ZeroMqConfig } from "../../src/zeromq/adapter-config.js";
 import { ChannelEndpoints } from "../../src/zeromq/channel-endpoints.js";
@@ -95,6 +97,10 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
       const stale = path.join(subscriberDirectory, "00000000-0000-4000-8000-000000000001.json");
       const dead = path.join(subscriberDirectory, "00000000-0000-4000-8000-000000000002.json");
       const foreign = path.join(subscriberDirectory, "00000000-0000-4000-8000-000000000003.json");
+      const wrongMode = path.join(
+        subscriberDirectory,
+        "00000000-0000-4000-8000-000000000004.json",
+      );
       await writeFile(bad, "{");
       await symlink(path.join(subscriberDirectory, source), linked);
       await writeFile(
@@ -113,13 +119,18 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
           adapterIdentity: "foreign",
         }),
       );
+      await writeFile(
+        wrongMode,
+        JSON.stringify({ ...sourceManifest, generation: wrongMode.slice(-41, -5) }),
+      );
+      await chmod(wrongMode, 0o644);
 
       const publisher = await factory.createPublisher(channel());
       await publisher.publish(frameId(), frame());
       await eventually(
         async () => (await readFile(path.join(subscriberDirectory, source), "utf8")).length > 0,
       );
-      for (const removed of [bad, linked, stale, dead])
+      for (const removed of [bad, linked, stale, dead, wrongMode])
         await expect(access(removed)).rejects.toMatchObject({ code: "ENOENT" });
       expect((await lstat(foreign)).isFile()).toBe(true);
 
@@ -351,6 +362,85 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
     });
   });
 
+  it("drops a malformed raw native frame and continues with the next valid frame", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const subscriber = await factory.createSubscriber(channel());
+      const manifest = JSON.parse(await readFile(await manifestPathFor(ipcDirectory), "utf8")) as {
+        readonly endpoint: string;
+      };
+      const received: string[] = [];
+      await subscriber.addConsumer((message) => {
+        received.push(
+          fromBinary(
+            StringValueSchema,
+            required(message.originalMessage, "valid original message").value,
+          ).value,
+        );
+      });
+      const raw = new Push({ linger: 0 });
+      raw.connect(manifest.endpoint);
+      await raw.send(new Uint8Array([255]));
+      raw.close();
+      const publisher = await factory.createPublisher(channel());
+      const valid = frame("after-malformed");
+      await publisher.publish(required(valid.id, "valid frame identity"), valid);
+      await eventually(() => Promise.resolve(received.length === 1));
+      expect(received).toEqual(["after-malformed"]);
+      await Promise.all([publisher.close(), subscriber.close(), factory.close()]);
+    });
+  });
+
+  it("rejects an oversized publication before native delivery", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const publisher = await factory.createPublisher(channel());
+      const oversized = create(ExternalMessageSchema, {
+        id: frameId("oversized"),
+        originalMessage: create(AnySchema, {
+          typeUrl: "type.spine.io/google.protobuf.StringValue",
+          value: new Uint8Array(1024 * 1024),
+        }),
+        boundedContextName: { value: "Manifest" },
+      });
+      await expect(
+        publisher.publish(required(oversized.id, "oversized identity"), oversized),
+      ).rejects.toThrow(/frame-size limit/iu);
+      await publisher.close().catch(() => undefined);
+      await factory.close().catch(() => undefined);
+    });
+  });
+
+  it("continues after a consumer rejection and reports it when closed", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const subscriber = await factory.createSubscriber(channel());
+      const received: string[] = [];
+      let reject = true;
+      await subscriber.addConsumer((message) => {
+        const value = fromBinary(
+          StringValueSchema,
+          required(message.originalMessage, "consumer continuation original message").value,
+        ).value;
+        if (reject) {
+          reject = false;
+          throw new Error("first consumer failure");
+        }
+        received.push(value);
+      });
+      const publisher = await factory.createPublisher(channel());
+      const first = frame("first");
+      const second = frame("second");
+      await publisher.publish(required(first.id, "first identity"), first);
+      await publisher.publish(required(second.id, "second identity"), second);
+      await eventually(() => Promise.resolve(received.length === 1));
+      expect(received).toEqual(["second"]);
+      await publisher.close();
+      await expect(subscriber.close()).rejects.toThrow(/background processing failed/iu);
+      await expect(factory.close()).resolves.toBeUndefined();
+    });
+  });
+
   it("does not resurrect a manifest when an in-flight heartbeat loses a close race", async () => {
     await withIpcDirectory(async (ipcDirectory) => {
       const factory = createZeroMqTransportFactory(config(ipcDirectory));
@@ -389,7 +479,7 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
     });
   });
 
-  it("attempts socket cleanup when manifest removal fails and reports the failure", async () => {
+  it("retries failed manifest cleanup while retaining factory ownership", async () => {
     await withIpcDirectory(async (ipcDirectory) => {
       const factory = createZeroMqTransportFactory(config(ipcDirectory));
       const subscriber = await factory.createSubscriber(channel());
@@ -401,7 +491,6 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
         "sockets",
         `${manifest.generation}.sock`,
       );
-      const remove = zeroMqMessageAccess.remove.bind(zeroMqMessageAccess);
       const cleanup = vi
         .spyOn(zeroMqMessageAccess, "remove")
         .mockImplementationOnce(() => Promise.reject(new Error("manifest unlink failed")));
@@ -409,9 +498,10 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
         await expect(subscriber.close()).rejects.toThrow(/background processing failed/iu);
         await expect(access(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
         await expect(access(manifestPath)).resolves.toBeUndefined();
+        await expect(subscriber.close()).resolves.toBeUndefined();
+        await expect(access(manifestPath)).rejects.toMatchObject({ code: "ENOENT" });
       } finally {
         cleanup.mockRestore();
-        await remove(manifestPath);
         await factory.close().catch(() => undefined);
       }
     });

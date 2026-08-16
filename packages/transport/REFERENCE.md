@@ -76,3 +76,10 @@ liveness identifies stale entries. Malformed, oversized, symlink, non-file, or
 stale manifests are removed and skipped; valid foreign adapter identities are
 ignored rather than deleted. These manifests are discovery metadata, never
 event persistence.
+
+The native adapter accepts at most 1 MiB for one complete encoded
+`ExternalMessage` frame (including nested `Any` and `Event` payload bytes), on
+both publish and receive. This fixed adapter-private resource bound adds no
+wire field or nested protocol. A raw undecodable or oversized received frame is
+dropped and later frames continue. A consumer failure likewise does not stop
+the receive loop, but is retained as a bounded observable failure from close.

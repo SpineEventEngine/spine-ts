@@ -190,6 +190,8 @@ export class IntegrationBroker {
   async #onOnline(message: ExternalMessage): Promise<void> {
     if (this.#closed) return;
     const online = unpackOnline(message);
+    if (online.context?.value !== message.boundedContextName?.value)
+      throw new Error("Malformed integration control message.");
     if (!this.#accepts(online.context)) return;
     await this.#publishWanted();
   }
@@ -545,7 +547,22 @@ function unpackWanted(message: ExternalMessage): ExternalEventsWanted {
 }
 function controlPayload(schema: MessageSchema, message: ExternalMessage): Any {
   const originalMessage = message.originalMessage;
-  if (!message.boundedContextName?.value || originalMessage?.typeUrl !== typeUrl(schema))
+  if (
+    !message.boundedContextName?.value ||
+    originalMessage?.typeUrl !== typeUrl(schema) ||
+    !isControlIdentity(message.id)
+  )
     throw new Error("Malformed integration control message.");
   return originalMessage;
+}
+
+function isControlIdentity(identity: Any | undefined): boolean {
+  if (identity?.typeUrl !== typeUrl(StringValueSchema)) return false;
+  try {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+      fromBinary(StringValueSchema, identity.value).value,
+    );
+  } catch {
+    return false;
+  }
 }

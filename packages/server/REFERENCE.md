@@ -36,7 +36,8 @@ Incoming broker frames must contain a valid `ExternalMessage` wrapper and a
 complete `Event`. The server unpacks and validates the event, obtains the
 tenant from its explicit event origin, validates that tenant at the existing
 boundary, copies only `EventContext.external = true`, and posts the ordinary
-domain `EventBus`. Unknown or malformed received payloads are logged safely,
+domain `EventBus`, whose admitted schemas are the destination's authority for
+incoming payload decoding. Unknown or malformed received payloads are logged safely,
 dropped, and do not stop the broker loop. Zero-byte control messages are valid
 where the Proto contract permits an empty payload.
 
@@ -55,7 +56,8 @@ one attempt.
 
 `ThirdPartyContext` is the sole public third-party import API. Its
 `singleTenant()` form forbids an actor tenant; `multitenant()` requires one.
-`emittedEvent(event, actor)` accepts a generated event and `ActorContext` (or a
+`emittedEvent(event, actor)` accepts a registered generated Protobuf message used as an event
+payload and `ActorContext` (or a
 `UserId` in the single-tenant form), preserves actor identity and timestamp,
 and publishes through its hidden context. An unknown local schema throws; a
 valid event with no interested external receptor is simply not delivered.
@@ -87,7 +89,7 @@ ServerEnvironment.when(EnvironmentType.Production).use({
 `storageFactory` supplies records and events, `transport` is the existing
 signal/runtime transport, `transportFactory` supplies private integration
 message channels, and `typeRegistry` is the complete application schema
-universe used to decode imported events. Local and test environments default
+universe used by `ThirdPartyContext` to encode outgoing imported events. Local and test environments default
 storage and message channels in memory and use the core registry only as a
 fallback; those defaults are not production configuration.
 

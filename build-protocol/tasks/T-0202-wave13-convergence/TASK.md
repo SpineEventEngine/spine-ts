@@ -32,6 +32,10 @@ release profile, integrate from isolation, push, and leave the remote with only
   `docs/api/README.md`.
 - The orchestrator exclusively owns canonical build-protocol records,
   documentation inventory enforcement, convergence evidence, and integration.
+- The consolidated final-review correction owner is the existing implementer,
+  explicitly configured `gpt-5.6-terra` / `medium`, without subagent authority;
+  it owns the accepted transport, broker, focused-test, documentation, and task
+  evidence corrections until its pushed handoff.
 - The primary checkout and all protected human changes remain read-only.
 
 ## Acceptance

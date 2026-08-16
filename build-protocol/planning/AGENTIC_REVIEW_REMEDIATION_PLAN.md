@@ -64,8 +64,8 @@ or remediation without turning a real finding into partial completion.
 1. Mark event enrichment as deferred/unsupported in the TypeScript runtime
    architecture. Do not justify this by claiming current JVM removed it: the
    pinned JVM mainline still contains active enrichment code.
-2. Qualify domestic/external event classification as future work tied to
-   cross-context exchange.
+2. Resolved by Wave 13: domestic/external event classification and its
+   cross-context exchange are implemented and documented as current runtime behavior.
 3. Leave the Proto-contract enrichment list in `docs/architecture/README.md`
    unchanged: it explicitly excludes runtime behavior.
 4. Mark first-field command routing as verified parity. The local pinned JVM

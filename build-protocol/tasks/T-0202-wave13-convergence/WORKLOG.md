@@ -55,3 +55,74 @@
   `gpt-5.6-luna` / `medium` profiles, no subagents, and unavailable runtime
   telemetry. Their disjoint file ownership is complete and returned to the
   orchestrator.
+
+## Final specialist review wave — 2026-08-16
+
+- The complete read-only review wave used the existing project roles with no
+  subagent authority and unavailable runtime telemetry: style/maintainability,
+  performance/reliability, and TypeScript/API reviewers were explicitly
+  configured `gpt-5.6-terra` / `high`; the documentation reviewer was
+  explicitly configured `gpt-5.6-luna` / `medium`; the final security reviewer
+  was explicitly configured `gpt-5.6-terra` / `high`.
+- Accepted product findings: native receive errors must be contained per frame
+  so one malformed or rejected frame cannot stop a channel; failed subscriber
+  manifest cleanup must remain retryable and owned; native frames need one
+  adapter-private total-size bound before Protobuf decoding; status/config
+  intake must validate wrapper identity and online source consistency; manifest
+  reads must verify the opened file's identity, owner, mode, and non-symlink
+  status rather than trust an `lstat`/path-open race.
+- The frame bound is an adapter-private Node/ZeroMQ resource-safety mechanism,
+  not a broker policy, public setting, wire field, or nested payload protocol.
+  It preserves the exact Protobuf contract and is documented as a transport
+  limit. No broker retry, replay, acknowledgement, or persistence is added.
+- Accepted documentation findings: correct incoming EventBus schema versus
+  outgoing ThirdParty application-registry ownership; correct the root versus
+  internal generated-registry export boundary; supply the application registry
+  prerequisite in the ThirdParty example; resolve the stale P-04 external-origin
+  sub-disposition; describe ThirdParty input as a registered generated message
+  used as an event payload. A stricter descriptor-level event designation is
+  rejected because pinned JVM accepts `Message` and Wave 13 must not invent a
+  new admission policy.
+- One consolidated correction owner is dispatched as the existing implementer,
+  explicitly configured `gpt-5.6-terra` / `medium`, with no subagent authority
+  and unavailable runtime telemetry. It owns the transport/broker source and
+  focused tests, the accepted documentation corrections, and this task's
+  correction evidence until handoff.
+
+## Final review correction batch — 2026-08-16
+
+- RED was retained for native consumer-rejection continuation and retryable
+  subscriber manifest cleanup. The original focused run failed respectively by
+  timing out before a later valid frame and by returning the cached failed close
+  attempt. GREEN contains per-frame raw decode containment, bounded retained
+  consumer failure reporting at close, a retryable cleanup attempt while
+  admission remains closed, and a factory that permanently rejects creation
+  while permitting a later cleanup attempt.
+- The native adapter now applies one private 1 MiB bound to the complete
+  encoded `ExternalMessage` before local send and before decode. The bound is
+  also passed to ZeroMQ socket options. It covers nested payload bytes and adds
+  no public setting, protocol field, or broker policy. Raw malformed and
+  oversized frames drop without poisoning close; consumer failures are bounded
+  close evidence and do not stop later frame delivery.
+- Manifest discovery opens with `O_NOFOLLOW`, compares pre-open `lstat` and
+  opened-handle identity/type/size, and requires effective-user ownership with
+  exact `0600` permissions for local entries. Foreign adapter manifests remain
+  untouched. Focused coverage includes an invalid-mode manifest.
+- Control intake now requires a non-empty `StringValue` UUID wrapper identity;
+  online payload context must agree with wrapper origin before normal
+  self/paired filtering. Focused tests prove forged identity and mismatched
+  origin reject while a later valid peer remains accepted.
+- Documentation now distinguishes destination EventBus schemas for incoming
+  event decode from the complete ServerEnvironment application registry used by
+  ThirdParty outgoing encoding; records the ThirdParty prerequisite and the
+  generated-registry root/internal boundary; resolves P-04's stale external
+  origin wording; and documents the native frame and continuation semantics.
+- GREEN evidence: `pnpm exec vitest run
+packages/transport/test/zeromq/message-transport-manifest.test.ts
+packages/server/test/integration/integration-broker-module.test.ts` passed
+  2 files / 51 tests. `pnpm typecheck:build:generated` passed. `pnpm exec
+vitest run packages/server/test/server/server-integration-broker-cross-process.test.ts`
+  passed 1 file / 1 real two-process normal-application-flow test. Scoped ESLint,
+  Prettier check, and `git diff --check` passed. The failed `pnpm run
+build:generated` invocation was a non-mutating incorrect script-name lookup;
+  the required generated build was then run with its actual repository command.
