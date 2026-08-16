@@ -15,7 +15,10 @@ import { eventBusAccess } from "../../src/bus/event-bus.js";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { IntegrationBroker } from "../../src/integration/integration-broker.js";
-import { wrapBoundedContextOnline } from "../../src/integration/external-messages.js";
+import {
+  wrapBoundedContextOnline,
+  wrapExternalEvent,
+} from "../../src/integration/external-messages.js";
 import { RecordingTransportFactory } from "./wave13-red-support.js";
 
 describe("IntegrationBroker module", () => {
@@ -257,6 +260,35 @@ describe("IntegrationBroker module", () => {
       (frames[1]!.message as { originalMessage?: { value?: Uint8Array } }).originalMessage?.value,
     ).toEqual(toBinary(EventSchema, second));
   });
+
+  it("imports an external event once and ignores self and paired origins", async () => {
+    const factory = new RecordingTransportFactory();
+    const received: unknown[] = [];
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "receiver" }),
+      pairedContextName: create(BoundedContextNameSchema, { value: "receiver_System" }),
+      transportFactory: factory as never,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [StringValueSchema],
+      postImported: (value) => {
+        received.push(value);
+        return Promise.resolve();
+      },
+    });
+    brokers.push(broker);
+    await broker.open();
+    const original = event("imported");
+    await publishExternal(factory, original, "producer");
+    await publishExternal(factory, original, "receiver");
+    await publishExternal(factory, original, "receiver_System");
+    expect(received).toEqual([
+      expect.objectContaining({
+        id: original.id,
+        message: original.message,
+        context: { ...original.context, external: true },
+      }),
+    ]);
+  });
 });
 
 function event(id: string) {
@@ -265,6 +297,21 @@ function event(id: string) {
     schema: StringValueSchema,
     message: create(StringValueSchema, { value: id }),
   });
+}
+async function publishExternal(
+  factory: RecordingTransportFactory,
+  value: ReturnType<typeof event>,
+  source: string,
+): Promise<void> {
+  const publisher = await factory.createPublisher(
+    create(ChannelIdSchema, { targetType: TypeUrls.derive(StringValueSchema) }) as never,
+  );
+  const frame = wrapExternalEvent(value, create(BoundedContextNameSchema, { value: source }));
+  try {
+    await publisher.publish(frame.id!, frame);
+  } finally {
+    await publisher.close();
+  }
 }
 
 async function publishWanted(
