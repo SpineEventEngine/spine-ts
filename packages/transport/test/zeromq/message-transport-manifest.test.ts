@@ -221,9 +221,10 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
         );
         await Promise.resolve();
         expect(settled).toBe(false);
+        const openingFailure = expect(opening).rejects.toThrow(/closed while subscriber opened/iu);
         release();
-        await expect(opening).rejects.toThrow(/closed while subscriber opened/iu);
         await expect(close).rejects.toThrow(/transport close failed/iu);
+        await openingFailure;
         expect(await readdir(path.join(ipcDirectory, "spine-message-channels", "sockets"))).toEqual(
           [],
         );
