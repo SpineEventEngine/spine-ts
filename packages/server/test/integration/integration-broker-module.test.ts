@@ -42,10 +42,10 @@ describe("IntegrationBroker module", () => {
     };
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "module-consumer" }),
-      transportFactory: factory as never,
+      transportFactory: factory,
       eventBus: bus,
       externalEventSchemas: schemas,
-      postImported: async () => undefined,
+      postImported: () => Promise.resolve(),
     });
     brokers.push(broker);
     await broker.open();
@@ -62,10 +62,10 @@ describe("IntegrationBroker module", () => {
     const factory = new RecordingTransportFactory();
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "closed" }),
-      transportFactory: factory as never,
+      transportFactory: factory,
       eventBus: eventBusAccess.createForgettingBus(),
       externalEventSchemas: [],
-      postImported: async () => undefined,
+      postImported: () => Promise.resolve(),
     });
     await broker.close();
     await expect(broker.open()).rejects.toThrow();
@@ -77,7 +77,7 @@ describe("IntegrationBroker module", () => {
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "left" }),
       pairedContextName: create(BoundedContextNameSchema, { value: "left_System" }),
-      transportFactory: factory as never,
+      transportFactory: factory,
       eventBus: eventBusAccess.createForgettingBus(),
       externalEventSchemas: [StringValueSchema],
       postImported: () => Promise.resolve(),
@@ -94,7 +94,7 @@ describe("IntegrationBroker module", () => {
           context: create(BoundedContextNameSchema, { value: name }),
         }),
       );
-      await publisher.publish(frame.id!, frame);
+      await publisher.publish(required(frame.id, "online frame identity"), frame);
     }
     await publisher.close();
     expect(
@@ -112,7 +112,7 @@ describe("IntegrationBroker module", () => {
     eventBusAccess.registerSchemas(bus, [StringValueSchema, Int32ValueSchema]);
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "producer" }),
-      transportFactory: factory as never,
+      transportFactory: factory,
       eventBus: bus,
       externalEventSchemas: [],
       postImported: () => Promise.resolve(),
@@ -133,7 +133,7 @@ describe("IntegrationBroker module", () => {
     const factory = new RecordingTransportFactory();
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "unknown-producer" }),
-      transportFactory: factory as never,
+      transportFactory: factory,
       eventBus: eventBusAccess.createForgettingBus(),
       externalEventSchemas: [],
       postImported: () => Promise.resolve(),
@@ -150,7 +150,7 @@ describe("IntegrationBroker module", () => {
     eventBusAccess.registerSchemas(bus, [StringValueSchema, Int32ValueSchema]);
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "rollback" }),
-      transportFactory: factory as never,
+      transportFactory: factory,
       eventBus: bus,
       externalEventSchemas: [],
       postImported: () => Promise.resolve(),
@@ -175,7 +175,7 @@ describe("IntegrationBroker module", () => {
     eventBusAccess.registerSchemas(bus, [StringValueSchema, Int32ValueSchema]);
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "overlap" }),
-      transportFactory: factory as never,
+      transportFactory: factory,
       eventBus: bus,
       externalEventSchemas: [],
       postImported: () => Promise.resolve(),
@@ -198,7 +198,7 @@ describe("IntegrationBroker module", () => {
     eventBusAccess.registerSchemas(bus, [StringValueSchema]);
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "retry" }),
-      transportFactory: factory as never,
+      transportFactory: factory,
       eventBus: bus,
       externalEventSchemas: [],
       postImported: () => Promise.resolve(),
@@ -226,7 +226,7 @@ describe("IntegrationBroker module", () => {
     bus.register(dispatcher);
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "events" }),
-      transportFactory: factory as never,
+      transportFactory: factory,
       eventBus: bus,
       externalEventSchemas: [],
       postImported: () => Promise.resolve(),
@@ -251,13 +251,25 @@ describe("IntegrationBroker module", () => {
     );
     expect(frames).toHaveLength(2);
     expect(
-      (frames[0]!.message as { boundedContextName?: { value?: string } }).boundedContextName?.value,
+      (
+        required(frames[0], "first exported frame").message as {
+          boundedContextName?: { value?: string };
+        }
+      ).boundedContextName?.value,
     ).toBe("events");
     expect(
-      (frames[0]!.message as { originalMessage?: { value?: Uint8Array } }).originalMessage?.value,
+      (
+        required(frames[0], "first exported frame").message as {
+          originalMessage?: { value?: Uint8Array };
+        }
+      ).originalMessage?.value,
     ).toEqual(toBinary(EventSchema, first));
     expect(
-      (frames[1]!.message as { originalMessage?: { value?: Uint8Array } }).originalMessage?.value,
+      (
+        required(frames[1], "second exported frame").message as {
+          originalMessage?: { value?: Uint8Array };
+        }
+      ).originalMessage?.value,
     ).toEqual(toBinary(EventSchema, second));
   });
 
@@ -267,7 +279,7 @@ describe("IntegrationBroker module", () => {
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "receiver" }),
       pairedContextName: create(BoundedContextNameSchema, { value: "receiver_System" }),
-      transportFactory: factory as never,
+      transportFactory: factory,
       eventBus: eventBusAccess.createForgettingBus(),
       externalEventSchemas: [StringValueSchema],
       postImported: (value) => {
@@ -295,7 +307,7 @@ describe("IntegrationBroker module", () => {
     let calls = 0;
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "invalid" }),
-      transportFactory: factory as never,
+      transportFactory: factory,
       eventBus: eventBusAccess.createForgettingBus(),
       externalEventSchemas: [StringValueSchema],
       postImported: () => {
@@ -308,7 +320,7 @@ describe("IntegrationBroker module", () => {
     const value = event("event-id");
     const frame = wrapExternalEvent(value, create(BoundedContextNameSchema, { value: "source" }));
     frame.id = {
-      ...frame.id!,
+      ...required(frame.id, "external frame identity"),
       value: toBinary(EventIdSchema, create(EventIdSchema, { value: "other" })),
     };
     const publisher = await factory.createPublisher(
@@ -327,7 +339,7 @@ describe("IntegrationBroker module", () => {
     });
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "no-loop" }),
-      transportFactory: factory as never,
+      transportFactory: factory,
       eventBus: bus,
       externalEventSchemas: [StringValueSchema, StringValueSchema, Int32ValueSchema],
       postImported: (value) => bus.post(value),
@@ -362,7 +374,7 @@ describe("IntegrationBroker module", () => {
     });
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "drain" }),
-      transportFactory: factory as never,
+      transportFactory: factory,
       eventBus: eventBusAccess.createForgettingBus(),
       externalEventSchemas: [StringValueSchema],
       postImported: async () => {
@@ -397,7 +409,7 @@ describe("IntegrationBroker module", () => {
     );
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "attach-failure" }),
-      transportFactory: factory as never,
+      transportFactory: factory,
       eventBus: eventBusAccess.createForgettingBus(),
       externalEventSchemas: [],
       postImported: () => Promise.resolve(),
@@ -412,7 +424,7 @@ describe("IntegrationBroker module", () => {
     const factory = new RecordingTransportFactory();
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "close-retry" }),
-      transportFactory: factory as never,
+      transportFactory: factory,
       eventBus: eventBusAccess.createForgettingBus(),
       externalEventSchemas: [StringValueSchema],
       postImported: () => Promise.resolve(),
@@ -430,7 +442,7 @@ describe("IntegrationBroker module", () => {
     const factory = new RecordingTransportFactory();
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "ordered-close" }),
-      transportFactory: factory as never,
+      transportFactory: factory,
       eventBus: eventBusAccess.createForgettingBus(),
       externalEventSchemas: [StringValueSchema],
       postImported: () => Promise.resolve(),
@@ -450,7 +462,7 @@ describe("IntegrationBroker module", () => {
         context: create(BoundedContextNameSchema, { value: "peer" }),
       }),
     );
-    const pending = publisher.publish(frame.id!, frame);
+    const pending = publisher.publish(required(frame.id, "online frame identity"), frame);
     while (
       factory.published.filter(
         ({ channel }) =>
@@ -502,7 +514,7 @@ async function publishExternal(
   );
   const frame = wrapExternalEvent(value, create(BoundedContextNameSchema, { value: source }));
   try {
-    await publisher.publish(frame.id!, frame);
+    await publisher.publish(required(frame.id, "external frame identity"), frame);
   } finally {
     await publisher.close();
   }
@@ -550,4 +562,9 @@ function eventPublisherCreations(
       kind === "publisher" &&
       (channel as { targetType?: string }).targetType === TypeUrls.derive(schema),
   );
+}
+
+function required<Value>(value: Value | undefined, label: string): Value {
+  if (value === undefined) throw new Error(`Expected ${label}.`);
+  return value;
 }

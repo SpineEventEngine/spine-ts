@@ -46,12 +46,24 @@ export function wrapExternalEventsWanted(
   wanted: ExternalEventsWanted,
   origin: BoundedContextName,
 ): ExternalMessage {
-  return wrapControl(ExternalEventsWantedSchema, wanted, origin);
+  return wrapControl(
+    {
+      typeUrl: spineTypeUrl(ExternalEventsWantedSchema),
+      value: toBinary(ExternalEventsWantedSchema, wanted),
+    },
+    origin,
+  );
 }
 
 /** Wraps online discovery using a non-event UUID identity. */
 export function wrapBoundedContextOnline(online: BoundedContextOnline): ExternalMessage {
-  return wrapControl(BoundedContextOnlineSchema, online, online.context);
+  return wrapControl(
+    {
+      typeUrl: spineTypeUrl(BoundedContextOnlineSchema),
+      value: toBinary(BoundedContextOnlineSchema, online),
+    },
+    online.context,
+  );
 }
 
 /** Validates and recovers the complete original Event. */
@@ -82,20 +94,15 @@ export function toExternalEvent(event: Event): Event {
   return imported;
 }
 
-function wrapControl<
-  Schema extends typeof BoundedContextOnlineSchema | typeof ExternalEventsWantedSchema,
->(
-  schema: Schema,
-  value: Schema extends typeof BoundedContextOnlineSchema
-    ? BoundedContextOnline
-    : ExternalEventsWanted,
+function wrapControl(
+  originalMessage: { readonly typeUrl: string; readonly value: Uint8Array },
   origin: BoundedContextName | undefined,
 ): ExternalMessage {
   if (!origin?.value) throw new Error("External control message requires an origin.");
   const id = create(StringValueSchema, { value: crypto.randomUUID() });
   return create(ExternalMessageSchema, {
     id: { typeUrl: spineTypeUrl(StringValueSchema), value: toBinary(StringValueSchema, id) },
-    originalMessage: { typeUrl: spineTypeUrl(schema), value: toBinary(schema, value as never) },
+    originalMessage,
     boundedContextName: origin,
   });
 }

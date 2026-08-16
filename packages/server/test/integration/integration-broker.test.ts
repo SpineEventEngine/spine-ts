@@ -12,6 +12,9 @@ import {
   EventContextSchema,
   EventIdSchema,
   EventSchema,
+  ChannelIdSchema,
+  ExternalEventsWantedSchema,
+  ExternalMessageSchema,
   TenantIdSchema,
   VersionSchema,
 } from "@spine-event-engine/proto";
@@ -35,11 +38,11 @@ const brokerModule = new URL("../../src/integration/integration-broker.js", impo
 const external = (schemas: readonly unknown[], received: unknown[]) => ({
   messageSchemas: () => schemas,
   externalEventSchemas: () => schemas,
-  dispatch: async (event: unknown) => received.push(event),
+  dispatch: (event: unknown) => Promise.resolve(received.push(event)).then(() => undefined),
 });
 const domestic = (schemas: readonly unknown[], received: unknown[] = []) => ({
   messageSchemas: () => schemas,
-  dispatch: async (event: unknown) => received.push(event),
+  dispatch: (event: unknown) => Promise.resolve(received.push(event)).then(() => undefined),
 });
 function event(schema = StringValueSchema, id = "wave13-event", tenantId?: string) {
   return SignalEnvelopes.event({
@@ -119,9 +122,8 @@ describe("Wave 13 IntegrationBroker", () => {
     try {
       await producer.eventBus().post(event(Int32ValueSchema, "unwanted"));
       await producer.eventBus().post(event(StringValueSchema, "wanted"));
-      expect(seen).toEqual([
-        expect.objectContaining({ id: expect.objectContaining({ value: "wanted" }) }),
-      ]);
+      expect(seen).toHaveLength(1);
+      expect(seen[0]).toMatchObject({ id: { value: "wanted" } });
     } finally {
       await close(producer, consumer);
     }
@@ -143,8 +145,10 @@ describe("Wave 13 IntegrationBroker", () => {
     try {
       await left.eventBus().post(event(StringValueSchema, "a"));
       await right.eventBus().post(event(Int32ValueSchema, "b"));
-      expect(a).toEqual([expect.objectContaining({ id: expect.objectContaining({ value: "b" }) })]);
-      expect(b).toEqual([expect.objectContaining({ id: expect.objectContaining({ value: "a" }) })]);
+      expect(a).toHaveLength(1);
+      expect(a[0]).toMatchObject({ id: { value: "b" } });
+      expect(b).toHaveLength(1);
+      expect(b[0]).toMatchObject({ id: { value: "a" } });
       expect(
         factory.published.filter(({ channel }) =>
           [TypeUrls.derive(StringValueSchema), TypeUrls.derive(Int32ValueSchema)].includes(
@@ -175,11 +179,10 @@ describe("Wave 13 IntegrationBroker", () => {
       const before = eventPublications(factory).length;
       await producer.eventBus().post(event(StringValueSchema, "replaced"));
       await producer.eventBus().post(event(Int32ValueSchema, "final"));
-      expect(eventPublications(factory).slice(before)).toEqual([
-        expect.objectContaining({
-          channel: expect.objectContaining({ targetType: TypeUrls.derive(Int32ValueSchema) }),
-        }),
-      ]);
+      expect(eventPublications(factory).slice(before)).toHaveLength(1);
+      expect(eventPublications(factory)[before]).toMatchObject({
+        channel: { targetType: TypeUrls.derive(Int32ValueSchema) },
+      });
       expect(eventPublisherCreations(factory, StringValueSchema)).toHaveLength(1);
       expect(eventPublisherCreations(factory, Int32ValueSchema)).toHaveLength(1);
     } finally {
@@ -278,9 +281,10 @@ describe("Wave 13 IntegrationBroker", () => {
     try {
       await p.eventBus().post(event(StringValueSchema, "a", "tenant-a"));
       await p.eventBus().post(event(StringValueSchema, "b", "tenant-b"));
-      expect(
-        Wave13OriginProjection.externalContexts.map((context) => context.tenantId?.value),
-      ).toEqual(["tenant-a", "tenant-b"]);
+      expect(Wave13OriginProjection.externalContexts.map(tenantValue)).toEqual([
+        "tenant-a",
+        "tenant-b",
+      ]);
       await expect(
         c.stand().read(Wave13OriginStateSchema, "a", { tenantId: tenantA }),
       ).resolves.toMatchObject({ name: "external:a" });
@@ -365,7 +369,7 @@ async function assertWantedLifecycle(options: {
   // RED-07 exercises producer-before-consumer; the peer-online branch creates
   // a consumer before its producer to retain the reverse construction order.
   const consumers = Array.from({ length: options.requesters }, (_, index) =>
-    BoundedContext.singleTenant(`WantedConsumer${index}${crypto.randomUUID()}`)
+    BoundedContext.singleTenant(`WantedConsumer${String(index)}${crypto.randomUUID()}`)
       .addEventDispatcher(external([StringValueSchema], []) as never)
       .build(),
   );
@@ -373,7 +377,7 @@ async function assertWantedLifecycle(options: {
   try {
     if (options.peerOnline)
       peer = BoundedContext.singleTenant(`WantedPeer${crypto.randomUUID()}`).build();
-    if (options.closeFirst) await consumers[0]!.close();
+    if (options.closeFirst) await required(consumers[0], "first consumer").close();
 
     const eventPublicationsBefore = eventPublications(factory).length;
     if (options.closeFirst) await producer.eventBus().post(event(StringValueSchema, "after-close"));
@@ -386,12 +390,10 @@ async function assertWantedLifecycle(options: {
       ),
     ).toHaveLength(options.expectedPublishers);
     expect(wantedFrames.map((entry) => wantedTypeUrls(entry.message))).toEqual(
-      expect.arrayContaining([
-        expect.arrayContaining([TypeUrls.derive(StringValueSchema)]),
-      ]),
+      expect.arrayContaining([expect.arrayContaining([TypeUrls.derive(StringValueSchema)])]),
     );
     if (options.assertCloseOrder) {
-      const emptyWithdrawal = wantedFrames.at(-1)!;
+      const emptyWithdrawal = required(wantedFrames.at(-1), "final wanted frame");
       expect(wantedTypeUrls(emptyWithdrawal.message)).toEqual([]);
       expect(emptyWithdrawal.operationIndex).toBeLessThan(
         factory.operations.indexOf("consumer:remove"),
@@ -441,30 +443,29 @@ async function assertFailedReplacementKeepsPriorWantedSet(): Promise<void> {
   }
 }
 
-async function decodeWantedFrames(factory: RecordingTransportFactory): Promise<
+function decodeWantedFrames(factory: RecordingTransportFactory): Promise<
   readonly {
     readonly message: { readonly type: readonly { readonly typeUrl: string }[] };
     readonly operationIndex: number;
   }[]
 > {
-  const proto = (await import("@spine-event-engine/proto")) as {
-    ExternalEventsWantedSchema: Parameters<typeof fromBinary>[0];
-  };
-  return factory.published.flatMap(({ message, operationIndex }) => {
-    const frame = message as { originalMessage?: { typeUrl?: string; value?: Uint8Array } };
-    if (
-      frame.originalMessage?.typeUrl !==
-        "type.spine.io/spine.server.integration.ExternalEventsWanted" ||
-      frame.originalMessage.value === undefined
-    )
-      return [];
-    return [
-      {
-        message: fromBinary(proto.ExternalEventsWantedSchema, frame.originalMessage.value) as never,
-        operationIndex,
-      },
-    ];
-  });
+  return Promise.resolve(
+    factory.published.flatMap(({ message, operationIndex }) => {
+      const frame = message as { originalMessage?: { typeUrl?: string; value?: Uint8Array } };
+      if (
+        frame.originalMessage?.typeUrl !==
+          "type.spine.io/spine.server.integration.ExternalEventsWanted" ||
+        frame.originalMessage.value === undefined
+      )
+        return [];
+      return [
+        {
+          message: fromBinary(ExternalEventsWantedSchema, frame.originalMessage.value),
+          operationIndex,
+        },
+      ];
+    }),
+  );
 }
 function wantedTypeUrls(message: {
   readonly type: readonly { readonly typeUrl: string }[];
@@ -472,7 +473,7 @@ function wantedTypeUrls(message: {
   return message.type.map((entry) => entry.typeUrl);
 }
 function isEventChannel(channel: unknown): boolean {
-  const target = (channel as { targetType?: string })?.targetType;
+  const target = (channel as { targetType?: string }).targetType;
   return [
     TypeUrls.derive(StringValueSchema),
     TypeUrls.derive(Int32ValueSchema),
@@ -482,7 +483,7 @@ function isEventChannel(channel: unknown): boolean {
 
 function isConfigChannel(channel: unknown): boolean {
   return (
-    (channel as { targetType?: string })?.targetType ===
+    (channel as { targetType?: string }).targetType ===
     "type.spine.io/spine.server.integration.ExternalEventsWanted"
   );
 }
@@ -496,7 +497,7 @@ function configPublications(factory: RecordingTransportFactory) {
 }
 
 function isStringEventChannel(channel: unknown): boolean {
-  return (channel as { targetType?: string })?.targetType === TypeUrls.derive(StringValueSchema);
+  return (channel as { targetType?: string }).targetType === TypeUrls.derive(StringValueSchema);
 }
 
 function eventPublisherCreations(
@@ -515,8 +516,7 @@ async function publishWanted(
   source: string,
   schemas: readonly (typeof StringValueSchema | typeof Int32ValueSchema | typeof BoolValueSchema)[],
 ): Promise<void> {
-  const proto = (await import("@spine-event-engine/proto")) as Record<string, any>;
-  const wanted = create(proto.ExternalEventsWantedSchema, {
+  const wanted = create(ExternalEventsWantedSchema, {
     type: schemas.map((schema) => ({ typeUrl: TypeUrls.derive(schema) })),
   });
   const id = create(StringValueSchema, { value: crypto.randomUUID() });
@@ -525,18 +525,18 @@ async function publishWanted(
     value: toBinary(StringValueSchema, id),
   };
   const publisher = await factory.createPublisher(
-    create(proto.ChannelIdSchema, {
+    create(ChannelIdSchema, {
       targetType: "type.spine.io/spine.server.integration.ExternalEventsWanted",
     }),
   );
   try {
     await publisher.publish(
       packedId,
-      create(proto.ExternalMessageSchema, {
+      create(ExternalMessageSchema, {
         id: packedId,
         originalMessage: {
           typeUrl: "type.spine.io/spine.server.integration.ExternalEventsWanted",
-          value: toBinary(proto.ExternalEventsWantedSchema, wanted),
+          value: toBinary(ExternalEventsWantedSchema, wanted),
         },
         boundedContextName: { value: source },
       }),
@@ -551,18 +551,17 @@ async function publishExternalEvent(
   original: ReturnType<typeof event>,
   source: string,
 ): Promise<void> {
-  const proto = (await import("@spine-event-engine/proto")) as Record<string, any>;
   const packedId = {
     typeUrl: TypeUrls.derive(EventIdSchema),
     value: toBinary(EventIdSchema, original.id),
   };
   const publisher = await factory.createPublisher(
-    create(proto.ChannelIdSchema, { targetType: TypeUrls.derive(StringValueSchema) }),
+    create(ChannelIdSchema, { targetType: TypeUrls.derive(StringValueSchema) }),
   );
   try {
     await publisher.publish(
       packedId,
-      create(proto.ExternalMessageSchema, {
+      create(ExternalMessageSchema, {
         id: packedId,
         originalMessage: {
           typeUrl: TypeUrls.derive(EventSchema),
@@ -583,7 +582,23 @@ async function waitForConfigPublications(
   const deadline = Date.now() + 2_000;
   while (configPublications(factory).length < count) {
     if (Date.now() >= deadline)
-      throw new Error(`Timed out waiting for ${count} configuration publications.`);
+      throw new Error(`Timed out waiting for ${String(count)} configuration publications.`);
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
+}
+
+function required<Value>(value: Value | undefined, label: string): Value {
+  if (value === undefined) throw new Error(`Expected ${label}.`);
+  return value;
+}
+
+function tenantValue(context: unknown): string {
+  if (typeof context !== "object" || context === null)
+    throw new Error("Expected an Event context.");
+  const tenantId = (context as { readonly tenantId?: unknown }).tenantId;
+  if (typeof tenantId !== "object" || tenantId === null)
+    throw new Error("Expected an Event context tenant identity.");
+  const value = (tenantId as { readonly value?: unknown }).value;
+  if (typeof value !== "string") throw new Error("Expected a string tenant identity.");
+  return value;
 }

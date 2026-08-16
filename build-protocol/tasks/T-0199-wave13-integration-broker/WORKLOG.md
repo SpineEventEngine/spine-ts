@@ -92,3 +92,37 @@ Event publication path through its hidden context broker only.
 `rg -n "ContextTransport|RuntimeTransportBinding|SignalTransport" packages/server/src/integration`
 must remain empty. There is no Inbox, retry, deduplication, replay, election,
 lease, cursor, or ownership mechanism in the broker.
+
+## Quality-convergence ownership transfer — 2026-08-16
+
+- Ownership transferred from the turn-budget-exhausted original implementer to
+  the replacement **implementer** for bounded T0199 quality/convergence only.
+- Configured dispatch profile: `gpt-5.6-terra` / `medium`, explicitly supplied
+  by the orchestrator. Runtime telemetry is unavailable on this surface; the
+  configured role/profile is the durable metadata.
+- The existing uncommitted decoder correction was preserved and completed:
+  control-frame decoding now guards a local `originalMessage` before reading
+  bytes, with concrete online/wanted decoders and no non-null assertion,
+  `any`, `never`, or unsound decoder generic.
+- Wrapper construction no longer uses a conditional generic cast. Internal
+  broker API surfaces and their fields have narrow TSDoc.
+- Focused ESLint over all assigned broker, EventBus/registry, direct broker
+  tests, Wave 13 transport support, and wrapper-contract paths: passed with
+  zero diagnostics.
+- Focused direct verification passed: `pnpm exec vitest run
+  packages/proto/test/integration-broker-contract.test.ts
+  packages/server/test/bus/event-bus.test.ts
+  packages/server/test/integration/integration-broker-module.test.ts
+  --reporter=dot` — 61 tests passed.
+- Broader direct regression invocation added `integration-broker.test.ts`, the
+  registry test path, and the Wave 13 repository-routing test path. It retained
+  the already-recorded 13 T-0196 whole-context failures: no T-0200 broker/context
+  wiring causes no imported delivery or wanted publications; RED-15 additionally
+  reaches the pre-existing generated-repository fixture identity failure. The
+  61 direct tests remained green. This remains an explicit dependent-owner
+  limitation, not an accepted T0199 quality finding.
+- Canonical review dispositions: correctness/type safety **resolved** by typed
+  decoder and typed transport double; style **resolved** by focused lint and
+  formatting; API documentation **resolved** by internal markers/field docs;
+  performance/reliability **N/A** for this no-behavior-change convergence
+  correction; security **N/A** (release-only gate, no new trust boundary).

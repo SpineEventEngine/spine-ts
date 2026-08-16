@@ -45,7 +45,7 @@ import {
 const onlineType = typeUrl(BoundedContextOnlineSchema);
 const wantedType = typeUrl(ExternalEventsWantedSchema);
 
-/** Private context-owned exchange coordinator. */
+/** @internal Private context-owned exchange coordinator. */
 export class IntegrationBroker {
   readonly #input: IntegrationBrokerInput;
   readonly #wantedByOrigin = new Map<string, ReadonlySet<string>>();
@@ -140,7 +140,7 @@ export class IntegrationBroker {
 
   async #onOnline(message: ExternalMessage): Promise<void> {
     if (this.#closed) return;
-    const online = unpackControl<BoundedContextOnline>(BoundedContextOnlineSchema, message);
+    const online = unpackOnline(message);
     if (this.#ignored(online.context)) return;
     await this.#publishWanted(true);
   }
@@ -148,7 +148,7 @@ export class IntegrationBroker {
   async #onWanted(message: ExternalMessage): Promise<void> {
     if (this.#closed) return;
     if (this.#ignored(message.boundedContextName)) return;
-    const wanted = unpackControl<ExternalEventsWanted>(ExternalEventsWantedSchema, message);
+    const wanted = unpackWanted(message);
     const requested = new Set<string>(
       wanted.type.map((entry: { typeUrl: string }) => entry.typeUrl).filter(Boolean),
     );
@@ -299,13 +299,19 @@ export class IntegrationBroker {
   }
 }
 
-/** Minimal internal handoff for context assembly; it is not a public application API. */
+/** @internal Minimal context-assembly handoff; it is not a public application API. */
 export interface IntegrationBrokerInput {
+  /** Name of the owning bounded context. */
   readonly contextName: BoundedContextName;
+  /** Optional system context whose frames share this broker's transport. */
   readonly pairedContextName?: BoundedContextName;
+  /** Transport resource factory owned by the context environment. */
   readonly transportFactory: TransportFactory;
+  /** Local EventBus used for domestic publication and schema lookup. */
   readonly eventBus: EventBus;
+  /** Schemas whose external event channels this context consumes. */
   readonly externalEventSchemas: Iterable<MessageSchema>;
+  /** Context-owned intake seam for a validated imported Event. */
   readonly postImported: (event: Event) => Promise<void>;
 }
 
@@ -393,14 +399,29 @@ function channel(targetType: string) {
 function typeUrl(schema: MessageSchema): string {
   return TypeUrls.derive(schema);
 }
-function unpackControl<Output>(schema: MessageSchema, message: ExternalMessage): Output {
-  if (!message.boundedContextName?.value || message.originalMessage?.typeUrl !== typeUrl(schema))
-    throw new Error("Malformed integration control message.");
+function unpackOnline(message: ExternalMessage): BoundedContextOnline {
+  const originalMessage = controlPayload(BoundedContextOnlineSchema, message);
   try {
-    return fromBinary(schema as never, message.originalMessage.value);
+    return fromBinary(BoundedContextOnlineSchema, originalMessage.value);
   } catch {
     throw new Error("Malformed integration control message.");
   }
+}
+function unpackWanted(message: ExternalMessage): ExternalEventsWanted {
+  try {
+    return fromBinary(
+      ExternalEventsWantedSchema,
+      controlPayload(ExternalEventsWantedSchema, message).value,
+    );
+  } catch {
+    throw new Error("Malformed integration control message.");
+  }
+}
+function controlPayload(schema: MessageSchema, message: ExternalMessage): Any {
+  const originalMessage = message.originalMessage;
+  if (!message.boundedContextName?.value || originalMessage?.typeUrl !== typeUrl(schema))
+    throw new Error("Malformed integration control message.");
+  return originalMessage;
 }
 function frameIdentity(frame: ExternalMessage): Any {
   if (frame.id === undefined) throw new Error("External message requires an identity.");
