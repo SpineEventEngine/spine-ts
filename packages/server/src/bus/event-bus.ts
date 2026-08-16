@@ -157,6 +157,16 @@ export class EventBus {
     return dispatcher;
   }
 
+  /** Removes a previously registered dispatcher without withdrawing its schema admission. */
+  unregister(dispatcher: EventDispatcher): void {
+    this.#registry.unregister(dispatcher);
+  }
+
+  /** Finds an admitted event schema for internal dynamic dispatcher assembly. */
+  schema(typeUrl: string): MessageSchema | undefined {
+    return this.#registry.schema(typeUrl);
+  }
+
   /**
    * Posts an event for asynchronous dispatch.
    *
