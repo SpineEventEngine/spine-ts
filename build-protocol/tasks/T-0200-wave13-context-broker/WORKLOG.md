@@ -667,6 +667,29 @@ scripts/check-tsdoc.test.mjs` process exited after its run banner, but this
   allocating a publisher/frame, and normal online/wanted synchronization
   remains deterministic after the harness fix.
 
+## Final residual correction and specialist acceptance — 2026-08-16
+
+- Correction commits `d140f394` and `a4afd52e` are pushed. Corruption
+  containment now ends before application intake, uses the allowlisted safe
+  `contextName`, `eventType`, `operation`, and lowercase
+  `corrupt_external_event` facts, and proves unknown plus undecodable frames are
+  dropped before a subsequent valid frame delivers. Downstream intake failure
+  propagates normally.
+- Recording subscribers reject admission synchronously when close begins and
+  share idempotent close completion. ThirdParty's UserId overload synthesizes a
+  current actor timestamp and copies the same nonzero value into EventContext;
+  the exact two public overload declarations and complete Production registry
+  TSDoc are retained.
+- Fresh focused evidence passed 2 files / 36 tests, generated build, full
+  ESLint, TSDoc, API docs with 255 server exports, cleanup, copyright,
+  formatting, and diff checks.
+- Final focused sign-off passed without residual finding in all affected lanes:
+  `performance_reliability_reviewer`, `typescript_api_docs_reviewer`, and
+  `style_maintainability_reviewer`, each with the previously recorded explicit
+  `gpt-5.6-terra` / `high` profile and unavailable runtime telemetry. T-0200 is
+  ready for canonical task verification, refreshed changed-range coverage, and
+  isolated integration.
+
 ## Deterministic lint correction — 2026-08-16
 
 - Retained the error binding in broker-open cleanup, where it remains part of
