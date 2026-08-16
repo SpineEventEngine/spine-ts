@@ -5,21 +5,24 @@
  * in compliance with the License. You may obtain a copy of the License at
  *
  * https://www.apache.org/licenses/LICENSE-2.0
+ *
  */
 
 import type { Any } from "@bufbuild/protobuf/wkt";
 import type { ChannelId, ExternalMessage } from "@spine-event-engine/proto";
 
 /**
- * Consumes one integration external-message frame.
+ * Receives one integration external-message frame.
  *
  * @param message Provides the received frame.
  * @returns Completes when consumption finishes.
+ *
  */
 export type ExternalMessageConsumer = (message: ExternalMessage) => void | Promise<void>;
 
 /**
  * Removes one subscriber consumer.
+ *
  */
 export interface ConsumerHandle {
   /**
@@ -32,18 +35,28 @@ export interface ConsumerHandle {
 
 /**
  * Defines a typed integration message channel.
+ *
  */
 export interface MessageChannel {
-  /** Identifies the channel. */
-  readonly id: ChannelId;
-  /** Identifies the canonical target type URL. */
-  readonly targetType: string;
   /**
-   * Reports whether the channel has no active local work.
+   * Identifies the channel.
+   *
+   */
+  readonly id: ChannelId;
+
+  /**
+   * Identifies the canonical target type URL.
+   *
+   */
+  readonly targetType: string;
+
+  /**
+   * Checks whether the channel has no active local work.
    *
    * @returns True when stale.
    */
   isStale(): boolean;
+
   /**
    * Closes the channel.
    *
@@ -54,6 +67,7 @@ export interface MessageChannel {
 
 /**
  * Publishes integration external-message frames.
+ *
  */
 export interface Publisher extends MessageChannel {
   /**
@@ -68,6 +82,7 @@ export interface Publisher extends MessageChannel {
 
 /**
  * Receives integration external-message frames.
+ *
  */
 export interface Subscriber extends MessageChannel {
   /**
@@ -81,6 +96,7 @@ export interface Subscriber extends MessageChannel {
 
 /**
  * Creates typed integration channels.
+ *
  */
 export interface TransportFactory {
   /**
@@ -90,6 +106,7 @@ export interface TransportFactory {
    * @returns A publisher for the channel.
    */
   createPublisher(id: ChannelId): Promise<Publisher>;
+
   /**
    * Creates a subscriber.
    *
@@ -97,6 +114,7 @@ export interface TransportFactory {
    * @returns A subscriber for the channel.
    */
   createSubscriber(id: ChannelId): Promise<Subscriber>;
+
   /**
    * Closes factory resources.
    *

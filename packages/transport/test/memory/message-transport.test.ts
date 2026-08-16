@@ -89,11 +89,33 @@ describe("InMemoryTransportFactory", () => {
     const publisher = await factory.createPublisher(channel());
     const current = frame("close");
     const accepted = publisher.publish(current.id, current.message);
-    await factory.close();
+    const firstClose = factory.close();
+    const secondClose = factory.close();
+    expect(secondClose).toBe(firstClose);
+    await Promise.all([firstClose, secondClose]);
     await accepted;
     expect(received).toEqual(["delivered"]);
     await expect(factory.createSubscriber(channel())).rejects.toThrow(/closed/u);
     await handle.close();
+  });
+
+  it("shares publisher close failure after an accepted consumer error", async () => {
+    const factory = new InMemoryTransportFactory();
+    const subscriber = await factory.createSubscriber(channel());
+    await subscriber.addConsumer(() => {
+      throw new Error("consumer failed");
+    });
+    const publisher = await factory.createPublisher(channel());
+    const current = frame("failure");
+    await expect(publisher.publish(current.id, current.message)).rejects.toThrow(
+      /consumer failed/u,
+    );
+    const firstClose = publisher.close();
+    const secondClose = publisher.close();
+    expect(secondClose).toBe(firstClose);
+    await expect(firstClose).rejects.toThrow(/publication failed/u);
+    await expect(secondClose).rejects.toThrow(/publication failed/u);
+    await Promise.all([subscriber.close(), factory.close().catch(() => undefined)]);
   });
 
   it("copies channel identity and rejects malformed identity and frame boundaries", async () => {
@@ -103,7 +125,17 @@ describe("InMemoryTransportFactory", () => {
     const subscriber = await factory.createSubscriber(mutable);
     mutable.targetType = "type.spine.io/changed";
     expect(subscriber.targetType).toBe("type.spine.io/wave13.Memory");
+    subscriber.id.targetType = "type.spine.io/changed-again";
+    expect(subscriber.targetType).toBe("type.spine.io/wave13.Memory");
     const publisher = await factory.createPublisher(channel());
+    publisher.id.targetType = "type.spine.io/changed-publisher";
+    expect(publisher.targetType).toBe("type.spine.io/wave13.Memory");
+    const valid = frame("valid");
+    const emptyOriginal = create(ExternalMessageSchema, {
+      ...valid.message,
+      originalMessage: create(AnySchema),
+    });
+    await expect(publisher.publish(valid.id, emptyOriginal)).rejects.toThrow(/original message/u);
     const invalid = create(ExternalMessageSchema);
     await expect(publisher.publish(create(AnySchema), invalid)).rejects.toThrow(/identity/u);
     await expect(publisher.close()).rejects.toThrow(/publication failed/u);
