@@ -167,3 +167,10 @@ packages/server/test/integration/integration-broker-module.test.ts
   retry and aggregates their cleanup failure with the original acquisition error.
   Final focused V8: wrappers 96.00% lines / 94.44% branches; broker 100.00% /
   94.33%; integration aggregate 99.53% / 94.36% (27 tests).
+
+- Symmetric rollback P1 resolved: newly acquired publishers detach before
+  rollback close, failed rollback channels remain broker-owned for original
+  retry, and both acquisition/removal error paths aggregate cleanup failures.
+  Final V8: wrappers 96.00% lines / 94.44% branches; broker 100.00% /
+  94.54%; aggregate 99.54% / 94.52% (28 tests). Generated build passed and
+  focused direct wrapper/broker/EventBus/registry regressions passed 73 tests.
