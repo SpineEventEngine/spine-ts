@@ -22,3 +22,6 @@
 - Final owned matrix after symmetric state filtering: generated typecheck passed;
   eight focused suites passed 426 tests. The analyzer cycle guard and exact
   declaration-directory identity regression then passed in the origin suite.
+- Counterfeit marker proof: a resolved path mapping to a different
+  `counterfeit/handler/external.ts` is not classified as external; the origin
+  suite now has 5 passing assertions.

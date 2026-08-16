@@ -92,6 +92,14 @@ describe("Wave 13 external receptor origin", () => {
     expect(generated).toContain('origin: "domestic"');
     void EventIdSchema;
   });
+
+  it("rejects a same-spelled External from a resolved counterfeit module", () => {
+    const result = BuildHandlerAnalyzer.analyze(programWithSource(externalOriginSource, true));
+    expect(result.diagnostics.map(({ code }) => code)).toContain("INVALID_SIGNAL_TYPE");
+    expect(result.entities.flatMap((entity) => entity.handlers)).not.toContainEqual(
+      expect.objectContaining({ origin: "external" }),
+    );
+  });
 });
 
 function event(externalOrigin: boolean) {
@@ -104,7 +112,7 @@ function event(externalOrigin: boolean) {
   } as never;
 }
 
-function programWithSource(source: string): ts.Program {
+function programWithSource(source: string, counterfeit = false): ts.Program {
   const sources: Record<string, string> = {
     "src/external.ts": source,
     "generated/task_pb.ts": generatedModule("spine/wave13/task.proto", "Task"),
@@ -122,6 +130,7 @@ function programWithSource(source: string): ts.Program {
       "spine/wave13/task_rejections.proto",
       "TaskAlreadyDone",
     ),
+    "counterfeit/handler/external.ts": "export type External<T> = T;",
   };
   const options: ts.CompilerOptions = {
     baseUrl: process.cwd(),
@@ -129,7 +138,11 @@ function programWithSource(source: string): ts.Program {
     module: ts.ModuleKind.NodeNext,
     moduleResolution: ts.ModuleResolutionKind.NodeNext,
     noEmit: true,
-    paths: { "@spine-event-engine/server": ["packages/server/src/index.ts"] },
+    paths: {
+      "@spine-event-engine/server": [
+        counterfeit ? "counterfeit/handler/external.ts" : "packages/server/src/index.ts",
+      ],
+    },
     target: ts.ScriptTarget.ES2024,
   };
   const host = ts.createCompilerHost(options);
