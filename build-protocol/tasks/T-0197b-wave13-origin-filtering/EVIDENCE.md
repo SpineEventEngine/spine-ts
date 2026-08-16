@@ -18,3 +18,7 @@
 - Handler/origin focused suites: 67 passed.
 - EventBus, state-update routing, repository routing, and bounded-context suites:
   359 passed.
+
+- Final owned matrix after symmetric state filtering: generated typecheck passed;
+  eight focused suites passed 426 tests. The analyzer cycle guard and exact
+  declaration-directory identity regression then passed in the origin suite.

@@ -61,3 +61,14 @@ domestic `EntityStateChanged` updates from reaching an external state receptor.
 External command validation now depends on the inferred input signal kind, so
 both `@Assign External<Command>` and command-input `@Command` fail while event
 and rejection command handlers remain valid.
+
+## Specialist review dispositions
+
+- Performance/reliability reviewer: existing reviewer role, configured
+  `gpt-5.6-terra` / `high`, no child spawning, runtime telemetry unavailable.
+  Accepted correction: schema snapshots are taken once; domestic/external
+  indexes and state candidates filter at the existing routing boundary.
+- TypeScript/API documentation reviewer: existing reviewer role, configured
+  `gpt-5.6-terra` / `high`, no child spawning, runtime telemetry unavailable.
+  Accepted correction: v3 origin is required, the marker remains type-only,
+  and canonical identity uses the analyzer package's own declaration directory.

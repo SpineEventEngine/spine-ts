@@ -16,6 +16,7 @@ import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import type * as Protobuf from "@bufbuild/protobuf";
 import type * as ProtobufWkt from "@bufbuild/protobuf/wkt";
@@ -359,6 +360,7 @@ interface HandlerDecoratorUse extends DecoratorUse {
 const handlerDecorators = new Set<HandlerDecorator>(["Assign", "Command", "React", "Subscribe"]);
 const entityBaseNames = new Set(["Aggregate", "Projection", "ProcessManager"]);
 const maxAliasDepth = 50;
+const handlerModuleDirectory = dirname(fileURLToPath(import.meta.url));
 // `spine.options.entity` in the frozen `spine/options.proto` contract.
 const entityOptionFieldNumber = 73903;
 const protobuf = requirePackage("@bufbuild/protobuf") as typeof Protobuf;
@@ -1347,11 +1349,19 @@ const HandlerSources = Object.freeze({
       : { direct: type.typeArguments?.length === 1, type: argument };
   },
 
-  containsExternalMarker(type: ts.TypeNode, scope: AnalyzerScope): boolean {
+  containsExternalMarker(
+    type: ts.TypeNode,
+    scope: AnalyzerScope,
+    seen: ReadonlySet<string> = new Set(),
+  ): boolean {
     if (HandlerSources.externalMarker(type, scope) !== undefined) return true;
     if (ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName)) {
       const alias = scope.imports.localTypeAliases.get(type.typeName.text);
-      if (alias !== undefined && HandlerSources.containsExternalMarker(alias, scope)) return true;
+      if (alias !== undefined && !seen.has(type.typeName.text)) {
+        const next = new Set(seen);
+        next.add(type.typeName.text);
+        if (HandlerSources.containsExternalMarker(alias, scope, next)) return true;
+      }
     }
     let found = false;
     const visit = (node: ts.Node): void => {
@@ -1378,7 +1388,11 @@ const HandlerSources = Object.freeze({
       (declaration) =>
         ts.isTypeAliasDeclaration(declaration) &&
         declaration.name.text === "External" &&
-        /(?:^|[/\\])handler[/\\]external(?:\.d)?\.ts$/u.test(declaration.getSourceFile().fileName),
+        resolve(dirname(declaration.getSourceFile().fileName)) ===
+          resolve(handlerModuleDirectory) &&
+        /^external(?:\.d)?\.ts$/u.test(
+          declaration.getSourceFile().fileName.split(/[\\/]/u).at(-1) ?? "",
+        ),
     );
   },
 
