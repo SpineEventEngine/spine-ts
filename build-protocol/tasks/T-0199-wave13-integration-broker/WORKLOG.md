@@ -27,6 +27,10 @@ explicit dependent owner.
   installs one type-specific domestic dispatcher/publisher, references retain
   it, final withdrawal unregisters it, and failed acquisition closes partial
   resources while leaving the old authoritative set intact.
+- A wanted type remains a wire type URL only. A receiving context without an
+  admitted local domestic schema records no producer for that type and ignores
+  it without failing the shared configuration broadcast; T-0200/fixture owners
+  must declare a normal domestic dispatcher before posting a producer event.
 - Imported frames are marked external only and passed to the supplied existing
   EventBus/tenant intake seam. Domestic dynamic dispatchers exclude external
   events, preserving the no-reexport invariant.
@@ -45,6 +49,13 @@ The T-0196 whole-context broker suite still has 13 failures because T-0200 has
 not yet connected one broker to each `BoundedContext`, supplied the distinct
 environment `TransportFactory`, or supplied the context tenant intake seam.
 This is a recorded dependency, not a claim of green context behavior.
+
+## Correctness correction
+
+After read-only lifecycle review, `open()` now closes partial attachments when
+setup fails, `close()` waits for an in-flight open, closed brokers stop intake,
+and a failed final-removal cleanup leaves the authoritative wanted map intact.
+The dynamic publisher is unregistered only after its channel closes cleanly.
 
 ## T-0200 handoff
 

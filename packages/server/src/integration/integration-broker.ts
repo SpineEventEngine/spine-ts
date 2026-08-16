@@ -23,7 +23,9 @@ import {
   EventSchema,
   ExternalEventsWantedSchema,
   type BoundedContextName,
+  type BoundedContextOnline,
   type Event,
+  type ExternalEventsWanted,
   type ExternalMessage,
 } from "@spine-event-engine/proto";
 import type {
@@ -74,18 +76,24 @@ export class IntegrationBroker {
   }
 
   async #openOnce(): Promise<void> {
-    const factory = this.#input.transportFactory;
-    const status = await this.#attach(factory, onlineType, (message) => this.#onOnline(message));
-    const config = await this.#attach(factory, wantedType, (message) => this.#onWanted(message));
-    this.#resources.push(status, config);
-    for (const schema of this.#input.externalEventSchemas) {
-      const targetType = typeUrl(schema);
-      this.#resources.push(
-        await this.#attach(factory, targetType, (message) => this.#onEvent(message)),
-      );
+    try {
+      const factory = this.#input.transportFactory;
+      const status = await this.#attach(factory, onlineType, (message) => this.#onOnline(message));
+      const config = await this.#attach(factory, wantedType, (message) => this.#onWanted(message));
+      this.#resources.push(status, config);
+      for (const schema of this.#input.externalEventSchemas) {
+        const targetType = typeUrl(schema);
+        this.#resources.push(
+          await this.#attach(factory, targetType, (message) => this.#onEvent(message)),
+        );
+      }
+      await this.#publishOnline();
+      await this.#publishWanted(false);
+    } catch (error) {
+      await closeAll(this.#resources);
+      this.#resources.length = 0;
+      throw error;
     }
-    await this.#publishOnline();
-    await this.#publishWanted(false);
   }
 
   async #attach(
@@ -99,14 +107,16 @@ export class IntegrationBroker {
   }
 
   async #onOnline(message: ExternalMessage): Promise<void> {
-    const online = unpackControl(BoundedContextOnlineSchema, message);
+    if (this.#closed) return;
+    const online = unpackControl<BoundedContextOnline>(BoundedContextOnlineSchema, message);
     if (this.#ignored(online.context)) return;
     await this.#publishWanted(true);
   }
 
   async #onWanted(message: ExternalMessage): Promise<void> {
+    if (this.#closed) return;
     if (this.#ignored(message.boundedContextName)) return;
-    const wanted = unpackControl(ExternalEventsWantedSchema, message);
+    const wanted = unpackControl<ExternalEventsWanted>(ExternalEventsWantedSchema, message);
     const requested = new Set<string>(
       wanted.type.map((entry: { typeUrl: string }) => entry.typeUrl).filter(Boolean),
     );
@@ -116,6 +126,7 @@ export class IntegrationBroker {
   }
 
   async #onEvent(message: ExternalMessage): Promise<void> {
+    if (this.#closed) return;
     if (this.#ignored(message.boundedContextName)) return;
     const original = unpackExternalEvent(message);
     const imported = clone(EventSchema, original);
@@ -127,7 +138,10 @@ export class IntegrationBroker {
   async #replaceWanted(origin: string, next: ReadonlySet<string>): Promise<void> {
     const previous = this.#wantedByOrigin.get(origin) ?? new Set<string>();
     const add = [...next].filter(
-      (type) => !previous.has(type) && !this.#wantedElsewhere(type, origin),
+      (type) =>
+        !previous.has(type) &&
+        !this.#wantedElsewhere(type, origin) &&
+        this.#input.eventBus.schema(type) !== undefined,
     );
     const remove = [...previous].filter(
       (type) => !next.has(type) && !this.#wantedElsewhere(type, origin),
@@ -147,16 +161,19 @@ export class IntegrationBroker {
       await closeAll(acquired);
       throw error;
     }
-    this.#wantedByOrigin.set(origin, new Set(next));
-    for (const publisher of acquired) this.#publishers.set(publisher.targetType, publisher);
     const errors: unknown[] = [];
     for (const targetType of remove) {
       const publisher = this.#publishers.get(targetType);
       if (publisher === undefined) continue;
-      this.#publishers.delete(targetType);
       await collect(() => publisher.close(), errors);
     }
-    if (errors.length) throw new AggregateError(errors, "Failed to remove domestic publisher.");
+    if (errors.length) {
+      await closeAll(acquired);
+      throw new AggregateError(errors, "Failed to remove domestic publisher.");
+    }
+    this.#wantedByOrigin.set(origin, new Set(next));
+    for (const targetType of remove) this.#publishers.delete(targetType);
+    for (const publisher of acquired) this.#publishers.set(publisher.targetType, publisher);
   }
 
   #wantedElsewhere(targetType: string, exceptOrigin: string): boolean {
@@ -212,6 +229,7 @@ export class IntegrationBroker {
   async #closeOnce(): Promise<void> {
     this.#closed = true;
     const errors: unknown[] = [];
+    if (this.#open !== undefined) await collect(() => this.#open!, errors);
     await collect(() => this.#publishEmptyWanted(), errors);
     await this.#transition;
     await Promise.all(
@@ -290,8 +308,8 @@ class DomesticPublisher implements Closeable {
   }
   close(): Promise<void> {
     this.#close ??= (async () => {
-      this.#eventBus.unregister(this.#dispatcher);
       await this.#publisher.close();
+      this.#eventBus.unregister(this.#dispatcher);
     })();
     return this.#close;
   }
@@ -326,11 +344,14 @@ function channel(targetType: string) {
 function typeUrl(schema: { readonly typeName: string }): string {
   return `type.spine.io/${schema.typeName}`;
 }
-function unpackControl<Schema>(schema: any, message: ExternalMessage): any {
+function unpackControl<Output>(
+  schema: { readonly typeName: string },
+  message: ExternalMessage,
+): Output {
   if (!message.boundedContextName?.value || message.originalMessage?.typeUrl !== typeUrl(schema))
     throw new Error("Malformed integration control message.");
   try {
-    return fromBinary(schema, message.originalMessage.value);
+    return fromBinary(schema as never, message.originalMessage.value) as Output;
   } catch {
     throw new Error("Malformed integration control message.");
   }
