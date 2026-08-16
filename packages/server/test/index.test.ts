@@ -292,6 +292,7 @@ describe("@spine-event-engine/server", () => {
         "StorageSubscriptionRegistry",
         "StateUpdateRouting",
         "SystemClock",
+        "ThirdPartyContext",
         "TransactionalEntity",
         "TransactionalEntityScopeError",
         "React",

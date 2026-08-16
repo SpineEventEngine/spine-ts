@@ -39,6 +39,7 @@ describe("build-time handler analyzer", () => {
           {
             kind: "command-assignment",
             methodName: "createTask",
+            origin: "domestic",
             signalSchema: schema(
               "../generated/spine/examples/todo/task_commands_pb.js",
               "CreateTaskSchema",
@@ -51,6 +52,7 @@ describe("build-time handler analyzer", () => {
           {
             kind: "command-reaction",
             methodName: "renameAgain",
+            origin: "domestic",
             signalSchema: schema(
               "../generated/spine/examples/todo/task_events_pb.js",
               "TaskCreatedSchema",
@@ -63,6 +65,7 @@ describe("build-time handler analyzer", () => {
           {
             kind: "event-reaction",
             methodName: "reactToCreated",
+            origin: "domestic",
             signalSchema: schema(
               "../generated/spine/examples/todo/task_events_pb.js",
               "TaskCreatedSchema",
@@ -76,6 +79,7 @@ describe("build-time handler analyzer", () => {
           {
             kind: "event-subscription",
             methodName: "onRenamed",
+            origin: "domestic",
             signalSchema: schema(
               "../generated/spine/examples/todo/task_events_pb.js",
               "TaskRenamedSchema",
@@ -111,6 +115,7 @@ describe("build-time handler analyzer", () => {
     expect(result.entities[0]?.handlers[0]).toEqual({
       kind: "command-assignment",
       methodName: "create",
+      origin: "domestic",
       signalSchema: schema("../generated/domain_pb.js", "CreateTaskSchema"),
       emittedSchemas: [schema("../generated/events_pb.js", "TaskCreatedSchema")],
       parameterCount: 1,
@@ -136,6 +141,7 @@ describe("build-time handler analyzer", () => {
     expect(result.entities[0]?.handlers[0]).toEqual({
       kind: "event-subscription",
       methodName: "observe",
+      origin: "domestic",
       signalSchema: schema("../generated/domain_pb.js", "TaskCreatedSchema"),
       emittedSchemas: [],
       parameterCount: 1,
@@ -158,6 +164,7 @@ describe("build-time handler analyzer", () => {
       {
         kind: "state-subscription",
         methodName: "observe",
+        origin: "domestic",
         signalSchema: schema("../generated/task_pb.js", "TaskSchema"),
         emittedSchemas: [],
         parameterCount: 1,
@@ -188,6 +195,7 @@ describe("build-time handler analyzer", () => {
       {
         kind: "state-subscription",
         methodName: "observeForeign",
+        origin: "domestic",
         signalSchema: schema("../generated/foreign_pb.js", "ForeignStateSchema"),
         emittedSchemas: [],
         parameterCount: 1,
@@ -225,6 +233,7 @@ describe("build-time handler analyzer", () => {
       roles.map(([, methodName, , kind, emittedSchemas, parameterCount]) => ({
         kind,
         methodName,
+        origin: "domestic",
         signalSchema: schema("../generated/rejections_pb.js", "TaskAlreadyDoneSchema"),
         emittedSchemas: emittedSchemas.map((exportName) =>
           schema(
@@ -680,6 +689,7 @@ describe("build-time handler analyzer", () => {
           {
             kind: "event-reaction",
             methodName: "observe",
+            origin: "domestic",
             signalSchema: schema("../generated/events_pb.js", "TaskCreatedSchema"),
             emittedSchemas: [],
             parameterCount: 1,
@@ -721,6 +731,7 @@ describe("build-time handler analyzer", () => {
       {
         kind: "command-assignment",
         methodName: 'create\u2028"task"\nnext',
+        origin: "domestic",
         signalSchema: schema("../generated/commands_pb.js", "CreateTaskSchema"),
         emittedSchemas: [schema("../generated/events_pb.js", "TaskCreatedSchema")],
         parameterCount: 1,
@@ -878,6 +889,7 @@ describe("build-time handler analyzer", () => {
           {
             kind: "command-assignment",
             methodName: "create",
+            origin: "domestic",
             signalSchema: schema("../generated/commands_pb", "CreateTaskSchema"),
             emittedSchemas: [schema("../generated/events_pb", "TaskCreatedSchema")],
             parameterCount: 1,
@@ -885,6 +897,7 @@ describe("build-time handler analyzer", () => {
           {
             kind: "command-reaction",
             methodName: "rename",
+            origin: "domestic",
             signalSchema: schema("../generated/commands_pb", "CreateTaskSchema"),
             emittedSchemas: [schema("../generated/commands_pb", "RenameTaskSchema")],
             parameterCount: 1,
@@ -892,6 +905,7 @@ describe("build-time handler analyzer", () => {
           {
             kind: "event-reaction",
             methodName: "fanOut",
+            origin: "domestic",
             signalSchema: schema("../generated/events_pb", "TaskCreatedSchema"),
             emittedSchemas: [
               schema("../generated/events_pb", "TaskRenamedSchema"),
@@ -926,6 +940,7 @@ describe("build-time handler analyzer", () => {
           {
             kind: "command-assignment",
             methodName: "parenthesized",
+            origin: "domestic",
             signalSchema: schema("../generated/commands_pb.js", "CreateTaskSchema"),
             emittedSchemas: [schema("../generated/events_pb.js", "TaskCreatedSchema")],
             parameterCount: 1,
