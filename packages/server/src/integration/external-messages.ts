@@ -13,6 +13,7 @@
  */
 
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import type { Any } from "@bufbuild/protobuf/wkt";
 import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
@@ -36,13 +37,16 @@ import {
  * @param origin Provides the publishing bounded context.
  * @returns The external event frame.
  */
-export function wrapExternalEvent(event: Event, origin: BoundedContextName): ExternalMessage {
+export function wrapExternalEvent(
+  event: Event,
+  origin: BoundedContextName,
+): WrappedExternalMessage {
   if (!event.id?.value) throw new Error("External Event requires an EventId.");
   return create(ExternalMessageSchema, {
     id: { typeUrl: spineTypeUrl(EventIdSchema), value: toBinary(EventIdSchema, event.id) },
     originalMessage: { typeUrl: spineTypeUrl(EventSchema), value: toBinary(EventSchema, event) },
     boundedContextName: origin,
-  });
+  }) as WrappedExternalMessage;
 }
 
 /**
@@ -55,7 +59,7 @@ export function wrapExternalEvent(event: Event, origin: BoundedContextName): Ext
 export function wrapExternalEventsWanted(
   wanted: ExternalEventsWanted,
   origin: BoundedContextName,
-): ExternalMessage {
+): WrappedExternalMessage {
   return wrapControl(
     {
       typeUrl: spineTypeUrl(ExternalEventsWantedSchema),
@@ -71,7 +75,7 @@ export function wrapExternalEventsWanted(
  * @param online Provides the online announcement.
  * @returns The external control frame.
  */
-export function wrapBoundedContextOnline(online: BoundedContextOnline): ExternalMessage {
+export function wrapBoundedContextOnline(online: BoundedContextOnline): WrappedExternalMessage {
   return wrapControl(
     {
       typeUrl: spineTypeUrl(BoundedContextOnlineSchema),
@@ -123,15 +127,18 @@ export function toExternalEvent(event: Event): Event {
 function wrapControl(
   originalMessage: { readonly typeUrl: string; readonly value: Uint8Array },
   origin: BoundedContextName | undefined,
-): ExternalMessage {
+): WrappedExternalMessage {
   if (!origin?.value) throw new Error("External control message requires an origin.");
   const id = create(StringValueSchema, { value: crypto.randomUUID() });
   return create(ExternalMessageSchema, {
     id: { typeUrl: spineTypeUrl(StringValueSchema), value: toBinary(StringValueSchema, id) },
     originalMessage,
     boundedContextName: origin,
-  });
+  }) as WrappedExternalMessage;
 }
+
+/** @internal An ExternalMessage constructed locally with its required wrapper identity. */
+type WrappedExternalMessage = ExternalMessage & { readonly id: Any };
 
 function spineTypeUrl(schema: MessageSchema): string {
   return TypeUrls.derive(schema);

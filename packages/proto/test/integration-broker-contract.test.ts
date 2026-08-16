@@ -31,6 +31,7 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   unpackExternalEvent,
+  toExternalEvent,
   wrapBoundedContextOnline,
   wrapExternalEvent,
   wrapExternalEventsWanted,
@@ -165,6 +166,7 @@ describe("Wave 13 integration broker protobuf contract", () => {
     expect(() => wrapBoundedContextOnline(create(online, { context: { value: "" } }))).toThrow(
       /origin/u,
     );
+    expect(toExternalEvent(create(EventSchema)).context).toMatchObject({ external: true });
   });
 });
 

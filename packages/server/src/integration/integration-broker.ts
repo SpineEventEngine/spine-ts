@@ -13,7 +13,6 @@
  */
 
 import { create, fromBinary } from "@bufbuild/protobuf";
-import type { Any } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   BoundedContextOnlineSchema,
@@ -61,7 +60,6 @@ export class IntegrationBroker {
   #open: Promise<void> | undefined;
   #close: Promise<void> | undefined;
   #closed = false;
-  #lastWanted: string | undefined;
 
   /**
    * Creates an exchange coordinator from context-owned integration resources.
@@ -115,7 +113,7 @@ export class IntegrationBroker {
         );
       }
       await this.#publishOnline();
-      await this.#publishWanted(false);
+      await this.#publishWanted();
     } catch (error) {
       await closeAll(this.#resources);
       this.#resources.length = 0;
@@ -159,7 +157,7 @@ export class IntegrationBroker {
     if (this.#closed) return;
     const online = unpackOnline(message);
     if (this.#ignored(online.context)) return;
-    await this.#publishWanted(true);
+    await this.#publishWanted();
   }
 
   async #onWanted(message: ExternalMessage): Promise<void> {
@@ -189,17 +187,20 @@ export class IntegrationBroker {
         !this.#wantedElsewhere(type, origin) &&
         eventBusAccess.schema(this.#input.eventBus, type) !== undefined,
     );
-    const remove = [...previous].filter(
-      (type) => !next.has(type) && !this.#wantedElsewhere(type, origin),
+    const removals = [...this.#publishers].filter(
+      ([type]) => previous.has(type) && !next.has(type) && !this.#wantedElsewhere(type, origin),
     );
     const acquired: DomesticPublisher[] = [];
     try {
       for (const targetType of add) {
+        const schema = eventBusAccess.schema(this.#input.eventBus, targetType);
+        if (schema === undefined) continue;
         const publisher = await DomesticPublisher.create(
           this.#input.eventBus,
           this.#input.transportFactory,
           targetType,
           this.#input.contextName,
+          schema,
         );
         acquired.push(publisher);
       }
@@ -208,9 +209,7 @@ export class IntegrationBroker {
       throw error;
     }
     const errors: unknown[] = [];
-    for (const targetType of remove) {
-      const publisher = this.#publishers.get(targetType);
-      if (publisher === undefined) continue;
+    for (const [, publisher] of removals) {
       await collect(() => publisher.close(), errors);
     }
     if (errors.length) {
@@ -218,7 +217,7 @@ export class IntegrationBroker {
       throw new AggregateError(errors, "Failed to remove domestic publisher.");
     }
     this.#wantedByOrigin.set(origin, new Set(next));
-    for (const targetType of remove) this.#publishers.delete(targetType);
+    for (const [targetType] of removals) this.#publishers.delete(targetType);
     for (const publisher of acquired) this.#publishers.set(publisher.targetType, publisher);
   }
 
@@ -240,24 +239,21 @@ export class IntegrationBroker {
       const frame = wrapBoundedContextOnline(
         create(BoundedContextOnlineSchema, { context: this.#input.contextName }),
       );
-      await publisher.publish(frameIdentity(frame), frame);
+      await publisher.publish(frame.id, frame);
     } finally {
       await publisher.close();
     }
   }
 
-  async #publishWanted(force: boolean): Promise<void> {
+  async #publishWanted(): Promise<void> {
     const types = this.#externalSchemas.map(typeUrl).sort();
-    const fingerprint = types.join("\n");
-    if (!force && this.#lastWanted === fingerprint) return;
     const publisher = await this.#input.transportFactory.createPublisher(channel(wantedType));
     try {
       const frame = wrapExternalEventsWanted(
         create(ExternalEventsWantedSchema, { type: types.map((typeUrl) => ({ typeUrl })) }),
         this.#input.contextName,
       );
-      await publisher.publish(frameIdentity(frame), frame);
-      this.#lastWanted = fingerprint;
+      await publisher.publish(frame.id, frame);
     } finally {
       await publisher.close();
     }
@@ -309,7 +305,7 @@ export class IntegrationBroker {
         create(ExternalEventsWantedSchema),
         this.#input.contextName,
       );
-      await publisher.publish(frameIdentity(frame), frame);
+      await publisher.publish(frame.id, frame);
     } finally {
       await publisher.close();
     }
@@ -363,7 +359,6 @@ class DomesticPublisher implements Closeable {
   readonly #eventBus: EventBus;
   readonly #dispatcher: EventDispatcher;
   readonly #publisher: Publisher;
-  #close: Promise<void> | undefined;
   private constructor(
     eventBus: EventBus,
     publisher: Publisher,
@@ -379,7 +374,7 @@ class DomesticPublisher implements Closeable {
       dispatch: async (event) => {
         if (event.context?.external) return;
         const frame = wrapExternalEvent(event, origin);
-        await publisher.publish(frameIdentity(frame), frame);
+        await publisher.publish(frame.id, frame);
       },
     };
   }
@@ -388,26 +383,16 @@ class DomesticPublisher implements Closeable {
     factory: TransportFactory,
     targetType: string,
     origin: BoundedContextName,
+    schema: MessageSchema,
   ): Promise<DomesticPublisher> {
-    const schema = eventBusAccess.schema(eventBus, targetType);
-    if (schema === undefined)
-      throw new Error(`No domestic Event schema registered for "${targetType}".`);
     const publisher = await factory.createPublisher(channel(targetType));
     const domestic = new DomesticPublisher(eventBus, publisher, targetType, origin, schema);
     eventBus.register(domestic.#dispatcher);
     return domestic;
   }
-  close(): Promise<void> {
-    if (this.#close === undefined) {
-      this.#close = (async () => {
-        await this.#publisher.close();
-        eventBusAccess.unregister(this.#eventBus, this.#dispatcher);
-      })();
-      void this.#close.catch(() => {
-        this.#close = undefined;
-      });
-    }
-    return this.#close;
+  async close(): Promise<void> {
+    await this.#publisher.close();
+    eventBusAccess.unregister(this.#eventBus, this.#dispatcher);
   }
 }
 
@@ -465,8 +450,4 @@ function controlPayload(schema: MessageSchema, message: ExternalMessage): Any {
   if (!message.boundedContextName?.value || originalMessage?.typeUrl !== typeUrl(schema))
     throw new Error("Malformed integration control message.");
   return originalMessage;
-}
-function frameIdentity(frame: ExternalMessage): Any {
-  if (frame.id === undefined) throw new Error("External message requires an identity.");
-  return frame.id;
 }

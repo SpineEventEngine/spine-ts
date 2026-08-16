@@ -119,6 +119,109 @@ describe("IntegrationBroker module", () => {
     ).toHaveLength(2);
   });
 
+  it("rejects malformed online and wanted control frames before changing broker state", async () => {
+    const factory = new RecordingTransportFactory();
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "validation" }),
+      transportFactory: factory,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    brokers.push(broker);
+    await broker.open();
+    const identity = {
+      typeUrl: TypeUrls.derive(StringValueSchema),
+      value: toBinary(StringValueSchema, create(StringValueSchema, { value: "control" })),
+    };
+    for (const targetType of [
+      TypeUrls.derive(BoundedContextOnlineSchema),
+      TypeUrls.derive(ExternalEventsWantedSchema),
+    ]) {
+      const publisher = await factory.createPublisher(create(ChannelIdSchema, { targetType }));
+      await expect(
+        publisher.publish(
+          identity,
+          create(ExternalMessageSchema, {
+            id: identity,
+            boundedContextName: create(BoundedContextNameSchema, { value: "peer" }),
+            originalMessage: { typeUrl: targetType, value: new Uint8Array([255]) },
+          }),
+        ),
+      ).rejects.toThrow(/Malformed integration control message/u);
+      await publisher.close();
+    }
+    const online = await factory.createPublisher(
+      create(ChannelIdSchema, { targetType: TypeUrls.derive(BoundedContextOnlineSchema) }),
+    );
+    await expect(
+      online.publish(
+        identity,
+        create(ExternalMessageSchema, {
+          id: identity,
+          originalMessage: {
+            typeUrl: TypeUrls.derive(BoundedContextOnlineSchema),
+            value: toBinary(BoundedContextOnlineSchema, create(BoundedContextOnlineSchema)),
+          },
+        }),
+      ),
+    ).rejects.toThrow(/Malformed integration control message/u);
+    await online.close();
+  });
+
+  it("retries close after its final wanted publication cleanup fails", async () => {
+    const factory = new RecordingTransportFactory();
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "close-retry-publication" }),
+      transportFactory: factory,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    brokers.push(broker);
+    await broker.open();
+    factory.failNextClose();
+    await expect(broker.close()).rejects.toThrow(/close failed/u);
+    await expect(broker.close()).resolves.toBeUndefined();
+  });
+
+  it("retains failed subscriber cleanup and shares a concurrent close promise", async () => {
+    const factory = new RecordingTransportFactory();
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "close-resource-retry" }),
+      transportFactory: factory,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    brokers.push(broker);
+    await broker.open();
+    factory.failCloseAfter(1);
+    const first = broker.close();
+    expect(first).toBe(broker.close());
+    await expect(first).rejects.toThrow(/close failed/u);
+    await expect(broker.close()).resolves.toBeUndefined();
+  });
+
+  it("retains a failed domestic publisher until a later close succeeds", async () => {
+    const factory = new RecordingTransportFactory();
+    const bus = eventBusAccess.createForgettingBus();
+    eventBusAccess.registerSchemas(bus, [StringValueSchema]);
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "close-publisher-retry" }),
+      transportFactory: factory,
+      eventBus: bus,
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    brokers.push(broker);
+    await broker.open();
+    await publishWanted(factory, "receiver", [StringValueSchema]);
+    factory.failCloseAfter(1);
+    await expect(broker.close()).rejects.toThrow(/close failed/u);
+    await expect(broker.close()).resolves.toBeUndefined();
+  });
+
   it("installs one publisher per type, retains it for another requester, then removes it", async () => {
     const factory = new RecordingTransportFactory();
     const bus = eventBusAccess.createForgettingBus();
@@ -431,6 +534,24 @@ describe("IntegrationBroker module", () => {
     expect(factory.operations.filter((operation) => operation === "subscriber:close")).toHaveLength(
       2,
     );
+  });
+
+  it("reports both attachment and subscriber-close failures", async () => {
+    const factory = new RecordingTransportFactory();
+    factory.failNextConsumerAddition(
+      (channel) =>
+        (channel as { targetType?: string }).targetType ===
+        TypeUrls.derive(BoundedContextOnlineSchema),
+    );
+    factory.failNextClose();
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "aggregate-attach" }),
+      transportFactory: factory,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    await expect(broker.open()).rejects.toThrow(/Integration subscriber setup failed/u);
   });
 
   it("retains failed teardown ownership and retries close", async () => {

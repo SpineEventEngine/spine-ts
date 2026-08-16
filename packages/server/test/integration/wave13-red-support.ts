@@ -40,6 +40,7 @@ export class RecordingTransportFactory implements TransportFactory {
   readonly created: { readonly kind: "publisher" | "subscriber"; readonly channel: unknown }[] = [];
   #consumers = new Map<string, Set<ExternalMessageConsumer>>();
   #remainingCloseFailures: number;
+  #closeSuccessesBeforeFailure: number | undefined;
   #publishFailure: ((channel: unknown) => boolean) | undefined;
   #publisherCreationFailure: ((channel: unknown) => boolean) | undefined;
   #consumerAdditionFailure: ((channel: unknown) => boolean) | undefined;
@@ -58,6 +59,13 @@ export class RecordingTransportFactory implements TransportFactory {
    */
   failNextClose(): void {
     this.#remainingCloseFailures = 1;
+  }
+
+  /**
+   * Makes one adapter close fail after the requested number of successful closes.
+   */
+  failCloseAfter(successfulCloses: number): void {
+    this.#closeSuccessesBeforeFailure = successfulCloses;
   }
 
   /**
@@ -83,6 +91,13 @@ export class RecordingTransportFactory implements TransportFactory {
 
   #close(operation: string): void {
     this.operations.push(operation);
+    if (this.#closeSuccessesBeforeFailure !== undefined) {
+      if (this.#closeSuccessesBeforeFailure === 0) {
+        this.#closeSuccessesBeforeFailure = undefined;
+        throw new Error(`${operation} failed`);
+      }
+      this.#closeSuccessesBeforeFailure -= 1;
+    }
     if (this.#remainingCloseFailures-- > 0) throw new Error(`${operation} failed`);
   }
 
