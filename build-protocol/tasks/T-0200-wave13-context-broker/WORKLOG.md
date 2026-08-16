@@ -596,6 +596,21 @@ scripts/check-tsdoc.test.mjs` process exited after its run banner, but this
   forbidden-transport finding remains. Re-review after correction is limited to
   these affected lanes.
 
+## Focused re-review correction — 2026-08-16
+
+- Corruption containment now ends before `postImported()`: malformed wrapper,
+  type, and payload frames log only allowlisted identity/operation/reason-code
+  facts and resolve their callback; tenant, EventBus, and application failures
+  continue to reject through the normal downstream path.
+- Restored both public `emittedEvent` overload declarations, made the UserId
+  form create a current nonzero actor timestamp copied into the Event context,
+  and clarified the Production complete-registry versus local/test fallback
+  contract in public TSDoc.
+- Recording subscriber admission now rejects after close, reports stale, shares
+  concurrent close completion, and resets its cached close only after a failed
+  close so existing broker retry behavior remains valid. Focused generated
+  build passed; affected matrix passed 5 files / 75 tests before formatting.
+
 ## Consolidated lifecycle continuation — 2026-08-16
 
 - Production explicitly requires `typeRegistry`; only local/test resolution

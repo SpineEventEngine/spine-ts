@@ -208,6 +208,7 @@ export class IntegrationBroker {
   async #onEvent(message: ExternalMessage): Promise<void> {
     if (this.#closed) return;
     if (!this.#accepts(message.boundedContextName)) return;
+    let imported: Event;
     try {
       const original = unpackExternalEvent(message);
       const typeUrl = original.message?.typeUrl;
@@ -219,18 +220,21 @@ export class IntegrationBroker {
       if (schema === undefined || original.message === undefined)
         throw new Error("External event message type is not accepted.");
       fromBinary(schema, original.message.value);
-      await this.#input.postImported(toExternalEvent(original));
+      imported = toExternalEvent(original);
     } catch (error) {
       emitServerError(
         serverEnvironmentAccess.loggerFor(ServerEnvironment.instance()),
         "Dropped corrupt external event.",
         {
-          context: message.boundedContextName.value,
-          typeUrl: message.originalMessage?.typeUrl,
-          reason: error instanceof Error ? error.message : "invalid external event",
+          contextName: message.boundedContextName.value,
+          eventType: message.originalMessage?.typeUrl ?? "unknown",
+          operation: "external-event-intake",
+          reasonCode: "CORRUPT_EXTERNAL_EVENT",
         },
       );
+      return;
     }
+    await this.#input.postImported(imported);
   }
 
   async #replaceWanted(origin: string, next: ReadonlySet<string>): Promise<void> {

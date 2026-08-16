@@ -106,7 +106,10 @@ export interface ServerEnvironmentSettings {
    */
   readonly transportFactory?: TransportFactory;
 
-  /** Read-only application schema lookup used by private integration boundaries. */
+  /**
+   * Complete generated application schema lookup used for ThirdParty event encoding.
+   * Production requires it; local/test environments fall back to `spineCoreRegistry` only.
+   */
   readonly typeRegistry?: TypeRegistryLookup;
 
   /**

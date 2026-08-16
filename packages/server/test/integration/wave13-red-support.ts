@@ -198,11 +198,14 @@ export class RecordingTransportFactory implements TransportFactory {
     const consumers = this.#consumers.get(key) ?? new Set();
     this.#consumers.set(key, consumers);
     const subscriberConsumers = new Set<ExternalMessageConsumer>();
+    let closed = false;
+    let closing: Promise<void> | undefined;
     const subscriber: Subscriber = {
       id: channel,
       targetType: required(channel.targetType, "subscriber channel target type"),
       isStale: () => subscriberConsumers.size === 0,
       addConsumer: (consumer: ExternalMessageConsumer): Promise<ConsumerHandle> => {
+        if (closed) return Promise.reject(new Error("subscriber is closed"));
         if (this.#consumerAdditionFailure?.(channel) === true) {
           this.#consumerAdditionFailure = undefined;
           this.operations.push("consumer:add:failed");
@@ -211,11 +214,11 @@ export class RecordingTransportFactory implements TransportFactory {
         consumers.add(consumer);
         subscriberConsumers.add(consumer);
         this.operations.push("consumer:add");
-        let closed = false;
+        let handleClosed = false;
         const handle: ConsumerHandle = {
           close: () => {
-            if (closed) return Promise.resolve();
-            closed = true;
+            if (handleClosed) return Promise.resolve();
+            handleClosed = true;
             consumers.delete(consumer);
             subscriberConsumers.delete(consumer);
             this.operations.push("consumer:remove");
@@ -225,11 +228,17 @@ export class RecordingTransportFactory implements TransportFactory {
         return Promise.resolve(handle);
       },
       close: () =>
-        Promise.resolve().then(() => {
-          for (const consumer of subscriberConsumers) consumers.delete(consumer);
-          subscriberConsumers.clear();
-          this.#close("subscriber:close");
-        }),
+        (closing ??= Promise.resolve()
+          .then(() => {
+            closed = true;
+            for (const consumer of subscriberConsumers) consumers.delete(consumer);
+            subscriberConsumers.clear();
+            this.#close("subscriber:close");
+          })
+          .catch((error: unknown) => {
+            closing = undefined;
+            throw error;
+          })),
     };
     return Promise.resolve(subscriber);
   }

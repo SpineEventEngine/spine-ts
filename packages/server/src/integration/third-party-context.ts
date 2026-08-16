@@ -73,6 +73,8 @@ export class ThirdPartyContext {
    * @returns Completes when the private broker accepts the imported event, or rejects for a closed
    * context, an unsupported message, or incompatible actor tenancy.
    */
+  emittedEvent(event: Message, actor: ActorContext): Promise<void>;
+  emittedEvent(event: Message, actor: UserId): Promise<void>;
   async emittedEvent(event: Message, actor: ActorContext | UserId): Promise<void> {
     if (this.#closed) throw new Error("ThirdPartyContext is closed.");
     const actorContext = this.#actorContext(actor);
@@ -123,7 +125,14 @@ export class ThirdPartyContext {
     if (isUser) {
       if (this.#multitenant)
         throw new Error("Multitenant ThirdPartyContext requires ActorContext.");
-      return create(ActorContextSchema, { actor });
+      const now = Date.now();
+      return create(ActorContextSchema, {
+        actor,
+        timestamp: create(TimestampSchema, {
+          seconds: BigInt(Math.floor(now / 1_000)),
+          nanos: (now % 1_000) * 1_000_000,
+        }),
+      });
     }
     const hasTenant = actor.tenantId?.kind.case !== undefined;
     if (this.#multitenant !== hasTenant) {

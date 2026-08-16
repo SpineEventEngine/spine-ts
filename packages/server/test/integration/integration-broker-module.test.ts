@@ -59,6 +59,11 @@ describe("IntegrationBroker module", () => {
       }),
     );
     await first.close();
+    await expect(first.addConsumer(() => Promise.resolve())).rejects.toThrow(
+      "subscriber is closed",
+    );
+    expect(first.isStale()).toBe(true);
+    await expect(first.close()).resolves.toBeUndefined();
     const publisher = await factory.createPublisher(channel);
     await publisher.publish(create(AnySchema), create(ExternalMessageSchema));
     expect(received).toBe(1);
