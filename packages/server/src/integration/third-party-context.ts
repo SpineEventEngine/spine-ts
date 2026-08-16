@@ -65,7 +65,9 @@ export class ThirdPartyContext {
     return new ThirdPartyContext(await BoundedContext.multitenant(name).buildAsync(), true);
   }
 
-  /* eslint-disable @typescript-eslint/unified-signatures -- Frozen JVM public contract requires distinct actor overloads. */
+  /* eslint-disable @typescript-eslint/unified-signatures --
+   * Frozen JVM public contract requires distinct actor overloads.
+   */
 
   /**
    * Publishes one generated event with its importing actor identity.

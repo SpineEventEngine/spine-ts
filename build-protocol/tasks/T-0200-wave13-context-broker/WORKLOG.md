@@ -718,3 +718,13 @@ scripts/check-tsdoc.test.mjs` process exited after its run banner, but this
 - Fresh generated build, full ESLint, TSDoc, API-docs, cleanup, copyright,
   formatting, and diff checks pass. The final focused broker/ThirdParty run
   passed 2 files / 36 tests.
+
+## Canonical preflight correction — 2026-08-16
+
+- The retained canonical `verify:task -- --no-coverage` run passed Node policy,
+  exact Proto intake, generated build, and tooling typecheck, then found one
+  deterministic cleanup violation: the documented overload-lint suppression in
+  `third-party-context.ts` was 125 characters.
+- Wrapped that comment without changing behavior. Focused Prettier, ESLint,
+  cleanup, TSDoc, and diff checks pass. Canonical verification is being rerun
+  from this correction checkpoint.
