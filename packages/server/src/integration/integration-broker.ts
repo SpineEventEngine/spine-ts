@@ -206,22 +206,7 @@ export class IntegrationBroker {
         acquired.push(publisher);
       }
     } catch (error) {
-      const settled = await Promise.all(
-        acquired.map(async (publisher) => {
-          try {
-            await publisher.close();
-          } catch (reason) {
-            return { publisher, reason };
-          }
-          return undefined;
-        }),
-      );
-      const failures: unknown[] = [];
-      for (const failure of settled) {
-        if (failure === undefined) continue;
-        this.#retainedCloseables.push(failure.publisher);
-        failures.push(failure.reason);
-      }
+      const failures = await this.#rollbackAcquired(acquired);
       if (failures.length)
         throw new AggregateError([error, ...failures], "Integration publisher acquisition failed.");
       throw error;
@@ -231,8 +216,8 @@ export class IntegrationBroker {
       await collect(() => publisher.close(), errors);
     }
     if (errors.length) {
-      await Promise.allSettled(acquired.map((publisher) => publisher.close()));
-      throw new AggregateError(errors, "Failed to remove domestic publisher.");
+      const failures = await this.#rollbackAcquired(acquired);
+      throw new AggregateError([...errors, ...failures], "Failed to remove domestic publisher.");
     }
     this.#wantedByOrigin.set(origin, new Set(next));
     for (const [targetType] of removals) this.#publishers.delete(targetType);
@@ -243,6 +228,26 @@ export class IntegrationBroker {
     return [...this.#wantedByOrigin.entries()].some(
       ([origin, types]) => origin !== exceptOrigin && types.has(targetType),
     );
+  }
+
+  async #rollbackAcquired(acquired: readonly DomesticPublisher[]): Promise<unknown[]> {
+    const settled = await Promise.all(
+      acquired.map(async (publisher) => {
+        try {
+          await publisher.rollback();
+        } catch (reason) {
+          return { publisher, reason };
+        }
+        return undefined;
+      }),
+    );
+    const failures: unknown[] = [];
+    for (const failure of settled) {
+      if (failure === undefined) continue;
+      this.#retainedCloseables.push(failure.publisher);
+      failures.push(failure.reason);
+    }
+    return failures;
   }
 
   #enqueueTransition(work: () => Promise<void>): Promise<void> {
@@ -381,6 +386,7 @@ class DomesticPublisher implements Closeable {
   readonly #eventBus: EventBus;
   readonly #dispatcher: EventDispatcher;
   readonly #publisher: Publisher;
+  #detached = false;
   private constructor(
     eventBus: EventBus,
     publisher: Publisher,
@@ -413,6 +419,15 @@ class DomesticPublisher implements Closeable {
   }
   async close(): Promise<void> {
     await this.#publisher.close();
+    this.#detach();
+  }
+  async rollback(): Promise<void> {
+    this.#detach();
+    await this.#publisher.close();
+  }
+  #detach(): void {
+    if (this.#detached) return;
+    this.#detached = true;
     eventBusAccess.unregister(this.#eventBus, this.#dispatcher);
   }
 }
