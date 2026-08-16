@@ -34,3 +34,6 @@
   RED-21). Independent publisher fan-out now has native proof. Outstanding
   before task completion: injected background-failure proof and final
   lifecycle review.
+- Failed atomic manifest writes now remove their same-directory exclusive temp
+  file before returning the original failure. Fresh generated typecheck,
+  focused lint, and native plus shared transport tests passed 7/7.

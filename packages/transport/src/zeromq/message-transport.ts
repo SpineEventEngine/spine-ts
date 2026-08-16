@@ -414,14 +414,20 @@ async function writeManifest(manifestPath: string, manifest: SubscriberManifest)
   if (Buffer.byteLength(contents) > maxManifestBytes)
     throw new Error("ZeroMQ message manifest is too large.");
   const temporary = `${manifestPath}.${randomUUID()}.tmp`;
-  const file = await open(temporary, "wx", 0o600);
+  let renamed = false;
   try {
-    await file.writeFile(contents, "utf8");
-    await file.sync();
+    const file = await open(temporary, "wx", 0o600);
+    try {
+      await file.writeFile(contents, "utf8");
+      await file.sync();
+    } finally {
+      await file.close();
+    }
+    await rename(temporary, manifestPath);
+    renamed = true;
   } finally {
-    await file.close();
+    if (!renamed) await rm(temporary, { force: true });
   }
-  await rename(temporary, manifestPath);
 }
 
 async function readManifest(
