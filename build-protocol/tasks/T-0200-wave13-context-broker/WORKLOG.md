@@ -476,3 +476,45 @@ scripts/check-tsdoc.test.mjs` process exited after its run banner, but this
   configured role/profile is the recorded runtime metadata. All reviewer
   dispatches prohibit subagent spawning and are read-only. Final security review
   remains assigned to T-0202 after the real cross-process evidence is present.
+
+## Specialist review wave and human decision gate — 2026-08-16
+
+- Performance/reliability review requested two P1 corrections. Context close
+  currently awaits broker shutdown before gating public EventBus intake, so a
+  racing domestic post can still dispatch or export after close starts.
+  Separately, a failed broker open rejects `buildAsync()` without compensating
+  close of the already-built context; synchronous `build()` retains an
+  unobserved readiness rejection until a later operation. The accepted batch
+  requires intake gating before the first close await, context-level failed-open
+  cleanup, and failure-injected behavior proofs.
+- TypeScript/API review found three further P1 corrections: ThirdPartyContext
+  factories wrap synchronous `build()` instead of awaiting readiness; imported
+  events discard the actor timestamp; and `publishImported()` sends an event
+  without consulting current wanted-event interest. These violate observable
+  JVM readiness, imported EventContext, and unrequested-event semantics.
+- TypeScript/API and style/maintainability review independently found one P0
+  parity blocker. The public `emittedEvent(event: Message, actor)` contract
+  accepts an arbitrary generated event, but Protobuf-ES `Message` exposes only
+  `$typeName` and unknown fields. Binary encoding requires its generated
+  `MessageSchema`, and the schema is also required to derive the canonical type
+  URL (`type.spine.io` for Spine domain schemas rather than the implementation's
+  hard-coded `type.googleapis.com`). The current implementation therefore
+  supports only `StringValue` and rejects real domain events; its test currently
+  enshrines that invalid limitation.
+- No established hidden registry resolves the blocker. `TypeRegistryLookup`
+  can resolve only schemas already supplied to a registry; neither
+  ThirdPartyContext nor its hidden BoundedContext receives the application's
+  generated registry, and the wanted-event wire contract intentionally carries
+  type URLs without descriptors. Protobuf-ES messages do not retain a runtime
+  schema back-reference. Supplying a schema argument or application registry
+  would change the frozen public construction/publication contract; adding a
+  global lookup would add lifecycle and policy absent from the approved JVM
+  substitution.
+- The style boundary review otherwise passed: the broker path has no
+  `ContextTransport`, `RuntimeTransportBinding`, or `SignalTransport`
+  dependency, and the message-channel move and cleanup necessity ledgers are
+  coherent. Per the binding Node-substitution gate, product correction, T-0200
+  integration, T-0201 cross-process acceptance, and T-0202 release closure stop
+  pending a human choice of schema-provisioning substitution. The P1 correction
+  batch remains queued and will be applied only after that choice fixes the
+  public ThirdParty contract direction.
