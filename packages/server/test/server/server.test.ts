@@ -27,7 +27,7 @@ import {
   SubscriptionGateway,
 } from "@spine-event-engine/auth";
 import type { RequestCredential } from "@spine-event-engine/auth";
-import { TypeRegistry } from "@spine-event-engine/core";
+import { spineCoreRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { ApplicationNode } from "@spine-event-engine/deployment";
 import { AuthenticationService, ResolveContextRequestSchema } from "@spine-event-engine/proto/auth";
 import { EventSchema } from "@spine-event-engine/proto";
@@ -62,7 +62,11 @@ import type {
   TransportSubscription,
   TransportSubscriptionHandle,
 } from "@spine-event-engine/transport";
-import { TransportSubscriptions, TransportTopics } from "@spine-event-engine/transport";
+import {
+  InMemoryTransportFactory,
+  TransportSubscriptions,
+  TransportTopics,
+} from "@spine-event-engine/transport";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -506,6 +510,8 @@ describe("Server", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: new CloseTrackingTransport([]),
+      transportFactory: new InMemoryTransportFactory(),
+      typeRegistry: spineCoreRegistry,
     });
     let resourceClosed = false;
 

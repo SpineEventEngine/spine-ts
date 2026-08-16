@@ -13,6 +13,8 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { spineCoreRegistry } from "@spine-event-engine/core";
+import { InMemoryTransportFactory } from "@spine-event-engine/transport";
 
 import { Environment, EnvironmentType, Server, ServerEnvironment } from "../../src/index.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
@@ -46,6 +48,8 @@ describe("ServerEnvironment singleton", () => {
       production.ServerEnvironment.when(production.EnvironmentType.Production).use({
         storageFactory,
         transport,
+        transportFactory: new InMemoryTransportFactory(),
+        typeRegistry: spineCoreRegistry,
       });
       const environment = production.ServerEnvironment.instance();
 
