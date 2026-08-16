@@ -552,9 +552,10 @@ scripts/check-tsdoc.test.mjs` process exited after its run banner, but this
 ## Schema-universe correction progress — 2026-08-16
 
 - Added the smallest bootstrap seam: `ServerEnvironmentSettings.typeRegistry`
-  and its resolved readonly environment value. It defaults to the existing
-  curated Spine lookup while applications can provide their generated complete
-  lookup without a global mutable registry or any wire descriptor exchange.
+  and its resolved readonly environment value. Production requires the
+  generated complete application lookup; only local/test resolution defaults to
+  the curated Spine lookup. This adds no global mutable registry or wire
+  descriptor exchange.
 - `ThirdPartyContext` now awaits `buildAsync()`, resolves the event schema by
   `$typeName` from that environment lookup, derives its canonical URL, and
   serializes through that schema. It preserves an actor-supplied timestamp and
@@ -566,6 +567,34 @@ scripts/check-tsdoc.test.mjs` process exited after its run banner, but this
 - Still pending in this consolidated batch: corrupt received-frame log/drop
   continuation, wanted-only imported publication, failed-open cleanup/sync
   readiness observation, and close-before-await EventBus admission gating.
+
+## Consolidated correction checkpoint and focused re-review — 2026-08-16
+
+- Correction commit `52369619` is pushed. Generated build and the affected
+  broker, ThirdParty, environment, and lifecycle matrix passed 5 files / 75
+  tests. It includes the generated application registry seam, ThirdParty schema
+  lookup/canonical encoding/readiness, wanted-only no-op, early close admission,
+  failed-open compensation, corrupt-frame containment, and per-subscriber test
+  transport ownership.
+- Focused re-review reused the recorded existing project roles with explicit
+  profiles: `performance_reliability_reviewer`,
+  `typescript_api_docs_reviewer`, and `style_maintainability_reviewer`, each
+  `gpt-5.6-terra` / `high`, runtime telemetry unavailable, read-only, and no
+  subagent authority.
+- One final consolidated correction batch is accepted. Corruption containment
+  must cover wrapper/schema/binary validation only; tenant/EventBus/application
+  failures from `postImported()` must propagate. The ERROR record must use the
+  logger's existing allowlisted safe fields (`contextName`, `eventType`,
+  `operation`, stable `reasonCode`) and prove metadata plus later valid-event
+  continuation. The RecordingTransportFactory subscriber must reject admission
+  after close and share idempotent close completion. The UserId overload must
+  synthesize a current actor timestamp, the two frozen public overload
+  declarations must be restored over the union implementation, and public
+  registry TSDoc must state complete generated Production lookup versus the
+  local/test Spine-core fallback.
+- No other lifecycle, concurrency, public registry, module-boundary, or
+  forbidden-transport finding remains. Re-review after correction is limited to
+  these affected lanes.
 
 ## Consolidated lifecycle continuation — 2026-08-16
 
