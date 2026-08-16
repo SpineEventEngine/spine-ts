@@ -174,3 +174,20 @@ packages/server/test/integration/integration-broker-module.test.ts
   Final V8: wrappers 96.00% lines / 94.44% branches; broker 100.00% /
   94.54%; aggregate 99.54% / 94.52% (28 tests). Generated build passed and
   focused direct wrapper/broker/EventBus/registry regressions passed 73 tests.
+
+## Specialist review closure — 2026-08-16
+
+- Performance/reliability reviewer (`gpt-5.6-terra` / high, explicitly
+  dispatched; runtime telemetry unavailable) **PASS** after the symmetric
+  rollback correction. It confirmed that both newly acquired failure paths
+  detach the uncommitted dispatcher before closing its channel, retain the
+  original failed channel for broker-close retry, and preserve the prior
+  publisher set when removal fails. Its focused typecheck, 73-test regression,
+  and diff validation passed.
+- TypeScript/API documentation reviewer (`gpt-5.6-terra` / high, explicitly
+  dispatched; runtime telemetry unavailable) **PASS**.
+- Style/maintainability reviewer (`gpt-5.6-terra` / high, explicitly
+  dispatched; runtime telemetry unavailable) **PASS** after verifying the two
+  rollback paths, attempt-all aggregation, retry ownership, and direct proofs.
+- Security review is deferred to the one final Wave 13 release-readiness review
+  because T-0199 adds no independent public trust boundary or credential seam.
