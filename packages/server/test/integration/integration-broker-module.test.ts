@@ -1,13 +1,15 @@
 /* Copyright 2026, CodeMatters. All rights reserved. Licensed under Apache-2.0. */
 import { create, toBinary } from "@bufbuild/protobuf";
 import { Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { TypeUrls } from "@spine-event-engine/core";
+import { SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   BoundedContextNameSchema,
   BoundedContextOnlineSchema,
   ChannelIdSchema,
   ExternalEventsWantedSchema,
   ExternalMessageSchema,
+  EventIdSchema,
+  EventSchema,
 } from "@spine-event-engine/proto";
 import { eventBusAccess } from "../../src/bus/event-bus.js";
 import { afterEach, describe, expect, it } from "vitest";
@@ -210,7 +212,60 @@ describe("IntegrationBroker module", () => {
     expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(StringValueSchema));
     expect(eventPublisherCreations(factory, StringValueSchema)).toHaveLength(1);
   });
+
+  it("exports only requested domestic events with complete Event identity and preserves order", async () => {
+    const factory = new RecordingTransportFactory();
+    const bus = eventBusAccess.createForgettingBus();
+    const dispatcher = {
+      messageSchemas: () => [StringValueSchema, Int32ValueSchema],
+      dispatch: () => Promise.resolve(),
+    };
+    bus.register(dispatcher);
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "events" }),
+      transportFactory: factory as never,
+      eventBus: bus,
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    brokers.push(broker);
+    await broker.open();
+    await publishWanted(factory, "receiver", [StringValueSchema]);
+    const first = event("first"),
+      second = event("second");
+    await bus.post(first);
+    await bus.post(
+      SignalEnvelopes.event({
+        id: create(EventIdSchema, { value: "ignored" }),
+        schema: Int32ValueSchema,
+        message: create(Int32ValueSchema, { value: 1 }),
+      }),
+    );
+    await bus.post(second);
+    const frames = factory.published.filter(
+      ({ channel }) =>
+        (channel as { targetType?: string }).targetType === TypeUrls.derive(StringValueSchema),
+    );
+    expect(frames).toHaveLength(2);
+    expect(
+      (frames[0]!.message as { boundedContextName?: { value?: string } }).boundedContextName?.value,
+    ).toBe("events");
+    expect(
+      (frames[0]!.message as { originalMessage?: { value?: Uint8Array } }).originalMessage?.value,
+    ).toEqual(toBinary(EventSchema, first));
+    expect(
+      (frames[1]!.message as { originalMessage?: { value?: Uint8Array } }).originalMessage?.value,
+    ).toEqual(toBinary(EventSchema, second));
+  });
 });
+
+function event(id: string) {
+  return SignalEnvelopes.event({
+    id: create(EventIdSchema, { value: id }),
+    schema: StringValueSchema,
+    message: create(StringValueSchema, { value: id }),
+  });
+}
 
 async function publishWanted(
   factory: RecordingTransportFactory,
