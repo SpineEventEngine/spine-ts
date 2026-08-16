@@ -497,6 +497,7 @@ const expectedZeroMqExports = [
   "ZeroMqTransportOptions",
   "ZeroMqTransportScope",
   "createZeroMqTransport",
+  "createZeroMqTransportFactory",
 ];
 const expectedTestingExports = [
   "BlackBox",

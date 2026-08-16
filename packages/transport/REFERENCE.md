@@ -8,7 +8,7 @@ This reference is for agents integrating the public transport contracts.
 transport topic/routing/subscription/operation types, and immutable helpers
 `TransportTopics`, `TransportSubscriptions`, and `TransportOperations`.
 `@spine-event-engine/transport/zeromq` exports `ZeroMqConfig` and
-`createZeroMqTransport`.
+`createZeroMqTransport` and `createZeroMqTransportFactory`.
 
 ## Topics and subscriptions
 
@@ -33,6 +33,11 @@ cluster topology, durable delivery, or a cross-machine guarantee.
 
 The adapter accepts optional request and receive timeout settings. Callers must
 close handles and the transport during shutdown.
+
+`createZeroMqTransportFactory()` creates the distinct typed integration-message
+channel adapter. It exchanges generated `ExternalMessage` Protobuf frames on
+private local IPC channels; it does not expose SignalTransport routing,
+requests, or subscriptions.
 
 ## Integration message channels
 

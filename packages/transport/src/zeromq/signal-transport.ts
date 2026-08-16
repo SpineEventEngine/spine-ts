@@ -13,8 +13,7 @@
  */
 
 import { createHash } from "node:crypto";
-import type { BigIntStats } from "node:fs";
-import { lstat, mkdir, realpath, stat } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { deserialize, serialize } from "node:v8";
 
@@ -34,6 +33,7 @@ import type {
   TransportTopic,
 } from "../index.js";
 import type { ZeroMqConfig } from "./adapter-config.js";
+import { ChannelEndpoints, type PreparedIpcDirectory } from "./channel-endpoints.js";
 import { EndpointFiles } from "./endpoint-files.js";
 
 /**
@@ -85,29 +85,6 @@ const closeDelayMs = 0;
 const nativeMessageMaxBytes = 8_388_608;
 const requestHandlerFailureMessage = "ZeroMQ request handler failed.";
 const privateDirectoryMode = 0o700;
-const privateModeBits = 0o700n;
-const posixModeMask = 0o7777n;
-const posixWriteMask = 0o022n;
-const isPosix = process.platform !== "win32";
-
-interface PreparedIpcDirectory {
-  readonly path: string;
-  readonly identity: {
-    readonly device: bigint;
-    readonly inode: bigint;
-  };
-}
-
-interface IpcPathPlan {
-  readonly anchorPath: string;
-  readonly missingComponents: readonly string[];
-}
-
-interface IpcPathWalk {
-  readonly existingPath: string;
-  readonly missingComponents: readonly string[];
-}
-
 /**
  * Exposes package-private native socket and filesystem operations for tests.
  */
@@ -172,7 +149,9 @@ export const zeroMqSocketAccess = {
    * @returns Returns its prepared identity.
    */
   async prepareIpcDirectory(ipcDirectory: string): Promise<PreparedIpcDirectory> {
-    return await IpcDirectories.prepare(ipcDirectory);
+    return await ChannelEndpoints.prepare(ipcDirectory, async (directory) => {
+      await zeroMqSocketAccess.createIpcDirectoryComponent(directory);
+    });
   },
 
   /**
@@ -182,7 +161,7 @@ export const zeroMqSocketAccess = {
    * @returns Completes after the directory is verified.
    */
   async recheckIpcDirectory(prepared: PreparedIpcDirectory): Promise<void> {
-    await IpcDirectories.recheck(prepared);
+    await ChannelEndpoints.recheck(prepared);
   },
 
   /**
@@ -912,230 +891,6 @@ const ZeroMqFrames = {
     if (isMessage(envelope)) {
       throw new Error("ZeroMQ transport cannot encode generated Protobuf replies.");
     }
-  },
-};
-
-/**
- * Prepares and revalidates secure directories used for IPC sockets.
- */
-const IpcDirectories = {
-  // prettier-ignore
-
-  /**
-   * Creates and identifies a secure IPC directory.
-   */
-  async prepare(ipcDirectory: string): Promise<PreparedIpcDirectory> {
-    const plan = await IpcDirectories.inspect(ipcDirectory);
-    const completedPath = await IpcDirectories.createSuffix(
-      plan.anchorPath,
-      plan.missingComponents,
-    );
-    return await IpcDirectories.finalize(completedPath);
-  },
-
-  /**
-   * Inspects the existing portion of an IPC path.
-   */
-  async inspect(ipcDirectory: string): Promise<IpcPathPlan> {
-    const parsed = path.parse(ipcDirectory);
-    const components = ipcDirectory
-      .slice(parsed.root.length)
-      .split(path.sep)
-      .filter((component) => component.length > 0);
-    const walk = await IpcDirectories.walk(parsed.root, components);
-    const followedAnchor = await stat(walk.existingPath, { bigint: true });
-    const anchorPath = await realpath(walk.existingPath);
-    const anchorEntry = await lstat(anchorPath, { bigint: true });
-    IpcDirectories.requireMatchingIdentity(anchorEntry, followedAnchor, "canonical anchor");
-
-    return {
-      anchorPath,
-      missingComponents: walk.missingComponents,
-    };
-  },
-
-  /**
-   * Finds the first missing IPC path component.
-   */
-  async walk(root: string, components: readonly string[]): Promise<IpcPathWalk> {
-    let existingPath = root;
-
-    for (let index = 0; index < components.length; index += 1) {
-      const component = components[index];
-      if (component === undefined) {
-        continue;
-      }
-      const candidate = path.join(existingPath, component);
-      let lexicalEntry;
-
-      try {
-        lexicalEntry = await lstat(candidate, { bigint: true });
-      } catch (error) {
-        if (!IpcDirectories.hasErrorCode(error, "ENOENT")) {
-          throw error;
-        }
-        return { existingPath, missingComponents: components.slice(index) };
-      }
-
-      await IpcDirectories.validateEntry(candidate, index === components.length - 1, lexicalEntry);
-      existingPath = candidate;
-    }
-
-    return { existingPath, missingComponents: [] };
-  },
-
-  /**
-   * Validates one existing IPC path component.
-   */
-  async validateEntry(
-    candidate: string,
-    isFinal: boolean,
-    lexicalEntry: BigIntStats,
-  ): Promise<void> {
-    if (lexicalEntry.isSymbolicLink()) {
-      if (isFinal) {
-        throw new Error("ZeroMQ adapter ipcDirectory final component must not be a symlink.");
-      }
-      if (isPosix) {
-        await IpcDirectories.validatePosixAlias(candidate, lexicalEntry.uid);
-      }
-    }
-
-    const followed = await stat(candidate, { bigint: true });
-    if (!followed.isDirectory()) {
-      throw new Error("ZeroMQ adapter ipcDirectory path components must be directories.");
-    }
-  },
-
-  /**
-   * Creates the missing secure IPC path suffix.
-   */
-  async createSuffix(anchorPath: string, missingComponents: readonly string[]): Promise<string> {
-    let completedPath = anchorPath;
-    for (const component of missingComponents) {
-      const next = path.join(completedPath, component);
-      try {
-        await zeroMqSocketAccess.createIpcDirectoryComponent(next);
-      } catch (error) {
-        if (!IpcDirectories.hasErrorCode(error, "EEXIST")) {
-          throw error;
-        }
-      }
-      const existing = await lstat(next, { bigint: true });
-      if (existing.isSymbolicLink() || !existing.isDirectory()) {
-        throw new Error("ZeroMQ adapter ipcDirectory creation encountered an unsafe path.");
-      }
-      completedPath = next;
-    }
-    return completedPath;
-  },
-
-  /**
-   * Validates and identifies the final IPC directory.
-   */
-  async finalize(completedPath: string): Promise<PreparedIpcDirectory> {
-    const canonicalCompletedPath = await realpath(completedPath);
-    if (canonicalCompletedPath !== completedPath) {
-      throw new Error("ZeroMQ adapter ipcDirectory must resolve to its canonical path.");
-    }
-    const finalEntry = await lstat(completedPath, { bigint: true });
-    IpcDirectories.requirePrivateFinalDirectory(finalEntry);
-
-    return Object.freeze({
-      path: completedPath,
-      identity: Object.freeze({
-        device: finalEntry.dev,
-        inode: finalEntry.ino,
-      }),
-    });
-  },
-
-  /**
-   * Revalidates an IPC directory immediately before native socket work.
-   */
-  async recheck(prepared: PreparedIpcDirectory): Promise<void> {
-    const canonicalPath = await realpath(prepared.path);
-    if (canonicalPath !== prepared.path) {
-      throw new Error("ZeroMQ adapter ipcDirectory changed after preparation.");
-    }
-    const finalEntry = await lstat(prepared.path, { bigint: true });
-    IpcDirectories.requirePrivateFinalDirectory(finalEntry);
-
-    const identityIsStable =
-      isPosix ||
-      (prepared.identity.device !== 0n &&
-        prepared.identity.inode !== 0n &&
-        finalEntry.dev !== 0n &&
-        finalEntry.ino !== 0n);
-    if (
-      identityIsStable &&
-      (finalEntry.dev !== prepared.identity.device || finalEntry.ino !== prepared.identity.inode)
-    ) {
-      throw new Error("ZeroMQ adapter ipcDirectory identity changed after preparation.");
-    }
-  },
-
-  /**
-   * Validates a POSIX ancestor symlink.
-   */
-  async validatePosixAlias(aliasPath: string, aliasUid: bigint): Promise<void> {
-    const parent = await stat(path.dirname(aliasPath), { bigint: true });
-    if (aliasUid !== 0n || parent.uid !== 0n || (parent.mode & posixWriteMask) !== 0n) {
-      throw new Error(
-        "ZeroMQ adapter ipcDirectory ancestor symlink must be an immutable root-owned alias.",
-      );
-    }
-  },
-
-  /**
-   * Requires final-directory ownership and permissions.
-   */
-  requirePrivateFinalDirectory(entry: {
-    readonly dev: bigint;
-    readonly ino: bigint;
-    readonly mode: bigint;
-    readonly uid: bigint;
-    isDirectory(): boolean;
-    isSymbolicLink(): boolean;
-  }): void {
-    if (entry.isSymbolicLink() || !entry.isDirectory()) {
-      throw new Error("ZeroMQ adapter ipcDirectory must be a non-symlink directory.");
-    }
-    if (!isPosix) {
-      return;
-    }
-
-    const effectiveUserId = process.geteuid?.();
-    if (effectiveUserId === undefined || entry.uid !== BigInt(effectiveUserId)) {
-      throw new Error("ZeroMQ adapter ipcDirectory must be owned by the effective user.");
-    }
-    if ((entry.mode & posixModeMask) !== privateModeBits) {
-      throw new Error("ZeroMQ adapter ipcDirectory must have exact POSIX mode 0700.");
-    }
-  },
-
-  /**
-   * Requires two filesystem identities to match.
-   */
-  requireMatchingIdentity(
-    actual: { readonly dev: bigint; readonly ino: bigint },
-    expected: { readonly dev: bigint; readonly ino: bigint },
-    label: string,
-  ): void {
-    if (actual.dev !== expected.dev || actual.ino !== expected.ino) {
-      throw new Error(`ZeroMQ adapter ipcDirectory ${label} identity changed.`);
-    }
-  },
-
-  /**
-   * Tests an unknown error for a Node error code.
-   */
-  hasErrorCode(error: unknown, code: string): boolean {
-    return (
-      error instanceof Error &&
-      "code" in error &&
-      (error as Error & { readonly code?: unknown }).code === code
-    );
   },
 };
 
