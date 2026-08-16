@@ -21,6 +21,12 @@
   tests plus shared RED-21 passed 4/4 on 2026-08-16. Focused ESLint passed for
   the adapter and new native test. Shared conformance retains pre-existing
   lint debt outside this checkpoint's behavior work.
-- Outstanding before task completion: publisher FIFO/drain-close and full
-  failure aggregation, complete cache identity reconciliation, exact frame/id
-  validation, and the remaining multi-publisher/restart/close proofs.
+- Native publishers now serialize accepted work through one promise tail,
+  snapshot/validate the supplied wrapper identity and message before I/O, and
+  return one close completion after draining. Accepted failures remain
+  observable as an AggregateError at close. PUSH sockets are cached per live
+  subscriber generation and evicted on manifest reconciliation.
+- The focused suite now proves concurrent per-publisher FIFO plus mismatched
+  identity rejection (5/5 tests with shared RED-21). Outstanding before task
+  completion: dedicated multipublisher/close-race/background-failure proofs,
+  cache identity endpoint replacement, and final lifecycle review.

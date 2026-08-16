@@ -293,7 +293,8 @@ async function assertNativeManifestContract(directory: string, factory: Factory)
   await expect(publisher.publish(frameId("bounded"), frame(proto, "bounded"))).rejects.toThrow(
     /1024|bound|manifest/iu,
   );
-  await Promise.all([activeHandle.close(), activeSubscriber.close(), publisher.close()]);
+  await Promise.all([activeHandle.close(), activeSubscriber.close()]);
+  await expect(publisher.close()).rejects.toBeInstanceOf(AggregateError);
   await factory.close();
 }
 

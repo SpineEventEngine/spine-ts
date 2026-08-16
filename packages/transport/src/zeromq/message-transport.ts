@@ -15,7 +15,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, open, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { ChannelIdSchema, ExternalMessageSchema } from "@spine-event-engine/proto";
 import type { ChannelId, ExternalMessage } from "@spine-event-engine/proto";
@@ -69,14 +69,14 @@ class ZeroMqMessageTransport implements TransportFactory {
 
   createPublisher(id: ChannelId): Promise<Publisher> {
     if (this.#closePromise !== undefined) throw new Error("ZeroMQ message transport is closed.");
-    const publisher = new NativePublisher(id, this.#config);
+    const publisher = new NativePublisher(id, this.#config, this);
     this.#publishers.add(publisher);
     return Promise.resolve(publisher);
   }
 
   async createSubscriber(id: ChannelId): Promise<Subscriber> {
     if (this.#closePromise !== undefined) throw new Error("ZeroMQ message transport is closed.");
-    const subscriber = await NativeSubscriber.open(id, this.#config);
+    const subscriber = await NativeSubscriber.open(id, this.#config, this);
     this.#subscribers.add(subscriber);
     return subscriber;
   }
@@ -84,6 +84,14 @@ class ZeroMqMessageTransport implements TransportFactory {
   close(): Promise<void> {
     this.#closePromise ??= this.#close();
     return this.#closePromise;
+  }
+
+  removePublisher(publisher: NativePublisher): void {
+    this.#publishers.delete(publisher);
+  }
+
+  removeSubscriber(subscriber: NativeSubscriber): void {
+    this.#subscribers.delete(subscriber);
   }
 
   async #close(): Promise<void> {
@@ -103,12 +111,17 @@ class ZeroMqMessageTransport implements TransportFactory {
 class NativePublisher implements Publisher {
   readonly #id: ChannelId;
   readonly #config: ZeroMqConfig;
+  readonly #factory: ZeroMqMessageTransport;
   readonly #sockets = new Map<string, Push>();
-  #closed = false;
+  #closing = false;
+  #tail: Promise<void> = Promise.resolve();
+  readonly #failures: unknown[] = [];
+  #closePromise: Promise<void> | undefined;
 
-  constructor(id: ChannelId, config: ZeroMqConfig) {
+  constructor(id: ChannelId, config: ZeroMqConfig, factory: ZeroMqMessageTransport) {
     this.#id = canonicalChannelId(id);
     this.#config = config;
+    this.#factory = factory;
   }
 
   get id(): ChannelId {
@@ -120,11 +133,43 @@ class NativePublisher implements Publisher {
   }
 
   isStale(): boolean {
-    return this.#closed;
+    return this.#closing;
   }
 
-  async publish(_id: Any, message: ExternalMessage): Promise<void> {
-    if (this.#closed) throw new Error("ZeroMQ message publisher is closed.");
+  async publish(id: Any, message: ExternalMessage): Promise<void> {
+    if (this.#closing) throw new Error("ZeroMQ message publisher is closed.");
+    validateFrame(id, message);
+    const copiedMessage = clone(ExternalMessageSchema, message);
+    const accepted = this.#tail.then(() => this.#publish(copiedMessage));
+    this.#tail = accepted.catch((error: unknown) => {
+      this.#failures.push(error);
+    });
+    return accepted;
+  }
+
+  close(): Promise<void> {
+    this.#closePromise ??= this.#closeAfterDrain();
+    return this.#closePromise;
+  }
+
+  async #closeAfterDrain(): Promise<void> {
+    this.#closing = true;
+    try {
+      await this.#tail;
+      if (this.#failures.length > 0)
+        throw new AggregateError(this.#failures, "Accepted ZeroMQ message publication failed.");
+    } finally {
+      this.#factory.removePublisher(this);
+      this.#closeSockets();
+    }
+  }
+
+  #closeSockets(): void {
+    for (const socket of this.#sockets.values()) socket.close();
+    this.#sockets.clear();
+  }
+
+  async #publish(message: ExternalMessage): Promise<void> {
     const manifests = await discoverSubscribers(this.#config, this.targetType);
     this.#reconcile(manifests);
     const frame = toBinary(ExternalMessageSchema, message);
@@ -141,13 +186,6 @@ class NativePublisher implements Publisher {
         failures,
         `ZeroMQ message publication failed for ${this.targetType}.`,
       );
-  }
-
-  close(): Promise<void> {
-    this.#closed = true;
-    for (const socket of this.#sockets.values()) socket.close();
-    this.#sockets.clear();
-    return Promise.resolve();
   }
 
   async #send(manifest: SubscriberManifest, frame: Uint8Array): Promise<void> {
@@ -176,6 +214,7 @@ class NativeSubscriber implements Subscriber {
   readonly #manifestPath: string;
   readonly #socketPath: string;
   readonly #manifest: SubscriberManifest;
+  readonly #factory: ZeroMqMessageTransport;
   readonly #consumers = new Set<ExternalMessageConsumer>();
   readonly #heartbeat: NodeJS.Timeout;
   #closePromise: Promise<void> | undefined;
@@ -186,12 +225,14 @@ class NativeSubscriber implements Subscriber {
     manifestPath: string,
     socketPath: string,
     manifest: SubscriberManifest,
+    factory: ZeroMqMessageTransport,
   ) {
     this.#id = canonicalChannelId(id);
     this.#socket = socket;
     this.#manifestPath = manifestPath;
     this.#socketPath = socketPath;
     this.#manifest = manifest;
+    this.#factory = factory;
     this.#heartbeat = setInterval(() => {
       void this.#refreshHeartbeat();
     }, heartbeatIntervalMs);
@@ -199,7 +240,11 @@ class NativeSubscriber implements Subscriber {
     void this.#run();
   }
 
-  static async open(id: ChannelId, config: ZeroMqConfig): Promise<NativeSubscriber> {
+  static async open(
+    id: ChannelId,
+    config: ZeroMqConfig,
+    factory: ZeroMqMessageTransport,
+  ): Promise<NativeSubscriber> {
     const channel = canonicalChannelId(id);
     const layout = await prepareLayout(config, channel.targetType);
     const generation = randomUUID();
@@ -220,7 +265,7 @@ class NativeSubscriber implements Subscriber {
     try {
       await socket.bind(endpoint);
       await writeManifest(manifestPath, manifest);
-      return new NativeSubscriber(channel, socket, manifestPath, socketPath, manifest);
+      return new NativeSubscriber(channel, socket, manifestPath, socketPath, manifest, factory);
     } catch (error) {
       socket.close();
       await rm(socketPath, { force: true });
@@ -266,6 +311,7 @@ class NativeSubscriber implements Subscriber {
     this.#socket.close();
     await rm(this.#socketPath, { force: true });
     this.#consumers.clear();
+    this.#factory.removeSubscriber(this);
   }
 
   async #refreshHeartbeat(): Promise<void> {
@@ -470,9 +516,29 @@ function socketPathFromEndpoint(endpoint: string): string {
 
 function canonicalChannelId(id: ChannelId): ChannelId {
   create(ChannelIdSchema, id);
-  if (id.targetType.trim().length === 0)
-    throw new Error("ZeroMQ message channel target type is required.");
+  if (!/^type\.spine\.io\/[A-Za-z_][A-Za-z0-9_.]*$/u.test(id.targetType))
+    throw new Error("Message channel targetType must be a canonical type.spine.io URL.");
   return create(ChannelIdSchema, { targetType: id.targetType });
+}
+
+function validateFrame(id: Any, message: ExternalMessage): void {
+  if (!id.typeUrl || id.value.length === 0)
+    throw new Error("External message identity must contain a type URL and bytes.");
+  if (
+    !message.id ||
+    !message.originalMessage?.typeUrl ||
+    message.originalMessage.value.length === 0 ||
+    !message.boundedContextName?.value
+  )
+    throw new Error(
+      "External message must contain identity, original message, and source context.",
+    );
+  if (message.id.typeUrl !== id.typeUrl || !bytesEqual(message.id.value, id.value))
+    throw new Error("External message identity must match the supplied identity.");
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function isErrorCode(error: unknown, code: string): boolean {

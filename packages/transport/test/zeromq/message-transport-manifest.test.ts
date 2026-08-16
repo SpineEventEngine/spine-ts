@@ -25,7 +25,7 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 
-import { create, toBinary } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { ChannelIdSchema, ExternalMessageSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
@@ -126,6 +126,27 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
       await rm(ipcDirectory, { recursive: true, force: true });
     }
   });
+
+  it("serializes concurrently accepted publication work and rejects mismatched frame identity", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const subscriber = await factory.createSubscriber(channel());
+      const received: string[] = [];
+      await subscriber.addConsumer((message) => {
+        received.push(fromBinary(StringValueSchema, message.originalMessage.value).value);
+      });
+      const publisher = await factory.createPublisher(channel());
+      const first = frame("first");
+      const second = frame("second");
+      if (first.id === undefined || second.id === undefined)
+        throw new Error("Expected external-message wrapper identities.");
+      await Promise.all([publisher.publish(first.id, first), publisher.publish(second.id, second)]);
+      await eventually(() => Promise.resolve(received.length === 2));
+      expect(received).toEqual(["first", "second"]);
+      await expect(publisher.publish(frameId(), first)).rejects.toThrow(/identity must match/iu);
+      await Promise.all([publisher.close(), subscriber.close(), factory.close()]);
+    });
+  });
 });
 
 function config(ipcDirectory: string): ZeroMqConfig {
@@ -136,17 +157,17 @@ function channel() {
   return create(ChannelIdSchema, { targetType });
 }
 
-function frameId() {
+function frameId(value = "manifest") {
   return {
     typeUrl: "type.spine.io/google.protobuf.StringValue",
-    value: toBinary(StringValueSchema, create(StringValueSchema, { value: "manifest" })),
+    value: toBinary(StringValueSchema, create(StringValueSchema, { value })),
   };
 }
 
-function frame() {
+function frame(value = "manifest") {
   return create(ExternalMessageSchema, {
-    id: frameId(),
-    originalMessage: frameId(),
+    id: frameId(value),
+    originalMessage: frameId(value),
     boundedContextName: { value: "Manifest" },
   });
 }
