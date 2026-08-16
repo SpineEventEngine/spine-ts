@@ -14,7 +14,17 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { constants, type Stats } from "node:fs";
-import { lstat, mkdir, open, opendir, rename, rm, stat, type FileHandle } from "node:fs/promises";
+import {
+  link,
+  lstat,
+  mkdir,
+  open,
+  opendir,
+  rename,
+  rm,
+  stat,
+  type FileHandle,
+} from "node:fs/promises";
 import path from "node:path";
 import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
@@ -87,6 +97,15 @@ export const zeroMqMessageAccess = {
    */
   async openManifest(manifestPath: string): Promise<FileHandle> {
     return await open(manifestPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+  },
+
+  /**
+   * Atomically moves a manifest path within its private directory.
+   *
+   * @internal
+   */
+  async moveManifest(fromPath: string, toPath: string): Promise<void> {
+    await rename(fromPath, toPath);
   },
 };
 
@@ -514,12 +533,12 @@ async function discoverSubscribers(
   const discovered: SubscriberManifest[] = [];
   for (const entry of manifests) {
     const manifestPath = path.join(layout.subscribers, entry);
-    const manifest = await readManifest(manifestPath, layout, entry, config.adapterIdentity);
-    if (manifest === undefined) continue;
-    if (manifest.adapterIdentity !== config.adapterIdentity) continue;
+    const inspected = await readManifest(manifestPath, layout, entry, config.adapterIdentity);
+    if (inspected === undefined) continue;
+    const { manifest, file } = inspected;
     if (!(await isLive(manifest))) {
-      await rm(manifestPath, { force: true });
-      await rm(socketPathFromEndpoint(manifest.endpoint), { force: true });
+      if (await quarantineIfUnchanged(manifestPath, file))
+        await rm(socketPathFromEndpoint(manifest.endpoint), { force: true });
       continue;
     }
     discovered.push(manifest);
@@ -590,13 +609,13 @@ async function readManifest(
   layout: { readonly subscribers: string; readonly sockets: string },
   entry: string,
   adapterIdentity: string,
-): Promise<SubscriberManifest | undefined> {
+): Promise<{ readonly manifest: SubscriberManifest; readonly file: Stats } | undefined> {
   let inspected: Stats | undefined;
   try {
     const file = await lstat(manifestPath);
     inspected = file;
     if (file.isSymbolicLink() || !file.isFile() || file.size > maxManifestBytes) {
-      await removeIfUnchanged(manifestPath, file);
+      await quarantineIfUnchanged(manifestPath, file);
       return undefined;
     }
     const handle = await zeroMqMessageAccess.openManifest(manifestPath);
@@ -629,32 +648,44 @@ async function readManifest(
         (file.mode & 0o777) !== 0o600 ||
         (openedMode & 0o777) !== 0o600)
     ) {
-      await removeIfUnchanged(manifestPath, file);
+      await quarantineIfUnchanged(manifestPath, file);
       return undefined;
     }
     if (!isManifest(parsed, layout, entry)) {
-      await removeIfUnchanged(manifestPath, file);
+      await quarantineIfUnchanged(manifestPath, file);
       return undefined;
     }
-    return parsed;
+    return { manifest: parsed, file };
   } catch {
-    if (inspected !== undefined) await removeIfUnchanged(manifestPath, inspected);
+    if (inspected !== undefined) await quarantineIfUnchanged(manifestPath, inspected);
     return undefined;
   }
 }
 
-async function removeIfUnchanged(manifestPath: string, inspected: Stats): Promise<void> {
+async function quarantineIfUnchanged(manifestPath: string, inspected: Stats): Promise<boolean> {
+  const quarantinePath = `${manifestPath}.${randomUUID()}.quarantine`;
   try {
-    const current = await lstat(manifestPath);
-    if (
-      current.dev !== inspected.dev ||
-      current.ino !== inspected.ino ||
-      current.isSymbolicLink() !== inspected.isSymbolicLink()
-    )
-      return;
-    await rm(manifestPath, { force: true });
+    await zeroMqMessageAccess.moveManifest(manifestPath, quarantinePath);
+    const moved = await lstat(quarantinePath);
+    if (moved.dev === inspected.dev && moved.ino === inspected.ino) {
+      await rm(quarantinePath, { force: true });
+      return true;
+    }
+    await restoreQuarantine(quarantinePath, manifestPath);
+    return false;
   } catch {
-    // A concurrent writer/remover owns the current pathname.
+    await rm(quarantinePath, { force: true }).catch(() => undefined);
+    return false;
+  }
+}
+
+async function restoreQuarantine(quarantinePath: string, manifestPath: string): Promise<void> {
+  try {
+    await link(quarantinePath, manifestPath);
+  } catch (error) {
+    if (!isErrorCode(error, "EEXIST")) throw error;
+  } finally {
+    await rm(quarantinePath, { force: true });
   }
 }
 

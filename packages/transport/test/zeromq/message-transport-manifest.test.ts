@@ -188,6 +188,84 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
     });
   });
 
+  it("preserves a replacement that races invalid-manifest quarantine", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const subscriber = await factory.createSubscriber(channel());
+      const manifestPath = await manifestPathFor(ipcDirectory);
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Parameters<
+        typeof zeroMqMessageAccess.writeManifest
+      >[1];
+      await chmod(manifestPath, 0o644);
+      const moveManifest = zeroMqMessageAccess.moveManifest.bind(zeroMqMessageAccess);
+      const replacement = vi
+        .spyOn(zeroMqMessageAccess, "moveManifest")
+        .mockImplementationOnce(async (fromPath, toPath) => {
+          await zeroMqMessageAccess.writeManifest(fromPath, manifest);
+          await moveManifest(fromPath, toPath);
+        });
+      const received: string[] = [];
+      await subscriber.addConsumer((message) => {
+        received.push(
+          fromBinary(
+            StringValueSchema,
+            required(message.originalMessage, "quarantine-race original message").value,
+          ).value,
+        );
+      });
+      try {
+        const publisher = await factory.createPublisher(channel());
+        const message = frame("survives-quarantine-race");
+        await publisher.publish(required(message.id, "quarantine-race identity"), message);
+        await eventually(() => Promise.resolve(received.length === 1));
+        expect(received).toEqual(["survives-quarantine-race"]);
+        await publisher.close();
+      } finally {
+        replacement.mockRestore();
+        await Promise.allSettled([subscriber.close(), factory.close()]);
+      }
+    });
+  });
+
+  it("preserves a replacement that races stale-manifest quarantine", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const subscriber = await factory.createSubscriber(channel());
+      const manifestPath = await manifestPathFor(ipcDirectory);
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Parameters<
+        typeof zeroMqMessageAccess.writeManifest
+      >[1];
+      await zeroMqMessageAccess.writeManifest(manifestPath, { ...manifest, heartbeatAtMs: 1 });
+      const moveManifest = zeroMqMessageAccess.moveManifest.bind(zeroMqMessageAccess);
+      const replacement = vi
+        .spyOn(zeroMqMessageAccess, "moveManifest")
+        .mockImplementationOnce(async (fromPath, toPath) => {
+          await zeroMqMessageAccess.writeManifest(fromPath, manifest);
+          await moveManifest(fromPath, toPath);
+        });
+      const received: string[] = [];
+      await subscriber.addConsumer((message) => {
+        received.push(
+          fromBinary(
+            StringValueSchema,
+            required(message.originalMessage, "stale-race original message").value,
+          ).value,
+        );
+      });
+      try {
+        const publisher = await factory.createPublisher(channel());
+        const message = frame("survives-stale-race");
+        await publisher.publish(required(message.id, "stale-race identity"), message);
+        await eventually(() => Promise.resolve(received.length === 1));
+        expect(received).toEqual(["survives-stale-race"]);
+        await publisher.close();
+      } finally {
+        replacement.mockRestore();
+        await Promise.allSettled([subscriber.close(), factory.close()]);
+      }
+    });
+  });
+
   it("serializes concurrently accepted publication work and rejects mismatched frame identity", async () => {
     await withIpcDirectory(async (ipcDirectory) => {
       const factory = createZeroMqTransportFactory(config(ipcDirectory));

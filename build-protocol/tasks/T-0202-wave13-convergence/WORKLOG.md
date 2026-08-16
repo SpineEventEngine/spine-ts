@@ -155,3 +155,24 @@ packages/server/test/integration/integration-broker-module.test.ts
 packages/server/test/server/server-integration-broker-cross-process.test.ts`
   passed 4 files / 54 tests. Scoped ESLint, Prettier, and `git diff --check`
   passed before handoff.
+
+## Final security residual — 2026-08-16
+
+- Security re-review found the prior identity recheck still left a pathname
+  `lstat`/`rm` gap, including stale-entry pruning. Cleanup now atomically moves
+  the pathname to a unique same-directory quarantine first, then compares the
+  quarantined inode with the inspected inode. A match deletes only quarantine.
+  A mismatch is restored with an exclusive hard link when no newer pathname
+  exists; if one does, that newer entry remains authoritative and quarantine is
+  removed. Stale socket removal occurs only after the inspected stale manifest
+  was actually quarantined and deleted.
+- Deterministic private move seams cover a replacement after invalid-manifest
+  inspection and a replacement after `isLive()` declares a manifest stale. In
+  both cases, the fresh valid manifest survives, remains discoverable, and the
+  next normal publication reaches its subscriber.
+- GREEN evidence: `pnpm typecheck:build:generated` passed. `pnpm exec vitest
+run packages/transport/test/zeromq/message-transport-manifest.test.ts
+packages/transport/test/message-transport-conformance.test.ts
+packages/server/test/server/server-integration-broker-cross-process.test.ts`
+  passed 3 files / 23 tests. Scoped ESLint, Prettier, and `git diff --check`
+  passed before push.
