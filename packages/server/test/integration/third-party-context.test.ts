@@ -21,6 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { TypeRegistry } from "@spine-event-engine/core";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import {
   ActorContextSchema,
@@ -48,6 +49,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ThirdPartyContext as DirectSourceThirdPartyContext } from "../../src/integration/third-party-context.js";
 import { BoundedContext as DirectSourceBoundedContext } from "../../src/context/bounded-context.js";
+import { ServerEnvironment as DirectSourceServerEnvironment } from "../../src/server/server-environment.js";
 import { resetServerEnvironmentForTest as resetDirectSourceServerEnvironment } from "../../src/testing/index.js";
 import { RecordingTransportFactory } from "./wave13-red-support.js";
 import { expectWave13ContractToCompile } from "./wave13-compile-contract.js";
@@ -127,6 +129,9 @@ describe("Wave 13 ThirdPartyContext", () => {
   afterEach(async () => resetServerEnvironmentForTest());
   it("publishes generated events through its direct-source broker and closes idempotently", async () => {
     await resetDirectSourceServerEnvironment();
+    DirectSourceServerEnvironment.when(EnvironmentType.Local).use({
+      typeRegistry: new TypeRegistry([StringValueSchema]),
+    });
     const context = await DirectSourceThirdPartyContext.singleTenant("DirectSourceThirdParty");
     const event = create(StringValueSchema, { value: "direct-source" });
     const user = create(UserIdSchema, { value: "actor" });
@@ -146,6 +151,9 @@ describe("Wave 13 ThirdPartyContext", () => {
 
   it("routes direct-source multitenant imports and rejects unsupported actor and message forms", async () => {
     await resetDirectSourceServerEnvironment();
+    DirectSourceServerEnvironment.when(EnvironmentType.Local).use({
+      typeRegistry: new TypeRegistry([StringValueSchema]),
+    });
     const received: Event[] = [];
     const receiver = await DirectSourceBoundedContext.multitenant("DirectSourceReceiver")
       .addEventDispatcher({
@@ -216,7 +224,7 @@ describe("Wave 13 ThirdPartyContext", () => {
         "ThirdPartyContext requires a generated event message.",
       );
       await expect(single.emittedEvent(create(ActorContextSchema), user)).rejects.toThrow(
-        "ThirdPartyContext cannot encode this message without its generated schema descriptor.",
+        "ThirdPartyContext does not know spine.core.ActorContext.",
       );
       await receiver.close();
       await expect(receiver.eventBus().post(tenantEvent)).rejects.toThrow(
@@ -255,7 +263,10 @@ describe("Wave 13 ThirdPartyContext", () => {
     ).toBeDefined();
     if (ThirdPartyContext === undefined) throw new Error("ThirdPartyContext is unavailable.");
     const factory = new RecordingTransportFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      transportFactory: factory,
+      typeRegistry: new TypeRegistry([StringValueSchema]),
+    });
     const stateRegistry = generatedStateRegistryRoot();
     const ingestor = new HandlerRegistryIngestor();
     expect(() => ingestor.ingest({ version: 2, entities: [] })).toThrow(/version 2/u);

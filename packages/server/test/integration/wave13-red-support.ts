@@ -197,10 +197,11 @@ export class RecordingTransportFactory implements TransportFactory {
     const key = channelKey(channel);
     const consumers = this.#consumers.get(key) ?? new Set();
     this.#consumers.set(key, consumers);
+    const subscriberConsumers = new Set<ExternalMessageConsumer>();
     const subscriber: Subscriber = {
       id: channel,
       targetType: required(channel.targetType, "subscriber channel target type"),
-      isStale: () => consumers.size === 0,
+      isStale: () => subscriberConsumers.size === 0,
       addConsumer: (consumer: ExternalMessageConsumer): Promise<ConsumerHandle> => {
         if (this.#consumerAdditionFailure?.(channel) === true) {
           this.#consumerAdditionFailure = undefined;
@@ -208,6 +209,7 @@ export class RecordingTransportFactory implements TransportFactory {
           return Promise.reject(new Error("injected consumer attachment failure"));
         }
         consumers.add(consumer);
+        subscriberConsumers.add(consumer);
         this.operations.push("consumer:add");
         let closed = false;
         const handle: ConsumerHandle = {
@@ -215,6 +217,7 @@ export class RecordingTransportFactory implements TransportFactory {
             if (closed) return Promise.resolve();
             closed = true;
             consumers.delete(consumer);
+            subscriberConsumers.delete(consumer);
             this.operations.push("consumer:remove");
             return Promise.resolve();
           },
@@ -223,7 +226,8 @@ export class RecordingTransportFactory implements TransportFactory {
       },
       close: () =>
         Promise.resolve().then(() => {
-          consumers.clear();
+          for (const consumer of subscriberConsumers) consumers.delete(consumer);
+          subscriberConsumers.clear();
           this.#close("subscriber:close");
         }),
     };

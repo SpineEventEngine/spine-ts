@@ -1028,6 +1028,7 @@ export class BoundedContext {
    */
   close(): Promise<void> {
     closingContexts.add(this);
+    eventBusAccess.beginClose(this.#eventBus);
     this.#closed ??= this.#closeOnce();
     return this.#closed;
   }
@@ -1520,7 +1521,19 @@ export class BoundedContextBuilder {
       repositories,
       this.#storageFactory ?? defaultStorageFactory ?? new InMemoryStorageFactory(),
     );
-    await ContextParts.integrationReady(context);
+    try {
+      await ContextParts.integrationReady(context);
+    } catch (error) {
+      try {
+        await context.close();
+      } catch (closeError) {
+        throw new AggregateError(
+          [error, closeError],
+          "BoundedContext broker open failed during cleanup.",
+        );
+      }
+      throw error;
+    }
     return context;
   }
 
@@ -2017,13 +2030,17 @@ const ContextParts = Object.freeze({
         await eventBus.post(imported);
       },
     });
-    contextIntegrations.set(context, { broker, ready: broker.open() });
+    const ready = broker.open();
+    // Synchronous build returns before readiness; retain the failure for the next
+    // observable operation without letting Node report an unhandled rejection.
+    void ready.catch(() => undefined);
+    contextIntegrations.set(context, { broker, ready });
   },
 
   postContextEvent(context: BoundedContext, event: Event): Promise<void> {
     const buses = contextEventBuses.get(context);
     if (buses === undefined) return Promise.reject(new Error("Context EventBus is unavailable."));
-    if (closingContexts.has(context)) return buses[0].post(event);
+    if (closingContexts.has(context)) return Promise.reject(new Error("server runtime is closed."));
     return (contextIntegrations.get(context)?.ready ?? Promise.resolve()).then(() => {
       ContextParts.validateImportedTenant(context, event);
       return buses[0].post(event);

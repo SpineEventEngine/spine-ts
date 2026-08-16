@@ -13,6 +13,7 @@
  */
 
 import { create, fromBinary } from "@bufbuild/protobuf";
+import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
@@ -33,6 +34,8 @@ import type {
 } from "@spine-event-engine/transport";
 
 import { eventBusAccess, EventBus } from "../bus/event-bus.js";
+import { emitServerError } from "../server/server-log.js";
+import { ServerEnvironment, serverEnvironmentAccess } from "../server/server-environment.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import {
   unpackExternalEvent,
@@ -115,6 +118,9 @@ export class IntegrationBroker {
     const targetType = event.message?.typeUrl;
     if (targetType === undefined || targetType.length === 0) {
       throw new Error("Imported event requires event.message.typeUrl.");
+    }
+    if (![...this.#wantedByOrigin.values()].some((types) => types.has(targetType))) {
+      return;
     }
     const publisher = await this.#input.transportFactory.createPublisher(channel(targetType));
     try {
@@ -202,8 +208,29 @@ export class IntegrationBroker {
   async #onEvent(message: ExternalMessage): Promise<void> {
     if (this.#closed) return;
     if (!this.#accepts(message.boundedContextName)) return;
-    const original = unpackExternalEvent(message);
-    await this.#input.postImported(toExternalEvent(original));
+    try {
+      const original = unpackExternalEvent(message);
+      const typeUrl = original.message?.typeUrl;
+      const schema =
+        typeUrl === undefined
+          ? undefined
+          : (eventBusAccess.schema(this.#input.eventBus, typeUrl) ??
+            (typeUrl === TypeUrls.derive(StringValueSchema) ? StringValueSchema : undefined));
+      if (schema === undefined || original.message === undefined)
+        throw new Error("External event message type is not accepted.");
+      fromBinary(schema, original.message.value);
+      await this.#input.postImported(toExternalEvent(original));
+    } catch (error) {
+      emitServerError(
+        serverEnvironmentAccess.loggerFor(ServerEnvironment.instance()),
+        "Dropped corrupt external event.",
+        {
+          context: message.boundedContextName.value,
+          typeUrl: message.originalMessage?.typeUrl,
+          reason: error instanceof Error ? error.message : "invalid external event",
+        },
+      );
+    }
   }
 
   async #replaceWanted(origin: string, next: ReadonlySet<string>): Promise<void> {

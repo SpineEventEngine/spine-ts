@@ -548,3 +548,77 @@ scripts/check-tsdoc.test.mjs` process exited after its run banner, but this
   wanted-only imported publication; factory readiness/failed-open cleanup; and
   close-before-await intake gating. It must preserve the original public
   ThirdParty signature and every broker/wire exclusion.
+
+## Schema-universe correction progress — 2026-08-16
+
+- Added the smallest bootstrap seam: `ServerEnvironmentSettings.typeRegistry`
+  and its resolved readonly environment value. It defaults to the existing
+  curated Spine lookup while applications can provide their generated complete
+  lookup without a global mutable registry or any wire descriptor exchange.
+- `ThirdPartyContext` now awaits `buildAsync()`, resolves the event schema by
+  `$typeName` from that environment lookup, derives its canonical URL, and
+  serializes through that schema. It preserves an actor-supplied timestamp and
+  rejects an unknown local type before broker publication.
+- Direct-source ThirdParty proof was configured with an explicit generated
+  lookup stand-in. `pnpm typecheck:build:generated` passed and the focused
+  ThirdParty suite passed 3/3 after its expected unknown-schema assertion was
+  updated to the approved local-registry rejection behavior.
+- Still pending in this consolidated batch: corrupt received-frame log/drop
+  continuation, wanted-only imported publication, failed-open cleanup/sync
+  readiness observation, and close-before-await EventBus admission gating.
+
+## Consolidated lifecycle continuation — 2026-08-16
+
+- Production explicitly requires `typeRegistry`; only local/test resolution
+  falls back to the curated Spine registry. A focused production configuration
+  proof passed before the broader fixture run.
+- Added preliminary broker/context corrections for wanted-only third-party
+  publication, corrupt external-event decode/type validation with contained
+  error logging, failed `buildAsync()` broker-open compensating close, handled
+  synchronous readiness rejection, and EventBus close admission before broker
+  shutdown awaits.
+- Fresh generated build passed. The first combined focused run is intentionally
+  red: four existing production environment fixtures lack the newly mandatory
+  application registry, and two ThirdParty fixtures publish before a producer
+  has observed any wanted interest. These are concrete fixture/readiness cases
+  to correct; the new wanted-only error is `Imported event type ... is not wanted.`
+
+## Interest synchronization disposition — 2026-08-16
+
+- Applied the reviewed JVM behavior: `publishImported()` now resolves without
+  creating a publisher or frame when no context currently wants the type. The
+  four production environment fixtures now explicitly supply the bounded
+  `spineCoreRegistry` test lookup; their focused suite passed 28/28.
+- Generated build passed again. RED-20 remains one deterministic synchronization
+  failure (two received events instead of three): after the late multitenant
+  receiver finishes `buildAsync()`, its online/wanted traffic has not populated
+  the already-open hidden ThirdParty broker's wanted map. The third import thus
+  correctly no-ops. No sleep, direct wanted injection, or weakened interest
+  guard was added; broker status/config sequencing remains the concrete open
+  product defect.
+
+## Recording harness correction — 2026-08-16
+
+- Root cause was the test transport, not broker synchronization: each
+  `RecordingTransportFactory` subscriber closed the channel-wide consumer set.
+  Closing RED-20's single receiver therefore silently detached both hidden
+  ThirdParty config observers. The harness now owns per-subscriber consumer
+  sets and removes only its own consumers from the channel aggregate.
+- New focused regression was observed red (`received` was 0 after the first
+  same-channel subscriber closed), then green after the harness correction.
+  RED-20 is green with the ordinary synchronous online → wanted rebroadcast;
+  no sleep, direct wanted injection, or broker timing policy was added.
+
+## Consolidated focused evidence — 2026-08-16
+
+- Fresh generated build passed. The full affected focused matrix passed 5 files
+  and 75 tests: broker module and integrated broker behavior, ThirdParty,
+  ServerEnvironment, and lifecycle close behavior.
+- Corrupt external wrapper/type/payload failures now log an ERROR and resolve
+  the transport callback without importing the event. The former mismatched
+  wrapper test was updated from callback rejection to this contained drop
+  behavior; subsequent valid imports remain covered by the module suite.
+- Production requires an explicit application registry; local/test alone use
+  the curated fallback. ThirdParty no-interest publication resolves without
+  allocating a publisher/frame, and normal online/wanted synchronization
+  remains deterministic after the harness fix.

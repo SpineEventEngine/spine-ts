@@ -46,6 +46,25 @@ describe("IntegrationBroker module", () => {
     await Promise.all(brokers.splice(0).map((broker) => broker.close().catch(() => undefined)));
   });
 
+  it("keeps another same-channel subscriber active after one subscriber closes", async () => {
+    const factory = new RecordingTransportFactory();
+    const channel = create(ChannelIdSchema, { targetType: "type.test/Shared" });
+    const first = await factory.createSubscriber(channel);
+    const second = await factory.createSubscriber(channel);
+    let received = 0;
+    await first.addConsumer(() => Promise.resolve());
+    await second.addConsumer(() =>
+      Promise.resolve().then(() => {
+        received += 1;
+      }),
+    );
+    await first.close();
+    const publisher = await factory.createPublisher(channel);
+    await publisher.publish(create(AnySchema), create(ExternalMessageSchema));
+    expect(received).toBe(1);
+    await Promise.all([publisher.close(), second.close()]);
+  });
+
   it("rejects an imported event without a message type before allocating a publisher", async () => {
     const factory = new RecordingTransportFactory();
     const broker = new IntegrationBroker({
@@ -605,7 +624,7 @@ describe("IntegrationBroker module", () => {
     const publisher = await factory.createPublisher(
       create(ChannelIdSchema, { targetType: TypeUrls.derive(StringValueSchema) }),
     );
-    await expect(publisher.publish(frame.id, frame)).rejects.toThrow(/identity/u);
+    await expect(publisher.publish(frame.id, frame)).resolves.toBeUndefined();
     expect(calls).toBe(0);
   });
 

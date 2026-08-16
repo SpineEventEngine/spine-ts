@@ -13,8 +13,8 @@
  */
 
 import { create, toBinary, type Message } from "@bufbuild/protobuf";
-import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { AnyMessages } from "@spine-event-engine/core";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   BoundedContextNameSchema,
@@ -27,6 +27,7 @@ import {
 } from "@spine-event-engine/proto";
 
 import { BoundedContext, boundedContextIntegrationAccess } from "../context/bounded-context.js";
+import { ServerEnvironment } from "../server/server-environment.js";
 
 /**
  * Represents a hidden bounded context that imports third-party events through its private broker.
@@ -50,8 +51,8 @@ export class ThirdPartyContext {
    * @param name Identifies the hidden bounded context.
    * @returns Resolves to an open single-tenant context.
    */
-  static singleTenant(name: string): Promise<ThirdPartyContext> {
-    return Promise.resolve(new ThirdPartyContext(BoundedContext.singleTenant(name).build(), false));
+  static async singleTenant(name: string): Promise<ThirdPartyContext> {
+    return new ThirdPartyContext(await BoundedContext.singleTenant(name).buildAsync(), false);
   }
 
   /**
@@ -60,8 +61,8 @@ export class ThirdPartyContext {
    * @param name Identifies the hidden bounded context.
    * @returns Resolves to an open multitenant context.
    */
-  static multitenant(name: string): Promise<ThirdPartyContext> {
-    return Promise.resolve(new ThirdPartyContext(BoundedContext.multitenant(name).build(), true));
+  static async multitenant(name: string): Promise<ThirdPartyContext> {
+    return new ThirdPartyContext(await BoundedContext.multitenant(name).buildAsync(), true);
   }
 
   /**
@@ -82,11 +83,11 @@ export class ThirdPartyContext {
     const envelope = create(EventSchema, {
       id: create(EventIdSchema, { value: crypto.randomUUID() }),
       message: {
-        typeUrl: `type.googleapis.com/${typeName}`,
-        value: ThirdPartyContext.#encodeMessage(event),
+        typeUrl: this.#schema(typeName).typeUrl,
+        value: toBinary(this.#schema(typeName).schema, event as never),
       },
       context: create(EventContextSchema, {
-        timestamp: create(TimestampSchema),
+        timestamp: actorContext.timestamp ?? create(TimestampSchema),
         origin: { case: "importContext", value: actorContext },
         producerId: AnyMessages.pack(
           BoundedContextNameSchema,
@@ -135,12 +136,9 @@ export class ThirdPartyContext {
     return actor;
   }
 
-  static #encodeMessage(message: Message): Uint8Array {
-    if (message.$typeName === StringValueSchema.typeName) {
-      return toBinary(StringValueSchema, message as never);
-    }
-    throw new TypeError(
-      "ThirdPartyContext cannot encode this message without its generated schema descriptor.",
-    );
+  #schema(typeName: string) {
+    const metadata = ServerEnvironment.instance().typeRegistry.findByFullName(typeName);
+    if (metadata === undefined) throw new TypeError(`ThirdPartyContext does not know ${typeName}.`);
+    return { schema: metadata.schema, typeUrl: TypeUrls.derive(metadata.schema) };
   }
 }

@@ -25,6 +25,7 @@ import type {
   TransportSubscriptionHandle,
 } from "@spine-event-engine/transport";
 import { InMemoryTransportFactory, type TransportFactory } from "@spine-event-engine/transport";
+import { spineCoreRegistry, type TypeRegistryLookup } from "@spine-event-engine/core";
 
 import { RetryableCloseGroup } from "./retryable-close.js";
 import { emitServerWarning } from "./server-log.js";
@@ -105,6 +106,9 @@ export interface ServerEnvironmentSettings {
    */
   readonly transportFactory?: TransportFactory;
 
+  /** Read-only application schema lookup used by private integration boundaries. */
+  readonly typeRegistry?: TypeRegistryLookup;
+
   /**
    * Optional closeable delivery owner for durable delivery seams.
    */
@@ -164,6 +168,9 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
    */
   readonly transportFactory: TransportFactory;
 
+  /** Read-only application schema lookup used by private integration boundaries. */
+  readonly typeRegistry: TypeRegistryLookup;
+
   /**
    * Optional closeable delivery owner selected for this environment.
    */
@@ -186,6 +193,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     this.storageFactory = settings.storageFactory;
     this.transport = settings.transport;
     this.transportFactory = settings.transportFactory;
+    this.typeRegistry = settings.typeRegistry;
     this.delivery = settings.delivery;
     this.tracerFactory = settings.tracerFactory;
     environmentLoggers.set(this, settings.logger);
@@ -309,6 +317,7 @@ interface RequiredFacilities {
   readonly storageFactory: StorageFactory;
   readonly transport: SignalTransport;
   readonly transportFactory: TransportFactory;
+  readonly typeRegistry: TypeRegistryLookup;
   readonly delivery: ServerEnvironmentCloseable | undefined;
   readonly tracerFactory: ServerEnvironmentCloseable | undefined;
   readonly logger: ILogLayer;
@@ -581,10 +590,14 @@ const ServerEnvironmentValues = Object.freeze({
       if (settings.transportFactory === undefined) {
         throw new Error("Production ServerEnvironment requires transportFactory.");
       }
+      if (settings.typeRegistry === undefined) {
+        throw new Error("Production ServerEnvironment requires typeRegistry.");
+      }
       return {
         storageFactory: settings.storageFactory,
         transport: settings.transport,
         transportFactory: settings.transportFactory,
+        typeRegistry: settings.typeRegistry,
         delivery: settings.delivery,
         tracerFactory: settings.tracerFactory,
         logger: ServerEnvironmentValues.logger(settings.logger),
@@ -594,6 +607,7 @@ const ServerEnvironmentValues = Object.freeze({
       storageFactory: settings.storageFactory ?? new InMemoryStorageFactory(),
       transport: settings.transport ?? new LocalSignalTransport(),
       transportFactory: settings.transportFactory ?? new InMemoryTransportFactory(),
+      typeRegistry: settings.typeRegistry ?? spineCoreRegistry,
       delivery: settings.delivery,
       tracerFactory: settings.tracerFactory,
       logger: ServerEnvironmentValues.logger(settings.logger),
