@@ -151,20 +151,26 @@ process.on("message", async (message) => {
 
 if (role === "consumer" && context !== undefined) {
   try {
-    await waitFor(() => observed.length > 0 && handled.length > 0);
+    await waitFor(
+      () => observedEvent("wave13-readiness-probe") && handledPayload("readiness-probe"),
+    );
     await send({ type: "probe-delivered", role: "consumer" });
-    await waitFor(() => observed.length > 1 && handled.length > 1);
+    await waitFor(
+      () => observedEvent("wave13-cross-process-event") && handledPayload("full-event-payload"),
+    );
+    const delivered = observed.find((event) => event.id.value === "wave13-cross-process-event");
+    if (delivered === undefined) throw new Error("Expected the imported target Event.");
     await send({
       type: "delivered",
       role: "consumer",
-      eventId: observed[1].id.value,
-      typeUrl: observed[1].message.typeUrl,
-      producerId: fromBinary(StringValueSchema, observed[1].context.producerId.value).value,
-      payload: fromBinary(EmailAddressSchema, observed[1].message.value).value,
-      origin: observed[1].context.origin.case,
-      actorId: observed[1].context.origin.value.actor.value,
-      tenantId: observed[1].context.origin.value.tenantId?.kind.value,
-      external: observed[1].context.external,
+      eventId: delivered.id.value,
+      typeUrl: delivered.message.typeUrl,
+      producerId: fromBinary(StringValueSchema, delivered.context.producerId.value).value,
+      payload: fromBinary(EmailAddressSchema, delivered.message.value).value,
+      origin: delivered.context.origin.case,
+      actorId: delivered.context.origin.value.actor.value,
+      tenantId: delivered.context.origin.value.tenantId?.kind.value,
+      external: delivered.context.external,
     });
   } catch (error) {
     await cleanup();
@@ -174,6 +180,14 @@ if (role === "consumer" && context !== undefined) {
       reason: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+function observedEvent(eventId) {
+  return observed.some((event) => event.id.value === eventId);
+}
+
+function handledPayload(payload) {
+  return handled.some(({ event }) => event.value === payload);
 }
 
 async function generatedRegistryRoot() {

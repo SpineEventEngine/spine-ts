@@ -295,3 +295,15 @@ packages/server/test/integration/integration-broker-module.test.ts` passed
 - The converged exact release-failure matrix passes 7 files / 480 tests. All
   corrections are test-only; production tenant admission, handler-origin
   validation, Production configuration, and public exports remain unchanged.
+- The first complete post-correction preflight passed every deterministic gate
+  and 541/542 tests, but the real two-process proof timed out while running
+  concurrently with ten heavy suites. It immediately passed alone in 635 ms.
+  Root-cause tracing found that its one-shot readiness Event could be posted
+  before asynchronous status/wanted discovery reached the producer, where the
+  broker correctly treats it as not yet requested.
+- The child-process harness now retries only that normal application Event
+  until the external consumer observes it, then identifies the actual target
+  Event and handler call by ID and payload rather than arrival position. It
+  neither publishes a transport frame directly nor adds a sleep assumption.
+  Standalone native acceptance passes, and the formerly failing concurrent
+  11-file matrix passes 542/542 tests.

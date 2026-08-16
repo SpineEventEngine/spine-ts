@@ -100,8 +100,7 @@ describe("Wave 13 IntegrationBroker across normal Node applications", () => {
       expect(producerReady.pid).not.toBe(consumerReady.pid);
       expect(producerReady.contextName).not.toBe(consumerReady.contextName);
 
-      producer.send({ type: "publish-readiness-probe" });
-      await awaitMessage<ProbeDelivered>(consumer, "probe-delivered");
+      await establishExternalDelivery(producer, consumer);
       producer.send({ type: "publish-domestic-event" });
       const delivered = await awaitMessage<Delivered>(consumer, "delivered");
       expect(delivered).toEqual({
@@ -137,6 +136,23 @@ describe("Wave 13 IntegrationBroker across normal Node applications", () => {
     if (cleanupFailure !== undefined) throw cleanupFailure;
   });
 });
+
+async function establishExternalDelivery(
+  producer: ChildProcess,
+  consumer: ChildProcess,
+): Promise<void> {
+  const delivered = awaitMessage<ProbeDelivered>(consumer, "probe-delivered");
+  const publish = () => {
+    if (producer.connected) producer.send({ type: "publish-readiness-probe" });
+  };
+  publish();
+  const retry = setInterval(publish, 50);
+  try {
+    await delivered;
+  } finally {
+    clearInterval(retry);
+  }
+}
 
 function start(role: Role, ipcDirectory: string): ChildProcess {
   return fork(childPath, [], {
