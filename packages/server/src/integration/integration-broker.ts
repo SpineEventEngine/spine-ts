@@ -322,6 +322,8 @@ export class IntegrationBroker {
  * @internal
  */
 export interface IntegrationBrokerInput {
+  // prettier-ignore
+
   /**
    * Name of the owning bounded context.
    */

@@ -14,7 +14,7 @@
 
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { expect } from "vitest";
@@ -22,7 +22,9 @@ import { expect } from "vitest";
 const serverRoot = fileURLToPath(new URL("../..", import.meta.url));
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 
-/** Compiles a temporary package consumer and reports its complete diagnostics. */
+/**
+ * Compiles a temporary package consumer and reports its complete diagnostics.
+ */
 export function expectWave13ContractToCompile(source: string): void {
   const directory = mkdtempSync(join(serverRoot, ".wave13-contract-"));
   try {

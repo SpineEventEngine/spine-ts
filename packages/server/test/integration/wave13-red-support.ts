@@ -53,17 +53,23 @@ export class RecordingTransportFactory implements TransportFactory {
     this.#remainingCloseFailures = options.failCloseAttempts ?? 0;
   }
 
-  /** Makes the next adapter close operation fail. */
+  /**
+   * Makes the next adapter close operation fail.
+   */
   failNextClose(): void {
     this.#remainingCloseFailures = 1;
   }
 
-  /** Makes the next matching subscriber consumer attachment fail. */
+  /**
+   * Makes the next matching subscriber consumer attachment fail.
+   */
   failNextConsumerAddition(predicate: (channel: unknown) => boolean): void {
     this.#consumerAdditionFailure = predicate;
   }
 
-  /** Gates matching publication after it has been accepted by the recording transport. */
+  /**
+   * Gates matching publication after it has been accepted by the recording transport.
+   */
   gateNextPublish(predicate: (channel: unknown) => boolean): () => void {
     let release!: () => void;
     this.#publishGate = {
@@ -80,17 +86,23 @@ export class RecordingTransportFactory implements TransportFactory {
     if (this.#remainingCloseFailures-- > 0) throw new Error(`${operation} failed`);
   }
 
-  /** Makes the next matching adapter publication fail before it is accepted. */
+  /**
+   * Makes the next matching adapter publication fail before it is accepted.
+   */
   failNextPublish(predicate: (channel: unknown) => boolean = () => true): void {
     this.#publishFailure = predicate;
   }
 
-  /** Makes the next matching publisher acquisition fail without retaining a resource. */
+  /**
+   * Makes the next matching publisher acquisition fail without retaining a resource.
+   */
   failNextPublisherCreation(predicate: (channel: unknown) => boolean): void {
     this.#publisherCreationFailure = predicate;
   }
 
-  /** Fails after a fixed number of matching publisher acquisitions have succeeded. */
+  /**
+   * Fails after a fixed number of matching publisher acquisitions have succeeded.
+   */
   failPublisherCreationAfter(
     successfulCreations: number,
     predicate: (channel: unknown) => boolean,
@@ -101,7 +113,9 @@ export class RecordingTransportFactory implements TransportFactory {
     };
   }
 
-  /** Lists currently open publisher channel keys. */
+  /**
+   * Lists currently open publisher channel keys.
+   */
   openPublisherTargets(): readonly string[] {
     return [...this.#openPublishers].sort();
   }
@@ -208,7 +222,9 @@ function channelKey(channel: unknown): string {
   return targetType;
 }
 
-/** Loads a planned Wave 13 contract without making the test suite itself depend on an absent module. */
+/**
+ * Loads a planned Wave 13 contract without making the test suite itself depend on an absent module.
+ */
 export async function loadWave13Contract(modulePath: string): Promise<Record<string, unknown>> {
   try {
     return (await import(modulePath)) as Record<string, unknown>;
@@ -218,7 +234,9 @@ export async function loadWave13Contract(modulePath: string): Promise<Record<str
   }
 }
 
-/** Requires the specified contract member so a missing implementation is an assertion failure. */
+/**
+ * Requires the specified contract member so a missing implementation is an assertion failure.
+ */
 export function requireContractMember(
   contract: Record<string, unknown>,
   member: string,
