@@ -52,6 +52,7 @@ export class IntegrationBroker {
   readonly #publishers = new Map<string, DomesticPublisher>();
   readonly #resources: Closeable[] = [];
   readonly #externalSchemas: readonly MessageSchema[];
+  readonly #acceptedCallbacks = new Set<Promise<void>>();
   #transition = Promise.resolve();
   #open: Promise<void> | undefined;
   #close: Promise<void> | undefined;
@@ -87,8 +88,9 @@ export class IntegrationBroker {
     try {
       const factory = this.#input.transportFactory;
       const status = await this.#attach(factory, onlineType, (message) => this.#onOnline(message));
+      this.#resources.push(status);
       const config = await this.#attach(factory, wantedType, (message) => this.#onWanted(message));
-      this.#resources.push(status, config);
+      this.#resources.push(config);
       for (const schema of this.#externalSchemas) {
         const targetType = typeUrl(schema);
         this.#resources.push(
@@ -110,8 +112,27 @@ export class IntegrationBroker {
     consumer: (message: ExternalMessage) => Promise<void>,
   ): Promise<Closeable> {
     const subscriber = await factory.createSubscriber(channel(targetType));
-    const handle = await subscriber.addConsumer(consumer);
-    return new SubscriberResource(subscriber, handle);
+    try {
+      const handle = await subscriber.addConsumer((message) =>
+        this.#acceptCallback(() => consumer(message)),
+      );
+      return new SubscriberResource(subscriber, handle);
+    } catch (error) {
+      try {
+        await subscriber.close();
+      } catch (closeError) {
+        throw new AggregateError([error, closeError], "Integration subscriber setup failed.");
+      }
+      throw error;
+    }
+  }
+
+  #acceptCallback(work: () => Promise<void>): Promise<void> {
+    if (this.#closed) return Promise.resolve();
+    const accepted = Promise.resolve().then(work);
+    this.#acceptedCallbacks.add(accepted);
+    void accepted.finally(() => this.#acceptedCallbacks.delete(accepted));
+    return accepted;
   }
 
   async #onOnline(message: ExternalMessage): Promise<void> {
@@ -236,12 +257,15 @@ export class IntegrationBroker {
     const errors: unknown[] = [];
     const opening = this.#open;
     if (opening !== undefined) await collect(() => opening, errors);
-    await collect(() => this.#publishEmptyWanted(), errors);
+    await Promise.allSettled([...this.#acceptedCallbacks]);
     await this.#transition;
-    await Promise.all(
-      [...this.#publishers.values()].map((publisher) => collect(() => publisher.close(), errors)),
-    );
-    this.#publishers.clear();
+    await collect(() => this.#publishEmptyWanted(), errors);
+    for (const [type, publisher] of this.#publishers) {
+      const failures: unknown[] = [];
+      await collect(() => publisher.close(), failures);
+      if (failures.length === 0) this.#publishers.delete(type);
+      else errors.push(...failures);
+    }
     await Promise.all(this.#resources.map((resource) => collect(() => resource.close(), errors)));
     if (errors.length) {
       this.#close = undefined;

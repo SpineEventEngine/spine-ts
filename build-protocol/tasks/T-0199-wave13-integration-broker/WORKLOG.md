@@ -68,6 +68,11 @@ suite proves one-shot iterable handling and closed-open rejection. The RED-14
 control-frame expectation now uses the canonical helper; this is a fixture
 expectation correction, not a wire change.
 
+Follow-up lifecycle correction: each successful attachment is retained
+immediately; a failed consumer attachment closes its subscriber. Accepted
+callbacks are tracked, and close gates new intake then drains accepted
+callbacks/transitions before publishing its final empty wanted document.
+
 ## T-0200 handoff
 
 Construct one internal broker with `IntegrationBrokerInput`, call `open()` as
