@@ -196,3 +196,14 @@ packages/transport/test/message-transport-conformance.test.ts
 packages/server/test/server/server-integration-broker-cross-process.test.ts`
   passed 3 files / 25 tests. Scoped ESLint, Prettier, and `git diff --check`
   passed before push.
+
+## Cleanup necessity ledger reconciliation — 2026-08-16
+
+- Deterministic preflight reported only stale standalone-function necessity
+  records after the final security corrections. Removed the obsolete
+  `isLive()#1` identity; recorded exact responsibility-specific necessities for
+  `inspectLiveness()#1`, `quarantineIfUnchanged()#1`, and
+  `restoreQuarantine()#1` in the transport partition, and
+  `isControlIdentity()#1` in the server partition. No product code, public
+  API, or broad exemption changed.
+- `pnpm lint:cleanup`, focused Prettier, and `git diff --check` pass.

@@ -1,6 +1,15 @@
 [
   {
     "rule": "standalone-function",
+    "file": "packages/server/src/integration/integration-broker.ts",
+    "kind": "function-declaration",
+    "identity": "isControlIdentity()#1",
+    "name": "isControlIdentity",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf control boundary: isControlIdentity verifies the packed StringValue UUID required before broker status or wanted exchange mutation."
+  },
+  {
+    "rule": "standalone-function",
     "file": "packages/server/src/delivery/delivery-loop.ts",
     "kind": "function-declaration",
     "identity": "empty()#1",

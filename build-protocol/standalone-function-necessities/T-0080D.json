@@ -300,10 +300,28 @@
     "rule": "standalone-function",
     "file": "packages/transport/src/zeromq/message-transport.ts",
     "kind": "function-declaration",
-    "identity": "isLive()#1",
-    "name": "isLive",
+    "identity": "quarantineIfUnchanged()#1",
+    "name": "quarantineIfUnchanged",
     "disposition": "necessity",
-    "reason": "TypeScript process-liveness boundary: isLive determines whether a manifest owner PID remains active."
+    "reason": "TypeScript filesystem race boundary: quarantineIfUnchanged atomically isolates the inspected manifest inode before stale cleanup can delete it."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/zeromq/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "restoreQuarantine()#1",
+    "name": "restoreQuarantine",
+    "disposition": "necessity",
+    "reason": "TypeScript filesystem race boundary: restoreQuarantine exclusively restores a replacement inode without overwriting a newer manifest pathname."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/zeromq/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "inspectLiveness()#1",
+    "name": "inspectLiveness",
+    "disposition": "necessity",
+    "reason": "TypeScript process-liveness boundary: inspectLiveness distinguishes an ESRCH-dead manifest owner from an expired live-owner heartbeat before socket cleanup."
   },
   {
     "rule": "standalone-function",
