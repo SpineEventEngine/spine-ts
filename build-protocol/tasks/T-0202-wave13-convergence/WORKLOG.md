@@ -281,3 +281,17 @@ packages/server/test/integration/integration-broker-module.test.ts` passed
   acceptance record. Each lane owns only its named test files in an isolated
   worktree and must retain focused RED/GREEN evidence before its pushed
   checkpoint is integrated here.
+- The analyzer/export lane corrected the 10 exact version-3 analyzer
+  expectations and the root export inventory; its focused two-file suite
+  passed 43/43 tests. The lifecycle/environment lane corrected the one shared
+  version-3 registry fixture plus explicit Production message transport and
+  complete schema lookup settings; its four-file suite passed 192/192 tests.
+- The repository lane confirmed that four source-origin tests intentionally
+  carry and assert tenant IDs, so their contexts are multitenant. Parent
+  verification then exposed one multitenant event/state reader without an
+  explicit tenant selection; the retained RED failed with
+  `Multitenant EventStore reads require a complete tenant ID.` The reader now
+  selects the asserted `tenant-b` boundary using the established storage API.
+- The converged exact release-failure matrix passes 7 files / 480 tests. All
+  corrections are test-only; production tenant admission, handler-origin
+  validation, Production configuration, and public exports remain unchanged.
