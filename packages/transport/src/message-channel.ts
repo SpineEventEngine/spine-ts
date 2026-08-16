@@ -81,7 +81,7 @@ export interface MessageChannel {
 
   /**
    *
-   * Closes the channel.
+   * Closes the channel idempotently; racing callers await the same completion.
    *
    * @returns Completes after close.
    */
@@ -160,7 +160,7 @@ export interface TransportFactory {
 
   /**
    *
-   * Closes factory resources.
+   * Closes factory resources idempotently; racing callers await the same completion.
    *
    * @returns Completes after close.
    */

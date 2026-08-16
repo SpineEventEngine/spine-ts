@@ -16,3 +16,5 @@
 
 - TypeScript/API reviewer assignment: existing specialist reviewer, gpt-5.6-terra / high; no child spawning; runtime telemetry unavailable. Finding batch addressed: factory declaration surface, copy-safe IDs, and close/failure semantics.
 - Performance/reliability reviewer assignment: existing specialist reviewer, gpt-5.6-terra / high; no child spawning; runtime telemetry unavailable. Finding batch addressed: serial publisher ordering, close races, drain, and aggregate errors.
+
+- TypeScript/API re-review: PASS-with-P2-corrected. Public channel and factory close documentation now explicitly states idempotent, shared racing completion.
