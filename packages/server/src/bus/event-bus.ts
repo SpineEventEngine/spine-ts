@@ -40,6 +40,8 @@ const subscriberRegistrars = new WeakMap<
 >();
 const eventSchemaLists = new WeakMap<EventBus, () => readonly MessageSchema[]>();
 const eventSchemaRegistrars = new WeakMap<EventBus, (schemas: Iterable<MessageSchema>) => void>();
+const dispatcherUnregistrars = new WeakMap<EventBus, (dispatcher: EventDispatcher) => void>();
+const eventSchemaFinders = new WeakMap<EventBus, (typeUrl: string) => MessageSchema | undefined>();
 const eventBusCloseStarters = new WeakMap<EventBus, () => void>();
 const eventBusDrainers = new WeakMap<EventBus, () => Promise<void>>();
 const eventBusCloseFinishers = new WeakMap<EventBus, () => Promise<void>>();
@@ -78,6 +80,8 @@ interface EventBusAccess {
   subscribe(eventBus: EventBus, typeUrl: string, subscriber: EventSubscriber): EventSubscription;
   eventSchemas(eventBus: EventBus): readonly MessageSchema[];
   registerSchemas(eventBus: EventBus, schemas: Iterable<MessageSchema>): void;
+  unregister(eventBus: EventBus, dispatcher: EventDispatcher): void;
+  schema(eventBus: EventBus, typeUrl: string): MessageSchema | undefined;
   beginClose(eventBus: EventBus): void;
   drain(eventBus: EventBus): Promise<void>;
   finishClose(eventBus: EventBus): Promise<void>;
@@ -130,6 +134,10 @@ export class EventBus {
     eventSchemaRegistrars.set(this, (schemas) => {
       this.#registry.registerSchemas(schemas);
     });
+    dispatcherUnregistrars.set(this, (dispatcher) => {
+      this.#registry.unregister(dispatcher);
+    });
+    eventSchemaFinders.set(this, (typeUrl) => this.#registry.schema(typeUrl));
     eventBusCloseStarters.set(this, () => {
       this.#beginClose();
     });
@@ -155,16 +163,6 @@ export class EventBus {
     EventBusRoles.validateDispatcher(eventBusRoles.get(this) ?? "domain", dispatcher);
     this.#registry.register(dispatcher);
     return dispatcher;
-  }
-
-  /** Removes a previously registered dispatcher without withdrawing its schema admission. */
-  unregister(dispatcher: EventDispatcher): void {
-    this.#registry.unregister(dispatcher);
-  }
-
-  /** Finds an admitted event schema for internal dynamic dispatcher assembly. */
-  schema(typeUrl: string): MessageSchema | undefined {
-    return this.#registry.schema(typeUrl);
   }
 
   /**
@@ -663,6 +661,16 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
       EventBusRoles.validateSchema(eventBusRoles.get(eventBus) ?? "domain", schema);
     }
     registerSchemas(checked);
+  },
+  unregister(eventBus: EventBus, dispatcher: EventDispatcher): void {
+    const unregister = dispatcherUnregistrars.get(eventBus);
+    if (unregister === undefined) throw new TypeError("Event dispatcher requires an EventBus.");
+    unregister(dispatcher);
+  },
+  schema(eventBus: EventBus, typeUrl: string): MessageSchema | undefined {
+    const schema = eventSchemaFinders.get(eventBus);
+    if (schema === undefined) throw new TypeError("Event schema requires an EventBus.");
+    return schema(typeUrl);
   },
 
   beginClose(eventBus: EventBus): void {

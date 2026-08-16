@@ -17,6 +17,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { serialize } from "node:v8";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { TypeUrls } from "../../core/src/index.js";
 import { EventContextSchema, EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
@@ -133,7 +134,7 @@ describe("Wave 13 integration broker protobuf contract", () => {
       create(online, { context: origin }),
     );
     for (const controlFrame of [wantedFrame, onlineFrame]) {
-      expect(controlFrame.id.typeUrl).toBe("type.spine.io/google.protobuf.StringValue");
+      expect(controlFrame.id.typeUrl).toBe(TypeUrls.derive(StringValueSchema));
       expect(fromBinary(StringValueSchema, controlFrame.id.value).value).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
       );

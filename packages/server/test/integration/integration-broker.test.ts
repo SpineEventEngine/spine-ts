@@ -387,7 +387,7 @@ async function assertWantedLifecycle(options: {
     ).toHaveLength(options.expectedPublishers);
     expect(wantedFrames.map((entry) => wantedTypeUrls(entry.message))).toEqual(
       expect.arrayContaining([
-        expect.arrayContaining([`type.spine.io/${StringValueSchema.typeName}`]),
+        expect.arrayContaining([TypeUrls.derive(StringValueSchema)]),
       ]),
     );
     if (options.assertCloseOrder) {

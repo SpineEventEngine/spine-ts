@@ -57,6 +57,17 @@ setup fails, `close()` waits for an in-flight open, closed brokers stop intake,
 and a failed final-removal cleanup leaves the authoritative wanted map intact.
 The dynamic publisher is unregistered only after its channel closes cleanly.
 
+## Consolidated review correction — 2026-08-16
+
+The accepted review batch required canonical `TypeUrls.derive()` identities:
+WKT external-event channels now retain their `type.googleapis.com` URL while
+Spine schemas retain `type.spine.io`. Broker schema iterables are snapshotted
+and deduplicated at construction. EventBus dynamic unregister/schema discovery
+is package-internal through `eventBusAccess`, not public API. A direct module
+suite proves one-shot iterable handling and closed-open rejection. The RED-14
+control-frame expectation now uses the canonical helper; this is a fixture
+expectation correction, not a wire change.
+
 ## T-0200 handoff
 
 Construct one internal broker with `IntegrationBrokerInput`, call `open()` as

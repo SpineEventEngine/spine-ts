@@ -14,12 +14,13 @@
  * the License.
  */
 
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { TypeUrls } from "@spine-event-engine/core";
+import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   BoundedContextOnlineSchema,
   EventIdSchema,
+  EventContextSchema,
   EventSchema,
   ExternalEventsWantedSchema,
   ExternalMessageSchema,
@@ -56,7 +57,7 @@ export function wrapBoundedContextOnline(online: BoundedContextOnline): External
 /** Validates and recovers the complete original Event. */
 export function unpackExternalEvent(message: ExternalMessage): Event {
   if (!message.boundedContextName?.value) throw new Error("External message requires an origin.");
-  if (!message.id || message.id.typeUrl !== spineTypeUrl(EventIdSchema))
+  if (message.id?.typeUrl !== spineTypeUrl(EventIdSchema))
     throw new Error("External Event requires an EventId wrapper identity.");
   if (message.originalMessage?.typeUrl !== spineTypeUrl(EventSchema))
     throw new Error("External message does not contain an Event.");
@@ -71,6 +72,14 @@ export function unpackExternalEvent(message: ExternalMessage): Event {
     throw new Error("External Event is malformed.");
   }
   return event;
+}
+
+/** @internal Copies an imported Event while changing only its external origin flag. */
+export function toExternalEvent(event: Event): Event {
+  const imported = clone(EventSchema, event);
+  imported.context = clone(EventContextSchema, imported.context ?? create(EventContextSchema));
+  imported.context.external = true;
+  return imported;
 }
 
 function wrapControl<
@@ -91,6 +100,6 @@ function wrapControl<
   });
 }
 
-function spineTypeUrl(schema: { readonly typeName: string }): string {
-  return `type.spine.io/${schema.typeName}`;
+function spineTypeUrl(schema: MessageSchema): string {
+  return TypeUrls.derive(schema);
 }
