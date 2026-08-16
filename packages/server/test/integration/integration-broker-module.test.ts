@@ -581,6 +581,43 @@ describe("IntegrationBroker module", () => {
     await expect(broker.open()).rejects.toThrow(/Integration subscriber setup failed/u);
   });
 
+  it("retains an earlier attachment when a later setup and rollback close both fail", async () => {
+    const factory = new RecordingTransportFactory();
+    factory.failNextConsumerAddition(
+      (channel) =>
+        (channel as { targetType?: string }).targetType ===
+        TypeUrls.derive(ExternalEventsWantedSchema),
+    );
+    factory.failCloseAfter(1);
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "rollback-retry" }),
+      transportFactory: factory,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    await expect(broker.open()).rejects.toThrow(/IntegrationBroker open failed/u);
+    expect(factory.operations.filter((operation) => operation === "subscriber:close")).toHaveLength(2);
+    await expect(broker.close()).resolves.toBeUndefined();
+    expect(factory.operations.filter((operation) => operation === "subscriber:close")).toHaveLength(3);
+  });
+
+  it("retains an original failed online publisher until broker close retries it", async () => {
+    const factory = new RecordingTransportFactory();
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "ephemeral-retry" }),
+      transportFactory: factory,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    factory.failNextClose();
+    await expect(broker.open()).rejects.toThrow(/publisher:close failed/u);
+    expect(factory.openPublisherTargets()).toHaveLength(1);
+    await expect(broker.close()).resolves.toBeUndefined();
+    expect(factory.openPublisherTargets()).toHaveLength(0);
+  });
+
   it("retains failed teardown ownership and retries close", async () => {
     const factory = new RecordingTransportFactory();
     const broker = new IntegrationBroker({
