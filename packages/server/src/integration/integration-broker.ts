@@ -229,7 +229,7 @@ export class IntegrationBroker {
           contextName: message.boundedContextName.value,
           eventType: message.originalMessage?.typeUrl ?? "unknown",
           operation: "external-event-intake",
-          reasonCode: "CORRUPT_EXTERNAL_EVENT",
+          reasonCode: "corrupt_external_event",
         },
       );
       return;

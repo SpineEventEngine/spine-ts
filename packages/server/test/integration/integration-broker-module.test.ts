@@ -26,11 +26,15 @@ import {
   ChannelIdSchema,
   ExternalEventsWantedSchema,
   ExternalMessageSchema,
+  type Event,
   EventContextSchema,
   EventIdSchema,
   EventSchema,
 } from "@spine-event-engine/proto";
 import { eventBusAccess } from "../../src/bus/event-bus.js";
+import { EnvironmentType } from "../../src/server/environment.js";
+import { ServerEnvironment } from "../../src/server/server-environment.js";
+import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { IntegrationBroker } from "../../src/integration/integration-broker.js";
@@ -44,6 +48,7 @@ describe("IntegrationBroker module", () => {
   const brokers: IntegrationBroker[] = [];
   afterEach(async () => {
     await Promise.all(brokers.splice(0).map((broker) => broker.close().catch(() => undefined)));
+    await resetServerEnvironmentForTest();
   });
 
   it("keeps another same-channel subscriber active after one subscriber closes", async () => {
@@ -58,10 +63,11 @@ describe("IntegrationBroker module", () => {
         received += 1;
       }),
     );
-    await first.close();
+    const closing = first.close();
     await expect(first.addConsumer(() => Promise.resolve())).rejects.toThrow(
       "subscriber is closed",
     );
+    await closing;
     expect(first.isStale()).toBe(true);
     await expect(first.close()).resolves.toBeUndefined();
     const publisher = await factory.createPublisher(channel);
@@ -605,16 +611,82 @@ describe("IntegrationBroker module", () => {
     ]);
   });
 
-  it("rejects a mismatched external Event identity before import", async () => {
+  it("drops corrupt external events with safe ERROR facts and continues with a valid frame", async () => {
+    await resetServerEnvironmentForTest();
+    const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      logger: {
+        child: () => ({
+          withMetadata: (facts: Record<string, unknown>) => ({
+            error: (message: string) => errors.push({ message, facts }),
+          }),
+        }),
+      } as never,
+    });
     const factory = new RecordingTransportFactory();
-    let calls = 0;
+    const imported: Event[] = [];
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "invalid" }),
       transportFactory: factory,
       eventBus: eventBusAccess.createForgettingBus(),
       externalEventSchemas: [StringValueSchema],
+      postImported: (event) => {
+        imported.push(event);
+        return Promise.resolve();
+      },
+    });
+    brokers.push(broker);
+    await broker.open();
+    const unknown = create(EventSchema, {
+      id: create(EventIdSchema, { value: "unknown-schema" }),
+      context: create(EventContextSchema),
+      message: { typeUrl: "type.example/Unknown", value: new Uint8Array() },
+    });
+    const undecodable = create(EventSchema, {
+      id: create(EventIdSchema, { value: "undecodable-payload" }),
+      context: create(EventContextSchema),
+      message: { typeUrl: TypeUrls.derive(StringValueSchema), value: new Uint8Array([255]) },
+    });
+
+    await expect(publishExternal(factory, unknown, "source-unknown")).resolves.toBeUndefined();
+    await expect(
+      publishExternal(factory, undecodable, "source-undecodable"),
+    ).resolves.toBeUndefined();
+    await publishExternal(factory, event("valid-after-corruption"), "source-valid");
+
+    expect(errors).toEqual([
+      {
+        message: "Dropped corrupt external event.",
+        facts: {
+          contextName: "source-unknown",
+          eventType: TypeUrls.derive(EventSchema),
+          operation: "external-event-intake",
+          reasonCode: "corrupt_external_event",
+        },
+      },
+      {
+        message: "Dropped corrupt external event.",
+        facts: {
+          contextName: "source-undecodable",
+          eventType: TypeUrls.derive(EventSchema),
+          operation: "external-event-intake",
+          reasonCode: "corrupt_external_event",
+        },
+      },
+    ]);
+    expect(imported.map((value) => value.id?.value)).toEqual(["valid-after-corruption"]);
+  });
+
+  it("drops a mismatched external Event identity before import", async () => {
+    const factory = new RecordingTransportFactory();
+    let calls = 0;
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "invalid-identity" }),
+      transportFactory: factory,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [StringValueSchema],
       postImported: () => {
-        calls++;
+        calls += 1;
         return Promise.resolve();
       },
     });
@@ -631,6 +703,23 @@ describe("IntegrationBroker module", () => {
     );
     await expect(publisher.publish(frame.id, frame)).resolves.toBeUndefined();
     expect(calls).toBe(0);
+  });
+
+  it("propagates a postImported failure after an external event decodes", async () => {
+    const factory = new RecordingTransportFactory();
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "downstream-failure" }),
+      transportFactory: factory,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [StringValueSchema],
+      postImported: () => Promise.reject(new Error("import downstream failed")),
+    });
+    brokers.push(broker);
+    await broker.open();
+
+    await expect(publishExternal(factory, event("downstream"), "source")).rejects.toThrow(
+      "import downstream failed",
+    );
   });
 
   it("does not re-export an imported event and creates one subscription per canonical external type", async () => {

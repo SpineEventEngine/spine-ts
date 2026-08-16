@@ -205,7 +205,8 @@ export class RecordingTransportFactory implements TransportFactory {
       targetType: required(channel.targetType, "subscriber channel target type"),
       isStale: () => subscriberConsumers.size === 0,
       addConsumer: (consumer: ExternalMessageConsumer): Promise<ConsumerHandle> => {
-        if (closed) return Promise.reject(new Error("subscriber is closed"));
+        if (closed || closing !== undefined)
+          return Promise.reject(new Error("subscriber is closed"));
         if (this.#consumerAdditionFailure?.(channel) === true) {
           this.#consumerAdditionFailure = undefined;
           this.operations.push("consumer:add:failed");

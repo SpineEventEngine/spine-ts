@@ -149,6 +149,47 @@ describe("Wave 13 ThirdPartyContext", () => {
     await expect(context.emittedEvent(event, user)).rejects.toThrow("ThirdPartyContext is closed.");
   });
 
+  it("copies a current UserId actor timestamp into the imported event context", async () => {
+    await resetDirectSourceServerEnvironment();
+    DirectSourceServerEnvironment.when(EnvironmentType.Local).use({
+      typeRegistry: new TypeRegistry([StringValueSchema]),
+    });
+    const received: Event[] = [];
+    const receiver = await DirectSourceBoundedContext.singleTenant("DirectSourceTimestampReceiver")
+      .addEventDispatcher({
+        messageSchemas: () => [StringValueSchema],
+        externalEventSchemas: () => [StringValueSchema],
+        dispatch: (event: Event) => {
+          received.push(event);
+          return Promise.resolve();
+        },
+      })
+      .buildAsync();
+    const context = await DirectSourceThirdPartyContext.singleTenant("DirectSourceTimestampSource");
+    const before = Date.now();
+
+    try {
+      await context.emittedEvent(
+        create(StringValueSchema, { value: "timestamp" }),
+        create(UserIdSchema, { value: "actor" }),
+      );
+      await expect.poll(() => received.length).toBe(1);
+      const eventContext = received[0]?.context;
+      const actorContext =
+        eventContext?.origin.case === "importContext" ? eventContext.origin.value : undefined;
+      expect(actorContext?.timestamp).toEqual(eventContext?.timestamp);
+      const timestamp = eventContext?.timestamp;
+      expect(timestamp?.seconds).toBeGreaterThan(0n);
+      const millis =
+        Number(timestamp?.seconds ?? 0n) * 1_000 + Math.floor((timestamp?.nanos ?? 0) / 1_000_000);
+      expect(millis).toBeGreaterThanOrEqual(before);
+      expect(millis).toBeLessThanOrEqual(Date.now());
+    } finally {
+      await Promise.all([receiver.close(), context.close()]);
+      await resetDirectSourceServerEnvironment();
+    }
+  });
+
   it("routes direct-source multitenant imports and rejects unsupported actor and message forms", async () => {
     await resetDirectSourceServerEnvironment();
     DirectSourceServerEnvironment.when(EnvironmentType.Local).use({

@@ -678,3 +678,20 @@ scripts/check-tsdoc.test.mjs` process exited after its run banner, but this
 - Fresh evidence: `pnpm lint:tsdoc`, `pnpm exec eslint .`, and the focused
   IntegrationBroker/ThirdParty Vitest run passed (2 files / 33 tests);
   Prettier and `git diff --check` passed.
+
+## Final residual review disposition — 2026-08-16
+
+- Accepted the final broker containment clarification: corrupt unknown-schema
+  and undecodable-payload frames resolve their callback, emit ERROR facts with
+  the safe source context, outer Event type, `external-event-intake` operation,
+  and lowercase `corrupt_external_event` reason code, then permit a later valid
+  frame to import. A decoded event's downstream `postImported()` rejection
+  remains observable.
+- Recording transport subscriber admission now rejects immediately after close
+  begins by treating its shared close promise as closing; repeated close still
+  shares completion and existing retry behavior remains unchanged.
+- The UserId ThirdParty form is proven to create a nonzero current timestamp
+  that is retained identically in both the import ActorContext and EventContext.
+- Fresh generated build, full ESLint, TSDoc, API-docs, cleanup, copyright,
+  formatting, and diff checks pass. The final focused broker/ThirdParty run
+  passed 2 files / 36 tests.
