@@ -33,6 +33,7 @@ export class RecordingTransportFactory {
   #remainingCloseFailures: number;
   #publishFailure: ((channel: unknown) => boolean) | undefined;
   #publisherCreationFailure: ((channel: unknown) => boolean) | undefined;
+  #consumerAdditionFailure: ((channel: unknown) => boolean) | undefined;
   #publisherCreationFailureAfter:
     { remainingSuccesses: number; predicate: (channel: unknown) => boolean } | undefined;
   #openPublishers = new Set<string>();
@@ -44,6 +45,11 @@ export class RecordingTransportFactory {
   /** Makes the next adapter close operation fail. */
   failNextClose(): void {
     this.#remainingCloseFailures = 1;
+  }
+
+  /** Makes the next matching subscriber consumer attachment fail. */
+  failNextConsumerAddition(predicate: (channel: unknown) => boolean): void {
+    this.#consumerAdditionFailure = predicate;
   }
 
   #close(operation: string): void {
@@ -120,6 +126,7 @@ export class RecordingTransportFactory {
   }
 
   async createSubscriber(channel: unknown) {
+    const factory = this;
     this.created.push({ kind: "subscriber", channel });
     this.operations.push("subscriber:create");
     const key = channelKey(channel);
@@ -130,6 +137,11 @@ export class RecordingTransportFactory {
       targetType: (channel as { targetType?: string }).targetType,
       isStale: () => consumers.size === 0,
       addConsumer: async (consumer: (message: unknown) => void | Promise<void>) => {
+        if (factory.#consumerAdditionFailure?.(channel) === true) {
+          factory.#consumerAdditionFailure = undefined;
+          this.operations.push("consumer:add:failed");
+          throw new Error("injected consumer attachment failure");
+        }
         consumers.add(consumer);
         this.operations.push("consumer:add");
         let closed = false;

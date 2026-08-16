@@ -387,6 +387,26 @@ describe("IntegrationBroker module", () => {
     await publishExternal(factory, event("late"), "remote");
     expect(calls).toBe(1);
   });
+
+  it("closes failed and earlier subscriber attachments when opening fails", async () => {
+    const factory = new RecordingTransportFactory();
+    factory.failNextConsumerAddition(
+      (channel) =>
+        (channel as { targetType?: string }).targetType ===
+        TypeUrls.derive(ExternalEventsWantedSchema),
+    );
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "attach-failure" }),
+      transportFactory: factory as never,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    await expect(broker.open()).rejects.toThrow(/attachment failure/u);
+    expect(factory.operations.filter((operation) => operation === "subscriber:close")).toHaveLength(
+      2,
+    );
+  });
 });
 
 function event(id: string) {
