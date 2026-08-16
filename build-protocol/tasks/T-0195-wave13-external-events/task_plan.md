@@ -20,12 +20,14 @@ identity, and the repository build protocol.
   the human-requirements ledger, JVM matrix, substitution ledger, contract
   decision, dependency plan, ownership, and RED designs.
 - [completed] 3. Review and commit the planning gate; push the checkpoint.
-- [pending] 4. Capture failing-before evidence for all 22 acceptance groups.
-- [pending] 5. Implement and review serialized contracts/transport seam,
+- [completed] 4. Capture failing-before evidence for all 22 acceptance groups.
+- [completed] 5. Implement and review serialized contracts/transport seam,
   external handler semantics, and behavior harness with non-overlapping
   ownership.
 - [pending] 6. Integrate the context-owned broker and lifecycle; run focused
-  checks and push green checkpoints.
+  checks and push green checkpoints. T-0200 reached specialist review; the
+  ThirdPartyContext schema-provisioning decision is resolved and its consolidated
+  correction batch is in progress.
 - [pending] 7. Converge behavior, changed coverage, cross-process proof,
   documentation, specialist review, and one correction batch.
 - [pending] 8. Run cheap preflight then one release verification; integrate,

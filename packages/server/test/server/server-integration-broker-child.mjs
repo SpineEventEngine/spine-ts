@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import process from "node:process";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
@@ -182,7 +183,7 @@ async function waitFor(predicate) {
   while (!predicate()) {
     if (Date.now() >= deadline)
       throw new Error("Timed out waiting for generated external delivery.");
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await delay(10);
   }
 }
 

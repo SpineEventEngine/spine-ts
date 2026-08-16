@@ -55,3 +55,39 @@
 - Focused re-review passed all four canonical planning concerns. Style's two
   residual conditional phrases were made deterministic and confirmed. T-0195
   is accepted for the T-0196 RED gate; executable behavior is still unchanged.
+
+## 2026-08-16 — Execution through T-0200 review
+
+- T-0196 retained all 22 failing-before acceptance designs. T-0197a/b/c,
+  T-0198, and T-0199 delivered the exact wire contracts, typed transport seam,
+  domestic/external generated metadata and EventBus filtering, cross-process
+  harness, in-memory/ZeroMQ adapters, and three-exchange IntegrationBroker.
+- T-0200 integrated context ownership, ServerEnvironment transport ownership,
+  tenant-aware import, and the public ThirdPartyContext candidate. Its retained
+  canonical task profile passed 10 files / 153 tests, and exact changed-range
+  LCOV is 97.92% executable lines / 90.16% branches.
+- The T-0200 specialist wave found an unavoidable Node public-contract decision:
+  Protobuf-ES `Message` does not retain its generated `MessageSchema`, while
+  arbitrary third-party event encoding and canonical type-URL derivation require
+  that schema. No application registry is owned by ThirdPartyContext or its
+  hidden BoundedContext. The present StringValue-only implementation is not JVM
+  parity.
+- Per the binding substitution gate, execution is paused before product
+  correction, integration, T-0201, and T-0202 until the human selects an
+  approved schema-provisioning public substitution. The remaining lifecycle,
+  timestamp, wanted-interest, and readiness corrections are fully identified
+  and queued behind that decision.
+
+## 2026-08-16 — Schema decision resolved
+
+- The human confirmed the application schema-universe rule: the server
+  application knows the domain Proto models of every assembled Bounded Context.
+  The generated application TypeRegistry is therefore the approved process-wide
+  read-only schema catalog supplied by ServerEnvironment to all contexts,
+  including ThirdPartyContext.
+- A local unknown ThirdParty message rejects publication. A received unknown or
+  undecodable external event is logged at ERROR and dropped without failing the
+  broker or application. Schemas remain out of the wire contract.
+- The P0 substitution gate is resolved. T-0200 resumes with the single
+  consolidated specialist correction batch before focused re-review and
+  integration.

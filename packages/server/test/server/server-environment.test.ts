@@ -14,6 +14,8 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InMemoryStorageFactory, type StorageContext } from "@spine-event-engine/storage";
+import { InMemoryTransportFactory } from "@spine-event-engine/transport";
+import { spineCoreRegistry } from "@spine-event-engine/core";
 
 import {
   ServerEnvironment,
@@ -49,6 +51,31 @@ function configured(
 }
 
 describe("ServerEnvironment delivery lifecycle", () => {
+  it("requires an explicit transport factory in production", () => {
+    EnvironmentTests.use(EnvironmentType.Production);
+    ServerEnvironment.when(EnvironmentType.Production).use({
+      storageFactory: new InMemoryStorageFactory(),
+      transport: { close: () => undefined } as never,
+    });
+
+    expect(() => ServerEnvironment.instance()).toThrow(
+      "Production ServerEnvironment requires transportFactory.",
+    );
+  });
+
+  it("requires an application schema registry in production", () => {
+    EnvironmentTests.use(EnvironmentType.Production);
+    ServerEnvironment.when(EnvironmentType.Production).use({
+      storageFactory: new InMemoryStorageFactory(),
+      transport: { close: () => undefined } as never,
+      transportFactory: new InMemoryTransportFactory(),
+    });
+
+    expect(() => ServerEnvironment.instance()).toThrow(
+      "Production ServerEnvironment requires typeRegistry.",
+    );
+  });
+
   it("rejects package lifecycle access for an object outside the environment registry", async () => {
     const outside = {} as ServerEnvironment;
     const attachment = {} as EnvironmentAttachmentHandle;
@@ -223,6 +250,8 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
+      transportFactory: new InMemoryTransportFactory(),
+      typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
     });
     const production = ServerEnvironment.instance();
@@ -255,6 +284,8 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
+      transportFactory: new InMemoryTransportFactory(),
+      typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
     });
     const environment = ServerEnvironment.instance();
@@ -309,6 +340,8 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
+      transportFactory: new InMemoryTransportFactory(),
+      typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
     });
     const environment = ServerEnvironment.instance();
@@ -337,6 +370,8 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
+      transportFactory: new InMemoryTransportFactory(),
+      typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
     });
     const context = BoundedContext.singleTenant("Tasks")

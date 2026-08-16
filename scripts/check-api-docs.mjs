@@ -635,6 +635,7 @@ const expectedServerExports = [
   "ServerRuntimeRoutingPlan",
   "StateUpdateRoute",
   "StateUpdateRouting",
+  "ThirdPartyContext",
   "RoutingPlanInput",
   "ServerRuntimeState",
   "ServerRuntimeStateError",

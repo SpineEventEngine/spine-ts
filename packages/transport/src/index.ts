@@ -408,5 +408,5 @@ export type {
   Publisher,
   Subscriber,
   TransportFactory,
-} from "./message-channel.js";
+} from "./internal/message-channel.js";
 export { InMemoryTransportFactory } from "./memory/message-transport.js";

@@ -58,7 +58,10 @@ interface Stopped {
 type ChildMessage = Ready | Delivered | ProbeDelivered | Failure | Stopped;
 
 describe("Wave 13 IntegrationBroker across normal Node applications", () => {
-  it("RED-22 delivers a domestic Event across two configured application processes without a forwarding shortcut", async () => {
+  // prettier-ignore
+  it(
+    "RED-22 delivers a domestic Event across two configured application processes without a forwarding shortcut",
+    async () => {
     const fixtureSource = await readFile(childPath, "utf8");
     expect(fixtureSource).toContain("createZeroMqTransportFactory");
     expect(fixtureSource).toContain("ZeroMqConfig.create");
@@ -74,6 +77,7 @@ describe("Wave 13 IntegrationBroker across normal Node applications", () => {
     const ipcDirectory = await mkdtemp(join(tmpdir(), "spine-wave13-red-ipc-"));
     const producer = start("producer", ipcDirectory);
     const consumer = start("consumer", ipcDirectory);
+    let cleanupFailure: AggregateError | undefined;
     try {
       const [producerReady, consumerReady] = await Promise.all([
         awaitMessage<Ready>(producer, "ready"),
@@ -98,9 +102,9 @@ describe("Wave 13 IntegrationBroker across normal Node applications", () => {
       const failures: unknown[] = [];
       try {
         const shutdown = await Promise.allSettled([stop(producer), stop(consumer)]);
-        failures.push(
-          ...shutdown.flatMap((result) => (result.status === "rejected" ? [result.reason] : [])),
-        );
+        for (const result of shutdown) {
+          if (result.status === "rejected") failures.push(result.reason);
+        }
         try {
           expect(await adapterArtifacts(ipcDirectory)).toEqual([]);
         } catch (error) {
@@ -110,8 +114,9 @@ describe("Wave 13 IntegrationBroker across normal Node applications", () => {
         await rm(ipcDirectory, { recursive: true, force: true });
       }
       if (failures.length > 0)
-        throw new AggregateError(failures, "Wave 13 child-process cleanup failed.");
+        cleanupFailure = new AggregateError(failures, "Wave 13 child-process cleanup failed.");
     }
+    if (cleanupFailure !== undefined) throw cleanupFailure;
   });
 });
 
@@ -141,10 +146,9 @@ function awaitMessage<T extends ChildMessage>(
   expected: T["type"],
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error(`Timed out waiting for ${expected}.`)),
-      phaseTimeoutMs,
-    );
+    const timeout = setTimeout(() => {
+      reject(new Error(`Timed out waiting for ${expected}.`));
+    }, phaseTimeoutMs);
     child.on("message", (message: ChildMessage) => {
       if (message.type === "failure") {
         clearTimeout(timeout);
@@ -158,7 +162,7 @@ function awaitMessage<T extends ChildMessage>(
     child.once("error", reject);
     child.once("exit", (code, signal) => {
       clearTimeout(timeout);
-      reject(new Error(`Child exited before ${expected}: ${String(code)}/${signal}.`));
+      reject(new Error(`Child exited before ${expected}: ${String(code)}/${String(signal)}.`));
     });
   });
 }
@@ -168,7 +172,11 @@ async function stop(child: ChildProcess): Promise<void> {
   const exited = new Promise<{
     readonly code: number | null;
     readonly signal: NodeJS.Signals | null;
-  }>((resolve) => child.once("exit", (code, signal) => resolve({ code, signal })));
+  }>((resolve) =>
+    child.once("exit", (code, signal) => {
+      resolve({ code, signal });
+    }),
+  );
   child.send({ type: "shutdown" });
   const terminate = setTimeout(() => child.kill("SIGTERM"), 1_000);
   const force = setTimeout(() => child.kill("SIGKILL"), 2_000);
@@ -177,10 +185,9 @@ async function stop(child: ChildProcess): Promise<void> {
     exited,
     new Promise<never>(
       (_, reject) =>
-        (rejectForcedExit = setTimeout(
-          () => reject(new Error("Child did not exit after SIGKILL.")),
-          3_000,
-        )),
+        (rejectForcedExit = setTimeout(() => {
+          reject(new Error("Child did not exit after SIGKILL."));
+        }, 3_000)),
     ),
   ]);
   clearTimeout(terminate);

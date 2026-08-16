@@ -23,7 +23,7 @@ import type {
   Publisher,
   Subscriber,
   TransportFactory,
-} from "../message-channel.js";
+} from "../internal/message-channel.js";
 
 /**
  * Provides an in-process typed transport factory for local and test environments.
@@ -225,24 +225,24 @@ class MemorySubscriber implements Subscriber {
 }
 
 function copyChannel(id: ChannelId): ChannelId {
-  if (!/^type\.spine\.io\/[A-Za-z_][A-Za-z0-9_.]*$/u.test(id.targetType))
-    throw new Error("Message channel targetType must be a canonical type.spine.io URL.");
+  if (!/^type\.(?:spine\.io|googleapis\.com)\/[A-Za-z_][A-Za-z0-9_.]*$/u.test(id.targetType))
+    throw new Error("Message channel targetType must be a canonical type URL.");
   return create(ChannelIdSchema, { targetType: id.targetType });
 }
 
 function validateFrame(id: Any, message: ExternalMessage): void {
   if (!id.typeUrl || id.value.length === 0)
     throw new Error("External message identity must contain a type URL and bytes.");
+  const messageId = message.id;
   if (
-    !message.id ||
+    messageId === undefined ||
     !message.originalMessage?.typeUrl ||
-    message.originalMessage.value.length === 0 ||
     !message.boundedContextName?.value
   )
     throw new Error(
       "External message must contain identity, original message, and source context.",
     );
-  if (message.id.typeUrl !== id.typeUrl || !bytesEqual(message.id.value, id.value))
+  if (messageId.typeUrl !== id.typeUrl || !bytesEqual(messageId.value, id.value))
     throw new Error("External message identity must match the supplied identity.");
 }
 

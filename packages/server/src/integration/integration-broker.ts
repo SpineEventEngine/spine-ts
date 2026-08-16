@@ -13,6 +13,7 @@
  */
 
 import { create, fromBinary } from "@bufbuild/protobuf";
+import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
@@ -33,6 +34,8 @@ import type {
 } from "@spine-event-engine/transport";
 
 import { eventBusAccess, EventBus } from "../bus/event-bus.js";
+import { emitServerError } from "../server/server-log.js";
+import { ServerEnvironment, serverEnvironmentAccess } from "../server/server-environment.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import {
   unpackExternalEvent,
@@ -62,6 +65,7 @@ export class IntegrationBroker {
   #open: Promise<void> | undefined;
   #close: Promise<void> | undefined;
   #closed = false;
+  #emptyWantedPublished = false;
 
   /**
    * Creates an exchange coordinator from context-owned integration resources.
@@ -99,6 +103,32 @@ export class IntegrationBroker {
   close(): Promise<void> {
     this.#close ??= this.#closeOnce();
     return this.#close;
+  }
+
+  /**
+   * Publishes a third-party imported event through this context's private broker.
+   *
+   * @param event Contains the original event envelope to publish.
+   * @returns Completes after publication is accepted or rejects when the broker is closed or the
+   * event has no message type URL.
+   * @internal
+   */
+  async publishImported(event: Event): Promise<void> {
+    if (this.#closed) throw new Error("IntegrationBroker is closed.");
+    const targetType = event.message?.typeUrl;
+    if (targetType === undefined || targetType.length === 0) {
+      throw new Error("Imported event requires event.message.typeUrl.");
+    }
+    if (![...this.#wantedByOrigin.values()].some((types) => types.has(targetType))) {
+      return;
+    }
+    const publisher = await this.#input.transportFactory.createPublisher(channel(targetType));
+    try {
+      const frame = wrapExternalEvent(event, this.#input.contextName);
+      await publisher.publish(frame.id, frame);
+    } finally {
+      await this.#closeEphemeral(publisher);
+    }
   }
 
   async #openOnce(): Promise<void> {
@@ -178,8 +208,33 @@ export class IntegrationBroker {
   async #onEvent(message: ExternalMessage): Promise<void> {
     if (this.#closed) return;
     if (!this.#accepts(message.boundedContextName)) return;
-    const original = unpackExternalEvent(message);
-    await this.#input.postImported(toExternalEvent(original));
+    let imported: Event;
+    try {
+      const original = unpackExternalEvent(message);
+      const typeUrl = original.message?.typeUrl;
+      const schema =
+        typeUrl === undefined
+          ? undefined
+          : (eventBusAccess.schema(this.#input.eventBus, typeUrl) ??
+            (typeUrl === TypeUrls.derive(StringValueSchema) ? StringValueSchema : undefined));
+      if (schema === undefined || original.message === undefined)
+        throw new Error("External event message type is not accepted.");
+      fromBinary(schema, original.message.value);
+      imported = toExternalEvent(original);
+    } catch {
+      emitServerError(
+        serverEnvironmentAccess.loggerFor(ServerEnvironment.instance()),
+        "Dropped corrupt external event.",
+        {
+          contextName: message.boundedContextName.value,
+          eventType: message.originalMessage?.typeUrl ?? "unknown",
+          operation: "external-event-intake",
+          reasonCode: "corrupt_external_event",
+        },
+      );
+      return;
+    }
+    await this.#input.postImported(imported);
   }
 
   async #replaceWanted(origin: string, next: ReadonlySet<string>): Promise<void> {
@@ -317,6 +372,7 @@ export class IntegrationBroker {
   }
 
   async #publishEmptyWanted(): Promise<void> {
+    if (this.#emptyWantedPublished) return;
     const publisher = await this.#input.transportFactory.createPublisher(channel(wantedType));
     try {
       const frame = wrapExternalEventsWanted(
@@ -324,6 +380,7 @@ export class IntegrationBroker {
         this.#input.contextName,
       );
       await publisher.publish(frame.id, frame);
+      this.#emptyWantedPublished = true;
     } finally {
       await this.#closeEphemeral(publisher);
     }

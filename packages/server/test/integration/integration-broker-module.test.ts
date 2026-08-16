@@ -13,7 +13,12 @@
  */
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { BoolValueSchema, Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import {
+  AnySchema,
+  BoolValueSchema,
+  Int32ValueSchema,
+  StringValueSchema,
+} from "@bufbuild/protobuf/wkt";
 import { SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   BoundedContextNameSchema,
@@ -21,11 +26,15 @@ import {
   ChannelIdSchema,
   ExternalEventsWantedSchema,
   ExternalMessageSchema,
+  type Event,
   EventContextSchema,
   EventIdSchema,
   EventSchema,
 } from "@spine-event-engine/proto";
 import { eventBusAccess } from "../../src/bus/event-bus.js";
+import { EnvironmentType } from "../../src/server/environment.js";
+import { ServerEnvironment } from "../../src/server/server-environment.js";
+import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { IntegrationBroker } from "../../src/integration/integration-broker.js";
@@ -39,6 +48,64 @@ describe("IntegrationBroker module", () => {
   const brokers: IntegrationBroker[] = [];
   afterEach(async () => {
     await Promise.all(brokers.splice(0).map((broker) => broker.close().catch(() => undefined)));
+    await resetServerEnvironmentForTest();
+  });
+
+  it("keeps another same-channel subscriber active after one subscriber closes", async () => {
+    const factory = new RecordingTransportFactory();
+    const channel = create(ChannelIdSchema, { targetType: "type.test/Shared" });
+    const first = await factory.createSubscriber(channel);
+    const second = await factory.createSubscriber(channel);
+    let received = 0;
+    await first.addConsumer(() => Promise.resolve());
+    await second.addConsumer(() =>
+      Promise.resolve().then(() => {
+        received += 1;
+      }),
+    );
+    const closing = first.close();
+    await expect(first.addConsumer(() => Promise.resolve())).rejects.toThrow(
+      "subscriber is closed",
+    );
+    await closing;
+    expect(first.isStale()).toBe(true);
+    await expect(first.close()).resolves.toBeUndefined();
+    const publisher = await factory.createPublisher(channel);
+    await publisher.publish(create(AnySchema), create(ExternalMessageSchema));
+    expect(received).toBe(1);
+    await Promise.all([publisher.close(), second.close()]);
+  });
+
+  it("rejects an imported event without a message type before allocating a publisher", async () => {
+    const factory = new RecordingTransportFactory();
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "module-importer" }),
+      transportFactory: factory,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    brokers.push(broker);
+
+    await expect(broker.publishImported(create(EventSchema))).rejects.toThrow(
+      "Imported event requires event.message.typeUrl.",
+    );
+    expect(factory.created).toEqual([]);
+  });
+
+  it("rejects imported publication after broker close", async () => {
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "closed-importer" }),
+      transportFactory: new RecordingTransportFactory(),
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    await broker.close();
+
+    await expect(broker.publishImported(create(EventSchema))).rejects.toThrow(
+      "IntegrationBroker is closed.",
+    );
   });
 
   it("deduplicates a one-shot external schema iterable and uses its canonical channel URL", async () => {
@@ -131,10 +198,10 @@ describe("IntegrationBroker module", () => {
     });
     brokers.push(broker);
     await broker.open();
-    const identity = {
+    const identity = create(AnySchema, {
       typeUrl: TypeUrls.derive(StringValueSchema),
       value: toBinary(StringValueSchema, create(StringValueSchema, { value: "control" })),
-    };
+    });
     for (const targetType of [
       TypeUrls.derive(BoundedContextOnlineSchema),
       TypeUrls.derive(ExternalEventsWantedSchema),
@@ -146,7 +213,10 @@ describe("IntegrationBroker module", () => {
           create(ExternalMessageSchema, {
             id: identity,
             boundedContextName: create(BoundedContextNameSchema, { value: "peer" }),
-            originalMessage: { typeUrl: targetType, value: new Uint8Array([255]) },
+            originalMessage: create(AnySchema, {
+              typeUrl: targetType,
+              value: new Uint8Array([255]),
+            }),
           }),
         ),
       ).rejects.toThrow(/Malformed integration control message/u);
@@ -160,10 +230,10 @@ describe("IntegrationBroker module", () => {
         identity,
         create(ExternalMessageSchema, {
           id: identity,
-          originalMessage: {
+          originalMessage: create(AnySchema, {
             typeUrl: TypeUrls.derive(BoundedContextOnlineSchema),
             value: toBinary(BoundedContextOnlineSchema, create(BoundedContextOnlineSchema)),
-          },
+          }),
         }),
       ),
     ).rejects.toThrow(/Malformed integration control message/u);
@@ -314,6 +384,7 @@ describe("IntegrationBroker module", () => {
     await bus.post(
       SignalEnvelopes.event({
         id: create(EventIdSchema, { value: "rolled-back" }),
+        context: create(EventContextSchema),
         schema: Int32ValueSchema,
         message: create(Int32ValueSchema, { value: 1 }),
       }),
@@ -370,6 +441,7 @@ describe("IntegrationBroker module", () => {
     await bus.post(
       SignalEnvelopes.event({
         id: create(EventIdSchema, { value: "new" }),
+        context: create(EventContextSchema),
         schema: Int32ValueSchema,
         message: create(Int32ValueSchema, { value: 1 }),
       }),
@@ -450,6 +522,7 @@ describe("IntegrationBroker module", () => {
     await bus.post(
       SignalEnvelopes.event({
         id: create(EventIdSchema, { value: "ignored" }),
+        context: create(EventContextSchema),
         schema: Int32ValueSchema,
         message: create(Int32ValueSchema, { value: 1 }),
       }),
@@ -538,16 +611,82 @@ describe("IntegrationBroker module", () => {
     ]);
   });
 
-  it("rejects a mismatched external Event identity before import", async () => {
+  it("drops corrupt external events with safe ERROR facts and continues with a valid frame", async () => {
+    await resetServerEnvironmentForTest();
+    const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      logger: {
+        child: () => ({
+          withMetadata: (facts: Record<string, unknown>) => ({
+            error: (message: string) => errors.push({ message, facts }),
+          }),
+        }),
+      } as never,
+    });
     const factory = new RecordingTransportFactory();
-    let calls = 0;
+    const imported: Event[] = [];
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: "invalid" }),
       transportFactory: factory,
       eventBus: eventBusAccess.createForgettingBus(),
       externalEventSchemas: [StringValueSchema],
+      postImported: (event) => {
+        imported.push(event);
+        return Promise.resolve();
+      },
+    });
+    brokers.push(broker);
+    await broker.open();
+    const unknown = create(EventSchema, {
+      id: create(EventIdSchema, { value: "unknown-schema" }),
+      context: create(EventContextSchema),
+      message: { typeUrl: "type.example/Unknown", value: new Uint8Array() },
+    });
+    const undecodable = create(EventSchema, {
+      id: create(EventIdSchema, { value: "undecodable-payload" }),
+      context: create(EventContextSchema),
+      message: { typeUrl: TypeUrls.derive(StringValueSchema), value: new Uint8Array([255]) },
+    });
+
+    await expect(publishExternal(factory, unknown, "source-unknown")).resolves.toBeUndefined();
+    await expect(
+      publishExternal(factory, undecodable, "source-undecodable"),
+    ).resolves.toBeUndefined();
+    await publishExternal(factory, event("valid-after-corruption"), "source-valid");
+
+    expect(errors).toEqual([
+      {
+        message: "Dropped corrupt external event.",
+        facts: {
+          contextName: "source-unknown",
+          eventType: TypeUrls.derive(EventSchema),
+          operation: "external-event-intake",
+          reasonCode: "corrupt_external_event",
+        },
+      },
+      {
+        message: "Dropped corrupt external event.",
+        facts: {
+          contextName: "source-undecodable",
+          eventType: TypeUrls.derive(EventSchema),
+          operation: "external-event-intake",
+          reasonCode: "corrupt_external_event",
+        },
+      },
+    ]);
+    expect(imported.map((value) => value.id?.value)).toEqual(["valid-after-corruption"]);
+  });
+
+  it("drops a mismatched external Event identity before import", async () => {
+    const factory = new RecordingTransportFactory();
+    let calls = 0;
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "invalid-identity" }),
+      transportFactory: factory,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [StringValueSchema],
       postImported: () => {
-        calls++;
+        calls += 1;
         return Promise.resolve();
       },
     });
@@ -562,8 +701,25 @@ describe("IntegrationBroker module", () => {
     const publisher = await factory.createPublisher(
       create(ChannelIdSchema, { targetType: TypeUrls.derive(StringValueSchema) }),
     );
-    await expect(publisher.publish(frame.id, frame)).rejects.toThrow(/identity/u);
+    await expect(publisher.publish(frame.id, frame)).resolves.toBeUndefined();
     expect(calls).toBe(0);
+  });
+
+  it("propagates a postImported failure after an external event decodes", async () => {
+    const factory = new RecordingTransportFactory();
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "downstream-failure" }),
+      transportFactory: factory,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [StringValueSchema],
+      postImported: () => Promise.reject(new Error("import downstream failed")),
+    });
+    brokers.push(broker);
+    await broker.open();
+
+    await expect(publishExternal(factory, event("downstream"), "source")).rejects.toThrow(
+      "import downstream failed",
+    );
   });
 
   it("does not re-export an imported event and creates one subscription per canonical external type", async () => {
@@ -795,6 +951,7 @@ describe("IntegrationBroker module", () => {
 function event(id: string) {
   return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: id }),
+    context: create(EventContextSchema),
     schema: StringValueSchema,
     message: create(StringValueSchema, { value: id }),
   });
@@ -823,16 +980,16 @@ async function publishWanted(
   const publisher = await factory.createPublisher(
     create(ChannelIdSchema, { targetType: TypeUrls.derive(ExternalEventsWantedSchema) }),
   );
-  const id = {
+  const id = create(AnySchema, {
     typeUrl: TypeUrls.derive(StringValueSchema),
     value: toBinary(StringValueSchema, create(StringValueSchema, { value: crypto.randomUUID() })),
-  };
+  });
   try {
     await publisher.publish(
       id,
       create(ExternalMessageSchema, {
         id,
-        originalMessage: {
+        originalMessage: create(AnySchema, {
           typeUrl: TypeUrls.derive(ExternalEventsWantedSchema),
           value: toBinary(
             ExternalEventsWantedSchema,
@@ -840,7 +997,7 @@ async function publishWanted(
               type: schemas.map((schema) => ({ typeUrl: TypeUrls.derive(schema) })),
             }),
           ),
-        },
+        }),
         boundedContextName: create(BoundedContextNameSchema, { value: source }),
       }),
     );

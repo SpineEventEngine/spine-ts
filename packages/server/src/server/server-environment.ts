@@ -24,6 +24,8 @@ import type {
   TransportSubscription,
   TransportSubscriptionHandle,
 } from "@spine-event-engine/transport";
+import { InMemoryTransportFactory, type TransportFactory } from "@spine-event-engine/transport";
+import { spineCoreRegistry, type TypeRegistryLookup } from "@spine-event-engine/core";
 
 import { RetryableCloseGroup } from "./retryable-close.js";
 import { emitServerWarning } from "./server-log.js";
@@ -100,6 +102,17 @@ export interface ServerEnvironmentSettings {
   readonly transport?: SignalTransport;
 
   /**
+   * Message-channel factory used by private bounded-context integration brokers.
+   */
+  readonly transportFactory?: TransportFactory;
+
+  /**
+   * Complete generated application schema lookup used for ThirdParty event encoding.
+   * Production requires it; local/test environments fall back to `spineCoreRegistry` only.
+   */
+  readonly typeRegistry?: TypeRegistryLookup;
+
+  /**
    * Optional closeable delivery owner for durable delivery seams.
    */
   readonly delivery?: ServerEnvironmentCloseable;
@@ -154,6 +167,16 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   readonly transport: SignalTransport;
 
   /**
+   * Message-channel factory selected for private bounded-context integration.
+   */
+  readonly transportFactory: TransportFactory;
+
+  /**
+   * Read-only application schema lookup used by private integration boundaries.
+   */
+  readonly typeRegistry: TypeRegistryLookup;
+
+  /**
    * Optional closeable delivery owner selected for this environment.
    */
   readonly delivery: ServerEnvironmentCloseable | undefined;
@@ -174,6 +197,8 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     this.nodeId = crypto.randomUUID();
     this.storageFactory = settings.storageFactory;
     this.transport = settings.transport;
+    this.transportFactory = settings.transportFactory;
+    this.typeRegistry = settings.typeRegistry;
     this.delivery = settings.delivery;
     this.tracerFactory = settings.tracerFactory;
     environmentLoggers.set(this, settings.logger);
@@ -296,6 +321,8 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
 interface RequiredFacilities {
   readonly storageFactory: StorageFactory;
   readonly transport: SignalTransport;
+  readonly transportFactory: TransportFactory;
+  readonly typeRegistry: TypeRegistryLookup;
   readonly delivery: ServerEnvironmentCloseable | undefined;
   readonly tracerFactory: ServerEnvironmentCloseable | undefined;
   readonly logger: ILogLayer;
@@ -532,6 +559,7 @@ const ServerEnvironmentValues = Object.freeze({
   facilitiesToClose(options: RequiredFacilities): readonly unknown[] {
     return Object.freeze([
       ...(options.delivery === undefined ? [] : [options.delivery]),
+      options.transportFactory,
       options.transport,
       ...(options.tracerFactory === undefined ? [] : [options.tracerFactory]),
       options.storageFactory,
@@ -564,9 +592,17 @@ const ServerEnvironmentValues = Object.freeze({
       if (settings.transport === undefined) {
         throw new Error("Production ServerEnvironment requires transport.");
       }
+      if (settings.transportFactory === undefined) {
+        throw new Error("Production ServerEnvironment requires transportFactory.");
+      }
+      if (settings.typeRegistry === undefined) {
+        throw new Error("Production ServerEnvironment requires typeRegistry.");
+      }
       return {
         storageFactory: settings.storageFactory,
         transport: settings.transport,
+        transportFactory: settings.transportFactory,
+        typeRegistry: settings.typeRegistry,
         delivery: settings.delivery,
         tracerFactory: settings.tracerFactory,
         logger: ServerEnvironmentValues.logger(settings.logger),
@@ -575,6 +611,8 @@ const ServerEnvironmentValues = Object.freeze({
     return {
       storageFactory: settings.storageFactory ?? new InMemoryStorageFactory(),
       transport: settings.transport ?? new LocalSignalTransport(),
+      transportFactory: settings.transportFactory ?? new InMemoryTransportFactory(),
+      typeRegistry: settings.typeRegistry ?? spineCoreRegistry,
       delivery: settings.delivery,
       tracerFactory: settings.tracerFactory,
       logger: ServerEnvironmentValues.logger(settings.logger),

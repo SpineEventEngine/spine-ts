@@ -22,8 +22,20 @@ const posixModeMask = 0o7777n;
 const posixWriteMask = 0o022n;
 const isPosix = process.platform !== "win32";
 
+/**
+ * Describes a prepared, private IPC directory whose filesystem identity can be rechecked.
+ */
 export interface PreparedIpcDirectory {
+  // prettier-ignore
+
+  /**
+   * Describes the canonical directory path accepted for native socket endpoints.
+   */
   readonly path: string;
+
+  /**
+   * Describes the device and inode captured when the directory was prepared.
+   */
   readonly identity: {
     readonly device: bigint;
     readonly inode: bigint;
@@ -40,8 +52,24 @@ interface IpcPathWalk {
   readonly missingComponents: readonly string[];
 }
 
-/** Package-local secure IPC directory preparation shared by ZeroMQ adapters. */
+/**
+ * Prepares and revalidates secure IPC directories shared by ZeroMQ adapters.
+ *
+ * Every operation rejects symlink, ownership, mode, or identity changes instead of trusting a
+ * path that a different process could have replaced.
+ *
+ * @internal
+ */
 export const ChannelEndpoints = {
+  // prettier-ignore
+
+  /**
+   * Creates and validates a private IPC directory.
+   *
+   * @param ipcDirectory Specifies the requested local directory.
+   * @param createComponent Creates one missing directory component.
+   * @returns The canonical path and identity that callers must recheck before use.
+   */
   async prepare(
     ipcDirectory: string,
     createComponent: (directory: string) => Promise<void> = async (directory) => {
@@ -57,6 +85,12 @@ export const ChannelEndpoints = {
     return await ChannelEndpoints.finalize(completedPath);
   },
 
+  /**
+   * Checks a directory identity captured during preparation.
+   *
+   * @param prepared Supplies the prepared directory to inspect.
+   * @returns Completes when the path remains canonical, private, and unchanged; otherwise rejects.
+   */
   async recheck(prepared: PreparedIpcDirectory): Promise<void> {
     const canonicalPath = await realpath(prepared.path);
     if (canonicalPath !== prepared.path)
@@ -76,6 +110,12 @@ export const ChannelEndpoints = {
       throw new Error("ZeroMQ adapter ipcDirectory identity changed after preparation.");
   },
 
+  /**
+   * Finds the existing safe ancestor and missing suffix for an IPC directory.
+   *
+   * @param ipcDirectory Specifies the requested local directory.
+   * @returns A validated anchor path and the components still needing creation.
+   */
   async inspect(ipcDirectory: string): Promise<IpcPathPlan> {
     const parsed = path.parse(ipcDirectory);
     const components = ipcDirectory
@@ -90,6 +130,13 @@ export const ChannelEndpoints = {
     return { anchorPath, missingComponents: walk.missingComponents };
   },
 
+  /**
+   * Finds existing path components until the first missing component.
+   *
+   * @param root Supplies the filesystem root from which to walk.
+   * @param components Supplies the path components to validate.
+   * @returns The last existing path and any remaining components.
+   */
   async walk(root: string, components: readonly string[]): Promise<IpcPathWalk> {
     let existingPath = root;
     for (let index = 0; index < components.length; index += 1) {
@@ -113,6 +160,14 @@ export const ChannelEndpoints = {
     return { existingPath, missingComponents: [] };
   },
 
+  /**
+   * Validates one existing component before accepting it as an IPC path ancestor.
+   *
+   * @param candidate Identifies the component being checked.
+   * @param isFinal States whether the component is the requested final directory.
+   * @param lexicalEntry Supplies the component's non-following filesystem metadata.
+   * @returns Completes when the component is safe; otherwise rejects.
+   */
   async validateEntry(
     candidate: string,
     isFinal: boolean,
@@ -128,6 +183,14 @@ export const ChannelEndpoints = {
       throw new Error("ZeroMQ adapter ipcDirectory path components must be directories.");
   },
 
+  /**
+   * Creates and validates every missing component beneath a safe anchor.
+   *
+   * @param anchorPath Supplies the validated existing ancestor.
+   * @param missingComponents Supplies ordered directory components to create.
+   * @param createComponent Creates one component, allowing a concurrent existing directory.
+   * @returns The completed directory path after every component is safe.
+   */
   async createSuffix(
     anchorPath: string,
     missingComponents: readonly string[],
@@ -149,6 +212,12 @@ export const ChannelEndpoints = {
     return completedPath;
   },
 
+  /**
+   * Returns the canonical path and identity of a completed IPC directory.
+   *
+   * @param completedPath Identifies the created directory to finalize.
+   * @returns The frozen path and filesystem identity for later rechecks.
+   */
   async finalize(completedPath: string): Promise<PreparedIpcDirectory> {
     const canonicalCompletedPath = await realpath(completedPath);
     if (canonicalCompletedPath !== completedPath)
@@ -161,6 +230,13 @@ export const ChannelEndpoints = {
     });
   },
 
+  /**
+   * Checks a POSIX ancestor symlink allowed only for immutable root-owned aliases.
+   *
+   * @param aliasPath Identifies the symlink ancestor.
+   * @param aliasUid Supplies the symlink owner's user identifier.
+   * @returns Completes when the alias is safe; otherwise rejects.
+   */
   async validatePosixAlias(aliasPath: string, aliasUid: bigint): Promise<void> {
     const parent = await stat(path.dirname(aliasPath), { bigint: true });
     if (aliasUid !== 0n || parent.uid !== 0n || (parent.mode & posixWriteMask) !== 0n)
@@ -169,6 +245,11 @@ export const ChannelEndpoints = {
       );
   },
 
+  /**
+   * Checks that the final IPC directory is private and owned by this user.
+   *
+   * @param entry Supplies non-following metadata for the final directory.
+   */
   requirePrivateFinalDirectory(entry: {
     readonly dev: bigint;
     readonly ino: bigint;
@@ -187,6 +268,13 @@ export const ChannelEndpoints = {
       throw new Error("ZeroMQ adapter ipcDirectory must have exact POSIX mode 0700.");
   },
 
+  /**
+   * Checks that two filesystem entries retain the same device and inode.
+   *
+   * @param actual Supplies the identity observed after an operation.
+   * @param expected Supplies the identity captured before the operation.
+   * @param label Identifies the checked path in a rejection message.
+   */
   requireMatchingIdentity(
     actual: { readonly dev: bigint; readonly ino: bigint },
     expected: { readonly dev: bigint; readonly ino: bigint },
@@ -196,6 +284,13 @@ export const ChannelEndpoints = {
       throw new Error(`ZeroMQ adapter ipcDirectory ${label} identity changed.`);
   },
 
+  /**
+   * Tests whether an unknown failure carries an expected Node error code.
+   *
+   * @param error Supplies the failure to inspect.
+   * @param code Specifies the expected Node error code.
+   * @returns `true` only when the failure has that error code.
+   */
   hasErrorCode(error: unknown, code: string): boolean {
     return (
       error instanceof Error &&

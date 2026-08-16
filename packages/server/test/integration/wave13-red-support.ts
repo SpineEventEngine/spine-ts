@@ -161,9 +161,9 @@ export class RecordingTransportFactory implements TransportFactory {
     const key = channelKey(channel);
     this.#openPublishers.add(key);
     let closed = false;
-    return {
+    const publisher: Publisher = {
       id: channel,
-      targetType: (channel as { targetType?: string }).targetType,
+      targetType: required(channel.targetType, "publisher channel target type"),
       isStale: () => false,
       publish: async (id: Any, message: ExternalMessage) => {
         this.operations.push("publisher:publish");
@@ -197,24 +197,31 @@ export class RecordingTransportFactory implements TransportFactory {
     const key = channelKey(channel);
     const consumers = this.#consumers.get(key) ?? new Set();
     this.#consumers.set(key, consumers);
-    return {
+    const subscriberConsumers = new Set<ExternalMessageConsumer>();
+    let closed = false;
+    let closing: Promise<void> | undefined;
+    const subscriber: Subscriber = {
       id: channel,
-      targetType: (channel as { targetType?: string }).targetType,
-      isStale: () => consumers.size === 0,
+      targetType: required(channel.targetType, "subscriber channel target type"),
+      isStale: () => subscriberConsumers.size === 0,
       addConsumer: (consumer: ExternalMessageConsumer): Promise<ConsumerHandle> => {
+        if (closed || closing !== undefined)
+          return Promise.reject(new Error("subscriber is closed"));
         if (this.#consumerAdditionFailure?.(channel) === true) {
           this.#consumerAdditionFailure = undefined;
           this.operations.push("consumer:add:failed");
           return Promise.reject(new Error("injected consumer attachment failure"));
         }
         consumers.add(consumer);
+        subscriberConsumers.add(consumer);
         this.operations.push("consumer:add");
-        let closed = false;
-        return {
+        let handleClosed = false;
+        const handle: ConsumerHandle = {
           close: () => {
-            if (closed) return Promise.resolve();
-            closed = true;
+            if (handleClosed) return Promise.resolve();
+            handleClosed = true;
             consumers.delete(consumer);
+            subscriberConsumers.delete(consumer);
             this.operations.push("consumer:remove");
             return Promise.resolve();
           },
@@ -222,10 +229,17 @@ export class RecordingTransportFactory implements TransportFactory {
         return Promise.resolve(handle);
       },
       close: () =>
-        Promise.resolve().then(() => {
-          consumers.clear();
-          this.#close("subscriber:close");
-        }),
+        (closing ??= Promise.resolve()
+          .then(() => {
+            closed = true;
+            for (const consumer of subscriberConsumers) consumers.delete(consumer);
+            subscriberConsumers.clear();
+            this.#close("subscriber:close");
+          })
+          .catch((error: unknown) => {
+            closing = undefined;
+            throw error;
+          })),
     };
     return Promise.resolve(subscriber);
   }
@@ -242,6 +256,11 @@ function channelKey(channel: unknown): string {
   if (typeof targetType !== "string" || targetType.length === 0)
     throw new TypeError("Transport channels require ChannelId.targetType.");
   return targetType;
+}
+
+function required<Value>(value: Value | undefined, label: string): Value {
+  if (value === undefined) throw new Error(`Expected ${label}.`);
+  return value;
 }
 
 /**

@@ -34,7 +34,7 @@ import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it } from "vitest";
 import { Reply } from "zeromq";
 
-type Factory = {
+interface Factory {
   createPublisher(id: { targetType: string }): Promise<{
     publish(id: unknown, message: unknown): Promise<void>;
     close(): Promise<void>;
@@ -45,24 +45,26 @@ type Factory = {
     close(): Promise<void>;
   }>;
   close(): Promise<void>;
-};
+}
 
 async function discoverFactory(path: string, exportName: string): Promise<Factory> {
-  let module: Record<string, unknown>;
+  let module: Record<string, unknown> = {};
   try {
     module = (await import(path)) as Record<string, unknown>;
   } catch (error) {
-    expect.fail(`Wave 13 message transport is unavailable at ${path}: ${String(error)}`);
+    throw new Error(`Wave 13 message transport is unavailable at ${path}: ${String(error)}`);
   }
   expect(
-    module![exportName],
+    module[exportName],
     `${exportName} must implement the frozen TransportFactory SPI.`,
   ).toBeDefined();
-  return new (module![exportName] as new () => Factory)();
+  const factory = module[exportName];
+  if (typeof factory !== "function") throw new Error(`${exportName} is not a constructor.`);
+  return new (factory as new () => Factory)();
 }
 
 async function assertConformance(factory: Factory): Promise<void> {
-  const proto = (await import("@spine-event-engine/proto")) as Record<string, any>;
+  const proto = await import("@spine-event-engine/proto");
   const channel = create(proto.ChannelIdSchema, {
     targetType: "type.spine.io/wave13.Conformance",
   });
@@ -121,7 +123,7 @@ async function assertConformance(factory: Factory): Promise<void> {
 }
 
 async function assertNativeManifestContract(directory: string, factory: Factory): Promise<void> {
-  const proto = (await import("@spine-event-engine/proto")) as Record<string, any>;
+  const proto = await import("@spine-event-engine/proto");
   const targetType = "type.spine.io/wave13.Manifest";
   const channel = { targetType };
   const subscriber = await factory.createSubscriber(channel);
@@ -134,8 +136,9 @@ async function assertNativeManifestContract(directory: string, factory: Factory)
   expect((await lstat(root)).isDirectory()).toBe(true);
   const files = await readdir(subscribers);
   expect(files).toHaveLength(1);
-  expect(files[0]).toMatch(/^[0-9a-f]{8}-[0-9a-f-]{27}\.json$/u);
-  const manifest = JSON.parse(await readFile(join(subscribers, files[0]!), "utf8")) as Record<
+  const manifestFile = required(files[0], "subscriber manifest");
+  expect(manifestFile).toMatch(/^[0-9a-f]{8}-[0-9a-f-]{27}\.json$/u);
+  const manifest = JSON.parse(await readFile(join(subscribers, manifestFile), "utf8")) as Record<
     string,
     unknown
   >;
@@ -143,8 +146,8 @@ async function assertNativeManifestContract(directory: string, factory: Factory)
     ["adapterIdentity", "endpoint", "generation", "heartbeatAtMs", "ownerPid", "version"].sort(),
   );
   expect(manifest).toMatchObject({ version: 1, adapterIdentity: "wave13-red" });
-  expect(manifest.generation).toBe(files[0]!.slice(0, -5));
-  expect(manifest.endpoint).toBe(`ipc://${join(sockets, `${manifest.generation}.sock`)}`);
+  expect(manifest.generation).toBe(manifestFile.slice(0, -5));
+  expect(manifest.endpoint).toBe(`ipc://${join(sockets, `${String(manifest.generation)}.sock`)}`);
   const oversize = "00000000-0000-4000-8000-000000000000.json";
   const linked = "00000000-0000-4000-8000-000000000001.json";
   const foreign = "00000000-0000-4000-8000-000000000002.json";
@@ -152,7 +155,7 @@ async function assertNativeManifestContract(directory: string, factory: Factory)
   const expired = "00000000-0000-4000-8000-000000000004.json";
   const missing = "00000000-0000-4000-8000-000000000005.json";
   await writeFile(join(subscribers, oversize), "{".repeat(4097));
-  await symlink(join(subscribers, files[0]!), join(subscribers, linked));
+  await symlink(join(subscribers, manifestFile), join(subscribers, linked));
   await writeFile(
     join(subscribers, foreign),
     JSON.stringify({
@@ -186,7 +189,7 @@ async function assertNativeManifestContract(directory: string, factory: Factory)
   expect((await lstat(join(subscribers, foreign))).isFile()).toBe(true);
   await liveHandle.close();
   await subscriber.close();
-  expect(await readdir(subscribers)).not.toContain(files[0]!);
+  expect(await readdir(subscribers)).not.toContain(manifestFile);
   const restarted = await factory.createSubscriber(channel);
   const restartedValues: string[] = [];
   const restartedHandle = await restarted.addConsumer((message) =>
@@ -221,13 +224,14 @@ async function assertNativeManifestContract(directory: string, factory: Factory)
       });
     await expect(attempted).rejects.toBeInstanceOf(AggregateError);
     expect(restartedValues).toContain("attempt-all");
-    expect(aggregate?.message).toContain(targetType);
-    expect(JSON.stringify(aggregate?.errors)).toContain(incompatibleGeneration);
-    expect(`${aggregate?.message}${JSON.stringify(aggregate?.errors)}`).not.toMatch(
+    if (!(aggregate instanceof AggregateError)) throw new Error("Expected aggregate failure.");
+    expect(aggregate.message).toContain(targetType);
+    expect(JSON.stringify(aggregate.errors)).toContain(incompatibleGeneration);
+    expect(`${aggregate.message}${JSON.stringify(aggregate.errors)}`).not.toMatch(
       /ipc:\/\/|\.sock|spine-message-channels|heartbeatAtMs|ownerPid|adapterIdentity/u,
     );
   } finally {
-    await incompatiblePeer.close();
+    incompatiblePeer.close();
     await rm(incompatibleManifest, { force: true });
     await rm(incompatibleSocket, { force: true });
   }
@@ -246,8 +250,8 @@ async function assertNativeManifestContract(directory: string, factory: Factory)
       generationValues.push(frameValue(message)),
     );
     await publisher.publish(
-      frameId(`generation-${generation}`),
-      frame(proto, `generation-${generation}`),
+      frameId(`generation-${String(generation)}`),
+      frame(proto, `generation-${String(generation)}`),
     );
     await eventually(() => generationValues.length === 1);
     const currentManifests = (await readdir(subscribers)).filter(
@@ -299,7 +303,10 @@ async function assertNativeManifestContract(directory: string, factory: Factory)
 }
 
 describe("Wave 13 message transport conformance", () => {
-  it("RED-21 gives memory and ZeroMQ factories one typed channel, fan-out, stale, FIFO, and close contract", async () => {
+  // prettier-ignore
+  it(
+    "RED-21 gives memory and ZeroMQ factories one typed channel, fan-out, stale, FIFO, and close contract",
+    async () => {
     expectTransportContractToCompile();
     await assertConformance(await discoverFactory("../src/index.js", "InMemoryTransportFactory"));
     const zeroMqRoot = (await import("../src/zeromq/index.js")) as Record<string, unknown>;
@@ -331,12 +338,17 @@ function frameId(value: string) {
   };
 }
 
-function frame(proto: Record<string, any>, value: string) {
+function frame(proto: typeof import("@spine-event-engine/proto"), value: string) {
   return create(proto.ExternalMessageSchema, {
     id: frameId(value),
     originalMessage: frameId(value),
     boundedContextName: { value: "Wave13Transport" },
   });
+}
+
+function required<Value>(value: Value | undefined, label: string): Value {
+  if (value === undefined) throw new Error(`Missing ${label}.`);
+  return value;
 }
 
 function frameValue(message: unknown): string {

@@ -24,7 +24,7 @@ import { describe, expect, it } from "vitest";
 
 import { BuildHandlerAnalyzer } from "../../src/handler/build-time-handler-analyzer.js";
 import { GeneratedRegistryWriter } from "../../src/handler/generated-registry-writer.js";
-import { BoundedContext } from "../../src/index.js";
+import { BoundedContext } from "@spine-event-engine/server";
 import { expectWave13ContractToCompile } from "../integration/wave13-compile-contract.js";
 import {
   createWave13OriginRegistry,

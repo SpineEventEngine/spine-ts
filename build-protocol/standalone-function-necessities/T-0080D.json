@@ -196,5 +196,167 @@
     "name": "cleanupOperationActive",
     "disposition": "necessity",
     "reason": "TypeScript provider-neutral correctness boundary: cleanupOperationActive shares exact deadline semantics across memory, MySQL, and Datastore without class ownership."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/memory/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "copyChannel()#1",
+    "name": "copyChannel",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: copyChannel clones caller channel identity before asynchronous memory transport ownership."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/memory/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "validateFrame()#1",
+    "name": "validateFrame",
+    "disposition": "necessity",
+    "reason": "TypeScript transport boundary: validateFrame validates packed frame identity before local publication fan-out."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/memory/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "bytesEqual()#1",
+    "name": "bytesEqual",
+    "disposition": "necessity",
+    "reason": "TypeScript binary-wire boundary: bytesEqual compares packed frame bytes without mutable transport ownership."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/zeromq/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "createZeroMqTransportFactory()#1",
+    "name": "createZeroMqTransportFactory",
+    "disposition": "necessity",
+    "reason": "Spine JVM framework boundary: createZeroMqTransportFactory exposes the frozen TransportFactory adapter construction contract."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/zeromq/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "discoverSubscribers()#1",
+    "name": "discoverSubscribers",
+    "disposition": "necessity",
+    "reason": "TypeScript filesystem boundary: discoverSubscribers reads bounded manifest entries before native publisher connection."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/zeromq/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "prepareLayout()#1",
+    "name": "prepareLayout",
+    "disposition": "necessity",
+    "reason": "TypeScript filesystem boundary: prepareLayout establishes the private IPC directory layout before socket use."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/zeromq/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "ensurePrivateDirectory()#1",
+    "name": "ensurePrivateDirectory",
+    "disposition": "necessity",
+    "reason": "TypeScript filesystem boundary: ensurePrivateDirectory verifies restrictive IPC directory permissions before manifest ownership."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/zeromq/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "writeManifest()#1",
+    "name": "writeManifest",
+    "disposition": "necessity",
+    "reason": "TypeScript filesystem boundary: writeManifest atomically records one subscriber endpoint for cross-process discovery."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/zeromq/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "readManifest()#1",
+    "name": "readManifest",
+    "disposition": "necessity",
+    "reason": "TypeScript filesystem boundary: readManifest validates bounded subscriber discovery data before endpoint connection."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/zeromq/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "hasForeignIdentity()#1",
+    "name": "hasForeignIdentity",
+    "disposition": "necessity",
+    "reason": "TypeScript filesystem boundary: hasForeignIdentity preserves a live foreign adapter manifest during stale cleanup."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/zeromq/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "isManifest()#1",
+    "name": "isManifest",
+    "disposition": "necessity",
+    "reason": "TypeScript untrusted-data boundary: isManifest narrows parsed filesystem data to the exact subscriber manifest shape."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/zeromq/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "isLive()#1",
+    "name": "isLive",
+    "disposition": "necessity",
+    "reason": "TypeScript process-liveness boundary: isLive determines whether a manifest owner PID remains active."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/zeromq/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "socketPathFromEndpoint()#1",
+    "name": "socketPathFromEndpoint",
+    "disposition": "necessity",
+    "reason": "TypeScript IPC boundary: socketPathFromEndpoint validates native IPC endpoints before local socket cleanup."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/zeromq/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "canonicalChannelId()#1",
+    "name": "canonicalChannelId",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: canonicalChannelId copies validated channel identity for manifest-derived routing keys."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/zeromq/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "validateFrame()#1",
+    "name": "validateFrame",
+    "disposition": "necessity",
+    "reason": "TypeScript transport boundary: validateFrame rejects mismatched packed identities before ZeroMQ publication."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/zeromq/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "bytesEqual()#1",
+    "name": "bytesEqual",
+    "disposition": "necessity",
+    "reason": "TypeScript binary-wire boundary: bytesEqual compares serialized identities without retaining socket lifecycle state."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/zeromq/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "isErrorCode()#1",
+    "name": "isErrorCode",
+    "disposition": "necessity",
+    "reason": "TypeScript native-error boundary: isErrorCode narrows filesystem errors before deterministic cleanup decisions."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/zeromq/message-transport.ts",
+    "kind": "function-declaration",
+    "identity": "retainFailure()#1",
+    "name": "retainFailure",
+    "disposition": "necessity",
+    "reason": "TypeScript lifecycle boundary: retainFailure bounds native close failures for one aggregate report."
   }
 ]

@@ -1393,5 +1393,131 @@
     "name": "isPromiseLike",
     "disposition": "necessity",
     "reason": "TypeScript logging boundary: isPromiseLike remains standalone so fault containment recognizes object and callable thenables through one exact rule."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/integration/external-messages.ts",
+    "kind": "function-declaration",
+    "identity": "wrapExternalEvent()#1",
+    "name": "wrapExternalEvent",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: wrapExternalEvent creates one typed integration envelope from an external Event."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/integration/external-messages.ts",
+    "kind": "function-declaration",
+    "identity": "wrapExternalEventsWanted()#1",
+    "name": "wrapExternalEventsWanted",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: wrapExternalEventsWanted creates the exact wanted-event control envelope for broker exchange."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/integration/external-messages.ts",
+    "kind": "function-declaration",
+    "identity": "wrapBoundedContextOnline()#1",
+    "name": "wrapBoundedContextOnline",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: wrapBoundedContextOnline creates the canonical broker availability control envelope."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/integration/external-messages.ts",
+    "kind": "function-declaration",
+    "identity": "unpackExternalEvent()#1",
+    "name": "unpackExternalEvent",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: unpackExternalEvent validates a packed frame before imported Event admission."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/integration/external-messages.ts",
+    "kind": "function-declaration",
+    "identity": "toExternalEvent()#1",
+    "name": "toExternalEvent",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: toExternalEvent converts one validated generated Event into its external wire form."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/integration/external-messages.ts",
+    "kind": "function-declaration",
+    "identity": "wrapControl()#1",
+    "name": "wrapControl",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: wrapControl packs one generated broker-control payload with its canonical type URL."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/integration/external-messages.ts",
+    "kind": "function-declaration",
+    "identity": "spineTypeUrl()#1",
+    "name": "spineTypeUrl",
+    "disposition": "necessity",
+    "reason": "Spine JVM Protobuf boundary: spineTypeUrl derives the canonical generated message type URL."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/integration/integration-broker.ts",
+    "kind": "function-declaration",
+    "identity": "closeRetained()#1",
+    "name": "closeRetained",
+    "disposition": "necessity",
+    "reason": "TypeScript lifecycle boundary: closeRetained closes retained resources while preserving failed closeables for retry."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/integration/integration-broker.ts",
+    "kind": "function-declaration",
+    "identity": "collect()#1",
+    "name": "collect",
+    "disposition": "necessity",
+    "reason": "TypeScript failure boundary: collect retains one cleanup failure in the bounded aggregate report."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/integration/integration-broker.ts",
+    "kind": "function-declaration",
+    "identity": "channel()#1",
+    "name": "channel",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: channel builds a generated ChannelId from one canonical target type URL."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/integration/integration-broker.ts",
+    "kind": "function-declaration",
+    "identity": "typeUrl()#1",
+    "name": "typeUrl",
+    "disposition": "necessity",
+    "reason": "Spine JVM Protobuf boundary: typeUrl derives one canonical event URL for broker channel matching."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/integration/integration-broker.ts",
+    "kind": "function-declaration",
+    "identity": "unpackOnline()#1",
+    "name": "unpackOnline",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: unpackOnline validates an online control payload before peer observation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/integration/integration-broker.ts",
+    "kind": "function-declaration",
+    "identity": "unpackWanted()#1",
+    "name": "unpackWanted",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: unpackWanted validates a wanted-event payload before interest reconciliation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/integration/integration-broker.ts",
+    "kind": "function-declaration",
+    "identity": "controlPayload()#1",
+    "name": "controlPayload",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: controlPayload validates broker control identity before payload-specific unpacking."
   }
 ]
