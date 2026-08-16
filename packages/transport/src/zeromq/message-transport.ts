@@ -60,6 +60,7 @@ export function createZeroMqTransportFactory(config: ZeroMqConfig): TransportFac
 class ZeroMqMessageTransport implements TransportFactory {
   readonly #publishers = new Set<NativePublisher>();
   readonly #subscribers = new Set<NativeSubscriber>();
+  readonly #pendingSubscribers = new Set<Promise<NativeSubscriber>>();
   readonly #config: ZeroMqConfig;
   #closePromise: Promise<void> | undefined;
 
@@ -76,7 +77,13 @@ class ZeroMqMessageTransport implements TransportFactory {
 
   async createSubscriber(id: ChannelId): Promise<Subscriber> {
     if (this.#closePromise !== undefined) throw new Error("ZeroMQ message transport is closed.");
-    const subscriber = await NativeSubscriber.open(id, this.#config, this);
+    const opening = NativeSubscriber.open(id, this.#config, this);
+    this.#pendingSubscribers.add(opening);
+    const subscriber = await opening.finally(() => this.#pendingSubscribers.delete(opening));
+    if (this.#isClosing()) {
+      await subscriber.close();
+      throw new Error("ZeroMQ message transport closed while subscriber opened.");
+    }
     this.#subscribers.add(subscriber);
     return subscriber;
   }
@@ -94,13 +101,18 @@ class ZeroMqMessageTransport implements TransportFactory {
     this.#subscribers.delete(subscriber);
   }
 
+  #isClosing(): boolean {
+    return this.#closePromise !== undefined;
+  }
+
   async #close(): Promise<void> {
+    const pending = await Promise.allSettled([...this.#pendingSubscribers]);
     const results = await Promise.allSettled([
       ...[...this.#publishers].map((item) => item.close()),
       ...[...this.#subscribers].map((item) => item.close()),
     ]);
     const failures: unknown[] = [];
-    for (const result of results) {
+    for (const result of [...pending, ...results]) {
       if (result.status === "rejected") failures.push(result.reason);
     }
     if (failures.length > 0)
@@ -220,6 +232,7 @@ class NativeSubscriber implements Subscriber {
   readonly #consumers = new Set<ExternalMessageConsumer>();
   readonly #heartbeat: NodeJS.Timeout;
   readonly #backgroundFailures: unknown[] = [];
+  #receiveWork: Promise<void> = Promise.resolve();
   #closePromise: Promise<void> | undefined;
 
   private constructor(
@@ -297,7 +310,7 @@ class NativeSubscriber implements Subscriber {
         if (removed) return Promise.resolve();
         removed = true;
         this.#consumers.delete(consumer);
-        return Promise.resolve();
+        return this.#consumers.size === 0 ? this.close() : Promise.resolve();
       },
     };
     return Promise.resolve(handle);
@@ -311,6 +324,7 @@ class NativeSubscriber implements Subscriber {
   async #close(): Promise<void> {
     clearInterval(this.#heartbeat);
     await rm(this.#manifestPath, { force: true });
+    await this.#receiveWork;
     this.#socket.close();
     await rm(this.#socketPath, { force: true });
     this.#consumers.clear();
@@ -336,11 +350,19 @@ class NativeSubscriber implements Subscriber {
       for await (const [bytes] of this.#socket) {
         if (bytes === undefined) continue;
         const message = fromBinary(ExternalMessageSchema, bytes);
-        for (const consumer of this.#consumers) await consumer(message);
+        const work = this.#deliver(message);
+        this.#receiveWork = work.catch((error: unknown) => {
+          this.#backgroundFailures.push(error);
+        });
+        await work;
       }
     } catch (error) {
       if (this.#closePromise === undefined) this.#backgroundFailures.push(error);
     }
+  }
+
+  async #deliver(message: ExternalMessage): Promise<void> {
+    for (const consumer of this.#consumers) await consumer(message);
   }
 }
 
@@ -349,13 +371,12 @@ async function discoverSubscribers(
   targetType: string,
 ): Promise<SubscriberManifest[]> {
   const layout = await prepareLayout(config, targetType);
-  const manifests = (await readdir(layout.subscribers))
-    .filter((entry) => entry.endsWith(".json"))
-    .sort();
-  if (manifests.length > maxManifestEntries)
+  const entries = (await readdir(layout.subscribers)).sort();
+  if (entries.length > maxManifestEntries)
     throw new Error(
       `ZeroMQ message channel exceeds ${String(maxManifestEntries)} subscriber manifests.`,
     );
+  const manifests = entries.filter((entry) => entry.endsWith(".json"));
   const discovered: SubscriberManifest[] = [];
   for (const entry of manifests) {
     const manifestPath = path.join(layout.subscribers, entry);

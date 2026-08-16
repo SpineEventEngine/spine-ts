@@ -37,3 +37,16 @@
 - Failed atomic manifest writes now remove their same-directory exclusive temp
   file before returning the original failure. Fresh generated typecheck,
   focused lint, and native plus shared transport tests passed 7/7.
+
+## Consolidated review correction batch
+
+- Review assignments: TypeScript/API reviewer `gpt-5.6-terra` / high and
+  performance/reliability reviewer `gpt-5.6-terra` / high. The implementation
+  owner remains `gpt-5.6-terra` / medium; child spawning is prohibited and
+  runtime telemetry is unavailable.
+- Corrected lifecycle behavior: the last consumer handle closes/withdraws its
+  subscriber; factory close observes in-progress subscriber opens; subscriber
+  close drains receive work; and the scanner bounds all lexical entries before
+  filtering manifests. These changes are green in the focused suite (7/7).
+- Remaining batch items: deterministic injected proofs, shared IPC helper
+  extraction, bounded failure samples, startup sweep, and final API-doc check.
