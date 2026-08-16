@@ -386,6 +386,18 @@ scripts/check-tsdoc.test.mjs` process exited after its run banner, but this
 - The canonical no-coverage task profile remains for the orchestrator: this
   bounded documentation correction does not change executable behavior.
 
+## API inventory correction — 2026-08-16
+
+- Canonical verification found one exact public-documentation omission:
+  `ThirdPartyContext` is exported from the server root but absent from the
+  frozen server API inventory. The inventory now records that established
+  public root export; no declaration or runtime behavior changes.
+- Next: regenerate and check API documentation, run formatting and diff
+  validation, then checkpoint and push the correction.
+- `pnpm docs:api:generated`, `pnpm docs:api:check`, and direct
+  `node scripts/check-api-docs.mjs` passed with 255 expected server exports.
+  Scoped Prettier and `git diff --check` also passed.
+
 ## Canonical no-coverage verification — 2026-08-16
 
 - Invoked the canonical profile once: `pnpm verify:task -- --no-coverage`
