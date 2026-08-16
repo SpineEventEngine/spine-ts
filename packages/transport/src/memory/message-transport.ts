@@ -24,16 +24,44 @@ import type {
  * Provides an in-process typed transport factory for local and test environments.
  */
 export class InMemoryTransportFactory implements TransportFactory {
+  readonly #state = new MemoryTransportState();
+
+  /**
+   * Creates a publisher for a validated channel identity.
+   *
+   * @param id Identifies the typed channel.
+   * @returns A publisher for the channel.
+   */
+  createPublisher(id: ChannelId): Promise<Publisher> {
+    return this.#state.createPublisher(id);
+  }
+
+  /**
+   * Creates a subscriber for a validated channel identity.
+   *
+   * @param id Identifies the typed channel.
+   * @returns A subscriber for the channel.
+   */
+  createSubscriber(id: ChannelId): Promise<Subscriber> {
+    return this.#state.createSubscriber(id);
+  }
+
+  /**
+   * Closes this factory idempotently and drains accepted publication work.
+   *
+   * @returns The shared close completion for all racing callers.
+   */
+  close(): Promise<void> {
+    return this.#state.close();
+  }
+}
+
+class MemoryTransportState {
   readonly #subscribers = new Map<string, Set<MemorySubscriber>>();
   readonly #publishers = new Set<MemoryPublisher>();
   #closed = false;
+  #close: Promise<void> | undefined;
 
-  /**
-   * Creates a publisher for a validated, copied channel identity.
-   *
-   * @param id Identifies the typed message channel.
-   * @returns A publisher owned by this factory.
-   */
   createPublisher(id: ChannelId): Promise<Publisher> {
     return Promise.resolve().then(() => {
       this.#assertOpen();
@@ -42,13 +70,6 @@ export class InMemoryTransportFactory implements TransportFactory {
       return publisher;
     });
   }
-
-  /**
-   * Creates a subscriber for a validated, copied channel identity.
-   *
-   * @param id Identifies the typed message channel.
-   * @returns A subscriber owned by this factory.
-   */
   createSubscriber(id: ChannelId): Promise<Subscriber> {
     return Promise.resolve().then(() => {
       this.#assertOpen();
@@ -59,15 +80,13 @@ export class InMemoryTransportFactory implements TransportFactory {
       return subscriber;
     });
   }
-
-  /**
-   * Closes and drains all factory-owned channels.
-   *
-   * @returns Resolves after accepted publication work and channels close.
-   */
-  async close(): Promise<void> {
-    if (this.#closed) return;
+  close(): Promise<void> {
+    if (this.#close) return this.#close;
     this.#closed = true;
+    this.#close = this.#closeAll();
+    return this.#close;
+  }
+  async #closeAll(): Promise<void> {
     const publishers = [...this.#publishers];
     const subscribers = [...this.#subscribers.values()].flatMap((group) => [...group]);
     const publisherResults = await Promise.allSettled(
@@ -84,14 +103,12 @@ export class InMemoryTransportFactory implements TransportFactory {
     if (failures.length > 0)
       throw new AggregateError(failures, "Failed to close in-memory message transport.");
   }
-
-  async dispatch(channel: ChannelId, id: Any, message: ExternalMessage): Promise<void> {
+  async dispatch(targetType: string, id: Any, message: ExternalMessage): Promise<void> {
     validateFrame(id, message);
     const snapshot = clone(ExternalMessageSchema, message);
-    for (const subscriber of [...(this.#subscribers.get(channel.targetType) ?? [])])
+    for (const subscriber of [...(this.#subscribers.get(targetType) ?? [])])
       await subscriber.receive(snapshot);
   }
-
   removePublisher(publisher: MemoryPublisher): void {
     this.#publishers.delete(publisher);
   }
@@ -109,14 +126,18 @@ export class InMemoryTransportFactory implements TransportFactory {
 class MemoryPublisher implements Publisher {
   #closing = false;
   #tail: Promise<void> = Promise.resolve();
-  readonly id: ChannelId;
-  readonly #factory: InMemoryTransportFactory;
-  constructor(id: ChannelId, factory: InMemoryTransportFactory) {
-    this.id = id;
+  readonly #failures: unknown[] = [];
+  readonly #targetType: string;
+  readonly #factory: MemoryTransportState;
+  get id(): ChannelId {
+    return create(ChannelIdSchema, { targetType: this.#targetType });
+  }
+  constructor(id: ChannelId, factory: MemoryTransportState) {
+    this.#targetType = id.targetType;
     this.#factory = factory;
   }
   get targetType(): string {
-    return this.id.targetType;
+    return this.#targetType;
   }
   isStale(): boolean {
     return this.#closing;
@@ -126,9 +147,11 @@ class MemoryPublisher implements Publisher {
     const copiedId = create(AnySchema, { typeUrl: id.typeUrl, value: new Uint8Array(id.value) });
     const copiedMessage = clone(ExternalMessageSchema, message);
     const accepted = this.#tail.then(() =>
-      this.#factory.dispatch(this.id, copiedId, copiedMessage),
+      this.#factory.dispatch(this.#targetType, copiedId, copiedMessage),
     );
-    this.#tail = accepted.catch(() => undefined);
+    this.#tail = accepted.catch((error: unknown) => {
+      this.#failures.push(error);
+    });
     return accepted;
   }
   async close(): Promise<void> {
@@ -136,6 +159,8 @@ class MemoryPublisher implements Publisher {
     this.#closing = true;
     try {
       await this.#tail;
+      if (this.#failures.length > 0)
+        throw new AggregateError(this.#failures, "Accepted message publication failed.");
     } finally {
       this.#factory.removePublisher(this);
     }
@@ -145,14 +170,17 @@ class MemoryPublisher implements Publisher {
 class MemorySubscriber implements Subscriber {
   readonly #consumers = new Set<ExternalMessageConsumer>();
   #closed = false;
-  readonly id: ChannelId;
-  readonly #factory: InMemoryTransportFactory;
-  constructor(id: ChannelId, factory: InMemoryTransportFactory) {
-    this.id = id;
+  readonly #targetType: string;
+  readonly #factory: MemoryTransportState;
+  get id(): ChannelId {
+    return create(ChannelIdSchema, { targetType: this.#targetType });
+  }
+  constructor(id: ChannelId, factory: MemoryTransportState) {
+    this.#targetType = id.targetType;
     this.#factory = factory;
   }
   get targetType(): string {
-    return this.id.targetType;
+    return this.#targetType;
   }
   isStale(): boolean {
     return this.#closed || this.#consumers.size === 0;
@@ -195,7 +223,12 @@ function copyChannel(id: ChannelId): ChannelId {
 function validateFrame(id: Any, message: ExternalMessage): void {
   if (!id.typeUrl || id.value.length === 0)
     throw new Error("External message identity must contain a type URL and bytes.");
-  if (!message.id || !message.originalMessage || !message.boundedContextName?.value)
+  if (
+    !message.id ||
+    !message.originalMessage?.typeUrl ||
+    message.originalMessage.value.length === 0 ||
+    !message.boundedContextName?.value
+  )
     throw new Error(
       "External message must contain identity, original message, and source context.",
     );

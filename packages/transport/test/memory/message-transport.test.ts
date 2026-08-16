@@ -106,6 +106,7 @@ describe("InMemoryTransportFactory", () => {
     const publisher = await factory.createPublisher(channel());
     const invalid = create(ExternalMessageSchema);
     await expect(publisher.publish(create(AnySchema), invalid)).rejects.toThrow(/identity/u);
-    await Promise.all([publisher.close(), subscriber.close(), factory.close()]);
+    await expect(publisher.close()).rejects.toThrow(/publication failed/u);
+    await Promise.all([subscriber.close(), factory.close().catch(() => undefined)]);
   });
 });

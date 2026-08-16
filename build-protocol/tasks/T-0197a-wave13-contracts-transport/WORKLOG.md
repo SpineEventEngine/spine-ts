@@ -12,3 +12,5 @@
 - Added independent memory conformance tests: four tests cover fan-out/removal/staleness, concurrent FIFO plus publisher close, factory close draining, mutation isolation, and malformed input rejection.
 - Updated exact source and generated module inventory counts: 46 pinned sources and 50 generated Proto files.
 - Known external REDs remain: RED-14 awaits server external-messages; combined RED-21 awaits the separately-owned ZeroMQ factory export.
+
+- Final correction: moved adapter mechanics behind a private state collaborator; public factory declaration is limited to the TransportFactory SPI. Returned IDs are fresh canonical copies and close shares one completion.
