@@ -2746,7 +2746,7 @@ describe("repository signal routing", () => {
     GeneratedReactorAggregate.reset();
     const factory = new InMemoryStorageFactory();
     const observed: string[] = [];
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = BoundedContext.multitenant("Tasks")
       .add(createGeneratedReactorRepository())
       .addEventDispatcher({
         messageSchemas: () => [AggregateStateSchema],
@@ -2758,11 +2758,11 @@ describe("repository signal routing", () => {
       .withStorageFactory(factory)
       .build();
     const storage = new CurrentRecordTestStorage({
-      context: { name: "Tasks", multitenant: false },
+      context: { name: "Tasks", multitenant: true },
       storageFactory: factory,
       stateSchema: AggregateStateSchema,
     });
-    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const eventStore = new EventStore({ name: "Tasks", multitenant: true }, factory);
 
     await context.eventBus().post(
       createProjectionEvent("event-reactor-source", "task-reactor", {
@@ -2994,7 +2994,7 @@ describe("repository signal routing", () => {
 
   it("wraps commands from generated command reactions with the source event origin", async () => {
     const commands: SpineCommand[] = [];
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = BoundedContext.multitenant("Tasks")
       .add(createGeneratedCommandingRepository())
       .addCommandDispatcher({
         messageSchemas: () => [AggregateStateSchema],
@@ -6272,7 +6272,7 @@ describe("repository signal routing", () => {
   it("posts commands produced by process-manager event commanding after state commit", async () => {
     RoutingProcessManager.reset();
     const commands: SpineCommand[] = [];
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = BoundedContext.multitenant("Tasks")
       .add(createProcessManagerEventRepository())
       .addCommandDispatcher({
         messageSchemas: () => [AggregateStateSchema],
@@ -8290,7 +8290,7 @@ describe("repository signal routing", () => {
 
   it("passes EventContext to generated-registry two-argument event subscribers", async () => {
     GeneratedTwoArgProjection.reset();
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = BoundedContext.multitenant("Tasks")
       .add(createGeneratedTwoArgProjectionRepository())
       .build();
 
