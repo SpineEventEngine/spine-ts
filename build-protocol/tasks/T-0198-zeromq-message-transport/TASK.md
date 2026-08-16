@@ -92,3 +92,14 @@
   focused ESLint, Prettier, diff, `docs:api:generated`, and `docs:api:check`
   are recorded as the final correction preflight. No accepted finding remains
   open in this implementation slice.
+
+## Final re-review correction batch — 2026-08-16
+
+- All accepted P1 findings are resolved. Factory close owns full pending
+  publisher discovery and subscriber open/register continuations; gated tests
+  prove close waits before each creation rejects. The subscriber heartbeat now
+  tracks every started refresh and close waits those writes before manifest and
+  socket cleanup. Directory discovery streams entries with `opendir` and
+  rejects entry 1025 before unbounded collection.
+- TypeScript/API and performance/reliability dispositions: accepted; no waiver
+  or open finding. Final focused evidence is updated in the correction commit.

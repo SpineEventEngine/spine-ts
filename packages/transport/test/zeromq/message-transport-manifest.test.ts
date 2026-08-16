@@ -223,10 +223,37 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
         expect(settled).toBe(false);
         release();
         await expect(opening).rejects.toThrow(/closed while subscriber opened/iu);
-        await close;
+        await expect(close).rejects.toThrow(/transport close failed/iu);
         expect(await readdir(path.join(ipcDirectory, "spine-message-channels", "sockets"))).toEqual(
           [],
         );
+      } finally {
+        preparation.mockRestore();
+      }
+    });
+  });
+
+  it("drains a gated publisher creation before factory close settles", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const prepare = ChannelEndpoints.prepare.bind(ChannelEndpoints);
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const preparation = vi
+        .spyOn(ChannelEndpoints, "prepare")
+        .mockImplementationOnce(async (directory, createComponent) => {
+          await gate;
+          return await prepare(directory, createComponent);
+        });
+      try {
+        const factory = createZeroMqTransportFactory(config(ipcDirectory));
+        const creation = factory.createPublisher(channel());
+        await Promise.resolve();
+        const close = factory.close();
+        release();
+        await expect(close).rejects.toThrow(/transport close failed/iu);
+        await expect(creation).rejects.toThrow(/closed while publisher opened/iu);
       } finally {
         preparation.mockRestore();
       }

@@ -13,7 +13,7 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { lstat, mkdir, open, readdir, rename, rm, stat } from "node:fs/promises";
+import { lstat, mkdir, open, opendir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
@@ -72,7 +72,8 @@ export function createZeroMqTransportFactory(config: ZeroMqConfig): TransportFac
 class ZeroMqMessageTransport implements TransportFactory {
   readonly #publishers = new Set<NativePublisher>();
   readonly #subscribers = new Set<NativeSubscriber>();
-  readonly #pendingSubscribers = new Set<Promise<NativeSubscriber>>();
+  readonly #pendingPublishers = new Set<Promise<Publisher>>();
+  readonly #pendingSubscribers = new Set<Promise<Subscriber>>();
   readonly #config: ZeroMqConfig;
   #closePromise: Promise<void> | undefined;
 
@@ -81,27 +82,41 @@ class ZeroMqMessageTransport implements TransportFactory {
   }
 
   createPublisher(id: ChannelId): Promise<Publisher> {
-    return Promise.resolve().then(() => {
+    const creating = Promise.resolve().then(() => {
       if (this.#closePromise !== undefined) throw new Error("ZeroMQ message transport is closed.");
       const publisher = new NativePublisher(id, this.#config, this);
       return discoverSubscribers(this.#config, publisher.targetType).then(() => {
+        if (this.#isClosing())
+          throw new Error("ZeroMQ message transport closed while publisher opened.");
         this.#publishers.add(publisher);
         return publisher;
       });
     });
+    this.#pendingPublishers.add(creating);
+    void creating.then(
+      () => this.#pendingPublishers.delete(creating),
+      () => this.#pendingPublishers.delete(creating),
+    );
+    return creating;
   }
 
-  async createSubscriber(id: ChannelId): Promise<Subscriber> {
-    if (this.#closePromise !== undefined) throw new Error("ZeroMQ message transport is closed.");
-    const opening = NativeSubscriber.open(id, this.#config, this);
-    this.#pendingSubscribers.add(opening);
-    const subscriber = await opening.finally(() => this.#pendingSubscribers.delete(opening));
-    if (this.#isClosing()) {
-      await subscriber.close();
-      throw new Error("ZeroMQ message transport closed while subscriber opened.");
-    }
-    this.#subscribers.add(subscriber);
-    return subscriber;
+  createSubscriber(id: ChannelId): Promise<Subscriber> {
+    const creating = Promise.resolve().then(async () => {
+      if (this.#isClosing()) throw new Error("ZeroMQ message transport is closed.");
+      const subscriber = await NativeSubscriber.open(id, this.#config, this);
+      if (this.#isClosing()) {
+        await subscriber.close();
+        throw new Error("ZeroMQ message transport closed while subscriber opened.");
+      }
+      this.#subscribers.add(subscriber);
+      return subscriber;
+    });
+    this.#pendingSubscribers.add(creating);
+    void creating.then(
+      () => this.#pendingSubscribers.delete(creating),
+      () => this.#pendingSubscribers.delete(creating),
+    );
+    return creating;
   }
 
   close(): Promise<void> {
@@ -122,7 +137,10 @@ class ZeroMqMessageTransport implements TransportFactory {
   }
 
   async #close(): Promise<void> {
-    const pending = await Promise.allSettled([...this.#pendingSubscribers]);
+    const pending = await Promise.allSettled([
+      ...this.#pendingPublishers,
+      ...this.#pendingSubscribers,
+    ]);
     const results = await Promise.allSettled([
       ...[...this.#publishers].map((item) => item.close()),
       ...[...this.#subscribers].map((item) => item.close()),
@@ -249,7 +267,7 @@ class NativeSubscriber implements Subscriber {
   readonly #heartbeat: NodeJS.Timeout;
   readonly #backgroundFailures: unknown[] = [];
   #receiveWork: Promise<void> = Promise.resolve();
-  #heartbeatWork: Promise<void> = Promise.resolve();
+  readonly #heartbeatWork = new Set<Promise<void>>();
   #closePromise: Promise<void> | undefined;
 
   private constructor(
@@ -267,7 +285,12 @@ class NativeSubscriber implements Subscriber {
     this.#manifest = manifest;
     this.#factory = factory;
     this.#heartbeat = setInterval(() => {
-      this.#heartbeatWork = this.#refreshHeartbeat();
+      const work = this.#refreshHeartbeat();
+      this.#heartbeatWork.add(work);
+      void work.then(
+        () => this.#heartbeatWork.delete(work),
+        () => this.#heartbeatWork.delete(work),
+      );
     }, heartbeatIntervalMs);
     this.#heartbeat.unref();
     void this.#run();
@@ -347,10 +370,10 @@ class NativeSubscriber implements Subscriber {
 
   async #close(): Promise<void> {
     clearInterval(this.#heartbeat);
+    const heartbeats = await Promise.allSettled([...this.#heartbeatWork]);
     const results = await Promise.allSettled([
       zeroMqMessageAccess.remove(this.#manifestPath),
       this.#receiveWork,
-      this.#heartbeatWork,
     ]);
     this.#socket.close();
     results.push(
@@ -361,7 +384,7 @@ class NativeSubscriber implements Subscriber {
     this.#consumers.clear();
     this.#factory.removeSubscriber(this);
     const failures: unknown[] = [...this.#backgroundFailures];
-    for (const result of results) {
+    for (const result of [...heartbeats, ...results]) {
       if (result.status === "rejected") failures.push(result.reason);
     }
     if (failures.length > 0)
@@ -407,11 +430,16 @@ async function discoverSubscribers(
   targetType: string,
 ): Promise<SubscriberManifest[]> {
   const layout = await prepareLayout(config, targetType);
-  const entries = (await readdir(layout.subscribers)).sort();
-  if (entries.length > maxManifestEntries)
-    throw new Error(
-      `ZeroMQ message channel exceeds ${String(maxManifestEntries)} subscriber manifests.`,
-    );
+  const entries: string[] = [];
+  const directory = await opendir(layout.subscribers);
+  for await (const entry of directory) {
+    entries.push(entry.name);
+    if (entries.length > maxManifestEntries)
+      throw new Error(
+        `ZeroMQ message channel exceeds ${String(maxManifestEntries)} subscriber manifests.`,
+      );
+  }
+  entries.sort();
   const manifests = entries.filter((entry) => entry.endsWith(".json"));
   const discovered: SubscriberManifest[] = [];
   for (const entry of manifests) {
