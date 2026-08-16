@@ -289,6 +289,34 @@ describe("IntegrationBroker module", () => {
       }),
     ]);
   });
+
+  it("rejects a mismatched external Event identity before import", async () => {
+    const factory = new RecordingTransportFactory();
+    let calls = 0;
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "invalid" }),
+      transportFactory: factory as never,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [StringValueSchema],
+      postImported: () => {
+        calls++;
+        return Promise.resolve();
+      },
+    });
+    brokers.push(broker);
+    await broker.open();
+    const value = event("event-id");
+    const frame = wrapExternalEvent(value, create(BoundedContextNameSchema, { value: "source" }));
+    frame.id = {
+      ...frame.id!,
+      value: toBinary(EventIdSchema, create(EventIdSchema, { value: "other" })),
+    };
+    const publisher = await factory.createPublisher(
+      create(ChannelIdSchema, { targetType: TypeUrls.derive(StringValueSchema) }) as never,
+    );
+    await expect(publisher.publish(frame.id!, frame)).rejects.toThrow(/identity/u);
+    expect(calls).toBe(0);
+  });
 });
 
 function event(id: string) {
