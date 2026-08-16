@@ -155,7 +155,7 @@ describe("Wave 13 ThirdPartyContext", () => {
           received.push(event);
           return Promise.resolve();
         },
-      } as never)
+      })
       .buildAsync();
     const single = await DirectSourceThirdPartyContext.singleTenant("DirectSourceSingle");
     const multi = await DirectSourceThirdPartyContext.multitenant("DirectSourceMulti");
@@ -190,7 +190,7 @@ describe("Wave 13 ThirdPartyContext", () => {
       .addEventDispatcher({
         messageSchemas: () => [StringValueSchema],
         dispatch: () => Promise.resolve(),
-      } as never)
+      })
       .buildAsync();
 
     try {
@@ -212,7 +212,7 @@ describe("Wave 13 ThirdPartyContext", () => {
       await expect(single.emittedEvent(event, tenantActor)).rejects.toThrow(
         "Single-tenant ThirdPartyContext forbids actor tenantId.",
       );
-      await expect(single.emittedEvent({ $typeName: "" } as Message, user)).rejects.toThrow(
+      await expect(single.emittedEvent({ $typeName: "" }, user)).rejects.toThrow(
         "ThirdPartyContext requires a generated event message.",
       );
       await expect(single.emittedEvent(create(ActorContextSchema), user)).rejects.toThrow(
@@ -302,7 +302,7 @@ describe("Wave 13 ThirdPartyContext", () => {
           received.push(event);
           return Promise.resolve();
         },
-      } as never)
+      })
       .buildAsync();
     const imported = create(StringValueSchema, { value: "external" });
     const singleActor = create(ActorContextSchema, {
@@ -332,7 +332,7 @@ describe("Wave 13 ThirdPartyContext", () => {
             received.push(event);
             return Promise.resolve();
           },
-        } as never)
+        })
         .buildAsync();
       await multi.emittedEvent(imported, multiActor);
       expect(received).toHaveLength(3);
