@@ -317,6 +317,76 @@ describe("IntegrationBroker module", () => {
     await expect(publisher.publish(frame.id!, frame)).rejects.toThrow(/identity/u);
     expect(calls).toBe(0);
   });
+
+  it("does not re-export an imported event and creates one subscription per canonical external type", async () => {
+    const factory = new RecordingTransportFactory();
+    const bus = eventBusAccess.createForgettingBus();
+    bus.register({
+      messageSchemas: () => [StringValueSchema, Int32ValueSchema],
+      dispatch: () => Promise.resolve(),
+    });
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "no-loop" }),
+      transportFactory: factory as never,
+      eventBus: bus,
+      externalEventSchemas: [StringValueSchema, StringValueSchema, Int32ValueSchema],
+      postImported: (value) => bus.post(value),
+    });
+    brokers.push(broker);
+    await broker.open();
+    await publishWanted(factory, "requester", [StringValueSchema]);
+    await publishExternal(factory, event("external"), "remote");
+    expect(
+      factory.created.filter(
+        ({ kind, channel }) =>
+          kind === "subscriber" &&
+          [TypeUrls.derive(StringValueSchema), TypeUrls.derive(Int32ValueSchema)].includes(
+            (channel as { targetType?: string }).targetType ?? "",
+          ),
+      ),
+    ).toHaveLength(2);
+    expect(
+      factory.published.filter(
+        ({ channel }) =>
+          (channel as { targetType?: string }).targetType === TypeUrls.derive(StringValueSchema),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("drains an accepted import before close and ignores later intake", async () => {
+    const factory = new RecordingTransportFactory();
+    let release!: () => void;
+    let calls = 0;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "drain" }),
+      transportFactory: factory as never,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [StringValueSchema],
+      postImported: async () => {
+        calls++;
+        await gate;
+      },
+    });
+    brokers.push(broker);
+    await broker.open();
+    const pending = publishExternal(factory, event("accepted"), "remote");
+    while (calls === 0) await new Promise((resolve) => setTimeout(resolve, 0));
+    const closing = broker.close();
+    let settled = false;
+    void closing.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    release();
+    await pending;
+    await closing;
+    await publishExternal(factory, event("late"), "remote");
+    expect(calls).toBe(1);
+  });
 });
 
 function event(id: string) {
