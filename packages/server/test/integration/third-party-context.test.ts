@@ -212,6 +212,9 @@ describe("Wave 13 ThirdPartyContext", () => {
       await expect(single.emittedEvent(event, tenantActor)).rejects.toThrow(
         "Single-tenant ThirdPartyContext forbids actor tenantId.",
       );
+      await expect(single.emittedEvent({ $typeName: "" } as Message, user)).rejects.toThrow(
+        "ThirdPartyContext requires a generated event message.",
+      );
       await expect(single.emittedEvent(create(ActorContextSchema), user)).rejects.toThrow(
         "ThirdPartyContext cannot encode this message without its generated schema descriptor.",
       );
