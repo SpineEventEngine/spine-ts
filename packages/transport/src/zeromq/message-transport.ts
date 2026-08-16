@@ -28,6 +28,7 @@ import type {
   TransportFactory,
 } from "../message-channel.js";
 import type { ZeroMqConfig } from "./adapter-config.js";
+import { zeroMqSocketAccess } from "./signal-transport.js";
 
 /**
  * Creates the distinct typed-message ZeroMQ adapter.
@@ -127,6 +128,7 @@ class NativeSubscriber implements Subscriber {
     this.#run();
   }
   static async open(id: ChannelId, config: ZeroMqConfig): Promise<NativeSubscriber> {
+    await zeroMqSocketAccess.prepareIpcDirectory(config.ipcDirectory);
     const generation = randomUUID();
     const directory = channelDirectory(config, id.targetType);
     const subscribers = path.join(directory, "subscribers");
