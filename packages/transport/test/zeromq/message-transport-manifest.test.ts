@@ -302,6 +302,54 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
     });
   });
 
+  it("keeps the newest manifest when quarantine restoration finds an existing pathname", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const subscriber = await factory.createSubscriber(channel());
+      const manifestPath = await manifestPathFor(ipcDirectory);
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Parameters<
+        typeof zeroMqMessageAccess.writeManifest
+      >[1];
+      await chmod(manifestPath, 0o644);
+      const moveManifest = zeroMqMessageAccess.moveManifest.bind(zeroMqMessageAccess);
+      const replacement = vi
+        .spyOn(zeroMqMessageAccess, "moveManifest")
+        .mockImplementationOnce(async (fromPath, toPath) => {
+          await zeroMqMessageAccess.writeManifest(fromPath, manifest);
+          await moveManifest(fromPath, toPath);
+          await zeroMqMessageAccess.writeManifest(fromPath, {
+            ...manifest,
+            heartbeatAtMs: Date.now(),
+          });
+        });
+      const received: string[] = [];
+      await subscriber.addConsumer((message) => {
+        received.push(
+          fromBinary(
+            StringValueSchema,
+            required(message.originalMessage, "newest manifest original message").value,
+          ).value,
+        );
+      });
+      try {
+        const publisher = await factory.createPublisher(channel());
+        const message = frame("newest-manifest");
+        await publisher.publish(required(message.id, "newest manifest identity"), message);
+        await eventually(() => Promise.resolve(received.length === 1));
+        expect(received).toEqual(["newest-manifest"]);
+        expect(
+          (await readdir(path.dirname(manifestPath))).filter((entry) =>
+            entry.includes(".quarantine"),
+          ),
+        ).toEqual([]);
+        await publisher.close();
+      } finally {
+        replacement.mockRestore();
+        await Promise.allSettled([subscriber.close(), factory.close()]);
+      }
+    });
+  });
+
   it("preserves a replacement that races stale-manifest quarantine", async () => {
     await withIpcDirectory(async (ipcDirectory) => {
       const factory = createZeroMqTransportFactory(config(ipcDirectory));

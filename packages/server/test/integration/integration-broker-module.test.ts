@@ -259,6 +259,10 @@ describe("IntegrationBroker module", () => {
         context: create(BoundedContextNameSchema, { value: "later-peer" }),
       }),
     );
+    const missingIdentity = create(ExternalMessageSchema, { ...valid, id: undefined });
+    await expect(
+      publisher.publish(required(valid.id, "separate valid identity"), missingIdentity),
+    ).rejects.toThrow(/Malformed integration control message/u);
     const undecodable = create(ExternalMessageSchema, {
       ...valid,
       id: create(AnySchema, {

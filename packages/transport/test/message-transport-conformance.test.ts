@@ -82,6 +82,7 @@ async function assertConformance(factory: Factory): Promise<void> {
   await publisher.publish(frameId("first"), frame(proto, "first"));
   await eventually(() => received.length === 2);
   expect(received).toEqual(["first", "first"]);
+  expect(first.isStale()).toBe(false);
   await firstHandle.close();
   expect(first.isStale()).toBe(true);
   await publisher.publish(frameId("second"), frame(proto, "second"));

@@ -236,3 +236,14 @@ packages/server/test/integration/integration-broker-module.test.ts` passed
   invalid manifest through the typed production test seam. The fixture now uses
   raw filesystem JSON plus exact `0600` permissions, preserving the same
   invalid-schema behavior without an unsafe cast or production seam widening.
+
+## Final changed-branch proofs — 2026-08-16
+
+- Fresh exact intersection was 87/91 lines (95.60%) and 58/67 branches
+  (86.57%). Added three concrete existing-path proofs: an online frame missing
+  its own `message.id` rejects despite a separate valid publisher identity;
+  a subscriber with an active consumer is not stale before its handle closes;
+  and a quarantine mismatch whose restoration sees a newer canonical manifest
+  preserves that newest manifest, valid delivery, and no quarantine artifact.
+- `pnpm typecheck:tooling` and focused manifest/conformance/broker tests passed
+  3 files / 61 tests; scoped ESLint, Prettier, and `git diff --check` pass.
