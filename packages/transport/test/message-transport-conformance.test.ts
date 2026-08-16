@@ -17,6 +17,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import {
   access,
+  chmod,
   lstat,
   mkdtemp,
   readdir,
@@ -214,6 +215,7 @@ async function assertNativeManifestContract(directory: string, factory: Factory)
       ownerPid: process.pid,
     }),
   );
+  await chmod(incompatibleManifest, 0o600);
   let aggregate: AggregateError | undefined;
   try {
     const attempted = publisher

@@ -149,6 +149,45 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
     }
   });
 
+  it("preserves a freshly replaced manifest when discovery observes an identity race", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const subscriber = await factory.createSubscriber(channel());
+      const manifestPath = await manifestPathFor(ipcDirectory);
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Parameters<
+        typeof zeroMqMessageAccess.writeManifest
+      >[1];
+      const openManifest = zeroMqMessageAccess.openManifest.bind(zeroMqMessageAccess);
+      const replacement = vi
+        .spyOn(zeroMqMessageAccess, "openManifest")
+        .mockImplementationOnce(async (filePath) => {
+          await zeroMqMessageAccess.writeManifest(filePath, manifest);
+          return await openManifest(filePath);
+        });
+      const received: string[] = [];
+      await subscriber.addConsumer((message) => {
+        received.push(
+          fromBinary(
+            StringValueSchema,
+            required(message.originalMessage, "race-safe original message").value,
+          ).value,
+        );
+      });
+      try {
+        const publisher = await factory.createPublisher(channel());
+        const message = frame("survives-race");
+        await publisher.publish(required(message.id, "race-safe frame identity"), message);
+        await eventually(() => Promise.resolve(received.length === 1));
+        expect(received).toEqual(["survives-race"]);
+        expect(await readFile(manifestPath, "utf8")).not.toEqual("");
+        await publisher.close();
+      } finally {
+        replacement.mockRestore();
+        await Promise.allSettled([subscriber.close(), factory.close()]);
+      }
+    });
+  });
+
   it("serializes concurrently accepted publication work and rejects mismatched frame identity", async () => {
     await withIpcDirectory(async (ipcDirectory) => {
       const factory = createZeroMqTransportFactory(config(ipcDirectory));
@@ -479,10 +518,10 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
     });
   });
 
-  it("retries failed manifest cleanup while retaining factory ownership", async () => {
+  it("retries failed factory cleanup while retaining closed admission", async () => {
     await withIpcDirectory(async (ipcDirectory) => {
       const factory = createZeroMqTransportFactory(config(ipcDirectory));
-      const subscriber = await factory.createSubscriber(channel());
+      await factory.createSubscriber(channel());
       const manifestPath = await manifestPathFor(ipcDirectory);
       const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { generation: string };
       const socketPath = path.join(
@@ -495,10 +534,11 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
         .spyOn(zeroMqMessageAccess, "remove")
         .mockImplementationOnce(() => Promise.reject(new Error("manifest unlink failed")));
       try {
-        await expect(subscriber.close()).rejects.toThrow(/background processing failed/iu);
+        await expect(factory.close()).rejects.toThrow(/transport close failed/iu);
         await expect(access(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
         await expect(access(manifestPath)).resolves.toBeUndefined();
-        await expect(subscriber.close()).resolves.toBeUndefined();
+        await expect(factory.createPublisher(channel())).rejects.toThrow(/closed/iu);
+        await expect(factory.close()).resolves.toBeUndefined();
         await expect(access(manifestPath)).rejects.toMatchObject({ code: "ENOENT" });
       } finally {
         cleanup.mockRestore();

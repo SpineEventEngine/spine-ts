@@ -126,3 +126,32 @@ vitest run packages/server/test/server/server-integration-broker-cross-process.t
   Prettier check, and `git diff --check` passed. The failed `pnpm run
 build:generated` invocation was a non-mutating incorrect script-name lookup;
   the required generated build was then run with its actual repository command.
+
+## Residual re-review correction batch — 2026-08-16
+
+- Security P2: stable invalid manifests remain removable, but manifest cleanup
+  now re-establishes pathname identity immediately before unlinking. An
+  `lstat`/opened-handle identity mismatch is ignored rather than deleted, so a
+  concurrent atomic replacement remains owned by its writer. A deterministic
+  private open seam replaces a manifest between inspection and open; the fresh
+  valid replacement survives and is discovered for delivery.
+- Reliability P1: the RED-21 same-identity incompatible native peer manifest is
+  now written with exact `0600` mode. It therefore reaches native discovery
+  under the accepted manifest policy, while healthy delivery and aggregate
+  failure evidence remain part of the same conformance contract.
+- Factory cleanup regression: the existing unlink injection now directly proves
+  first `factory.close()` rejection, a successful second close, permanent
+  creation rejection, and absent manifest/socket after retry.
+- RED/GREEN: the replacement race test first timed out because the former code
+  unlinked the fresh pathname after identity mismatch. After conditional
+  removal, `pnpm exec vitest run
+packages/transport/test/zeromq/message-transport-manifest.test.ts
+packages/transport/test/message-transport-conformance.test.ts` passed 2
+  files / 20 tests.
+- Final residual evidence: `pnpm typecheck:build:generated` passed, and
+  `pnpm exec vitest run packages/transport/test/zeromq/message-transport-manifest.test.ts
+packages/transport/test/message-transport-conformance.test.ts
+packages/server/test/integration/integration-broker-module.test.ts
+packages/server/test/server/server-integration-broker-cross-process.test.ts`
+  passed 4 files / 54 tests. Scoped ESLint, Prettier, and `git diff --check`
+  passed before handoff.

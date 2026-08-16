@@ -13,8 +13,8 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { constants } from "node:fs";
-import { lstat, mkdir, open, opendir, rename, rm, stat } from "node:fs/promises";
+import { constants, type Stats } from "node:fs";
+import { lstat, mkdir, open, opendir, rename, rm, stat, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
@@ -78,6 +78,15 @@ export const zeroMqMessageAccess = {
    */
   async writeManifest(manifestPath: string, manifest: SubscriberManifest): Promise<void> {
     await writeManifest(manifestPath, manifest);
+  },
+
+  /**
+   * Opens a manifest without following a symbolic link.
+   *
+   * @internal
+   */
+  async openManifest(manifestPath: string): Promise<FileHandle> {
+    return await open(manifestPath, constants.O_RDONLY | constants.O_NOFOLLOW);
   },
 };
 
@@ -405,22 +414,22 @@ class NativeSubscriber implements Subscriber {
   async #close(): Promise<void> {
     clearInterval(this.#heartbeat);
     const heartbeats = await Promise.allSettled([this.#heartbeatTail]);
-    const results = await Promise.allSettled([
+    const [manifestRemoval, receiveWork] = await Promise.allSettled([
       zeroMqMessageAccess.remove(this.#manifestPath),
       this.#receiveWork,
     ]);
     this.#socket.close();
-    results.push(
-      await Promise.allSettled([zeroMqMessageAccess.remove(this.#socketPath)]).then(
-        ([item]) => item,
-      ),
+    const socketRemoval = await zeroMqMessageAccess.remove(this.#socketPath).then(
+      () => ({ status: "fulfilled" as const }),
+      (reason: unknown) => ({ status: "rejected" as const, reason }),
     );
     this.#consumers.clear();
     const failures: unknown[] = [...this.#backgroundFailures];
-    for (const result of [...heartbeats, ...results]) {
+    for (const result of [...heartbeats, manifestRemoval, receiveWork, socketRemoval]) {
       if (result.status === "rejected") failures.push(result.reason);
     }
-    const cleanupFailed = results[0].status === "rejected" || results[2].status === "rejected";
+    const cleanupFailed =
+      manifestRemoval.status === "rejected" || socketRemoval.status === "rejected";
     if (!cleanupFailed) this.#factory.removeSubscriber(this);
     if (failures.length > 0)
       throw new AggregateError(failures, "ZeroMQ message subscriber background processing failed.");
@@ -582,13 +591,15 @@ async function readManifest(
   entry: string,
   adapterIdentity: string,
 ): Promise<SubscriberManifest | undefined> {
+  let inspected: Stats | undefined;
   try {
     const file = await lstat(manifestPath);
+    inspected = file;
     if (file.isSymbolicLink() || !file.isFile() || file.size > maxManifestBytes) {
-      await rm(manifestPath, { force: true });
+      await removeIfUnchanged(manifestPath, file);
       return undefined;
     }
-    const handle = await open(manifestPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const handle = await zeroMqMessageAccess.openManifest(manifestPath);
     let text: string;
     let openedUid = -1;
     let openedMode = 0;
@@ -603,7 +614,6 @@ async function readManifest(
         opened.size !== file.size ||
         opened.size > maxManifestBytes
       ) {
-        await rm(manifestPath, { force: true });
         return undefined;
       }
       text = await handle.readFile({ encoding: "utf8" });
@@ -619,17 +629,32 @@ async function readManifest(
         (file.mode & 0o777) !== 0o600 ||
         (openedMode & 0o777) !== 0o600)
     ) {
-      await rm(manifestPath, { force: true });
+      await removeIfUnchanged(manifestPath, file);
       return undefined;
     }
     if (!isManifest(parsed, layout, entry)) {
-      await rm(manifestPath, { force: true });
+      await removeIfUnchanged(manifestPath, file);
       return undefined;
     }
     return parsed;
   } catch {
-    await rm(manifestPath, { force: true });
+    if (inspected !== undefined) await removeIfUnchanged(manifestPath, inspected);
     return undefined;
+  }
+}
+
+async function removeIfUnchanged(manifestPath: string, inspected: Stats): Promise<void> {
+  try {
+    const current = await lstat(manifestPath);
+    if (
+      current.dev !== inspected.dev ||
+      current.ino !== inspected.ino ||
+      current.isSymbolicLink() !== inspected.isSymbolicLink()
+    )
+      return;
+    await rm(manifestPath, { force: true });
+  } catch {
+    // A concurrent writer/remover owns the current pathname.
   }
 }
 
