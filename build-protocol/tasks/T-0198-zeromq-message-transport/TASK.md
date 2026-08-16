@@ -31,5 +31,6 @@
   are retained and made observable through close; publisher and factory close
   calls share their in-flight completion. The focused suite now proves these
   close races in addition to FIFO/identity behavior (6/6 tests with shared
-  RED-21). Outstanding before task completion: dedicated multipublisher and
-  injected background-failure proofs, plus final lifecycle review.
+  RED-21). Independent publisher fan-out now has native proof. Outstanding
+  before task completion: injected background-failure proof and final
+  lifecycle review.

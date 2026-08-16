@@ -160,6 +160,30 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
       await factoryClose;
     });
   });
+
+  it("fans out frames published by independent publishers through one discovered subscriber", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const subscriber = await factory.createSubscriber(channel());
+      const received: string[] = [];
+      await subscriber.addConsumer((message) => {
+        received.push(fromBinary(StringValueSchema, message.originalMessage.value).value);
+      });
+      const left = await factory.createPublisher(channel());
+      const right = await factory.createPublisher(channel());
+      const leftFrame = frame("left");
+      const rightFrame = frame("right");
+      if (leftFrame.id === undefined || rightFrame.id === undefined)
+        throw new Error("Expected external-message wrapper identities.");
+      await Promise.all([
+        left.publish(leftFrame.id, leftFrame),
+        right.publish(rightFrame.id, rightFrame),
+      ]);
+      await eventually(() => Promise.resolve(received.length === 2));
+      expect(received.sort()).toEqual(["left", "right"]);
+      await Promise.all([left.close(), right.close(), subscriber.close(), factory.close()]);
+    });
+  });
 });
 
 function config(ipcDirectory: string): ZeroMqConfig {
