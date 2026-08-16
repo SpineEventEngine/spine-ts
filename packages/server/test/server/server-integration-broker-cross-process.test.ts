@@ -14,7 +14,7 @@
 
 import { fork, type ChildProcess } from "node:child_process";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import process from "node:process";
 import { join } from "node:path";
@@ -144,7 +144,14 @@ function start(role: Role, ipcDirectory: string): ChildProcess {
 
 async function adapterArtifacts(directory: string): Promise<readonly string[]> {
   try {
-    return await readdir(directory, { recursive: true });
+    const entries = await readdir(directory, { recursive: true });
+    return (
+      await Promise.all(
+        entries.map(async (entry) =>
+          (await stat(join(directory, entry))).isDirectory() ? undefined : entry,
+        ),
+      )
+    ).flatMap((entry) => (entry === undefined ? [] : [entry]));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;

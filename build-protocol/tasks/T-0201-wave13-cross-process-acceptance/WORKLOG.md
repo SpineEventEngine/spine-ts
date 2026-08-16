@@ -52,3 +52,32 @@ typecheck:build:generated` (exit 0) and restored all ten volatile generated
   passed; the latter reports 13 passing RED-01 through RED-16 broker cases.
 - Configured implementation profile remains `gpt-5.6-terra` / `medium`;
   runtime self-inspection telemetry is unavailable.
+
+## Native GREEN after transport handoff — 2026-08-16
+
+- The transport owner corrected valid empty protobuf frame handling in
+  `7a67a51a`; it was merged into this branch as `62541618`. No product code was
+  changed by this implementer.
+- Refreshed local runtime outputs with `pnpm proto:generate && pnpm
+typecheck:build:generated` (exit 0). The generation run left no tracked
+  volatile generation-ID changes.
+- Exact native acceptance is GREEN:
+  `pnpm exec vitest run packages/server/test/server/server-integration-broker-cross-process.test.ts --reporter=verbose`
+  (1 file, 1 test passed). It proves two distinct PIDs and context names, v3
+  generated external metadata, normal domestic producer posting, original Event
+  ID and canonical type URL, generated payload, producer identity, import actor,
+  absent single-tenant ID, and external context; both children exit code 0 and
+  no sockets or manifests remain. Empty adapter layout directories are retained
+  as benign transport structure and the parent removes the temporary root.
+- Same-process/in-memory evidence remains GREEN:
+  `pnpm exec vitest run packages/server/test/integration/integration-broker.test.ts --reporter=verbose`
+  (13/13 passing).
+- Native empty-frame regression is GREEN:
+  `pnpm exec vitest run packages/transport/test/zeromq/message-transport-manifest.test.ts --reporter=verbose`
+  (15/15 passing, including valid empty `ExternalEventsWanted` payload delivery).
+- Final mechanical checks passed: focused ESLint, child `node --check`,
+  Prettier, `git diff --check`, and a child-source shortcut scan. The only
+  `eventBus().post()` is the producer's normal domestic publication; the child
+  contains no `ExternalMessage`, `ContextTransport`, `RuntimeTransportBinding`,
+  `SignalTransport`, forwarder, `externalEventSchemas`, or
+  `addEventDispatcher` shortcut.

@@ -59,3 +59,17 @@ type URL, absent tenant/origin where applicable, and complete context identity.
 After native GREEN evidence and focused review, the orchestrator integrates the
 task from an isolated worktree, pushes `main`, removes the contained task branch,
 and verifies the remote exposes exactly `main` and no tags.
+
+## Completion evidence — 2026-08-16
+
+- Fixture checkpoint `33fd4ed9` replaces invalid repository state metadata with
+  the accepted generated projection schema pattern and strengthens full Event
+  observation without changing production code.
+- Transport correction `7a67a51a`, merged here as `62541618`, permits valid
+  zero-byte protobuf payloads so the broker's final empty wanted-event document
+  withdraws cleanly over native ZeroMQ.
+- The exact RED-22 command is GREEN with two distinct child PIDs, generated
+  registry v3 external metadata, normal domestic `eventBus().post()`, original
+  Event identity/type/payload/context proof, bounded clean child exits, and no
+  socket or manifest artifacts. Empty adapter layout directories are retained
+  intentionally as transport structure, not runtime artifacts.
