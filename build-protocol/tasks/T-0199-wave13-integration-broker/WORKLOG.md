@@ -126,3 +126,17 @@ packages/server/test/integration/integration-broker-module.test.ts
   formatting; API documentation **resolved** by internal markers/field docs;
   performance/reliability **N/A** for this no-behavior-change convergence
   correction; security **N/A** (release-only gate, no new trust boundary).
+
+## Coverage convergence evidence — 2026-08-16
+
+- Focused V8 invocation over direct wrapper, broker-module, EventBus, and
+  registry tests passed 61 tests. It measured 92.85% lines but 80.49% branches
+  across changed executable product files, so it does **not** satisfy the Wave
+  13 90/90 coverage gate.
+- A wrapper-focused follow-up added behavior assertions for missing event
+  identity, missing event origin, and missing control origin. The two direct
+  suites passed 17 tests and measured: `external-messages.ts` 96.00% lines /
+  88.88% branches; `integration-broker.ts` 95.65% lines / 76.66% branches;
+  aggregate 95.69% lines / 79.48% branches. The remaining branch deficit is
+  explicit open T0199 convergence work; no ignore/source-inclusion mechanism
+  was used.

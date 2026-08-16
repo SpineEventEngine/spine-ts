@@ -158,6 +158,13 @@ describe("Wave 13 integration broker protobuf contract", () => {
         }),
       ),
     ).toThrow();
+    expect(() => wrapExternalEvent(create(EventSchema), { value: "Wave13Producer" })).toThrow(
+      /EventId/u,
+    );
+    expect(() => unpackExternalEvent(create(wrapper))).toThrow(/origin/u);
+    expect(() => wrapBoundedContextOnline(create(online, { context: { value: "" } }))).toThrow(
+      /origin/u,
+    );
   });
 });
 
