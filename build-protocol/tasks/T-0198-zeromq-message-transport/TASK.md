@@ -103,3 +103,7 @@
   rejects entry 1025 before unbounded collection.
 - TypeScript/API and performance/reliability dispositions: accepted; no waiver
   or open finding. Final focused evidence is updated in the correction commit.
+- Final P2 disposition: accepted. Heartbeat refreshes are coalesced to one
+  running write plus one pending refresh, and close fences scheduling while it
+  drains the bounded chain. The deterministic gated-write proof advances three
+  ticks and observes only one started write before close.

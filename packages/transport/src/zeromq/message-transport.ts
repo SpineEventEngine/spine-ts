@@ -267,7 +267,9 @@ class NativeSubscriber implements Subscriber {
   readonly #heartbeat: NodeJS.Timeout;
   readonly #backgroundFailures: unknown[] = [];
   #receiveWork: Promise<void> = Promise.resolve();
-  readonly #heartbeatWork = new Set<Promise<void>>();
+  #heartbeatTail: Promise<void> = Promise.resolve();
+  #heartbeatRunning = false;
+  #heartbeatQueued = false;
   #closePromise: Promise<void> | undefined;
 
   private constructor(
@@ -285,12 +287,7 @@ class NativeSubscriber implements Subscriber {
     this.#manifest = manifest;
     this.#factory = factory;
     this.#heartbeat = setInterval(() => {
-      const work = this.#refreshHeartbeat();
-      this.#heartbeatWork.add(work);
-      void work.then(
-        () => this.#heartbeatWork.delete(work),
-        () => this.#heartbeatWork.delete(work),
-      );
+      this.#scheduleHeartbeat();
     }, heartbeatIntervalMs);
     this.#heartbeat.unref();
     void this.#run();
@@ -370,7 +367,7 @@ class NativeSubscriber implements Subscriber {
 
   async #close(): Promise<void> {
     clearInterval(this.#heartbeat);
-    const heartbeats = await Promise.allSettled([...this.#heartbeatWork]);
+    const heartbeats = await Promise.allSettled([this.#heartbeatTail]);
     const results = await Promise.allSettled([
       zeroMqMessageAccess.remove(this.#manifestPath),
       this.#receiveWork,
@@ -402,6 +399,22 @@ class NativeSubscriber implements Subscriber {
     } catch (error) {
       retainFailure(this.#backgroundFailures, error);
     }
+  }
+
+  #scheduleHeartbeat(): void {
+    if (this.#isClosing()) return;
+    if (this.#heartbeatRunning) {
+      this.#heartbeatQueued = true;
+      return;
+    }
+    this.#heartbeatRunning = true;
+    this.#heartbeatTail = this.#refreshHeartbeat().finally(() => {
+      this.#heartbeatRunning = false;
+      if (this.#heartbeatQueued && !this.#isClosing()) {
+        this.#heartbeatQueued = false;
+        this.#scheduleHeartbeat();
+      }
+    });
   }
 
   async #run(): Promise<void> {

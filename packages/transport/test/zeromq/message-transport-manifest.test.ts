@@ -327,8 +327,9 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
         });
       vi.useFakeTimers();
       try {
-        await vi.advanceTimersByTimeAsync(1000);
+        await vi.advanceTimersByTimeAsync(3000);
         await started;
+        expect(heartbeat).toHaveBeenCalledTimes(1);
         const close = subscriber.close();
         release();
         await close;
