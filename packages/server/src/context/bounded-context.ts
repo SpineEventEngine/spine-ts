@@ -2022,12 +2022,8 @@ const ContextParts = Object.freeze({
 
   postContextEvent(context: BoundedContext, event: Event): Promise<void> {
     const buses = contextEventBuses.get(context);
-    if (closingContexts.has(context)) {
-      return (
-        buses?.[0].post(event) ?? Promise.reject(new Error("Context EventBus is unavailable."))
-      );
-    }
     if (buses === undefined) return Promise.reject(new Error("Context EventBus is unavailable."));
+    if (closingContexts.has(context)) return buses[0].post(event);
     return (contextIntegrations.get(context)?.ready ?? Promise.resolve()).then(() => {
       ContextParts.validateImportedTenant(context, event);
       return buses[0].post(event);
