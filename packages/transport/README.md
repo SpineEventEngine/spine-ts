@@ -70,3 +70,7 @@ responsibilities.
 - [Server](../server/README.md)
 - [Delivery server](../delivery-server/README.md)
 - [Reference for coding agents](REFERENCE.md)
+
+## Integration channels
+
+The package also supplies the typed TransportFactory channel seam for external-event integration. InMemoryTransportFactory is the local/test implementation; it is separate from SignalTransport and carries generated ExternalMessage frames only.

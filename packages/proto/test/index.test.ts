@@ -79,7 +79,7 @@ describe("@spine-event-engine/proto", () => {
     ) as ProtoSourceManifest;
 
     expect(manifest.schemaVersion).toBe(1);
-    expect(manifest.sources).toHaveLength(43);
+    expect(manifest.sources).toHaveLength(46);
 
     for (const source of manifest.sources) {
       const contents = readFileSync(resolve(source.localPath));
@@ -189,6 +189,9 @@ describe("@spine-event-engine/proto", () => {
       [
         "AckSchema",
         "ActorContextSchema",
+        "BoundedContextNameSchema",
+        "BoundedContextOnlineSchema",
+        "ChannelIdSchema",
         "ConstraintViolationSchema",
         "CommandContextSchema",
         "CommandContext_ScheduleSchema",
@@ -217,6 +220,11 @@ describe("@spine-event-engine/proto", () => {
         "EventSchema",
         "EventValidationError",
         "EventValidationErrorSchema",
+        "ExternalEventTypeSchema",
+        "ExternalEventsWantedSchema",
+        "ExternalMessageSchema",
+        "ExternalMessageValidationError",
+        "ExternalMessageValidationErrorSchema",
         "FieldPathSchema",
         "InternetDomainSchema",
         "is",
@@ -247,6 +255,7 @@ describe("@spine-event-engine/proto", () => {
         "file_spine_base_error",
         "fieldPathFile",
         "file_spine_core_ack",
+        "file_spine_core_bounded_context",
         "actorContextFile",
         "file_spine_core_command",
         "file_spine_core_diagnostics",
@@ -259,6 +268,8 @@ describe("@spine-event-engine/proto", () => {
         "emailAddressFile",
         "internetDomainFile",
         "file_spine_options",
+        "file_spine_server_integration_broker",
+        "file_spine_server_transport_transport",
         "templateStringFile",
         "file_spine_time_time",
         "file_spine_ui_language",

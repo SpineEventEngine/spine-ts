@@ -27,6 +27,7 @@ import * as fieldPathSchemas from "../generated/spine/base/field_path_pb.js";
 import * as ackSchemas from "../generated/spine/core/ack_pb.js";
 import * as actorContextSchemas from "../generated/spine/core/actor_context_pb.js";
 import * as commandSchemas from "../generated/spine/core/command_pb.js";
+import * as boundedContextSchemas from "../generated/spine/core/bounded_context_pb.js";
 import * as diagnosticsSchemas from "../generated/spine/core/diagnostics_pb.js";
 import * as enrichmentSchemas from "../generated/spine/core/enrichment_pb.js";
 import * as eventSchemas from "../generated/spine/core/event_pb.js";
@@ -46,6 +47,8 @@ import * as catchUpSchemas from "../generated/spine/server/catchup/catch_up_pb.j
 import * as entitySchemas from "../generated/spine/server/entity/entity_pb.js";
 import * as entityStateKeySchemas from "../generated/spine/server/entity/state_key_pb.js";
 import * as environmentSchemas from "../generated/spine/server/server_environment_pb.js";
+import * as integrationSchemas from "../generated/spine/server/integration/broker_pb.js";
+import * as transportSchemas from "../generated/spine/server/transport/transport_pb.js";
 import * as nodeDiscoverySchemas from "../generated/spine/deployment/node_discovery_pb.js";
 import * as systemEventSchemas from "../generated/spine/system/server/entity_log_events_pb.js";
 import * as systemTypeSchemas from "../generated/spine/system/server/entity_type_pb.js";
@@ -101,7 +104,7 @@ describe("spineProtoModule", () => {
       dependencies: [],
       moduleExport: "spineProtoModule",
     });
-    expect(manifest.protoFiles).toHaveLength(47);
+    expect(manifest.protoFiles).toHaveLength(50);
     expect(manifest.generationId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu,
     );
@@ -133,6 +136,7 @@ describe("spineProtoModule", () => {
       ...schemaNames(ackSchemas),
       ...schemaNames(actorContextSchemas),
       ...schemaNames(commandSchemas),
+      ...schemaNames(boundedContextSchemas),
       ...schemaNames(diagnosticsSchemas),
       ...schemaNames(enrichmentSchemas),
       ...schemaNames(eventSchemas),
@@ -156,6 +160,8 @@ describe("spineProtoModule", () => {
       ...schemaNames(entitySchemas),
       ...schemaNames(entityStateKeySchemas),
       ...schemaNames(environmentSchemas),
+      ...schemaNames(integrationSchemas),
+      ...schemaNames(transportSchemas),
       ...schemaNames(nodeDiscoverySchemas),
       ...schemaNames(systemEventSchemas),
       ...schemaNames(systemTypeSchemas),

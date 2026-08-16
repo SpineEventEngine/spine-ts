@@ -580,3 +580,7 @@ export const ValidationErrorSchema: GenMessage<ValidationError> = validationErro
  */
 export const ConstraintViolationSchema: GenMessage<ConstraintViolation> =
   generatedConstraintViolationSchema;
+
+export * from "../generated/spine/core/bounded_context_pb.js";
+export * from "../generated/spine/server/integration/broker_pb.js";
+export * from "../generated/spine/server/transport/transport_pb.js";

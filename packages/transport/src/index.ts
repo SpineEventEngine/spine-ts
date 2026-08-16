@@ -400,3 +400,13 @@ type TransportOperationsOwner = Readonly<typeof transportOperations>;
  * Checks transport operation kinds.
  */
 export const TransportOperations: TransportOperationsOwner = Object.freeze(transportOperations);
+
+export type {
+  ConsumerHandle,
+  ExternalMessageConsumer,
+  MessageChannel,
+  Publisher,
+  Subscriber,
+  TransportFactory,
+} from "./message-channel.js";
+export { InMemoryTransportFactory } from "./memory/message-transport.js";
