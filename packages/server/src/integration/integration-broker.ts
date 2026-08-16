@@ -337,10 +337,15 @@ class DomesticPublisher implements Closeable {
     return domestic;
   }
   close(): Promise<void> {
-    this.#close ??= (async () => {
-      await this.#publisher.close();
-      eventBusAccess.unregister(this.#eventBus, this.#dispatcher);
-    })();
+    if (this.#close === undefined) {
+      this.#close = (async () => {
+        await this.#publisher.close();
+        eventBusAccess.unregister(this.#eventBus, this.#dispatcher);
+      })();
+      void this.#close.catch(() => {
+        this.#close = undefined;
+      });
+    }
     return this.#close;
   }
 }
@@ -354,8 +359,10 @@ class SubscriberResource implements Closeable {
     readonly handle: ConsumerHandle,
   ) {}
   async close(): Promise<void> {
-    await this.handle.close();
-    await this.subscriber.close();
+    const errors: unknown[] = [];
+    await collect(() => this.handle.close(), errors);
+    await collect(() => this.subscriber.close(), errors);
+    if (errors.length) throw new AggregateError(errors, "Integration subscriber close failed.");
   }
 }
 async function closeAll(resources: readonly Closeable[]): Promise<void> {

@@ -72,6 +72,10 @@ Follow-up lifecycle correction: each successful attachment is retained
 immediately; a failed consumer attachment closes its subscriber. Accepted
 callbacks are tracked, and close gates new intake then drains accepted
 callbacks/transitions before publishing its final empty wanted document.
+`SubscriberResource` now attempt-closes both handle and subscriber; domestic
+publisher close clears its shared completion after failure so context close can
+retry. Direct module evidence now covers peer-online forced resend and
+self/paired suppression.
 
 ## T-0200 handoff
 

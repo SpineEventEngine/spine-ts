@@ -2,11 +2,16 @@
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { TypeUrls } from "@spine-event-engine/core";
-import { BoundedContextNameSchema } from "@spine-event-engine/proto";
+import {
+  BoundedContextNameSchema,
+  BoundedContextOnlineSchema,
+  ChannelIdSchema,
+} from "@spine-event-engine/proto";
 import { eventBusAccess } from "../../src/bus/event-bus.js";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { IntegrationBroker } from "../../src/integration/integration-broker.js";
+import { wrapBoundedContextOnline } from "../../src/integration/external-messages.js";
 import { RecordingTransportFactory } from "./wave13-red-support.js";
 
 describe("IntegrationBroker module", () => {
@@ -58,5 +63,39 @@ describe("IntegrationBroker module", () => {
     await broker.close();
     await expect(broker.open()).rejects.toThrow();
     expect(factory.created).toHaveLength(1);
+  });
+
+  it("rebroadcasts wanted configuration for a peer online but ignores self and paired origins", async () => {
+    const factory = new RecordingTransportFactory();
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "left" }),
+      pairedContextName: create(BoundedContextNameSchema, { value: "left_System" }),
+      transportFactory: factory as never,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [StringValueSchema],
+      postImported: () => Promise.resolve(),
+    });
+    brokers.push(broker);
+    await broker.open();
+    const channel = create(ChannelIdSchema, {
+      targetType: TypeUrls.derive(BoundedContextOnlineSchema),
+    });
+    const publisher = await factory.createPublisher(channel as never);
+    for (const name of ["left", "left_System", "peer"]) {
+      const frame = wrapBoundedContextOnline(
+        create(BoundedContextOnlineSchema, {
+          context: create(BoundedContextNameSchema, { value: name }),
+        }),
+      );
+      await publisher.publish(frame.id!, frame);
+    }
+    await publisher.close();
+    expect(
+      factory.published.filter(
+        ({ channel: candidate }) =>
+          (candidate as { targetType?: string }).targetType ===
+          "type.spine.io/spine.server.integration.ExternalEventsWanted",
+      ),
+    ).toHaveLength(2);
   });
 });
