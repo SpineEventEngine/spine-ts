@@ -536,8 +536,9 @@ async function discoverSubscribers(
     const inspected = await readManifest(manifestPath, layout, entry, config.adapterIdentity);
     if (inspected === undefined) continue;
     const { manifest, file } = inspected;
-    if (!(await isLive(manifest))) {
-      if (await quarantineIfUnchanged(manifestPath, file))
+    const liveness = await inspectLiveness(manifest);
+    if (!liveness.live) {
+      if ((await quarantineIfUnchanged(manifestPath, file)) && liveness.removeSocket)
         await rm(socketPathFromEndpoint(manifest.endpoint), { force: true });
       continue;
     }
@@ -735,19 +736,25 @@ function isManifest(
   return value.endpoint === `ipc://${expectedSocket}`;
 }
 
-async function isLive(manifest: SubscriberManifest): Promise<boolean> {
-  if (Date.now() - manifest.heartbeatAtMs > staleAfterMs) return false;
+async function inspectLiveness(
+  manifest: SubscriberManifest,
+): Promise<{ readonly live: boolean; readonly removeSocket: boolean }> {
   try {
     const socket = await stat(socketPathFromEndpoint(manifest.endpoint));
-    if (!socket.isSocket()) return false;
+    if (!socket.isSocket()) return { live: false, removeSocket: false };
   } catch {
-    return false;
+    return { live: false, removeSocket: false };
   }
   try {
     process.kill(manifest.ownerPid, 0);
-    return true;
+    if (Date.now() - manifest.heartbeatAtMs > staleAfterMs)
+      return { live: false, removeSocket: false };
+    return { live: true, removeSocket: false };
   } catch (error) {
-    return isErrorCode(error, "EPERM");
+    if (isErrorCode(error, "ESRCH")) return { live: false, removeSocket: true };
+    if (isErrorCode(error, "EPERM") && Date.now() - manifest.heartbeatAtMs <= staleAfterMs)
+      return { live: true, removeSocket: false };
+    return { live: false, removeSocket: false };
   }
 }
 

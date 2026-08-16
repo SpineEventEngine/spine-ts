@@ -34,7 +34,7 @@ import {
   ExternalMessageSchema,
 } from "@spine-event-engine/proto";
 import { describe, expect, it, vi } from "vitest";
-import { Push } from "zeromq";
+import { Pull, Push } from "zeromq";
 
 import { ZeroMqConfig } from "../../src/zeromq/adapter-config.js";
 import { ChannelEndpoints } from "../../src/zeromq/channel-endpoints.js";
@@ -261,6 +261,88 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
         await publisher.close();
       } finally {
         replacement.mockRestore();
+        await Promise.allSettled([subscriber.close(), factory.close()]);
+      }
+    });
+  });
+
+  it("keeps a live owner's socket when a fresh manifest follows matched stale quarantine", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const subscriber = await factory.createSubscriber(channel());
+      const manifestPath = await manifestPathFor(ipcDirectory);
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Parameters<
+        typeof zeroMqMessageAccess.writeManifest
+      >[1];
+      const socketPath = path.join(
+        ipcDirectory,
+        "spine-message-channels",
+        "sockets",
+        `${manifest.generation}.sock`,
+      );
+      await zeroMqMessageAccess.writeManifest(manifestPath, { ...manifest, heartbeatAtMs: 1 });
+      const moveManifest = zeroMqMessageAccess.moveManifest.bind(zeroMqMessageAccess);
+      const replacement = vi
+        .spyOn(zeroMqMessageAccess, "moveManifest")
+        .mockImplementationOnce(async (fromPath, toPath) => {
+          await moveManifest(fromPath, toPath);
+          await zeroMqMessageAccess.writeManifest(fromPath, manifest);
+        });
+      const received: string[] = [];
+      await subscriber.addConsumer((message) => {
+        received.push(
+          fromBinary(
+            StringValueSchema,
+            required(message.originalMessage, "fresh-after-stale original message").value,
+          ).value,
+        );
+      });
+      try {
+        const publisher = await factory.createPublisher(channel());
+        const message = frame("fresh-after-stale");
+        await publisher.publish(required(message.id, "fresh-after-stale identity"), message);
+        await eventually(() => Promise.resolve(received.length === 1));
+        await expect(access(socketPath)).resolves.toBeUndefined();
+        expect(received).toEqual(["fresh-after-stale"]);
+        await publisher.close();
+      } finally {
+        replacement.mockRestore();
+        await Promise.allSettled([subscriber.close(), factory.close()]);
+      }
+    });
+  });
+
+  it("removes a dead owner's stale manifest and existing socket", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const subscriber = await factory.createSubscriber(channel());
+      const manifestPath = await manifestPathFor(ipcDirectory);
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Parameters<
+        typeof zeroMqMessageAccess.writeManifest
+      >[1];
+      const generation = "00000000-0000-4000-8000-000000000008";
+      const socketPath = path.join(
+        ipcDirectory,
+        "spine-message-channels",
+        "sockets",
+        `${generation}.sock`,
+      );
+      const deadManifestPath = path.join(path.dirname(manifestPath), `${generation}.json`);
+      const deadSocket = new Pull({ linger: 0 });
+      await deadSocket.bind(`ipc://${socketPath}`);
+      await zeroMqMessageAccess.writeManifest(deadManifestPath, {
+        ...manifest,
+        generation,
+        endpoint: `ipc://${socketPath}`,
+        ownerPid: 2147483647,
+        heartbeatAtMs: 1,
+      });
+      try {
+        await factory.createPublisher(channel());
+        await expect(access(deadManifestPath)).rejects.toMatchObject({ code: "ENOENT" });
+        await expect(access(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
+      } finally {
+        deadSocket.close();
         await Promise.allSettled([subscriber.close(), factory.close()]);
       }
     });

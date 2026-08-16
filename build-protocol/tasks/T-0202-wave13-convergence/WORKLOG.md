@@ -176,3 +176,23 @@ packages/transport/test/message-transport-conformance.test.ts
 packages/server/test/server/server-integration-broker-cross-process.test.ts`
   passed 3 files / 23 tests. Scoped ESLint, Prettier, and `git diff --check`
   passed before push.
+
+## Final stale-socket residual — 2026-08-16
+
+- Security re-review found that stale cleanup still unconditionally removed a
+  socket after manifest quarantine. Liveness inspection now retains whether a
+  stale owner is positively absent (`ESRCH`). Only that confirmed-dead case
+  removes the existing v1 owner socket. A live or `EPERM`/potentially-live
+  owner with an expired heartbeat loses only the old manifest, preserving its
+  socket so the next heartbeat can advertise a fresh manifest. A missing or
+  non-socket endpoint likewise needs only manifest cleanup.
+- Deterministic coverage writes a fresh manifest after matched stale quarantine
+  and before the former socket-removal point; its live socket remains and a
+  normal subsequent publication delivers. A separate dead-owner fixture binds
+  a real IPC socket and proves both stale manifest and socket are removed.
+- Final residual evidence: `pnpm typecheck:build:generated` passed. `pnpm exec
+vitest run packages/transport/test/zeromq/message-transport-manifest.test.ts
+packages/transport/test/message-transport-conformance.test.ts
+packages/server/test/server/server-integration-broker-cross-process.test.ts`
+  passed 3 files / 25 tests. Scoped ESLint, Prettier, and `git diff --check`
+  passed before push.
