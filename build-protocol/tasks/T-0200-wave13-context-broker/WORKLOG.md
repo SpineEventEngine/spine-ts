@@ -293,3 +293,24 @@ packages/transport/test/memory/message-transport.test.ts` — 5 files, 126
   explicitly overridden to zero. It selected the four direct-source suites plus
   all package-boundary Wave 13 RED paths; 10 files / 148 tests passed. Exact
   changed-range intersection remains the next action.
+
+## Changed-range proof expansion — 2026-08-16
+
+- First exact LCOV intersection against `origin/main...3059a38b` measured
+  93/96 changed executable lines (96.88%) and 54/61 changed executable branches
+  (88.52%). It met the line threshold but not the branch threshold.
+- Added behavior proofs only for uncovered paths: broker rejection after close
+  and before publisher allocation, explicit production factory rejection,
+  in-memory external-frame identity mismatch with close-drain failure, and
+  direct-source single/multitenant imported-event admission. The direct-source
+  context proof found a second lifecycle edge: after a successful close, metadata
+  cleanup removed the private EventBus reference before the close-state path
+  could preserve `server runtime is closed`.
+- The direct-source regression was observed RED with `Context EventBus is
+  unavailable.` after normal close. The context now retains only its weakly
+  held private EventBus pair after metadata cleanup so close-state rejection can
+  delegate to the closed EventBus; all other internal metadata remains cleared.
+- Targeted RED/GREEN evidence passed: the direct-source multitenant import and
+  normal-close rejection test passed (1 selected test), as did the broker-close,
+  production-factory, and identity-mismatch behavior tests. Next: rerun the
+  complete LCOV selection and exact intersection.

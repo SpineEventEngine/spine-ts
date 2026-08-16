@@ -46,6 +46,38 @@ describe("IntegrationBroker module", () => {
     await Promise.all(brokers.splice(0).map((broker) => broker.close().catch(() => undefined)));
   });
 
+  it("rejects an imported event without a message type before allocating a publisher", async () => {
+    const factory = new RecordingTransportFactory();
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "module-importer" }),
+      transportFactory: factory,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    brokers.push(broker);
+
+    await expect(broker.publishImported(create(EventSchema))).rejects.toThrow(
+      "Imported event requires event.message.typeUrl.",
+    );
+    expect(factory.created).toEqual([]);
+  });
+
+  it("rejects imported publication after broker close", async () => {
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "closed-importer" }),
+      transportFactory: new RecordingTransportFactory(),
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    await broker.close();
+
+    await expect(broker.publishImported(create(EventSchema))).rejects.toThrow(
+      "IntegrationBroker is closed.",
+    );
+  });
+
   it("deduplicates a one-shot external schema iterable and uses its canonical channel URL", async () => {
     const factory = new RecordingTransportFactory();
     const bus = eventBusAccess.createForgettingBus();

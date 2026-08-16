@@ -28,6 +28,9 @@ import {
   BoundedContextNameSchema,
   ExternalEventsWantedSchema,
   type Event,
+  EventContextSchema,
+  EventIdSchema,
+  EventSchema,
   file_spine_options,
   TenantIdSchema,
   type UserId,
@@ -44,6 +47,7 @@ import { resetServerEnvironmentForTest } from "@spine-event-engine/server/testin
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ThirdPartyContext as DirectSourceThirdPartyContext } from "../../src/integration/third-party-context.js";
+import { BoundedContext as DirectSourceBoundedContext } from "../../src/context/bounded-context.js";
 import { resetServerEnvironmentForTest as resetDirectSourceServerEnvironment } from "../../src/testing/index.js";
 import { RecordingTransportFactory } from "./wave13-red-support.js";
 import { expectWave13ContractToCompile } from "./wave13-compile-contract.js";
@@ -138,6 +142,87 @@ describe("Wave 13 ThirdPartyContext", () => {
 
     expect(context.isOpen()).toBe(false);
     await expect(context.emittedEvent(event, user)).rejects.toThrow("ThirdPartyContext is closed.");
+  });
+
+  it("routes direct-source multitenant imports and rejects unsupported actor and message forms", async () => {
+    await resetDirectSourceServerEnvironment();
+    const received: Event[] = [];
+    const receiver = await DirectSourceBoundedContext.multitenant("DirectSourceReceiver")
+      .addEventDispatcher({
+        messageSchemas: () => [StringValueSchema],
+        externalEventSchemas: () => [StringValueSchema],
+        dispatch: (event: Event) => {
+          received.push(event);
+          return Promise.resolve();
+        },
+      } as never)
+      .buildAsync();
+    const single = await DirectSourceThirdPartyContext.singleTenant("DirectSourceSingle");
+    const multi = await DirectSourceThirdPartyContext.multitenant("DirectSourceMulti");
+    const event = create(StringValueSchema, { value: "multitenant" });
+    const user = create(UserIdSchema, { value: "actor" });
+    const tenantActor = create(ActorContextSchema, {
+      actor: user,
+      tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant" } }),
+    });
+    const actorWithoutTenant = create(ActorContextSchema, { actor: user });
+    const missingTenantEvent = create(EventSchema, {
+      id: create(EventIdSchema, { value: "missing-tenant" }),
+      message: {
+        typeUrl: `type.googleapis.com/${StringValueSchema.typeName}`,
+        value: toBinary(StringValueSchema, event),
+      },
+      context: create(EventContextSchema),
+    });
+    const tenantEvent = create(EventSchema, {
+      id: create(EventIdSchema, { value: "single-tenant" }),
+      message: {
+        typeUrl: `type.googleapis.com/${StringValueSchema.typeName}`,
+        value: toBinary(StringValueSchema, event),
+      },
+      context: create(EventContextSchema, {
+        origin: { case: "importContext", value: tenantActor },
+      }),
+    });
+    const singleReceiver = await DirectSourceBoundedContext.singleTenant(
+      "DirectSourceSingleReceiver",
+    )
+      .addEventDispatcher({
+        messageSchemas: () => [StringValueSchema],
+        dispatch: () => Promise.resolve(),
+      } as never)
+      .buildAsync();
+
+    try {
+      await expect(receiver.eventBus().post(missingTenantEvent)).rejects.toThrow(
+        'Multitenant context "DirectSourceReceiver" requires tenantId.',
+      );
+      await expect(singleReceiver.eventBus().post(tenantEvent)).rejects.toThrow(
+        'Single-tenant context "DirectSourceSingleReceiver" does not accept tenantId.',
+      );
+      await multi.emittedEvent(event, tenantActor);
+      await expect.poll(() => received.length).toBe(1);
+      expect(received[0]?.context?.external).toBe(true);
+      await expect(multi.emittedEvent(event, user)).rejects.toThrow(
+        "Multitenant ThirdPartyContext requires ActorContext.",
+      );
+      await expect(multi.emittedEvent(event, actorWithoutTenant)).rejects.toThrow(
+        "Multitenant ThirdPartyContext requires actor tenantId.",
+      );
+      await expect(single.emittedEvent(event, tenantActor)).rejects.toThrow(
+        "Single-tenant ThirdPartyContext forbids actor tenantId.",
+      );
+      await expect(single.emittedEvent(create(ActorContextSchema), user)).rejects.toThrow(
+        "ThirdPartyContext cannot encode this message without its generated schema descriptor.",
+      );
+      await receiver.close();
+      await expect(receiver.eventBus().post(tenantEvent)).rejects.toThrow(
+        "server runtime is closed",
+      );
+    } finally {
+      await Promise.all([receiver.close(), singleReceiver.close(), single.close(), multi.close()]);
+      await resetDirectSourceServerEnvironment();
+    }
   });
 
   it("RED-20 classifies every supported external receptor, keeps system/state subsets out of wanted documents, and preserves ThirdPartyContext import semantics", async () => {

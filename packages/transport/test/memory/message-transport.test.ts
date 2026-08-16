@@ -35,6 +35,19 @@ const frame = (value: string) => {
 };
 
 describe("InMemoryTransportFactory", () => {
+  it("rejects frames whose supplied and embedded identities differ", async () => {
+    const factory = new InMemoryTransportFactory();
+    const publisher = await factory.createPublisher(channel());
+    const current = frame("one");
+    const different = frame("two");
+
+    await expect(publisher.publish(different.id, current.message)).rejects.toThrow(
+      "External message identity must match the supplied identity.",
+    );
+    await expect(publisher.close()).rejects.toThrow("Accepted message publication failed.");
+    await factory.close();
+  });
+
   it("fans out copied frames and removes consumers idempotently", async () => {
     const factory = new InMemoryTransportFactory();
     const first = await factory.createSubscriber(channel());

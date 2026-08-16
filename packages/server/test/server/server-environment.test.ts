@@ -50,6 +50,18 @@ function configured(
 }
 
 describe("ServerEnvironment delivery lifecycle", () => {
+  it("requires an explicit transport factory in production", () => {
+    EnvironmentTests.use(EnvironmentType.Production);
+    ServerEnvironment.when(EnvironmentType.Production).use({
+      storageFactory: new InMemoryStorageFactory(),
+      transport: { close: () => undefined } as never,
+    });
+
+    expect(() => ServerEnvironment.instance()).toThrow(
+      "Production ServerEnvironment requires transportFactory.",
+    );
+  });
+
   it("rejects package lifecycle access for an object outside the environment registry", async () => {
     const outside = {} as ServerEnvironment;
     const attachment = {} as EnvironmentAttachmentHandle;
