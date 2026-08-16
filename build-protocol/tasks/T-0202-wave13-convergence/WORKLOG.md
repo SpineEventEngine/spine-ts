@@ -259,3 +259,25 @@ packages/server/test/integration/integration-broker-module.test.ts` passed
   focused Prettier and `git diff --check` pass. The attempted
   `pnpm docs:audience` name was non-mutating and corrected to the repository's
   actual `docs:audience:check` script.
+
+## Release-suite test-contract reconciliation — 2026-08-16
+
+- After the snippet correction, the complete release profile passed every
+  deterministic generation, build, lint, documentation, API, Buf, and release
+  readiness gate. Its full V8 run then retained a reproducible RED result: 65
+  failures across seven test files, with 4,203 tests passing and 19 skipped.
+- Stack traces and comparison with the accepted Wave 13 contracts isolate four
+  stale fixture classes: generated-handler expectations missing the required
+  domestic origin, Production environment fixtures missing explicit message
+  transport/type-registry settings, single-tenant repository fixtures carrying
+  tenant IDs, and the server root-export inventory missing
+  `ThirdPartyContext`. These are test-contract reconciliation failures; no
+  production behavior is being weakened to satisfy them.
+- Three independent test-only correction lanes are dispatched from this exact
+  checkpoint. The analyzer/export lane, server lifecycle/environment lane, and
+  repository tenant lane each use the existing implementer role, explicitly
+  configured `gpt-5.6-terra` / `medium`, without subagent authority. Runtime
+  telemetry is unavailable; the immutable configured role/profile is the
+  acceptance record. Each lane owns only its named test files in an isolated
+  worktree and must retain focused RED/GREEN evidence before its pushed
+  checkpoint is integrated here.
