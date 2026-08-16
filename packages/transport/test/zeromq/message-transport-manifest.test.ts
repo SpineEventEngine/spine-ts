@@ -27,7 +27,11 @@ import path from "node:path";
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { ChannelIdSchema, ExternalMessageSchema } from "@spine-event-engine/proto";
+import {
+  ChannelIdSchema,
+  ExternalEventsWantedSchema,
+  ExternalMessageSchema,
+} from "@spine-event-engine/proto";
 import { describe, expect, it, vi } from "vitest";
 
 import { ZeroMqConfig } from "../../src/zeromq/adapter-config.js";
@@ -156,6 +160,40 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
       await eventually(() => Promise.resolve(received.length === 2));
       expect(received).toEqual(["first", "second"]);
       await expect(publisher.publish(frameId(), first)).rejects.toThrow(/identity must match/iu);
+      await Promise.all([publisher.close(), subscriber.close(), factory.close()]);
+    });
+  });
+
+  it("delivers an original message whose valid protobuf payload is empty", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const subscriber = await factory.createSubscriber(channel());
+      const received: { readonly typeUrl: string; readonly value: Uint8Array }[] = [];
+      await subscriber.addConsumer((message) => {
+        const original = required(message.originalMessage, "empty original message");
+        received.push({ typeUrl: original.typeUrl, value: original.value });
+      });
+      const publisher = await factory.createPublisher(channel());
+      const emptyPayload = toBinary(ExternalEventsWantedSchema, create(ExternalEventsWantedSchema));
+      expect(emptyPayload).toEqual(new Uint8Array());
+      const message = create(ExternalMessageSchema, {
+        id: frameId("empty-protobuf"),
+        originalMessage: create(AnySchema, {
+          typeUrl: "type.spine.io/spine.server.integration.ExternalEventsWanted",
+          value: emptyPayload,
+        }),
+        boundedContextName: { value: "Manifest" },
+      });
+      const id = required(message.id, "empty protobuf frame identity");
+
+      await expect(publisher.publish(id, message)).resolves.toBeUndefined();
+      await eventually(() => Promise.resolve(received.length === 1));
+      expect(received).toEqual([
+        {
+          typeUrl: "type.spine.io/spine.server.integration.ExternalEventsWanted",
+          value: new Uint8Array(),
+        },
+      ]);
       await Promise.all([publisher.close(), subscriber.close(), factory.close()]);
     });
   });

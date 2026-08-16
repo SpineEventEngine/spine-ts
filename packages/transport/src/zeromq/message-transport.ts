@@ -655,12 +655,7 @@ function canonicalChannelId(id: ChannelId): ChannelId {
 function validateFrame(id: Any, message: ExternalMessage): void {
   if (!id.typeUrl || id.value.length === 0)
     throw new Error("External message identity must contain a type URL and bytes.");
-  if (
-    !message.id ||
-    !message.originalMessage?.typeUrl ||
-    message.originalMessage.value.length === 0 ||
-    !message.boundedContextName?.value
-  )
+  if (!message.id || !message.originalMessage?.typeUrl || !message.boundedContextName?.value)
     throw new Error(
       "External message must contain identity, original message, and source context.",
     );

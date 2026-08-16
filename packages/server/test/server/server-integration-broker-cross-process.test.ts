@@ -14,8 +14,9 @@
 
 import { fork, type ChildProcess } from "node:child_process";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import process from "node:process";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -26,6 +27,7 @@ const childPath = fileURLToPath(new URL("./server-integration-broker-child.mjs",
 const phaseTimeoutMs = 5_000;
 const execFileAsync = promisify(execFile);
 const adapterIdentity = "wave13-cross-process";
+const ipcTemporaryRoot = process.platform === "darwin" ? "/tmp" : tmpdir();
 
 type Role = "consumer" | "producer";
 interface Ready {
@@ -35,12 +37,16 @@ interface Ready {
   readonly type: "ready";
 }
 interface Delivered {
+  readonly actorId: string;
   readonly eventId: string;
   readonly external: boolean;
+  readonly origin: "importContext";
   readonly payload: string;
   readonly producerId: string;
   readonly role: "consumer";
+  readonly tenantId: undefined;
   readonly type: "delivered";
+  readonly typeUrl: "type.spine.io/spine.net.EmailAddress";
 }
 interface ProbeDelivered {
   readonly role: "consumer";
@@ -69,12 +75,20 @@ describe("Wave 13 IntegrationBroker across normal Node applications", () => {
     expect(fixtureSource).toContain("version: 3");
     expect(fixtureSource).toContain(".add(Wave13ExternalProjection)");
     expect(fixtureSource).not.toContain("Repository");
-    expect(fixtureSource).not.toMatch(
-      /ExternalMessage|ContextTransport|forwarder|externalEventSchemas|addEventDispatcher/iu,
-    );
+    for (const forbiddenShortcut of [
+      "ExternalMessage",
+      "ContextTransport",
+      "RuntimeTransportBinding",
+      "SignalTransport",
+      "forwarder",
+      "externalEventSchemas",
+      "addEventDispatcher",
+    ]) {
+      expect(fixtureSource).not.toMatch(new RegExp(forbiddenShortcut, "iu"));
+    }
     await expect(execFileAsync(process.execPath, ["--check", childPath])).resolves.toBeDefined();
 
-    const ipcDirectory = await mkdtemp(join(tmpdir(), "spine-wave13-red-ipc-"));
+    const ipcDirectory = await mkdtemp(join(ipcTemporaryRoot, "w13-"));
     const producer = start("producer", ipcDirectory);
     const consumer = start("consumer", ipcDirectory);
     let cleanupFailure: AggregateError | undefined;
@@ -94,8 +108,12 @@ describe("Wave 13 IntegrationBroker across normal Node applications", () => {
         type: "delivered",
         role: "consumer",
         eventId: "wave13-cross-process-event",
+        typeUrl: "type.spine.io/spine.net.EmailAddress",
         producerId: "Wave13Producer",
         payload: "full-event-payload",
+        origin: "importContext",
+        actorId: "Wave13Actor",
+        tenantId: undefined,
         external: true,
       });
     } finally {
@@ -134,7 +152,14 @@ function start(role: Role, ipcDirectory: string): ChildProcess {
 
 async function adapterArtifacts(directory: string): Promise<readonly string[]> {
   try {
-    return await readdir(directory, { recursive: true });
+    const entries = await readdir(directory, { recursive: true });
+    return (
+      await Promise.all(
+        entries.map(async (entry) =>
+          (await stat(join(directory, entry))).isDirectory() ? undefined : entry,
+        ),
+      )
+    ).flatMap((entry) => (entry === undefined ? [] : [entry]));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
