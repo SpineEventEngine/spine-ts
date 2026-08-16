@@ -259,6 +259,16 @@ describe("IntegrationBroker module", () => {
         context: create(BoundedContextNameSchema, { value: "later-peer" }),
       }),
     );
+    const undecodable = create(ExternalMessageSchema, {
+      ...valid,
+      id: create(AnySchema, {
+        typeUrl: TypeUrls.derive(StringValueSchema),
+        value: new Uint8Array([255]),
+      }),
+    });
+    await expect(
+      publisher.publish(required(undecodable.id, "undecodable identity"), undecodable),
+    ).rejects.toThrow(/Malformed integration control message/u);
     const forged = create(ExternalMessageSchema, {
       ...valid,
       id: create(AnySchema, {

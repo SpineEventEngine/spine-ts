@@ -215,3 +215,17 @@ packages/server/test/server/server-integration-broker-cross-process.test.ts`
   opener and blank-line form with callable summaries, exact parameters, and
   return descriptions. No runtime behavior changed.
 - `pnpm lint:tsdoc`, focused Prettier, and `git diff --check` pass.
+
+## Coverage correction regressions — 2026-08-16
+
+- Exact Wave 13 diff coverage preflight reported 79/91 changed lines (86.81%)
+  and 52/67 changed branches (77.61%). The gap was addressed with behavioral
+  regressions rather than coverage-only assertions: undecodable packed control
+  UUID then valid peer processing; oversized raw native frame then valid
+  delivery; exact-0600 structurally invalid manifest removal; injected
+  quarantine move failure with no artifact leak and later delivery; non-socket
+  endpoint preservation; and `EPERM` stale/fresh owner re-advertisement.
+- Focused regression evidence: `pnpm exec vitest run
+packages/transport/test/zeromq/message-transport-manifest.test.ts
+packages/server/test/integration/integration-broker-module.test.ts` passed
+  2 files / 58 tests. Scoped ESLint, Prettier, and `git diff --check` pass.

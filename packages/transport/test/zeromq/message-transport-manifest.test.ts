@@ -93,6 +93,10 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
         await readFile(path.join(subscriberDirectory, source), "utf8"),
       ) as Record<string, unknown>;
       const bad = path.join(subscriberDirectory, "bad.json");
+      const structural = path.join(
+        subscriberDirectory,
+        "00000000-0000-4000-8000-000000000005.json",
+      );
       const linked = path.join(subscriberDirectory, "linked.json");
       const stale = path.join(subscriberDirectory, "00000000-0000-4000-8000-000000000001.json");
       const dead = path.join(subscriberDirectory, "00000000-0000-4000-8000-000000000002.json");
@@ -101,7 +105,18 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
         subscriberDirectory,
         "00000000-0000-4000-8000-000000000004.json",
       );
+      const nonSocket = path.join(subscriberDirectory, "00000000-0000-4000-8000-000000000006.json");
+      const nonSocketPath = path.join(
+        ipcDirectory,
+        "spine-message-channels",
+        "sockets",
+        "00000000-0000-4000-8000-000000000006.sock",
+      );
       await writeFile(bad, "{");
+      await zeroMqMessageAccess.writeManifest(structural, {
+        ...sourceManifest,
+        generation: structural.slice(-41, -5),
+      });
       await symlink(path.join(subscriberDirectory, source), linked);
       await writeFile(
         stale,
@@ -124,14 +139,25 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
         JSON.stringify({ ...sourceManifest, generation: wrongMode.slice(-41, -5) }),
       );
       await chmod(wrongMode, 0o644);
+      await writeFile(nonSocketPath, "not-a-socket");
+      await writeFile(
+        nonSocket,
+        JSON.stringify({
+          ...sourceManifest,
+          generation: nonSocket.slice(-41, -5),
+          endpoint: `ipc://${nonSocketPath}`,
+        }),
+      );
+      await chmod(nonSocket, 0o600);
 
       const publisher = await factory.createPublisher(channel());
       await publisher.publish(frameId(), frame());
       await eventually(
         async () => (await readFile(path.join(subscriberDirectory, source), "utf8")).length > 0,
       );
-      for (const removed of [bad, linked, stale, dead, wrongMode])
+      for (const removed of [bad, linked, stale, dead, wrongMode, structural, nonSocket])
         await expect(access(removed)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(nonSocketPath)).resolves.toBeUndefined();
       expect((await lstat(foreign)).isFile()).toBe(true);
 
       await Promise.all([publisher.close(), subscriber.close(), factory.close()]);
@@ -222,6 +248,54 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
         await publisher.close();
       } finally {
         replacement.mockRestore();
+        await Promise.allSettled([subscriber.close(), factory.close()]);
+      }
+    });
+  });
+
+  it("keeps the current manifest when quarantine movement fails", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const subscriber = await factory.createSubscriber(channel());
+      const manifestPath = await manifestPathFor(ipcDirectory);
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Parameters<
+        typeof zeroMqMessageAccess.writeManifest
+      >[1];
+      const invalidPath = path.join(
+        path.dirname(manifestPath),
+        "00000000-0000-4000-8000-000000000009.json",
+      );
+      await zeroMqMessageAccess.writeManifest(invalidPath, {
+        ...manifest,
+        generation: invalidPath.slice(-41, -5),
+      });
+      const movement = vi
+        .spyOn(zeroMqMessageAccess, "moveManifest")
+        .mockRejectedValueOnce(new Error("injected quarantine failure"));
+      const received: string[] = [];
+      await subscriber.addConsumer((message) => {
+        received.push(
+          fromBinary(
+            StringValueSchema,
+            required(message.originalMessage, "move failure original message").value,
+          ).value,
+        );
+      });
+      try {
+        const publisher = await factory.createPublisher(channel());
+        await expect(access(invalidPath)).resolves.toBeUndefined();
+        expect(
+          (await readdir(path.dirname(invalidPath))).filter((entry) =>
+            entry.includes(".quarantine"),
+          ),
+        ).toEqual([]);
+        const message = frame("after-move-failure");
+        await publisher.publish(required(message.id, "move failure identity"), message);
+        await eventually(() => Promise.resolve(received.length === 1));
+        await publisher.close();
+      } finally {
+        movement.mockRestore();
+        await rm(invalidPath, { force: true });
         await Promise.allSettled([subscriber.close(), factory.close()]);
       }
     });
@@ -343,6 +417,50 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
         await expect(access(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
       } finally {
         deadSocket.close();
+        await Promise.allSettled([subscriber.close(), factory.close()]);
+      }
+    });
+  });
+
+  it("treats EPERM owners as live when fresh and preserves their expired socket", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const subscriber = await factory.createSubscriber(channel());
+      const manifestPath = await manifestPathFor(ipcDirectory);
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Parameters<
+        typeof zeroMqMessageAccess.writeManifest
+      >[1];
+      const socketPath = path.join(
+        ipcDirectory,
+        "spine-message-channels",
+        "sockets",
+        `${manifest.generation}.sock`,
+      );
+      await zeroMqMessageAccess.writeManifest(manifestPath, { ...manifest, heartbeatAtMs: 1 });
+      const permission = vi.spyOn(process, "kill").mockImplementation(() => {
+        throw Object.assign(new Error("denied"), { code: "EPERM" });
+      });
+      const received: string[] = [];
+      await subscriber.addConsumer((message) => {
+        received.push(
+          fromBinary(
+            StringValueSchema,
+            required(message.originalMessage, "eperm original message").value,
+          ).value,
+        );
+      });
+      try {
+        const publisher = await factory.createPublisher(channel());
+        await expect(access(manifestPath)).rejects.toMatchObject({ code: "ENOENT" });
+        await expect(access(socketPath)).resolves.toBeUndefined();
+        await zeroMqMessageAccess.writeManifest(manifestPath, manifest);
+        const message = frame("eperm-fresh");
+        await publisher.publish(required(message.id, "eperm identity"), message);
+        await eventually(() => Promise.resolve(received.length === 1));
+        expect(received).toEqual(["eperm-fresh"]);
+        await publisher.close();
+      } finally {
+        permission.mockRestore();
         await Promise.allSettled([subscriber.close(), factory.close()]);
       }
     });
@@ -607,6 +725,35 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
       ).rejects.toThrow(/frame-size limit/iu);
       await publisher.close().catch(() => undefined);
       await factory.close().catch(() => undefined);
+    });
+  });
+
+  it("drops an oversized raw native frame and continues with a valid frame", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const subscriber = await factory.createSubscriber(channel());
+      const manifest = JSON.parse(await readFile(await manifestPathFor(ipcDirectory), "utf8")) as {
+        readonly endpoint: string;
+      };
+      const received: string[] = [];
+      await subscriber.addConsumer((message) => {
+        received.push(
+          fromBinary(
+            StringValueSchema,
+            required(message.originalMessage, "oversized continuation original message").value,
+          ).value,
+        );
+      });
+      const raw = new Push({ linger: 0, maxMessageSize: 2 * 1024 * 1024 });
+      raw.connect(manifest.endpoint);
+      await raw.send(new Uint8Array(1024 * 1024 + 1));
+      raw.close();
+      const publisher = await factory.createPublisher(channel());
+      const valid = frame("after-oversized");
+      await publisher.publish(required(valid.id, "oversized continuation identity"), valid);
+      await eventually(() => Promise.resolve(received.length === 1));
+      expect(received).toEqual(["after-oversized"]);
+      await Promise.all([publisher.close(), subscriber.close(), factory.close()]);
     });
   });
 
