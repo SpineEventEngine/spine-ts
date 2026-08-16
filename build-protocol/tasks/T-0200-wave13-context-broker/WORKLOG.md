@@ -453,3 +453,26 @@ scripts/check-tsdoc.test.mjs` process exited after its run banner, but this
   this bounded cleanup correction does not widen into that separate TSDoc
   remediation. The old moved source path is also transiently reported by TSDoc
   before the rename is staged; staging is the next checkpoint action.
+
+## Canonical task verification and specialist dispatch — 2026-08-16
+
+- The retained-terminal canonical task profile passed end to end over the ten
+  direct-source and package-boundary paths: exact 50-source/55-descriptor Proto
+  intake, generated build, strict tooling typecheck, cleanup, TSDoc, copyright,
+  log containment, repository formatting, documentation audience, 255-export
+  server API inventory, Buf lint, generated cleanliness, release-readiness, and
+  10 files / 153 tests.
+- The specialist wave uses only existing project roles. The
+  `performance_reliability_reviewer` owns context/broker/transport lifecycle,
+  ordering, concurrency, close, tenant, failure, and JVM-invariant correctness;
+  it is explicitly configured `gpt-5.6-terra` / `high`. The
+  `typescript_api_docs_reviewer` owns public TypeScript declarations, generated
+  API inventory, compatibility, TSDoc, and ThirdPartyContext contract parity;
+  it is explicitly configured `gpt-5.6-terra` / `high`. The
+  `style_maintainability_reviewer` owns module depth, ownership boundaries,
+  cleanup necessity records, ContextTransport/SignalTransport separation, and
+  maintainability; it is explicitly configured `gpt-5.6-terra` / `high`.
+- Runtime self-introspection is unavailable on this surface, so each immutable
+  configured role/profile is the recorded runtime metadata. All reviewer
+  dispatches prohibit subagent spawning and are read-only. Final security review
+  remains assigned to T-0202 after the real cross-process evidence is present.
