@@ -276,8 +276,9 @@ parameter; the generated registry then filters imported events to that
 handler:
 
 ```ts
+// docs-snippet-path: examples/message-board/app/src/index.ts
 import { Subscribe, type External } from "@spine-event-engine/server";
-import type { MessagePosted } from "./generated/message_events_pb.js";
+import type { MessagePosted } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
 
 class ImportedBoard {
   @Subscribe
@@ -309,9 +310,10 @@ configured first with the complete application `typeRegistry` that contains
 `MessagePosted`:
 
 ```ts
+// docs-snippet-path: examples/message-board/app/src/index.ts
 import { ThirdPartyContext } from "@spine-event-engine/server";
 import type { ActorContext } from "@spine-event-engine/proto";
-import type { MessagePosted } from "./generated/message_events_pb.js";
+import type { MessagePosted } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/events_pb.js";
 
 declare const messagePosted: MessagePosted;
 declare const actorContext: ActorContext;

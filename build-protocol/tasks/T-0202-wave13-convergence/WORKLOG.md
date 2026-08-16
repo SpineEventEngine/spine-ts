@@ -247,3 +247,15 @@ packages/server/test/integration/integration-broker-module.test.ts` passed
   preserves that newest manifest, valid delivery, and no quarantine artifact.
 - `pnpm typecheck:tooling` and focused manifest/conformance/broker tests passed
   3 files / 61 tests; scoped ESLint, Prettier, and `git diff --check` pass.
+
+## Release snippet preflight reconciliation — 2026-08-16
+
+- Release verification failed only in new TypeScript documentation snippets.
+  The external-receptor and ThirdParty examples now declare the real Message
+  Board application snippet path and generated model import; the server example
+  declares the Todo path and its real generated TaskCreated import. The fences
+  remain checked TypeScript and no diagnostic suppression was added.
+- `pnpm docs:snippets:check:generated` and `pnpm docs:audience:check` pass;
+  focused Prettier and `git diff --check` pass. The attempted
+  `pnpm docs:audience` name was non-mutating and corrected to the repository's
+  actual `docs:audience:check` script.

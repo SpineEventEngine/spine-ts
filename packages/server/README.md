@@ -414,8 +414,9 @@ event is delivered only to handlers declared with `External<T>`. The marker is
 type-only and transparent at runtime:
 
 ```ts
+// docs-snippet-path: examples/todo/src/index.ts
 import { Subscribe, type External } from "@spine-event-engine/server";
-import type { TaskCreated } from "./generated/task_events_pb.js";
+import type { TaskCreated } from "../generated/spine/examples/todo/task_events_pb.js";
 
 class TaskProjection {
   @Subscribe
