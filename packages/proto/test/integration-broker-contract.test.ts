@@ -17,28 +17,35 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { serialize } from "node:v8";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { EventContextSchema, EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import { TypeUrls } from "../../core/src/index.js";
+import {
+  BoundedContextOnlineSchema,
+  ChannelIdSchema,
+  EventContextSchema,
+  EventIdSchema,
+  EventSchema,
+  ExternalEventsWantedSchema,
+  ExternalEventTypeSchema,
+  ExternalMessageSchema,
+} from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
+import {
+  unpackExternalEvent,
+  toExternalEvent,
+  wrapBoundedContextOnline,
+  wrapExternalEvent,
+  wrapExternalEventsWanted,
+} from "../../server/src/integration/external-messages.js";
 
 describe("Wave 13 integration broker protobuf contract", () => {
   it("RED-14 preserves the exact ExternalMessage wrapper and ChannelId contracts", async () => {
-    const proto = await import("@spine-event-engine/proto");
-
-    expect(proto, "Wave 13 broker schemas must be exported from the proto package.").toMatchObject({
-      ExternalMessageSchema: expect.anything(),
-      ExternalEventsWantedSchema: expect.anything(),
-      ExternalEventTypeSchema: expect.anything(),
-      BoundedContextOnlineSchema: expect.anything(),
-      ChannelIdSchema: expect.anything(),
-    });
-    const contracts = proto as Record<string, any>;
-    const wrapper = contracts.ExternalMessageSchema;
-    const channel = contracts.ChannelIdSchema;
-    const wanted = contracts.ExternalEventsWantedSchema;
-    const externalType = contracts.ExternalEventTypeSchema;
-    const online = contracts.BoundedContextOnlineSchema;
+    const wrapper = ExternalMessageSchema;
+    const channel = ChannelIdSchema;
+    const wanted = ExternalEventsWantedSchema;
+    const externalType = ExternalEventTypeSchema;
+    const online = BoundedContextOnlineSchema;
     expect(wrapper.typeName).toBe("spine.server.integration.ExternalMessage");
-    expect(wrapper.fields.map((field: any) => [field.localName, field.number])).toEqual([
+    expect(wrapper.fields.map((field) => [field.localName, field.number])).toEqual([
       ["id", 1],
       ["originalMessage", 2],
       ["boundedContextName", 4],
@@ -47,17 +54,17 @@ describe("Wave 13 integration broker protobuf contract", () => {
     expect(wrapper.field.originalMessage.message.typeName).toBe("google.protobuf.Any");
     expect(wrapper.field.boundedContextName.message.typeName).toBe("spine.core.BoundedContextName");
     expect(
-      wrapper.file.proto.messageType.find((message: any) => message.name === "ExternalMessage")
-        .reservedRange,
+      wrapper.file.proto.messageType.find((message) => message.name === "ExternalMessage")
+        ?.reservedRange,
     ).toEqual(expect.arrayContaining([expect.objectContaining({ start: 3, end: 4 })]));
     expect(
-      wrapper.file.proto.messageType.find((message: any) => message.name === "ExternalMessage")
-        .reservedName,
+      wrapper.file.proto.messageType.find((message) => message.name === "ExternalMessage")
+        ?.reservedName,
     ).toContain("actor_context");
     expect(channel.typeName).toBe("spine.server.transport.ChannelId");
-    expect(
-      channel.fields.map((field: any) => [field.localName, field.number, field.scalar]),
-    ).toEqual([["targetType", 1, 9]]);
+    expect(channel.fields.map((field) => [field.localName, field.number, field.scalar])).toEqual([
+      ["targetType", 1, 9],
+    ]);
     expect(wanted.typeName).toBe("spine.server.integration.ExternalEventsWanted");
     expect(wanted.fields).toHaveLength(1);
     expect(wanted.field.type.number).toBe(1);
@@ -65,7 +72,7 @@ describe("Wave 13 integration broker protobuf contract", () => {
     expect(wanted.field.type.message.typeName).toBe("spine.server.integration.ExternalEventType");
     expect(externalType.typeName).toBe("spine.server.integration.ExternalEventType");
     expect(
-      externalType.fields.map((field: any) => [field.localName, field.number, field.scalar]),
+      externalType.fields.map((field) => [field.localName, field.number, field.scalar]),
     ).toEqual([["typeUrl", 1, 9]]);
     expect(online.typeName).toBe("spine.server.integration.BoundedContextOnline");
     expect(online.fields).toHaveLength(1);
@@ -116,31 +123,22 @@ describe("Wave 13 integration broker protobuf contract", () => {
       "../proto/spine/core/event.proto",
       "0c385d3fd98d68d35ce1d7887bd564b590daba47b959b99d205c2be56a737d29",
     );
-    const externalMessages =
-      (await import("../../server/src/integration/external-messages.js")) as {
-        wrapBoundedContextOnline(message: unknown): any;
-        wrapExternalEvent(message: unknown, origin: unknown): any;
-        wrapExternalEventsWanted(message: unknown, origin: unknown): any;
-        unpackExternalEvent(message: unknown): unknown;
-      };
-    expect(externalMessages.wrapExternalEvent(event, { value: "Wave13Producer" })).toEqual(frame);
+    expect(wrapExternalEvent(event, { value: "Wave13Producer" })).toEqual(frame);
     const origin = { value: "Wave13Producer" };
     const wantedMessage = create(wanted, {
       type: [{ typeUrl: "type.spine.io/google.protobuf.StringValue" }],
     });
-    const wantedFrame = externalMessages.wrapExternalEventsWanted(wantedMessage, origin);
-    const onlineFrame = externalMessages.wrapBoundedContextOnline(
-      create(online, { context: origin }),
-    );
+    const wantedFrame = wrapExternalEventsWanted(wantedMessage, origin);
+    const onlineFrame = wrapBoundedContextOnline(create(online, { context: origin }));
     for (const controlFrame of [wantedFrame, onlineFrame]) {
-      expect(controlFrame.id.typeUrl).toBe("type.spine.io/google.protobuf.StringValue");
+      expect(controlFrame.id.typeUrl).toBe(TypeUrls.derive(StringValueSchema));
       expect(fromBinary(StringValueSchema, controlFrame.id.value).value).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u,
       );
     }
     expect(wantedFrame.id.value).not.toEqual(onlineFrame.id.value);
     expect(() =>
-      externalMessages.unpackExternalEvent(
+      unpackExternalEvent(
         create(wrapper, {
           ...frame,
           originalMessage: {
@@ -151,7 +149,7 @@ describe("Wave 13 integration broker protobuf contract", () => {
       ),
     ).toThrow();
     expect(() =>
-      externalMessages.unpackExternalEvent(
+      unpackExternalEvent(
         create(wrapper, {
           ...frame,
           id: {
@@ -161,6 +159,14 @@ describe("Wave 13 integration broker protobuf contract", () => {
         }),
       ),
     ).toThrow();
+    expect(() => wrapExternalEvent(create(EventSchema), { value: "Wave13Producer" })).toThrow(
+      /EventId/u,
+    );
+    expect(() => unpackExternalEvent(create(wrapper))).toThrow(/origin/u);
+    expect(() => wrapBoundedContextOnline(create(online, { context: { value: "" } }))).toThrow(
+      /origin/u,
+    );
+    expect(toExternalEvent(create(EventSchema)).context).toMatchObject({ external: true });
   });
 });
 

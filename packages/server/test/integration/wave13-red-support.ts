@@ -13,6 +13,15 @@
  */
 
 import { expect } from "vitest";
+import type { Any } from "@bufbuild/protobuf/wkt";
+import type { ChannelId, ExternalMessage } from "@spine-event-engine/proto";
+import type {
+  ConsumerHandle,
+  ExternalMessageConsumer,
+  Publisher,
+  Subscriber,
+  TransportFactory,
+} from "@spine-event-engine/transport";
 
 /**
  * A deliberately small transport double. It implements the frozen public
@@ -20,7 +29,7 @@ import { expect } from "vitest";
  * frame to the currently attached consumers.  It is an observation seam, not
  * a broker control surface.
  */
-export class RecordingTransportFactory {
+export class RecordingTransportFactory implements TransportFactory {
   readonly operations: string[] = [];
   readonly published: {
     readonly channel: unknown;
@@ -29,10 +38,14 @@ export class RecordingTransportFactory {
     readonly operationIndex: number;
   }[] = [];
   readonly created: { readonly kind: "publisher" | "subscriber"; readonly channel: unknown }[] = [];
-  #consumers = new Map<string, Set<(message: unknown) => void | Promise<void>>>();
+  #consumers = new Map<string, Set<ExternalMessageConsumer>>();
   #remainingCloseFailures: number;
+  #closeSuccessesBeforeFailure: number | undefined;
   #publishFailure: ((channel: unknown) => boolean) | undefined;
   #publisherCreationFailure: ((channel: unknown) => boolean) | undefined;
+  #consumerAdditionFailure: ((channel: unknown) => boolean) | undefined;
+  #publishGate:
+    { readonly predicate: (channel: unknown) => boolean; readonly wait: Promise<void> } | undefined;
   #publisherCreationFailureAfter:
     { remainingSuccesses: number; predicate: (channel: unknown) => boolean } | undefined;
   #openPublishers = new Set<string>();
@@ -41,22 +54,77 @@ export class RecordingTransportFactory {
     this.#remainingCloseFailures = options.failCloseAttempts ?? 0;
   }
 
+  /**
+   * Makes the next adapter close operation fail.
+   */
+  failNextClose(): void {
+    this.#remainingCloseFailures = 1;
+  }
+
+  /**
+   * Makes the requested number of adapter close operations fail.
+   */
+  failCloseAttempts(attempts: number): void {
+    this.#remainingCloseFailures = attempts;
+  }
+
+  /**
+   * Makes one adapter close fail after the requested number of successful closes.
+   */
+  failCloseAfter(successfulCloses: number): void {
+    this.#closeSuccessesBeforeFailure = successfulCloses;
+  }
+
+  /**
+   * Makes the next matching subscriber consumer attachment fail.
+   */
+  failNextConsumerAddition(predicate: (channel: unknown) => boolean): void {
+    this.#consumerAdditionFailure = predicate;
+  }
+
+  /**
+   * Gates matching publication after it has been accepted by the recording transport.
+   */
+  gateNextPublish(predicate: (channel: unknown) => boolean): () => void {
+    let release!: () => void;
+    this.#publishGate = {
+      predicate,
+      wait: new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    };
+    return release;
+  }
+
   #close(operation: string): void {
     this.operations.push(operation);
+    if (this.#closeSuccessesBeforeFailure !== undefined) {
+      if (this.#closeSuccessesBeforeFailure === 0) {
+        this.#closeSuccessesBeforeFailure = undefined;
+        throw new Error(`${operation} failed`);
+      }
+      this.#closeSuccessesBeforeFailure -= 1;
+    }
     if (this.#remainingCloseFailures-- > 0) throw new Error(`${operation} failed`);
   }
 
-  /** Makes the next matching adapter publication fail before it is accepted. */
+  /**
+   * Makes the next matching adapter publication fail before it is accepted.
+   */
   failNextPublish(predicate: (channel: unknown) => boolean = () => true): void {
     this.#publishFailure = predicate;
   }
 
-  /** Makes the next matching publisher acquisition fail without retaining a resource. */
+  /**
+   * Makes the next matching publisher acquisition fail without retaining a resource.
+   */
   failNextPublisherCreation(predicate: (channel: unknown) => boolean): void {
     this.#publisherCreationFailure = predicate;
   }
 
-  /** Fails after a fixed number of matching publisher acquisitions have succeeded. */
+  /**
+   * Fails after a fixed number of matching publisher acquisitions have succeeded.
+   */
   failPublisherCreationAfter(
     successfulCreations: number,
     predicate: (channel: unknown) => boolean,
@@ -67,22 +135,24 @@ export class RecordingTransportFactory {
     };
   }
 
-  /** Lists currently open publisher channel keys. */
+  /**
+   * Lists currently open publisher channel keys.
+   */
   openPublisherTargets(): readonly string[] {
     return [...this.#openPublishers].sort();
   }
 
-  async createPublisher(channel: unknown) {
+  createPublisher(channel: ChannelId): Promise<Publisher> {
     if (this.#publisherCreationFailure?.(channel) === true) {
       this.#publisherCreationFailure = undefined;
       this.operations.push("publisher:create:failed");
-      throw new Error("injected publisher creation failure");
+      return Promise.reject(new Error("injected publisher creation failure"));
     }
     if (this.#publisherCreationFailureAfter?.predicate(channel) === true) {
       if (this.#publisherCreationFailureAfter.remainingSuccesses === 0) {
         this.#publisherCreationFailureAfter = undefined;
         this.operations.push("publisher:create:failed");
-        throw new Error("injected publisher creation failure");
+        return Promise.reject(new Error("injected publisher creation failure"));
       }
       this.#publisherCreationFailureAfter.remainingSuccesses -= 1;
     }
@@ -95,7 +165,7 @@ export class RecordingTransportFactory {
       id: channel,
       targetType: (channel as { targetType?: string }).targetType,
       isStale: () => false,
-      publish: async (id: unknown, message: unknown) => {
+      publish: async (id: Any, message: ExternalMessage) => {
         this.operations.push("publisher:publish");
         if (this.#publishFailure?.(channel) === true) {
           this.#publishFailure = undefined;
@@ -104,17 +174,24 @@ export class RecordingTransportFactory {
         this.published.push({ channel, id, message, operationIndex: this.operations.length - 1 });
         for (const consumer of this.#consumers.get(channelKey(channel)) ?? [])
           await consumer(message);
+        if (this.#publishGate?.predicate(channel) === true) {
+          const gate = this.#publishGate;
+          this.#publishGate = undefined;
+          await gate.wait;
+        }
       },
-      close: async () => {
-        if (closed) return;
-        this.#close("publisher:close");
-        closed = true;
-        this.#openPublishers.delete(key);
-      },
+      close: () =>
+        Promise.resolve().then(() => {
+          if (closed) return;
+          this.#close("publisher:close");
+          closed = true;
+          this.#openPublishers.delete(key);
+        }),
     };
+    return Promise.resolve(publisher);
   }
 
-  async createSubscriber(channel: unknown) {
+  createSubscriber(channel: ChannelId): Promise<Subscriber> {
     this.created.push({ kind: "subscriber", channel });
     this.operations.push("subscriber:create");
     const key = channelKey(channel);
@@ -124,39 +201,52 @@ export class RecordingTransportFactory {
       id: channel,
       targetType: (channel as { targetType?: string }).targetType,
       isStale: () => consumers.size === 0,
-      addConsumer: async (consumer: (message: unknown) => void | Promise<void>) => {
+      addConsumer: (consumer: ExternalMessageConsumer): Promise<ConsumerHandle> => {
+        if (this.#consumerAdditionFailure?.(channel) === true) {
+          this.#consumerAdditionFailure = undefined;
+          this.operations.push("consumer:add:failed");
+          return Promise.reject(new Error("injected consumer attachment failure"));
+        }
         consumers.add(consumer);
         this.operations.push("consumer:add");
         let closed = false;
         return {
-          close: async () => {
-            if (closed) return;
+          close: () => {
+            if (closed) return Promise.resolve();
             closed = true;
             consumers.delete(consumer);
             this.operations.push("consumer:remove");
+            return Promise.resolve();
           },
         };
+        return Promise.resolve(handle);
       },
-      close: async () => {
-        consumers.clear();
-        this.#close("subscriber:close");
-      },
+      close: () =>
+        Promise.resolve().then(() => {
+          consumers.clear();
+          this.#close("subscriber:close");
+        }),
     };
+    return Promise.resolve(subscriber);
   }
 
-  async close(): Promise<void> {
-    this.#close("factory:close");
+  close(): Promise<void> {
+    return Promise.resolve().then(() => {
+      this.#close("factory:close");
+    });
   }
 }
 
 function channelKey(channel: unknown): string {
-  const targetType = (channel as { targetType?: unknown })?.targetType;
+  const targetType = (channel as { targetType?: unknown }).targetType;
   if (typeof targetType !== "string" || targetType.length === 0)
     throw new TypeError("Transport channels require ChannelId.targetType.");
   return targetType;
 }
 
-/** Loads a planned Wave 13 contract without making the test suite itself depend on an absent module. */
+/**
+ * Loads a planned Wave 13 contract without making the test suite itself depend on an absent module.
+ */
 export async function loadWave13Contract(modulePath: string): Promise<Record<string, unknown>> {
   try {
     return (await import(modulePath)) as Record<string, unknown>;
@@ -166,7 +256,9 @@ export async function loadWave13Contract(modulePath: string): Promise<Record<str
   }
 }
 
-/** Requires the specified contract member so a missing implementation is an assertion failure. */
+/**
+ * Requires the specified contract member so a missing implementation is an assertion failure.
+ */
 export function requireContractMember(
   contract: Record<string, unknown>,
   member: string,

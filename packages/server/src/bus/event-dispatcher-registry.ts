@@ -22,6 +22,7 @@ import { EventDispatcherOriginSchemas } from "./event-dispatcher-origin-schemas.
  */
 export class EventDispatcherRegistry {
   readonly #dispatchers = new Set<EventDispatcher>();
+  readonly #snapshots = new Map<EventDispatcher, DispatcherOriginSnapshot>();
   readonly #byTypeUrl = new Map<string, EventDispatcher[]>();
   readonly #domesticByTypeUrl = new Map<string, EventDispatcher[]>();
   readonly #externalByTypeUrl = new Map<string, EventDispatcher[]>();
@@ -45,6 +46,7 @@ export class EventDispatcherRegistry {
     }
 
     this.#dispatchers.add(dispatcher);
+    this.#snapshots.set(dispatcher, snapshot);
 
     for (const { schema, typeUrl } of snapshot.all) {
       const registered = this.#byTypeUrl.get(typeUrl);
@@ -69,6 +71,27 @@ export class EventDispatcherRegistry {
         domesticDispatchers.push(dispatcher);
         this.#domesticByTypeUrl.set(typeUrl, domesticDispatchers);
       }
+    }
+  }
+
+  /**
+   * Removes dispatch routes while retaining schema admission for other routes and schema-only users.
+   *
+   * @param dispatcher Provides the dispatcher to remove.
+   */
+  unregister(dispatcher: EventDispatcher): void {
+    const snapshot = this.#snapshots.get(dispatcher);
+    if (snapshot === undefined) return;
+    this.#dispatchers.delete(dispatcher);
+    this.#snapshots.delete(dispatcher);
+    for (const { typeUrl } of snapshot.all) {
+      EventDispatcherRegistry.#remove(this.#byTypeUrl, typeUrl, dispatcher);
+      if (snapshot.domestic.has(typeUrl))
+        EventDispatcherRegistry.#remove(this.#domesticByTypeUrl, typeUrl, dispatcher);
+      if (snapshot.external.has(typeUrl))
+        EventDispatcherRegistry.#remove(this.#externalByTypeUrl, typeUrl, dispatcher);
+      if ((this.#byTypeUrl.get(typeUrl)?.length ?? 0) === 0)
+        this.#dispatcherSchemasByTypeUrl.delete(typeUrl);
     }
   }
 
@@ -168,6 +191,18 @@ export class EventDispatcherRegistry {
     }
 
     return Object.freeze(registrations);
+  }
+
+  static #remove(
+    routes: Map<string, EventDispatcher[]>,
+    typeUrl: string,
+    dispatcher: EventDispatcher,
+  ): void {
+    const registered = routes.get(typeUrl);
+    if (registered === undefined) return;
+    const retained = registered.filter((candidate) => candidate !== dispatcher);
+    if (retained.length === 0) routes.delete(typeUrl);
+    else routes.set(typeUrl, retained);
   }
 }
 

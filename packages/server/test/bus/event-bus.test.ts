@@ -194,6 +194,47 @@ describe("EventBus", () => {
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-schema-only" } }]);
   });
 
+  it("unregisters only target origin routes while preserving admission and unrelated dispatchers", async () => {
+    const bus = eventBusAccess.createForgettingBus();
+    const target = createEventDispatcher([ProjectionStateSchema, AggregateStateSchema], () =>
+      Promise.resolve(),
+    );
+    target.externalEventSchemas = () => [ProjectionStateSchema];
+    const unrelated = createEventDispatcher([ProjectionStateSchema], () => Promise.resolve());
+    unrelated.externalEventSchemas = () => [ProjectionStateSchema];
+    const seen: string[] = [];
+    target.dispatch = () => {
+      seen.push("target");
+      return Promise.resolve();
+    };
+    unrelated.dispatch = () => {
+      seen.push("unrelated");
+      return Promise.resolve();
+    };
+    bus.register(target);
+    bus.register(unrelated);
+    eventBusAccess.registerSchemas(bus, [AggregateStateSchema]);
+    eventBusAccess.unregister(bus, target);
+    eventBusAccess.unregister(bus, target);
+    const external = createProjectionEvent("external-route");
+    external.context = create(EventContextSchema, { external: true });
+    await bus.post(external);
+    await bus.post(
+      SignalEnvelopes.event({
+        id: create(EventIdSchema, { value: "domestic-route" }),
+        schema: AggregateStateSchema,
+        message: create(AggregateStateSchema, { id: "domestic-route", name: "route" }),
+      }),
+    );
+    expect(seen).toEqual(["unrelated"]);
+    expect(eventBusAccess.schema(bus, TypeUrls.derive(ProjectionStateSchema))).toBe(
+      ProjectionStateSchema,
+    );
+    expect(eventBusAccess.schema(bus, TypeUrls.derive(AggregateStateSchema))).toBe(
+      AggregateStateSchema,
+    );
+  });
+
   it("rejects system schemas from a domain bus before EventStore access", () => {
     const store = new EventStore(
       { name: "Tasks", multitenant: false },
