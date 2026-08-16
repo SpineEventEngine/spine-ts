@@ -69,10 +69,12 @@ class ZeroMqMessageTransport implements TransportFactory {
   }
 
   createPublisher(id: ChannelId): Promise<Publisher> {
-    if (this.#closePromise !== undefined) throw new Error("ZeroMQ message transport is closed.");
-    const publisher = new NativePublisher(id, this.#config, this);
-    this.#publishers.add(publisher);
-    return Promise.resolve(publisher);
+    return Promise.resolve().then(() => {
+      if (this.#closePromise !== undefined) throw new Error("ZeroMQ message transport is closed.");
+      const publisher = new NativePublisher(id, this.#config, this);
+      this.#publishers.add(publisher);
+      return publisher;
+    });
   }
 
   async createSubscriber(id: ChannelId): Promise<Subscriber> {
@@ -302,18 +304,20 @@ class NativeSubscriber implements Subscriber {
   }
 
   addConsumer(consumer: ExternalMessageConsumer): Promise<ConsumerHandle> {
-    if (this.#closePromise !== undefined) throw new Error("ZeroMQ message subscriber is closed.");
-    this.#consumers.add(consumer);
-    let removed = false;
-    const handle: ConsumerHandle = {
-      close: () => {
-        if (removed) return Promise.resolve();
-        removed = true;
-        this.#consumers.delete(consumer);
-        return this.#consumers.size === 0 ? this.close() : Promise.resolve();
-      },
-    };
-    return Promise.resolve(handle);
+    return Promise.resolve().then(() => {
+      if (this.#closePromise !== undefined) throw new Error("ZeroMQ message subscriber is closed.");
+      this.#consumers.add(consumer);
+      let removed = false;
+      const handle: ConsumerHandle = {
+        close: () => {
+          if (removed) return Promise.resolve();
+          removed = true;
+          this.#consumers.delete(consumer);
+          return this.#consumers.size === 0 ? this.close() : Promise.resolve();
+        },
+      };
+      return handle;
+    });
   }
 
   close(): Promise<void> {
