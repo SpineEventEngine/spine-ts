@@ -34,6 +34,8 @@ export class RecordingTransportFactory {
   #publishFailure: ((channel: unknown) => boolean) | undefined;
   #publisherCreationFailure: ((channel: unknown) => boolean) | undefined;
   #consumerAdditionFailure: ((channel: unknown) => boolean) | undefined;
+  #publishGate:
+    { readonly predicate: (channel: unknown) => boolean; readonly wait: Promise<void> } | undefined;
   #publisherCreationFailureAfter:
     { remainingSuccesses: number; predicate: (channel: unknown) => boolean } | undefined;
   #openPublishers = new Set<string>();
@@ -50,6 +52,18 @@ export class RecordingTransportFactory {
   /** Makes the next matching subscriber consumer attachment fail. */
   failNextConsumerAddition(predicate: (channel: unknown) => boolean): void {
     this.#consumerAdditionFailure = predicate;
+  }
+
+  /** Gates matching publication after it has been accepted by the recording transport. */
+  gateNextPublish(predicate: (channel: unknown) => boolean): () => void {
+    let release!: () => void;
+    this.#publishGate = {
+      predicate,
+      wait: new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    };
+    return release;
   }
 
   #close(operation: string): void {
@@ -115,6 +129,11 @@ export class RecordingTransportFactory {
         this.published.push({ channel, id, message, operationIndex: this.operations.length - 1 });
         for (const consumer of this.#consumers.get(channelKey(channel)) ?? [])
           await consumer(message);
+        if (this.#publishGate?.predicate(channel) === true) {
+          const gate = this.#publishGate;
+          this.#publishGate = undefined;
+          await gate.wait;
+        }
       },
       close: async () => {
         if (closed) return;

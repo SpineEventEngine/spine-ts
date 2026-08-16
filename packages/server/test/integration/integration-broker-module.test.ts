@@ -1,5 +1,5 @@
 /* Copyright 2026, CodeMatters. All rights reserved. Licensed under Apache-2.0. */
-import { create, toBinary } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
@@ -424,6 +424,64 @@ describe("IntegrationBroker module", () => {
     expect(
       factory.operations.filter((operation) => operation === "subscriber:close").length,
     ).toBeGreaterThan(0);
+  });
+
+  it("drains a gated peer-online resend before its final empty withdrawal", async () => {
+    const factory = new RecordingTransportFactory();
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "ordered-close" }),
+      transportFactory: factory as never,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [StringValueSchema],
+      postImported: () => Promise.resolve(),
+    });
+    brokers.push(broker);
+    await broker.open();
+    const release = factory.gateNextPublish(
+      (channel) =>
+        (channel as { targetType?: string }).targetType ===
+        TypeUrls.derive(ExternalEventsWantedSchema),
+    );
+    const publisher = await factory.createPublisher(
+      create(ChannelIdSchema, { targetType: TypeUrls.derive(BoundedContextOnlineSchema) }) as never,
+    );
+    const frame = wrapBoundedContextOnline(
+      create(BoundedContextOnlineSchema, {
+        context: create(BoundedContextNameSchema, { value: "peer" }),
+      }),
+    );
+    const pending = publisher.publish(frame.id!, frame);
+    while (
+      factory.published.filter(
+        ({ channel }) =>
+          (channel as { targetType?: string }).targetType ===
+          TypeUrls.derive(ExternalEventsWantedSchema),
+      ).length < 2
+    )
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    const closing = broker.close();
+    let settled = false;
+    void closing.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    release();
+    await pending;
+    await closing;
+    const wanted = factory.published
+      .filter(
+        ({ channel }) =>
+          (channel as { targetType?: string }).targetType ===
+          TypeUrls.derive(ExternalEventsWantedSchema),
+      )
+      .map(({ message }) =>
+        fromBinary(
+          ExternalEventsWantedSchema,
+          (message as { originalMessage: { value: Uint8Array } }).originalMessage.value,
+        ),
+      );
+    expect(wanted.at(-1)?.type).toEqual([]);
   });
 });
 
