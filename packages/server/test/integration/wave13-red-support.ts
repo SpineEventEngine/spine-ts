@@ -62,6 +62,13 @@ export class RecordingTransportFactory implements TransportFactory {
   }
 
   /**
+   * Makes the requested number of adapter close operations fail.
+   */
+  failCloseAttempts(attempts: number): void {
+    this.#remainingCloseFailures = attempts;
+  }
+
+  /**
    * Makes one adapter close fail after the requested number of successful closes.
    */
   failCloseAfter(successfulCloses: number): void {

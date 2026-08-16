@@ -310,6 +310,15 @@ describe("IntegrationBroker module", () => {
       publishWanted(factory, "requester", [StringValueSchema, Int32ValueSchema, BoolValueSchema]),
     ).rejects.toThrow(/Integration publisher acquisition failed/u);
     expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(Int32ValueSchema));
+    const publications = factory.published.length;
+    await bus.post(
+      SignalEnvelopes.event({
+        id: create(EventIdSchema, { value: "rolled-back" }),
+        schema: Int32ValueSchema,
+        message: create(Int32ValueSchema, { value: 1 }),
+      }),
+    );
+    expect(factory.published).toHaveLength(publications);
     await expect(broker.close()).resolves.toBeUndefined();
     expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(Int32ValueSchema));
   });
@@ -336,6 +345,38 @@ describe("IntegrationBroker module", () => {
       publishWanted(factory, "requester", [StringValueSchema, Int32ValueSchema]),
     ).rejects.toThrow(/injected publisher creation failure/u);
     expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(StringValueSchema));
+  });
+
+  it("rolls back a new publisher when old removal fails without exporting the new type", async () => {
+    const factory = new RecordingTransportFactory();
+    const bus = eventBusAccess.createForgettingBus();
+    eventBusAccess.registerSchemas(bus, [StringValueSchema, Int32ValueSchema]);
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "removal-rollback" }),
+      transportFactory: factory,
+      eventBus: bus,
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    brokers.push(broker);
+    await broker.open();
+    await publishWanted(factory, "requester", [StringValueSchema]);
+    factory.failCloseAttempts(2);
+    await expect(publishWanted(factory, "requester", [Int32ValueSchema])).rejects.toThrow(
+      /Failed to remove domestic publisher/u,
+    );
+    const before = factory.published.length;
+    await bus.post(event("old"));
+    await bus.post(
+      SignalEnvelopes.event({
+        id: create(EventIdSchema, { value: "new" }),
+        schema: Int32ValueSchema,
+        message: create(Int32ValueSchema, { value: 1 }),
+      }),
+    );
+    expect(factory.published).toHaveLength(before + 1);
+    await expect(broker.close()).resolves.toBeUndefined();
+    expect(factory.openPublisherTargets()).toEqual([]);
   });
 
   it("serializes overlapping complete wanted replacements to the final authority", async () => {
