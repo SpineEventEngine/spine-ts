@@ -123,6 +123,46 @@ describe("IntegrationBroker module", () => {
     expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(StringValueSchema));
     expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(Int32ValueSchema));
   });
+
+  it("ignores a wanted type without a local admitted schema", async () => {
+    const factory = new RecordingTransportFactory();
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "unknown-producer" }),
+      transportFactory: factory as never,
+      eventBus: eventBusAccess.createForgettingBus(),
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    brokers.push(broker);
+    await broker.open();
+    await expect(publishWanted(factory, "requester", [StringValueSchema])).resolves.toBeUndefined();
+    expect(eventPublisherCreations(factory, StringValueSchema)).toHaveLength(0);
+  });
+
+  it("cleans a partially acquired replacement and retains the prior wanted publisher", async () => {
+    const factory = new RecordingTransportFactory();
+    const bus = eventBusAccess.createForgettingBus();
+    eventBusAccess.registerSchemas(bus, [StringValueSchema, Int32ValueSchema]);
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "rollback" }),
+      transportFactory: factory as never,
+      eventBus: bus,
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    brokers.push(broker);
+    await broker.open();
+    await publishWanted(factory, "requester", [StringValueSchema]);
+    factory.failNextPublisherCreation(
+      (channel) =>
+        (channel as { targetType?: string }).targetType === TypeUrls.derive(Int32ValueSchema),
+    );
+    await expect(
+      publishWanted(factory, "requester", [StringValueSchema, Int32ValueSchema]),
+    ).rejects.toThrow(/injected publisher creation failure/u);
+    expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(StringValueSchema));
+    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(Int32ValueSchema));
+  });
 });
 
 async function publishWanted(

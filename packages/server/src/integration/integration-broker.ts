@@ -131,7 +131,10 @@ export class IntegrationBroker {
     if (this.#closed) return Promise.resolve();
     const accepted = Promise.resolve().then(work);
     this.#acceptedCallbacks.add(accepted);
-    void accepted.finally(() => this.#acceptedCallbacks.delete(accepted));
+    void accepted.then(
+      () => this.#acceptedCallbacks.delete(accepted),
+      () => this.#acceptedCallbacks.delete(accepted),
+    );
     return accepted;
   }
 
