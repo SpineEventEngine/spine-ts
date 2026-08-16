@@ -21,6 +21,7 @@ import {
   ChannelIdSchema,
   ExternalEventsWantedSchema,
   ExternalMessageSchema,
+  EventContextSchema,
   EventIdSchema,
   EventSchema,
 } from "@spine-event-engine/proto";
@@ -387,6 +388,32 @@ describe("IntegrationBroker module", () => {
         }
       ).originalMessage?.value,
     ).toEqual(toBinary(EventSchema, second));
+  });
+
+  it("does not export an Event already marked external", async () => {
+    const factory = new RecordingTransportFactory();
+    const bus = eventBusAccess.createForgettingBus();
+    bus.register({ messageSchemas: () => [StringValueSchema], dispatch: () => Promise.resolve() });
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "external-loop" }),
+      transportFactory: factory,
+      eventBus: bus,
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    brokers.push(broker);
+    await broker.open();
+    await publishWanted(factory, "receiver", [StringValueSchema]);
+    const before = factory.published.length;
+    await bus.post(
+      SignalEnvelopes.event({
+        id: create(EventIdSchema, { value: "external" }),
+        context: create(EventContextSchema, { external: true }),
+        schema: StringValueSchema,
+        message: create(StringValueSchema, { value: "external" }),
+      }),
+    );
+    expect(factory.published).toHaveLength(before);
   });
 
   it("imports an external event once and ignores self and paired origins", async () => {

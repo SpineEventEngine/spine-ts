@@ -140,3 +140,13 @@ packages/server/test/integration/integration-broker-module.test.ts
   aggregate 95.69% lines / 79.48% branches. The remaining branch deficit is
   explicit open T0199 convergence work; no ignore/source-inclusion mechanism
   was used.
+
+## Coverage gate closure — 2026-08-16
+
+- Direct V8 coverage is now green: `external-messages.ts` 96.00% lines / 94.44%
+  branches; `integration-broker.ts` 100.00% lines / 90.19% branches; integration
+  aggregate 99.49% lines / 91.30% branches (23 direct tests).
+- The final generated build passed, as did focused wrapper, broker-module,
+  EventBus, and registry regressions: 67 tests passed. Focused ESLint and
+  `git diff --check` passed. The coverage report directory remains untracked
+  because this execution surface rejected its requested removal; it is not staged.

@@ -13,6 +13,7 @@
  */
 
 import { create, fromBinary } from "@bufbuild/protobuf";
+import type { Any } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   BoundedContextOnlineSchema,
@@ -181,20 +182,18 @@ export class IntegrationBroker {
 
   async #replaceWanted(origin: string, next: ReadonlySet<string>): Promise<void> {
     const previous = this.#wantedByOrigin.get(origin) ?? new Set<string>();
-    const add = [...next].filter(
-      (type) =>
-        !previous.has(type) &&
-        !this.#wantedElsewhere(type, origin) &&
-        eventBusAccess.schema(this.#input.eventBus, type) !== undefined,
-    );
+    const add = [...next].flatMap((type) => {
+      const schema = eventBusAccess.schema(this.#input.eventBus, type);
+      if (previous.has(type) || this.#wantedElsewhere(type, origin) || schema === undefined)
+        return [];
+      return [[type, schema] as const];
+    });
     const removals = [...this.#publishers].filter(
       ([type]) => previous.has(type) && !next.has(type) && !this.#wantedElsewhere(type, origin),
     );
     const acquired: DomesticPublisher[] = [];
     try {
-      for (const targetType of add) {
-        const schema = eventBusAccess.schema(this.#input.eventBus, targetType);
-        if (schema === undefined) continue;
+      for (const [targetType, schema] of add) {
         const publisher = await DomesticPublisher.create(
           this.#input.eventBus,
           this.#input.transportFactory,
