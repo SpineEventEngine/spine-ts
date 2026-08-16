@@ -48,6 +48,17 @@ interface SubscriberManifest {
   readonly heartbeatAtMs: number;
 }
 
+/** Package-private filesystem seam for deterministic native lifecycle tests. */
+export const zeroMqMessageAccess = {
+  async remove(filePath: string): Promise<void> {
+    await rm(filePath, { force: true });
+  },
+
+  async writeManifest(manifestPath: string, manifest: SubscriberManifest): Promise<void> {
+    await writeManifest(manifestPath, manifest);
+  },
+};
+
 /**
  * Creates the distinct typed-message ZeroMQ adapter.
  *
@@ -238,6 +249,7 @@ class NativeSubscriber implements Subscriber {
   readonly #heartbeat: NodeJS.Timeout;
   readonly #backgroundFailures: unknown[] = [];
   #receiveWork: Promise<void> = Promise.resolve();
+  #heartbeatWork: Promise<void> = Promise.resolve();
   #closePromise: Promise<void> | undefined;
 
   private constructor(
@@ -255,7 +267,7 @@ class NativeSubscriber implements Subscriber {
     this.#manifest = manifest;
     this.#factory = factory;
     this.#heartbeat = setInterval(() => {
-      void this.#refreshHeartbeat();
+      this.#heartbeatWork = this.#refreshHeartbeat();
     }, heartbeatIntervalMs);
     this.#heartbeat.unref();
     void this.#run();
@@ -286,11 +298,11 @@ class NativeSubscriber implements Subscriber {
     const socket = new Pull({ linger: 0 });
     try {
       await socket.bind(endpoint);
-      await writeManifest(manifestPath, manifest);
+      await zeroMqMessageAccess.writeManifest(manifestPath, manifest);
       return new NativeSubscriber(channel, socket, manifestPath, socketPath, manifest, factory);
     } catch (error) {
       socket.close();
-      await rm(socketPath, { force: true });
+      await zeroMqMessageAccess.remove(socketPath);
       throw error;
     }
   }
@@ -329,25 +341,41 @@ class NativeSubscriber implements Subscriber {
     return this.#closePromise;
   }
 
+  #isClosing(): boolean {
+    return this.#closePromise !== undefined;
+  }
+
   async #close(): Promise<void> {
     clearInterval(this.#heartbeat);
-    await rm(this.#manifestPath, { force: true });
-    await this.#receiveWork;
+    const results = await Promise.allSettled([
+      zeroMqMessageAccess.remove(this.#manifestPath),
+      this.#receiveWork,
+      this.#heartbeatWork,
+    ]);
     this.#socket.close();
-    await rm(this.#socketPath, { force: true });
+    results.push(
+      await Promise.allSettled([zeroMqMessageAccess.remove(this.#socketPath)]).then(
+        ([item]) => item,
+      ),
+    );
     this.#consumers.clear();
     this.#factory.removeSubscriber(this);
-    if (this.#backgroundFailures.length > 0)
-      throw new AggregateError(
-        this.#backgroundFailures,
-        "ZeroMQ message subscriber background processing failed.",
-      );
+    const failures: unknown[] = [...this.#backgroundFailures];
+    for (const result of results) {
+      if (result.status === "rejected") failures.push(result.reason);
+    }
+    if (failures.length > 0)
+      throw new AggregateError(failures, "ZeroMQ message subscriber background processing failed.");
   }
 
   async #refreshHeartbeat(): Promise<void> {
     if (this.#closePromise !== undefined) return;
     try {
-      await writeManifest(this.#manifestPath, { ...this.#manifest, heartbeatAtMs: Date.now() });
+      await zeroMqMessageAccess.writeManifest(this.#manifestPath, {
+        ...this.#manifest,
+        heartbeatAtMs: Date.now(),
+      });
+      if (this.#isClosing()) await zeroMqMessageAccess.remove(this.#manifestPath);
     } catch (error) {
       retainFailure(this.#backgroundFailures, error);
     }

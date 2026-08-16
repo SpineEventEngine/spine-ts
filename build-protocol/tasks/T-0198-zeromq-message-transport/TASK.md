@@ -76,10 +76,19 @@
   exposes that consumer failure. Focused native plus shared transport tests
   passed 74 tests, and generated typecheck passed.
 - TypeScript/API reviewer disposition: accepted boundary correction is
-  implemented; final reviewer confirmation remains pending the complete
-  correction batch. Performance/reliability disposition: accepted close-race
-  and drain proofs are implemented; heartbeat/write race and injected cleanup
-  proof remain open. Other required open proofs: heartbeat cannot recreate a
-  manifest after close, attempt-all cleanup after manifest-unlink injection,
-  bounded non-JSON directory entries, and asynchronous invalid/closed SPI
-  rejections. Final API-doc checks remain pending.
+  implemented: both adapters now delegate secure IPC preparation to the one
+  package-local helper, with no MessageTransport import of SignalTransport.
+  No public configuration or export changed.
+- Performance/reliability reviewer disposition: accepted. Deterministic tests
+  now prove the heartbeat close fence, attempt-all cleanup following injected
+  manifest removal failure, final-consumer withdrawal, factory-close/open
+  racing, subscriber delivery draining, and bounded total lexical scanning.
+- SPI rejection disposition: accepted. Invalid and closed `createPublisher`
+  and closed `addConsumer` calls are proved to return rejected promises rather
+  than throwing synchronously. Existing startup sweep and bounded manifest
+  failure tests remain covered by the preceding pushed checkpoint.
+- Final local evidence: generated typecheck passed; focused manifest,
+  SignalTransport, and shared message conformance tests passed 78 tests;
+  focused ESLint, Prettier, diff, `docs:api:generated`, and `docs:api:check`
+  are recorded as the final correction preflight. No accepted finding remains
+  open in this implementation slice.

@@ -32,7 +32,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ZeroMqConfig } from "../../src/zeromq/adapter-config.js";
 import { ChannelEndpoints } from "../../src/zeromq/channel-endpoints.js";
-import { createZeroMqTransportFactory } from "../../src/zeromq/message-transport.js";
+import {
+  createZeroMqTransportFactory,
+  zeroMqMessageAccess,
+} from "../../src/zeromq/message-transport.js";
 
 const targetType = "type.spine.io/wave13.Manifest";
 
@@ -271,6 +274,111 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
       await publication;
 
       await Promise.allSettled([publisher.close(), factory.close()]);
+    });
+  });
+
+  it("does not resurrect a manifest when an in-flight heartbeat loses a close race", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const subscriber = await factory.createSubscriber(channel());
+      const manifestPath = await manifestPathFor(ipcDirectory);
+      const write = zeroMqMessageAccess.writeManifest.bind(zeroMqMessageAccess);
+      let entered!: () => void;
+      const started = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const heartbeat = vi
+        .spyOn(zeroMqMessageAccess, "writeManifest")
+        .mockImplementationOnce(async (filePath, manifest) => {
+          entered();
+          await gate;
+          await write(filePath, manifest);
+        });
+      vi.useFakeTimers();
+      try {
+        await vi.advanceTimersByTimeAsync(1000);
+        await started;
+        const close = subscriber.close();
+        release();
+        await close;
+        await expect(access(manifestPath)).rejects.toMatchObject({ code: "ENOENT" });
+        await factory.close();
+      } finally {
+        vi.useRealTimers();
+        heartbeat.mockRestore();
+      }
+    });
+  });
+
+  it("attempts socket cleanup when manifest removal fails and reports the failure", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const subscriber = await factory.createSubscriber(channel());
+      const manifestPath = await manifestPathFor(ipcDirectory);
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { generation: string };
+      const socketPath = path.join(
+        ipcDirectory,
+        "spine-message-channels",
+        "sockets",
+        `${manifest.generation}.sock`,
+      );
+      const remove = zeroMqMessageAccess.remove.bind(zeroMqMessageAccess);
+      const cleanup = vi
+        .spyOn(zeroMqMessageAccess, "remove")
+        .mockImplementationOnce(() => Promise.reject(new Error("manifest unlink failed")));
+      try {
+        await expect(subscriber.close()).rejects.toThrow(/background processing failed/iu);
+        await expect(access(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
+        await expect(access(manifestPath)).resolves.toBeUndefined();
+      } finally {
+        cleanup.mockRestore();
+        await remove(manifestPath);
+        await factory.close().catch(() => undefined);
+      }
+    });
+  });
+
+  it("bounds every lexical subscriber directory entry before filtering manifests", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      const subscriber = await factory.createSubscriber(channel());
+      const directory = subscriberDirectoryFor(ipcDirectory);
+      await Promise.all(
+        Array.from({ length: 1024 }, (_, index) =>
+          writeFile(path.join(directory, `non-json-${String(index)}.entry`), "x"),
+        ),
+      );
+      await expect(factory.createPublisher(channel())).rejects.toThrow(
+        /1024 subscriber manifests/iu,
+      );
+      await Promise.allSettled([subscriber.close(), factory.close()]);
+    });
+  });
+
+  it("returns rejected promises for invalid and closed SPI creation calls", async () => {
+    await withIpcDirectory(async (ipcDirectory) => {
+      const factory = createZeroMqTransportFactory(config(ipcDirectory));
+      let invalid!: ReturnType<typeof factory.createPublisher>;
+      expect(() => {
+        invalid = factory.createPublisher(create(ChannelIdSchema));
+      }).not.toThrow();
+      await expect(invalid).rejects.toThrow(/targetType/iu);
+      const subscriber = await factory.createSubscriber(channel());
+      await factory.close();
+      let consumer!: ReturnType<typeof subscriber.addConsumer>;
+      expect(() => {
+        consumer = subscriber.addConsumer(() => undefined);
+      }).not.toThrow();
+      await expect(consumer).rejects.toThrow(/closed/iu);
+      let closed!: ReturnType<typeof factory.createPublisher>;
+      expect(() => {
+        closed = factory.createPublisher(channel());
+      }).not.toThrow();
+      await expect(closed).rejects.toThrow(/closed/iu);
     });
   });
 
