@@ -13,3 +13,19 @@
   `gpt-5.6-luna` / `medium` configuration, no subagent authority, and
   unavailable runtime telemetry. It owns a read-only current-truth audit; the
   orchestrator owns all documentation edits.
+
+## Documentation audit and ownership — 2026-08-16
+
+- The read-only audit found documentation/status/inventory drift but no new
+  product-contract inconsistency. Highest-priority contradictions are the old
+  `@External()` claim, “external origin not implemented” claims, obsolete
+  broker durability requirements, registry-v2/no-origin API prose, and stale
+  Wave 13 planning/completion status.
+- Two independent documentation implementation functions are dispatched with
+  explicit `gpt-5.6-luna` / `medium` profiles, no subagent authority, and
+  unavailable runtime telemetry. One owns package/user guidance; one owns
+  architecture/API guidance. They must not edit canonical protocol records or
+  each other's files.
+- The orchestrator owns `DEVELOPER_API`, `RUNTIME_ARCHITECTURE`,
+  `TECHNICAL_SPEC`, completion/remediation/Wave 13 status, API-inventory
+  enforcement, final evidence, and integration.

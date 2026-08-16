@@ -21,8 +21,17 @@ release profile, integrate from isolation, push, and leave the remote with only
 - Documentation audit function: existing `documentation_reviewer`, explicitly
   configured `gpt-5.6-luna` / `medium`; no subagents; runtime telemetry
   unavailable.
-- Documentation edits are serialized in this worktree. Specialist reviews are
-  read-only and parallel only after deterministic convergence.
+- Documentation edits use independent single-writer file groups in this
+  worktree. Specialist reviews are read-only and parallel only after
+  deterministic convergence.
+- Package/user documentation function: explicit `gpt-5.6-luna` / `medium`, no
+  subagents; owns only server/transport/proto package README/REFERENCE files and
+  `docs/USER_GUIDE.md`.
+- Architecture/API documentation function: explicit `gpt-5.6-luna` / `medium`,
+  no subagents; owns only `docs/architecture/README.md` and
+  `docs/api/README.md`.
+- The orchestrator exclusively owns canonical build-protocol records,
+  documentation inventory enforcement, convergence evidence, and integration.
 - The primary checkout and all protected human changes remain read-only.
 
 ## Acceptance
