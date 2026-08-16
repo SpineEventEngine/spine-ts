@@ -1,11 +1,13 @@
 /* Copyright 2026, CodeMatters. All rights reserved. Licensed under Apache-2.0. */
-import { create } from "@bufbuild/protobuf";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { create, toBinary } from "@bufbuild/protobuf";
+import { Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { TypeUrls } from "@spine-event-engine/core";
 import {
   BoundedContextNameSchema,
   BoundedContextOnlineSchema,
   ChannelIdSchema,
+  ExternalEventsWantedSchema,
+  ExternalMessageSchema,
 } from "@spine-event-engine/proto";
 import { eventBusAccess } from "../../src/bus/event-bus.js";
 import { afterEach, describe, expect, it } from "vitest";
@@ -98,4 +100,71 @@ describe("IntegrationBroker module", () => {
       ),
     ).toHaveLength(2);
   });
+
+  it("installs one publisher per type, retains it for another requester, then removes it", async () => {
+    const factory = new RecordingTransportFactory();
+    const bus = eventBusAccess.createForgettingBus();
+    eventBusAccess.registerSchemas(bus, [StringValueSchema, Int32ValueSchema]);
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: "producer" }),
+      transportFactory: factory as never,
+      eventBus: bus,
+      externalEventSchemas: [],
+      postImported: () => Promise.resolve(),
+    });
+    brokers.push(broker);
+    await broker.open();
+    await publishWanted(factory, "one", [StringValueSchema]);
+    await publishWanted(factory, "two", [StringValueSchema]);
+    expect(eventPublisherCreations(factory, StringValueSchema)).toHaveLength(1);
+    await publishWanted(factory, "one", []);
+    expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(StringValueSchema));
+    await publishWanted(factory, "two", [Int32ValueSchema]);
+    expect(factory.openPublisherTargets()).not.toContain(TypeUrls.derive(StringValueSchema));
+    expect(factory.openPublisherTargets()).toContain(TypeUrls.derive(Int32ValueSchema));
+  });
 });
+
+async function publishWanted(
+  factory: RecordingTransportFactory,
+  source: string,
+  schemas: readonly (typeof StringValueSchema | typeof Int32ValueSchema)[],
+): Promise<void> {
+  const publisher = await factory.createPublisher(
+    create(ChannelIdSchema, { targetType: TypeUrls.derive(ExternalEventsWantedSchema) }) as never,
+  );
+  const id = {
+    typeUrl: TypeUrls.derive(StringValueSchema),
+    value: toBinary(StringValueSchema, create(StringValueSchema, { value: crypto.randomUUID() })),
+  };
+  try {
+    await publisher.publish(
+      id as never,
+      create(ExternalMessageSchema, {
+        id,
+        originalMessage: {
+          typeUrl: TypeUrls.derive(ExternalEventsWantedSchema),
+          value: toBinary(
+            ExternalEventsWantedSchema,
+            create(ExternalEventsWantedSchema, {
+              type: schemas.map((schema) => ({ typeUrl: TypeUrls.derive(schema) })),
+            }),
+          ),
+        },
+        boundedContextName: create(BoundedContextNameSchema, { value: source }),
+      }),
+    );
+  } finally {
+    await publisher.close();
+  }
+}
+function eventPublisherCreations(
+  factory: RecordingTransportFactory,
+  schema: typeof StringValueSchema | typeof Int32ValueSchema,
+) {
+  return factory.created.filter(
+    ({ kind, channel }) =>
+      kind === "publisher" &&
+      (channel as { targetType?: string }).targetType === TypeUrls.derive(schema),
+  );
+}
