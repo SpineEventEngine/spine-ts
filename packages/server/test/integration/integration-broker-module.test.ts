@@ -13,7 +13,12 @@
  */
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { BoolValueSchema, Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
+import {
+  AnySchema,
+  BoolValueSchema,
+  Int32ValueSchema,
+  StringValueSchema,
+} from "@bufbuild/protobuf/wkt";
 import { SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
   BoundedContextNameSchema,
@@ -131,10 +136,10 @@ describe("IntegrationBroker module", () => {
     });
     brokers.push(broker);
     await broker.open();
-    const identity = {
+    const identity = create(AnySchema, {
       typeUrl: TypeUrls.derive(StringValueSchema),
       value: toBinary(StringValueSchema, create(StringValueSchema, { value: "control" })),
-    };
+    });
     for (const targetType of [
       TypeUrls.derive(BoundedContextOnlineSchema),
       TypeUrls.derive(ExternalEventsWantedSchema),
@@ -146,7 +151,10 @@ describe("IntegrationBroker module", () => {
           create(ExternalMessageSchema, {
             id: identity,
             boundedContextName: create(BoundedContextNameSchema, { value: "peer" }),
-            originalMessage: { typeUrl: targetType, value: new Uint8Array([255]) },
+            originalMessage: create(AnySchema, {
+              typeUrl: targetType,
+              value: new Uint8Array([255]),
+            }),
           }),
         ),
       ).rejects.toThrow(/Malformed integration control message/u);
@@ -160,10 +168,10 @@ describe("IntegrationBroker module", () => {
         identity,
         create(ExternalMessageSchema, {
           id: identity,
-          originalMessage: {
+          originalMessage: create(AnySchema, {
             typeUrl: TypeUrls.derive(BoundedContextOnlineSchema),
             value: toBinary(BoundedContextOnlineSchema, create(BoundedContextOnlineSchema)),
-          },
+          }),
         }),
       ),
     ).rejects.toThrow(/Malformed integration control message/u);
@@ -314,6 +322,7 @@ describe("IntegrationBroker module", () => {
     await bus.post(
       SignalEnvelopes.event({
         id: create(EventIdSchema, { value: "rolled-back" }),
+        context: create(EventContextSchema),
         schema: Int32ValueSchema,
         message: create(Int32ValueSchema, { value: 1 }),
       }),
@@ -370,6 +379,7 @@ describe("IntegrationBroker module", () => {
     await bus.post(
       SignalEnvelopes.event({
         id: create(EventIdSchema, { value: "new" }),
+        context: create(EventContextSchema),
         schema: Int32ValueSchema,
         message: create(Int32ValueSchema, { value: 1 }),
       }),
@@ -450,6 +460,7 @@ describe("IntegrationBroker module", () => {
     await bus.post(
       SignalEnvelopes.event({
         id: create(EventIdSchema, { value: "ignored" }),
+        context: create(EventContextSchema),
         schema: Int32ValueSchema,
         message: create(Int32ValueSchema, { value: 1 }),
       }),
@@ -795,6 +806,7 @@ describe("IntegrationBroker module", () => {
 function event(id: string) {
   return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: id }),
+    context: create(EventContextSchema),
     schema: StringValueSchema,
     message: create(StringValueSchema, { value: id }),
   });
@@ -823,16 +835,16 @@ async function publishWanted(
   const publisher = await factory.createPublisher(
     create(ChannelIdSchema, { targetType: TypeUrls.derive(ExternalEventsWantedSchema) }),
   );
-  const id = {
+  const id = create(AnySchema, {
     typeUrl: TypeUrls.derive(StringValueSchema),
     value: toBinary(StringValueSchema, create(StringValueSchema, { value: crypto.randomUUID() })),
-  };
+  });
   try {
     await publisher.publish(
       id,
       create(ExternalMessageSchema, {
         id,
-        originalMessage: {
+        originalMessage: create(AnySchema, {
           typeUrl: TypeUrls.derive(ExternalEventsWantedSchema),
           value: toBinary(
             ExternalEventsWantedSchema,
@@ -840,7 +852,7 @@ async function publishWanted(
               type: schemas.map((schema) => ({ typeUrl: TypeUrls.derive(schema) })),
             }),
           ),
-        },
+        }),
         boundedContextName: create(BoundedContextNameSchema, { value: source }),
       }),
     );

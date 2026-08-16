@@ -40,8 +40,12 @@ describe("InMemoryTransportFactory", () => {
     const first = await factory.createSubscriber(channel());
     const second = await factory.createSubscriber(channel());
     const received: string[] = [];
-    const firstHandle = await first.addConsumer((message) => received.push(message.id.typeUrl));
-    const secondHandle = await second.addConsumer((message) => received.push(message.id.typeUrl));
+    const firstHandle = await first.addConsumer((message) => {
+      received.push(required(message.id, "first copied frame identity").typeUrl);
+    });
+    const secondHandle = await second.addConsumer((message) => {
+      received.push(required(message.id, "second copied frame identity").typeUrl);
+    });
     const publisher = await factory.createPublisher(channel());
     const current = frame("one");
     await publisher.publish(current.id, current.message);
@@ -69,7 +73,9 @@ describe("InMemoryTransportFactory", () => {
     const values: string[] = [];
     const handle = await subscriber.addConsumer(async (message) => {
       await new Promise((resolve) => setTimeout(resolve, 2));
-      values.push(String.fromCharCode(message.id.value.at(-1) ?? 0));
+      values.push(
+        String.fromCharCode(required(message.id, "serialized frame identity").value.at(-1) ?? 0),
+      );
     });
     const publisher = await factory.createPublisher(channel());
     const one = frame("1");
@@ -147,3 +153,8 @@ describe("InMemoryTransportFactory", () => {
     await Promise.all([subscriber.close(), factory.close().catch(() => undefined)]);
   });
 });
+
+function required<Value>(value: Value | undefined, label: string): Value {
+  if (value === undefined) throw new Error(`Expected ${label}.`);
+  return value;
+}

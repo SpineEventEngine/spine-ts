@@ -24,14 +24,14 @@ describe("Wave 13 broker lifecycle", () => {
   beforeEach(async () => resetServerEnvironmentForTest());
   afterEach(async () => resetServerEnvironmentForTest());
   it("RED-18 gives every BoundedContext one broker that withdraws, detaches, closes, aggregates failures, and supports retry cleanup", async () => {
-    const factory = new RecordingTransportFactory({ failCloseAttempts: 2 });
-    ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory } as never);
+    const factory = new RecordingTransportFactory();
+    ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
     const first = await BoundedContext.singleTenant(`Wave13LifecycleA${crypto.randomUUID()}`)
       .addEventDispatcher({
         messageSchemas: () => [StringValueSchema],
         externalEventSchemas: () => [StringValueSchema],
-        dispatch: async () => undefined,
-      } as never)
+        dispatch: () => Promise.resolve(),
+      })
       .buildAsync();
     const second = await BoundedContext.singleTenant(
       `Wave13LifecycleB${crypto.randomUUID()}`,
@@ -39,13 +39,14 @@ describe("Wave 13 broker lifecycle", () => {
     const environment = ServerEnvironment.instance() as unknown as { transportFactory: unknown };
     try {
       expect(environment.transportFactory).toBe(factory);
-      for (const targetType of [
-        "type.spine.io/spine.server.integration.BoundedContextOnline",
-        "type.spine.io/spine.server.integration.ExternalEventsWanted",
-      ]) {
+      for (const [targetType, publishers] of [
+        ["type.spine.io/spine.server.integration.BoundedContextOnline", 2],
+        ["type.spine.io/spine.server.integration.ExternalEventsWanted", 3],
+      ] as const) {
         expect(channels(factory, "subscriber", targetType)).toHaveLength(2);
-        expect(channels(factory, "publisher", targetType)).toHaveLength(2);
+        expect(channels(factory, "publisher", targetType)).toHaveLength(publishers);
       }
+      factory.failCloseAfter(1);
       await expect(first.close()).rejects.toBeInstanceOf(AggregateError);
       expect(factory.operations).toEqual(
         expect.arrayContaining(["publisher:close", "subscriber:close"]),
@@ -78,13 +79,18 @@ function channels(
   );
 }
 
-async function decodedWanted(factory: RecordingTransportFactory): Promise<readonly any[]> {
-  const proto = (await import("@spine-event-engine/proto")) as Record<string, any>;
+async function decodedWanted(
+  factory: RecordingTransportFactory,
+): Promise<readonly { readonly type: readonly unknown[] }[]> {
+  const { ExternalEventsWantedSchema } = await import("@spine-event-engine/proto");
   return factory.published.flatMap(({ message }) => {
     const original = (message as { originalMessage?: { typeUrl?: string; value?: Uint8Array } })
       .originalMessage;
-    return original?.typeUrl === "type.spine.io/spine.server.integration.ExternalEventsWanted"
-      ? [fromBinary(proto.ExternalEventsWantedSchema, original.value!)]
-      : [];
+    if (
+      original?.typeUrl !== "type.spine.io/spine.server.integration.ExternalEventsWanted" ||
+      original.value === undefined
+    )
+      return [];
+    return [fromBinary(ExternalEventsWantedSchema, original.value)];
   });
 }

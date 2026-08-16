@@ -26,7 +26,7 @@ import {
 import path from "node:path";
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { ChannelIdSchema, ExternalMessageSchema } from "@spine-event-engine/proto";
 import { describe, expect, it, vi } from "vitest";
 
@@ -137,7 +137,12 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
       const subscriber = await factory.createSubscriber(channel());
       const received: string[] = [];
       await subscriber.addConsumer((message) => {
-        received.push(fromBinary(StringValueSchema, message.originalMessage.value).value);
+        received.push(
+          fromBinary(
+            StringValueSchema,
+            required(message.originalMessage, "first original message").value,
+          ).value,
+        );
       });
       const publisher = await factory.createPublisher(channel());
       const first = frame("first");
@@ -417,7 +422,12 @@ describe("ZeroMQ message transport manifest lifecycle", () => {
       const subscriber = await factory.createSubscriber(channel());
       const received: string[] = [];
       await subscriber.addConsumer((message) => {
-        received.push(fromBinary(StringValueSchema, message.originalMessage.value).value);
+        received.push(
+          fromBinary(
+            StringValueSchema,
+            required(message.originalMessage, "second original message").value,
+          ).value,
+        );
       });
       const left = await factory.createPublisher(channel());
       const right = await factory.createPublisher(channel());
@@ -445,10 +455,15 @@ function channel() {
 }
 
 function frameId(value = "manifest") {
-  return {
+  return create(AnySchema, {
     typeUrl: "type.spine.io/google.protobuf.StringValue",
     value: toBinary(StringValueSchema, create(StringValueSchema, { value })),
-  };
+  });
+}
+
+function required<Value>(value: Value | undefined, label: string): Value {
+  if (value === undefined) throw new Error(`Expected ${label}.`);
+  return value;
 }
 
 function frame(value = "manifest") {

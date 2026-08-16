@@ -24,6 +24,7 @@ import type {
   TransportSubscription,
   TransportSubscriptionHandle,
 } from "@spine-event-engine/transport";
+import { InMemoryTransportFactory, type TransportFactory } from "@spine-event-engine/transport";
 
 import { RetryableCloseGroup } from "./retryable-close.js";
 import { emitServerWarning } from "./server-log.js";
@@ -99,6 +100,9 @@ export interface ServerEnvironmentSettings {
    */
   readonly transport?: SignalTransport;
 
+  /** Message-channel factory used by private bounded-context integration brokers. */
+  readonly transportFactory?: TransportFactory;
+
   /**
    * Optional closeable delivery owner for durable delivery seams.
    */
@@ -153,6 +157,9 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
    */
   readonly transport: SignalTransport;
 
+  /** Message-channel factory selected for private bounded-context integration. */
+  readonly transportFactory: TransportFactory;
+
   /**
    * Optional closeable delivery owner selected for this environment.
    */
@@ -174,6 +181,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     this.nodeId = crypto.randomUUID();
     this.storageFactory = settings.storageFactory;
     this.transport = settings.transport;
+    this.transportFactory = settings.transportFactory;
     this.delivery = settings.delivery;
     this.tracerFactory = settings.tracerFactory;
     environmentLoggers.set(this, settings.logger);
@@ -296,6 +304,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
 interface RequiredFacilities {
   readonly storageFactory: StorageFactory;
   readonly transport: SignalTransport;
+  readonly transportFactory: TransportFactory;
   readonly delivery: ServerEnvironmentCloseable | undefined;
   readonly tracerFactory: ServerEnvironmentCloseable | undefined;
   readonly logger: ILogLayer;
@@ -532,6 +541,7 @@ const ServerEnvironmentValues = Object.freeze({
   facilitiesToClose(options: RequiredFacilities): readonly unknown[] {
     return Object.freeze([
       ...(options.delivery === undefined ? [] : [options.delivery]),
+      options.transportFactory,
       options.transport,
       ...(options.tracerFactory === undefined ? [] : [options.tracerFactory]),
       options.storageFactory,
@@ -564,9 +574,13 @@ const ServerEnvironmentValues = Object.freeze({
       if (settings.transport === undefined) {
         throw new Error("Production ServerEnvironment requires transport.");
       }
+      if (settings.transportFactory === undefined) {
+        throw new Error("Production ServerEnvironment requires transportFactory.");
+      }
       return {
         storageFactory: settings.storageFactory,
         transport: settings.transport,
+        transportFactory: settings.transportFactory,
         delivery: settings.delivery,
         tracerFactory: settings.tracerFactory,
         logger: ServerEnvironmentValues.logger(settings.logger),
@@ -575,6 +589,7 @@ const ServerEnvironmentValues = Object.freeze({
     return {
       storageFactory: settings.storageFactory ?? new InMemoryStorageFactory(),
       transport: settings.transport ?? new LocalSignalTransport(),
+      transportFactory: settings.transportFactory ?? new InMemoryTransportFactory(),
       delivery: settings.delivery,
       tracerFactory: settings.tracerFactory,
       logger: ServerEnvironmentValues.logger(settings.logger),

@@ -13,6 +13,7 @@
  */
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
 import {
   BoolValueSchema,
   Int32ValueSchema,
@@ -25,6 +26,7 @@ import {
   EventContextSchema,
   EventIdSchema,
   EventSchema,
+  BoundedContextNameSchema,
   ChannelIdSchema,
   ExternalEventsWantedSchema,
   ExternalMessageSchema,
@@ -57,20 +59,52 @@ const domestic = (schemas: readonly unknown[], received: unknown[] = []) => ({
   messageSchemas: () => schemas,
   dispatch: (event: unknown) => Promise.resolve(received.push(event)).then(() => undefined),
 });
-function event(schema = StringValueSchema, id = "wave13-event", tenantId?: string) {
+function event(
+  schema?: typeof StringValueSchema,
+  id?: string,
+  tenantId?: string,
+): ReturnType<typeof stringEvent>;
+function event(
+  schema: typeof Int32ValueSchema,
+  id?: string,
+  tenantId?: string,
+): ReturnType<typeof int32Event>;
+function event(
+  schema: typeof StringValueSchema | typeof Int32ValueSchema = StringValueSchema,
+  id = "wave13-event",
+  tenantId?: string,
+) {
+  return schema === Int32ValueSchema ? int32Event(id, tenantId) : stringEvent(id, tenantId);
+}
+function eventContext(tenantId?: string) {
+  return create(
+    EventContextSchema,
+    tenantId === undefined
+      ? {}
+      : {
+          origin: {
+            case: "importContext",
+            value: {
+              tenantId: create(TenantIdSchema, { kind: { case: "value", value: tenantId } }),
+            },
+          },
+        },
+  );
+}
+function stringEvent(id: string, tenantId?: string) {
   return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: id }),
-    context: create(
-      EventContextSchema,
-      tenantId === undefined
-        ? {}
-        : { tenantId: create(TenantIdSchema, { value: tenantId } as never) },
-    ),
-    schema,
-    message:
-      schema === Int32ValueSchema
-        ? create(Int32ValueSchema, { value: id.length })
-        : create(StringValueSchema, { value: id }),
+    context: eventContext(tenantId),
+    schema: StringValueSchema,
+    message: create(StringValueSchema, { value: id }),
+  });
+}
+function int32Event(id: string, tenantId?: string) {
+  return SignalEnvelopes.event({
+    id: create(EventIdSchema, { value: id }),
+    context: eventContext(tenantId),
+    schema: Int32ValueSchema,
+    message: create(Int32ValueSchema, { value: id.length }),
   });
 }
 async function broker(behavior: string) {
@@ -108,7 +142,9 @@ describe("Wave 13 IntegrationBroker", () => {
     await broker("many-consumer complete-event fan-out");
     const first: unknown[] = [],
       second: unknown[] = [];
-    const producer = BoundedContext.singleTenant("Red02Producer").build();
+    const producer = BoundedContext.singleTenant("Red02Producer")
+      .addEventDispatcher(domestic([StringValueSchema]) as never)
+      .build();
     const one = BoundedContext.singleTenant("Red02One")
       .addEventDispatcher(external([StringValueSchema], first) as never)
       .build();
@@ -144,7 +180,7 @@ describe("Wave 13 IntegrationBroker", () => {
   it("RED-06 does not republish imported events in a bidirectional cycle", async () => {
     await broker("origin-only loop prevention");
     const factory = new RecordingTransportFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory } as never);
+    ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
     const a: unknown[] = [],
       b: unknown[] = [];
     const left = BoundedContext.singleTenant("Red06A")
@@ -176,7 +212,7 @@ describe("Wave 13 IntegrationBroker", () => {
   it("RED-07 installs one publisher on the first requester and serializes complete-set replacement", async () => {
     await broker("first request and replacement");
     const factory = new RecordingTransportFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory } as never);
+    ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
     const producer = await BoundedContext.singleTenant(`Red07${crypto.randomUUID()}`)
       .addEventDispatcher(domestic([StringValueSchema, Int32ValueSchema]) as never)
       .buildAsync();
@@ -206,8 +242,10 @@ describe("Wave 13 IntegrationBroker", () => {
   it("RED-08 retains publication while another requester still wants the type", async () => {
     await broker("per-origin wanted references");
     const factory = new RecordingTransportFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory } as never);
-    const producer = await BoundedContext.singleTenant(`Red08${crypto.randomUUID()}`).buildAsync();
+    ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
+    const producer = await BoundedContext.singleTenant(`Red08${crypto.randomUUID()}`)
+      .addEventDispatcher(domestic([StringValueSchema]) as never)
+      .buildAsync();
     try {
       await publishWanted(factory, "Red08First", [StringValueSchema]);
       await publishWanted(factory, "Red08Second", [StringValueSchema]);
@@ -228,7 +266,7 @@ describe("Wave 13 IntegrationBroker", () => {
   it("RED-10 suppresses an unchanged complete wanted-event set", async () => {
     await broker("unchanged complete-set suppression");
     const factory = new RecordingTransportFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory } as never);
+    ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
     const context = await BoundedContext.singleTenant(`Red10${crypto.randomUUID()}`)
       .addEventDispatcher(external([StringValueSchema], []) as never)
       .addEventDispatcher(external([StringValueSchema], []) as never)
@@ -265,7 +303,9 @@ describe("Wave 13 IntegrationBroker", () => {
     const c = BoundedContext.singleTenant("Red13C")
       .addEventDispatcher(external([StringValueSchema], seen) as never)
       .build();
-    const p = BoundedContext.singleTenant("Red13P").build();
+    const p = BoundedContext.singleTenant("Red13P")
+      .addEventDispatcher(domestic([StringValueSchema]) as never)
+      .build();
     try {
       const one = event(StringValueSchema, "one"),
         two = event(StringValueSchema, "two");
@@ -287,10 +327,11 @@ describe("Wave 13 IntegrationBroker", () => {
       .withGeneratedRegistryRoot(registry.root)
       .add(Wave13OriginProjection, { eventRouting: wave13OriginRouting })
       .buildAsync();
-    const p = await BoundedContext.multitenant("Red15P").buildAsync();
-    const single = await BoundedContext.singleTenant("Red15Single").buildAsync();
-    const tenantA = create(TenantIdSchema, { value: "tenant-a" } as never);
-    const tenantB = create(TenantIdSchema, { value: "tenant-b" } as never);
+    const p = await BoundedContext.multitenant("Red15P")
+      .addEventDispatcher(domestic([StringValueSchema]) as never)
+      .buildAsync();
+    const tenantA = create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } });
+    const tenantB = create(TenantIdSchema, { kind: { case: "value", value: "tenant-b" } });
     try {
       await p.eventBus().post(event(StringValueSchema, "a", "tenant-a"));
       await p.eventBus().post(event(StringValueSchema, "b", "tenant-b"));
@@ -310,23 +351,32 @@ describe("Wave 13 IntegrationBroker", () => {
       await expect(p.eventBus().post(event(StringValueSchema, "missing"))).rejects.toThrow(
         /tenant/u,
       );
+      const single = await BoundedContext.singleTenant("Red15Single")
+        .addEventDispatcher(external([StringValueSchema], []) as never)
+        .buildAsync();
+      const forbidden = await BoundedContext.singleTenant("Red15Forbidden")
+        .addEventDispatcher(domestic([StringValueSchema]) as never)
+        .buildAsync();
       await expect(
-        single.eventBus().post(event(StringValueSchema, "forbidden", "tenant-a")),
+        forbidden.eventBus().post(event(StringValueSchema, "forbidden", "tenant-a")),
       ).rejects.toThrow(/tenant/u);
+      await close(forbidden, single);
     } finally {
-      await close(p, c, single);
+      await close(p, c);
       registry.clear();
     }
   });
   it("RED-16 changes only EventContext.external before posting through the normal EventBus", async () => {
     await broker("normal EventBus import with system/self filtering");
     const factory = new RecordingTransportFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory } as never);
+    ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
     const seen: unknown[] = [];
     const c = await BoundedContext.singleTenant("Red16C")
       .addEventDispatcher(external([StringValueSchema], seen) as never)
       .buildAsync();
-    const p = await BoundedContext.singleTenant("Red16P").buildAsync();
+    const p = await BoundedContext.singleTenant("Red16P")
+      .addEventDispatcher(domestic([StringValueSchema]) as never)
+      .buildAsync();
     try {
       const original = SignalEnvelopes.event({
         id: create(EventIdSchema, { value: "red16-preserved" }),
@@ -375,27 +425,29 @@ async function assertWantedLifecycle(options: {
   readonly assertNoPublicationAfterWithdrawal?: boolean;
 }): Promise<void> {
   const factory = new RecordingTransportFactory();
-  ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory } as never);
-  const producer = BoundedContext.singleTenant(`WantedProducer${crypto.randomUUID()}`)
+  ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
+  const producer = await BoundedContext.singleTenant(`WantedProducer${crypto.randomUUID()}`)
     .addEventDispatcher(domestic([StringValueSchema, Int32ValueSchema]) as never)
-    .build();
+    .buildAsync();
   // RED-07 exercises producer-before-consumer; the peer-online branch creates
   // a consumer before its producer to retain the reverse construction order.
-  const consumers = Array.from({ length: options.requesters }, (_, index) =>
-    BoundedContext.singleTenant(`WantedConsumer${String(index)}${crypto.randomUUID()}`)
-      .addEventDispatcher(external([StringValueSchema], []) as never)
-      .build(),
+  const consumers = await Promise.all(
+    Array.from({ length: options.requesters }, (_, index) =>
+      BoundedContext.singleTenant(`WantedConsumer${String(index)}${crypto.randomUUID()}`)
+        .addEventDispatcher(external([StringValueSchema], []) as never)
+        .buildAsync(),
+    ),
   );
   let peer: BoundedContext | undefined;
   try {
     if (options.peerOnline)
-      peer = BoundedContext.singleTenant(`WantedPeer${crypto.randomUUID()}`).build();
+      peer = await BoundedContext.singleTenant(`WantedPeer${crypto.randomUUID()}`).buildAsync();
     if (options.closeFirst) await required(consumers[0], "first consumer").close();
 
     const eventPublicationsBefore = eventPublications(factory).length;
     if (options.closeFirst) await producer.eventBus().post(event(StringValueSchema, "after-close"));
 
-    const wantedFrames = await decodeWantedFrames(factory);
+    const wantedFrames = await decodeWantedFrames(factory, "WantedConsumer");
     expect(wantedFrames).toHaveLength(options.expectedWantedFrames);
     expect(
       factory.created.filter(
@@ -426,10 +478,10 @@ async function assertWantedLifecycle(options: {
 
 async function assertFailedReplacementKeepsPriorWantedSet(): Promise<void> {
   const factory = new RecordingTransportFactory();
-  ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory } as never);
-  const producer = await BoundedContext.singleTenant(
-    `RollbackProducer${crypto.randomUUID()}`,
-  ).buildAsync();
+  ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
+  const producer = await BoundedContext.singleTenant(`RollbackProducer${crypto.randomUUID()}`)
+    .addEventDispatcher(domestic([StringValueSchema, Int32ValueSchema, BoolValueSchema]) as never)
+    .buildAsync();
   try {
     await publishWanted(factory, "RollbackPeer", [StringValueSchema]);
     factory.failPublisherCreationAfter(
@@ -456,7 +508,10 @@ async function assertFailedReplacementKeepsPriorWantedSet(): Promise<void> {
   }
 }
 
-function decodeWantedFrames(factory: RecordingTransportFactory): Promise<
+function decodeWantedFrames(
+  factory: RecordingTransportFactory,
+  contextPrefix?: string,
+): Promise<
   readonly {
     readonly message: { readonly type: readonly { readonly typeUrl: string }[] };
     readonly operationIndex: number;
@@ -464,11 +519,15 @@ function decodeWantedFrames(factory: RecordingTransportFactory): Promise<
 > {
   return Promise.resolve(
     factory.published.flatMap(({ message, operationIndex }) => {
-      const frame = message as { originalMessage?: { typeUrl?: string; value?: Uint8Array } };
+      const frame = message as {
+        readonly boundedContextName?: { readonly value?: string };
+        readonly originalMessage?: { readonly typeUrl?: string; readonly value?: Uint8Array };
+      };
       if (
         frame.originalMessage?.typeUrl !==
           "type.spine.io/spine.server.integration.ExternalEventsWanted" ||
-        frame.originalMessage.value === undefined
+        frame.originalMessage.value === undefined ||
+        (contextPrefix !== undefined && !frame.boundedContextName?.value?.startsWith(contextPrefix))
       )
         return [];
       return [
@@ -533,10 +592,10 @@ async function publishWanted(
     type: schemas.map((schema) => ({ typeUrl: TypeUrls.derive(schema) })),
   });
   const id = create(StringValueSchema, { value: crypto.randomUUID() });
-  const packedId = {
+  const packedId = create(AnySchema, {
     typeUrl: TypeUrls.derive(StringValueSchema),
     value: toBinary(StringValueSchema, id),
-  };
+  });
   const publisher = await factory.createPublisher(
     create(ChannelIdSchema, {
       targetType: "type.spine.io/spine.server.integration.ExternalEventsWanted",
@@ -547,11 +606,11 @@ async function publishWanted(
       packedId,
       create(ExternalMessageSchema, {
         id: packedId,
-        originalMessage: {
+        originalMessage: create(AnySchema, {
           typeUrl: "type.spine.io/spine.server.integration.ExternalEventsWanted",
           value: toBinary(ExternalEventsWantedSchema, wanted),
-        },
-        boundedContextName: { value: source },
+        }),
+        boundedContextName: create(BoundedContextNameSchema, { value: source }),
       }),
     );
   } finally {
@@ -564,10 +623,10 @@ async function publishExternalEvent(
   original: ReturnType<typeof event>,
   source: string,
 ): Promise<void> {
-  const packedId = {
+  const packedId = create(AnySchema, {
     typeUrl: TypeUrls.derive(EventIdSchema),
-    value: toBinary(EventIdSchema, original.id),
-  };
+    value: toBinary(EventIdSchema, required(original.id, "external event identity")),
+  });
   const publisher = await factory.createPublisher(
     create(ChannelIdSchema, { targetType: TypeUrls.derive(StringValueSchema) }),
   );
@@ -576,11 +635,11 @@ async function publishExternalEvent(
       packedId,
       create(ExternalMessageSchema, {
         id: packedId,
-        originalMessage: {
+        originalMessage: create(AnySchema, {
           typeUrl: TypeUrls.derive(EventSchema),
           value: toBinary(EventSchema, original),
-        },
-        boundedContextName: { value: source },
+        }),
+        boundedContextName: create(BoundedContextNameSchema, { value: source }),
       }),
     );
   } finally {
@@ -608,10 +667,21 @@ function required<Value>(value: Value | undefined, label: string): Value {
 function tenantValue(context: unknown): string {
   if (typeof context !== "object" || context === null)
     throw new Error("Expected an Event context.");
-  const tenantId = (context as { readonly tenantId?: unknown }).tenantId;
+  const origin = (
+    context as {
+      readonly origin?: {
+        readonly case?: unknown;
+        readonly value?: { readonly tenantId?: unknown };
+      };
+    }
+  ).origin;
+  const tenantId = origin?.case === "importContext" ? origin.value?.tenantId : undefined;
   if (typeof tenantId !== "object" || tenantId === null)
     throw new Error("Expected an Event context tenant identity.");
-  const value = (tenantId as { readonly value?: unknown }).value;
+  const kind = (
+    tenantId as { readonly kind?: { readonly case?: unknown; readonly value?: unknown } }
+  ).kind;
+  const value = kind?.case === "value" ? kind.value : undefined;
   if (typeof value !== "string") throw new Error("Expected a string tenant identity.");
   return value;
 }

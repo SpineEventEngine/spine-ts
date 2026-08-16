@@ -250,6 +250,7 @@ describe("command registration readiness", () => {
       messageFullTypeName: CommandSchema.typeName,
       methodName: "assignCreate",
       parameterCount: 1,
+      origin: "domestic",
     };
     const mutableEntityHandlers: EntityHandlersMetadata = {
       entityType: TaskProjection,
@@ -316,6 +317,7 @@ describe("command registration readiness", () => {
       messageFullTypeName: CommandSchema.typeName,
       methodName: "assignCreate",
       parameterCount: 1,
+      origin: "domestic",
     };
     const mutableEntityHandlers: EntityHandlersMetadata = {
       entityType: TaskProjection,
@@ -366,6 +368,7 @@ describe("command registration readiness", () => {
       messageFullTypeName: CommandSchema.typeName,
       methodName: "assignCreate",
       parameterCount: 1,
+      origin: "domestic",
     };
     const entityHandlers: EntityHandlersMetadata = {
       entityType: TaskProjection,
@@ -436,6 +439,7 @@ function createRegistryLookupForCommandNames(
       messageFullTypeName: commandFullTypeName,
       methodName: "assignCreate",
       parameterCount: 1,
+      origin: "domestic",
     };
     const entityHandlers: EntityHandlersMetadata = {
       entityType: TaskProjection,

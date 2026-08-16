@@ -387,6 +387,8 @@ describe("@spine-event-engine/server", () => {
       | "UNSUPPORTED_HANDLER_KIND"
       | "INVALID_PARAMETER_COUNT"
       | "INVALID_SCHEMA"
+      | "INVALID_SIGNAL_ORIGIN"
+      | "EXTERNAL_COMMAND_RECEIVER"
       | "MISSING_EMITTED_SCHEMAS"
       | "UNEXPECTED_EMITTED_SCHEMAS"
     >();

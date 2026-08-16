@@ -16,10 +16,11 @@ import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { serialize } from "node:v8";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { TypeUrls } from "../../core/src/index.js";
 import {
   BoundedContextOnlineSchema,
+  BoundedContextNameSchema,
   ChannelIdSchema,
   EventContextSchema,
   EventIdSchema,
@@ -50,9 +51,19 @@ describe("Wave 13 integration broker protobuf contract", () => {
       ["originalMessage", 2],
       ["boundedContextName", 4],
     ]);
-    expect(wrapper.field.id.message.typeName).toBe("google.protobuf.Any");
-    expect(wrapper.field.originalMessage.message.typeName).toBe("google.protobuf.Any");
-    expect(wrapper.field.boundedContextName.message.typeName).toBe("spine.core.BoundedContextName");
+    expect(required(wrapper.field.id.message, "ExternalMessage.id message").typeName).toBe(
+      "google.protobuf.Any",
+    );
+    expect(
+      required(wrapper.field.originalMessage.message, "ExternalMessage.originalMessage message")
+        .typeName,
+    ).toBe("google.protobuf.Any");
+    expect(
+      required(
+        wrapper.field.boundedContextName.message,
+        "ExternalMessage.boundedContextName message",
+      ).typeName,
+    ).toBe("spine.core.BoundedContextName");
     expect(
       wrapper.file.proto.messageType.find((message) => message.name === "ExternalMessage")
         ?.reservedRange,
@@ -68,8 +79,13 @@ describe("Wave 13 integration broker protobuf contract", () => {
     expect(wanted.typeName).toBe("spine.server.integration.ExternalEventsWanted");
     expect(wanted.fields).toHaveLength(1);
     expect(wanted.field.type.number).toBe(1);
+    expect(wanted.field.type.fieldKind).toBe("list");
+    if (wanted.field.type.fieldKind !== "list")
+      throw new Error("Expected ExternalEventsWanted.type list field.");
     expect(wanted.field.type.listKind).toBe("message");
-    expect(wanted.field.type.message.typeName).toBe("spine.server.integration.ExternalEventType");
+    expect(required(wanted.field.type.message, "ExternalEventsWanted.type message").typeName).toBe(
+      "spine.server.integration.ExternalEventType",
+    );
     expect(externalType.typeName).toBe("spine.server.integration.ExternalEventType");
     expect(
       externalType.fields.map((field) => [field.localName, field.number, field.scalar]),
@@ -77,7 +93,9 @@ describe("Wave 13 integration broker protobuf contract", () => {
     expect(online.typeName).toBe("spine.server.integration.BoundedContextOnline");
     expect(online.fields).toHaveLength(1);
     expect(online.field.context.number).toBe(1);
-    expect(online.field.context.message.typeName).toBe("spine.core.BoundedContextName");
+    expect(
+      required(online.field.context.message, "BoundedContextOnline.context message").typeName,
+    ).toBe("spine.core.BoundedContextName");
     expect(wrapper.file.proto.package).toContain("spine.server.integration");
     expect(wrapper.file.proto.options?.javaPackage).toBe("io.spine.server.integration");
     expect(channel.file.proto.package).toBe("spine.server.transport");
@@ -90,23 +108,30 @@ describe("Wave 13 integration broker protobuf contract", () => {
       },
     });
     const frame = create(wrapper, {
-      id: {
+      id: create(AnySchema, {
         typeUrl: "type.spine.io/spine.core.EventId",
-        value: toBinary(EventIdSchema, event.id),
-      },
-      originalMessage: {
+        value: toBinary(EventIdSchema, required(event.id, "event identity")),
+      }),
+      originalMessage: create(AnySchema, {
         typeUrl: "type.spine.io/spine.core.Event",
         value: toBinary(EventSchema, event),
-      },
-      boundedContextName: { value: "Wave13Producer" },
+      }),
+      boundedContextName: create(BoundedContextNameSchema, { value: "Wave13Producer" }),
     });
     const roundTripped = fromBinary(wrapper, toBinary(wrapper, frame));
-    expect(roundTripped.id.typeUrl).toBe("type.spine.io/spine.core.EventId");
-    expect(fromBinary(EventIdSchema, roundTripped.id.value)).toEqual(event.id);
-    expect(roundTripped.originalMessage.typeUrl).toBe("type.spine.io/spine.core.Event");
+    const roundTrippedId = required(roundTripped.id, "round-tripped wrapper identity");
+    const roundTrippedOriginal = required(
+      roundTripped.originalMessage,
+      "round-tripped original message",
+    );
+    expect(roundTrippedId.typeUrl).toBe("type.spine.io/spine.core.EventId");
+    expect(fromBinary(EventIdSchema, roundTrippedId.value)).toEqual(event.id);
+    expect(roundTrippedOriginal.typeUrl).toBe("type.spine.io/spine.core.Event");
     expect(roundTripped.boundedContextName).toMatchObject({ value: "Wave13Producer" });
-    expect(roundTripped.originalMessage.value).toEqual(frame.originalMessage.value);
-    expect(fromBinary(EventSchema, roundTripped.originalMessage.value)).toEqual(event);
+    expect(roundTrippedOriginal.value).toEqual(
+      required(frame.originalMessage, "frame original message").value,
+    );
+    expect(fromBinary(EventSchema, roundTrippedOriginal.value)).toEqual(event);
     const protobufBytes = toBinary(wrapper, frame);
     expect(() => fromBinary(wrapper, Buffer.from(JSON.stringify(frame)))).toThrow();
     expect(() => fromBinary(wrapper, serialize(frame))).toThrow();
@@ -123,8 +148,8 @@ describe("Wave 13 integration broker protobuf contract", () => {
       "../proto/spine/core/event.proto",
       "0c385d3fd98d68d35ce1d7887bd564b590daba47b959b99d205c2be56a737d29",
     );
-    expect(wrapExternalEvent(event, { value: "Wave13Producer" })).toEqual(frame);
-    const origin = { value: "Wave13Producer" };
+    const origin = create(BoundedContextNameSchema, { value: "Wave13Producer" });
+    expect(wrapExternalEvent(event, origin)).toEqual(frame);
     const wantedMessage = create(wanted, {
       type: [{ typeUrl: "type.spine.io/google.protobuf.StringValue" }],
     });
@@ -141,10 +166,10 @@ describe("Wave 13 integration broker protobuf contract", () => {
       unpackExternalEvent(
         create(wrapper, {
           ...frame,
-          originalMessage: {
-            ...frame.originalMessage,
+          originalMessage: create(AnySchema, {
+            ...required(frame.originalMessage, "frame original message"),
             typeUrl: "type.spine.io/google.protobuf.StringValue",
-          },
+          }),
         }),
       ),
     ).toThrow();
@@ -152,20 +177,18 @@ describe("Wave 13 integration broker protobuf contract", () => {
       unpackExternalEvent(
         create(wrapper, {
           ...frame,
-          id: {
+          id: create(AnySchema, {
             typeUrl: "type.spine.io/google.protobuf.StringValue",
             value: toBinary(StringValueSchema, create(StringValueSchema, { value: "wrong" })),
-          },
+          }),
         }),
       ),
     ).toThrow();
-    expect(() => wrapExternalEvent(create(EventSchema), { value: "Wave13Producer" })).toThrow(
-      /EventId/u,
-    );
+    expect(() => wrapExternalEvent(create(EventSchema), origin)).toThrow(/EventId/u);
     expect(() => unpackExternalEvent(create(wrapper))).toThrow(/origin/u);
-    expect(() => wrapBoundedContextOnline(create(online, { context: { value: "" } }))).toThrow(
-      /origin/u,
-    );
+    expect(() =>
+      wrapBoundedContextOnline(create(online, { context: create(BoundedContextNameSchema) })),
+    ).toThrow(/origin/u);
     expect(toExternalEvent(create(EventSchema)).context).toMatchObject({ external: true });
   });
 });
@@ -173,4 +196,9 @@ describe("Wave 13 integration broker protobuf contract", () => {
 async function expectPinnedSource(relativePath: string, expected: string): Promise<void> {
   const bytes = await readFile(new URL(relativePath, import.meta.url));
   expect(createHash("sha256").update(bytes).digest("hex")).toBe(expected);
+}
+
+function required<Value>(value: Value | undefined, label: string): Value {
+  if (value === undefined) throw new Error(`Expected ${label}.`);
+  return value;
 }

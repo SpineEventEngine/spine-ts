@@ -222,6 +222,7 @@ describe("EventBus", () => {
     await bus.post(
       SignalEnvelopes.event({
         id: create(EventIdSchema, { value: "domestic-route" }),
+        context: create(EventContextSchema),
         schema: AggregateStateSchema,
         message: create(AggregateStateSchema, { id: "domestic-route", name: "route" }),
       }),

@@ -62,6 +62,7 @@ export class IntegrationBroker {
   #open: Promise<void> | undefined;
   #close: Promise<void> | undefined;
   #closed = false;
+  #emptyWantedPublished = false;
 
   /**
    * Creates an exchange coordinator from context-owned integration resources.
@@ -99,6 +100,26 @@ export class IntegrationBroker {
   close(): Promise<void> {
     this.#close ??= this.#closeOnce();
     return this.#close;
+  }
+
+  /**
+   * Publishes a third-party imported event through this context's private broker.
+   *
+   * @internal
+   */
+  async publishImported(event: Event): Promise<void> {
+    if (this.#closed) throw new Error("IntegrationBroker is closed.");
+    const targetType = event.message?.typeUrl;
+    if (targetType === undefined || targetType.length === 0) {
+      throw new Error("Imported event requires event.message.typeUrl.");
+    }
+    const publisher = await this.#input.transportFactory.createPublisher(channel(targetType));
+    try {
+      const frame = wrapExternalEvent(event, this.#input.contextName);
+      await publisher.publish(frame.id, frame);
+    } finally {
+      await this.#closeEphemeral(publisher);
+    }
   }
 
   async #openOnce(): Promise<void> {
@@ -317,6 +338,7 @@ export class IntegrationBroker {
   }
 
   async #publishEmptyWanted(): Promise<void> {
+    if (this.#emptyWantedPublished) return;
     const publisher = await this.#input.transportFactory.createPublisher(channel(wantedType));
     try {
       const frame = wrapExternalEventsWanted(
@@ -324,6 +346,7 @@ export class IntegrationBroker {
         this.#input.contextName,
       );
       await publisher.publish(frame.id, frame);
+      this.#emptyWantedPublished = true;
     } finally {
       await this.#closeEphemeral(publisher);
     }

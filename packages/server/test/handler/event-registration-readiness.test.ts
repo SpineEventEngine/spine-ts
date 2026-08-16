@@ -331,6 +331,7 @@ describe("event registration readiness", () => {
       messageFullTypeName: EventSchema.typeName,
       methodName: "subscribeCreated",
       parameterCount: 1,
+      origin: "domestic",
     };
     const mutableEntityHandlers: EntityHandlersMetadata = {
       entityType: TaskProjection,
@@ -397,6 +398,7 @@ describe("event registration readiness", () => {
       messageFullTypeName: EventSchema.typeName,
       methodName: "subscribeCreated",
       parameterCount: 1,
+      origin: "domestic",
     };
     const mutableEntityHandlers: EntityHandlersMetadata = {
       entityType: TaskProjection,
@@ -447,6 +449,7 @@ describe("event registration readiness", () => {
       messageFullTypeName: EventSchema.typeName,
       methodName: "subscribeCreated",
       parameterCount: 1,
+      origin: "domestic",
     };
     const entityHandlers: EntityHandlersMetadata = {
       entityType: TaskProjection,
@@ -530,6 +533,7 @@ function createRegistryLookupForEventNames(
       messageFullTypeName: eventFullTypeName,
       methodName: "subscribeCreated",
       parameterCount: 1,
+      origin: "domestic",
     };
     const entityHandlers: EntityHandlersMetadata = {
       entityType: TaskProjection,

@@ -161,9 +161,9 @@ export class RecordingTransportFactory implements TransportFactory {
     const key = channelKey(channel);
     this.#openPublishers.add(key);
     let closed = false;
-    return {
+    const publisher: Publisher = {
       id: channel,
-      targetType: (channel as { targetType?: string }).targetType,
+      targetType: required(channel.targetType, "publisher channel target type"),
       isStale: () => false,
       publish: async (id: Any, message: ExternalMessage) => {
         this.operations.push("publisher:publish");
@@ -197,9 +197,9 @@ export class RecordingTransportFactory implements TransportFactory {
     const key = channelKey(channel);
     const consumers = this.#consumers.get(key) ?? new Set();
     this.#consumers.set(key, consumers);
-    return {
+    const subscriber: Subscriber = {
       id: channel,
-      targetType: (channel as { targetType?: string }).targetType,
+      targetType: required(channel.targetType, "subscriber channel target type"),
       isStale: () => consumers.size === 0,
       addConsumer: (consumer: ExternalMessageConsumer): Promise<ConsumerHandle> => {
         if (this.#consumerAdditionFailure?.(channel) === true) {
@@ -210,7 +210,7 @@ export class RecordingTransportFactory implements TransportFactory {
         consumers.add(consumer);
         this.operations.push("consumer:add");
         let closed = false;
-        return {
+        const handle: ConsumerHandle = {
           close: () => {
             if (closed) return Promise.resolve();
             closed = true;
@@ -242,6 +242,11 @@ function channelKey(channel: unknown): string {
   if (typeof targetType !== "string" || targetType.length === 0)
     throw new TypeError("Transport channels require ChannelId.targetType.");
   return targetType;
+}
+
+function required<Value>(value: Value | undefined, label: string): Value {
+  if (value === undefined) throw new Error(`Expected ${label}.`);
+  return value;
 }
 
 /**

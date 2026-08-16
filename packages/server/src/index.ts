@@ -29,6 +29,7 @@ export {
   type StoredEventDispatchFailure,
   type TenantMode,
 } from "./context/bounded-context.js";
+export { ThirdPartyContext } from "./integration/third-party-context.js";
 
 export {
   Stand,

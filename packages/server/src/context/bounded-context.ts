@@ -18,11 +18,12 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { ILogLayer } from "loglayer";
 
-import { clone, getOption, hasOption, type Message } from "@bufbuild/protobuf";
+import { clone, create, getOption, hasOption, type Message } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   EventSchema,
+  BoundedContextNameSchema,
   TenantIdSchema,
   type Command,
   type Event,
@@ -98,6 +99,8 @@ import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/deliv
 import { InboxTargets } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import { emitServerError } from "../server/server-log.js";
+import { IntegrationBroker } from "../integration/integration-broker.js";
+import { ServerEnvironment } from "../server/server-environment.js";
 
 /**
  * Tenant isolation mode declared by a bounded context specification.
@@ -536,6 +539,10 @@ const contextDispatchFailureRecorders = new WeakMap<
   BoundedContext,
   (event: Event, error: unknown) => void
 >();
+const contextIntegrations = new WeakMap<
+  BoundedContext,
+  { readonly broker: IntegrationBroker; readonly ready: Promise<void> }
+>();
 const systemEventPosters = new WeakMap<BoundedContext, (event: Event) => Promise<void>>();
 const builderBuilds = new WeakMap<
   BoundedContextBuilder,
@@ -696,7 +703,7 @@ export class BoundedContext {
     });
     this.#eventEndpoint = Object.freeze({
       acceptedEventTypes: () => ContextParts.exposedEventTypeUrls(this.#eventBus),
-      post: (event: Event) => this.#eventBus.post(event),
+      post: (event: Event) => ContextParts.postContextEvent(this, event),
     });
     contextDispatchFailureRecorders.set(this, (event, error) => {
       this.#recordDispatchFailure(event, error);
@@ -1026,6 +1033,8 @@ export class BoundedContext {
   async #closeOnce(): Promise<void> {
     const errors: unknown[] = [];
 
+    await ContextParts.closeContextPart(() => ContextParts.closeIntegration(this), errors);
+
     commandBusAccess.beginClose(this.#commandBus);
     eventBusAccess.beginClose(this.#eventBus);
     await ContextParts.closeContextPart(
@@ -1058,11 +1067,11 @@ export class BoundedContext {
         registeredRepositories.delete(repository);
       }, errors);
     }
-    ContextParts.clearContextMetadata(this);
-
     if (errors.length > 0) {
+      this.#closed = undefined;
       throw new AggregateError(ContextParts.flattenErrors(errors), "BoundedContext close failed.");
     }
+    ContextParts.clearContextMetadata(this);
   }
 
   #recordDispatchFailure(event: Event, error: unknown): void {
@@ -1505,10 +1514,12 @@ export class BoundedContextBuilder {
       ...(await this.#loadGeneratedRepositories([...this.#entityTypes])),
     ];
 
-    return this.#buildWith(
+    const context = this.#buildWith(
       repositories,
       this.#storageFactory ?? defaultStorageFactory ?? new InMemoryStorageFactory(),
     );
+    await ContextParts.integrationReady(context);
+    return context;
   }
 
   #buildWith(
@@ -1572,7 +1583,7 @@ export class BoundedContextBuilder {
         storageFactory,
       );
       runtime = new SubscriptionRuntime(stand, systemStand, eventBus, systemEventBus, registry);
-      return ContextParts.createBoundedContext(
+      const context = ContextParts.createBoundedContext(
         this.#specSnapshot,
         commandBus,
         eventBus,
@@ -1585,6 +1596,13 @@ export class BoundedContextBuilder {
         registeredRepositories,
         this.#deliveryStrategy,
       );
+      ContextParts.attachIntegration(
+        context,
+        eventBus,
+        systemSpec,
+        ContextParts.externalEventSchemas(domainEventDispatchers),
+      );
+      return context;
     } catch (error) {
       const cleanupErrors: unknown[] = [];
       ContextParts.attemptCleanup(() => runtime?.abortClose(), cleanupErrors);
@@ -1965,6 +1983,77 @@ const ContextParts = Object.freeze({
         .filter((schema) => !ContextParts.isInternalEventSchema(schema))
         .map((schema) => TypeUrls.derive(schema)),
     );
+  },
+
+  externalEventSchemas(dispatchers: Iterable<EventDispatcher>): readonly MessageSchema[] {
+    const schemas = new Map<string, MessageSchema>();
+    for (const dispatcher of dispatchers) {
+      for (const schema of dispatcher.externalEventSchemas?.() ?? []) {
+        schemas.set(TypeUrls.derive(schema), schema);
+      }
+    }
+    return Object.freeze([...schemas.values()]);
+  },
+
+  attachIntegration(
+    context: BoundedContext,
+    eventBus: EventBus,
+    systemSpec: ContextSpecSnapshot,
+    externalEventSchemas: Iterable<MessageSchema>,
+  ): void {
+    const broker = new IntegrationBroker({
+      contextName: create(BoundedContextNameSchema, { value: context.name.value }),
+      pairedContextName: create(BoundedContextNameSchema, { value: systemSpec.name.value }),
+      transportFactory: ServerEnvironment.instance().transportFactory,
+      eventBus,
+      externalEventSchemas,
+      postImported: async (event) => {
+        const imported = clone(EventSchema, event);
+        if (imported.context === undefined) throw new Error("Imported event requires context.");
+        ContextParts.validateImportedTenant(context, imported);
+        imported.context.external = true;
+        await eventBus.post(imported);
+      },
+    });
+    contextIntegrations.set(context, { broker, ready: broker.open() });
+  },
+
+  postContextEvent(context: BoundedContext, event: Event): Promise<void> {
+    const buses = contextEventBuses.get(context);
+    if (buses === undefined) return Promise.reject(new Error("Context EventBus is unavailable."));
+    return (contextIntegrations.get(context)?.ready ?? Promise.resolve()).then(() => {
+      ContextParts.validateImportedTenant(context, event);
+      return buses[0].post(event);
+    });
+  },
+
+  closeIntegration(context: BoundedContext): Promise<void> {
+    return contextIntegrations.get(context)?.broker.close() ?? Promise.resolve();
+  },
+
+  publishImported(context: BoundedContext, event: Event): Promise<void> {
+    const integration = contextIntegrations.get(context);
+    if (integration === undefined)
+      return Promise.reject(new Error("Context integration is unavailable."));
+    return integration.ready.then(() => integration.broker.publishImported(event));
+  },
+
+  validateImportedTenant(context: BoundedContext, event: Event): void {
+    const tenantId = ContextParts.readReplayTenant(event);
+    if (!context.isMultitenant) {
+      if (tenantId !== undefined) {
+        throw new Error(`Single-tenant context "${context.name.value}" does not accept tenantId.`);
+      }
+      return;
+    }
+    if (tenantId === undefined) {
+      throw new Error(`Multitenant context "${context.name.value}" requires tenantId.`);
+    }
+    TenantBoundary.from(tenantId);
+  },
+
+  integrationReady(context: BoundedContext): Promise<void> {
+    return contextIntegrations.get(context)?.ready ?? Promise.resolve();
   },
 
   isInternalEventSchema(schema: DescriptorMessageSchema): boolean {
@@ -2370,6 +2459,7 @@ const ContextParts = Object.freeze({
     contextStorageFactories.delete(context);
     contextDeliveryDescriptors.delete(context);
     contextSubscriptionRuntimes.delete(context);
+    contextIntegrations.delete(context);
     eventSubscribers.delete(context);
     systemEventPosters.delete(context);
   },
@@ -2775,5 +2865,18 @@ const ContextParts = Object.freeze({
 
   readRecordField(record: Message, localName: DescriptorFieldMetadata["localName"]): unknown {
     return (record as Record<string, unknown>)[localName];
+  },
+});
+
+/** @internal */
+export const boundedContextIntegrationAccess: Readonly<{
+  publishImported(context: BoundedContext, event: Event): Promise<void>;
+  ready(context: BoundedContext): Promise<void>;
+}> = Object.freeze({
+  publishImported(context: BoundedContext, event: Event): Promise<void> {
+    return ContextParts.publishImported(context, event);
+  },
+  ready(context: BoundedContext): Promise<void> {
+    return ContextParts.integrationReady(context);
   },
 });
