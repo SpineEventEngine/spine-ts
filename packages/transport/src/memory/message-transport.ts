@@ -127,6 +127,7 @@ class MemoryPublisher implements Publisher {
   #closing = false;
   #tail: Promise<void> = Promise.resolve();
   readonly #failures: unknown[] = [];
+  #close: Promise<void> | undefined;
   readonly #targetType: string;
   readonly #factory: MemoryTransportState;
   get id(): ChannelId {
@@ -154,9 +155,13 @@ class MemoryPublisher implements Publisher {
     });
     return accepted;
   }
-  async close(): Promise<void> {
-    if (this.#closing) return this.#tail;
+  close(): Promise<void> {
+    if (this.#close) return this.#close;
     this.#closing = true;
+    this.#close = this.#closeAfterDrain();
+    return this.#close;
+  }
+  async #closeAfterDrain(): Promise<void> {
     try {
       await this.#tail;
       if (this.#failures.length > 0)
