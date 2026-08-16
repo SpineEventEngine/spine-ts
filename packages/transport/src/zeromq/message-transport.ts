@@ -13,9 +13,9 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import { fromBinary, toBinary } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { ChannelIdSchema, ExternalMessageSchema } from "@spine-event-engine/proto";
 import type { ChannelId, ExternalMessage } from "@spine-event-engine/proto";
@@ -30,6 +30,23 @@ import type {
 import type { ZeroMqConfig } from "./adapter-config.js";
 import { zeroMqSocketAccess } from "./signal-transport.js";
 
+const manifestVersion = 1;
+const maxManifestBytes = 4096;
+const maxManifestEntries = 1024;
+const staleAfterMs = 5000;
+const heartbeatIntervalMs = 1000;
+const unixSocketPathLimit = 104;
+const generationPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+
+interface SubscriberManifest {
+  readonly version: 1;
+  readonly generation: string;
+  readonly adapterIdentity: string;
+  readonly ownerPid: number;
+  readonly endpoint: string;
+  readonly heartbeatAtMs: number;
+}
+
 /**
  * Creates the distinct typed-message ZeroMQ adapter.
  *
@@ -43,140 +60,223 @@ export function createZeroMqTransportFactory(config: ZeroMqConfig): TransportFac
 class ZeroMqMessageTransport implements TransportFactory {
   readonly #publishers = new Set<NativePublisher>();
   readonly #subscribers = new Set<NativeSubscriber>();
-  #closed = false;
   readonly #config: ZeroMqConfig;
+  #closePromise: Promise<void> | undefined;
+
   constructor(config: ZeroMqConfig) {
     this.#config = config;
   }
-  async createPublisher(id: ChannelId): Promise<Publisher> {
-    if (this.#closed) throw new Error("ZeroMQ message transport is closed.");
+
+  createPublisher(id: ChannelId): Promise<Publisher> {
+    if (this.#closePromise !== undefined) throw new Error("ZeroMQ message transport is closed.");
     const publisher = new NativePublisher(id, this.#config);
     this.#publishers.add(publisher);
-    return publisher;
+    return Promise.resolve(publisher);
   }
+
   async createSubscriber(id: ChannelId): Promise<Subscriber> {
-    if (this.#closed) throw new Error("ZeroMQ message transport is closed.");
+    if (this.#closePromise !== undefined) throw new Error("ZeroMQ message transport is closed.");
     const subscriber = await NativeSubscriber.open(id, this.#config);
     this.#subscribers.add(subscriber);
     return subscriber;
   }
-  async close(): Promise<void> {
-    if (this.#closed) return;
-    this.#closed = true;
-    await Promise.all([...this.#publishers].map((item) => item.close()));
-    await Promise.all([...this.#subscribers].map((item) => item.close()));
+
+  close(): Promise<void> {
+    this.#closePromise ??= this.#close();
+    return this.#closePromise;
+  }
+
+  async #close(): Promise<void> {
+    const results = await Promise.allSettled([
+      ...[...this.#publishers].map((item) => item.close()),
+      ...[...this.#subscribers].map((item) => item.close()),
+    ]);
+    const failures: unknown[] = [];
+    for (const result of results) {
+      if (result.status === "rejected") failures.push(result.reason);
+    }
+    if (failures.length > 0)
+      throw new AggregateError(failures, "ZeroMQ message transport close failed.");
   }
 }
 
 class NativePublisher implements Publisher {
-  readonly id: ChannelId;
+  readonly #id: ChannelId;
   readonly #config: ZeroMqConfig;
+  readonly #sockets = new Map<string, Push>();
   #closed = false;
+
   constructor(id: ChannelId, config: ZeroMqConfig) {
-    this.id = { ...id };
+    this.#id = canonicalChannelId(id);
     this.#config = config;
   }
-  get targetType(): string {
-    return this.id.targetType;
+
+  get id(): ChannelId {
+    return { ...this.#id };
   }
+
+  get targetType(): string {
+    return this.#id.targetType;
+  }
+
   isStale(): boolean {
     return this.#closed;
   }
+
   async publish(_id: Any, message: ExternalMessage): Promise<void> {
     if (this.#closed) throw new Error("ZeroMQ message publisher is closed.");
-    const directory = channelDirectory(this.#config, this.targetType);
-    const subscribers = path.join(directory, "subscribers");
-    let entries: string[] = [];
-    try {
-      entries = await readdir(subscribers);
-    } catch {
-      return;
-    }
-    await Promise.all(
-      entries
-        .filter((entry) => entry.endsWith(".json"))
-        .map(async (entry) => {
-          const manifest = JSON.parse(await readFile(path.join(subscribers, entry), "utf8")) as {
-            endpoint?: string;
-          };
-          if (!manifest.endpoint) return;
-          const socket = new Push({ linger: 0 });
-          try {
-            socket.connect(manifest.endpoint);
-            await socket.send(toBinary(ExternalMessageSchema, message));
-          } finally {
-            socket.close();
-          }
-        }),
+    const manifests = await discoverSubscribers(this.#config, this.targetType);
+    this.#reconcile(manifests);
+    const frame = toBinary(ExternalMessageSchema, message);
+    const attempts = await Promise.allSettled(
+      manifests.map((manifest) => this.#send(manifest, frame)),
     );
+    const failures = attempts.flatMap((item, index) =>
+      item.status === "rejected"
+        ? [{ subscriber: manifests[index]?.generation, reason: "delivery failed" }]
+        : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(
+        failures,
+        `ZeroMQ message publication failed for ${this.targetType}.`,
+      );
   }
-  async close(): Promise<void> {
+
+  close(): Promise<void> {
     this.#closed = true;
+    for (const socket of this.#sockets.values()) socket.close();
+    this.#sockets.clear();
+    return Promise.resolve();
+  }
+
+  async #send(manifest: SubscriberManifest, frame: Uint8Array): Promise<void> {
+    let socket = this.#sockets.get(manifest.generation);
+    if (socket === undefined) {
+      socket = new Push({ linger: 100, immediate: true, sendTimeout: 250 });
+      socket.connect(manifest.endpoint);
+      this.#sockets.set(manifest.generation, socket);
+    }
+    await socket.send(frame);
+  }
+
+  #reconcile(manifests: readonly SubscriberManifest[]): void {
+    const active = new Set(manifests.map((manifest) => manifest.generation));
+    for (const [generation, socket] of this.#sockets) {
+      if (active.has(generation)) continue;
+      socket.close();
+      this.#sockets.delete(generation);
+    }
   }
 }
 
 class NativeSubscriber implements Subscriber {
-  readonly id: ChannelId;
+  readonly #id: ChannelId;
   readonly #socket: Pull;
-  readonly #manifest: string;
+  readonly #manifestPath: string;
+  readonly #socketPath: string;
+  readonly #manifest: SubscriberManifest;
   readonly #consumers = new Set<ExternalMessageConsumer>();
-  #closed = false;
-  private constructor(id: ChannelId, socket: Pull, manifest: string) {
-    this.id = { ...id };
+  readonly #heartbeat: NodeJS.Timeout;
+  #closePromise: Promise<void> | undefined;
+
+  private constructor(
+    id: ChannelId,
+    socket: Pull,
+    manifestPath: string,
+    socketPath: string,
+    manifest: SubscriberManifest,
+  ) {
+    this.#id = canonicalChannelId(id);
     this.#socket = socket;
+    this.#manifestPath = manifestPath;
+    this.#socketPath = socketPath;
     this.#manifest = manifest;
-    this.#run();
+    this.#heartbeat = setInterval(() => {
+      void this.#refreshHeartbeat();
+    }, heartbeatIntervalMs);
+    this.#heartbeat.unref();
+    void this.#run();
   }
+
   static async open(id: ChannelId, config: ZeroMqConfig): Promise<NativeSubscriber> {
-    await zeroMqSocketAccess.prepareIpcDirectory(config.ipcDirectory);
+    const channel = canonicalChannelId(id);
+    const layout = await prepareLayout(config, channel.targetType);
     const generation = randomUUID();
-    const directory = channelDirectory(config, id.targetType);
-    const subscribers = path.join(directory, "subscribers");
-    const sockets = path.join(config.ipcDirectory, "spine-message-channels", "sockets");
-    await mkdir(subscribers, { recursive: true, mode: 0o700 });
-    await mkdir(sockets, { recursive: true, mode: 0o700 });
-    const endpoint = "ipc://" + path.join(sockets, generation + ".sock");
+    const socketPath = path.join(layout.sockets, `${generation}.sock`);
+    const endpoint = `ipc://${socketPath}`;
+    if (Buffer.byteLength(socketPath) >= unixSocketPathLimit)
+      throw new Error("ZeroMQ message channel IPC socket path exceeds the native path limit.");
+    const manifestPath = path.join(layout.subscribers, `${generation}.json`);
+    const manifest: SubscriberManifest = {
+      version: manifestVersion,
+      generation,
+      adapterIdentity: config.adapterIdentity,
+      ownerPid: process.pid,
+      endpoint,
+      heartbeatAtMs: Date.now(),
+    };
     const socket = new Pull({ linger: 0 });
-    await socket.bind(endpoint);
-    const manifest = path.join(subscribers, generation + ".json");
-    await writeFile(
-      manifest,
-      JSON.stringify({
-        version: 1,
-        generation,
-        adapterIdentity: config.adapterIdentity,
-        ownerPid: process.pid,
-        endpoint,
-        heartbeatAtMs: Date.now(),
-      }),
-      { mode: 0o600 },
-    );
-    return new NativeSubscriber(id, socket, manifest);
+    try {
+      await socket.bind(endpoint);
+      await writeManifest(manifestPath, manifest);
+      return new NativeSubscriber(channel, socket, manifestPath, socketPath, manifest);
+    } catch (error) {
+      socket.close();
+      await rm(socketPath, { force: true });
+      throw error;
+    }
   }
+
+  get id(): ChannelId {
+    return { ...this.#id };
+  }
+
   get targetType(): string {
-    return this.id.targetType;
+    return this.#id.targetType;
   }
+
   isStale(): boolean {
-    return this.#closed || this.#consumers.size === 0;
+    return this.#closePromise !== undefined || this.#consumers.size === 0;
   }
-  async addConsumer(consumer: ExternalMessageConsumer): Promise<ConsumerHandle> {
+
+  addConsumer(consumer: ExternalMessageConsumer): Promise<ConsumerHandle> {
+    if (this.#closePromise !== undefined) throw new Error("ZeroMQ message subscriber is closed.");
     this.#consumers.add(consumer);
     let removed = false;
-    return {
-      close: async () => {
-        if (removed) return;
+    const handle: ConsumerHandle = {
+      close: () => {
+        if (removed) return Promise.resolve();
         removed = true;
         this.#consumers.delete(consumer);
+        return Promise.resolve();
       },
     };
+    return Promise.resolve(handle);
   }
-  async close(): Promise<void> {
-    if (this.#closed) return;
-    this.#closed = true;
-    await rm(this.#manifest, { force: true });
+
+  close(): Promise<void> {
+    this.#closePromise ??= this.#close();
+    return this.#closePromise;
+  }
+
+  async #close(): Promise<void> {
+    clearInterval(this.#heartbeat);
+    await rm(this.#manifestPath, { force: true });
     this.#socket.close();
+    await rm(this.#socketPath, { force: true });
     this.#consumers.clear();
   }
+
+  async #refreshHeartbeat(): Promise<void> {
+    if (this.#closePromise !== undefined) return;
+    try {
+      await writeManifest(this.#manifestPath, { ...this.#manifest, heartbeatAtMs: Date.now() });
+    } catch {
+      // Publication removes stale entries; no retry worker belongs in this adapter.
+    }
+  }
+
   async #run(): Promise<void> {
     try {
       for await (const [bytes] of this.#socket) {
@@ -185,15 +285,196 @@ class NativeSubscriber implements Subscriber {
         for (const consumer of this.#consumers) await consumer(message);
       }
     } catch {
-      /* close ends iteration */
+      // Socket closure terminates the async iterator.
     }
   }
 }
-function channelDirectory(config: ZeroMqConfig, targetType: string): string {
-  return path.join(
-    config.ipcDirectory,
-    "spine-message-channels",
+
+async function discoverSubscribers(
+  config: ZeroMqConfig,
+  targetType: string,
+): Promise<SubscriberManifest[]> {
+  const layout = await prepareLayout(config, targetType);
+  const manifests = (await readdir(layout.subscribers))
+    .filter((entry) => entry.endsWith(".json"))
+    .sort();
+  if (manifests.length > maxManifestEntries)
+    throw new Error(
+      `ZeroMQ message channel exceeds ${String(maxManifestEntries)} subscriber manifests.`,
+    );
+  const discovered: SubscriberManifest[] = [];
+  for (const entry of manifests) {
+    const manifestPath = path.join(layout.subscribers, entry);
+    const manifest = await readManifest(manifestPath, layout, entry, config.adapterIdentity);
+    if (manifest === undefined) continue;
+    if (manifest.adapterIdentity !== config.adapterIdentity) continue;
+    if (!(await isLive(manifest))) {
+      await rm(manifestPath, { force: true });
+      await rm(socketPathFromEndpoint(manifest.endpoint), { force: true });
+      continue;
+    }
+    discovered.push(manifest);
+  }
+  return discovered;
+}
+
+async function prepareLayout(
+  config: ZeroMqConfig,
+  targetType: string,
+): Promise<{
+  readonly subscribers: string;
+  readonly sockets: string;
+}> {
+  await zeroMqSocketAccess.prepareIpcDirectory(config.ipcDirectory);
+  const root = path.join(config.ipcDirectory, "spine-message-channels");
+  await ensurePrivateDirectory(root);
+  const channel = path.join(
+    root,
     "channels",
     createHash("sha256").update(targetType).digest("hex"),
   );
+  const subscribers = path.join(channel, "subscribers");
+  const sockets = path.join(root, "sockets");
+  await ensurePrivateDirectory(path.join(root, "channels"));
+  await ensurePrivateDirectory(channel);
+  await ensurePrivateDirectory(subscribers);
+  await ensurePrivateDirectory(sockets);
+  return { subscribers, sockets };
+}
+
+async function ensurePrivateDirectory(directory: string): Promise<void> {
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const entry = await lstat(directory);
+  if (entry.isSymbolicLink() || !entry.isDirectory())
+    throw new Error("ZeroMQ message channel directory must be a non-symlink directory.");
+  if (process.platform !== "win32") {
+    if (entry.uid !== process.geteuid?.())
+      throw new Error("ZeroMQ message channel directory must be owned by the effective user.");
+    if ((entry.mode & 0o777) !== 0o700)
+      throw new Error("ZeroMQ message channel directory must have exact POSIX mode 0700.");
+  }
+}
+
+async function writeManifest(manifestPath: string, manifest: SubscriberManifest): Promise<void> {
+  const contents = JSON.stringify(manifest);
+  if (Buffer.byteLength(contents) > maxManifestBytes)
+    throw new Error("ZeroMQ message manifest is too large.");
+  const temporary = `${manifestPath}.${randomUUID()}.tmp`;
+  const file = await open(temporary, "wx", 0o600);
+  try {
+    await file.writeFile(contents, "utf8");
+    await file.sync();
+  } finally {
+    await file.close();
+  }
+  await rename(temporary, manifestPath);
+}
+
+async function readManifest(
+  manifestPath: string,
+  layout: { readonly subscribers: string; readonly sockets: string },
+  entry: string,
+  adapterIdentity: string,
+): Promise<SubscriberManifest | undefined> {
+  try {
+    const file = await lstat(manifestPath);
+    if (file.isSymbolicLink() || !file.isFile() || file.size > maxManifestBytes) {
+      await rm(manifestPath, { force: true });
+      return undefined;
+    }
+    const handle = await open(manifestPath, "r");
+    let text: string;
+    try {
+      text = await handle.readFile({ encoding: "utf8" });
+    } finally {
+      await handle.close();
+    }
+    const parsed: unknown = JSON.parse(text);
+    if (hasForeignIdentity(parsed, adapterIdentity)) return undefined;
+    if (!isManifest(parsed, layout, entry)) {
+      await rm(manifestPath, { force: true });
+      return undefined;
+    }
+    return parsed;
+  } catch {
+    await rm(manifestPath, { force: true });
+    return undefined;
+  }
+}
+
+function hasForeignIdentity(candidate: unknown, adapterIdentity: string): boolean {
+  return (
+    candidate !== null &&
+    typeof candidate === "object" &&
+    !Array.isArray(candidate) &&
+    (candidate as { adapterIdentity?: unknown }).adapterIdentity !== adapterIdentity
+  );
+}
+
+function isManifest(
+  candidate: unknown,
+  layout: { readonly subscribers: string; readonly sockets: string },
+  entry: string,
+): candidate is SubscriberManifest {
+  if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) return false;
+  const value = candidate as Record<string, unknown>;
+  const expectedKeys = [
+    "adapterIdentity",
+    "endpoint",
+    "generation",
+    "heartbeatAtMs",
+    "ownerPid",
+    "version",
+  ];
+  if (Object.keys(value).sort().join("\0") !== expectedKeys.join("\0")) return false;
+  if (value.version !== manifestVersion || typeof value.generation !== "string") return false;
+  if (!generationPattern.test(value.generation) || entry !== `${value.generation}.json`)
+    return false;
+  if (typeof value.adapterIdentity !== "string" || value.adapterIdentity.length === 0) return false;
+  if (
+    typeof value.ownerPid !== "number" ||
+    !Number.isSafeInteger(value.ownerPid) ||
+    value.ownerPid <= 0
+  )
+    return false;
+  if (
+    typeof value.heartbeatAtMs !== "number" ||
+    !Number.isSafeInteger(value.heartbeatAtMs) ||
+    value.heartbeatAtMs <= 0
+  )
+    return false;
+  if (typeof value.endpoint !== "string") return false;
+  const expectedSocket = path.join(layout.sockets, `${value.generation}.sock`);
+  return value.endpoint === `ipc://${expectedSocket}`;
+}
+
+async function isLive(manifest: SubscriberManifest): Promise<boolean> {
+  if (Date.now() - manifest.heartbeatAtMs > staleAfterMs) return false;
+  try {
+    const socket = await stat(socketPathFromEndpoint(manifest.endpoint));
+    if (!socket.isSocket()) return false;
+  } catch {
+    return false;
+  }
+  try {
+    process.kill(manifest.ownerPid, 0);
+    return true;
+  } catch (error) {
+    return isErrorCode(error, "EPERM");
+  }
+}
+
+function socketPathFromEndpoint(endpoint: string): string {
+  return endpoint.slice("ipc://".length);
+}
+
+function canonicalChannelId(id: ChannelId): ChannelId {
+  create(ChannelIdSchema, id);
+  if (id.targetType.trim().length === 0)
+    throw new Error("ZeroMQ message channel target type is required.");
+  return create(ChannelIdSchema, { targetType: id.targetType });
+}
+
+function isErrorCode(error: unknown, code: string): boolean {
+  return error instanceof Error && "code" in error && (error as { code?: unknown }).code === code;
 }

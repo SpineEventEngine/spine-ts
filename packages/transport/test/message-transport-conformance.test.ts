@@ -25,7 +25,6 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -78,12 +77,14 @@ async function assertConformance(factory: Factory): Promise<void> {
   const publisher = await factory.createPublisher(channel);
   const secondPublisher = await factory.createPublisher(channel);
   await publisher.publish(frameId("first"), frame(proto, "first"));
+  await eventually(() => received.length === 2);
   expect(received).toEqual(["first", "first"]);
   await firstHandle.close();
   expect(first.isStale()).toBe(true);
   await publisher.publish(frameId("second"), frame(proto, "second"));
   await publisher.publish(frameId("third"), frame(proto, "third"));
   await secondPublisher.publish(frameId("fourth"), frame(proto, "fourth"));
+  await eventually(() => received.length === 5);
   expect(received).toEqual(["first", "first", "second", "third", "fourth"]);
   const status = await factory.createSubscriber(statusChannel);
   const statusReceived: string[] = [];
@@ -92,6 +93,7 @@ async function assertConformance(factory: Factory): Promise<void> {
   );
   const statusPublisher = await factory.createPublisher(statusChannel);
   await statusPublisher.publish(frameId("online"), frame(proto, "online"));
+  await eventually(() => statusReceived.length === 1);
   expect(statusReceived).toEqual(["online"]);
   const lateJoin = await factory.createSubscriber(channel);
   const lateReceived: string[] = [];
@@ -99,6 +101,7 @@ async function assertConformance(factory: Factory): Promise<void> {
     lateReceived.push(frameValue(message)),
   );
   await publisher.publish(frameId("late"), frame(proto, "late"));
+  await eventually(() => lateReceived.length === 1);
   expect(lateReceived).toEqual(["late"]);
   await secondHandle.close();
   await statusHandle.close();
@@ -301,7 +304,7 @@ describe("Wave 13 message transport conformance", () => {
     const zeroMqRoot = (await import("../src/zeromq/index.js")) as Record<string, unknown>;
     expect(zeroMqRoot.createZeroMqTransportFactory).toBeDefined();
     expect(zeroMqRoot.ZeroMqConfig).toBeDefined();
-    const directory = await mkdtemp(join(tmpdir(), "spine-wave13-red-transport-"));
+    const directory = await mkdtemp("/tmp/sz-");
     try {
       const config = (zeroMqRoot.ZeroMqConfig as { create(input: unknown): unknown }).create({
         ipcDirectory: directory,
