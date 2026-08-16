@@ -48,7 +48,10 @@ const staleAfterMs = 5000;
 const heartbeatIntervalMs = 1000;
 const unixSocketPathLimit = 104;
 const maxRetainedFailures = 16;
-/** One complete encoded ExternalMessage, including its nested Any/Event payload. */
+
+/**
+ * Bounds one complete encoded ExternalMessage, including nested Any/Event payload bytes.
+ */
 const maxNativeFrameBytes = 1024 * 1024;
 const generationPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
@@ -91,8 +94,10 @@ export const zeroMqMessageAccess = {
   },
 
   /**
-   * Opens a manifest without following a symbolic link.
+   * Opens one manifest without following a symbolic link.
    *
+   * @param manifestPath Identifies the manifest to open.
+   * @returns The opened manifest handle for identity verification.
    * @internal
    */
   async openManifest(manifestPath: string): Promise<FileHandle> {
@@ -100,8 +105,11 @@ export const zeroMqMessageAccess = {
   },
 
   /**
-   * Atomically moves a manifest path within its private directory.
+   * Updates one manifest pathname atomically within its private directory.
    *
+   * @param fromPath Identifies the current manifest pathname.
+   * @param toPath Identifies the private destination pathname.
+   * @returns Completes after the manifest move is visible.
    * @internal
    */
   async moveManifest(fromPath: string, toPath: string): Promise<void> {

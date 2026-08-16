@@ -207,3 +207,11 @@ packages/server/test/server/server-integration-broker-cross-process.test.ts`
   `isControlIdentity()#1` in the server partition. No product code, public
   API, or broad exemption changed.
 - `pnpm lint:cleanup`, focused Prettier, and `git diff --check` pass.
+
+## TSDoc preflight reconciliation — 2026-08-16
+
+- Deterministic preflight reported incomplete TSDoc only on the two private
+  `zeroMqMessageAccess` test-seam callables. Their blocks now use the project
+  opener and blank-line form with callable summaries, exact parameters, and
+  return descriptions. No runtime behavior changed.
+- `pnpm lint:tsdoc`, focused Prettier, and `git diff --check` pass.
