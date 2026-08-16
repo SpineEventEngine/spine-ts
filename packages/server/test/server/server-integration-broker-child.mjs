@@ -13,6 +13,7 @@
  */
 
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { Buffer } from "node:buffer";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -20,9 +21,21 @@ import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { SignalEnvelopes } from "@spine-event-engine/core";
-import { EventContextSchema, EventIdSchema } from "@spine-event-engine/proto";
+import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import {
+  FileDescriptorProtoSchema,
+  FileDescriptorSetSchema,
+  StringValueSchema,
+} from "@bufbuild/protobuf/wkt";
+import { SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
+import {
+  ActorContextSchema,
+  EmailAddressSchema,
+  EventContextSchema,
+  EventIdSchema,
+  UserIdSchema,
+  file_spine_options,
+} from "@spine-event-engine/proto";
 import {
   BoundedContext,
   EnvironmentType,
@@ -30,20 +43,25 @@ import {
   ServerEnvironment,
 } from "@spine-event-engine/server";
 import * as ZeroMq from "@spine-event-engine/transport/zeromq";
+import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.ts";
+import { boundedContextAccess } from "../../dist/context/bounded-context.js";
 
 const role = requiredEnvironment("SPINE_WAVE13_ROLE");
 const ipcDirectory = requiredEnvironment("SPINE_WAVE13_IPC_DIRECTORY");
 const adapterIdentity = requiredEnvironment("SPINE_WAVE13_ADAPTER_IDENTITY");
+const ProjectionStateSchema = generatedProjectionStateSchema();
 
 class Wave13ExternalProjection extends Projection {
-  onImportedEvent(event) {
-    observed.push(event);
+  onImportedEvent(event, context) {
+    handled.push({ context, event });
   }
 }
 
 const observed = [];
+const handled = [];
 let context;
 let registry;
+let eventSubscription;
 try {
   registry = await generatedRegistryRoot();
   if (typeof ZeroMq.createZeroMqTransportFactory !== "function") {
@@ -57,6 +75,17 @@ try {
     .withGeneratedRegistryRoot(registry.root)
     .add(Wave13ExternalProjection);
   context = await builder.buildAsync();
+  if (role === "consumer") {
+    eventSubscription = boundedContextAccess.subscribeToEvent(
+      context,
+      TypeUrls.derive(EmailAddressSchema),
+      {
+        onEvent(event) {
+          if (event.context?.external === true) observed.push(event);
+        },
+      },
+    );
+  }
   await send({
     type: "ready",
     pid: process.pid,
@@ -85,6 +114,12 @@ process.on("message", async (message) => {
             value: probe ? "wave13-readiness-probe" : "wave13-cross-process-event",
           }),
           context: create(EventContextSchema, {
+            origin: {
+              case: "importContext",
+              value: create(ActorContextSchema, {
+                actor: create(UserIdSchema, { value: "Wave13Actor" }),
+              }),
+            },
             producerId: {
               typeUrl: "type.googleapis.com/google.protobuf.StringValue",
               value: toBinary(
@@ -93,8 +128,8 @@ process.on("message", async (message) => {
               ),
             },
           }),
-          schema: StringValueSchema,
-          message: create(StringValueSchema, {
+          schema: EmailAddressSchema,
+          message: create(EmailAddressSchema, {
             value: probe ? "readiness-probe" : "full-event-payload",
           }),
         }),
@@ -116,15 +151,19 @@ process.on("message", async (message) => {
 
 if (role === "consumer" && context !== undefined) {
   try {
-    await waitFor(() => observed.length > 0);
+    await waitFor(() => observed.length > 0 && handled.length > 0);
     await send({ type: "probe-delivered", role: "consumer" });
-    await waitFor(() => observed.length > 1);
+    await waitFor(() => observed.length > 1 && handled.length > 1);
     await send({
       type: "delivered",
       role: "consumer",
       eventId: observed[1].id.value,
+      typeUrl: observed[1].message.typeUrl,
       producerId: fromBinary(StringValueSchema, observed[1].context.producerId.value).value,
-      payload: fromBinary(StringValueSchema, observed[1].message.value).value,
+      payload: fromBinary(EmailAddressSchema, observed[1].message.value).value,
+      origin: observed[1].context.origin.case,
+      actorId: observed[1].context.origin.value.actor.value,
+      tenantId: observed[1].context.origin.value.tenantId?.kind.value,
       external: observed[1].context.external,
     });
   } catch (error) {
@@ -147,14 +186,14 @@ async function generatedRegistryRoot() {
     entities: [
       {
         entityType: Wave13ExternalProjection,
-        stateSchema: StringValueSchema,
+        stateSchema: ProjectionStateSchema,
         handlers: [
           {
             kind: "event-subscription",
             methodName: "onImportedEvent",
-            signalSchema: StringValueSchema,
+            signalSchema: EmailAddressSchema,
             emittedSchemas: [],
-            parameterCount: 1,
+            parameterCount: 2,
             origin: "external",
           },
         ],
@@ -166,6 +205,21 @@ async function generatedRegistryRoot() {
     `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,
   );
   return { directory, root: pathToFileURL(directory), slot };
+}
+
+function generatedProjectionStateSchema() {
+  const descriptorSet = fromBinary(
+    FileDescriptorSetSchema,
+    Buffer.from(serverEntityMetadataTestFixtures.main.descriptorSetBase64, "base64"),
+  );
+  const descriptor = descriptorSet.file[0];
+  if (descriptor === undefined) throw new Error("Wave 13 projection schema descriptor is missing.");
+  return messageDesc(
+    fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+      file_spine_options,
+    ]),
+    0,
+  );
 }
 
 function requiredEnvironment(name) {
@@ -194,6 +248,8 @@ function send(message) {
 }
 
 async function cleanup() {
+  eventSubscription?.unsubscribe();
+  eventSubscription = undefined;
   if (context !== undefined) {
     await context.close();
     context = undefined;
