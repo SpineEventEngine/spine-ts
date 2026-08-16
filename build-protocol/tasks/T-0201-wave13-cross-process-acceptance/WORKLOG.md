@@ -81,3 +81,20 @@ typecheck:build:generated` (exit 0). The generation run left no tracked
   contains no `ExternalMessage`, `ContextTransport`, `RuntimeTransportBinding`,
   `SignalTransport`, forwarder, `externalEventSchemas`, or
   `addEventDispatcher` shortcut.
+
+## Focused review — 2026-08-16
+
+- The existing `performance_reliability_reviewer` was dispatched with explicit
+  `gpt-5.6-terra` / `high` configuration, no subagent authority, and unavailable
+  runtime telemetry. It passed T-0201 without findings after 10 consecutive
+  native cross-process runs (10/10), the ZeroMQ manifest suite (15/15), and a
+  clean diff check.
+- The existing `style_maintainability_reviewer` used the same explicit
+  `gpt-5.6-terra` / `high` profile and telemetry disposition. It confirmed the
+  generated metadata, complete Event proof, adapter consistency, and absence of
+  new concepts, but found one P1 acceptance-regression gap: the durable source
+  guard omitted `SignalTransport` and `RuntimeTransportBinding` even though the
+  current fixture uses neither.
+- The guard now enumerates every prohibited shortcut explicitly, including
+  those two APIs. This deterministic test-only correction reopens only the
+  maintainability review lane.

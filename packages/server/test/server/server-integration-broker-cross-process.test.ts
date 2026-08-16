@@ -75,9 +75,17 @@ describe("Wave 13 IntegrationBroker across normal Node applications", () => {
     expect(fixtureSource).toContain("version: 3");
     expect(fixtureSource).toContain(".add(Wave13ExternalProjection)");
     expect(fixtureSource).not.toContain("Repository");
-    expect(fixtureSource).not.toMatch(
-      /ExternalMessage|ContextTransport|forwarder|externalEventSchemas|addEventDispatcher/iu,
-    );
+    for (const forbiddenShortcut of [
+      "ExternalMessage",
+      "ContextTransport",
+      "RuntimeTransportBinding",
+      "SignalTransport",
+      "forwarder",
+      "externalEventSchemas",
+      "addEventDispatcher",
+    ]) {
+      expect(fixtureSource).not.toContain(forbiddenShortcut);
+    }
     await expect(execFileAsync(process.execPath, ["--check", childPath])).resolves.toBeDefined();
 
     const ipcDirectory = await mkdtemp(join(ipcTemporaryRoot, "w13-"));
