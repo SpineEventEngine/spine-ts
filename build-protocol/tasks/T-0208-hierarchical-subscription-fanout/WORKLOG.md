@@ -102,3 +102,12 @@
 - Remaining required proofs are late/replacement membership, managed registry
   validation, Gateway durable rehydrate, and exact changed-source coverage;
   this checkpoint does not claim those complete.
+
+## 2026-08-18 — Late member acceptance
+
+- A real HTTP/2 Coordinator test retains a definition, publishes a late READY
+  member, observes native Subscribe at that member, then proves normal unary
+  round-robin includes it. The kernel admission gate prevents the joining
+  member becoming selectable before the retained definition is installed.
+- Focused Coordinator suite: 20/20 passing. Replacement and managed-registry
+  paths remain next.

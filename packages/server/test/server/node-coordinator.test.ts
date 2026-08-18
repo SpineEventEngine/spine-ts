@@ -142,6 +142,29 @@ describe("NodeCoordinator", () => {
     await coordinator.close();
   });
 
+  it("installs retained definitions on a late replica before it enters unary selection", async () => {
+    const current = await backend("current");
+    const joining = await backend("joining");
+    closeables.push(current.close, joining.close);
+    const members = new TestReadyMembers([current.member]);
+    const coordinator = await NodeCoordinator.open({ members, port: 0 });
+    closeables.push(() => coordinator.close());
+    const subscriptions = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    await subscriptions.subscribe(create(TopicSchema));
+
+    members.set([current.member, joining.member]);
+    await expect.poll(() => joining.subscriptions()).toBe(1);
+
+    const commands = createClient(CommandService, createGrpcTransport({ baseUrl: coordinator.baseUrl }));
+    await commands.post(create(CommandService.method.post.input));
+    await commands.post(create(CommandService.method.post.input));
+    expect(joining.commands()).toBe(1);
+    await coordinator.close();
+  });
+
   it("reconciles replacement membership without exposing or polling child topology", async () => {
     const first = await backend("first");
     const replacement = await backend("replacement");
