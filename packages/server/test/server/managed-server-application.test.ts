@@ -65,7 +65,52 @@ describe("ManagedServerApplication", () => {
       },
     });
     try {
-      expect(managed.childEndpoints).toEqual([expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/)]);
+      expect(managed.childEndpoints).toEqual([
+        expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/),
+      ]);
+    } finally {
+      await managed.close();
+    }
+  }, 20_000);
+
+  it("waits for child-local synchronization before admitting its private listener", async () => {
+    const startedAt = Date.now();
+    const managed = await ManagedServerApplication.run({
+      processCount: 1,
+      moduleUrl: new URL("./managed-server-application-gated-child.mjs", import.meta.url).href,
+      host: "127.0.0.1",
+      port: 0,
+      createServer: async () => {
+        throw new Error("Parent must not assemble a child.");
+      },
+    });
+    try {
+      expect(Date.now() - startedAt).toBeGreaterThanOrEqual(200);
+      expect(managed.childEndpoints).toHaveLength(1);
+    } finally {
+      await managed.close();
+    }
+  }, 20_000);
+
+  it("replaces only the unexpected child exit and retains its surviving sibling", async () => {
+    const managed = await ManagedServerApplication.run({
+      processCount: 2,
+      moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
+      host: "127.0.0.1",
+      port: 0,
+      createServer: async () => {
+        throw new Error("Parent must not assemble a child.");
+      },
+    });
+    try {
+      const [failed, survivor] = managed.childPids;
+      process.kill(failed, "SIGKILL");
+      await expect.poll(() => managed.childPids.includes(survivor), { timeout: 10_000 }).toBe(true);
+      await expect
+        .poll(() => managed.childPids.some((pid) => pid !== failed && pid !== survivor), {
+          timeout: 10_000,
+        })
+        .toBe(true);
     } finally {
       await managed.close();
     }
