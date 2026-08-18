@@ -151,3 +151,16 @@ once'`.
   seconds respectively. This adds no sleep, retry policy, or runtime change;
   normal focused execution still completes immediately. The focused native
   proof and the release profile must be rerun before acceptance.
+
+## 2026-08-18 — Repository release timeout classification
+
+- The next release run passed every deterministic gate and the corrected
+  cross-process proof. Under full coverage load, two unrelated existing tests
+  then exhausted Vitest's five-second default: one TypeScript analyzer fixture
+  and one Proto generation rollback fixture. Both failed by timeout only.
+- Running the two complete files outside the repository-wide load immediately
+  passed all 171 tests. This confirms the same release concurrency/coverage
+  budget problem rather than an assertion or T-0204 behavior failure.
+- The release-only Vitest command now uses a 15-second per-test ceiling.
+  Focused development commands retain Vitest's short default, so this does not
+  conceal ordinary regressions or change application runtime behavior.
