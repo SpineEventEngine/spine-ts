@@ -12,11 +12,83 @@
  * the License.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ManagedServerApplication } from "../../src/index.js";
 
 describe("ManagedServerApplication", () => {
+  it("sends a child READY fact only after local assembly and synchronization", async () => {
+    const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
+    const priorSlot = process.env.SPINE_MANAGED_SERVER_SLOT;
+    const priorIncarnation = process.env.SPINE_MANAGED_SERVER_INCARNATION;
+    const priorListeners = new Set(process.listeners("message"));
+    const send = vi.spyOn(process, "send").mockImplementation((_message, callback) => {
+      callback(null);
+      return true;
+    });
+    process.env.SPINE_MANAGED_SERVER_CHILD = "true";
+    process.env.SPINE_MANAGED_SERVER_SLOT = "0";
+    process.env.SPINE_MANAGED_SERVER_INCARNATION = "incarnation";
+    const close = vi.fn(() => Promise.resolve());
+    try {
+      const handle = await ManagedServerApplication.run({
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        host: "127.0.0.1",
+        port: 0,
+        createServer: () =>
+          Promise.resolve({ host: "127.0.0.1", port: 42, baseUrl: "http://127.0.0.1:42", close }),
+        synchronizationGates: [Promise.resolve()],
+      });
+      expect(send).toHaveBeenCalledWith(
+        { type: "ready", slot: "0", incarnation: "incarnation", endpoint: "http://127.0.0.1:42" },
+        expect.any(Function),
+      );
+      await handle.close();
+      expect(close).toHaveBeenCalledOnce();
+    } finally {
+      send.mockRestore();
+      for (const listener of process.listeners("message")) {
+        if (!priorListeners.has(listener)) process.off("message", listener);
+      }
+      if (priorChild === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
+      else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
+      if (priorSlot === undefined) delete process.env.SPINE_MANAGED_SERVER_SLOT;
+      else process.env.SPINE_MANAGED_SERVER_SLOT = priorSlot;
+      if (priorIncarnation === undefined) delete process.env.SPINE_MANAGED_SERVER_INCARNATION;
+      else process.env.SPINE_MANAGED_SERVER_INCARNATION = priorIncarnation;
+    }
+  });
+
+  it("rejects a child start when its private parent IPC rejects READY", async () => {
+    const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
+    const send = vi.spyOn(process, "send").mockImplementation((_message, callback) => {
+      callback(new Error("closed"));
+      return false;
+    });
+    process.env.SPINE_MANAGED_SERVER_CHILD = "true";
+    try {
+      await expect(
+        ManagedServerApplication.run({
+          processCount: 1,
+          moduleUrl: import.meta.url,
+          host: "127.0.0.1",
+          port: 0,
+          createServer: () =>
+            Promise.resolve({
+              host: "127.0.0.1",
+              port: 42,
+              baseUrl: "http://127.0.0.1:42",
+              close: () => Promise.resolve(),
+            }),
+        }),
+      ).rejects.toThrow("closed");
+    } finally {
+      send.mockRestore();
+      if (priorChild === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
+      else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
+    }
+  });
   it("starts one separate complete child for an explicit single-replica cohort", async () => {
     const managed = await ManagedServerApplication.run({
       processCount: 1,
