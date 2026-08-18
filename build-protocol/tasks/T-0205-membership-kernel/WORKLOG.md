@@ -166,3 +166,40 @@ removal waits for disposal`. This is a cross-generation disposal/coalescing
   inside the provider-neutral deployment kernel.
 - `REVIEW.md` contains the exact consolidated correction batch. No correction
   is accepted until both affected concerns re-review it.
+
+## 2026-08-18 — Consolidated review-correction implementation
+
+- Existing implementer profile: `gpt-5.6-terra` / `medium`, explicitly
+  configured; runtime self-telemetry is unavailable on this surface. No
+  subagents ran.
+- RED evidence retained before runtime correction:
+  `pnpm exec vitest run packages/deployment/test/membership-kernel.test.ts`
+  failed 3/26 at the expected assertions: an older blocked `[a,b] -> []`
+  reconciliation closed `b` after `[b]` became latest; failed oversized
+  compensation was not retried (1 rather than 2 disposal attempts); and
+  failed stale compensation was not retried (1 rather than 2 attempts).
+- GREEN adds generation checks after awaited retry/removal cleanup, retains
+  created-child compensation failures through the existing retry set, and
+  centralizes that compensation. The kernel's internal errors and containment
+  IDs are deployment-membership-neutral; the Auth adapter translates only
+  availability/closed wording required for existing Gateway behavior.
+- The nested adapter proof decodes both real Protobuf child definitions and
+  verifies immediate-only `logical -> logical/a -> logical/a/b` rewriting,
+  actor/tenant topic retention, logical public identity, event payload, and
+  byte-for-byte relayed updates. Its initial failure was an invalid fixture
+  cleanup wire, corrected without product changes.
+- Final focused coverage passed 88 tests: kernel exact coverage is **219/226
+  executable lines (96.90%)** and **162/180 branches (90.00%)**. The
+  containment registry initially reported one stale Auth activation ID, then
+  passed after its directly affected neutral entry was corrected.
+- Cheap preflight passed: generated/tooling TypeScript builds; scoped ESLint;
+  cleanup, TSDoc, copyright, containment, Prettier, and diff checks; TypeDoc
+  inventory/audience; Buf/current generated output; and release readiness.
+- The required single task profile passed with both changed runtime sources:
+  `pnpm verify:task -- --coverage packages/deployment/test/membership-kernel.test.ts
+packages/auth/test/dynamic-subscription-creator.test.ts
+packages/auth/test/dynamic-unary-forwarder.test.ts --source
+packages/deployment/src/internal/backend-membership-kernel.ts
+packages/auth/src/gateway/dynamic-unary-forwarder.ts`. Its final LCOV keeps
+  the kernel at 219/226 lines and 162/180 branches; the adapter is 41/43 lines
+  and 32/35 branches. T-0205 remains pending the targeted re-reviews.

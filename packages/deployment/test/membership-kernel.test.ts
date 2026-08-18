@@ -72,7 +72,7 @@ describe("BackendMembershipKernel", () => {
     );
     const owner = kernel();
     await expect(owner.subscribe(definition("x"), new AbortController().signal)).rejects.toThrow(
-      "absent",
+      "membership is unavailable",
     );
     await owner.reconcile([{ id: "a" }]);
     await expect(owner.subscribe(definition("x"), new AbortController().signal, 0)).rejects.toThrow(
@@ -80,7 +80,9 @@ describe("BackendMembershipKernel", () => {
     );
     const aborted = new AbortController();
     aborted.abort();
-    await expect(owner.subscribe(definition("x"), aborted.signal)).rejects.toThrow("absent");
+    await expect(owner.subscribe(definition("x"), aborted.signal)).rejects.toThrow(
+      "membership is unavailable",
+    );
     await owner.close();
   });
   it("aborts a delayed subscription when its definition is cancelled", async () => {
@@ -191,7 +193,7 @@ describe("BackendMembershipKernel", () => {
     const owner = kernel({
       create: async (member) => client(member, { forward: async () => encoder.encode(member.id) }),
     });
-    await expect(owner.forward("request")).rejects.toThrow("absent");
+    await expect(owner.forward("request")).rejects.toThrow("membership is unavailable");
     await owner.reconcile([{ id: "a" }, { id: "b" }]);
     expect(decoder.decode(await owner.forward("request"))).toBe("a");
     expect(decoder.decode(await owner.forward("request"))).toBe("b");
@@ -218,6 +220,30 @@ describe("BackendMembershipKernel", () => {
     await owner.reconcile([{ id: "saved", endpoint: "next" }]);
     expect(closed).toEqual(["saved"]);
     expect(decoder.decode(await owner.forward("request"))).toBe("next");
+    await owner.close();
+  });
+  it("keeps a latest retained member open when an older removal is blocked", async () => {
+    const closed: string[] = [];
+    const release = deferred();
+    const owner = kernel({
+      create: async (member) =>
+        client(member, {
+          close: async () => {
+            closed.push(member.id);
+            if (member.id === "a") await release.promise;
+          },
+        }),
+    });
+    await owner.reconcile([{ id: "a" }, { id: "b" }]);
+
+    const removing = owner.reconcile([]);
+    await Promise.resolve();
+    const retaining = owner.reconcile([{ id: "b" }]);
+    release.resolve(undefined);
+    await Promise.all([removing, retaining]);
+
+    expect(closed).toEqual(["a"]);
+    expect(decoder.decode(await owner.forward("request"))).toBe("b");
     await owner.close();
   });
   it("retries failed member close and child disposal on later reconciliation", async () => {
@@ -273,6 +299,145 @@ describe("BackendMembershipKernel", () => {
     await Promise.all([starting.catch(() => undefined), changed]);
     expect(disposed).toContain("big");
     expect(disposed).toContain("slow");
+    await owner.close();
+  });
+  it("retries a failed oversized-child compensation on later reconciliation", async () => {
+    let disposals = 0;
+    const owner = kernel({
+      create: async (member) =>
+        client(member, {
+          subscribe: async () => ({ id: member.id, bytes: new Uint8Array([1, 2]) }),
+          dispose: async () => {
+            disposals++;
+            if (disposals === 1) throw new Error("dispose");
+          },
+        }),
+    });
+    await owner.reconcile([{ id: "a" }]);
+
+    await expect(owner.subscribe(definition("x"), new AbortController().signal, 1)).rejects.toThrow(
+      "too-large",
+    );
+    await owner.reconcile([{ id: "a" }]);
+
+    expect(disposals).toBe(2);
+    await owner.close();
+  });
+  it("lets the latest snapshot supersede a blocked failed-child cleanup retry", async () => {
+    const retryEntered = deferred();
+    const releaseRetry = deferred();
+    let disposals = 0;
+    const owner = kernel({
+      create: async (member) =>
+        client(member, {
+          subscribe: async () => ({ id: member.id, bytes: new Uint8Array([1, 2]) }),
+          dispose: async () => {
+            disposals++;
+            if (disposals === 1) throw new Error("dispose");
+            retryEntered.resolve(undefined);
+            await releaseRetry.promise;
+          },
+        }),
+    });
+    await owner.reconcile([{ id: "a" }]);
+    await expect(owner.subscribe(definition("x"), new AbortController().signal, 1)).rejects.toThrow(
+      "too-large",
+    );
+
+    const retrying = owner.reconcile([{ id: "a" }]);
+    await retryEntered.promise;
+    const latest = owner.reconcile([{ id: "a" }]);
+    releaseRetry.resolve(undefined);
+    await Promise.all([retrying, latest]);
+
+    expect(decoder.decode(await owner.forward("request"))).toBe("a");
+    await owner.close();
+  });
+  it("lets the latest snapshot supersede a blocked failed-member cleanup retry", async () => {
+    const retryEntered = deferred();
+    const releaseRetry = deferred();
+    let closes = 0;
+    const owner = kernel({
+      create: async (member) =>
+        client(member, {
+          close: async () => {
+            if (member.id !== "a") return;
+            closes++;
+            if (closes === 1) throw new Error("close");
+            retryEntered.resolve(undefined);
+            await releaseRetry.promise;
+          },
+        }),
+    });
+    await owner.reconcile([{ id: "a" }]);
+    await owner.reconcile([]);
+
+    const retrying = owner.reconcile([]);
+    await retryEntered.promise;
+    const latest = owner.reconcile([{ id: "b" }]);
+    releaseRetry.resolve(undefined);
+    await Promise.all([retrying, latest]);
+
+    expect(decoder.decode(await owner.forward("request"))).toBe("b");
+    await owner.close();
+  });
+  it("disposes a stale connecting member before the latest snapshot starts", async () => {
+    const connected = deferred<Client>();
+    const closed: string[] = [];
+    const owner = kernel({
+      create: async (member) =>
+        member.id === "a"
+          ? connected.promise
+          : client(member, {
+              close: async () => {
+                closed.push(member.id);
+              },
+            }),
+    });
+
+    const stale = owner.reconcile([{ id: "a" }]);
+    await Promise.resolve();
+    const latest = owner.reconcile([{ id: "b" }]);
+    connected.resolve(
+      client(
+        { id: "a" },
+        {
+          close: async () => {
+            closed.push("a");
+          },
+        },
+      ),
+    );
+    await Promise.all([stale, latest]);
+
+    expect(closed).toEqual(["a"]);
+    expect(decoder.decode(await owner.forward("request"))).toBe("b");
+    await owner.close();
+  });
+  it("retries a failed stale-child compensation on later reconciliation", async () => {
+    const created = deferred<Child>();
+    let disposals = 0;
+    const owner = kernel({
+      create: async (member) =>
+        client(member, {
+          subscribe: (wire) =>
+            member.id === "a" ? created.promise : Promise.resolve(child(member.id, wire)),
+          dispose: async () => {
+            disposals++;
+            if (disposals === 1) throw new Error("dispose");
+          },
+        }),
+    });
+    await owner.reconcile([{ id: "a" }]);
+
+    const subscribing = owner.subscribe(definition("x"), new AbortController().signal);
+    await Promise.resolve();
+    const replacing = owner.reconcile([]);
+    created.resolve(child("a", definition("x/a")));
+    await Promise.all([subscribing.catch(() => undefined), replacing]);
+    await owner.reconcile([]);
+
+    expect(disposals).toBe(2);
     await owner.close();
   });
   it("activates a stored child once, replaces completed children, and contains update failures", async () => {
@@ -400,4 +565,14 @@ function waitForAbort(signal: AbortSignal): Promise<void> {
   return new Promise((resolve) =>
     signal.addEventListener("abort", () => resolve(), { once: true }),
   );
+}
+
+function deferred<Value = undefined>() {
+  let resolve!: (value: Value | PromiseLike<Value>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }

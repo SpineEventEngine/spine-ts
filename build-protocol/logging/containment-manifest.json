@@ -372,32 +372,32 @@
       "test": "packages/deployment-gce/test/registrar/recovery.test.ts"
     },
     {
-      "id": "auth.dynamic_subscription_activation",
+      "id": "deployment.membership_child_activation",
       "source": "../../packages/deployment/src/internal/backend-membership-kernel.ts",
-      "operation": "auth.subscription.activate",
+      "operation": "deployment.membership.child_activation",
       "disposition": "no-log",
-      "test": "packages/auth/test/dynamic-unary-forwarder.test.ts"
+      "test": "packages/deployment/test/membership-kernel.test.ts"
     },
     {
-      "id": "auth.dynamic_subscription_cleanup",
+      "id": "deployment.membership_child_cleanup",
       "source": "../../packages/deployment/src/internal/backend-membership-kernel.ts",
-      "operation": "auth.subscription.cleanup",
+      "operation": "deployment.membership.child_cleanup",
       "disposition": "no-log",
-      "test": "packages/auth/test/dynamic-unary-forwarder.test.ts"
+      "test": "packages/deployment/test/membership-kernel.test.ts"
     },
     {
-      "id": "auth.dynamic_reconciliation",
+      "id": "deployment.membership_reconciliation",
       "source": "../../packages/deployment/src/internal/backend-membership-kernel.ts",
-      "operation": "auth.subscription.reconcile",
+      "operation": "deployment.membership.reconcile",
       "disposition": "no-log",
-      "test": "packages/auth/test/dynamic-unary-forwarder.test.ts"
+      "test": "packages/deployment/test/membership-kernel.test.ts"
     },
     {
-      "id": "auth.dynamic_cleanup_retry",
+      "id": "deployment.membership_child_cleanup_retry",
       "source": "../../packages/deployment/src/internal/backend-membership-kernel.ts",
-      "operation": "auth.subscription.cleanup",
+      "operation": "deployment.membership.child_cleanup",
       "disposition": "no-log",
-      "test": "packages/auth/test/dynamic-unary-forwarder.test.ts"
+      "test": "packages/deployment/test/membership-kernel.test.ts"
     },
     {
       "id": "deployment.membership_child_completion",

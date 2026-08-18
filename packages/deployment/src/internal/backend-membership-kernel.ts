@@ -240,7 +240,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     const key = this.#options.definitionKey(definition);
     if (key === undefined || key.length === 0) throw new Error("subscription ID is required");
     if (signal.aborted || this.#closed || this.#nodes.length === 0)
-      throw new Error("Gateway backend is absent.");
+      throw new Error("backend membership is unavailable.");
     if (!this.#definitions.has(key))
       this.#definitions.set(key, {
         definition: definition.slice(),
@@ -260,7 +260,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       throw new Error("subscription creation was cancelled");
     if (state.failure !== undefined || state.children.size !== this.#members.size) {
       await this.#removeDefinition(key, new AbortController().signal);
-      throw state.failure ?? new Error("Gateway backend is absent.");
+      throw state.failure ?? new Error("backend membership is unavailable.");
     }
   }
 
@@ -277,7 +277,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
   ): Promise<void> {
     if (!Number.isSafeInteger(maxChildBytes) || maxChildBytes < 1)
       throw new RangeError("maxChildBytes must be a positive safe integer.");
-    if (this.#closed) throw new Error("Gateway dynamic owner is closed.");
+    if (this.#closed) throw new Error("backend membership kernel is closed.");
     const key = this.#options.definitionKey(definition);
     if (key === undefined || key.length === 0) throw new Error("subscription ID is required");
     if (!this.#definitions.has(key))
@@ -351,7 +351,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
   forward(request: Request): Promise<Uint8Array> {
     const member = [...this.#members.values()][this.#next++ % this.#members.size];
     return member === undefined
-      ? Promise.reject(new Error("Gateway backend is absent."))
+      ? Promise.reject(new Error("backend membership is unavailable."))
       : member.client.forward(request);
   }
 
@@ -408,7 +408,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       try {
         await this.#replace(pending.members, pending.generation);
       } catch (error) {
-        // spine-log-boundary: auth.dynamic_reconciliation
+        // spine-log-boundary: deployment.membership_reconciliation
         void error;
         /* a later snapshot can recover */
       }
@@ -420,7 +420,11 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
   async #replace(members: readonly Member[], generation: number): Promise<void> {
     if (generation !== this.#generation || this.#closed) return;
     await this.#retryDisposals();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (generation !== this.#generation || this.#closed) return;
     if (this.#failedChildCleanup.size > 0) await this.#retryChildCleanup();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (generation !== this.#generation || this.#closed) return;
     const wanted = new Map<string, Member>();
     for (const member of members) {
       const key = this.#options.memberKey(member);
@@ -436,7 +440,11 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       ) {
         this.#members.delete(key);
         if (this.#definitions.size > 0) await this.#removeMemberChildren(key, current.client);
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (generation !== this.#generation || this.#closed) return;
         await this.#dispose(current.client);
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (generation !== this.#generation || this.#closed) return;
       }
     const added = [...wanted.entries()].filter(([key]) => !this.#members.has(key));
     for (let index = 0; index < added.length; index += this.#limit)
@@ -468,6 +476,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
         child.controller.abort();
         // spine-log-boundary: deployment.membership_child_completion
         await child.activation.catch(() => undefined);
+        if (generation !== this.#generation || this.#closed) return;
       }
     const missing = [...this.#members.entries()].filter(([key]) => !state.children.has(key));
     for (let index = 0; index < missing.length; index += this.#limit)
@@ -481,6 +490,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
             result.reason instanceof Error
               ? result.reason
               : new Error("native subscription creation failed");
+    if (generation !== this.#generation || this.#closed) return;
     if (state.active && state.updates !== undefined)
       for (const [key, child] of state.children) {
         const current = this.#members.get(key);
@@ -508,7 +518,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       this.#childStarts.delete(controller);
     }
     if (this.#options.childSize(child) > state.maxChildBytes) {
-      await current.client.dispose(child, controller.signal);
+      await this.#compensateChild(current.client, child, controller.signal);
       throw new Error("backend-envelope-too-large");
     }
     if (
@@ -516,7 +526,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       this.#members.get(key)?.incarnation !== current.incarnation ||
       this.#isClosed()
     ) {
-      await current.client.dispose(child, controller.signal);
+      await this.#compensateChild(current.client, child, controller.signal);
       return;
     }
     const stored = { child, controller, active: false, activation: Promise.resolve() };
@@ -532,7 +542,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
   ): void {
     if (child.active || state.updates === undefined) return;
     child.active = true;
-    // spine-log-boundary: auth.dynamic_subscription_activation
+    // spine-log-boundary: deployment.membership_child_activation
     child.activation = client
       .activate(child.child, state.updates, child.controller.signal)
       .catch(() => undefined)
@@ -571,13 +581,8 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
   ): Promise<void> {
     child.controller.abort();
     const cleanup = async (): Promise<void> => {
-      if (client !== undefined)
-        try {
-          await client.dispose(child.child, signal);
-        } catch {
-          this.#failedChildCleanup.add({ client, child: child.child });
-        }
-      // spine-log-boundary: auth.dynamic_subscription_cleanup
+      if (client !== undefined) await this.#compensateChild(client, child.child, signal);
+      // spine-log-boundary: deployment.membership_child_cleanup
       await child.activation.catch(() => undefined);
     };
     if (client === undefined) {
@@ -595,13 +600,24 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       if (cleanups.size === 0) this.#childCleanup.delete(client);
     }
   }
+  async #compensateChild(
+    client: BackendMemberClient<Request, Child, Update>,
+    child: Child,
+    signal: AbortSignal,
+  ): Promise<void> {
+    try {
+      await client.dispose(child, signal);
+    } catch {
+      this.#failedChildCleanup.add({ client, child });
+    }
+  }
   async #retryChildCleanup(): Promise<void> {
     for (const pending of [...this.#failedChildCleanup])
       try {
         await pending.client.dispose(pending.child, new AbortController().signal);
         this.#failedChildCleanup.delete(pending);
       } catch (error) {
-        // spine-log-boundary: auth.dynamic_cleanup_retry
+        // spine-log-boundary: deployment.membership_child_cleanup_retry
         void error;
         /* later reconciliation retries */
       }

@@ -1,10 +1,9 @@
 # T-0205 implementation report
 
-## Coverage convergence scope
+## Coverage convergence and review-correction scope
 
-This record covers the final bounded test-only convergence work on the neutral
-backend membership kernel. Only the assigned deployment kernel test and this
-task's durable records changed. Production source, public exports, and wire
+This record covers bounded convergence and the consolidated specialist review
+corrections. Production changes remain internal; public exports and wire
 contracts did not change.
 
 ## Behavior and evidence
@@ -22,25 +21,30 @@ contracts did not change.
   subscription creator: **3 files / 81 tests passed**.
 - Targeted `tsc -b` for deployment/auth and scoped ESLint, Prettier, cleanup,
   TSDoc, copyright, and diff checks passed before the final task verifier.
+- The review correction suite proves stale reconciliation generation fencing,
+  retained failed oversized/stale compensation, and two-level real Protobuf
+  child identity through the Gateway adapter. It passed **88 focused tests**
+  with **219/226 executable lines (96.90%)** and **162/180 branches (90.00%)**
+  for the kernel.
 
-## Final verification limitation
+## Verification state
 
-The required `verify:task` profile passed its generated build, tooling
-typecheck, cleanup, TSDoc, copyright, containment, Prettier, documentation,
-TypeDoc, Buf, and generated-cleanliness stages. It then failed release
-readiness solely because the ignored/untracked, out-of-scope file
-`.superpowers/sdd/t0205-report.md` contains a stale internal execution-history
-term (`T-0205`) in reader documentation. This is not a kernel or test failure;
-the external report must be corrected before the task profile can be accepted.
+The earlier ignored scratch-report evidence-placement blocker was removed
+before review. The required task profile now passes after this correction
+batch, including generated/tooling TypeScript, lint/cleanup/TSDoc/copyright,
+containment, formatting, TypeDoc/audience, Proto, release-readiness, and the
+focused coverage suite. It uses both changed runtime sources and reports the
+kernel at **219/226 lines** and **162/180 branches**; the adapter is **41/43
+lines** and **32/35 branches**.
 
 ## TDD and limitations
 
-The kernel's original extraction retained RED evidence before production code.
-This convergence adds characterization coverage to already implemented behavior;
-the two initially incorrect test expectations were observed failing, corrected,
-and rerun without production changes. A defensive no-await get-after-set branch
-remains intentionally unforced because making it observable would require
-distorting runtime behavior.
+The correction retained RED evidence before production changes: three direct
+kernel tests failed for superseded removal and lost compensation retries. The
+adapter recursion case is a proof addition over existing behavior; its first
+failure was an invalid test fixture cleanup path, corrected without a product
+change. A defensive no-await get-after-set branch remains intentionally
+unforced because making it observable would distort runtime behavior.
 
 ## Profile evidence
 

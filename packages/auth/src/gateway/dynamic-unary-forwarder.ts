@@ -160,7 +160,9 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
    * @returns The backend response bytes.
    */
   forward(request: Parameters<UnaryForwarder["forward"]>[0]): Promise<Uint8Array> {
-    return this.#kernel.forward(request);
+    return this.#kernel
+      .forward(request)
+      .catch((error: unknown) => DynamicUnaryForwarder.#gatewayError(error));
   }
 
   /**
@@ -190,7 +192,9 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       (!Number.isSafeInteger(maxBackendEnvelopeBytes) || maxBackendEnvelopeBytes < 1)
     )
       throw new RangeError("maxBackendEnvelopeBytes must be a positive safe integer.");
-    return this.#kernel.subscribe(request.bytes, signal, maxBackendEnvelopeBytes);
+    return this.#kernel
+      .subscribe(request.bytes, signal, maxBackendEnvelopeBytes)
+      .catch((error: unknown) => DynamicUnaryForwarder.#gatewayError(error));
   }
 
   /**
@@ -209,7 +213,9 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       (!Number.isSafeInteger(maxBackendEnvelopeBytes) || maxBackendEnvelopeBytes < 1)
     )
       throw new RangeError("maxBackendEnvelopeBytes must be a positive safe integer.");
-    await this.#kernel.rehydrate(request.bytes, maxBackendEnvelopeBytes);
+    await this.#kernel
+      .rehydrate(request.bytes, maxBackendEnvelopeBytes)
+      .catch((error: unknown) => DynamicUnaryForwarder.#gatewayError(error));
   }
 
   /**
@@ -274,5 +280,13 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     if (subscriptionId === undefined) return bytes.slice();
     subscriptionId.value = `${id}/${node.id}`;
     return toBinary(SubscriptionSchema, subscription);
+  }
+
+  static #gatewayError(error: unknown): never {
+    if (error instanceof Error && error.message === "backend membership is unavailable.")
+      throw new Error("Gateway backend is absent.");
+    if (error instanceof Error && error.message === "backend membership kernel is closed.")
+      throw new Error("Gateway dynamic owner is closed.");
+    throw error;
   }
 }
