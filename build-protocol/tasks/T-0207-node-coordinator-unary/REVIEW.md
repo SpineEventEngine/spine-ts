@@ -1,6 +1,6 @@
 # T-0207 review record
 
-Status: Specialist review passed; release verification pending.
+Status: Passed and release-verified.
 
 The implementation assignment is existing `implementer`, explicitly configured
 `gpt-5.6-terra` / medium; subagent spawning is prohibited. Runtime model

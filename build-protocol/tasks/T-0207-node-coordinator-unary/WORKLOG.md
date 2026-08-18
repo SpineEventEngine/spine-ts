@@ -154,3 +154,14 @@ packages/server/src/server/managed-server-application.ts` is green. It ran
   terms that legacy same-host ZeroMQ is scheduled for removal after remaining
   consumers migrate. Release-readiness, audience, generated snippet, format,
   and whitespace checks pass after the documentation-only correction.
+
+## 2026-08-18 — Release verification
+
+- `pnpm verify:release` completed successfully from the clean pushed task
+  checkpoint after all deterministic correction findings were resolved.
+- Full suite: 268 test files passed and 4 skipped; 4,364 tests passed and 19
+  skipped. Repository coverage is 94.06% statements, 90.30% branches, 94.05%
+  functions, and 95.21% lines.
+- The separately executed real cross-process IntegrationBroker acceptance
+  passed 1/1 after the coverage suite. T-0207 is release-verified and ready for
+  isolated integration into `main`.
