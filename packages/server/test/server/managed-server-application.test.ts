@@ -72,6 +72,25 @@ const localRunningServer = (close: () => Promise<void>, port = 42): RunningServe
   close,
 });
 
+function managedRegistryChild(registry?: "memory"): ChildProcess {
+  return fork(fileURLToPath(new URL("./managed-server-subscription-registry-child.mjs", import.meta.url)), {
+    env: {
+      ...process.env,
+      SPINE_MANAGED_SERVER_CHILD: "true",
+      SPINE_MANAGED_SERVER_SLOT: "0",
+      SPINE_MANAGED_SERVER_INCARNATION: "registry-test",
+      ...(registry === undefined ? {} : { SPINE_MANAGED_REGISTRY: registry }),
+    },
+    stdio: ["ignore", "ignore", "ignore", "ipc"],
+  });
+}
+
+function childExit(child: ChildProcess): Promise<{ readonly code: number | null }> {
+  return new Promise((resolve) => {
+    child.once("exit", (code) => resolve({ code }));
+  });
+}
+
 const managedSignalListener = (
   signal: NodeJS.Signals,
   prior: ReadonlySet<NodeJS.SignalsListener>,
@@ -1061,6 +1080,28 @@ describe("ManagedServerApplication", () => {
     } finally {
       await managed.close();
     }
+  }, 20_000);
+
+  it("rejects a persistent normal Server registry before a managed child reports READY", async () => {
+    const child = managedRegistryChild();
+    const messages: unknown[] = [];
+    child.on("message", (message) => messages.push(message));
+
+    await expect(childExit(child)).resolves.toMatchObject({ code: 1 });
+    expect(messages).toEqual([]);
+  }, 20_000);
+
+  it("admits an in-memory normal Server registry as a managed READY child", async () => {
+    const child = managedRegistryChild("memory");
+    const ready = new Promise<void>((resolve) => {
+      child.on("message", (message: { readonly type?: string }) => {
+        if (message.type === "ready") resolve();
+      });
+    });
+
+    await ready;
+    child.send({ type: "close" });
+    await expect(childExit(child)).resolves.toMatchObject({ code: 0 });
   }, 20_000);
 
   it("does not block readiness when a child writes verbose standard output", async () => {

@@ -123,3 +123,17 @@
   ordered `AggregateError`, matching existing startup cleanup behavior.
 - Server typecheck is green. Focused managed lifecycle proof and an actual
   persistent/in-memory assembly fixture remain required before acceptance.
+
+## 2026-08-18 — Real managed registry fixture
+
+- RED initially timed out at 20 seconds. Systematic trace found the fixture
+  executes `packages/server/dist`, while the new guard had only been checked
+  with `--noEmit`; it therefore ran the preceding artifact. No runtime change
+  was made for that environmental mismatch.
+- After the normal generated build (and restoring the ten volatile generated
+  stamp/manifest byproducts), the real child fixture proves a normal `Server`
+  with its default persistent registry exits before READY, and the same Server
+  with `InMemorySubscriptionRegistry` sends READY then closes cleanly.
+- `managed-server-application.test.ts` is green at 49/49. This closes the
+  managed-registry acceptance and confirms rejection cleanup does not leave a
+  running child.
