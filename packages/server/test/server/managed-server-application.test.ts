@@ -26,7 +26,6 @@ import {
   ManagedServerApplication,
   type RunningServer,
 } from "../../src/index.js";
-import { installRunningServerRegistriesForTest } from "../../src/testing/index.js";
 import {
   ManagedServerCoordinator,
   managedServerApplicationAccess,
@@ -77,7 +76,9 @@ const localRunningServer = (close: () => Promise<void>, port = 42): RunningServe
     baseUrl: `http://127.0.0.1:${String(port)}`,
     close,
   };
-  installRunningServerRegistriesForTest(server, [new InMemorySubscriptionRegistry()]);
+  managedServerApplicationAccess.installRegistriesForTest(server, [
+    new InMemorySubscriptionRegistry(),
+  ]);
   return server;
 };
 

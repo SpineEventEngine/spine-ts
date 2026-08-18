@@ -31,6 +31,7 @@ const closeGraceMs = 1_000;
 const closeKillMs = 1_000;
 const endpointMaximumBytes = 256;
 const handleMembers = new WeakMap<ManagedServerApplicationHandle, ManagedServerCoordinator>();
+const managedTestRegistries = new WeakMap<RunningServer, readonly InMemorySubscriptionRegistry[]>();
 const lifecycleLogger: ILogLayer = new LogLayer({
   transport: new StructuredTransport({
     logger: console,
@@ -270,7 +271,8 @@ const ManagedServerValues = Object.freeze({
     });
   },
   requireVolatileRegistries(server: RunningServer): void {
-    const registries = runningServerAccess.subscriptionRegistries(server);
+    const registries =
+      runningServerAccess.subscriptionRegistries(server) ?? managedTestRegistries.get(server);
     if (
       registries === undefined ||
       registries.some((registry) => !(registry instanceof InMemorySubscriptionRegistry))
@@ -798,12 +800,22 @@ export const managedServerCoordinatorAccess: Readonly<{
 export const managedServerApplicationAccess: Readonly<{
   readyMembers(handle: ManagedServerApplicationHandle): readonly ReadyMember[];
   coordinatorEndpoint(handle: ManagedServerApplicationHandle): string | undefined;
+  installRegistriesForTest(
+    server: RunningServer,
+    registries: readonly InMemorySubscriptionRegistry[],
+  ): void;
 }> = Object.freeze({
   readyMembers(handle: ManagedServerApplicationHandle): readonly ReadyMember[] {
     return handleMembers.get(handle)?.readyMembers() ?? [];
   },
   coordinatorEndpoint(handle: ManagedServerApplicationHandle): string | undefined {
     return handleMembers.get(handle)?.coordinatorEndpoint();
+  },
+  installRegistriesForTest(
+    server: RunningServer,
+    registries: readonly InMemorySubscriptionRegistry[],
+  ): void {
+    managedTestRegistries.set(server, registries);
   },
 });
 

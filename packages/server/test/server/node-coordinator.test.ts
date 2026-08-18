@@ -280,6 +280,87 @@ describe("NodeCoordinator", () => {
     await coordinator.close();
   });
 
+  it("cancels an active public iterator from a second client", async () => {
+    const replica = await backend("cancel-second-client", { holdActivation: true });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl });
+    const subscription = await createClient(SubscriptionService, transport).subscribe(
+      create(TopicSchema),
+    );
+    const iterator = createClient(SubscriptionService, transport)
+      .activate(subscription)
+      [Symbol.asyncIterator]();
+    const pending = iterator.next();
+    await expect.poll(() => replica.activations()).toBe(1);
+
+    await createClient(SubscriptionService, transport).cancel(subscription);
+    await expect(pending).resolves.toMatchObject({ done: true });
+    await expect.poll(() => replica.activationAborts()).toBe(1);
+  });
+
+  it("immediately reconnects after an aborted native activation completes", async () => {
+    const release = deferred<void>();
+    const replica = await backend("reconnect-held", {
+      holdActivation: true,
+      releaseActivation: release.promise,
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const subscription = await client.subscribe(create(TopicSchema));
+    const firstAbort = new AbortController();
+    const first = client
+      .activate(subscription, { signal: firstAbort.signal })
+      [Symbol.asyncIterator]()
+      .next();
+    await expect.poll(() => replica.activations()).toBe(1);
+    firstAbort.abort();
+    await expect(first).rejects.toMatchObject({ code: Code.Canceled });
+    const second = client.activate(subscription)[Symbol.asyncIterator]();
+    release.resolve(undefined);
+    await expect.poll(() => replica.activations()).toBe(2);
+    await second.return?.();
+  });
+
+  it("aborts a stalled native stream when merged updates exceed the existing bound", async () => {
+    const replica = await backend("overflow", { updates: 102, observeActivationAbort: true });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const subscription = await client.subscribe(create(TopicSchema));
+    const controller = new AbortController();
+    const iterator = client
+      .activate(subscription, { signal: controller.signal })
+      [Symbol.asyncIterator]();
+    try {
+      const first = await iterator.next();
+      expect(first.done).toBe(false);
+      await expect.poll(() => replica.activationAborts()).toBe(1);
+    } finally {
+      controller.abort();
+      await iterator.return?.();
+    }
+  });
+
   it("installs retained definitions on a late replica before it enters unary selection", async () => {
     const current = await backend("current");
     const joining = await backend("joining");
@@ -654,6 +735,8 @@ async function backend(
     readonly post?: (context: HandlerContext) => Promise<never> | MessageShape<typeof AckSchema>;
     readonly updates?: number;
     readonly holdActivation?: boolean;
+    readonly releaseActivation?: Promise<void>;
+    readonly observeActivationAbort?: boolean;
   } = {},
 ): Promise<{
   readonly member: ReadyMember;
@@ -696,6 +779,14 @@ async function backend(
           },
           activate: async function* (subscription, context) {
             value.activations++;
+            if (options.observeActivationAbort)
+              context.signal.addEventListener(
+                "abort",
+                () => {
+                  value.activationAborts++;
+                },
+                { once: true },
+              );
             for (let update = 0; update < (options.updates ?? 0); update += 1)
               yield create(SubscriptionUpdateSchema, { subscription });
             if (options.holdActivation)
@@ -708,6 +799,7 @@ async function backend(
                   },
                   { once: true },
                 );
+                void options.releaseActivation?.then(resolve);
               });
           },
           cancel: () => {
@@ -741,4 +833,15 @@ async function backend(
     activationAborts: () => value.activationAborts,
     close,
   };
+}
+
+function deferred<Value>(): {
+  readonly promise: Promise<Value>;
+  readonly resolve: (value: Value) => void;
+} {
+  let resolve!: (value: Value) => void;
+  const promise = new Promise<Value>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }

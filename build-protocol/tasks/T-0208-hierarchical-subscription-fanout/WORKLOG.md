@@ -1,5 +1,18 @@
 # T-0208 work log
 
+## 2026-08-18 — Final reliability correction ownership
+
+- Existing `implementer` ownership continues with explicit `gpt-5.6-terra` /
+  `medium`; telemetry is unavailable and no subagents are permitted.
+- P1-A reconnect ownership and P1-B bounded cleanup tombstones are pushed in
+  `9bb4a7078`. A second real HTTP/2 client now proves Coordinator Cancel ends
+  the active public iterator and native activation.
+- The same real HTTP/2 fixture now proves an immediate reconnect survives a
+  held aborted native activation completion, and that the fixed 100-envelope
+  merged-stream bound aborts a stalled native upstream without deadlock.
+- T-0209 retains Delivery admission; this task does not claim its Delivery
+  event acceptance.
+
 ## 2026-08-18 — Correction ownership transfer
 
 - Correction ownership transferred to the existing `implementer`, explicitly

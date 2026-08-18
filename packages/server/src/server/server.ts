@@ -57,10 +57,6 @@ const maximumMessageMaxBytes = 0xffff_ffff;
 const gracefulSessionDrainMs = 100;
 type ServerContext = BoundedContext | BoundedContextBuilder;
 const runningContexts = new WeakMap<RunningServer, readonly BoundedContext[]>();
-const runningServerTestRegistries = new WeakMap<
-  RunningServer,
-  readonly StandSubscriptionRegistry[]
->();
 
 /**
  * Performs work coupled to listener readiness and network shutdown.
@@ -885,17 +881,6 @@ export interface RunningServerAccess {
   subscriptionRegistries(
     server: RunningServer,
   ): readonly StandSubscriptionRegistry[] | undefined;
-
-  /**
-   * Adds registry facts for one structural test double.
-   *
-   * @param server Supplies the structural running server.
-   * @param registries Supplies its context registry facts.
-   */
-  installRegistriesForTest(
-    server: RunningServer,
-    registries: readonly StandSubscriptionRegistry[],
-  ): void;
 }
 
 /**
@@ -905,18 +890,9 @@ export interface RunningServerAccess {
  */
 export const runningServerAccess: RunningServerAccess = Object.freeze({
   subscriptionRegistries(server: RunningServer): readonly StandSubscriptionRegistry[] | undefined {
-    return (
-      runningContexts
-        .get(server)
-        ?.map((context) => boundedContextAccess.subscriptionRegistry(context)) ??
-      runningServerTestRegistries.get(server)
-    );
-  },
-  installRegistriesForTest(
-    server: RunningServer,
-    registries: readonly StandSubscriptionRegistry[],
-  ): void {
-    runningServerTestRegistries.set(server, registries);
+    return runningContexts
+      .get(server)
+      ?.map((context) => boundedContextAccess.subscriptionRegistry(context));
   },
 });
 

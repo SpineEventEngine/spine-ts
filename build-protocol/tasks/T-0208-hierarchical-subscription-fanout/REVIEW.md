@@ -21,6 +21,9 @@
   payload, eligibility synchronization, best-effort/no-replay behavior, and
   T-0210 handoff.
 - Security: N/A; corrections add no wire form, secret, or trust boundary.
+- Reliability correction evidence adds real HTTP/2 cancellation from a second
+  client, held-completion immediate reconnect, and bounded merged-stream
+  overflow upstream abort. T-0209 remains the Delivery-admission handoff.
 - Registry evidence is complete: opaque `RunningServer` access is absent;
   default persistent and structural non-persistent custom registries reject
   before READY; only actual `InMemorySubscriptionRegistry` reaches READY and
