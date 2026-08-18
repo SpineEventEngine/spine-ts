@@ -1,6 +1,6 @@
 # T-0207 review record
 
-Status: Ready for specialist review after the task verification profile.
+Status: Ready for specialist review.
 
 The implementation assignment is existing `implementer`, explicitly configured
 `gpt-5.6-terra` / medium; subagent spawning is prohibited. Runtime model
@@ -20,3 +20,5 @@ the existing local HTTP/2 service contract and adds no new public wire form.
 - Generated build, tooling typecheck, affected ESLint, cleanup, TSDoc,
   copyright, logging containment, generated documentation inventory, format,
   and whitespace checks pass.
+- `verify:task` with the two focused suites and both changed runtime sources
+  passes after the deterministic preflight.

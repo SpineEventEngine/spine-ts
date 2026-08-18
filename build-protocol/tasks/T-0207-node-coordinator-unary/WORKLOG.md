@@ -70,3 +70,10 @@
   generated-doc inventory, format, and `git diff --check` all pass. Callback
   parameters in the private ready-members seam were renamed to satisfy the
   repository cleanup rule without changing its behavior.
+- `pnpm verify:task -- --coverage packages/server/test/server/node-coordinator.test.ts
+packages/server/test/server/managed-server-application.test.ts --source
+packages/server/src/server/node-coordinator.ts
+packages/server/src/server/managed-server-application.ts` is green. It ran
+  the frozen Proto checks/generation, generated build, package-wide ESLint and
+  deterministic policy gates, release-readiness check, and the focused
+  coverage suite. The branch is ready for its required specialist review wave.
