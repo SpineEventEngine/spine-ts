@@ -92,3 +92,13 @@
 - Focused real HTTP/2 suite remains green at 19/19; server typecheck and
   changed-file formatting pass. Next: push this checkpoint and continue late
   membership/cancellation cleanup proofs.
+
+## 2026-08-18 — Cancellation fan-out proof
+
+- The existing real HTTP/2 Coordinator subscription fixture now records every
+  child `Cancel`. One Coordinator cancellation produces one native cancellation
+  at each current replica and returns explicit OK; the focused suite remains
+  green at 19/19.
+- Remaining required proofs are late/replacement membership, managed registry
+  validation, Gateway durable rehydrate, and exact changed-source coverage;
+  this checkpoint does not claim those complete.

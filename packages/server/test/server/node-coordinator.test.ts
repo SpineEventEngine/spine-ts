@@ -115,6 +115,8 @@ describe("NodeCoordinator", () => {
         ).cancel(subscription)
       ).status?.status.case,
     ).toBe("ok");
+    expect(first.cancellations()).toBe(1);
+    expect(second.cancellations()).toBe(1);
     await coordinator.close();
   });
 
@@ -434,8 +436,9 @@ async function backend(
   readonly close: () => Promise<void>;
   readonly commands: () => number;
   readonly subscriptions: () => number;
+  readonly cancellations: () => number;
 }> {
-  const value = { commands: 0, subscriptions: 0 };
+  const value = { commands: 0, subscriptions: 0, cancellations: 0 };
   const server = http2.createServer(
     connectNodeAdapter({
       routes: (router) => {
@@ -463,7 +466,10 @@ async function backend(
             for (let update = 0; update < (options.updates ?? 0); update += 1)
               yield create(SubscriptionUpdateSchema, { subscription });
           },
-          cancel: () => create(SubscriptionService.method.cancel.output),
+          cancel: () => {
+            value.cancellations++;
+            return create(SubscriptionService.method.cancel.output);
+          },
         });
       },
     }),
@@ -486,6 +492,7 @@ async function backend(
     },
     commands: () => value.commands,
     subscriptions: () => value.subscriptions,
+    cancellations: () => value.cancellations,
     close,
   };
 }
