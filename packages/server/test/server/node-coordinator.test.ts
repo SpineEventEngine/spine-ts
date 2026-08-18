@@ -154,6 +154,32 @@ describe("NodeCoordinator", () => {
     await coordinator.close();
   });
 
+  it("cancels active native streams when the public subscription stream aborts", async () => {
+    const replica = await backend("cancel-activation", { holdActivation: true });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const subscription = await client.subscribe(create(TopicSchema));
+    const controller = new AbortController();
+    const updates = client
+      .activate(subscription, { signal: controller.signal })
+      [Symbol.asyncIterator]();
+
+    const pending = updates.next();
+    await expect.poll(() => replica.activations()).toBe(1);
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ code: Code.Canceled });
+    await expect.poll(() => replica.activationAborts()).toBe(1);
+    await coordinator.close();
+  });
+
   it("installs retained definitions on a late replica before it enters unary selection", async () => {
     const current = await backend("current");
     const joining = await backend("joining");
@@ -468,6 +494,7 @@ async function backend(
   options: {
     readonly post?: (context: HandlerContext) => Promise<never> | MessageShape<typeof AckSchema>;
     readonly updates?: number;
+    readonly holdActivation?: boolean;
   } = {},
 ): Promise<{
   readonly member: ReadyMember;
@@ -476,7 +503,13 @@ async function backend(
   readonly subscriptions: () => number;
   readonly cancellations: () => number;
 }> {
-  const value = { commands: 0, subscriptions: 0, cancellations: 0 };
+  const value = {
+    commands: 0,
+    subscriptions: 0,
+    cancellations: 0,
+    activations: 0,
+    activationAborts: 0,
+  };
   const server = http2.createServer(
     connectNodeAdapter({
       routes: (router) => {
@@ -500,9 +533,21 @@ async function backend(
               topic,
             });
           },
-          activate: async function* (subscription) {
+          activate: async function* (subscription, context) {
+            value.activations++;
             for (let update = 0; update < (options.updates ?? 0); update += 1)
               yield create(SubscriptionUpdateSchema, { subscription });
+            if (options.holdActivation)
+              await new Promise<void>((resolve) =>
+                context.signal.addEventListener(
+                  "abort",
+                  () => {
+                    value.activationAborts++;
+                    resolve();
+                  },
+                  { once: true },
+                ),
+              );
           },
           cancel: () => {
             value.cancellations++;
@@ -531,6 +576,8 @@ async function backend(
     commands: () => value.commands,
     subscriptions: () => value.subscriptions,
     cancellations: () => value.cancellations,
+    activations: () => value.activations,
+    activationAborts: () => value.activationAborts,
     close,
   };
 }

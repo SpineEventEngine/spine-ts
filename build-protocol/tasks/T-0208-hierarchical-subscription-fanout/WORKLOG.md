@@ -159,3 +159,13 @@
   condition to the established `UNAVAILABLE` response. Focused real HTTP/2
   suite is green at 21/21. This improves the exact availability error branch;
   queue-overflow and close branches remain in the bounded coverage slice.
+
+## 2026-08-18 — Activation cancellation cleanup proof
+
+- A real HTTP/2 activation whose native child waits indefinitely now proves
+  client stream abort reaches the child, terminates the public pending read
+  with Connect `CANCELED`, and leaves no active native stream. Focused
+  Coordinator suite is green at 22/22.
+- Exact single-suite LCOV remains 167/181 lines and 48/59 branches. The
+  remaining queue-overflow branch requires more than the 100 bounded concurrent
+  child relays because each child awaits the sink before reading another update.
