@@ -189,3 +189,18 @@ once'`.
   but storage returned them in the opposite order; the contract does not
   promise insertion order. The proof now asserts the exact two-row membership
   without imposing an ordering policy on Inbox reads.
+
+## 2026-08-18 — Final release verification
+
+- The converged `pnpm verify:release` completed successfully with exit code
+  zero. Every deterministic release gate passed.
+- The V8 coverage pool passed 265 files with 4 skipped files, 4,269 passing
+  tests, and 19 skipped tests. Coverage was 94.07% statements, 90.30%
+  branches, 94.07% functions, and 95.20% lines.
+- The release profile then ran the real two-process IntegrationBroker
+  acceptance separately, as required for live cross-process evidence. It
+  passed 1/1 in 525 ms.
+- The post-review release-harness corrections changed test scheduling and
+  assertions only; they did not reopen the reviewed T-0204 public runtime or
+  lifecycle implementation. T-0204 is complete on its feature branch and is
+  ready for isolated integration and post-merge verification.
