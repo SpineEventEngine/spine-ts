@@ -602,7 +602,9 @@ export class TaskAssigneeProjection extends Projection<UserId, typeof TaskAssign
  *
  * @returns The assembled Tasks bounded context.
  */
-export async function createTodoContext(): Promise<BoundedContext> {
+export async function createTodoContext(
+  options: { readonly subscriptionRegistry?: import("@spine-event-engine/server").StandSubscriptionRegistry } = {},
+): Promise<BoundedContext> {
   const taskListRouting = EventRouting.create<TaskListId>()
     .route(TaskEvent, (event) => [taskListIds.require(event.taskListId)])
     .route(TaskAlreadyDoneSchema, (event) => taskListIds.fromTaskId(event.id))
@@ -614,12 +616,13 @@ export async function createTodoContext(): Promise<BoundedContext> {
     .route(TaskReassignedSchema, (event) => {
       return [assignees.require(event.previousAssignee), assignees.require(event.assignee)];
     });
-  return BoundedContext.singleTenant("Tasks")
+  const builder = BoundedContext.singleTenant("Tasks")
     .withGeneratedRegistryRoot(new URL("..", import.meta.url))
     .add(TaskAggregate)
     .add(TaskListProjection, { eventRouting: taskListRouting })
-    .add(TaskAssigneeProjection, { eventRouting: assigneeRouting })
-    .buildAsync();
+    .add(TaskAssigneeProjection, { eventRouting: assigneeRouting });
+  if (options.subscriptionRegistry !== undefined) builder.withSubscriptionRegistry(options.subscriptionRegistry);
+  return builder.buildAsync();
 }
 
 /**

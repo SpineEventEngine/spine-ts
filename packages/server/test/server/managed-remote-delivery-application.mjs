@@ -13,6 +13,7 @@
  */
 
 import { RemoteDelivery } from "../../../delivery-client/dist/index.js";
+import { createTodoContext } from "../../../../examples/todo/dist/src/index.js";
 import {
   EnvironmentType,
   ManagedServerApplication,
@@ -39,7 +40,13 @@ const managed = await ManagedServerApplication.run({
   processCount: 2,
   port: 50_053,
   moduleUrl: import.meta.url,
-  createServer: async ({ host, port }) => Server.atPort(port, { host }).start(),
+  createServer: async ({ host, port }) => {
+    const server = Server.atPort(port, { host });
+    const { InMemorySubscriptionRegistry } = await import("../../dist/index.js");
+    server.add(await createTodoContext({ subscriptionRegistry: new InMemorySubscriptionRegistry() }));
+    const running = await server.start();
+    return running;
+  },
   synchronize: async () => {
     await delivery.open();
     if (strategy.shardCount !== 2) throw new Error("Fixture strategy selection was not retained.");
@@ -53,5 +60,6 @@ if (process.env.SPINE_MANAGED_SERVER_CHILD !== "true") {
       slot: member.slot,
       pid: member.pid,
     })),
+    endpoint: managedServerApplicationAccess.coordinatorEndpoint(managed),
   });
 }
