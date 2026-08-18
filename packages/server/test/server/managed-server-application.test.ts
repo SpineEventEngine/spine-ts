@@ -17,6 +17,24 @@ import { describe, expect, it } from "vitest";
 import { ManagedServerApplication } from "../../src/index.js";
 
 describe("ManagedServerApplication", () => {
+  it("starts one separate complete child for an explicit single-replica cohort", async () => {
+    const managed = await ManagedServerApplication.run({
+      processCount: 1,
+      moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
+      host: "127.0.0.1",
+      port: 0,
+      createServer: async () => {
+        throw new Error("Parent must not assemble a child.");
+      },
+    });
+    try {
+      expect(managed.ready).toBe(true);
+      expect(managed.childPids).toHaveLength(1);
+      expect(managed.childPids[0]).not.toBe(process.pid);
+    } finally {
+      await managed.close();
+    }
+  }, 20_000);
   it.each([undefined, 0, -1, 1.5, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
     "rejects invalid explicit process count %s without deriving a machine default",
     async (processCount) => {

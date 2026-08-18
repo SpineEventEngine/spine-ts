@@ -49,3 +49,17 @@ packages/server/test/server/managed-server-application.test.ts` then collected
   non-finite, and unsafe `processCount` values without CPU inspection.
 - Checkpoint A remains in progress: topology, IPC, manifests, lifecycle policy,
   real-process fixtures, and public documentation are still pending.
+
+## 2026-08-18 — Checkpoint B: initial fork topology
+
+- Restored exactly the ten generated `.spine-proto-generation.json` and
+  `spine-proto-manifest.json` generation-ID byproducts to `HEAD` after local
+  prerequisite generation. The restoration was mechanical and touched no other
+  path.
+- RED: the real-process one-child fixture failed with `Managed server process
+lifecycle has not started.` before parent/child implementation.
+- GREEN: after `pnpm typecheck:build:generated`, the focused lifecycle test
+  passed 7/7, including one parent-managed distinct child PID, private ready
+  IPC, and parent-requested child close.
+- Still pending: N-child topology, deterministic manifest, synchronization
+  gates, replacement/backoff, and public documentation.

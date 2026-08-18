@@ -66,6 +66,7 @@ export {
 } from "./server/server.js";
 export {
   ManagedServerApplication,
+  type ManagedServerApplicationHandle,
   type ManagedServerApplicationOptions,
 } from "./server/managed-server-application.js";
 export {
