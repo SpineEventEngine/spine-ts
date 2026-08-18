@@ -164,3 +164,9 @@ once'`.
 - The release-only Vitest command now uses a 15-second per-test ceiling.
   Focused development commands retain Vitest's short default, so this does not
   conceal ordinary regressions or change application runtime behavior.
+- The following release run proved that the native two-process scenario itself
+  needs a larger total test envelope than the release-wide 15-second default:
+  its child and parent phases are independently bounded at 15 and 20 seconds,
+  and the test reached Vitest's 15-second ceiling under suite load. The test
+  now has an explicit 60-second total ceiling while retaining those tighter
+  internal phase bounds.

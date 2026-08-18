@@ -134,7 +134,7 @@ describe("Wave 13 IntegrationBroker across normal Node applications", () => {
         cleanupFailure = new AggregateError(failures, "Wave 13 child-process cleanup failed.");
     }
     if (cleanupFailure !== undefined) throw cleanupFailure;
-  });
+  }, 60_000);
 });
 
 async function establishExternalDelivery(
