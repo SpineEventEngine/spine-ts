@@ -154,8 +154,9 @@ and the assembled child is closed before READY. Durable logical bindings remain
 Gateway-only. The Coordinator fans each logical definition to ready children,
 merges updates, propagates cancellation, and carries no subscription payload on
 parent/child IPC. A late or replacement child synchronizes retained definitions
-before it is eligible for normal requests. T-0210 owns the remaining
-real-process event and Delivery handoff proof.
+before it is eligible for normal requests. This subscription-fan-out contract
+does not itself claim real-process event and Delivery handoff acceptance; that
+acceptance remains future work in the correction sequence.
 
 Create records begin `pending` and expire after 30 seconds unless activated.
 Active records have no framework TTL. Cancellation physically deletes the

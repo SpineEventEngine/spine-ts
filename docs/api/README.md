@@ -78,8 +78,9 @@ and replacement replicas synchronize retained definitions before they become
 eligible. Standalone Servers retain the persistent registry default; framework-
 owned managed children require each actual context registry to be
 `InMemorySubscriptionRegistry`, rejecting and closing persistent or custom
-registries before READY. T-0210 owns the remaining real-process event/Delivery
-handoff proof.
+registries before READY. This subscription-fan-out contract does not itself
+claim real-process event and Delivery handoff acceptance; that acceptance
+remains future work in the correction sequence.
 
 The reference has 15 entry points, including `@spine-event-engine/client-web`,
 `@spine-event-engine/client-node`, `@spine-event-engine/delivery-client`, and

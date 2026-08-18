@@ -376,3 +376,16 @@ incomplete.` The test's generic parallel cleanup closed the replacement
 - Applied the mechanical brace-only callback body; no behavior changed. Full
   `pnpm exec eslint .`, focused Coordinator suite (**29/29**), changed-file
   Prettier, and diff hygiene pass.
+
+## 2026-08-19 — Release-readiness documentation correction
+
+- Release-readiness rejected two reader-facing references to an internal task
+  identifier in the API and Server references. Replaced only those sentences
+  with the truthful contract boundary: subscription fan-out does not itself
+  claim real-process event and Delivery handoff acceptance, which remains future
+  work in the correction sequence.
+- `pnpm check:release-readiness` and `pnpm docs:api:check` pass; the latter
+  confirms all expected package API exports. Changed-file Prettier and diff
+  hygiene pass. Audience/snippet wrappers began their generated-build
+  prerequisite, which completed without tracked output changes but exceeds the
+  execution surface's 30-second command window.
