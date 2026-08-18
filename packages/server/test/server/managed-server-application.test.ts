@@ -23,9 +23,7 @@ describe("ManagedServerApplication", () => {
       moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
       host: "127.0.0.1",
       port: 0,
-      createServer: async () => {
-        throw new Error("Parent must not assemble a child.");
-      },
+      createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
     });
     try {
       expect(managed.ready).toBe(true);
@@ -42,9 +40,7 @@ describe("ManagedServerApplication", () => {
       moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
       host: "127.0.0.1",
       port: 0,
-      createServer: async () => {
-        throw new Error("Parent must not assemble a child.");
-      },
+      createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
     });
     try {
       expect(new Set(managed.childPids).size).toBe(4);
@@ -60,9 +56,7 @@ describe("ManagedServerApplication", () => {
       moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
       host: "127.0.0.1",
       port: 0,
-      createServer: async () => {
-        throw new Error("Parent must not assemble a child.");
-      },
+      createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
     });
     try {
       expect(managed.childEndpoints).toEqual([
@@ -80,9 +74,7 @@ describe("ManagedServerApplication", () => {
       moduleUrl: new URL("./managed-server-application-gated-child.mjs", import.meta.url).href,
       host: "127.0.0.1",
       port: 0,
-      createServer: async () => {
-        throw new Error("Parent must not assemble a child.");
-      },
+      createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
     });
     try {
       expect(Date.now() - startedAt).toBeGreaterThanOrEqual(200);
@@ -98,9 +90,7 @@ describe("ManagedServerApplication", () => {
       moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
       host: "127.0.0.1",
       port: 0,
-      createServer: async () => {
-        throw new Error("Parent must not assemble a child.");
-      },
+      createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
     });
     try {
       const [failed, survivor] = managed.childPids;
@@ -128,9 +118,7 @@ describe("ManagedServerApplication", () => {
         moduleUrl: import.meta.url,
         host: "127.0.0.1",
         port: 0,
-        createServer: async () => {
-          throw new Error("not reached");
-        },
+        createServer: () => Promise.reject(new Error("not reached")),
         restart,
       }),
     ).rejects.toThrow("restart");
@@ -142,9 +130,7 @@ describe("ManagedServerApplication", () => {
       moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
       host: "127.0.0.1",
       port: 0,
-      createServer: async () => {
-        throw new Error("Parent must not assemble a child.");
-      },
+      createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
       restart: { initialDelayMs: 1, maximumDelayMs: 1, healthyReadyMs: 1 },
     });
     await managed.close();
@@ -156,16 +142,17 @@ describe("ManagedServerApplication", () => {
     async (processCount) => {
       await expect(
         ManagedServerApplication.run({
-          processCount: processCount as number,
+          processCount: processCount as unknown as number,
           moduleUrl: import.meta.url,
           host: "127.0.0.1",
           port: 0,
-          createServer: async () => ({
-            host: "127.0.0.1",
-            port: 1,
-            baseUrl: "http://127.0.0.1:1",
-            close: async () => {},
-          }),
+          createServer: () =>
+            Promise.resolve({
+              host: "127.0.0.1",
+              port: 1,
+              baseUrl: "http://127.0.0.1:1",
+              close: () => Promise.resolve(),
+            }),
         }),
       ).rejects.toThrow("processCount");
     },

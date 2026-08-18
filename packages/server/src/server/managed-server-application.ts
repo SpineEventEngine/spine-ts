@@ -94,13 +94,20 @@ const ManagedServerValues = Object.freeze({
     });
     let closing: Promise<void> | undefined;
     process.once("message", (message: { readonly type?: string }) => {
-      if (message.type === "close") closing ??= server.close().finally(() => process.disconnect());
+      if (message.type === "close") {
+        closing ??= server.close().finally(() => {
+          process.disconnect();
+        });
+      }
     });
     return {
       childPids: [],
       childEndpoints: [server.baseUrl],
       ready: true,
-      close: () => (closing ??= server.close()),
+      close: () => {
+        closing ??= server.close();
+        return closing;
+      },
     };
   },
   parent(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle> {
@@ -117,7 +124,10 @@ const ManagedServerValues = Object.freeze({
         reject(new Error("Managed child has no parent IPC channel."));
         return;
       }
-      process.send(message, (error) => (error === null ? resolve() : reject(error)));
+      process.send(message, (error) => {
+        if (error === null) resolve();
+        else reject(error);
+      });
     });
   },
 });
@@ -168,16 +178,18 @@ class ManagedServerCoordinator {
     });
     for (const slot of this.#slots) this.#start(slot);
     await this.#ready;
-    const coordinator = this;
+    const childPids = () => ManagedServerCoordinatorValues.pids(this.#slots);
+    const childEndpoints = () => ManagedServerCoordinatorValues.endpoints(this.#slots);
+    const isReady = () => this.#slots.some((slot) => slot.replica?.readyAt !== undefined);
     return {
       get childPids() {
-        return ManagedServerCoordinatorValues.pids(coordinator.#slots);
+        return childPids();
       },
       get childEndpoints() {
-        return ManagedServerCoordinatorValues.endpoints(coordinator.#slots);
+        return childEndpoints();
       },
       get ready() {
-        return coordinator.#slots.some((slot) => slot.replica?.readyAt !== undefined);
+        return isReady();
       },
       close: () => this.close(),
     };
@@ -212,8 +224,12 @@ class ManagedServerCoordinator {
       expectedExit: false,
     };
     slot.replica = replica;
-    child.on("message", (message: unknown) => this.#onMessage(slot, replica, message));
-    child.once("exit", () => this.#onExit(slot, replica));
+    child.on("message", (message: unknown) => {
+      this.#onMessage(slot, replica, message);
+    });
+    child.once("exit", () => {
+      this.#onExit(slot, replica);
+    });
   }
 
   #onMessage(slot: SlotRecord, replica: ReplicaRecord, message: unknown): void {
@@ -322,7 +338,11 @@ const ManagedServerCoordinatorValues = Object.freeze({
     replica.expectedExit = true;
     const { child } = replica;
     if (child.exitCode !== null || child.signalCode !== null) return;
-    const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    const exited = new Promise<void>((resolve) =>
+      child.once("exit", () => {
+        resolve();
+      }),
+    );
     if (child.connected) child.send({ type: "close" });
     await exited;
   },
