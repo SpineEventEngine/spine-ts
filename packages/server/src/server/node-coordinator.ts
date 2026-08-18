@@ -17,6 +17,7 @@ import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 
 import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient, type HandlerContext } from "@connectrpc/connect";
 import {
   connectNodeAdapter,
@@ -28,7 +29,14 @@ import {
   BackendMembershipKernel,
   type BackendMembershipKernelOptions,
 } from "@spine-event-engine/deployment/internal/backend-membership-kernel";
-import { AckSchema, type Ack, type Command, type Response } from "@spine-event-engine/proto";
+import {
+  AckSchema,
+  ResponseSchema,
+  StatusSchema,
+  type Ack,
+  type Command,
+  type Response,
+} from "@spine-event-engine/proto";
 import {
   type Query,
   type QueryResponse,
@@ -346,7 +354,9 @@ export class NodeCoordinator {
 
   async #cancel(subscription: Subscription, context: HandlerContext): Promise<Response> {
     await this.#kernel.cancel(toBinary(SubscriptionSchema, subscription), context.signal);
-    return create(SubscriptionService.method.cancel.output);
+    return create(ResponseSchema, {
+      status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
+    });
   }
 
   async #forward(request: CoordinatorRequest): Promise<void> {
@@ -453,7 +463,8 @@ const NodeCoordinatorValues = Object.freeze({
       childDefinition: (definition, member) => {
         const subscription = clone(SubscriptionSchema, fromBinary(SubscriptionSchema, definition));
         const id = subscription.id;
-        if (id !== undefined) id.value = `${id.value}/${member.slot.toString()}-${member.incarnation}`;
+        if (id !== undefined)
+          id.value = `${id.value}/${member.slot.toString()}-${member.incarnation}`;
         return toBinary(SubscriptionSchema, subscription);
       },
       childSize: (child) => child.byteLength,

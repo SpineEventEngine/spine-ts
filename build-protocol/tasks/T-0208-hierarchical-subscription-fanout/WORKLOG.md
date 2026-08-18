@@ -81,3 +81,14 @@
 - Focused real HTTP/2 proof is green: 19/19 `node-coordinator` tests; server
   no-emit typecheck also passes. Next: commit and push the correction before
   continuing cancellation and membership tests.
+
+## 2026-08-18 — Cancel response correction
+
+- RED: Coordinator `Cancel` returned an empty default `Response`; the real
+  HTTP/2 assertion failed `expected undefined to be 'ok'` at
+  `node-coordinator.test.ts:110`.
+- GREEN: after cancelling every immediate child, the Coordinator returns the
+  same explicit `Response.status.ok` shape as `SpineServices.Cancel`.
+- Focused real HTTP/2 suite remains green at 19/19; server typecheck and
+  changed-file formatting pass. Next: push this checkpoint and continue late
+  membership/cancellation cleanup proofs.

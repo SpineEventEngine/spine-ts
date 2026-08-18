@@ -107,6 +107,14 @@ describe("NodeCoordinator", () => {
     expect(subscription.id?.value).toMatch(/^s-[0-9a-f-]{36}$/u);
     expect(first.subscriptions()).toBe(1);
     expect(second.subscriptions()).toBe(1);
+    expect(
+      (
+        await createClient(
+          SubscriptionService,
+          createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+        ).cancel(subscription)
+      ).status?.status.case,
+    ).toBe("ok");
     await coordinator.close();
   });
 
@@ -119,7 +127,10 @@ describe("NodeCoordinator", () => {
       port: 0,
     });
     closeables.push(() => coordinator.close());
-    const client = createClient(SubscriptionService, createGrpcTransport({ baseUrl: coordinator.baseUrl }));
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
     const subscription = await client.subscribe(create(TopicSchema));
     const updates = client.activate(subscription)[Symbol.asyncIterator]();
 
