@@ -82,3 +82,14 @@ corrections.
 Re-review every technical concern after the single correction batch.
 Documentation re-review is required because public examples and semantics
 change.
+
+## Final re-review correction
+
+The final technical re-review identified retryable close and final termination
+settlement as P1 lifecycle defects. The correction adds no public contract:
+parent/child close caches reset only after rejection, successful close remains
+idempotent, and private child termination has one deterministic final bounded
+failure after `SIGKILL`. Async child error cleanup uses that same private path
+without delaying replacement of healthy capacity. The focused RED/GREEN tests
+and final mechanical evidence are recorded in `WORKLOG.md`; re-review remains
+required after this commit.

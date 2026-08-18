@@ -1,5 +1,34 @@
 # T-0206 work log
 
+## 2026-08-18 — Final re-review correction
+
+- The re-review found two remaining lifecycle P1s: rejected parent/child close
+  promises were cached permanently, and a non-exiting child after `SIGKILL`
+  left a parent close awaiting forever. The assignment remains the existing
+  `implementer` role with explicit `gpt-5.6-terra` / `medium`; no subagents
+  were used and runtime model telemetry is unavailable.
+- RED: the existing tests could not retry a rejected close and the fake-clock
+  close path had no final settlement after `SIGKILL`.
+- GREEN: parent and child close cache only an in-flight or successful attempt;
+  a rejection clears the cache for an explicit retry while concurrent callers
+  continue sharing the same attempt. Successful cleanup remains idempotent.
+  The child removes IPC listeners/disconnects only after successful local
+  close, preserving retryability.
+- GREEN: termination uses the injected private clock for grace, `SIGTERM`,
+  `SIGKILL`, and one final bounded wait. A non-exiting child rejects with the
+  deterministic `Managed child did not exit after SIGKILL.` outcome rather
+  than retaining an unbounded close. An asynchronous child error retires its
+  membership and starts a bounded private termination while replacement stays
+  independent; terminal failure is contained as a safe lifecycle warning.
+- GREEN evidence: `pnpm exec vitest run
+packages/server/test/server/managed-server-application.test.ts
+packages/server/test/server/server-log.test.ts --coverage --pool=threads`
+  passed 41/41 with 94.98% statements, 90.28% branches, 94.52% functions, and
+  98.34% lines across the changed lifecycle/logging source. Typecheck, scoped
+  ESLint, copyright, and logging-containment checks also passed. No public
+  option, delivery strategy rule, application IPC, retry, or manifest was
+  added.
+
 ## 2026-08-18 — Review-correction checkpoint A
 
 - Returned to the existing bounded implementation role after the first review

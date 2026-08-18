@@ -130,12 +130,88 @@ describe("ManagedServerApplication", () => {
     void coordinator.start();
     child.emit("error", new Error("fork channel failed"));
     child.emit("exit", 1);
-    expect(clock.delays).toEqual([2]);
-    expect((child as unknown as { readonly killCalls: readonly string[] }).killCalls).toContain(
-      "SIGTERM",
-    );
+    expect(clock.delays).toEqual([2, 1_000]);
     clock.advance(2);
+    (child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      child.emit("exit");
+      return true;
+    });
     await coordinator.close();
+  });
+
+  it("bounds a failed asynchronous child-error termination without blocking replacement", async () => {
+    const clock = new FakeClock();
+    const child = fakeChild(1);
+    const killCalls: string[] = [];
+    Object.assign(child, {
+      kill: vi.fn((signal: string) => {
+        killCalls.push(signal);
+        return true;
+      }),
+    });
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.reject(new Error("unused")),
+        restart: { initialDelayMs: 10_000, maximumDelayMs: 10_000 },
+      },
+      { clock, spawn: () => child },
+    );
+    void coordinator.start();
+    child.emit("error", new Error("child channel failed"));
+    clock.advance(1_000);
+    await Promise.resolve();
+    expect(killCalls).toContain("SIGTERM");
+    clock.advance(1_000);
+    await Promise.resolve();
+    expect(killCalls).toContain("SIGKILL");
+    clock.advance(1_000);
+    await Promise.resolve();
+    await coordinator.close();
+  });
+
+  it("shares a failed parent close, bounds it, and retries the remaining child cleanup", async () => {
+    const clock = new FakeClock();
+    const child = fakeChild(1);
+    Object.assign(child, { kill: vi.fn(() => true) });
+    const spawned: { slot: number; incarnation: string }[] = [];
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.reject(new Error("unused")),
+      },
+      {
+        clock,
+        spawn: (_url, slot, incarnation) => {
+          spawned.push({ slot, incarnation });
+          return child;
+        },
+      },
+    );
+    const started = coordinator.start();
+    child.emit("message", {
+      type: "ready",
+      slot: "0",
+      incarnation: spawned[0].incarnation,
+      endpoint: "http://127.0.0.1:1",
+    });
+    await started;
+    const first = coordinator.close();
+    expect(coordinator.close()).toBe(first);
+    clock.advance(1_000);
+    await Promise.resolve();
+    clock.advance(1_000);
+    await Promise.resolve();
+    clock.advance(1_000);
+    await Promise.resolve();
+    await expect(first).rejects.toThrow("SIGKILL");
+    (child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      child.emit("exit");
+      return true;
+    });
+    await expect(coordinator.close()).resolves.toBeUndefined();
   });
 
   it("rejects non-canonical, oversized, and stale READY endpoints without retaining them", async () => {
@@ -211,6 +287,10 @@ describe("ManagedServerApplication", () => {
     );
     void coordinator.start();
     expect(synchronize).not.toHaveBeenCalled();
+    (child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      child.emit("exit");
+      return true;
+    });
     await coordinator.close();
   });
   it("delays repeated failed replacements exponentially and caps the delay", async () => {
@@ -484,7 +564,10 @@ describe("ManagedServerApplication", () => {
     process.env.SPINE_MANAGED_SERVER_CHILD = "true";
     process.env.SPINE_MANAGED_SERVER_SLOT = "0";
     process.env.SPINE_MANAGED_SERVER_INCARNATION = "incarnation";
-    const close = vi.fn(() => Promise.resolve());
+    const close = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error("retry child close"))
+      .mockResolvedValueOnce(undefined);
     try {
       const handle = await ManagedServerApplication.run({
         processCount: 1,
@@ -497,8 +580,9 @@ describe("ManagedServerApplication", () => {
         { type: "ready", slot: "0", incarnation: "incarnation", endpoint: "http://127.0.0.1:42" },
         expect.any(Function),
       );
-      await handle.close();
-      expect(close).toHaveBeenCalledOnce();
+      await expect(handle.close()).rejects.toThrow("retry child close");
+      await expect(handle.close()).resolves.toBeUndefined();
+      expect(close).toHaveBeenCalledTimes(2);
     } finally {
       if (priorSend === undefined) delete (process as { send?: unknown }).send;
       else Object.defineProperty(process, "send", priorSend);

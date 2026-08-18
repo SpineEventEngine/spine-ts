@@ -119,12 +119,20 @@ const ManagedServerValues = Object.freeze({
     }
     let closing: Promise<void> | undefined;
     const close = () => {
-      closing ??= server.close().finally(() => {
-        if (process.connected && typeof process.disconnect === "function") process.disconnect();
-        process.off("error", containIpcError);
-        process.off("message", onMessage);
-      });
-      return closing;
+      if (closing !== undefined) return closing;
+      const attempt = server.close().then(
+        () => {
+          if (process.connected && typeof process.disconnect === "function") process.disconnect();
+          process.off("error", containIpcError);
+          process.off("message", onMessage);
+        },
+        (error: unknown) => {
+          if (closing === attempt) closing = undefined;
+          throw error;
+        },
+      );
+      closing = attempt;
+      return attempt;
     };
     const onMessage = (message: { readonly type?: string }) => {
       if (message.type === "close") {
@@ -206,6 +214,7 @@ export class ManagedServerCoordinator {
   #ready: Promise<void> | undefined;
   #resolveReady: (() => void) | undefined;
   #close: Promise<void> | undefined;
+  readonly #terminations = new Set<Promise<void>>();
   #onSignal: (() => void) | undefined;
 
   constructor(
@@ -338,8 +347,7 @@ export class ManagedServerCoordinator {
     // A ChildProcess error can precede exit while the OS process still lives.
     // Retire the incarnation once, then actively terminate that known child.
     this.#onExit(slot, replica);
-    if (replica.child.exitCode === null && replica.child.signalCode === null)
-      replica.child.kill("SIGTERM");
+    this.#terminateUnexpected(replica);
   }
 
   #scheduleReplacement(slot: SlotRecord): void {
@@ -380,12 +388,39 @@ export class ManagedServerCoordinator {
           this.#dependencies.clock.clearTimeout(slot.replacementTimer);
         slot.replacementTimer = undefined;
       }
-      await Promise.all(
-        this.#slots.map((slot) => ManagedServerCoordinatorValues.close(slot.replica)),
-      );
+      await Promise.all(this.#slots.map((slot) => this.#closeReplica(slot.replica)));
+      await Promise.all([...this.#terminations]);
     })();
     this.#close = close;
+    void close.then(undefined, () => {
+      if (this.#close === close) this.#close = undefined;
+    });
     return close;
+  }
+
+  #closeReplica(replica: ReplicaRecord | undefined): Promise<void> {
+    return ManagedServerCoordinatorValues.close(replica, this.#dependencies.clock);
+  }
+
+  #terminateUnexpected(replica: ReplicaRecord): void {
+    const termination = ManagedServerCoordinatorValues.terminate(
+      replica.child,
+      this.#dependencies.clock,
+    );
+    this.#terminations.add(termination);
+    void termination.then(
+      () => this.#terminations.delete(termination),
+      () => {
+        this.#terminations.delete(termination);
+        // spine-log-boundary: server.managed_replica_termination
+        emitServerWarning(lifecycleLogger, "Managed replica termination was bounded.", {
+          operation: "managed_replica.terminate",
+          reasonCode: "unresponsive",
+          slot: String(replica.slot),
+          incarnation: replica.incarnation,
+        });
+      },
+    );
   }
 
   /** @internal Supplies ready child facts to the next Coordinator slice. */
@@ -513,7 +548,10 @@ const ManagedServerCoordinatorValues = Object.freeze({
       canonicalLoopbackEndpoint(candidate.endpoint) !== undefined
     );
   },
-  async close(replica: ReplicaRecord | undefined): Promise<void> {
+  async close(
+    replica: ReplicaRecord | undefined,
+    clock: ManagedServerCoordinatorDependencies["clock"],
+  ): Promise<void> {
     if (replica === undefined) return;
     replica.expectedExit = true;
     const { child } = replica;
@@ -524,23 +562,39 @@ const ManagedServerCoordinatorValues = Object.freeze({
       }),
     );
     if (child.connected) child.send({ type: "close" }, () => undefined);
-    else child.kill("SIGTERM");
-    await ManagedServerCoordinatorValues.waitForExit(child, exited);
+    await ManagedServerCoordinatorValues.terminate(child, clock, exited);
   },
-  async waitForExit(child: ChildProcess, exited: Promise<void>): Promise<void> {
-    if (await ManagedServerCoordinatorValues.within(exited, closeGraceMs)) return;
+  async terminate(
+    child: ChildProcess,
+    clock: ManagedServerCoordinatorDependencies["clock"],
+    knownExit?: Promise<void>,
+  ): Promise<void> {
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    const exited =
+      knownExit ??
+      new Promise<void>((resolve) =>
+        child.once("exit", () => {
+          resolve();
+        }),
+      );
+    if (await ManagedServerCoordinatorValues.within(exited, closeGraceMs, clock)) return;
     child.kill("SIGTERM");
-    if (await ManagedServerCoordinatorValues.within(exited, closeKillMs)) return;
+    if (await ManagedServerCoordinatorValues.within(exited, closeKillMs, clock)) return;
     child.kill("SIGKILL");
-    await exited;
+    if (await ManagedServerCoordinatorValues.within(exited, closeKillMs, clock)) return;
+    throw new Error("Managed child did not exit after SIGKILL.");
   },
-  within(promise: Promise<void>, delay: number): Promise<boolean> {
+  within(
+    promise: Promise<void>,
+    delay: number,
+    clock: ManagedServerCoordinatorDependencies["clock"],
+  ): Promise<boolean> {
     return new Promise((resolve) => {
-      const timer = setTimeout(() => {
+      const timer = clock.setTimeout(() => {
         resolve(false);
       }, delay);
       void promise.then(() => {
-        clearTimeout(timer);
+        clock.clearTimeout(timer);
         resolve(true);
       });
     });
