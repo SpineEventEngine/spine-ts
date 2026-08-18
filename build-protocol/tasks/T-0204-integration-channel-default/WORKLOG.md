@@ -184,3 +184,8 @@ once'`.
   now separates graceful and forced-exit budgets; the test retains its 10 ms
   graceful trigger and uses the existing five-second bounded forced-exit
   observation. No Delivery runtime behavior changes.
+- The next coverage pool exposed an order-sensitive assertion in an existing
+  environment-attachment failure test. Both required Inbox rows were present,
+  but storage returned them in the opposite order; the contract does not
+  promise insertion order. The proof now asserts the exact two-row membership
+  without imposing an ordering policy on Inbox reads.
