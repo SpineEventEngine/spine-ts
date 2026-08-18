@@ -389,3 +389,13 @@ incomplete.` The test's generic parallel cleanup closed the replacement
   hygiene pass. Audience/snippet wrappers began their generated-build
   prerequisite, which completed without tracked output changes but exceeds the
   execution surface's 30-second command window.
+
+## 2026-08-19 — Definitive release verification
+
+- Root's retained `pnpm verify:release` at `5079994b3` exited **0** after all
+  release gates: **268 passed / 4 skipped** test files and **4,395 passed / 19
+  skipped** tests. Coverage was **94.08% statements**, **90.31% branches
+  (13,260/14,682)**, **94.16% functions**, and **95.24% lines**.
+- The separate real cross-process broker proof passed **1/1**. Final style and
+  reliability dispositions are **PASS**; T-0208 is complete and release
+  verified. No product behavior changed for this record-only completion.

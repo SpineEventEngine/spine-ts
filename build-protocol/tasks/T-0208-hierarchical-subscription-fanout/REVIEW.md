@@ -1,6 +1,6 @@
 # T-0208 specialist review
 
-**Status:** Awaiting specialist review after deterministic convergence.
+**Status:** Complete — release verified.
 
 ## Correction intake and dispositions
 
@@ -111,3 +111,16 @@ an external trust principal.
   server, and tooling typechecks; scoped ESLint; cleanup; changed-file Prettier;
   and `git diff --check` pass. Existing authoring metadata remains implementer
   `gpt-5.6-terra` / `medium`, no subagents, telemetry unavailable.
+
+## Final release disposition (2026-08-19)
+
+- **PASS — style/maintainability.** The final release profile includes the
+  completed fixture cleanup and containment corrections.
+- **PASS — performance/reliability.** The final release profile includes the
+  bounded activation and child-cleanup proofs, including the real cross-process
+  broker proof (**1/1**).
+- Definitive root `pnpm verify:release` at `5079994b3` exited **0**: **268
+  passed / 4 skipped** test files; **4,395 passed / 19 skipped** tests; coverage
+  **94.08% statements**, **90.31% branches (13,260/14,682)**, **94.16%
+  functions**, and **95.24% lines**. This is record-only confirmation; no code
+  changed after the successful release profile.

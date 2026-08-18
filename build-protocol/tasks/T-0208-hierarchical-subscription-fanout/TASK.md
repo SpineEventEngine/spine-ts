@@ -1,6 +1,6 @@
 # T-0208 — Hierarchical subscription fan-out
 
-**Status:** In progress
+**Status:** Complete — release verified
 **Baseline:** `origin/main@b00cb4c21`
 **Branch/worktree:** `codex/t0208-subscription-fanout` / `/tmp/spine-ts-t0208`
 
@@ -105,3 +105,14 @@ definitions and fans each to every READY complete-replica child.
   branches (90.14%) and 983/1036 executable lines (94.88%).
 - Deterministic verification is converged. Required specialist review remains
   the final task gate; this record does not claim review completion.
+
+## Release verification (final)
+
+- Definitive `pnpm verify:release` at `5079994b3` exited **0**: **268 passed /
+  4 skipped** test files and **4,395 passed / 19 skipped** tests. Workspace
+  coverage was **94.08% statements**, **90.31% branches (13,260/14,682)**,
+  **94.16% functions**, and **95.24% lines**.
+- The separate real cross-process broker proof passed **1/1**. Final style and
+  reliability review dispositions are **PASS**. T-0208 is release verified;
+  the stated contract boundary for real-process event and Delivery handoff
+  acceptance remains future work in the correction sequence.
