@@ -24,3 +24,11 @@
 
 No test-forwarder or direct fake notification will be recorded as complete-replica acceptance.
 
+## Blocking evidence
+
+`ManagedServerApplicationOptions` has `createServer` and optional opaque
+`synchronize` only. `ServerEnvironment.delivery` is a generic closeable, and
+its internal openable form establishes ports/source only after assembly.
+`BoundedContextBuilder` defaults and snapshots its strategy. Therefore the
+current contracts cannot distinguish an explicitly configured remote/shared
+facility or explicit strategy selection from the default/local alternatives.
