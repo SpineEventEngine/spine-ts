@@ -16,7 +16,7 @@
 /* eslint-disable @typescript-eslint/no-empty-function */
 /* eslint-disable @typescript-eslint/require-await */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   type BackendMemberClient,
   BackendMembershipKernel,
@@ -576,6 +576,33 @@ describe("BackendMembershipKernel", () => {
     await owner.reconcile([{ id: "a" }]);
     expect(attempts).toBe(2);
     await owner.close();
+  });
+  it("bounds a never-settling disposal and clears its private timer after retry", async () => {
+    vi.useFakeTimers();
+    let attempts = 0;
+    const owner = kernel({
+      create: async (member) =>
+        client(member, {
+          dispose: async () => {
+            attempts++;
+            if (attempts === 1) await new Promise<void>(() => undefined);
+          },
+        }),
+    });
+    try {
+      await owner.reconcile([{ id: "a" }]);
+      await owner.subscribe(definition("x"), new AbortController().signal);
+      const cancelled = owner.cancel(definition("x"), new AbortController().signal);
+      const rejected = expect(cancelled).rejects.toThrow("cleanup remains incomplete");
+      await vi.advanceTimersByTimeAsync(1_000);
+      await rejected;
+      await owner.reconcile([{ id: "a" }]);
+      expect(attempts).toBe(2);
+      expect(vi.getTimerCount()).toBe(0);
+      await owner.close();
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it("aborts pending starts during close and retries an incomplete terminal cleanup", async () => {
     let startAborted = false;

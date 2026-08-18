@@ -163,7 +163,7 @@ interface FailedChildCleanup<Request, Child, Update> {
   readonly client: BackendMemberClient<Request, Child, Update>;
   readonly child: Child;
 }
-const childCleanupTimeoutMs = 100;
+const childCleanupTimeoutMs = 1_000;
 
 /**
  * Manages ephemeral backend membership and its native subscription children.
@@ -642,16 +642,19 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     signal: AbortSignal,
   ): Promise<boolean> {
     try {
-      await Promise.race([
-        client.dispose(child, signal),
-        new Promise<never>((_resolve, reject) => {
-          const timer = setTimeout(
-            () => reject(new Error("backend child cleanup timed out")),
-            childCleanupTimeoutMs,
-          );
-          timer.unref();
-        }),
-      ]);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("backend child cleanup timed out")),
+          childCleanupTimeoutMs,
+        );
+        timer.unref();
+      });
+      try {
+        await Promise.race([client.dispose(child, signal), timeout]);
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+      }
       return true;
     } catch {
       this.#failedChildCleanup.add({ client, child });
