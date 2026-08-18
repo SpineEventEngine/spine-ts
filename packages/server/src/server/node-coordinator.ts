@@ -346,7 +346,9 @@ export class NodeCoordinator {
         },
         context.signal,
       )
-      .finally(() => updates.close());
+      .finally(() => {
+        updates.close();
+      });
     try {
       for await (const update of updates) yield update;
     } finally {
@@ -414,10 +416,21 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
   readonly #limit: number;
   #closed = false;
 
+  /**
+   * Creates one terminal bounded update queue.
+   *
+   * @param limit Limits retained updates before terminal closure.
+   */
   constructor(limit: number) {
     this.#limit = limit;
   }
 
+  /**
+   * Queues one update or closes terminally when its bound is reached.
+   *
+   * @param update Supplies the update to deliver.
+   * @returns Completion after direct delivery, queue closure, or consumer delivery.
+   */
   push(update: SubscriptionUpdate): Promise<void> {
     if (this.#closed) return Promise.resolve();
     const waiter = this.#waiters.shift();
@@ -433,6 +446,9 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
     return new Promise((resolve) => this.#delivered.push(resolve));
   }
 
+  /**
+   * Closes the queue and releases all waiting producers and consumers.
+   */
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
@@ -441,6 +457,11 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
     for (const delivered of this.#delivered.splice(0)) delivered();
   }
 
+  /**
+   * Returns queued updates until the terminal close.
+   *
+   * @returns The asynchronous update iterator.
+   */
   [Symbol.asyncIterator](): AsyncIterator<SubscriptionUpdate> {
     return {
       next: (): Promise<IteratorResult<SubscriptionUpdate>> => {

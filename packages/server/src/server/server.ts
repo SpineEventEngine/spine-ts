@@ -869,13 +869,28 @@ export interface RunningServer {
  * @internal
  */
 export interface RunningServerAccess {
+  // prettier-ignore
+
+  /**
+   * Returns registry persistence facts for a framework-owned running server.
+   *
+   * @param server Supplies the local running server.
+   * @returns The context registry facts, or undefined for an opaque server.
+   */
   subscriptionRegistries(
     server: RunningServer,
   ): readonly { readonly persistent: boolean }[] | undefined;
 }
 
+/**
+ * Provides framework-only `RunningServer` context facts.
+ *
+ * @internal
+ */
 export const runningServerAccess: RunningServerAccess = Object.freeze({
-  subscriptionRegistries(server: RunningServer): readonly { readonly persistent: boolean }[] | undefined {
+  subscriptionRegistries(
+    server: RunningServer,
+  ): readonly { readonly persistent: boolean }[] | undefined {
     return runningContexts
       .get(server)
       ?.map((context) => boundedContextAccess.subscriptionRegistry(context));

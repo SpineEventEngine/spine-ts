@@ -35,7 +35,7 @@
   reconcile retries the existing child synchronization path. Existing members
   retain their unary eligibility, preserving Gateway compatibility.
 - Focused kernel proof is green: `pnpm exec vitest run
-  packages/deployment/test/membership-kernel.test.ts` — 31/31 tests passed.
+packages/deployment/test/membership-kernel.test.ts` — 31/31 tests passed.
 - Next: commit and push this green checkpoint, then add the Coordinator
   `SubscriptionService` HTTP/2 RED.
 
@@ -71,8 +71,8 @@
   internal kernel collision fence rather than a new wire observable.
 - RED: the real Coordinator subscribe proof changed to require the established
   `s-<UUID>` form. It failed exactly with `expected
-  '9dd73ec2-fbd5-4311-ad69-7fe602cb11f2' to match
-  /^s-[0-9a-f-]{36}$/u` at `node-coordinator.test.ts:107`.
+'9dd73ec2-fbd5-4311-ad69-7fe602cb11f2' to match
+/^s-[0-9a-f-]{36}$/u` at `node-coordinator.test.ts:107`.
 - GREEN: Coordinator logical IDs now use `s-${randomUUID()}`; immediate child
   definitions use `slot-incarnation`, preventing replacement collisions. The
   merged update queue is capped at the existing server subscription delivery
@@ -174,7 +174,7 @@
 
 - RED: direct internal queue behavior tests initially failed because the queue
   was not exposed to its focused runtime test (`TypeError: SubscriptionUpdateQueue
-  is not a constructor`).
+is not a constructor`).
 - GREEN: the internal queue is now directly testable and proves overflow closes
   terminally, drops stale buffered updates, resolves blocked producers, ignores
   later updates, and directly serves an awaiting consumer. This is the bounded
@@ -199,7 +199,7 @@
   into the empty replacement Coordinator and current child.
 - RED evidence: the first composition run completed its functional assertions
   but failed teardown with exact `Error: backend child cleanup remains
-  incomplete.` The test's generic parallel cleanup closed the replacement
+incomplete.` The test's generic parallel cleanup closed the replacement
   Coordinator while the dynamic owner was still issuing its required child
   Cancel. This was a fixture lifecycle race, not a product failure.
 - GREEN: the test explicitly closes the dynamic owner before its Coordinator,
@@ -212,3 +212,36 @@
 - Focused real HTTP/2 Coordinator suite is green at **25/25**. No product API,
   persistence path, or wire contract was added; the existing composed behavior
   satisfies this acceptance slice.
+
+## 2026-08-18 — Converged preflight coverage
+
+- Added only boundary-relevant coverage: an opaque managed handle exposes no
+  private Coordinator membership facts, while a framework-owned Server exposes
+  its actual registry facts. This exercises the smallest `server.ts` context
+  inspection seam used by managed-registry rejection; no browser/topology
+  feature or public API was added.
+- Combined focused suite (`node-coordinator`, managed application, Server,
+  Server lifecycle, membership kernel) is green at **284/284** with **93.26%
+  statements, 90.14% branches, and 94.88% lines** across all changed production
+  sources. `node-coordinator.ts` remains 92.72% branch coverage.
+- Exact `server.ts` changed-range LCOV evidence: `runningContexts.set` line is
+  hit 163 times; `runningServerAccess.subscriptionRegistries` is hit 10 times;
+  the map path is hit once. This is proportionate evidence for the private
+  WeakMap seam even though unrelated historical whole-file branches remain.
+- The exact RED 17–19 real-process checks remain deferred to **T-0210** by the
+  frozen T-0203 plan: domestic event, ThirdParty/external event, and Delivery
+  admission are not represented as T-0208 completion claims.
+
+## 2026-08-18 — Deterministic verification convergence
+
+- Cheap preflight passed: changed-file Prettier/diff, generated build/tooling
+  typechecks, 284 focused regressions, ESLint, cleanup/TSDoc/copyright/logging,
+  API/audience/snippet documentation, and release readiness.
+- One canonical scoped `verify:task --coverage` ran over the five focused
+  suites and all four changed production sources. Its terminal LCOV artifact
+  was written at 22:46:31 and reports **512/568 branches (90.14%)** and
+  **983/1036 lines (94.88%)**; Coordinator remains **51/55 branches**.
+- The verifier wrapper yielded its captured stream during the long generated
+  build, but its sole process completed and wrote the final coverage artifact;
+  no second expensive profile was run. Specialist review is the remaining
+  completion gate.

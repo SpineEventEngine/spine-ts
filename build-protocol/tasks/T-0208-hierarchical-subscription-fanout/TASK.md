@@ -62,3 +62,34 @@ definitions and fans each to every READY complete-replica child.
   over an existing public stream contract.
 - Security is deferred to final correction convergence: no new wire form or
   external trust boundary is introduced.
+
+## Implementation evidence
+
+- Checkpoints `029acdb8b` through `595e6000f` are pushed to
+  `origin/codex/t0208-subscription-fanout`. They implement membership admission
+  gating, Coordinator child fan-out/relay/cancel, managed registry rejection,
+  and Gateway durable recovery proof without a new public contract.
+- Focused real HTTP/2, managed-child, Server lifecycle, and membership-kernel
+  suites run 284 assertions. Their changed-source coverage is 93.26% statements,
+  90.14% branches, and 94.88% lines. `node-coordinator.ts` is 92.72% branches;
+  `server.ts` is retained for its smallest private registry seam, whose changed
+  `runningContexts.set` and `runningServerAccess.subscriptionRegistries` paths
+  are directly exercised by the Server suite.
+- RED 17 (domestic event), RED 18 (ThirdParty/external event), and RED 19
+  (Delivery event) are deliberately not claimed here. The accepted T-0203 plan
+  assigns their real-process end-to-end proofs, including delivery admission,
+  to T-0210. T-0208 supplies the reusable hierarchy/recovery behavior on which
+  those tests depend.
+
+## Verification disposition
+
+- The mandatory cheap preflight is clean: changed-file formatting and diff,
+  generated build/tooling typechecks, focused regressions, ESLint, cleanup,
+  TSDoc, copyright, logging, API/audience/snippet documentation, and release
+  readiness all passed.
+- Canonical profile: `pnpm verify:task -- --coverage` over the five focused
+  Coordinator/managed/Server/kernel suites and the four changed production
+  sources. Its terminal LCOV artifact was written at 22:46:31 with 512/568
+  branches (90.14%) and 983/1036 executable lines (94.88%).
+- Deterministic verification is converged. Required specialist review remains
+  the final task gate; this record does not claim review completion.

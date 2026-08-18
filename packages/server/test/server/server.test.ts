@@ -81,12 +81,31 @@ import {
 } from "../../src/index.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 import { BrowserServer } from "../../src/server/browser-server.js";
+import { runningServerAccess } from "../../src/server/server.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { attachDurableSubscriptionCleanup } from "../../src/server/durable-subscription-bindings.js";
 import { EnvironmentTests } from "../../src/server/environment.js";
 import type { ILogLayer } from "loglayer";
 
 describe("Server", () => {
+  it("exposes subscription registry facts only for framework-owned running servers", async () => {
+    const context = BoundedContext.singleTenant("RegistryFacts").build();
+    const running = await Server.atPort(0).add(context).start();
+
+    try {
+      expect(runningServerAccess.subscriptionRegistries(running)).toEqual([{ persistent: true }]);
+      const unrelated: RunningServer = {
+        host: "127.0.0.1",
+        port: 0,
+        baseUrl: "http://127.0.0.1:0",
+        close: () => Promise.resolve(),
+      };
+      expect(runningServerAccess.subscriptionRegistries(unrelated)).toBeUndefined();
+    } finally {
+      await running.close();
+    }
+  });
+
   it("propagates the environment logger child to built context event buses", async () => {
     const errors: { readonly message: string; readonly facts: Record<string, unknown> }[] = [];
     const child = {

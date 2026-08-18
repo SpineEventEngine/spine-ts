@@ -457,6 +457,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       );
     if (generation !== this.#generation) return;
     for (const state of this.#definitions.values()) await this.#syncDefinition(state, generation);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (generation !== this.#generation || this.#closed) return;
     if ([...this.#definitions.values()].every((state) => state.failure === undefined))
       for (const key of wanted.keys()) {
@@ -475,7 +476,8 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       this.#creating.delete(controller);
     }
     if (this.#closed || generation !== this.#generation) await this.#dispose(client);
-    else this.#members.set(key, { member, client, incarnation: ++this.#incarnation, eligible: false });
+    else
+      this.#members.set(key, { member, client, incarnation: ++this.#incarnation, eligible: false });
   }
   async #syncDefinition(state: DefinitionState<Child, Update>, generation: number): Promise<void> {
     state.failure = undefined;

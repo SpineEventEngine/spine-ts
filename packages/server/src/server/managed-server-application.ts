@@ -265,7 +265,9 @@ const ManagedServerValues = Object.freeze({
   requireVolatileRegistries(server: RunningServer): void {
     const registries = runningServerAccess.subscriptionRegistries(server);
     if (registries?.some((registry) => registry.persistent))
-      throw new Error("Managed application replicas require an in-memory Stand subscription registry.");
+      throw new Error(
+        "Managed application replicas require an in-memory Stand subscription registry.",
+      );
   },
   send(message: {
     readonly type: "ready";

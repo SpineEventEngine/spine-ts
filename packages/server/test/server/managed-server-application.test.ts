@@ -73,21 +73,26 @@ const localRunningServer = (close: () => Promise<void>, port = 42): RunningServe
 });
 
 function managedRegistryChild(registry?: "memory"): ChildProcess {
-  return fork(fileURLToPath(new URL("./managed-server-subscription-registry-child.mjs", import.meta.url)), {
-    env: {
-      ...process.env,
-      SPINE_MANAGED_SERVER_CHILD: "true",
-      SPINE_MANAGED_SERVER_SLOT: "0",
-      SPINE_MANAGED_SERVER_INCARNATION: "registry-test",
-      ...(registry === undefined ? {} : { SPINE_MANAGED_REGISTRY: registry }),
+  return fork(
+    fileURLToPath(new URL("./managed-server-subscription-registry-child.mjs", import.meta.url)),
+    {
+      env: {
+        ...process.env,
+        SPINE_MANAGED_SERVER_CHILD: "true",
+        SPINE_MANAGED_SERVER_SLOT: "0",
+        SPINE_MANAGED_SERVER_INCARNATION: "registry-test",
+        ...(registry === undefined ? {} : { SPINE_MANAGED_REGISTRY: registry }),
+      },
+      stdio: ["ignore", "ignore", "ignore", "ipc"],
     },
-    stdio: ["ignore", "ignore", "ignore", "ipc"],
-  });
+  );
 }
 
 function childExit(child: ChildProcess): Promise<{ readonly code: number | null }> {
   return new Promise((resolve) => {
-    child.once("exit", (code) => resolve({ code }));
+    child.once("exit", (code) => {
+      resolve({ code });
+    });
   });
 }
 
@@ -134,6 +139,16 @@ const fakeChild = (pid: number): ChildProcess => {
 };
 
 describe("ManagedServerApplication", () => {
+  it("keeps private Coordinator membership facts absent for opaque managed handles", () => {
+    const opaque = {
+      ready: false,
+      close: () => Promise.resolve(),
+    };
+
+    expect(managedServerApplicationAccess.readyMembers(opaque)).toEqual([]);
+    expect(managedServerApplicationAccess.coordinatorEndpoint(opaque)).toBeUndefined();
+  });
+
   it("uses the shared close path for a parent SIGINT", async () => {
     const clock = new FakeClock();
     const child = fakeChild(1);
