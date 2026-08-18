@@ -155,8 +155,13 @@ built Server:
 - Bounded Context name and tenant mode;
 - accepted Command and Event type URLs;
 - repository state type URLs;
-- generated handler-registry/application schema digest;
-- explicit Delivery shard strategy identity.
+- generated handler-registry/application schema digest.
+
+Delivery strategy selection is application code and configuration owned by the
+framework user. Managed deployment accepts arbitrary `DeliveryStrategy`
+implementations and does not identify, serialize, compare, sample, or restrict
+them. All replicas of one deployed application are required to run the same
+application code; process count and Delivery strategy remain independent.
 
 All children in one process group must have identical manifests. A mismatch
 fails node startup before the public listener becomes ready or the node is
@@ -425,7 +430,7 @@ slice. The final topology must prove all of these:
    without CPU inspection.
 4. `processCount: 1` starts a coordinator parent and one separate complete child.
 5. `processCount: 4` starts four distinct application PIDs behind one endpoint.
-6. A child with a different Bounded Context/schema/delivery manifest prevents
+6. A child with a different Bounded Context/schema/handler manifest prevents
    node readiness.
 7. A command sent to the Coordinator enters exactly one child's normal
    CommandService and CommandBus and returns its Ack.

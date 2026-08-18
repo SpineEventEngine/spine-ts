@@ -63,3 +63,21 @@ lifecycle has not started.` before parent/child implementation.
   IPC, and parent-requested child close.
 - Still pending: N-child topology, deterministic manifest, synchronization
   gates, replacement/backoff, and public documentation.
+
+## 2026-08-18 — Delivery strategy manifest correction
+
+- A bounded architecture audit confirmed that arbitrary `DeliveryStrategy`
+  behavior has no exact runtime configuration identity: the public seam is
+  only `shardCount` plus `shardFor()`, and finite sampling or function-source
+  comparison cannot prove behavioral equality.
+- The human clarified that Delivery strategy selection is the framework user's
+  responsibility and every deployed replica must use the same application
+  code. The framework therefore must not identify, serialize, compare, sample,
+  or restrict the strategy in managed mode.
+- Removed the overreaching strategy-identity requirement from the accepted
+  plan and this task. The private replica manifest remains responsible for
+  Bounded Context, tenant, schema, repository-state, and generated-handler
+  composition only. No new public strategy field or built-in-only restriction
+  is introduced.
+- This resolves the architecture blocker. Implementation resumes with
+  manifest equality and synchronization gates.

@@ -46,9 +46,9 @@ provider packages, examples, generic signal routing, or ZeroMQ removal.
 
 | ID    | Binding requirement                                                                                                                         | Behavioral proof                                                             |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| H-005 | Every managed child is a complete replica of the application's Bounded Contexts, schema, and Delivery topology.                             | Deterministic private manifest equality and real-process mismatch rejection. |
+| H-005 | Every managed child is a complete replica of the application's Bounded Contexts, schema, and generated handlers.                            | Deterministic private manifest equality and real-process mismatch rejection. |
 | H-009 | `processCount` is an explicit deployer setting; no CPU inspection or inferred default exists.                                               | Missing/invalid value matrix and forbidden-import scan.                      |
-| H-010 | Process count and Delivery shard count remain independent concepts.                                                                         | No numeric coupling in validation or manifest comparison.                    |
+| H-010 | Process count and Delivery strategy remain independent user-selected concepts.                                                              | No numeric coupling, strategy identity, sampling, or managed restriction.    |
 | H-011 | Children will observe Delivery directly; the parent IPC carries no Delivery notification or application signal.                             | Control-frame allowlist/dependency scan and synchronization-hook proof.      |
 | H-017 | Direct single-process `Server.run()` and browser use remain independent of managed Node machinery.                                          | Existing lifecycle/browser tests and import-boundary scan.                   |
 | H-022 | Unexpected child exit preserves reduced service and starts a bounded replacement; it never fails the whole node solely for one child crash. | Real-process crash/replacement and fake-clock policy tests.                  |
@@ -67,6 +67,9 @@ provider packages, examples, generic signal routing, or ZeroMQ removal.
   manifest and all registered synchronization gates resolve. T-0208 and T-0209
   later bind subscription and Delivery readiness to those gates; T-0206 proves
   the gate without owning those subsystems.
+- The manifest does not identify or compare `DeliveryStrategy`. Managed mode
+  accepts arbitrary strategies selected by the framework user. The deployed
+  replicas' common application code is the authority for that policy.
 - Initial node readiness requires every configured slot to synchronize at
   least once. Thereafter the node stays ready while at least one child is
   READY. With zero READY children it remains alive and continues replacements.
@@ -100,7 +103,7 @@ Retain RED evidence before product changes for plan cases 3–6 and 33–41:
    child PID.
 3. `processCount: 4` starts four distinct child PIDs owned by one parent
    lifecycle.
-4. One child with a different context/schema/Delivery manifest prevents
+4. One child with a different context/schema/handler manifest prevents
    initial readiness and cleans the cohort.
 5. Unexpected READY-child exit removes only that incarnation; survivors
    continue and one replacement for the same slot receives a fresh identity.
