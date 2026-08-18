@@ -73,6 +73,18 @@ describe("NodeCoordinator", () => {
     ).rejects.toMatchObject({ code: 14 });
   });
 
+  it("returns unavailable when a subscription has no ready replica", async () => {
+    const coordinator = await NodeCoordinator.open({ members: new TestReadyMembers([]), port: 0 });
+    closeables.push(() => coordinator.close());
+
+    await expect(
+      createClient(
+        SubscriptionService,
+        createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+      ).subscribe(create(TopicSchema)),
+    ).rejects.toMatchObject({ code: Code.Unavailable });
+  });
+
   it("forwards generated queries through the selected ready replica", async () => {
     const replica = await backend("query");
     closeables.push(replica.close);
@@ -158,7 +170,10 @@ describe("NodeCoordinator", () => {
     members.set([current.member, joining.member]);
     await expect.poll(() => joining.subscriptions()).toBe(1);
 
-    const commands = createClient(CommandService, createGrpcTransport({ baseUrl: coordinator.baseUrl }));
+    const commands = createClient(
+      CommandService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
     await commands.post(create(CommandService.method.post.input));
     await commands.post(create(CommandService.method.post.input));
     expect(joining.commands()).toBe(1);

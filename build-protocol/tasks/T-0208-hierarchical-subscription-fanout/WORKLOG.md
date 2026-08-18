@@ -149,3 +149,13 @@
   and 0/160 branches under this focused suite. It is intentionally private but
   still needs a changed-line-compatible coverage disposition before the task
   verifier can be accepted. No verification-pass claim is made.
+
+## 2026-08-18 — Subscription admission error checkpoint
+
+- RED: `SubscriptionService.Subscribe` with no READY replica escaped the
+  kernel's membership error as Connect `INTERNAL` (13), while unary calls
+  correctly return `UNAVAILABLE` (14).
+- GREEN: Coordinator subscription admission now maps the same absent-member
+  condition to the established `UNAVAILABLE` response. Focused real HTTP/2
+  suite is green at 21/21. This improves the exact availability error branch;
+  queue-overflow and close branches remain in the bounded coverage slice.

@@ -323,7 +323,11 @@ export class NodeCoordinator {
       id: create(SubscriptionIdSchema, { value: `s-${randomUUID()}` }),
       topic,
     });
-    await this.#kernel.subscribe(toBinary(SubscriptionSchema, subscription), context.signal);
+    try {
+      await this.#kernel.subscribe(toBinary(SubscriptionSchema, subscription), context.signal);
+    } catch (error) {
+      throw this.#availabilityError(error);
+    }
     return subscription;
   }
 
@@ -363,10 +367,14 @@ export class NodeCoordinator {
     try {
       await this.#kernel.forward(request);
     } catch (error) {
-      if (error instanceof Error && error.message === "backend membership is unavailable.")
-        throw new ConnectError("No ready application replica is available.", Code.Unavailable);
-      throw error;
+      throw this.#availabilityError(error);
     }
+  }
+
+  #availabilityError(error: unknown): unknown {
+    return error instanceof Error && error.message === "backend membership is unavailable."
+      ? new ConnectError("No ready application replica is available.", Code.Unavailable)
+      : error;
   }
 
   #reconcile(): Promise<void> {
