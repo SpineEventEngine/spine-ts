@@ -51,16 +51,43 @@ function configured(
 }
 
 describe("ServerEnvironment delivery lifecycle", () => {
-  it("requires an explicit transport factory in production", () => {
+  it("defaults one process-wide integration channel factory in production", async () => {
     EnvironmentTests.use(EnvironmentType.Production);
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
+      typeRegistry: spineCoreRegistry,
     });
 
-    expect(() => ServerEnvironment.instance()).toThrow(
-      "Production ServerEnvironment requires transportFactory.",
-    );
+    const close = vi.spyOn(InMemoryTransportFactory.prototype, "close");
+    const environment = ServerEnvironment.instance() as unknown as {
+      readonly integrationChannelFactory: InMemoryTransportFactory;
+    };
+
+    expect(environment.integrationChannelFactory).toBeInstanceOf(InMemoryTransportFactory);
+    expect(ServerEnvironment.instance()).toBe(environment);
+    await ServerEnvironment.instance().close();
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses and closes a supplied integration channel factory once", async () => {
+    const close = vi.fn();
+    const factory = { close } as never;
+    EnvironmentTests.use(EnvironmentType.Production);
+    ServerEnvironment.when(EnvironmentType.Production).use({
+      storageFactory: new InMemoryStorageFactory(),
+      transport: { close: () => undefined } as never,
+      integrationChannelFactory: factory,
+      typeRegistry: spineCoreRegistry,
+    });
+
+    const environment = ServerEnvironment.instance() as unknown as {
+      readonly integrationChannelFactory: unknown;
+    };
+
+    expect(environment.integrationChannelFactory).toBe(factory);
+    await ServerEnvironment.instance().close();
+    expect(close).toHaveBeenCalledTimes(1);
   });
 
   it("requires an application schema registry in production", () => {
@@ -68,7 +95,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
-      transportFactory: new InMemoryTransportFactory(),
+      integrationChannelFactory: new InMemoryTransportFactory(),
     });
 
     expect(() => ServerEnvironment.instance()).toThrow(
@@ -250,7 +277,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
-      transportFactory: new InMemoryTransportFactory(),
+      integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
     });
@@ -284,7 +311,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
-      transportFactory: new InMemoryTransportFactory(),
+      integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
     });
@@ -340,7 +367,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
-      transportFactory: new InMemoryTransportFactory(),
+      integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
     });
@@ -370,7 +397,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
-      transportFactory: new InMemoryTransportFactory(),
+      integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
     });

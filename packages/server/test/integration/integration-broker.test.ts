@@ -180,7 +180,7 @@ describe("Wave 13 IntegrationBroker", () => {
   it("RED-06 does not republish imported events in a bidirectional cycle", async () => {
     await broker("origin-only loop prevention");
     const factory = new RecordingTransportFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
+    ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
     const a: unknown[] = [],
       b: unknown[] = [];
     const left = BoundedContext.singleTenant("Red06A")
@@ -212,7 +212,7 @@ describe("Wave 13 IntegrationBroker", () => {
   it("RED-07 installs one publisher on the first requester and serializes complete-set replacement", async () => {
     await broker("first request and replacement");
     const factory = new RecordingTransportFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
+    ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
     const producer = await BoundedContext.singleTenant(`Red07${crypto.randomUUID()}`)
       .addEventDispatcher(domestic([StringValueSchema, Int32ValueSchema]) as never)
       .buildAsync();
@@ -242,7 +242,7 @@ describe("Wave 13 IntegrationBroker", () => {
   it("RED-08 retains publication while another requester still wants the type", async () => {
     await broker("per-origin wanted references");
     const factory = new RecordingTransportFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
+    ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
     const producer = await BoundedContext.singleTenant(`Red08${crypto.randomUUID()}`)
       .addEventDispatcher(domestic([StringValueSchema]) as never)
       .buildAsync();
@@ -269,7 +269,7 @@ describe("Wave 13 IntegrationBroker", () => {
   it("RED-10 suppresses an unchanged complete wanted-event set", async () => {
     await broker("unchanged complete-set suppression");
     const factory = new RecordingTransportFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
+    ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
     const context = await BoundedContext.singleTenant(`Red10${crypto.randomUUID()}`)
       .addEventDispatcher(external([StringValueSchema], []) as never)
       .addEventDispatcher(external([StringValueSchema], []) as never)
@@ -372,7 +372,7 @@ describe("Wave 13 IntegrationBroker", () => {
   it("RED-16 changes only EventContext.external before posting through the normal EventBus", async () => {
     await broker("normal EventBus import with system/self filtering");
     const factory = new RecordingTransportFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
+    ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
     const seen: unknown[] = [];
     const c = await BoundedContext.singleTenant("Red16C")
       .addEventDispatcher(external([StringValueSchema], seen) as never)
@@ -428,7 +428,7 @@ async function assertWantedLifecycle(options: {
   readonly assertNoPublicationAfterWithdrawal?: boolean;
 }): Promise<void> {
   const factory = new RecordingTransportFactory();
-  ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
+  ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
   const producer = await BoundedContext.singleTenant(`WantedProducer${crypto.randomUUID()}`)
     .addEventDispatcher(domestic([StringValueSchema, Int32ValueSchema]) as never)
     .buildAsync();
@@ -481,7 +481,7 @@ async function assertWantedLifecycle(options: {
 
 async function assertFailedReplacementKeepsPriorWantedSet(): Promise<void> {
   const factory = new RecordingTransportFactory();
-  ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
+  ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
   const producer = await BoundedContext.singleTenant(`RollbackProducer${crypto.randomUUID()}`)
     .addEventDispatcher(domestic([StringValueSchema, Int32ValueSchema, BoolValueSchema]) as never)
     .buildAsync();

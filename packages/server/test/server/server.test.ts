@@ -510,7 +510,7 @@ describe("Server", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: new CloseTrackingTransport([]),
-      transportFactory: new InMemoryTransportFactory(),
+      integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
     });
     let resourceClosed = false;

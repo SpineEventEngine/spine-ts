@@ -480,7 +480,7 @@ through `Server` use the environment storage factory unless
 `Server.atPort(port)` defaults to local-only `127.0.0.1`; broader hosts are
 explicit through `ServerOptions`. All servers share the lazily resolved
 singleton; production configuration requires `storageFactory`, `transport`,
-`transportFactory`, and `typeRegistry` before first resolution, and production selection itself requires
+and `typeRegistry` before first resolution, and production selection itself requires
 `NODE_ENV=production` before that first resolution. `RunningServer` exposes
 `host`, `port`, `baseUrl`, and
 idempotent `close()`. Close stops listener intake and active HTTP/2 sessions,
@@ -495,13 +495,15 @@ endpoint names, worker/process supervision, durable scheduling, and Java-style
 delivery-topology configuration; it intentionally exposes this one JVM-style
 global process environment configuration.
 
-`ServerEnvironmentSettings` also accepts `transportFactory` and `typeRegistry`.
-The former is the message-channel factory used by each context-owned integration
-broker; the latter is the complete application schema lookup used by
-`ThirdPartyContext`. Local/test resolution supplies `InMemoryTransportFactory`
-and `spineCoreRegistry` when omitted. Production resolution rejects either
-omission, so production applications must compose and configure their own
-schema universe (for example with `TypeRegistry.from(...)`) and message
+`ServerEnvironmentSettings` also accepts the optional `integrationChannelFactory`.
+It is the message-channel factory used by each context-owned integration broker;
+when omitted, all local contexts use the same environment-owned
+`InMemoryTransportFactory`. `typeRegistry` remains the complete application
+schema lookup used by `ThirdPartyContext`. Local/test resolution supplies
+in-memory storage and `spineCoreRegistry` when omitted. Production resolution
+rejects omitted storage, signal transport, or type registry, so production
+applications must compose and configure their own schema universe (for example
+with `TypeRegistry.from(...)`) and message
 transport. The existing `transport: SignalTransport` setting remains separate
 and continues to configure runtime command/event intake.
 

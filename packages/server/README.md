@@ -435,11 +435,13 @@ deduplication, or producer election. Delivery is best effort; many consumers
 may observe one domain producer at a time.
 
 The broker uses `TransportFactory` message channels, not `SignalTransport`.
-Local and test contexts use `InMemoryTransportFactory`. Production
-`ServerEnvironment` resolution requires `storageFactory`, `transport`,
-`transportFactory`, and the complete application `typeRegistry`; production
-does not silently fall back to memory or to the core-only registry. See the
-[transport reference](../transport/REFERENCE.md) for same-host ZeroMQ setup.
+`ServerEnvironment` owns one process-wide `InMemoryTransportFactory` by
+default for private IntegrationBroker message channels, including production.
+An application may supply `integrationChannelFactory` to override that local
+channel factory. Production resolution still requires `storageFactory`,
+`transport`, and the complete application `typeRegistry`; it does not fall
+back to in-memory storage or to the core-only registry. See the [transport
+reference](../transport/REFERENCE.md) for same-host ZeroMQ setup.
 
 `ThirdPartyContext.singleTenant(name)` or `.multitenant(name)` creates the
 public import facade. `emittedEvent(event, actor)` requires a generated event,

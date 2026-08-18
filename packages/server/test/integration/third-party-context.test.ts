@@ -305,7 +305,7 @@ describe("Wave 13 ThirdPartyContext", () => {
     if (ThirdPartyContext === undefined) throw new Error("ThirdPartyContext is unavailable.");
     const factory = new RecordingTransportFactory();
     ServerEnvironment.when(EnvironmentType.Local).use({
-      transportFactory: factory,
+      integrationChannelFactory: factory,
       typeRegistry: new TypeRegistry([StringValueSchema]),
     });
     const stateRegistry = generatedStateRegistryRoot();

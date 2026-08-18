@@ -75,22 +75,24 @@ import type { StorageFactory } from "@spine-event-engine/storage";
 
 declare const storageFactory: StorageFactory;
 declare const transport: SignalTransport;
-declare const transportFactory: TransportFactory;
+declare const integrationChannelFactory: TransportFactory;
 declare const typeRegistry: TypeRegistryLookup;
 
 ServerEnvironment.when(EnvironmentType.Production).use({
   storageFactory,
   transport,
-  transportFactory,
+  integrationChannelFactory,
   typeRegistry,
 });
 ```
 
 `storageFactory` supplies records and events, `transport` is the existing
-signal/runtime transport, `transportFactory` supplies private integration
-message channels, and `typeRegistry` is the complete application schema
-universe used by `ThirdPartyContext` to encode outgoing imported events. Local and test environments default
-storage and message channels in memory and use the core registry only as a
+signal/runtime transport, and `integrationChannelFactory` optionally overrides
+the process-wide private integration message channel factory. When it is
+absent, all local bounded contexts share one in-memory factory, including in
+production. `typeRegistry` is the complete application schema universe used by
+`ThirdPartyContext` to encode outgoing imported events. Local and test
+environments default storage in memory and use the core registry only as a
 fallback; those defaults are not production configuration.
 
 ## Routing lifecycle

@@ -104,7 +104,7 @@ export interface ServerEnvironmentSettings {
   /**
    * Message-channel factory used by private bounded-context integration brokers.
    */
-  readonly transportFactory?: TransportFactory;
+  readonly integrationChannelFactory?: TransportFactory;
 
   /**
    * Complete generated application schema lookup used for ThirdParty event encoding.
@@ -169,7 +169,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   /**
    * Message-channel factory selected for private bounded-context integration.
    */
-  readonly transportFactory: TransportFactory;
+  readonly integrationChannelFactory: TransportFactory;
 
   /**
    * Read-only application schema lookup used by private integration boundaries.
@@ -197,7 +197,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     this.nodeId = crypto.randomUUID();
     this.storageFactory = settings.storageFactory;
     this.transport = settings.transport;
-    this.transportFactory = settings.transportFactory;
+    this.integrationChannelFactory = settings.integrationChannelFactory;
     this.typeRegistry = settings.typeRegistry;
     this.delivery = settings.delivery;
     this.tracerFactory = settings.tracerFactory;
@@ -321,7 +321,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
 interface RequiredFacilities {
   readonly storageFactory: StorageFactory;
   readonly transport: SignalTransport;
-  readonly transportFactory: TransportFactory;
+  readonly integrationChannelFactory: TransportFactory;
   readonly typeRegistry: TypeRegistryLookup;
   readonly delivery: ServerEnvironmentCloseable | undefined;
   readonly tracerFactory: ServerEnvironmentCloseable | undefined;
@@ -559,7 +559,7 @@ const ServerEnvironmentValues = Object.freeze({
   facilitiesToClose(options: RequiredFacilities): readonly unknown[] {
     return Object.freeze([
       ...(options.delivery === undefined ? [] : [options.delivery]),
-      options.transportFactory,
+      options.integrationChannelFactory,
       options.transport,
       ...(options.tracerFactory === undefined ? [] : [options.tracerFactory]),
       options.storageFactory,
@@ -592,16 +592,14 @@ const ServerEnvironmentValues = Object.freeze({
       if (settings.transport === undefined) {
         throw new Error("Production ServerEnvironment requires transport.");
       }
-      if (settings.transportFactory === undefined) {
-        throw new Error("Production ServerEnvironment requires transportFactory.");
-      }
       if (settings.typeRegistry === undefined) {
         throw new Error("Production ServerEnvironment requires typeRegistry.");
       }
       return {
         storageFactory: settings.storageFactory,
         transport: settings.transport,
-        transportFactory: settings.transportFactory,
+        integrationChannelFactory:
+          settings.integrationChannelFactory ?? new InMemoryTransportFactory(),
         typeRegistry: settings.typeRegistry,
         delivery: settings.delivery,
         tracerFactory: settings.tracerFactory,
@@ -611,7 +609,8 @@ const ServerEnvironmentValues = Object.freeze({
     return {
       storageFactory: settings.storageFactory ?? new InMemoryStorageFactory(),
       transport: settings.transport ?? new LocalSignalTransport(),
-      transportFactory: settings.transportFactory ?? new InMemoryTransportFactory(),
+      integrationChannelFactory:
+        settings.integrationChannelFactory ?? new InMemoryTransportFactory(),
       typeRegistry: settings.typeRegistry ?? spineCoreRegistry,
       delivery: settings.delivery,
       tracerFactory: settings.tracerFactory,

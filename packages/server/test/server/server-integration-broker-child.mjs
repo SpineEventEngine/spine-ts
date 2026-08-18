@@ -70,7 +70,7 @@ try {
   const factory = ZeroMq.createZeroMqTransportFactory(
     ZeroMq.ZeroMqConfig.create({ ipcDirectory, adapterIdentity }),
   );
-  ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
+  ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
   const builder = BoundedContext.singleTenant(`Wave13${capitalize(role)}`)
     .withGeneratedRegistryRoot(registry.root)
     .add(Wave13ExternalProjection);
