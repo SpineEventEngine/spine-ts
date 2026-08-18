@@ -1,5 +1,26 @@
 # T-0206 work log
 
+## 2026-08-18 — Final release verification
+
+- The fork-pool isolation correction was pushed at `93fcd4942`. It changes
+  tests only: simulated process signals and IPC events invoke only the managed
+  lifecycle listeners, and simulated connected processes stub
+  `process.disconnect()`. Real forked-parent signal acceptance remains intact.
+- The formerly failing focused fork-pool matrix passed 55/55 tests. Coverage
+  for `managed-server-application.ts` was 95.53% statements, 90.00% branches,
+  97.22% functions, and 99.14% lines.
+- `pnpm verify:release` completed successfully on the pushed checkpoint. The
+  main suite passed 4,309 tests with 19 skipped across 266 passing and four
+  skipped files. Repository coverage was 94.08% statements, 90.30% branches,
+  94.11% functions, and 95.24% lines.
+- The separate real cross-process IntegrationBroker acceptance passed 1/1.
+  Node, exact Proto intake, generated builds, tooling typecheck, ESLint,
+  cleanup, TSDoc, copyright, formatting, documentation/API inventories, Buf,
+  generated-source cleanliness, logging containment, and release-readiness
+  gates all passed.
+- No Vitest worker exit recurred. The task is complete and ready for isolated
+  integration with the current `origin/main`.
+
 ## 2026-08-18 — Fork-pool coverage correction
 
 - RED: the default Vitest fork-pool command for the managed lifecycle file
