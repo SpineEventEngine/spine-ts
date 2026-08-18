@@ -156,6 +156,7 @@ interface Current<Member, Request, Child, Update> {
   readonly member: Member;
   readonly client: BackendMemberClient<Request, Child, Update>;
   readonly incarnation: number;
+  eligible: boolean;
 }
 interface FailedChildCleanup<Request, Child, Update> {
   readonly client: BackendMemberClient<Request, Child, Update>;
@@ -349,7 +350,8 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
    * @returns The backend response bytes.
    */
   forward(request: Request): Promise<Uint8Array> {
-    const member = [...this.#members.values()][this.#next++ % this.#members.size];
+    const eligible = [...this.#members.values()].filter((member) => member.eligible);
+    const member = eligible[this.#next++ % eligible.length];
     return member === undefined
       ? Promise.reject(new Error("backend membership is unavailable."))
       : member.client.forward(request);
@@ -455,6 +457,12 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       );
     if (generation !== this.#generation) return;
     for (const state of this.#definitions.values()) await this.#syncDefinition(state, generation);
+    if (generation !== this.#generation || this.#closed) return;
+    if ([...this.#definitions.values()].every((state) => state.failure === undefined))
+      for (const key of wanted.keys()) {
+        const current = this.#members.get(key);
+        if (current !== undefined) current.eligible = true;
+      }
     this.#next = 0;
   }
   async #start(key: string, member: Member, generation: number): Promise<void> {
@@ -467,9 +475,10 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       this.#creating.delete(controller);
     }
     if (this.#closed || generation !== this.#generation) await this.#dispose(client);
-    else this.#members.set(key, { member, client, incarnation: ++this.#incarnation });
+    else this.#members.set(key, { member, client, incarnation: ++this.#incarnation, eligible: false });
   }
   async #syncDefinition(state: DefinitionState<Child, Update>, generation: number): Promise<void> {
+    state.failure = undefined;
     for (const [key, child] of state.children)
       if (!this.#members.has(key)) {
         state.children.delete(key);

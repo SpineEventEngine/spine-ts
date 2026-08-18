@@ -65,6 +65,53 @@ describe("BackendMembershipKernel", () => {
     expect(received).toEqual(["logical/a", "logical/b"]);
     await owner.close();
   });
+  it("keeps a joining member out of unary selection until retained children synchronize", async () => {
+    const childStarted = deferred();
+    const owner = kernel({
+      create: async (member) =>
+        client(member, {
+          subscribe: async (wire) => {
+            if (member.id === "joining") await childStarted.promise;
+            return child(member.id, wire);
+          },
+        }),
+    });
+    await owner.reconcile([{ id: "current" }]);
+    await owner.subscribe(definition("logical"), new AbortController().signal);
+
+    const joining = owner.reconcile([{ id: "current" }, { id: "joining" }]);
+    await Promise.resolve();
+
+    expect(decoder.decode(await owner.forward("first"))).toBe("current");
+    expect(decoder.decode(await owner.forward("second"))).toBe("current");
+
+    childStarted.resolve(undefined);
+    await joining;
+    expect([
+      decoder.decode(await owner.forward("after-sync-first")),
+      decoder.decode(await owner.forward("after-sync-second")),
+    ]).toEqual(["current", "joining"]);
+    await owner.close();
+  });
+  it("keeps a joining member out of unary selection when retained child creation fails", async () => {
+    const owner = kernel({
+      create: async (member) =>
+        client(member, {
+          subscribe: async (wire) => {
+            if (member.id === "failing") throw new Error("child creation failed");
+            return child(member.id, wire);
+          },
+        }),
+    });
+    await owner.reconcile([{ id: "current" }]);
+    await owner.subscribe(definition("logical"), new AbortController().signal);
+
+    await owner.reconcile([{ id: "current" }, { id: "failing" }]);
+
+    expect(decoder.decode(await owner.forward("first"))).toBe("current");
+    expect(decoder.decode(await owner.forward("second"))).toBe("current");
+    await owner.close();
+  });
   it("rejects missing IDs, absent members, invalid bounds, and aborted creation", async () => {
     const missing = kernel({ definitionKey: () => undefined });
     await expect(missing.subscribe(definition("x"), new AbortController().signal)).rejects.toThrow(
