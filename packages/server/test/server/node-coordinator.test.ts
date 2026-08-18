@@ -175,57 +175,70 @@ describe("NodeCoordinator", () => {
     }) as never;
     const members = new TestReadyMembers([replica.member]);
     const firstCoordinator = await NodeCoordinator.open({ members, port: 0 });
+    let firstClosed = false;
     const firstOwner = dynamicOwner(firstCoordinator.baseUrl);
-    await firstOwner.reconcile([
-      new ApplicationNode({ id: "coordinator", endpoint: firstCoordinator.baseUrl }),
-    ]);
     const firstBindings = new DurableSubscriptionBindings({
       storageFactory,
       namespace: "gateway",
       nextId: () => "s-public",
       cleanup: () => Promise.resolve(),
     });
-    const definition = await firstBindings.create({
-      topic: { kind: "subscription-topic", bytes: trustedTopic() },
-      whenExpires: 10_000,
-    });
-    await new DynamicSubscriptionCreator(firstOwner).subscribe(
-      definition,
-      new AbortController().signal,
-    );
-    expect(replica.subscriptions()).toBe(1);
+    let replacementCoordinator: NodeCoordinator | undefined;
+    let replacementOwner: ReturnType<typeof dynamicOwner> | undefined;
+    let reopenedBindings: DurableSubscriptionBindings | undefined;
+    try {
+      await firstOwner.reconcile([
+        new ApplicationNode({ id: "coordinator", endpoint: firstCoordinator.baseUrl }),
+      ]);
+      const definition = await firstBindings.create({
+        topic: { kind: "subscription-topic", bytes: trustedTopic() },
+        whenExpires: 10_000,
+      });
+      await new DynamicSubscriptionCreator(firstOwner).subscribe(
+        definition,
+        new AbortController().signal,
+      );
+      expect(replica.subscriptions()).toBe(1);
 
-    await firstOwner.close();
-    await firstCoordinator.close();
-    await firstBindings.close();
+      await firstOwner.close();
+      await firstCoordinator.close();
+      await firstBindings.close();
+      firstClosed = true;
 
-    const replacementCoordinator = await NodeCoordinator.open({ members, port: 0 });
-    const replacementOwner = dynamicOwner(replacementCoordinator.baseUrl);
-    await replacementOwner.reconcile([
-      new ApplicationNode({ id: "coordinator", endpoint: replacementCoordinator.baseUrl }),
-    ]);
-    const reopenedBindings = new DurableSubscriptionBindings({
-      storageFactory,
-      namespace: "gateway",
-      nextId: () => "s-next",
-      cleanup: () => Promise.resolve(),
-    });
+      replacementCoordinator = await NodeCoordinator.open({ members, port: 0 });
+      replacementOwner = dynamicOwner(replacementCoordinator.baseUrl);
+      await replacementOwner.reconcile([
+        new ApplicationNode({ id: "coordinator", endpoint: replacementCoordinator.baseUrl }),
+      ]);
+      reopenedBindings = new DurableSubscriptionBindings({
+        storageFactory,
+        namespace: "gateway",
+        nextId: () => "s-next",
+        cleanup: () => Promise.resolve(),
+      });
 
-    expect(replica.subscriptions()).toBe(1);
-    await reopenedBindings.recoverActive({
-      nowMs: 1,
-      onDefinition: (wire) => new DynamicSubscriptionCreator(replacementOwner).rehydrate(wire),
-    });
+      expect(replica.subscriptions()).toBe(1);
+      await reopenedBindings.recoverActive({
+        nowMs: 1,
+        onDefinition: (wire) => new DynamicSubscriptionCreator(replacementOwner).rehydrate(wire),
+      });
 
-    expect(replica.subscriptions()).toBe(2);
-    expect(storageContexts).toEqual(["spine.auth.gateway", "spine.auth.gateway"]);
-    expect(recordTypes).toEqual([
-      GatewayAuthenticatedSubscriptionSchema,
-      GatewayAuthenticatedSubscriptionSchema,
-    ]);
-    await replacementOwner.close();
-    await replacementCoordinator.close();
-    await reopenedBindings.close();
+      expect(replica.subscriptions()).toBe(2);
+      expect(storageContexts).toEqual(["spine.auth.gateway", "spine.auth.gateway"]);
+      expect(recordTypes).toEqual([
+        GatewayAuthenticatedSubscriptionSchema,
+        GatewayAuthenticatedSubscriptionSchema,
+      ]);
+    } finally {
+      await replacementOwner?.close();
+      await replacementCoordinator?.close();
+      await reopenedBindings?.close();
+      if (!firstClosed) {
+        await firstOwner.close();
+        await firstCoordinator.close();
+        await firstBindings.close();
+      }
+    }
   });
 
   it("merges native update streams and relays the Coordinator logical subscription", async () => {
