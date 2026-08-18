@@ -31,7 +31,11 @@ import {
 } from "@spine-event-engine/proto/client";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { NodeCoordinator, type ReadyMemberSource } from "../../src/server/node-coordinator.js";
+import {
+  NodeCoordinator,
+  SubscriptionUpdateQueue,
+  type ReadyMemberSource,
+} from "../../src/server/node-coordinator.js";
 
 describe("NodeCoordinator", () => {
   const closeables: (() => Promise<void>)[] = [];
@@ -456,6 +460,27 @@ describe("NodeCoordinator", () => {
     await expect(coordinator.close()).resolves.toBeUndefined();
     await expect(request).rejects.toBeInstanceOf(ConnectError);
   }, 5_000);
+});
+
+describe("SubscriptionUpdateQueue", () => {
+  it("closes terminally on overflow, resolves blocked producers, and ignores later updates", async () => {
+    const queue = new SubscriptionUpdateQueue(1);
+    const first = queue.push(create(SubscriptionUpdateSchema));
+    await queue.push(create(SubscriptionUpdateSchema));
+    await expect(first).resolves.toBeUndefined();
+    await expect(queue[Symbol.asyncIterator]().next()).resolves.toEqual({ value: undefined, done: true });
+    await expect(queue.push(create(SubscriptionUpdateSchema))).resolves.toBeUndefined();
+  });
+
+  it("delivers directly to an awaiting consumer", async () => {
+    const queue = new SubscriptionUpdateQueue(1);
+    const iterator = queue[Symbol.asyncIterator]();
+    const pending = iterator.next();
+    const update = create(SubscriptionUpdateSchema);
+    await expect(queue.push(update)).resolves.toBeUndefined();
+    await expect(pending).resolves.toEqual({ value: update, done: false });
+    queue.close();
+  });
 });
 
 class TestReadyMembers implements ReadyMemberSource {

@@ -50,7 +50,6 @@ import {
   type SubscriptionUpdate,
   SubscriptionUpdateSchema,
   type Topic,
-  TopicSchema,
 } from "@spine-event-engine/proto/client";
 
 const defaultHost = "127.0.0.1";
@@ -219,7 +218,7 @@ export class NodeCoordinator {
     this.#kernel = new BackendMembershipKernel(NodeCoordinatorValues.unaryKernelOptions());
     this.#server = server;
     this.#sessions = sessions;
-    this.host = typeof address.address === "string" ? address.address : defaultHost;
+    this.host = address.address;
     this.port = address.port;
     this.baseUrl = `http://${NodeCoordinatorValues.formatHostForUrl(this.host)}:${this.port.toString()}`;
     this.#stopMembers = options.members.onReadyMembersChange(() => {
@@ -403,7 +402,12 @@ interface CoordinatorQuery {
 }
 type CoordinatorRequest = CoordinatorCommand | CoordinatorQuery;
 
-class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate> {
+/**
+ * Buffers bounded Coordinator subscription updates for one public stream.
+ *
+ * @internal
+ */
+export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate> {
   readonly #updates: SubscriptionUpdate[] = [];
   readonly #waiters: ((value: IteratorResult<SubscriptionUpdate>) => void)[] = [];
   readonly #delivered: (() => void)[] = [];
@@ -432,6 +436,7 @@ class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate> {
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
+    this.#updates.length = 0;
     for (const waiter of this.#waiters.splice(0)) waiter({ value: undefined, done: true });
     for (const delivered of this.#delivered.splice(0)) delivered();
   }
@@ -470,9 +475,11 @@ const NodeCoordinatorValues = Object.freeze({
       definitionKey: (definition) => fromBinary(SubscriptionSchema, definition).id?.value,
       childDefinition: (definition, member) => {
         const subscription = clone(SubscriptionSchema, fromBinary(SubscriptionSchema, definition));
-        const id = subscription.id;
-        if (id !== undefined)
-          id.value = `${id.value}/${member.slot.toString()}-${member.incarnation}`;
+        const id = NodeCoordinatorValues.requiredValue(
+          subscription.id,
+          "Coordinator subscription definition is missing an ID.",
+        );
+        id.value = `${id.value}/${member.slot.toString()}-${member.incarnation}`;
         return toBinary(SubscriptionSchema, subscription);
       },
       childSize: (child) => child.byteLength,
@@ -523,7 +530,10 @@ const NodeCoordinatorValues = Object.freeze({
       subscribe: async (definition, signal) => {
         const subscription = fromBinary(SubscriptionSchema, definition);
         const created = await createClient(SubscriptionService, transport).subscribe(
-          subscription.topic ?? create(TopicSchema),
+          NodeCoordinatorValues.requiredValue(
+            subscription.topic,
+            "Coordinator subscription definition is missing a Topic.",
+          ),
           { signal },
         );
         return toBinary(SubscriptionSchema, created);
@@ -562,6 +572,10 @@ const NodeCoordinatorValues = Object.freeze({
         forwarded.delete(name);
     }
     return forwarded;
+  },
+  requiredValue<Value>(value: Value | undefined, message: string): Value {
+    if (value === undefined) throw new Error(message);
+    return value;
   },
   host(value: string): string {
     const normalized = value.trim();

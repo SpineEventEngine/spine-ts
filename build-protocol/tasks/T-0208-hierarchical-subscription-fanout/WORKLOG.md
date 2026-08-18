@@ -169,3 +169,22 @@
 - Exact single-suite LCOV remains 167/181 lines and 48/59 branches. The
   remaining queue-overflow branch requires more than the 100 bounded concurrent
   child relays because each child awaits the sink before reading another update.
+
+## 2026-08-18 — Queue bound and structural-branch convergence
+
+- RED: direct internal queue behavior tests initially failed because the queue
+  was not exposed to its focused runtime test (`TypeError: SubscriptionUpdateQueue
+  is not a constructor`).
+- GREEN: the internal queue is now directly testable and proves overflow closes
+  terminally, drops stale buffered updates, resolves blocked producers, ignores
+  later updates, and directly serves an awaiting consumer. This is the bounded
+  behavior used by real HTTP/2 activation.
+- Removed only redundant downstream fallbacks confirmed by existing boundaries:
+  `AddressInfo.address` is a string; kernel child definitions passed to the
+  adapter have an ID; Coordinator-created native definitions have a Topic. No
+  corrupt public input validation was removed.
+- Coordinator invariants use descriptive required-value checks rather than
+  non-null assertions, so malformed internal definitions fail explicitly while
+  the existing definition and Topic boundaries remain enforced.
+- Focused Coordinator suite: 24/24. Exact LCOV is **174/183 lines** and
+  **51/55 branches (92.73%)**, meeting the changed runtime threshold.
