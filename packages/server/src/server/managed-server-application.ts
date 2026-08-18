@@ -41,49 +41,124 @@ const lifecycleLogger: ILogLayer = new LogLayer({
   }),
 }).child();
 
-/** Configures bounded replacement after an unexpected replica exit. */
+/**
+ *
+ * Configures bounded replacement after an unexpected replica exit.
+ */
 export interface ManagedServerRestartOptions {
-  /** Delay before the first replacement attempt. Defaults to 250 milliseconds. */
+  // prettier-ignore
+
+  /**
+   *
+   * Delays the first replacement attempt. Defaults to 250 milliseconds.
+   */
   readonly initialDelayMs?: number;
-  /** Largest replacement delay. Defaults to 30 seconds. */
+
+  /**
+   *
+   * Limits replacement delay to 30 seconds.
+   */
   readonly maximumDelayMs?: number;
-  /** READY duration after which replacement delay returns to its initial value. Defaults to 60 seconds. */
+
+  /**
+   *
+   * Resets replacement delay after 60 seconds of READY status.
+   */
   readonly healthyReadyMs?: number;
-  /** Largest number of concurrent child starts. Defaults to the smaller of four and processCount. */
+
+  /**
+   *
+   * Limits concurrent child starts to the smaller of four and processCount.
+   */
   readonly concurrentStarts?: number;
 }
 
-/** Configures one locally assembled complete-replica application. */
+/**
+ *
+ * Configures one locally assembled complete-replica application.
+ */
 export interface ManagedServerApplicationOptions {
-  /** Explicit number of complete application replicas to start. */
+  // prettier-ignore
+
+  /**
+   *
+   * Specifies the number of complete application replicas to start.
+   */
   readonly processCount: number;
-  /** URL of the ESM entry module that invokes this method in parent and child processes. */
+
+  /**
+   *
+   * Identifies the ESM entry module invoked in parent and child processes.
+   */
   readonly moduleUrl: string;
-  /** Builds one complete local application server in a child process. */
+
+  /**
+   *
+   * Builds one complete local application server in a child process.
+   *
+   * @param options Supplies the child-only loopback listener address.
+   * @returns The assembled local application server.
+   */
   readonly createServer: (options: {
+    // prettier-ignore
+
+    /**
+     *
+     * Identifies the loopback listener host.
+     */
     readonly host: string;
+
+    /**
+     *
+     * Requests an ephemeral loopback listener port.
+     */
     readonly port: number;
   }) => Promise<RunningServer>;
+
   /**
+   *
    * Starts child-local readiness work after local server assembly.
    *
    * This callback runs only in a managed child. It is deliberately lazy so a
    * parent never starts application synchronization work.
+   *
+   * @returns Completion after the child is ready for local intake.
    */
   readonly synchronize?: () => Promise<void>;
-  /** Bounded private process-replacement settings. */
+
+  /**
+   *
+   * Configures bounded private process replacement.
+   */
   readonly restart?: ManagedServerRestartOptions;
 }
 
-/** One managed complete-replica cohort. */
+/**
+ *
+ * Represents one managed complete-replica cohort.
+ */
 export interface ManagedServerApplicationHandle {
-  /** Whether at least one managed child is currently ready. */
+  // prettier-ignore
+
+  /**
+   *
+   * Reports whether at least one managed child is currently ready.
+   */
   readonly ready: boolean;
-  /** Stops all child processes and waits for their exit. */
+
+  /**
+   *
+   * Stops all child processes and waits for their exit.
+   *
+   * @returns Completion after managed child cleanup succeeds.
+   */
   close(): Promise<void>;
 }
 
-/** Starts a managed parent and its complete-replica child processes. */
+/**
+ *
+ * Starts a managed parent and its complete-replica child processes.
+ */
 export const ManagedServerApplication: Readonly<{
   run(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle>;
 }> = Object.freeze({
@@ -202,17 +277,67 @@ interface SlotRecord {
   replica: ReplicaRecord | undefined;
 }
 
-/** @internal Deterministic private process-supervisor dependencies. */
+/**
+ *
+ * Supplies deterministic dependencies for the private process supervisor.
+ *
+ * @internal
+ */
 export interface ManagedServerCoordinatorDependencies {
+  // prettier-ignore
+
+  /**
+   *
+   * Provides the clock and timers used by managed replica lifecycle tests.
+   */
   readonly clock: {
+    // prettier-ignore
+
+    /**
+     *
+     * Reads the current clock value.
+     *
+     * @returns The current time in milliseconds.
+     */
     now(): number;
+
+    /**
+     *
+     * Schedules a timeout callback.
+     *
+     * @param onTimeout Runs when the requested delay elapses.
+     * @param delay Specifies the timeout in milliseconds.
+     * @returns A timer handle that can be cleared.
+     */
     setTimeout(onTimeout: () => void, delay: number): unknown;
+
+    /**
+     *
+     * Cancels a scheduled timeout.
+     *
+     * @param timer Identifies the timer to cancel.
+     */
     clearTimeout(timer: unknown): void;
   };
+
+  /**
+   *
+   * Starts one child process for a replica incarnation.
+   *
+   * @param moduleUrl Identifies the child ESM entry module.
+   * @param slot Identifies the managed replica slot.
+   * @param incarnation Identifies this child process incarnation.
+   * @returns The started child process.
+   */
   readonly spawn: (moduleUrl: string, slot: number, incarnation: string) => ChildProcess;
 }
 
-/** @internal Parent-only managed-replica lifecycle supervisor. */
+/**
+ *
+ * Coordinates the parent-only lifecycle of managed application replicas.
+ *
+ * @internal
+ */
 export class ManagedServerCoordinator {
   readonly #slots: SlotRecord[];
   readonly #restart: Required<ManagedServerRestartOptions>;
@@ -227,6 +352,13 @@ export class ManagedServerCoordinator {
   readonly #retireTerminations = new Map<ReplicaRecord, Promise<void>>();
   #onSignal: (() => void) | undefined;
 
+  /**
+   *
+   * Creates a coordinator for one configured replica cohort.
+   *
+   * @param options Configures complete child application replicas.
+   * @param dependencies Supplies private process and clock dependencies.
+   */
   constructor(
     options: ManagedServerApplicationOptions,
     dependencies: ManagedServerCoordinatorDependencies = ManagedServerCoordinatorValues.dependencies,
@@ -244,6 +376,12 @@ export class ManagedServerCoordinator {
     }));
   }
 
+  /**
+   *
+   * Starts every initial replica and waits until all report READY.
+   *
+   * @returns The handle for the started managed cohort.
+   */
   async start(): Promise<ManagedServerApplicationHandle> {
     this.#ready = new Promise<void>((resolve) => {
       this.#resolveReady = resolve;
@@ -389,6 +527,12 @@ export class ManagedServerCoordinator {
     }
   }
 
+  /**
+   *
+   * Stops managed children and prevents later replacement starts.
+   *
+   * @returns Completion after child and retired-child cleanup succeeds.
+   */
   close(): Promise<void> {
     const closing = this.#close;
     if (closing !== undefined) return closing;
@@ -452,7 +596,13 @@ export class ManagedServerCoordinator {
     return termination;
   }
 
-  /** @internal Supplies ready child facts to the next Coordinator slice. */
+  /**
+   *
+   * Returns ready child facts to the next Coordinator slice.
+   *
+   * @returns The ready child topology facts.
+   * @internal
+   */
   readyMembers(): readonly Readonly<{
     slot: number;
     incarnation: string;
@@ -505,9 +655,20 @@ export class ManagedServerCoordinator {
   }
 }
 
-/** @internal Explicit handoff for the following Coordinator forwarding slice. */
+/**
+ *
+ * Represents private ready-child facts for Coordinator forwarding.
+ *
+ * @internal
+ */
 type ReadyMember = Readonly<{ slot: number; incarnation: string; pid: number; endpoint: string }>;
 
+/**
+ *
+ * Exposes private Coordinator topology facts to the next internal slice.
+ *
+ * @internal
+ */
 export const managedServerCoordinatorAccess: Readonly<{
   readyMembers(coordinator: ManagedServerCoordinator): readonly ReadyMember[];
 }> = Object.freeze({
@@ -516,7 +677,12 @@ export const managedServerCoordinatorAccess: Readonly<{
   },
 });
 
-/** @internal Reads private managed child facts for Coordinator forwarding tests. */
+/**
+ *
+ * Exposes private managed-child facts to Coordinator forwarding tests.
+ *
+ * @internal
+ */
 export const managedServerApplicationAccess: Readonly<{
   readyMembers(handle: ManagedServerApplicationHandle): readonly ReadyMember[];
 }> = Object.freeze({

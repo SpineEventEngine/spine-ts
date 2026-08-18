@@ -1,5 +1,18 @@
 # T-0206 work log
 
+## 2026-08-18 — TSDoc-preflight correction
+
+- `pnpm lint:tsdoc` found only authored documentation structure gaps on the
+  managed application options, handle, coordinator, test dependencies, and
+  internal topology handoffs.
+- Rewrote those blocks in the canonical multi-line layout with concrete
+  summaries and exact parameter/return descriptions. Prettier-ignore markers
+  preserve the required blank line at interface and nested-object boundaries.
+  No runtime behavior or public type shape changed.
+- GREEN evidence: fresh TSDoc lint, generated API documentation, API contract
+  check, tooling typecheck, formatting, and diff checks passed. This docs-only
+  correction does not reopen completed reviews.
+
 ## 2026-08-18 — Cleanup-preflight correction
 
 - `pnpm lint:cleanup` found only two deterministic policy gaps: the injected
