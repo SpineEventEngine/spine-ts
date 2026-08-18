@@ -218,6 +218,13 @@
       "test": "packages/server/test/server/managed-server-application.test.ts"
     },
     {
+      "id": "server.managed_replica_child_close",
+      "source": "../../packages/server/src/server/managed-server-application.ts",
+      "operation": "managed_replica.child_close",
+      "disposition": "warn",
+      "test": "packages/server/test/server/managed-server-application.test.ts"
+    },
+    {
       "id": "server.delivery_notify_start",
       "source": "../../packages/server/src/server/environment-delivery-worker.ts",
       "operation": "delivery.notify_start",

@@ -1,5 +1,28 @@
 # T-0206 work log
 
+## 2026-08-18 — Final focused re-review correction
+
+- The final focused re-review found two P1s: private child `message` and
+  `disconnect` close triggers detached rejected close promises, and failed
+  asynchronous-error termination was removed from coordinator ownership before
+  a later close could retry it.
+- RED: the old event handlers used `void close()` and the old termination set
+  deleted a rejected task despite a live retired child.
+- GREEN: event-triggered child close is explicitly contained and logged with
+  safe lifecycle facts; explicit `handle.close()` retains its rejecting and
+  retryable contract. Both `message` and `disconnect` failure paths prove no
+  `unhandledRejection` and later explicit success.
+- GREEN: retired replicas stay coordinator-owned until an independently
+  observed `exit` or a successful bounded termination. Each retired replica
+  has one private in-flight termination promise; a failed attempt remains
+  retryable by later coordinator close. The fake-clock acceptance proves an
+  async error, failed TERM/KILL, rejected close, later observed exit, and
+  successful retry.
+- GREEN evidence: focused lifecycle/logging tests passed 44/44 with 95.59%
+  statements, 90.96% branches, 97.43% functions, and 99.21% lines across the
+  changed source. Typecheck, scoped lint, logging-containment, copyright,
+  formatting, and diff checks are run before push.
+
 ## 2026-08-18 — Final re-review correction
 
 - The re-review found two remaining lifecycle P1s: rejected parent/child close

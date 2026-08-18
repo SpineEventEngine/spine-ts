@@ -93,3 +93,13 @@ failure after `SIGKILL`. Async child error cleanup uses that same private path
 without delaying replacement of healthy capacity. The focused RED/GREEN tests
 and final mechanical evidence are recorded in `WORKLOG.md`; re-review remains
 required after this commit.
+
+## Final focused re-review correction
+
+The final focused review confirmed that event-triggered child close failures
+must be contained, while explicit close remains observable and retryable. It
+also required coordinator ownership of retired asynchronous-error children
+through failure and later close retry. Both are now implemented by private
+event containment and a private retired-replica/in-flight-termination map;
+there is no public contract, wire message, application signal, or deployment
+policy addition. Final mechanical evidence is recorded in `WORKLOG.md`.

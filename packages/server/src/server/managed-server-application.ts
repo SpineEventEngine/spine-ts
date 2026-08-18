@@ -136,12 +136,12 @@ const ManagedServerValues = Object.freeze({
     };
     const onMessage = (message: { readonly type?: string }) => {
       if (message.type === "close") {
-        void close();
+        ManagedServerValues.closeFromEvent(close);
       }
     };
     process.on("message", onMessage);
     process.once("disconnect", () => {
-      void close();
+      ManagedServerValues.closeFromEvent(close);
     });
     return {
       ready: true,
@@ -150,6 +150,15 @@ const ManagedServerValues = Object.freeze({
   },
   parent(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle> {
     return new ManagedServerCoordinator(options).start();
+  },
+  closeFromEvent(close: () => Promise<void>): void {
+    // spine-log-boundary: server.managed_replica_child_close
+    void close().catch(() => {
+      emitServerWarning(lifecycleLogger, "Managed child close failed.", {
+        operation: "managed_replica.child_close",
+        reasonCode: "close_failed",
+      });
+    });
   },
   send(message: {
     readonly type: "ready";
@@ -214,7 +223,8 @@ export class ManagedServerCoordinator {
   #ready: Promise<void> | undefined;
   #resolveReady: (() => void) | undefined;
   #close: Promise<void> | undefined;
-  readonly #terminations = new Set<Promise<void>>();
+  readonly #retired = new Set<ReplicaRecord>();
+  readonly #retireTerminations = new Map<ReplicaRecord, Promise<void>>();
   #onSignal: (() => void) | undefined;
 
   constructor(
@@ -295,6 +305,8 @@ export class ManagedServerCoordinator {
       this.#onMessage(slot, replica, message);
     });
     child.once("exit", () => {
+      this.#retired.delete(replica);
+      this.#retireTerminations.delete(replica);
       this.#onExit(slot, replica);
     });
     child.once("error", () => {
@@ -389,7 +401,7 @@ export class ManagedServerCoordinator {
         slot.replacementTimer = undefined;
       }
       await Promise.all(this.#slots.map((slot) => this.#closeReplica(slot.replica)));
-      await Promise.all([...this.#terminations]);
+      await Promise.all([...this.#retired].map((replica) => this.#closeRetired(replica)));
     })();
     this.#close = close;
     void close.then(undefined, () => {
@@ -402,16 +414,32 @@ export class ManagedServerCoordinator {
     return ManagedServerCoordinatorValues.close(replica, this.#dependencies.clock);
   }
 
+  async #closeRetired(replica: ReplicaRecord): Promise<void> {
+    replica.expectedExit = true;
+    await this.#terminateRetired(replica);
+    this.#retired.delete(replica);
+  }
+
   #terminateUnexpected(replica: ReplicaRecord): void {
+    this.#retired.add(replica);
+    void this.#terminateRetired(replica);
+  }
+
+  #terminateRetired(replica: ReplicaRecord): Promise<void> {
+    const prior = this.#retireTerminations.get(replica);
+    if (prior !== undefined) return prior;
     const termination = ManagedServerCoordinatorValues.terminate(
       replica.child,
       this.#dependencies.clock,
     );
-    this.#terminations.add(termination);
+    this.#retireTerminations.set(replica, termination);
     void termination.then(
-      () => this.#terminations.delete(termination),
       () => {
-        this.#terminations.delete(termination);
+        this.#retireTerminations.delete(replica);
+        this.#retired.delete(replica);
+      },
+      () => {
+        this.#retireTerminations.delete(replica);
         // spine-log-boundary: server.managed_replica_termination
         emitServerWarning(lifecycleLogger, "Managed replica termination was bounded.", {
           operation: "managed_replica.terminate",
@@ -421,6 +449,7 @@ export class ManagedServerCoordinator {
         });
       },
     );
+    return termination;
   }
 
   /** @internal Supplies ready child facts to the next Coordinator slice. */

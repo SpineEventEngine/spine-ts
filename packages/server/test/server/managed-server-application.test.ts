@@ -73,6 +73,41 @@ const fakeChild = (pid: number): ChildProcess => {
 };
 
 describe("ManagedServerApplication", () => {
+  it("uses the shared close path for a parent SIGINT", async () => {
+    const clock = new FakeClock();
+    const child = fakeChild(1);
+    const spawned: { slot: number; incarnation: string }[] = [];
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.reject(new Error("unused")),
+      },
+      {
+        clock,
+        spawn: (_url, slot, incarnation) => {
+          spawned.push({ slot, incarnation });
+          return child;
+        },
+      },
+    );
+    const started = coordinator.start();
+    child.emit("message", {
+      type: "ready",
+      slot: "0",
+      incarnation: spawned[0].incarnation,
+      endpoint: "http://127.0.0.1:1",
+    });
+    await started;
+    (child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      child.emit("exit");
+      return true;
+    });
+    process.emit("SIGINT");
+    await Promise.resolve();
+    await expect(coordinator.close()).resolves.toBeUndefined();
+  });
+
   it.each(["SIGTERM", "SIGINT"] as const)(
     "closes its child when the parent receives %s",
     async (signal) => {
@@ -162,13 +197,30 @@ describe("ManagedServerApplication", () => {
     child.emit("error", new Error("child channel failed"));
     clock.advance(1_000);
     await Promise.resolve();
+    await Promise.resolve();
     expect(killCalls).toContain("SIGTERM");
     clock.advance(1_000);
+    await Promise.resolve();
     await Promise.resolve();
     expect(killCalls).toContain("SIGKILL");
     clock.advance(1_000);
     await Promise.resolve();
-    await coordinator.close();
+    await Promise.resolve();
+    const close = coordinator.close();
+    await Promise.resolve();
+    await Promise.resolve();
+    clock.advance(1_000);
+    await Promise.resolve();
+    await Promise.resolve();
+    clock.advance(1_000);
+    await Promise.resolve();
+    await Promise.resolve();
+    clock.advance(1_000);
+    await Promise.resolve();
+    await Promise.resolve();
+    await expect(close).rejects.toThrow("SIGKILL");
+    child.emit("exit");
+    await expect(coordinator.close()).resolves.toBeUndefined();
   });
 
   it("shares a failed parent close, bounds it, and retries the remaining child cleanup", async () => {
@@ -240,6 +292,7 @@ describe("ManagedServerApplication", () => {
       "http://127.0.0.1:1/path",
       "http://user@127.0.0.1:1",
       "http://127.0.0.1:0",
+      "not-a-url",
       `http://127.0.0.1:1/${"x".repeat(300)}`,
     ]) {
       first.child.emit("message", {
@@ -705,6 +758,57 @@ describe("ManagedServerApplication", () => {
       else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
     }
   });
+
+  it.each(["message", "disconnect"] as const)(
+    "contains a failed child close triggered by private %s and permits explicit retry",
+    async (trigger) => {
+      const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
+      const priorSend = Object.getOwnPropertyDescriptor(process, "send");
+      const priorConnected = Object.getOwnPropertyDescriptor(process, "connected");
+      const priorMessages = new Set(process.listeners("message"));
+      const priorDisconnects = new Set(process.listeners("disconnect"));
+      const send = vi.fn((_message: unknown, callback: (error: Error | null) => void) => {
+        callback(null);
+        return true;
+      });
+      Object.defineProperty(process, "send", { configurable: true, value: send });
+      Object.defineProperty(process, "connected", { configurable: true, value: true });
+      process.env.SPINE_MANAGED_SERVER_CHILD = "true";
+      const close = vi
+        .fn<() => Promise<void>>()
+        .mockRejectedValueOnce(new Error("event close failed"))
+        .mockResolvedValueOnce(undefined);
+      const unhandled = vi.fn();
+      process.once("unhandledRejection", unhandled);
+      try {
+        const handle = await ManagedServerApplication.run({
+          processCount: 1,
+          moduleUrl: import.meta.url,
+          createServer: () => Promise.resolve({ baseUrl: "http://127.0.0.1:42", close }),
+        });
+        if (trigger === "message") process.emit("message", { type: "close" });
+        else process.emit("disconnect");
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(unhandled).not.toHaveBeenCalled();
+        await expect(handle.close()).resolves.toBeUndefined();
+        expect(close).toHaveBeenCalledTimes(2);
+      } finally {
+        process.off("unhandledRejection", unhandled);
+        if (priorSend === undefined) delete (process as { send?: unknown }).send;
+        else Object.defineProperty(process, "send", priorSend);
+        if (priorConnected === undefined) delete (process as { connected?: unknown }).connected;
+        else Object.defineProperty(process, "connected", priorConnected);
+        for (const listener of process.listeners("message")) {
+          if (!priorMessages.has(listener)) process.off("message", listener);
+        }
+        for (const listener of process.listeners("disconnect")) {
+          if (!priorDisconnects.has(listener)) process.off("disconnect", listener);
+        }
+        if (priorChild === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
+        else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
+      }
+    },
+  );
 
   it("closes local assembly when a marked child has no parent IPC", async () => {
     const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
