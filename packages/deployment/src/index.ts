@@ -20,12 +20,6 @@ import type { ILogLayer } from "loglayer";
 
 export { ApplicationNode } from "./discovery/application-node.js";
 export {
-  BackendMembershipKernel,
-  type BackendMemberClient,
-  type BackendMembershipKernelOptions,
-} from "./internal/backend-membership-kernel.js";
-
-export {
   LeasedNodeRegistry,
   type LeasedNodeRegistryOptions,
   type NodeLease,

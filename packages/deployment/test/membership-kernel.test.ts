@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { BackendMembershipKernel } from "../src/index.js";
+import { BackendMembershipKernel } from "../src/internal/backend-membership-kernel.js";
 
 describe("BackendMembershipKernel", () => {
   it("rewrites only the immediate child definition for each member", async () => {
@@ -21,15 +21,15 @@ describe("BackendMembershipKernel", () => {
     const kernel = new BackendMembershipKernel({
       create: () =>
         Promise.resolve({
-        close: () => Promise.resolve(),
-        forward: () => Promise.resolve(new Uint8Array()),
-        subscribe: (definition: Uint8Array) => {
-          received.push(new TextDecoder().decode(definition));
-          return Promise.resolve(definition);
-        },
-        activate: () => Promise.resolve(),
-        dispose: () => Promise.resolve(),
-      }),
+          close: () => Promise.resolve(),
+          forward: () => Promise.resolve(new Uint8Array()),
+          subscribe: (definition: Uint8Array) => {
+            received.push(new TextDecoder().decode(definition));
+            return Promise.resolve(definition);
+          },
+          activate: () => Promise.resolve(),
+          dispose: () => Promise.resolve(),
+        }),
       memberKey: (member: { readonly id: string }) => member.id,
       sameMember: () => true,
       definitionKey: (definition: Uint8Array) => new TextDecoder().decode(definition),

@@ -1,5 +1,24 @@
 # T-0205 implementation report
 
+## Convergence update — coverage blocked, not review ready
+
+- The close-cancellation correction and focused kernel/Gateway suite pass: 3
+  files / 59 tests.
+- The full task verifier passed generated/tooling typechecks, cleanup, TSDoc,
+  copyright, containment, Prettier, and documentation audience checks before
+  `docs:api:check` rejected accidental deployment root exports. The kernel is
+  now exposed only through the explicit internal package subpath; targeted
+  deployment/auth build, API docs, containment, scoped ESLint, TSDoc, cleanup,
+  copyright, Prettier, and `git diff --check` pass.
+- Fresh exact-source coverage remains below the binding threshold: the focused
+  suite measures 62.27% kernel executable lines and 45.51% branches; complete
+  deployment/auth tests pass 17 files / 450 tests with the same kernel result.
+  Required changed executable line and branch coverage is 90%.
+- No runtime regression is reproduced. The remaining work is a
+  behavior-focused kernel test expansion for currently uncovered scheduling,
+  child activation/cancellation, cleanup retry, and close branches. Do not
+  review or complete this task until that evidence is green.
+
 ## Current handoff — not review ready
 
 - RED evidence retained: `pnpm exec vitest run

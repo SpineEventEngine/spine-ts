@@ -104,3 +104,19 @@ removal waits for disposal`. This is a cross-generation disposal/coalescing
   and replace stale report/status claims before review.
 - No further product change is authorized unless a reproduced gate exposes a
   concrete defect and a failing test is retained first.
+
+## 2026-08-18 — Convergence verification
+
+- Reproduced the close-cancellation correction and focused kernel/Gateway suite:
+  3 files / 59 tests passed.
+- Generated/tooling typechecks, cleanup, TSDoc, copyright, containment,
+  Prettier, and documentation audience gates passed in the task verifier. Its
+  API check then rejected three accidental deployment root exports. The kernel
+  now uses an explicit internal package subpath; targeted deployment/auth build,
+  API-doc, containment, scoped ESLint, TSDoc, cleanup, copyright, Prettier, and
+  diff checks pass.
+- Fresh exact-source coverage is blocked at 62.27% kernel executable lines and
+  45.51% branches. The focused suite passes 59 tests; all deployment/auth tests
+  pass 17 files / 450 tests with the same kernel coverage. This remains below
+  the required 90% changed executable line and branch threshold. Do not review
+  or mark T-0205 complete.

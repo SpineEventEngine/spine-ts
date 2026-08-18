@@ -13,7 +13,8 @@
  */
 
 import { clone, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { ApplicationNode, BackendMembershipKernel } from "@spine-event-engine/deployment";
+import { ApplicationNode } from "@spine-event-engine/deployment";
+import { BackendMembershipKernel } from "@spine-event-engine/deployment/internal/backend-membership-kernel";
 import { SubscriptionSchema } from "@spine-event-engine/proto/client";
 import type { ILogLayer } from "loglayer";
 
@@ -26,22 +27,53 @@ import type {
   SubscriptionUpdateWire,
 } from "../subscriptions/index.js";
 
-/** Represents a connected unary backend with deterministic disposal. */
+/**
+ * Represents a connected unary backend with deterministic disposal.
+ */
 export interface DynamicUnaryClient extends UnaryForwarder, SubscriptionCreator {
-  /** Returns after releasing this connection when its node leaves membership. */
+  // prettier-ignore
+
+  /**
+   * Returns after releasing this connection when its node leaves membership.
+   *
+   * @returns Completion of connection cleanup.
+   */
   close(): Promise<void>;
 }
 
-/** Configures unary clients for discovered application nodes. */
+/**
+ * Configures unary clients for discovered application nodes.
+ */
 export interface DynamicUnaryOptions {
+  // prettier-ignore
+
+  /**
+   * Creates a client for one discovered application node.
+   *
+   * @param node Supplies the discovered application node.
+   * @param signal Cancels client creation.
+   * @returns The connected unary client.
+   */
   readonly create: (node: ApplicationNode, signal: AbortSignal) => Promise<DynamicUnaryClient>;
+
+  /**
+   * Limits parallel client starts when supplied.
+   */
   readonly maxConcurrentStarts?: number;
+
+  /**
+   * Limits one backend subscription envelope when supplied.
+   */
   readonly maxBackendEnvelopeBytes?: number;
+
+  /**
+   * Receives adapter-local diagnostic records when supplied.
+   */
   readonly logger?: ILogLayer;
 }
 
 /**
- * Auth adapter for the deployment-owned ephemeral backend membership kernel.
+ * Adapts Gateway unary operations to the deployment-owned membership kernel.
  * Durable logical ownership remains in the Gateway's subscription bindings.
  */
 export class DynamicUnaryForwarder implements UnaryForwarder {
@@ -52,6 +84,11 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     SubscriptionUpdateWire
   >;
 
+  /**
+   * Creates the Gateway adapter around the deployment membership kernel.
+   *
+   * @param options Configures discovery clients and resource bounds.
+   */
   constructor(options: DynamicUnaryOptions) {
     if (
       options.maxBackendEnvelopeBytes !== undefined &&
@@ -106,15 +143,43 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     });
   }
 
+  /**
+   * Updates connected clients from a complete application-node snapshot.
+   *
+   * @param nodes Supplies the complete node snapshot.
+   * @returns Completion of client reconciliation.
+   */
   reconcile(nodes: readonly ApplicationNode[]): Promise<void> {
     return this.#kernel.reconcile(nodes);
   }
+
+  /**
+   * Returns a unary response from the selected backend client.
+   *
+   * @param request Supplies the request to forward.
+   * @returns The backend response bytes.
+   */
   forward(request: Parameters<UnaryForwarder["forward"]>[0]): Promise<Uint8Array> {
     return this.#kernel.forward(request);
   }
+
+  /**
+   * Closes all live backend clients.
+   *
+   * @returns Completion of backend cleanup.
+   */
   close(): Promise<void> {
     return this.#kernel.close();
   }
+
+  /**
+   * Creates backend children for one logical Gateway subscription.
+   *
+   * @param request Supplies the public subscription wire.
+   * @param signal Cancels child creation.
+   * @param maxBackendEnvelopeBytes Limits one backend envelope when supplied.
+   * @returns Completion of child creation.
+   */
   subscribeDefinition(
     request: PublicSubscriptionWire,
     signal: AbortSignal,
@@ -127,6 +192,14 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       throw new RangeError("maxBackendEnvelopeBytes must be a positive safe integer.");
     return this.#kernel.subscribe(request.bytes, signal, maxBackendEnvelopeBytes);
   }
+
+  /**
+   * Updates backend children for a retained Gateway subscription.
+   *
+   * @param request Supplies the retained public subscription wire.
+   * @param maxBackendEnvelopeBytes Limits one backend envelope when supplied.
+   * @returns Completion of child recreation.
+   */
   async rehydrateDefinition(
     request: PublicSubscriptionWire,
     maxBackendEnvelopeBytes?: number,
@@ -138,6 +211,15 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       throw new RangeError("maxBackendEnvelopeBytes must be a positive safe integer.");
     await this.#kernel.rehydrate(request.bytes, maxBackendEnvelopeBytes);
   }
+
+  /**
+   * Activates backend update relay for one Gateway subscription.
+   *
+   * @param wire Supplies the public subscription wire.
+   * @param updates Receives relayed subscription updates.
+   * @param signal Cancels update relay.
+   * @returns Completion after cancellation.
+   */
   activateDefinition(
     wire: PublicSubscriptionWire,
     updates: SubscriptionUpdateSink,
@@ -145,15 +227,45 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   ): Promise<void> {
     return this.#kernel.activate(wire.bytes, updates, signal);
   }
+
+  /**
+   * Cancels backend children for one Gateway subscription.
+   *
+   * @param wire Supplies the public subscription wire.
+   * @param signal Cancels child cleanup when supported.
+   * @returns Completion of child cleanup.
+   */
   cancelDefinition(wire: PublicSubscriptionWire, signal: AbortSignal): Promise<void> {
     return this.#kernel.cancel(wire.bytes, signal);
   }
+
+  /**
+   * Resolves when the supplied signal aborts.
+   *
+   * @param signal Supplies the signal to observe.
+   * @returns Completion after the signal aborts.
+   */
   static waitForAbort(signal: AbortSignal): Promise<void> {
     return BackendMembershipKernel.waitForAbort(signal);
   }
+
+  /**
+   * Returns the logical identifier encoded in public subscription bytes.
+   *
+   * @param bytes Supplies the public subscription bytes.
+   * @returns The logical identifier, when present.
+   */
   static definitionKey(bytes: Uint8Array): string | undefined {
     return fromBinary(SubscriptionSchema, bytes).id?.value;
   }
+
+  /**
+   * Returns bytes with only the immediate child subscription identifier rewritten.
+   *
+   * @param bytes Supplies the parent subscription bytes.
+   * @param node Supplies the child application node.
+   * @returns The rewritten child subscription bytes.
+   */
   static childDefinition(bytes: Uint8Array, node: ApplicationNode): Uint8Array {
     const subscription = clone(SubscriptionSchema, fromBinary(SubscriptionSchema, bytes));
     const id = subscription.id?.value;
