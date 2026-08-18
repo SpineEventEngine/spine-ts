@@ -148,3 +148,9 @@ packages/server/src/server/managed-server-application.ts` is green. It ran
   64/64 focused tests. It confirmed ordered aggregate failure reporting,
   bounded child termination, and the retained retryable cleanup path; no P0-P2
   finding remains.
+- The next release attempt passed every earlier deterministic gate and stopped
+  at release-readiness because the reader architecture guide exposed the
+  internal future task identifier `T-0212`. The guide now states in reader
+  terms that legacy same-host ZeroMQ is scheduled for removal after remaining
+  consumers migrate. Release-readiness, audience, generated snippet, format,
+  and whitespace checks pass after the documentation-only correction.

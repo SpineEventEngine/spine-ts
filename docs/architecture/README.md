@@ -19,10 +19,10 @@ They explain the server scope: delivery/inbox processing and
 command/query/subscription services. `Server` owns one ordinary application
 process. For a Node deployment that needs complete replicas on one machine,
 `ManagedServerApplication` supervises the deployer-configured child cohort and
-its HTTP/2 Coordinator. The same-host ZeroMQ transport is the legacy
-application-composed path pending T-0212 removal; it is not the Coordinator
-deployment path. Gateway hosting and remote delivery are supported integration
-paths, not a prescribed topology.
+its HTTP/2 Coordinator. The same-host ZeroMQ transport is a legacy
+application-composed path scheduled for removal after its remaining consumers
+migrate; it is not the Coordinator deployment path. Gateway hosting and remote
+delivery are supported integration paths, not a prescribed topology.
 Read the [browser and Gateway guide](../BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 and the [delivery-client](../../packages/delivery-client/README.md) and
 [delivery-server](../../packages/delivery-server/README.md) guides for those
