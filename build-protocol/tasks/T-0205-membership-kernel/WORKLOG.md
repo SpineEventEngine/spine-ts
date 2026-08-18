@@ -88,3 +88,19 @@ removal waits for disposal`. This is a cross-generation disposal/coalescing
 - Two correction hypotheses were used; no architecture blocker was reached.
   The remaining task preflight, coverage, documentation checks, commit, push,
   and review preparation have not yet run.
+
+## 2026-08-18 — Coverage regression and convergence handoff
+
+- The first coverage attempt exposed a close-cancellation result regression not
+  reached by the 59-test parity selection. The original implementer added a
+  focused regression, corrected the kernel, and pushed `c9d5dd5c2`; that direct
+  test passed. The owner then returned BLOCKED before the complete post-fix
+  coverage/preflight and durable report correction, so the task remains open.
+- This is not an architectural or external blocker. A fresh existing
+  `implementer` role owns only bounded convergence in the same worktree:
+  explicit `gpt-5.6-terra` / `medium`, subagent spawning prohibited. It must
+  reproduce the close regression evidence, rerun the complete focused suite,
+  establish changed executable line/branch coverage, run deterministic gates,
+  and replace stale report/status claims before review.
+- No further product change is authorized unless a reproduced gate exposes a
+  concrete defect and a failing test is retained first.
