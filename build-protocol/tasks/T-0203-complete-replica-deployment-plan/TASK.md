@@ -1,6 +1,6 @@
 # T-0203 — Complete-replica deployment and hierarchical subscriptions plan
 
-**Status:** Draft complete; one human lifecycle decision remains.
+**Status:** Accepted; planning complete.
 
 ## Objective
 
@@ -38,5 +38,7 @@ This task is planning-only. It does not implement or delete runtime code.
 3. The dependency-ordered implementation tasks have exclusive file ownership,
    RED designs, review dispositions, documentation ownership, and a final
    release/remote-closure task.
-4. The one remaining worker-crash policy question is answered and the plan is
-   updated from Draft to Accepted before product implementation starts.
+4. Unexpected worker exit preserves degraded service and uses the accepted
+   bounded replacement policy, with behavioral proofs assigned to T-0206.
+5. ZeroMQ and the generic signal-routing layer are deleted by T-0212 only after
+   the replacement HTTP/2 topology is accepted, with no hidden fallback.

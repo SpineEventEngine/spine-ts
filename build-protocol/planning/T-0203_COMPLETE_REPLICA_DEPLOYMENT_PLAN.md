@@ -8,9 +8,9 @@ Wave 13 itself is complete at Spine TS commit
 domain-event semantics. It replaces the deployment assumptions that put normal
 command/event traffic and IntegrationBroker channels on same-host ZeroMQ.
 
-The plan is complete except for one explicit human decision under
-“Open decision.” Product implementation is gated until that decision is
-recorded.
+The plan is accepted. The final lifecycle question was resolved in favor of
+degraded service with bounded child replacement; product implementation starts
+at T-0204.
 
 Authority, in order:
 
@@ -285,6 +285,14 @@ current main**. Current code already provides:
 - a real two-child-process test proving both application environments observe
   one update while exactly one drains the shard.
 
+This became true after the earlier missing-wiring report. T-0094 on 2026-08-02
+connected `RemoteDelivery` ports and lifecycle to `ServerEnvironment`. T-0107
+on 2026-08-04 completed the behavior: `015ef122` connected every environment's
+supervisor to remote observations, `c9f9e4e0` and `5067b502` added real gRPC and
+two-process fan-out proof, and `d8891091` added remote commit fencing. Later
+T-0107 corrections covered shutdown lease release, reconnect snapshots, and
+fault recovery.
+
 The new work preserves and integrates this machinery rather than redesigning
 it.
 
@@ -345,6 +353,13 @@ setting name explains what it configures. The obsolete generic
 removed with the signal-routing subsystem.
 
 ## ZeroMQ and generic signal-layer removal
+
+This is a mandatory first-release deletion, not optional comparative cleanup.
+It is intentionally T-0212 rather than an early task: T-0211 must first retain
+real command, query, subscription, Delivery, domestic/external Event, and
+provider acceptance through the replacement HTTP/2 topology. The next task
+then deletes the old implementation completely, and T-0213 proves no hidden
+fallback remains.
 
 Removal is ordered after real managed HTTP/2 acceptance. It includes:
 
@@ -457,6 +472,26 @@ slice. The final topology must prove all of these:
     no managed Node process implementation.
 32. GKE and GCE discovery route to ready Coordinators through scale up, down,
     zero, return, and compatible replacement.
+33. An unexpected READY-child exit immediately removes that incarnation from
+    unary selection and subscription membership while surviving READY children
+    continue serving.
+34. The Coordinator starts at most one replacement for the failed logical slot,
+    and the replacement has a fresh immutable incarnation identity.
+35. Replacement delays follow the configured exponential sequence, never
+    exceed its cap, and do not spin under a fake-clock crash loop.
+36. A child which remains READY for the configured healthy interval resets its
+    slot's backoff to the initial delay.
+37. Simultaneous child failures never exceed the configured concurrent-start
+    limit and do not create unbounded timers, listeners, or child records.
+38. A replacement cannot become READY until replica-manifest equality, initial
+    Delivery snapshot, and all current subscription definitions are complete.
+39. If no child is READY, the Coordinator remains alive and keeps replacing,
+    but public readiness is false and application calls receive UNAVAILABLE;
+    readiness returns when one synchronized replacement is admitted.
+40. A command interrupted by child exit fails normally and is never retried on
+    a replacement or surviving child.
+41. Graceful DRAINING/CLOSED exits schedule no replacement, and Coordinator
+    close cancels and awaits every pending delay and child start.
 
 ## Dependency-ordered implementation tasks
 
@@ -495,8 +530,8 @@ termination, and real child fixtures.
 **Outcome:** one parent controls exactly N complete application children; no
 client operation is proxied yet.
 
-**Gate:** RED 3–6 and the resolved crash-policy cases; no orphan process,
-listener, timer, or IPC handle on every failure path.
+**Gate:** RED 3–6 and 33–41; no orphan process, listener, timer, or IPC handle on
+every failure path.
 
 ### T-0207 — Node Coordinator unary HTTP/2 services
 
@@ -654,19 +689,44 @@ by one consolidated correction batch and only affected-lane re-review.
 - role-specialized application children;
 - changes to Delivery lease semantics or broker-specific Inbox/retry/dedup.
 
-## Open decision
+## Frozen unexpected-child replacement policy
 
-If one READY application child exits unexpectedly, the first release needs one
-of these exact policies:
+The Coordinator keeps the node serving at reduced capacity and replaces an
+unexpectedly exited application child. It does not fail the whole node, because
+that node may be the deployment's only node.
 
-1. **Fail the whole deployment node (recommended):** immediately mark the
-   Coordinator unready, stop admission, drain/close surviving children where
-   possible, and exit non-zero. The machine/pod service manager restarts the
-   complete node. This has one failure policy, avoids hidden crash-loop/backoff
-   configuration, and matches the framework-not-platform boundary.
-2. **Replace only that child:** keep the node serving at reduced capacity,
-   spawn a replacement, synchronize Delivery/subscriptions, and admit it after
-   manifest equality. This requires bounded restart/backoff/exhaustion policy
-   and more lifecycle configuration owned by the framework.
-
-No implementation begins until the human chooses one.
+- The configured `processCount` defines stable logical worker slots. An
+  unexpected exit immediately removes that child incarnation from unary and
+  subscription membership and starts replacement for the same slot.
+- Surviving READY children continue accepting unary calls, observing Delivery,
+  and producing subscription updates. An in-flight unary call owned by the
+  failed child fails normally; it is never retried automatically.
+- Each replacement receives a new immutable incarnation identity, builds the
+  complete application, proves replica-manifest equality, opens its direct
+  Delivery observation and initial snapshot, and installs all active
+  subscriptions before entering READY.
+- Restarts continue indefinitely. There is no permanent attempt limit which
+  could leave the only node degraded forever. Instead, the framework bounds
+  restart rate and resource use with per-slot exponential backoff, one
+  in-flight replacement per slot, and a Coordinator-wide concurrent-start
+  limit.
+- Managed startup accepts optional restart settings with defaults of 250 ms
+  initial delay, 30 seconds maximum delay, 60 seconds continuously READY before
+  resetting a slot's backoff, and the smaller of four or `processCount`
+  concurrent child starts. Delay doubles after each pre-reset failure and is
+  capped. Values are finite safe positive integers, the maximum delay cannot be
+  below the initial delay, and the concurrent-start limit cannot exceed
+  `processCount`.
+- Initial node readiness requires the complete configured cohort to have
+  synchronized successfully at least once. After that first readiness, the
+  node stays ready while at least one child is READY. At zero READY children it
+  remains alive and keeps replacing, but reports unready and rejects application
+  calls until a synchronized child returns.
+- Expected exits during DRAINING/CLOSED never restart. Coordinator shutdown
+  cancels and awaits backoff timers and pending child starts before returning.
+- Delivery leases remain Delivery Server authority. The Coordinator does not
+  forge release after a crash; normal lease expiry/fencing makes unfinished
+  Inbox work available to another eligible replica.
+- Unexpected exits and crash-loop state changes are logged with safe slot,
+  incarnation, attempt, delay, and reason-code facts. Raw child errors and
+  application payloads are not logged.

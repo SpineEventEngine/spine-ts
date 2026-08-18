@@ -6,7 +6,7 @@ Future implementation must append every decision here or to a task-specific deci
 
 ## D-0126: Use Complete Application Replicas Behind Node-Local HTTP/2 Coordinators
 
-Status: Accepted; unexpected-child-exit policy remains open in T-0203
+Status: Accepted
 
 Date: 2026-08-18
 
@@ -54,8 +54,14 @@ Consequences:
   shard strategy, but process and shard counts remain independent.
 - The future Gateway-hosted Integration Hub for physically split server
   applications is outside the first release.
-- T-0203 must resolve whether an unexpected child exit terminates the whole
-  node or triggers bounded child replacement before implementation begins.
+- An unexpected child exit does not terminate the deployment node. Surviving
+  READY children continue serving while the Coordinator replaces the failed
+  logical slot under bounded exponential backoff and concurrent-start limits.
+  Replacement continues indefinitely, but a child is not admitted until its
+  manifest, Delivery snapshot, and current subscriptions are synchronized.
+- ZeroMQ and the generic signal-routing layer are mandatory first-release
+  deletions after the HTTP/2 replacement has real acceptance; they are not
+  retained as a hidden fallback.
 
 ## D-0125: Use Node DNS promises for GKE DNS discovery
 

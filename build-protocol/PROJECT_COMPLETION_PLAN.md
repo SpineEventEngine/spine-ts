@@ -57,9 +57,12 @@ domain semantics or begin Wave 14 package/SPI work.
 
 The approved architecture is recorded in D-0126 and
 `build-protocol/planning/T-0203_COMPLETE_REPLICA_DEPLOYMENT_PLAN.md`. Product
-implementation remains gated by the one worker-crash lifecycle decision named
-there. The Gateway-hosted Integration Hub for physically split server
-applications is outside the first release.
+planning is accepted. An unexpected child is replaced with bounded backoff
+while surviving children keep serving; T-0204 is the next implementation task.
+The Gateway-hosted Integration Hub for physically split server applications is
+outside the first release. ZeroMQ and the generic signal-routing layer are a
+mandatory ordered deletion in T-0212 after replacement acceptance, not a
+retained fallback.
 
 ## Purpose
 
