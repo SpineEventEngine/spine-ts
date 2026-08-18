@@ -16,7 +16,7 @@ import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
 
 import { create, type MessageShape } from "@bufbuild/protobuf";
-import { createClient } from "@connectrpc/connect";
+import { Code, ConnectError, createClient, type HandlerContext } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
 import { AckSchema } from "@spine-event-engine/proto";
 import {
@@ -106,6 +106,69 @@ describe("NodeCoordinator", () => {
       .toBe(1);
     expect(first.commands()).toBe(1);
   });
+
+  it("does not retry an admitted command after the selected child fails", async () => {
+    const failing = await backend("failing", {
+      post: () => Promise.reject(new ConnectError("child lost", Code.Unavailable)),
+    });
+    const sibling = await backend("sibling");
+    closeables.push(failing.close, sibling.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([failing.member, sibling.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+
+    await expect(
+      createClient(CommandService, createGrpcTransport({ baseUrl: coordinator.baseUrl })).post(
+        create(CommandService.method.post.input),
+      ),
+    ).rejects.toMatchObject({ code: Code.Unavailable });
+    expect(failing.commands()).toBe(1);
+    expect(sibling.commands()).toBe(0);
+  });
+
+  it("propagates cancellation and application metadata to the selected child", async () => {
+    let aborted = false;
+    let startedResolve: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      startedResolve = resolve;
+    });
+    const replica = await backend("cancel", {
+      post: (context) =>
+        new Promise((_, reject) => {
+          startedResolve?.();
+          context.signal.addEventListener(
+            "abort",
+            () => {
+              aborted = true;
+              reject(new ConnectError("cancelled", Code.Canceled));
+            },
+            { once: true },
+          );
+          context.responseHeader.set("x-child", context.requestHeader.get("x-tenant") ?? "missing");
+          context.responseTrailer.set("x-trailer", "child");
+        }),
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const controller = new AbortController();
+    const request = createGrpcTransport({ baseUrl: coordinator.baseUrl }).unary(
+      CommandService.method.post,
+      controller.signal,
+      undefined,
+      { "x-tenant": "acme" },
+      create(CommandService.method.post.input),
+    );
+    await started;
+    controller.abort();
+    await expect(request).rejects.toMatchObject({ code: Code.Canceled });
+    await expect.poll(() => aborted).toBe(true);
+  });
 });
 
 class TestReadyMembers implements ReadyMemberSource {
@@ -139,7 +202,10 @@ interface ReadyMember {
   readonly slot: number;
 }
 
-async function backend(name: string): Promise<{
+async function backend(
+  name: string,
+  options: { readonly post?: (context: HandlerContext) => Promise<never> } = {},
+): Promise<{
   readonly member: ReadyMember;
   readonly close: () => Promise<void>;
   readonly commands: () => number;
@@ -149,8 +215,9 @@ async function backend(name: string): Promise<{
     connectNodeAdapter({
       routes: (router) => {
         router.service(CommandService, {
-          post: () => {
+          post: (_command, context) => {
             value.commands++;
+            if (options.post !== undefined) return options.post(context);
             return create(AckSchema, { status: { case: "ok", value: {} } });
           },
         });
