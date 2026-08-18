@@ -57,8 +57,10 @@ Consequences:
 - An unexpected child exit does not terminate the deployment node. Surviving
   READY children continue serving while the Coordinator replaces the failed
   logical slot under bounded exponential backoff and concurrent-start limits.
-  Replacement continues indefinitely, but a child is not admitted until its
-  manifest, Delivery snapshot, and current subscriptions are synchronized.
+  Replacement continues indefinitely, but a child is not admitted until the
+  same configured application entry has assembled its complete replica and its
+  Delivery snapshot and current subscriptions are synchronized. No runtime
+  manifest, attestation, or DeliveryStrategy identity is introduced.
 - ZeroMQ and the generic signal-routing layer are mandatory first-release
   deletions after the HTTP/2 replacement has real acceptance; they are not
   retained as a hidden fallback.

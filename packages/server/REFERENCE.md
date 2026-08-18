@@ -261,7 +261,8 @@ signal-driven failure.
 `ManagedServerApplication.run()` is the Node-only deployment entrypoint for a
 complete-replica process cohort. It requires a positive safe-integer
 `processCount` and an ESM `moduleUrl`; it never derives a process count from
-the machine. Every child executes that same module and calls its own
+the machine. Its optional `host` and required nonzero `port` bind the public
+Coordinator listener. Every child executes that same module and calls its own
 `createServer({ host: "127.0.0.1", port: 0 })`. The child reports its actual
 loopback endpoint only after its local readiness gates settle. The parent
 initially waits until every configured child is ready. Afterwards it is ready
@@ -272,11 +273,16 @@ reset after 60 s READY). It does not restart a child being closed. Restart
 values are optional `restart` settings and must be positive safe integers;
 concurrent starts default to `min(4, processCount)`. Parent `SIGINT` and
 `SIGTERM` use the same shared child-close path. This private lifecycle channel
-does not transport application signals or proxy public services; Coordinator
-HTTP/2 forwarding belongs to a later deployment slice. Process count does not
+does not transport application signals. The Coordinator forwards generated
+Command and Query unary calls once to a READY child; process count does not
 inspect CPU availability and does not constrain the application's independently
 chosen `DeliveryStrategy` or shard count. Direct `Server.run()` and browser
 hosting remain independent of managed Node deployment.
+
+If no child is READY, Command and Query return gRPC `UNAVAILABLE`. The
+Coordinator does not enter application intake and does not retry the selected
+call on a sibling child. Subscription fan-out is a later deployment slice and
+is not a Coordinator capability here.
 
 `ServerOptions.browser` changes the public listener, not the bounded-context
 services. The native HTTP/2 backend binds to an ephemeral loopback port and is

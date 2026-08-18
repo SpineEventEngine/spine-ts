@@ -18,6 +18,7 @@ import process from "node:process";
 
 const managed = await ManagedServerApplication.run({
   processCount: 1,
+  port: 50_052,
   moduleUrl: import.meta.url,
   createServer: async ({ host, port }) => Server.atPort(port, { host }).start(),
 });
@@ -26,5 +27,6 @@ if (process.env.SPINE_MANAGED_SERVER_CHILD !== "true") {
   process.send?.({
     type: "parent-ready",
     pid: managedServerApplicationAccess.readyMembers(managed)[0]?.pid,
+    endpoint: managedServerApplicationAccess.coordinatorEndpoint(managed),
   });
 }

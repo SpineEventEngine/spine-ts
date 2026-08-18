@@ -16,6 +16,10 @@ import { describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import { fork, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { create } from "@bufbuild/protobuf";
+import { createClient } from "@connectrpc/connect";
+import { createGrpcTransport } from "@connectrpc/connect-node";
+import { CommandService } from "@spine-event-engine/proto/client";
 
 import { ManagedServerApplication, type RunningServer } from "../../src/index.js";
 import {
@@ -199,6 +203,39 @@ describe("ManagedServerApplication", () => {
     },
     20_000,
   );
+
+  it("forwards a command through the managed Coordinator to the child normal service", async () => {
+    const parent = fork(
+      fileURLToPath(new URL("./managed-server-application-parent.mjs", import.meta.url)),
+      [],
+      { silent: true },
+    );
+    try {
+      const endpoint = await new Promise<string>((resolve, reject) => {
+        parent.once("message", (message: unknown) => {
+          const endpoint =
+            typeof message === "object" && message !== null
+              ? (message as { endpoint?: unknown }).endpoint
+              : undefined;
+          if (typeof endpoint === "string") resolve(endpoint);
+          else reject(new Error("Managed parent did not report its Coordinator endpoint."));
+        });
+        parent.once("error", reject);
+      });
+      const response = await createClient(
+        CommandService,
+        createGrpcTransport({ baseUrl: endpoint }),
+      ).post(create(CommandService.method.post.input));
+      expect(response.status).toBeDefined();
+    } finally {
+      parent.kill("SIGTERM");
+      await new Promise<void>((resolve) => {
+        parent.once("exit", () => {
+          resolve();
+        });
+      });
+    }
+  }, 20_000);
   it("treats one asynchronous child error and its later exit as one failed incarnation", async () => {
     const clock = new FakeClock();
     const child = fakeChild(1);
@@ -331,6 +368,50 @@ describe("ManagedServerApplication", () => {
       child.emit("exit");
       return true;
     });
+    await expect(coordinator.close()).resolves.toBeUndefined();
+  });
+
+  it("reports Coordinator startup and managed-child rollback failures together", async () => {
+    const clock = new FakeClock();
+    const child = fakeChild(1);
+    Object.assign(child, { kill: vi.fn(() => true) });
+    const spawned: { slot: number; incarnation: string }[] = [];
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.reject(new Error("unused")),
+      },
+      {
+        clock,
+        spawn: (_url, slot, incarnation) => {
+          spawned.push({ slot, incarnation });
+          return child;
+        },
+        openCoordinator: () => Promise.reject(new Error("Coordinator listener failed")),
+      },
+    );
+    const failure = coordinator.start().catch((error: unknown) => error);
+    child.emit("message", {
+      type: "ready",
+      slot: "0",
+      incarnation: itemAt(spawned, 0, "the initial replica").incarnation,
+      endpoint: "http://127.0.0.1:1",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      clock.advance(1_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    }
+    const error = await failure;
+    expect(error).toBeInstanceOf(AggregateError);
+    expect((error as AggregateError).errors).toEqual([
+      new Error("Coordinator listener failed"),
+      new Error("Managed child did not exit after SIGKILL."),
+    ]);
+    child.emit("exit");
     await expect(coordinator.close()).resolves.toBeUndefined();
   });
 
@@ -695,6 +776,7 @@ describe("ManagedServerApplication", () => {
     try {
       const handle = await ManagedServerApplication.run({
         processCount: 1,
+        port: 50_051,
         moduleUrl: import.meta.url,
         createServer: () =>
           Promise.resolve({ host: "127.0.0.1", port: 42, baseUrl: "http://127.0.0.1:42", close }),
@@ -743,6 +825,7 @@ describe("ManagedServerApplication", () => {
       await expect(
         ManagedServerApplication.run({
           processCount: 1,
+          port: 50_051,
           moduleUrl: import.meta.url,
           createServer: () => Promise.resolve(localRunningServer(close)),
         }),
@@ -774,6 +857,7 @@ describe("ManagedServerApplication", () => {
     try {
       await ManagedServerApplication.run({
         processCount: 1,
+        port: 50_051,
         moduleUrl: import.meta.url,
         createServer: () => Promise.resolve(localRunningServer(close)),
       });
@@ -813,6 +897,7 @@ describe("ManagedServerApplication", () => {
     try {
       await ManagedServerApplication.run({
         processCount: 1,
+        port: 50_051,
         moduleUrl: import.meta.url,
         createServer: () => Promise.resolve(localRunningServer(close)),
       });
@@ -862,6 +947,7 @@ describe("ManagedServerApplication", () => {
       try {
         const handle = await ManagedServerApplication.run({
           processCount: 1,
+          port: 50_051,
           moduleUrl: import.meta.url,
           createServer: () => Promise.resolve(localRunningServer(close)),
         });
@@ -909,6 +995,7 @@ describe("ManagedServerApplication", () => {
       await expect(
         ManagedServerApplication.run({
           processCount: 1,
+          port: 50_051,
           moduleUrl: import.meta.url,
           createServer: () => Promise.resolve(localRunningServer(close)),
         }),
@@ -941,6 +1028,7 @@ describe("ManagedServerApplication", () => {
       await expect(
         ManagedServerApplication.run({
           processCount: 1,
+          port: 50_051,
           moduleUrl: import.meta.url,
           createServer: () => Promise.resolve(localRunningServer(close)),
         }),
@@ -958,6 +1046,7 @@ describe("ManagedServerApplication", () => {
   it("starts one separate complete child for an explicit single-replica cohort", async () => {
     const managed = await ManagedServerApplication.run({
       processCount: 1,
+      port: 50_051,
       moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
       createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
     });
@@ -980,6 +1069,7 @@ describe("ManagedServerApplication", () => {
     try {
       const managed = await ManagedServerApplication.run({
         processCount: 1,
+        port: 50_051,
         moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
         createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
       });
@@ -993,6 +1083,7 @@ describe("ManagedServerApplication", () => {
   it("starts four distinct child processes for one managed cohort", async () => {
     const managed = await ManagedServerApplication.run({
       processCount: 4,
+      port: 50_051,
       moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
       createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
     });
@@ -1012,6 +1103,7 @@ describe("ManagedServerApplication", () => {
   it("reports each child's actual local listener only after that child is ready", async () => {
     const managed = await ManagedServerApplication.run({
       processCount: 1,
+      port: 50_051,
       moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
       createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
     });
@@ -1028,6 +1120,7 @@ describe("ManagedServerApplication", () => {
     const startedAt = Date.now();
     const managed = await ManagedServerApplication.run({
       processCount: 1,
+      port: 50_051,
       moduleUrl: new URL("./managed-server-application-gated-child.mjs", import.meta.url).href,
       createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
     });
@@ -1044,6 +1137,7 @@ describe("ManagedServerApplication", () => {
   it("replaces only the unexpected child exit and retains its surviving sibling", async () => {
     const managed = await ManagedServerApplication.run({
       processCount: 2,
+      port: 50_051,
       moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
       createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
     });
@@ -1090,6 +1184,7 @@ describe("ManagedServerApplication", () => {
     await expect(
       ManagedServerApplication.run({
         processCount: 1,
+        port: 50_051,
         moduleUrl: import.meta.url,
         createServer: () => Promise.reject(new Error("not reached")),
         restart,
@@ -1100,6 +1195,7 @@ describe("ManagedServerApplication", () => {
   it("does not restart a child that the managed cohort closes", async () => {
     const managed = await ManagedServerApplication.run({
       processCount: 1,
+      port: 50_051,
       moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
       createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
       restart: { initialDelayMs: 1, maximumDelayMs: 1, healthyReadyMs: 1 },
@@ -1116,10 +1212,37 @@ describe("ManagedServerApplication", () => {
       await expect(
         ManagedServerApplication.run({
           processCount: processCount as unknown as number,
+          port: 50_051,
           moduleUrl: import.meta.url,
           createServer: () => Promise.resolve(localRunningServer(() => Promise.resolve(), 1)),
         }),
       ).rejects.toThrow("processCount");
+    },
+  );
+
+  it.each([undefined, 0, -1, 65_536, 1.5, Number.POSITIVE_INFINITY])(
+    "rejects an unusable Coordinator port %s before local child assembly",
+    async (port) => {
+      const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
+      process.env.SPINE_MANAGED_SERVER_CHILD = "true";
+      const createServer = vi.fn(() =>
+        Promise.resolve(localRunningServer(() => Promise.resolve())),
+      );
+      try {
+        await expect(
+          ManagedServerApplication.run({
+            processCount: 1,
+            // @ts-expect-error Exercises runtime validation of an omitted port.
+            port,
+            moduleUrl: import.meta.url,
+            createServer,
+          }),
+        ).rejects.toThrow("Managed server Coordinator port");
+        expect(createServer).not.toHaveBeenCalled();
+      } finally {
+        if (priorChild === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
+        else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
+      }
     },
   );
 });

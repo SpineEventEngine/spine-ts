@@ -6,6 +6,7 @@ if (process.env.SPINE_MANAGED_SERVER_VERBOSE === "true") console.info("managed-c
 
 await ManagedServerApplication.run({
   processCount: 1,
+  port: 50_051,
   moduleUrl: import.meta.url,
   createServer: async ({ host, port }) => Server.atPort(port, { host }).start(),
 });
