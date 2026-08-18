@@ -188,3 +188,27 @@
   the existing definition and Topic boundaries remain enforced.
 - Focused Coordinator suite: 24/24. Exact LCOV is **174/183 lines** and
   **51/55 branches (92.73%)**, meeting the changed runtime threshold.
+
+## 2026-08-18 — Joined Gateway durability recovery proof
+
+- Added one real HTTP/2 composition test: `DurableSubscriptionBindings` retains
+  the public `s-public` definition; `DynamicSubscriptionCreator` and
+  `DynamicUnaryForwarder` send it to a real `NodeCoordinator`; the Coordinator
+  fans it to a real child `SubscriptionService`. After orderly Gateway-owner
+  and Coordinator replacement, a reopened bindings store recovers that one row
+  into the empty replacement Coordinator and current child.
+- RED evidence: the first composition run completed its functional assertions
+  but failed teardown with exact `Error: backend child cleanup remains
+  incomplete.` The test's generic parallel cleanup closed the replacement
+  Coordinator while the dynamic owner was still issuing its required child
+  Cancel. This was a fixture lifecycle race, not a product failure.
+- GREEN: the test explicitly closes the dynamic owner before its Coordinator,
+  preserving the actual ownership shutdown order. It proves the replacement
+  has no child definition before `recoverActive`, then has one after recovery
+  (child Subscribe count 1 → 2). The configured storage-factory spy records
+  exactly two `spine.auth.gateway` opens, both for
+  `GatewayAuthenticatedSubscriptionSchema`; Coordinator and worker fixtures
+  receive no storage factory and retain no durable logical row.
+- Focused real HTTP/2 Coordinator suite is green at **25/25**. No product API,
+  persistence path, or wire contract was added; the existing composed behavior
+  satisfies this acceptance slice.

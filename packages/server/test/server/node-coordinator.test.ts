@@ -15,10 +15,24 @@
 import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
 
-import { create, type MessageShape } from "@bufbuild/protobuf";
+import { create, toBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
 import { Code, ConnectError, createClient, type HandlerContext } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
-import { AckSchema, CommandIdSchema, StatusSchema } from "@spine-event-engine/proto";
+import {
+  DynamicSubscriptionCreator,
+  DynamicUnaryForwarder,
+  NativeSubscriptionCreator,
+  type DynamicUnaryClient,
+} from "@spine-event-engine/auth";
+import { ApplicationNode } from "@spine-event-engine/deployment";
+import {
+  ActorContextSchema,
+  AckSchema,
+  CommandIdSchema,
+  StatusSchema,
+  TenantIdSchema,
+} from "@spine-event-engine/proto";
+import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/auth";
 import {
   CommandService,
   QueryService,
@@ -29,6 +43,11 @@ import {
   SubscriptionUpdateSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
+import {
+  InMemoryStorageFactory,
+  type RecordSpec as StorageRecordSpec,
+  type StorageContext,
+} from "@spine-event-engine/storage";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -36,6 +55,9 @@ import {
   SubscriptionUpdateQueue,
   type ReadyMemberSource,
 } from "../../src/server/node-coordinator.js";
+import { DurableSubscriptionBindings } from "../../src/server/durable-subscription-bindings.js";
+
+type RecordSpec<I, R> = StorageRecordSpec<I, R extends Message ? R : Message>;
 
 describe("NodeCoordinator", () => {
   const closeables: (() => Promise<void>)[] = [];
@@ -136,6 +158,76 @@ describe("NodeCoordinator", () => {
     await coordinator.close();
   });
 
+  it("rehydrates the Gateway durable logical definition into a replacement Coordinator only", async () => {
+    const replica = await backend("durable-recovery");
+    closeables.push(replica.close);
+    const storageFactory = new InMemoryStorageFactory();
+    const openStorage = storageFactory.createRecordStorage.bind(storageFactory);
+    const storageContexts: string[] = [];
+    const recordTypes: unknown[] = [];
+    storageFactory.createRecordStorage = ((
+      context: StorageContext,
+      spec: RecordSpec<unknown, never>,
+    ) => {
+      storageContexts.push(context.name);
+      recordTypes.push(spec.recordType);
+      return openStorage(context, spec as never);
+    }) as never;
+    const members = new TestReadyMembers([replica.member]);
+    const firstCoordinator = await NodeCoordinator.open({ members, port: 0 });
+    const firstOwner = dynamicOwner(firstCoordinator.baseUrl);
+    await firstOwner.reconcile([
+      new ApplicationNode({ id: "coordinator", endpoint: firstCoordinator.baseUrl }),
+    ]);
+    const firstBindings = new DurableSubscriptionBindings({
+      storageFactory,
+      namespace: "gateway",
+      nextId: () => "s-public",
+      cleanup: () => Promise.resolve(),
+    });
+    const definition = await firstBindings.create({
+      topic: { kind: "subscription-topic", bytes: trustedTopic() },
+      whenExpires: 10_000,
+    });
+    await new DynamicSubscriptionCreator(firstOwner).subscribe(
+      definition,
+      new AbortController().signal,
+    );
+    expect(replica.subscriptions()).toBe(1);
+
+    await firstOwner.close();
+    await firstCoordinator.close();
+    await firstBindings.close();
+
+    const replacementCoordinator = await NodeCoordinator.open({ members, port: 0 });
+    const replacementOwner = dynamicOwner(replacementCoordinator.baseUrl);
+    await replacementOwner.reconcile([
+      new ApplicationNode({ id: "coordinator", endpoint: replacementCoordinator.baseUrl }),
+    ]);
+    const reopenedBindings = new DurableSubscriptionBindings({
+      storageFactory,
+      namespace: "gateway",
+      nextId: () => "s-next",
+      cleanup: () => Promise.resolve(),
+    });
+
+    expect(replica.subscriptions()).toBe(1);
+    await reopenedBindings.recoverActive({
+      nowMs: 1,
+      onDefinition: (wire) => new DynamicSubscriptionCreator(replacementOwner).rehydrate(wire),
+    });
+
+    expect(replica.subscriptions()).toBe(2);
+    expect(storageContexts).toEqual(["spine.auth.gateway", "spine.auth.gateway"]);
+    expect(recordTypes).toEqual([
+      GatewayAuthenticatedSubscriptionSchema,
+      GatewayAuthenticatedSubscriptionSchema,
+    ]);
+    await replacementOwner.close();
+    await replacementCoordinator.close();
+    await reopenedBindings.close();
+  });
+
   it("merges native update streams and relays the Coordinator logical subscription", async () => {
     const first = await backend("first", { updates: 1 });
     const second = await backend("second", { updates: 1 });
@@ -152,8 +244,12 @@ describe("NodeCoordinator", () => {
     const subscription = await client.subscribe(create(TopicSchema));
     const updates = client.activate(subscription)[Symbol.asyncIterator]();
 
-    expect((await updates.next()).value?.subscription?.id).toEqual(subscription.id);
-    expect((await updates.next()).value?.subscription?.id).toEqual(subscription.id);
+    const firstUpdate = await updates.next();
+    const secondUpdate = await updates.next();
+    if (firstUpdate.done || secondUpdate.done)
+      throw new Error("expected native subscription updates");
+    expect(firstUpdate.value.subscription?.id).toEqual(subscription.id);
+    expect(secondUpdate.value.subscription?.id).toEqual(subscription.id);
 
     await coordinator.close();
   });
@@ -468,7 +564,10 @@ describe("SubscriptionUpdateQueue", () => {
     const first = queue.push(create(SubscriptionUpdateSchema));
     await queue.push(create(SubscriptionUpdateSchema));
     await expect(first).resolves.toBeUndefined();
-    await expect(queue[Symbol.asyncIterator]().next()).resolves.toEqual({ value: undefined, done: true });
+    await expect(queue[Symbol.asyncIterator]().next()).resolves.toEqual({
+      value: undefined,
+      done: true,
+    });
     await expect(queue.push(create(SubscriptionUpdateSchema))).resolves.toBeUndefined();
   });
 
@@ -514,6 +613,37 @@ interface ReadyMember {
   readonly slot: number;
 }
 
+function dynamicOwner(endpoint: string): DynamicUnaryForwarder {
+  return new DynamicUnaryForwarder({
+    create: () => Promise.resolve(dynamicCoordinatorClient(endpoint)),
+  });
+}
+
+function dynamicCoordinatorClient(endpoint: string): DynamicUnaryClient {
+  const native = new NativeSubscriptionCreator(createGrpcTransport({ baseUrl: endpoint }));
+  return {
+    forward: native.forward.bind(native),
+    subscribe: native.subscribe.bind(native),
+    activate: native.activate.bind(native),
+    cancel: native.cancel.bind(native),
+    dispose: native.dispose.bind(native),
+    close: () => Promise.resolve(),
+  };
+}
+
+function trustedTopic(): Uint8Array {
+  return toBinary(
+    TopicSchema,
+    create(TopicSchema, {
+      id: { value: "topic" },
+      context: create(ActorContextSchema, {
+        actor: { value: "actor" },
+        tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant" } }),
+      }),
+    }),
+  );
+}
+
 async function backend(
   name: string,
   options: {
@@ -527,6 +657,8 @@ async function backend(
   readonly commands: () => number;
   readonly subscriptions: () => number;
   readonly cancellations: () => number;
+  readonly activations: () => number;
+  readonly activationAborts: () => number;
 }> {
   const value = {
     commands: 0,
@@ -563,7 +695,7 @@ async function backend(
             for (let update = 0; update < (options.updates ?? 0); update += 1)
               yield create(SubscriptionUpdateSchema, { subscription });
             if (options.holdActivation)
-              await new Promise<void>((resolve) =>
+              await new Promise<void>((resolve) => {
                 context.signal.addEventListener(
                   "abort",
                   () => {
@@ -571,8 +703,8 @@ async function backend(
                     resolve();
                   },
                   { once: true },
-                ),
-              );
+                );
+              });
           },
           cancel: () => {
             value.cancellations++;
