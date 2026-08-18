@@ -42,6 +42,10 @@ definitions and fans each to every READY complete-replica child.
   seam if necessary, focused tests/fixtures, necessary Gateway integration
   tests, and these records. Deployment-kernel changes require a demonstrated
   blocking contract defect first.
+- RED 17–19 real-process domestic, ThirdParty/external-event, and Delivery
+  acceptance remains explicitly owned by T-0210 under the accepted T-0203
+  plan. T-0208 retains the hierarchical subscription machinery and its
+  Coordinator/Gateway composition proofs only.
 
 ## Owner/profile record
 
