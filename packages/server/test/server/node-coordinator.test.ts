@@ -457,6 +457,24 @@ describe("NodeCoordinator", () => {
     await coordinator.close();
   });
 
+  it("removes a draining child from unary admission while retaining its subscription relay", async () => {
+    const draining = await backend("draining");
+    closeables.push(draining.close);
+    const members = new TestReadyMembers([draining.member]);
+    const coordinator = await NodeCoordinator.open({ members, port: 0 });
+    closeables.push(() => coordinator.close());
+    const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl });
+    await createClient(SubscriptionService, transport).subscribe(create(TopicSchema));
+    expect(draining.subscriptions()).toBe(1);
+
+    members.setReady([], [draining.member]);
+
+    await expect(createClient(CommandService, transport).post(create(CommandService.method.post.input))).rejects.toMatchObject({ code: Code.Unavailable });
+    expect(draining.subscriptions()).toBe(1);
+    members.setReady([], []);
+    await expect.poll(() => draining.cancellations()).toBe(1);
+  });
+
   it("reconciles replacement membership without exposing or polling child topology", async () => {
     const first = await backend("first");
     const replacement = await backend("replacement");
@@ -741,10 +759,16 @@ class TestReadyMembers implements ReadyMemberSource {
   readonly #listeners = new Set<() => void>();
 
   #members: readonly ReadyMember[];
+  #relays: readonly ReadyMember[];
 
   constructor(members: readonly ReadyMember[]) {
     this.#members = members;
+    this.#relays = members;
   }
+
+  relayMembers(): readonly ReadyMember[] { return this.#relays; }
+
+  onRelayMembersChange(onChange: () => void): () => void { return this.onReadyMembersChange(onChange); }
 
   readyMembers(): readonly ReadyMember[] {
     return this.#members;
@@ -756,7 +780,12 @@ class TestReadyMembers implements ReadyMemberSource {
   }
 
   set(members: readonly ReadyMember[]): void {
+    this.setReady(members, members);
+  }
+
+  setReady(members: readonly ReadyMember[], relays: readonly ReadyMember[]): void {
     this.#members = members;
+    this.#relays = relays;
     for (const listener of this.#listeners) listener();
   }
 }

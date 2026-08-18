@@ -709,11 +709,19 @@ export class ManagedServerCoordinator {
    * @internal
    */
   readyMembers(): readonly ReadyCoordinatorMember[] {
+    return this.#members(false);
+  }
+
+  relayMembers(): readonly ReadyCoordinatorMember[] {
+    return this.#members(true);
+  }
+
+  #members(includeDraining: boolean): readonly ReadyCoordinatorMember[] {
     return this.#slots.flatMap((slot) => {
       const replica = slot.replica;
       if (
         replica?.readyAt === undefined ||
-        replica.draining ||
+        (!includeDraining && replica.draining) ||
         replica.endpoint === undefined ||
         replica.child.pid === undefined
       )
@@ -739,6 +747,10 @@ export class ManagedServerCoordinator {
   onReadyMembersChange(onChange: () => void): () => void {
     this.#memberListeners.add(onChange);
     return () => this.#memberListeners.delete(onChange);
+  }
+
+  onRelayMembersChange(onChange: () => void): () => void {
+    return this.onReadyMembersChange(onChange);
   }
 
   /**

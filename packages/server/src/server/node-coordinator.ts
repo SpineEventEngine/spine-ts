@@ -112,6 +112,9 @@ export interface ReadyMemberSource {
 
   readyMembers(): readonly ReadyCoordinatorMember[];
 
+  /** Returns READY and DRAINING children while their relay remains live. */
+  relayMembers(): readonly ReadyCoordinatorMember[];
+
   /**
    *
    * Subscribes one callback after READY membership changes.
@@ -120,6 +123,9 @@ export interface ReadyMemberSource {
    * @returns Stops later membership callbacks.
    */
   onReadyMembersChange(onChange: () => void): () => void;
+
+  /** Subscribes relay-membership reconciliation. */
+  onRelayMembersChange(onChange: () => void): () => void;
 }
 
 /**
@@ -175,15 +181,18 @@ export class NodeCoordinator {
   // prettier-ignore
 
   readonly #members: ReadyMemberSource;
-  readonly #kernel: BackendMembershipKernel<
+  readonly #unaryKernel: BackendMembershipKernel<
     ReadyCoordinatorMember,
     CoordinatorRequest,
     Uint8Array,
     Uint8Array
   >;
+  readonly #subscriptionKernel: BackendMembershipKernel<
+    ReadyCoordinatorMember, CoordinatorRequest, Uint8Array, Uint8Array
+  >;
   readonly #server: http2.Http2Server;
   readonly #sessions: Set<http2.ServerHttp2Session>;
-  readonly #stopMembers: () => void;
+  readonly #stopMembers: readonly (() => void)[];
 
   /**
    *
@@ -215,20 +224,23 @@ export class NodeCoordinator {
     sessions: Set<http2.ServerHttp2Session>,
   ) {
     this.#members = options.members;
-    this.#kernel = new BackendMembershipKernel(NodeCoordinatorValues.unaryKernelOptions());
+    this.#unaryKernel = new BackendMembershipKernel(NodeCoordinatorValues.unaryKernelOptions());
+    this.#subscriptionKernel = new BackendMembershipKernel(NodeCoordinatorValues.unaryKernelOptions());
     this.#server = server;
     this.#sessions = sessions;
     this.host = address.address;
     this.port = address.port;
     this.baseUrl = `http://${NodeCoordinatorValues.formatHostForUrl(this.host)}:${this.port.toString()}`;
-    this.#stopMembers = options.members.onReadyMembersChange(() => {
+    const reconcile = () => {
       this.#membershipReconciliation = this.#membershipReconciliation
         .then(
           () => this.#reconcile(),
           () => this.#reconcile(),
         )
         .catch(() => undefined);
-    });
+    };
+    const relayChange = options.members.onRelayMembersChange?.bind(options.members) ?? options.members.onReadyMembersChange.bind(options.members);
+    this.#stopMembers = [options.members.onReadyMembersChange(reconcile), relayChange(reconcile)];
   }
 
   /**
@@ -323,7 +335,7 @@ export class NodeCoordinator {
       topic,
     });
     try {
-      await this.#kernel.subscribe(toBinary(SubscriptionSchema, subscription), context.signal);
+      await this.#subscriptionKernel.subscribe(toBinary(SubscriptionSchema, subscription), context.signal);
     } catch (error) {
       throw this.#availabilityError(error);
     }
@@ -342,7 +354,7 @@ export class NodeCoordinator {
     context.signal.addEventListener("abort", abort, { once: true });
     if (context.signal.aborted) abort();
     const updates = new SubscriptionUpdateQueue(subscriptionQueueLimit, abort);
-    const activation = this.#kernel
+    const activation = this.#subscriptionKernel
       .activate(
         definition,
         async (childUpdate) => {
@@ -366,7 +378,7 @@ export class NodeCoordinator {
   }
 
   async #cancel(subscription: Subscription, context: HandlerContext): Promise<Response> {
-    await this.#kernel.cancel(toBinary(SubscriptionSchema, subscription), context.signal);
+    await this.#subscriptionKernel.cancel(toBinary(SubscriptionSchema, subscription), context.signal);
     return create(ResponseSchema, {
       status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
     });
@@ -374,7 +386,7 @@ export class NodeCoordinator {
 
   async #forward(request: CoordinatorRequest): Promise<void> {
     try {
-      await this.#kernel.forward(request);
+      await this.#unaryKernel.forward(request);
     } catch (error) {
       throw this.#availabilityError(error);
     }
@@ -387,14 +399,17 @@ export class NodeCoordinator {
   }
 
   #reconcile(): Promise<void> {
-    return this.#kernel.reconcile(this.#members.readyMembers());
+    return Promise.all([
+      this.#unaryKernel.reconcile(this.#members.readyMembers()),
+      this.#subscriptionKernel.reconcile(this.#members.relayMembers?.() ?? this.#members.readyMembers()),
+    ]).then(() => undefined);
   }
 
   async #closeOnce(): Promise<void> {
-    this.#stopMembers();
+    this.#stopMembers.forEach((stop) => stop());
     await this.#membershipReconciliation;
     const network = NodeCoordinatorValues.closeNetwork(this.#server, this.#sessions);
-    await Promise.all([network, this.#kernel.close()]);
+    await Promise.all([network, this.#unaryKernel.close(), this.#subscriptionKernel.close()]);
   }
 }
 
