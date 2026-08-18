@@ -366,3 +366,13 @@ incomplete.` The test's generic parallel cleanup closed the replacement
   and diff hygiene pass.
 - Ownership/profile remains existing `implementer`, configured
   `gpt-5.6-terra` / `medium`; no subagents and telemetry unavailable.
+
+## 2026-08-19 — Release lint correction
+
+- `pnpm verify:release` completed Node/Proto generation, generated build, and
+  tooling before its full ESLint phase reported one deterministic violation:
+  `node-coordinator.ts:339` used an arrow shorthand that returned the void
+  result of `AbortController.abort()`.
+- Applied the mechanical brace-only callback body; no behavior changed. Full
+  `pnpm exec eslint .`, focused Coordinator suite (**29/29**), changed-file
+  Prettier, and diff hygiene pass.

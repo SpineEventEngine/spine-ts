@@ -336,7 +336,9 @@ export class NodeCoordinator {
   ): AsyncIterable<SubscriptionUpdate> {
     const definition = toBinary(SubscriptionSchema, subscription);
     const overflow = new AbortController();
-    const abort = () => overflow.abort();
+    const abort = () => {
+      overflow.abort();
+    };
     context.signal.addEventListener("abort", abort, { once: true });
     if (context.signal.aborted) abort();
     const updates = new SubscriptionUpdateQueue(subscriptionQueueLimit, abort);
