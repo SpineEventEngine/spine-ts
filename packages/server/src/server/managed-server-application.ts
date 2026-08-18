@@ -671,13 +671,13 @@ export class ManagedServerCoordinator {
   /**
    * Subscribes one private Coordinator to READY membership changes.
    *
-   * @param listener Runs after an admitted READY member or removed member changes.
+   * @param onChange Runs after an admitted READY member or removed member changes.
    * @returns Stops later private notifications.
    * @internal
    */
-  onReadyMembersChange(listener: () => void): () => void {
-    this.#memberListeners.add(listener);
-    return () => this.#memberListeners.delete(listener);
+  onReadyMembersChange(onChange: () => void): () => void {
+    this.#memberListeners.add(onChange);
+    return () => this.#memberListeners.delete(onChange);
   }
 
   /**

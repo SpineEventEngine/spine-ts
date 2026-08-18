@@ -260,6 +260,80 @@ describe("NodeCoordinator", () => {
       ),
     ).rejects.toBeInstanceOf(ConnectError);
   });
+
+  it.each([
+    [{ host: " " }, "Server host must not be blank."],
+    [{ port: -1 }, "Managed server port must be a safe integer between 0 and 65535."],
+    [{ port: 65_536 }, "Managed server port must be a safe integer between 0 and 65535."],
+    [
+      { readMaxBytes: 0 },
+      "Managed server message limit must be a safe integer between 1 and 4294967295.",
+    ],
+  ] as const)("rejects invalid Coordinator listener configuration", async (options, message) => {
+    await expect(
+      NodeCoordinator.open({ members: new TestReadyMembers([]), ...options }),
+    ).rejects.toThrow(message);
+  });
+
+  it("closes idempotently after membership reconciliation", async () => {
+    const replica = await backend("close");
+    closeables.push(replica.close);
+    const members = new TestReadyMembers([replica.member]);
+    const coordinator = await NodeCoordinator.open({ members, port: 0 });
+    const first = coordinator.close();
+    expect(coordinator.close()).toBe(first);
+    members.set([]);
+    await expect(first).resolves.toBeUndefined();
+  });
+
+  it("rolls back a listener-open failure without retaining a second coordinator", async () => {
+    const first = await NodeCoordinator.open({ members: new TestReadyMembers([]), port: 0 });
+    closeables.push(() => first.close());
+    await expect(
+      NodeCoordinator.open({
+        members: new TestReadyMembers([]),
+        host: first.host,
+        port: first.port,
+      }),
+    ).rejects.toBeInstanceOf(Error);
+  });
+
+  it("formats an IPv6 listener endpoint as a valid Connect base URL", async () => {
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([]),
+      host: "::1",
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+
+    expect(coordinator.baseUrl).toMatch(/^http:\/\/\[::1\]:\d+$/);
+  });
+
+  it("bounds close for an active child call by closing the public HTTP2 session", async () => {
+    let enteredResolve: (() => void) | undefined;
+    const entered = new Promise<void>((resolve) => {
+      enteredResolve = resolve;
+    });
+    const replica = await backend("drain", {
+      post: () =>
+        new Promise(() => {
+          enteredResolve?.();
+        }),
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    const request = createClient(
+      CommandService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    ).post(create(CommandService.method.post.input));
+    void request.catch(() => undefined);
+    await entered;
+    await expect(coordinator.close()).resolves.toBeUndefined();
+    await expect(request).rejects.toBeInstanceOf(ConnectError);
+  }, 5_000);
 });
 
 class TestReadyMembers implements ReadyMemberSource {
@@ -275,9 +349,9 @@ class TestReadyMembers implements ReadyMemberSource {
     return this.#members;
   }
 
-  onReadyMembersChange(listener: () => void): () => void {
-    this.#listeners.add(listener);
-    return () => this.#listeners.delete(listener);
+  onReadyMembersChange(onChange: () => void): () => void {
+    this.#listeners.add(onChange);
+    return () => this.#listeners.delete(onChange);
   }
 
   set(members: readonly ReadyMember[]): void {

@@ -15,17 +15,23 @@
 import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
 
+import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError, type HandlerContext } from "@connectrpc/connect";
 import {
   connectNodeAdapter,
   createGrpcTransport,
   Http2SessionManager,
 } from "@connectrpc/connect-node";
-import { BackendMembershipKernel } from "@spine-event-engine/deployment/internal/backend-membership-kernel";
-import { type Ack, type Command } from "@spine-event-engine/proto";
+import {
+  type BackendMemberClient,
+  BackendMembershipKernel,
+  type BackendMembershipKernelOptions,
+} from "@spine-event-engine/deployment/internal/backend-membership-kernel";
+import { AckSchema, type Ack, type Command } from "@spine-event-engine/proto";
 import {
   type Query,
   type QueryResponse,
+  QueryResponseSchema,
   CommandService,
   QueryService,
 } from "@spine-event-engine/proto/client";
@@ -93,10 +99,10 @@ export interface ReadyMemberSource {
    *
    * Subscribes one callback after READY membership changes.
    *
-   * @param listener Runs after a new snapshot becomes current.
+   * @param onChange Runs after a new snapshot becomes current.
    * @returns Stops later membership callbacks.
    */
-  onReadyMembersChange(listener: () => void): () => void;
+  onReadyMembersChange(onChange: () => void): () => void;
 }
 
 /**
@@ -192,14 +198,7 @@ export class NodeCoordinator {
     sessions: Set<http2.ServerHttp2Session>,
   ) {
     this.#members = options.members;
-    this.#kernel = new BackendMembershipKernel({
-      create: (member) => Promise.resolve(NodeCoordinatorValues.client(member)),
-      memberKey: (member) => `${member.slot.toString()}/${member.incarnation}`,
-      sameMember: (left, right) => left.endpoint === right.endpoint,
-      definitionKey: () => undefined,
-      childDefinition: (definition) => definition,
-      childSize: () => 0,
-    });
+    this.#kernel = new BackendMembershipKernel(NodeCoordinatorValues.unaryKernelOptions());
     this.#server = server;
     this.#sessions = sessions;
     this.host = typeof address.address === "string" ? address.address : defaultHost;
@@ -230,22 +229,19 @@ export class NodeCoordinator {
     const writeMaxBytes = NodeCoordinatorValues.messageLimit(
       options.writeMaxBytes ?? defaultMessageMaxBytes,
     );
-    let coordinator: NodeCoordinator | undefined = undefined;
+    // eslint-disable-next-line prefer-const -- routes capture the Coordinator before the listener exists.
+    let coordinator: NodeCoordinator;
     const sessions = new Set<http2.ServerHttp2Session>();
     const server = http2.createServer(
       connectNodeAdapter({
         routes: (router) => {
           router.service(CommandService, {
             post: async (command, context) => {
-              if (coordinator === undefined)
-                throw new ConnectError("Node Coordinator is starting.", Code.Unavailable);
               return coordinator.#post(command, context);
             },
           });
           router.service(QueryService, {
             read: async (query, context) => {
-              if (coordinator === undefined)
-                throw new ConnectError("Node Coordinator is starting.", Code.Unavailable);
               return coordinator.#read(query, context);
             },
           });
@@ -278,21 +274,25 @@ export class NodeCoordinator {
   }
 
   async #post(command: Command, context: HandlerContext): Promise<Ack> {
-    const request: CoordinatorCommand = { kind: "command", command, context };
+    const request: CoordinatorCommand = {
+      kind: "command",
+      command,
+      context,
+      response: create(AckSchema),
+    };
     await this.#forward(request);
-    const response = request.response;
-    if (response === undefined)
-      throw new ConnectError("Ready application replica returned no response.", Code.Internal);
-    return response;
+    return request.response;
   }
 
   async #read(query: Query, context: HandlerContext): Promise<QueryResponse> {
-    const request: CoordinatorQuery = { kind: "query", query, context };
+    const request: CoordinatorQuery = {
+      kind: "query",
+      query,
+      context,
+      response: create(QueryResponseSchema),
+    };
     await this.#forward(request);
-    const response = request.response;
-    if (response === undefined)
-      throw new ConnectError("Ready application replica returned no response.", Code.Internal);
-    return response;
+    return request.response;
   }
 
   async #forward(request: CoordinatorRequest): Promise<void> {
@@ -303,8 +303,6 @@ export class NodeCoordinator {
         throw new ConnectError("No ready application replica is available.", Code.Unavailable);
       throw error;
     }
-    if (request.response === undefined)
-      throw new ConnectError("Ready application replica returned no response.", Code.Internal);
   }
 
   #reconcile(): Promise<void> {
@@ -323,17 +321,39 @@ interface CoordinatorCommand {
   readonly kind: "command";
   readonly command: Command;
   readonly context: HandlerContext;
-  response?: Ack;
+  response: Ack;
 }
 interface CoordinatorQuery {
   readonly kind: "query";
   readonly query: Query;
   readonly context: HandlerContext;
-  response?: QueryResponse;
+  response: QueryResponse;
 }
 type CoordinatorRequest = CoordinatorCommand | CoordinatorQuery;
 
 const NodeCoordinatorValues = Object.freeze({
+  unaryKernelOptions(): BackendMembershipKernelOptions<
+    ReadyCoordinatorMember,
+    CoordinatorRequest,
+    unknown,
+    never
+  > {
+    // The Coordinator deliberately uses only the kernel's member lifecycle and
+    // one-shot forwarding operations. Subscription fan-out is owned by T-0208.
+    return {
+      create: (member: ReadyCoordinatorMember) =>
+        Promise.resolve(NodeCoordinatorValues.client(member)),
+      memberKey: (member: ReadyCoordinatorMember) =>
+        `${member.slot.toString()}/${member.incarnation}`,
+      sameMember: (left: ReadyCoordinatorMember, right: ReadyCoordinatorMember) =>
+        left.endpoint === right.endpoint,
+    } as unknown as BackendMembershipKernelOptions<
+      ReadyCoordinatorMember,
+      CoordinatorRequest,
+      unknown,
+      never
+    >;
+  },
   client(member: ReadyCoordinatorMember) {
     const manager = new Http2SessionManager(member.endpoint);
     const transport = createGrpcTransport({ baseUrl: member.endpoint, sessionManager: manager });
@@ -370,16 +390,11 @@ const NodeCoordinatorValues = Object.freeze({
         }
         return new Uint8Array();
       },
-      subscribe: () =>
-        Promise.reject(new Error("Coordinator subscription forwarding belongs to T-0208.")),
-      activate: () =>
-        Promise.reject(new Error("Coordinator subscription forwarding belongs to T-0208.")),
-      dispose: () => Promise.resolve(),
       close: () => {
         manager.abort();
         return Promise.resolve();
       },
-    };
+    } as BackendMemberClient<CoordinatorRequest, unknown, never>;
   },
   responseMetadata(headers: Headers, trailers: Headers, context: HandlerContext): void {
     for (const [name, value] of NodeCoordinatorValues.applicationHeaders(headers))

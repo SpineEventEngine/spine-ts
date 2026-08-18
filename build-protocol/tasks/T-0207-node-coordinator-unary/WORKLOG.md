@@ -45,3 +45,28 @@
   inbound/outbound message bounds reject oversized calls at the coordinator.
 - Replacement selection uses the internal READY-member notification rather
   than polling or public topology.
+
+## 2026-08-18 — Ownership transfer and coverage convergence
+
+- Ownership of the existing uncommitted T-0207 production, test, documentation,
+  and record diff transferred to the existing `implementer`, configured
+  `gpt-5.6-terra` / medium. Subagents are prohibited. Runtime model telemetry
+  is not exposed by this surface; the configured immutable role/profile is the
+  available evidence.
+- The inherited focused suite initially proved 91.82% executable lines but
+  87.92% branches and 87.59% functions across the two changed runtime modules.
+  Exact LCOV inspection showed that the shortfall came from three impossible
+  pre-construction route guards and six subscription callbacks/configuration
+  callbacks that this unary-only Coordinator cannot invoke. Those defensive
+  duplicates were removed instead of creating test-only access to private
+  internals. The kernel is deliberately supplied only its forwarding/member
+  lifecycle subset; T-0208 owns subscription fan-out.
+- Added real IPv6 listener acceptance: the private Coordinator exposes a valid
+  bracketed Connect base URL. The full focused managed/coordinator suite is
+  green at 93.52% statements, 90.04% branches, 91.93% functions, and 95.71%
+  lines (57 tests).
+- Deterministic preflight is green after generated build and tooling
+  typechecks: affected ESLint, cleanup, TSDoc, copyright, logging-containment,
+  generated-doc inventory, format, and `git diff --check` all pass. Callback
+  parameters in the private ready-members seam were renamed to satisfy the
+  repository cleanup rule without changing its behavior.
