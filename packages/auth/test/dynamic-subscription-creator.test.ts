@@ -13,9 +13,19 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { create, toBinary } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { ApplicationNode } from "@spine-event-engine/deployment";
-import { SubscriptionSchema, TopicSchema } from "@spine-event-engine/proto/client";
+import {
+  ActorContextSchema,
+  EventIdSchema,
+  EventSchema,
+  TenantIdSchema,
+} from "@spine-event-engine/proto";
+import {
+  SubscriptionSchema,
+  SubscriptionUpdateSchema,
+  TopicSchema,
+} from "@spine-event-engine/proto/client";
 
 import {
   type DynamicUnaryClient,
@@ -1052,6 +1062,117 @@ describe("DynamicSubscriptionCreator", () => {
     await expect(creating).rejects.toThrow("native creation failed");
     await removing;
     expect(order).toEqual(["dispose", "close", "close"]);
+  });
+
+  it("rewrites only each immediate recursive child ID while preserving protobuf identity and updates", async () => {
+    const firstLayer: Uint8Array[] = [];
+    const secondLayer: Uint8Array[] = [];
+    const relayed: Uint8Array[] = [];
+    const update = toBinary(
+      SubscriptionUpdateSchema,
+      create(SubscriptionUpdateSchema, {
+        subscription: create(SubscriptionSchema, { id: { value: "logical" } }),
+        update: {
+          case: "eventUpdates",
+          value: {
+            event: [
+              create(EventSchema, {
+                id: create(EventIdSchema, { value: "event-1" }),
+                message: { typeUrl: "type.example/Event", value: new Uint8Array([7, 8]) },
+              }),
+            ],
+          },
+        },
+      }),
+    );
+    const inner = new DynamicUnaryForwarder({
+      create: () =>
+        Promise.resolve({
+          forward: () => Promise.resolve(new Uint8Array()),
+          close: () => Promise.resolve(),
+          subscribe: (wire) => {
+            secondLayer.push(wire.bytes.slice());
+            return Promise.resolve({
+              kind: "backend-subscription-envelope" as const,
+              bytes: wire.bytes.slice(),
+            });
+          },
+          activate: (request) =>
+            request.updates({ kind: "subscription-update", bytes: update.slice() }),
+          cancel: () => Promise.resolve(),
+          dispose: () => Promise.resolve(),
+        }),
+    });
+    await inner.reconcile([new ApplicationNode({ id: "b", endpoint: "http://10.0.0.2" })]);
+    const outer = new DynamicUnaryForwarder({
+      create: () =>
+        Promise.resolve({
+          forward: () => Promise.resolve(new Uint8Array()),
+          close: () => Promise.resolve(),
+          subscribe: async (wire, signal) => {
+            firstLayer.push(wire.bytes.slice());
+            await inner.subscribeDefinition(wire, signal);
+            return { kind: "backend-subscription-envelope", bytes: wire.bytes.slice() };
+          },
+          activate: (request, signal) =>
+            inner.activateDefinition(
+              { kind: "public-subscription", bytes: request.wire.bytes.slice() },
+              request.updates,
+              signal,
+            ),
+          cancel: () => Promise.resolve(),
+          dispose: (request, signal) =>
+            inner.cancelDefinition(
+              { kind: "public-subscription", bytes: request.bytes.slice() },
+              signal,
+            ),
+        }),
+    });
+    const publicDefinition = toBinary(
+      SubscriptionSchema,
+      create(SubscriptionSchema, {
+        id: { value: "logical" },
+        topic: create(TopicSchema, {
+          context: create(ActorContextSchema, {
+            actor: { value: "actor-1" },
+            tenantId: create(TenantIdSchema, { kind: { case: "value", value: "tenant-1" } }),
+          }),
+        }),
+      }),
+    );
+    await outer.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
+    await outer.subscribeDefinition(
+      { kind: "public-subscription", bytes: publicDefinition },
+      new AbortController().signal,
+    );
+    const controller = new AbortController();
+    const activation = outer.activateDefinition(
+      { kind: "public-subscription", bytes: publicDefinition },
+      (wire) => {
+        relayed.push(wire.bytes.slice());
+        return Promise.resolve();
+      },
+      controller.signal,
+    );
+    await Promise.resolve();
+    controller.abort();
+    await activation;
+
+    const firstChild = firstLayer[0];
+    const secondChild = secondLayer[0];
+    if (firstChild === undefined || secondChild === undefined)
+      throw new Error("expected both recursive child definitions");
+    expect(fromBinary(SubscriptionSchema, firstChild)).toMatchObject({
+      id: { value: "logical/a" },
+      topic: fromBinary(SubscriptionSchema, publicDefinition).topic,
+    });
+    expect(fromBinary(SubscriptionSchema, secondChild)).toMatchObject({
+      id: { value: "logical/a/b" },
+      topic: fromBinary(SubscriptionSchema, publicDefinition).topic,
+    });
+    expect(relayed).toEqual([update]);
+    await outer.close();
+    await inner.close();
   });
 });
 

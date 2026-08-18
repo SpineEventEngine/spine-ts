@@ -372,32 +372,39 @@
       "test": "packages/deployment-gce/test/registrar/recovery.test.ts"
     },
     {
-      "id": "auth.dynamic_subscription_activation",
-      "source": "../../packages/auth/src/gateway/dynamic-unary-forwarder.ts",
-      "operation": "auth.subscription.activate",
+      "id": "deployment.membership_child_activation",
+      "source": "../../packages/deployment/src/internal/backend-membership-kernel.ts",
+      "operation": "deployment.membership.child_activation",
       "disposition": "no-log",
-      "test": "packages/auth/test/dynamic-unary-forwarder.test.ts"
+      "test": "packages/deployment/test/membership-kernel.test.ts"
     },
     {
-      "id": "auth.dynamic_subscription_cleanup",
-      "source": "../../packages/auth/src/gateway/dynamic-unary-forwarder.ts",
-      "operation": "auth.subscription.cleanup",
+      "id": "deployment.membership_child_cleanup",
+      "source": "../../packages/deployment/src/internal/backend-membership-kernel.ts",
+      "operation": "deployment.membership.child_cleanup",
       "disposition": "no-log",
-      "test": "packages/auth/test/dynamic-unary-forwarder.test.ts"
+      "test": "packages/deployment/test/membership-kernel.test.ts"
     },
     {
-      "id": "auth.dynamic_reconciliation",
-      "source": "../../packages/auth/src/gateway/dynamic-unary-forwarder.ts",
-      "operation": "auth.subscription.reconcile",
+      "id": "deployment.membership_reconciliation",
+      "source": "../../packages/deployment/src/internal/backend-membership-kernel.ts",
+      "operation": "deployment.membership.reconcile",
       "disposition": "no-log",
-      "test": "packages/auth/test/dynamic-unary-forwarder.test.ts"
+      "test": "packages/deployment/test/membership-kernel.test.ts"
     },
     {
-      "id": "auth.dynamic_cleanup_retry",
-      "source": "../../packages/auth/src/gateway/dynamic-unary-forwarder.ts",
-      "operation": "auth.subscription.cleanup",
+      "id": "deployment.membership_child_cleanup_retry",
+      "source": "../../packages/deployment/src/internal/backend-membership-kernel.ts",
+      "operation": "deployment.membership.child_cleanup",
       "disposition": "no-log",
-      "test": "packages/auth/test/dynamic-unary-forwarder.test.ts"
+      "test": "packages/deployment/test/membership-kernel.test.ts"
+    },
+    {
+      "id": "deployment.membership_child_completion",
+      "source": "../../packages/deployment/src/internal/backend-membership-kernel.ts",
+      "operation": "deployment.membership.child_completion",
+      "disposition": "no-log",
+      "test": "packages/deployment/test/membership-kernel.test.ts"
     },
     {
       "id": "auth.subscription_expiry_cleanup",
