@@ -371,6 +371,50 @@ describe("ManagedServerApplication", () => {
     await expect(coordinator.close()).resolves.toBeUndefined();
   });
 
+  it("reports Coordinator startup and managed-child rollback failures together", async () => {
+    const clock = new FakeClock();
+    const child = fakeChild(1);
+    Object.assign(child, { kill: vi.fn(() => true) });
+    const spawned: { slot: number; incarnation: string }[] = [];
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.reject(new Error("unused")),
+      },
+      {
+        clock,
+        spawn: (_url, slot, incarnation) => {
+          spawned.push({ slot, incarnation });
+          return child;
+        },
+        openCoordinator: () => Promise.reject(new Error("Coordinator listener failed")),
+      },
+    );
+    const failure = coordinator.start().catch((error: unknown) => error);
+    child.emit("message", {
+      type: "ready",
+      slot: "0",
+      incarnation: itemAt(spawned, 0, "the initial replica").incarnation,
+      endpoint: "http://127.0.0.1:1",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      clock.advance(1_000);
+      await Promise.resolve();
+      await Promise.resolve();
+    }
+    const error = await failure;
+    expect(error).toBeInstanceOf(AggregateError);
+    expect((error as AggregateError).errors).toEqual([
+      new Error("Coordinator listener failed"),
+      new Error("Managed child did not exit after SIGKILL."),
+    ]);
+    child.emit("exit");
+    await expect(coordinator.close()).resolves.toBeUndefined();
+  });
+
   it("rejects non-canonical, oversized, and stale READY endpoints without retaining them", async () => {
     const clock = new FakeClock();
     const spawned: { child: ChildProcess; slot: number; incarnation: string }[] = [];

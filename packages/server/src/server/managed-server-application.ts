@@ -431,7 +431,14 @@ export class ManagedServerCoordinator {
           ...(this.#options.port === undefined ? {} : { port: this.#options.port }),
         });
     } catch (error) {
-      await this.close().catch(() => undefined);
+      try {
+        await this.close();
+      } catch (rollback) {
+        throw new AggregateError(
+          [error, rollback],
+          "Managed replica Coordinator start and rollback failed.",
+        );
+      }
       throw error;
     }
     const isReady = () => this.#slots.some((slot) => slot.replica?.readyAt !== undefined);

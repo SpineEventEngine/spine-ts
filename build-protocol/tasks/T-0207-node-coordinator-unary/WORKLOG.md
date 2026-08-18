@@ -136,3 +136,11 @@ packages/server/src/server/managed-server-application.ts` is green. It ran
   formatting, and whitespace checks pass after the correction. The release
   profile must be rerun because the stopped attempt did not reach its test
   phase.
+- The second release attempt passed build, lint, formatting, documentation,
+  Proto, and generated-output gates, then found an unannotated fulfilled catch
+  at failed Coordinator startup rollback. Rather than annotate a silently
+  discarded cleanup failure, startup now reports the original listener failure
+  and bounded child-cleanup failure together in an `AggregateError`, matching
+  established `Server` startup semantics. A fake-clock regression proves both
+  causes and later successful cleanup. Logging containment, tooling typecheck,
+  focused ESLint, and all 64 managed/coordinator tests pass.
