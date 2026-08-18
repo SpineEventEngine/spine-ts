@@ -35,6 +35,24 @@ describe("ManagedServerApplication", () => {
       await managed.close();
     }
   }, 20_000);
+
+  it("starts four distinct child processes for one managed cohort", async () => {
+    const managed = await ManagedServerApplication.run({
+      processCount: 4,
+      moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
+      host: "127.0.0.1",
+      port: 0,
+      createServer: async () => {
+        throw new Error("Parent must not assemble a child.");
+      },
+    });
+    try {
+      expect(new Set(managed.childPids).size).toBe(4);
+      expect(managed.childPids).not.toContain(process.pid);
+    } finally {
+      await managed.close();
+    }
+  }, 20_000);
   it.each([undefined, 0, -1, 1.5, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
     "rejects invalid explicit process count %s without deriving a machine default",
     async (processCount) => {
