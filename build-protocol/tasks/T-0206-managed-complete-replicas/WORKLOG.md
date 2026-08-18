@@ -1,5 +1,23 @@
 # T-0206 work log
 
+## 2026-08-18 — Tooling-preflight correction
+
+- Mandatory cheap preflight `pnpm typecheck:tooling` initially failed only in
+  `managed-server-application.test.ts`: strict test compilation found unchecked
+  replica/PID array access, incomplete `RunningServer` fakes, and the special
+  Node process `message` event typing.
+- The correction adds test-only narrowing helpers, one complete loopback
+  `RunningServer` fixture, and an `EventEmitter`-level message emitter. It does
+  not change managed lifecycle behavior or production code.
+- The focused suite also proves coordinator close drains a retired failed
+  child, retaining the changed-source branch threshold after the strict-fixture
+  cleanup.
+- GREEN evidence: fresh `pnpm typecheck:tooling`, focused lifecycle/logging
+  Vitest (45/45), changed-source coverage (95.53% statements, 90.00% branches,
+  97.22% functions, and 99.14% lines), scoped ESLint, formatting, and diff
+  checks passed. This deterministic test-only correction does not reopen
+  completed reviews.
+
 ## 2026-08-18 — Final focused re-review correction
 
 - The final focused re-review found two P1s: private child `message` and

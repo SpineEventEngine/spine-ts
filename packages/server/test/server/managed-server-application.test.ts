@@ -17,7 +17,7 @@ import { EventEmitter } from "node:events";
 import { fork, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import { ManagedServerApplication } from "../../src/index.js";
+import { ManagedServerApplication, type RunningServer } from "../../src/index.js";
 import {
   ManagedServerCoordinator,
   managedServerApplicationAccess,
@@ -54,6 +54,23 @@ class FakeClock {
     }
   }
 }
+
+const itemAt = <T>(values: readonly T[], index: number, description: string): T => {
+  const value = values[index];
+  if (value === undefined) throw new Error(`Expected ${description}.`);
+  return value;
+};
+
+const localRunningServer = (close: () => Promise<void>, port = 42): RunningServer => ({
+  host: "127.0.0.1",
+  port,
+  baseUrl: `http://127.0.0.1:${String(port)}`,
+  close,
+});
+
+const emitProcessMessage = (message: unknown): void => {
+  EventEmitter.prototype.emit.call(process, "message", message);
+};
 
 const fakeChild = (pid: number): ChildProcess => {
   const killCalls: string[] = [];
@@ -95,7 +112,7 @@ describe("ManagedServerApplication", () => {
     child.emit("message", {
       type: "ready",
       slot: "0",
-      incarnation: spawned[0].incarnation,
+      incarnation: itemAt(spawned, 0, "the initial replica").incarnation,
       endpoint: "http://127.0.0.1:1",
     });
     await started;
@@ -174,6 +191,25 @@ describe("ManagedServerApplication", () => {
     await coordinator.close();
   });
 
+  it("drains a retired failed child when the coordinator closes", async () => {
+    const clock = new FakeClock();
+    const child = fakeChild(1);
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.reject(new Error("unused")),
+        restart: { initialDelayMs: 10_000, maximumDelayMs: 10_000 },
+      },
+      { clock, spawn: () => child },
+    );
+    void coordinator.start();
+    child.emit("error", new Error("child channel failed"));
+    const closing = coordinator.close();
+    clock.advance(1_000);
+    await closing;
+  });
+
   it("bounds a failed asynchronous child-error termination without blocking replacement", async () => {
     const clock = new FakeClock();
     const child = fakeChild(1);
@@ -246,7 +282,7 @@ describe("ManagedServerApplication", () => {
     child.emit("message", {
       type: "ready",
       slot: "0",
-      incarnation: spawned[0].incarnation,
+      incarnation: itemAt(spawned, 0, "the initial replica").incarnation,
       endpoint: "http://127.0.0.1:1",
     });
     await started;
@@ -285,7 +321,7 @@ describe("ManagedServerApplication", () => {
       },
     );
     const started = coordinator.start();
-    const first = spawned[0];
+    const first = itemAt(spawned, 0, "the initial replica");
     for (const endpoint of [
       "https://127.0.0.1:1",
       "http://localhost:1",
@@ -370,7 +406,7 @@ describe("ManagedServerApplication", () => {
       },
     );
     const started = coordinator.start();
-    let current = spawned[0];
+    let current = itemAt(spawned, 0, "the initial replica");
     current.child.emit("message", {
       type: "ready",
       slot: String(current.slot),
@@ -426,7 +462,7 @@ describe("ManagedServerApplication", () => {
       },
     );
     const started = coordinator.start();
-    const first = spawned[0];
+    const first = itemAt(spawned, 0, "the initial replica");
     first.child.emit("message", null);
     first.child.emit("message", {
       type: "ready",
@@ -445,7 +481,7 @@ describe("ManagedServerApplication", () => {
     first.child.emit("exit");
     expect(handle.ready).toBe(false);
     clock.advance(2);
-    const replacement = spawned[1];
+    const replacement = itemAt(spawned, 1, "the replacement replica");
     first.child.emit("exit");
     expect(clock.delays).toHaveLength(1);
     replacement.child.emit("message", {
@@ -497,7 +533,7 @@ describe("ManagedServerApplication", () => {
     const started = coordinator.start();
     expect(spawned).toHaveLength(1);
     for (const index of [0, 1]) {
-      const current = spawned[index];
+      const current = itemAt(spawned, index, "the next replica");
       current.child.emit("message", {
         type: "ready",
         slot: String(current.slot),
@@ -540,10 +576,10 @@ describe("ManagedServerApplication", () => {
       },
     );
     const started = coordinator.start();
-    spawned[0].child.emit("exit");
+    itemAt(spawned, 0, "the initial replica").child.emit("exit");
     expect(clock.delays).toEqual([2]);
     clock.advance(2);
-    const replacement = spawned[1];
+    const replacement = itemAt(spawned, 1, "the replacement replica");
     replacement.child.emit("message", {
       type: "ready",
       slot: String(replacement.slot),
@@ -587,7 +623,7 @@ describe("ManagedServerApplication", () => {
     const started = coordinator.start();
     expect(clock.delays).toEqual([2]);
     clock.advance(2);
-    const replacement = spawned[0];
+    const replacement = itemAt(spawned, 0, "the replacement replica");
     replacement.child.emit("message", {
       type: "ready",
       slot: String(replacement.slot),
@@ -670,11 +706,7 @@ describe("ManagedServerApplication", () => {
         ManagedServerApplication.run({
           processCount: 1,
           moduleUrl: import.meta.url,
-          createServer: () =>
-            Promise.resolve({
-              baseUrl: "http://127.0.0.1:42",
-              close,
-            }),
+          createServer: () => Promise.resolve(localRunningServer(close)),
         }),
       ).rejects.toThrow("closed");
       expect(close).toHaveBeenCalledOnce();
@@ -704,12 +736,12 @@ describe("ManagedServerApplication", () => {
       await ManagedServerApplication.run({
         processCount: 1,
         moduleUrl: import.meta.url,
-        createServer: () => Promise.resolve({ baseUrl: "http://127.0.0.1:42", close }),
+        createServer: () => Promise.resolve(localRunningServer(close)),
       });
-      process.emit("message", { type: "ignored" });
+      emitProcessMessage({ type: "ignored" });
       expect(close).not.toHaveBeenCalled();
       Object.defineProperty(process, "connected", { configurable: true, value: false });
-      process.emit("message", { type: "close" });
+      emitProcessMessage({ type: "close" });
       await Promise.resolve();
       expect(close).toHaveBeenCalledOnce();
     } finally {
@@ -741,7 +773,7 @@ describe("ManagedServerApplication", () => {
       await ManagedServerApplication.run({
         processCount: 1,
         moduleUrl: import.meta.url,
-        createServer: () => Promise.resolve({ baseUrl: "http://127.0.0.1:42", close }),
+        createServer: () => Promise.resolve(localRunningServer(close)),
       });
       process.emit("disconnect");
       await Promise.resolve();
@@ -784,9 +816,9 @@ describe("ManagedServerApplication", () => {
         const handle = await ManagedServerApplication.run({
           processCount: 1,
           moduleUrl: import.meta.url,
-          createServer: () => Promise.resolve({ baseUrl: "http://127.0.0.1:42", close }),
+          createServer: () => Promise.resolve(localRunningServer(close)),
         });
-        if (trigger === "message") process.emit("message", { type: "close" });
+        if (trigger === "message") emitProcessMessage({ type: "close" });
         else process.emit("disconnect");
         await new Promise((resolve) => setImmediate(resolve));
         expect(unhandled).not.toHaveBeenCalled();
@@ -823,7 +855,7 @@ describe("ManagedServerApplication", () => {
         ManagedServerApplication.run({
           processCount: 1,
           moduleUrl: import.meta.url,
-          createServer: () => Promise.resolve({ baseUrl: "http://127.0.0.1:42", close }),
+          createServer: () => Promise.resolve(localRunningServer(close)),
         }),
       ).rejects.toThrow("no parent IPC");
       expect(close).toHaveBeenCalledOnce();
@@ -855,7 +887,7 @@ describe("ManagedServerApplication", () => {
         ManagedServerApplication.run({
           processCount: 1,
           moduleUrl: import.meta.url,
-          createServer: () => Promise.resolve({ baseUrl: "http://127.0.0.1:42", close }),
+          createServer: () => Promise.resolve(localRunningServer(close)),
         }),
       ).rejects.toThrow("ipc write failed");
       expect(close).toHaveBeenCalledOnce();
@@ -961,9 +993,11 @@ describe("ManagedServerApplication", () => {
       createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
     });
     try {
-      const [failed, survivor] = managedServerApplicationAccess
+      const memberPids = managedServerApplicationAccess
         .readyMembers(managed)
         .map((member) => member.pid);
+      const failed = itemAt(memberPids, 0, "a failed child PID");
+      const survivor = itemAt(memberPids, 1, "a surviving child PID");
       process.kill(failed, "SIGKILL");
       await expect
         .poll(
@@ -1028,11 +1062,7 @@ describe("ManagedServerApplication", () => {
         ManagedServerApplication.run({
           processCount: processCount as unknown as number,
           moduleUrl: import.meta.url,
-          createServer: () =>
-            Promise.resolve({
-              baseUrl: "http://127.0.0.1:1",
-              close: () => Promise.resolve(),
-            }),
+          createServer: () => Promise.resolve(localRunningServer(() => Promise.resolve(), 1)),
         }),
       ).rejects.toThrow("processCount");
     },
