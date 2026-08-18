@@ -83,6 +83,18 @@ definitions and fans each to every READY complete-replica child.
 
 ## Verification disposition
 
+- Final correction convergence retains the same sole `implementer` profile:
+  explicit `gpt-5.6-terra` / `medium`, no subagents, and unavailable runtime
+  telemetry. The focused runtime matrix passed 247/247; scoped changed-source
+  V8 coverage passed 120/120 with 96.42% lines and 90.72% branches.
+- Static/docs evidence is green: server/deployment/tooling typechecks, scoped
+  ESLint, cleanup, TSDoc, copyright, logging containment, docs
+  API/audience/snippets, format, and diff checks. The only generation claim was
+  an untracked stale quarantine artifact for a dead process; it was removed
+  exactly before serial documentation checks completed.
+- T-0209 remains the explicit Delivery-admission handoff and is not claimed by
+  this task.
+
 - The mandatory cheap preflight is clean: changed-file formatting and diff,
   generated build/tooling typechecks, focused regressions, ESLint, cleanup,
   TSDoc, copyright, logging, API/audience/snippet documentation, and release

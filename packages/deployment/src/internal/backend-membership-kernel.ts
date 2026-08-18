@@ -635,8 +635,8 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       state.children.delete(key);
       try {
         await this.#cleanupChild(child, client);
-      } catch {
-        /* reconciliation retains failed cleanup for the next snapshot */
+      } catch (error) {
+        void error;
       }
     }
   }
@@ -658,7 +658,6 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       return;
     }
     const running = cleanup();
-    void running.catch(() => undefined);
     const cleanups = this.#childCleanup.get(client) ?? new Set<Promise<void>>();
     cleanups.add(running);
     this.#childCleanup.set(client, cleanups);
@@ -683,10 +682,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     for (const pending of [...this.#failedChildCleanup])
       if (await this.#disposeChild(pending, new AbortController().signal))
         this.#failedChildCleanup.delete(pending);
-      else {
-        // spine-log-boundary: deployment.membership_child_cleanup_retry
-        /* later reconciliation retries */
-      }
+      else continue;
   }
   async #disposeChild(
     pending: FailedChildCleanup<Request, Child, Update>,
@@ -694,24 +690,27 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
   ): Promise<boolean> {
     if (pending.running !== undefined) return false;
     const controller = new AbortController();
-    const abort = () => controller.abort();
+    const abort = (): void => {
+      controller.abort();
+    };
     signal.addEventListener("abort", abort, { once: true });
     if (signal.aborted) abort();
     try {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(
-          () => reject(new Error("backend child cleanup timed out")),
-          childCleanupTimeoutMs,
-        );
+        timer = setTimeout(() => {
+          reject(new Error("backend child cleanup timed out"));
+        }, childCleanupTimeoutMs);
         timer.unref();
       });
       try {
         const running = pending.client.dispose(pending.child, controller.signal);
         pending.running = running;
-        void running.catch(() => undefined).finally(() => {
+        const settled = () => {
           if (pending.running === running) pending.running = undefined;
-        });
+        };
+        // spine-log-boundary: deployment.membership_child_cleanup_retry
+        void running.then(settled, settled);
         await Promise.race([running, timeout]);
       } finally {
         if (timer !== undefined) clearTimeout(timer);

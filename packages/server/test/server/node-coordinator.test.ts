@@ -207,6 +207,7 @@ describe("NodeCoordinator", () => {
 
       replacementCoordinator = await NodeCoordinator.open({ members, port: 0 });
       replacementOwner = dynamicOwner(replacementCoordinator.baseUrl);
+      const activeReplacementOwner = replacementOwner;
       await replacementOwner.reconcile([
         new ApplicationNode({ id: "coordinator", endpoint: replacementCoordinator.baseUrl }),
       ]);
@@ -220,7 +221,8 @@ describe("NodeCoordinator", () => {
       expect(replica.subscriptions()).toBe(1);
       await reopenedBindings.recoverActive({
         nowMs: 1,
-        onDefinition: (wire) => new DynamicSubscriptionCreator(replacementOwner).rehydrate(wire),
+        onDefinition: (wire) =>
+          new DynamicSubscriptionCreator(activeReplacementOwner).rehydrate(wire),
       });
 
       expect(replica.subscriptions()).toBe(2);
@@ -317,7 +319,7 @@ describe("NodeCoordinator", () => {
   });
 
   it("immediately reconnects after an aborted native activation completes", async () => {
-    const release = deferred<void>();
+    const release = deferred<undefined>();
     const replica = await backend("reconnect-held", {
       holdActivation: true,
       releaseActivation: release.promise,

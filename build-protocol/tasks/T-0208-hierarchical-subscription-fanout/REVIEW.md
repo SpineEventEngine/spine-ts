@@ -29,6 +29,22 @@
   before READY; only actual `InMemorySubscriptionRegistry` reaches READY and
   closes. The real fork fixture was rebuilt from `dist` before this evidence.
 
+## Final correction dispositions
+
+- Reliability: accepted. Focused runtime matrix 247/247; scoped coverage 120/120,
+  96.42% executable lines and 90.72% branches. Reconnect, cleanup tombstones,
+  second-client Cancel, and overflow all have focused behavior proofs.
+- Style/maintainability: accepted. Recovery teardown is unconditional and
+  owner-before-Coordinator; forked registry fixtures capture stderr and always
+  terminate/await on failure. The test-only registry seam is confined to the
+  managed assembly module.
+- TypeScript/API documentation and documentation: accepted. TSDoc and docs
+  API/audience/snippet checks pass; reader documentation retains the T-0209
+  Delivery-admission handoff.
+- Security: N/A, unchanged—no new wire form or trust boundary.
+- Authoring profile: existing implementer, explicit `gpt-5.6-terra` / `medium`;
+  no subagents; telemetry unavailable.
+
 The required review wave is style/maintainability, TypeScript/API
 documentation, documentation, and performance/reliability. Each dispatch must
 record its existing role and explicit configured profile; runtime telemetry is

@@ -303,7 +303,7 @@ describe("BackendMembershipKernel", () => {
         client(member, {
           activate: async (_child, updates, signal) => {
             activations++;
-            await updates(`${member.id}-${activations}`);
+            await updates(`${member.id}-${String(activations)}`);
             await waitForAbort(signal);
           },
         }),
@@ -349,7 +349,7 @@ describe("BackendMembershipKernel", () => {
           activate: async (_child, updates) => {
             calls++;
             if (calls === 1) await release.promise;
-            await updates(`${member.id}-${calls}`);
+            await updates(`${member.id}-${String(calls)}`);
           },
         }),
     });
@@ -734,7 +734,8 @@ describe("BackendMembershipKernel", () => {
   });
   it("normalizes a non-Error native child creation rejection", async () => {
     const owner = kernel({
-      create: async (member) => client(member, { subscribe: async () => Promise.reject("broken") }),
+      create: async (member) =>
+        client(member, { subscribe: async () => Promise.reject({ reason: "broken" }) }),
     });
     try {
       await owner.reconcile([{ id: "a" }]);
@@ -779,7 +780,9 @@ describe("BackendMembershipKernel", () => {
       await underlyingSettled.promise;
       await Promise.resolve();
       await Promise.resolve();
-      await expect(owner.cancel(definition("x"), new AbortController().signal)).resolves.toBeUndefined();
+      await expect(
+        owner.cancel(definition("x"), new AbortController().signal),
+      ).resolves.toBeUndefined();
       expect(attempts).toBe(2);
       await owner.close();
     } finally {
@@ -816,7 +819,9 @@ describe("BackendMembershipKernel", () => {
     await underlyingSettled.promise;
     await Promise.resolve();
     await Promise.resolve();
-    await expect(owner.cancel(definition("x"), new AbortController().signal)).resolves.toBeUndefined();
+    await expect(
+      owner.cancel(definition("x"), new AbortController().signal),
+    ).resolves.toBeUndefined();
     expect(attempts).toBe(2);
     await owner.close();
     vi.useRealTimers();

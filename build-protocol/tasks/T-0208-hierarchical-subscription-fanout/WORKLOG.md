@@ -13,6 +13,26 @@
 - T-0209 retains Delivery admission; this task does not claim its Delivery
   event acceptance.
 
+## 2026-08-18 — Final correction evidence
+
+- Sole owner remains the existing `implementer`, explicitly configured
+  `gpt-5.6-terra` / `medium`; no subagents ran and runtime telemetry is
+  unavailable on this surface.
+- Accepted reliability corrections: activation reconnect ownership, bounded
+  single-attempt child-cleanup tombstones, second-client Cancel, held native
+  reconnect, and existing-bound overflow upstream abort. Managed registry tests
+  capture stderr and always await termination; recovery closes owner before
+  Coordinator in `finally`.
+- Final focused runtime matrix passed **247/247**. Scoped V8 evidence over the
+  changed runtime sources passed **120/120**, with **96.42% lines** (729/756)
+  and **90.72% branches** (411/453).
+- Server/deployment/tooling typechecks, scoped ESLint, cleanup, TSDoc,
+  copyright, logging containment, docs API/audience/snippets, formatting, and
+  diff checks passed. A stale untracked Proto workflow quarantine claim from a
+  dead process was removed exactly; serial docs checks then completed.
+- T-0209 remains the explicit Delivery-admission/event handoff; no T-0208
+  completion claim includes it.
+
 ## 2026-08-18 — Correction ownership transfer
 
 - Correction ownership transferred to the existing `implementer`, explicitly
