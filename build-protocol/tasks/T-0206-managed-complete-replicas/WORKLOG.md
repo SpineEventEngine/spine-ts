@@ -21,3 +21,31 @@
   reflection or a new public control API.
 - No conceptual blocker was found. Product implementation remains pending
   until this framing checkpoint is pushed.
+
+## 2026-08-18 — Checkpoint A: validation RED/GREEN
+
+- Implementation owner: existing `implementer` role, configured explicitly as
+  `gpt-5.6-terra` / `medium` by the orchestrator. This execution surface does
+  not expose runtime model telemetry, so the immutable dispatch profile is the
+  available record. No subagents were used.
+- Selected governing skill: `test-driven-development`, fully read before
+  product changes. `systematic-debugging` was fully read after the first RED
+  was blocked unexpectedly before test collection.
+- JVM guardrail inspected: `spine-jvm-docs/spine-validation-storage-observability-and-support.md`,
+  including its `ServerEnvironment` source mapping and process-wide semantic.
+  This slice retains that local complete-server assembly model and adds no JVM-
+  divergent application routing concept.
+- The initial focused Vitest invocation failed before collection because fresh
+  workspace package exports pointed to absent generated/build outputs. Root
+  cause evidence: `packages/core/dist` was absent and direct `tsc -b` showed
+  absent generated Proto imports. `pnpm proto:generate` plus
+  `pnpm typecheck:build:generated` restored the normal test resolution path;
+  this was a worktree prerequisite, not a product change.
+- RED evidence retained: `pnpm exec vitest run
+packages/server/test/server/managed-server-application.test.ts` then collected
+  six tests and failed each with `ManagedServerApplication` undefined.
+- GREEN evidence: the same command passed 6/6 after adding the smallest public
+  validation boundary. It rejects missing, zero, negative, fractional,
+  non-finite, and unsafe `processCount` values without CPU inspection.
+- Checkpoint A remains in progress: topology, IPC, manifests, lifecycle policy,
+  real-process fixtures, and public documentation are still pending.
