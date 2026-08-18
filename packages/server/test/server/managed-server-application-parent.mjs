@@ -26,5 +26,6 @@ if (process.env.SPINE_MANAGED_SERVER_CHILD !== "true") {
   process.send?.({
     type: "parent-ready",
     pid: managedServerApplicationAccess.readyMembers(managed)[0]?.pid,
+    endpoint: managedServerApplicationAccess.coordinatorEndpoint(managed),
   });
 }

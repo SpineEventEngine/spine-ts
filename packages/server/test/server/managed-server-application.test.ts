@@ -16,6 +16,10 @@ import { describe, expect, it, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import { fork, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { create } from "@bufbuild/protobuf";
+import { createClient } from "@connectrpc/connect";
+import { createGrpcTransport } from "@connectrpc/connect-node";
+import { CommandService } from "@spine-event-engine/proto/client";
 
 import { ManagedServerApplication, type RunningServer } from "../../src/index.js";
 import {
@@ -199,6 +203,35 @@ describe("ManagedServerApplication", () => {
     },
     20_000,
   );
+
+  it("forwards a command through the managed Coordinator to the child normal service", async () => {
+    const parent = fork(
+      fileURLToPath(new URL("./managed-server-application-parent.mjs", import.meta.url)),
+      [],
+      { silent: true },
+    );
+    try {
+      const endpoint = await new Promise<string>((resolve, reject) => {
+        parent.once("message", (message: unknown) => {
+          const endpoint =
+            typeof message === "object" && message !== null
+              ? (message as { endpoint?: unknown }).endpoint
+              : undefined;
+          if (typeof endpoint === "string") resolve(endpoint);
+          else reject(new Error("Managed parent did not report its Coordinator endpoint."));
+        });
+        parent.once("error", reject);
+      });
+      const response = await createClient(
+        CommandService,
+        createGrpcTransport({ baseUrl: endpoint }),
+      ).post(create(CommandService.method.post.input));
+      expect(response.status).toBeDefined();
+    } finally {
+      parent.kill("SIGTERM");
+      await new Promise<void>((resolve) => parent.once("exit", () => resolve()));
+    }
+  }, 20_000);
   it("treats one asynchronous child error and its later exit as one failed incarnation", async () => {
     const clock = new FakeClock();
     const child = fakeChild(1);

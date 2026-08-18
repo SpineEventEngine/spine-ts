@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { LogLayer, StructuredTransport, type ILogLayer } from "loglayer";
 import type { RunningServer } from "./server.js";
 import { emitServerWarning } from "./server-log.js";
+import { NodeCoordinator, type ReadyCoordinatorMember } from "./node-coordinator.js";
 
 const childMarker = "SPINE_MANAGED_SERVER_CHILD";
 const slotMarker = "SPINE_MANAGED_SERVER_SLOT";
@@ -85,6 +86,18 @@ export interface ManagedServerApplicationOptions {
    * Specifies the number of complete application replicas to start.
    */
   readonly processCount: number;
+
+  /**
+   *
+   * Hosts the front-facing Coordinator listener. Defaults to `127.0.0.1`.
+   */
+  readonly host?: string;
+
+  /**
+   *
+   * Selects the front-facing Coordinator listener port. Defaults to zero.
+   */
+  readonly port?: number;
 
   /**
    *
@@ -330,6 +343,19 @@ export interface ManagedServerCoordinatorDependencies {
    * @returns The started child process.
    */
   readonly spawn: (moduleUrl: string, slot: number, incarnation: string) => ChildProcess;
+
+  /**
+   *
+   * Opens the private parent Coordinator after initial replica readiness.
+   *
+   * @param options Supplies private Coordinator membership and listener facts.
+   * @returns The running private Coordinator.
+   */
+  readonly openCoordinator?: (options: {
+    readonly members: ManagedServerCoordinator;
+    readonly host?: string;
+    readonly port?: number;
+  }) => Promise<NodeCoordinator>;
 }
 
 /**
@@ -350,7 +376,9 @@ export class ManagedServerCoordinator {
   #close: Promise<void> | undefined;
   readonly #retired = new Set<ReplicaRecord>();
   readonly #retireTerminations = new Map<ReplicaRecord, Promise<void>>();
+  readonly #memberListeners = new Set<() => void>();
   #onSignal: (() => void) | undefined;
+  #nodeCoordinator: NodeCoordinator | undefined;
 
   /**
    *
@@ -389,6 +417,18 @@ export class ManagedServerCoordinator {
     this.#installSignalHandlers();
     for (const slot of this.#slots) this.#start(slot);
     await this.#ready;
+    try {
+      const openCoordinator = this.#dependencies.openCoordinator;
+      if (openCoordinator !== undefined)
+        this.#nodeCoordinator = await openCoordinator({
+          members: this,
+          ...(this.#options.host === undefined ? {} : { host: this.#options.host }),
+          ...(this.#options.port === undefined ? {} : { port: this.#options.port }),
+        });
+    } catch (error) {
+      await this.close().catch(() => undefined);
+      throw error;
+    }
     const isReady = () => this.#slots.some((slot) => slot.replica?.readyAt !== undefined);
     const handle: ManagedServerApplicationHandle = {
       get ready() {
@@ -462,6 +502,7 @@ export class ManagedServerCoordinator {
     replica.readyAt = this.#dependencies.clock.now();
     slot.initialReady = true;
     if (this.#slots.every((candidate) => candidate.initialReady)) this.#resolveReady?.();
+    this.#notifyReadyMembers();
     this.#drainStarts();
   }
 
@@ -469,6 +510,7 @@ export class ManagedServerCoordinator {
     if (slot.replica !== replica || replica.terminal) return;
     replica.terminal = true;
     slot.replica = undefined;
+    this.#notifyReadyMembers();
     if (slot.starting) {
       slot.starting = false;
       this.#starts--;
@@ -544,6 +586,7 @@ export class ManagedServerCoordinator {
           this.#dependencies.clock.clearTimeout(slot.replacementTimer);
         slot.replacementTimer = undefined;
       }
+      if (this.#nodeCoordinator !== undefined) await this.#nodeCoordinator.close();
       await Promise.all(this.#slots.map((slot) => this.#closeReplica(slot.replica)));
       await Promise.all([...this.#retired].map((replica) => this.#closeRetired(replica)));
     })();
@@ -603,12 +646,7 @@ export class ManagedServerCoordinator {
    * @returns The ready child topology facts.
    * @internal
    */
-  readyMembers(): readonly Readonly<{
-    slot: number;
-    incarnation: string;
-    pid: number;
-    endpoint: string;
-  }>[] {
+  readyMembers(): readonly ReadyCoordinatorMember[] {
     return this.#slots.flatMap((slot) => {
       const replica = slot.replica;
       if (
@@ -626,6 +664,32 @@ export class ManagedServerCoordinator {
         },
       ];
     });
+  }
+
+  /**
+   * Subscribes one private Coordinator to READY membership changes.
+   *
+   * @param listener Runs after an admitted READY member or removed member changes.
+   * @returns Stops later private notifications.
+   * @internal
+   */
+  onReadyMembersChange(listener: () => void): () => void {
+    this.#memberListeners.add(listener);
+    return () => this.#memberListeners.delete(listener);
+  }
+
+  /**
+   * Returns the private public-listener endpoint for coordinator acceptance.
+   *
+   * @returns The listener endpoint after managed startup, when open.
+   * @internal
+   */
+  coordinatorEndpoint(): string | undefined {
+    return this.#nodeCoordinator?.baseUrl;
+  }
+
+  #notifyReadyMembers(): void {
+    for (const listener of this.#memberListeners) listener();
   }
 
   #installSignalHandlers(): void {
@@ -661,7 +725,7 @@ export class ManagedServerCoordinator {
  *
  * @internal
  */
-type ReadyMember = Readonly<{ slot: number; incarnation: string; pid: number; endpoint: string }>;
+type ReadyMember = ReadyCoordinatorMember;
 
 /**
  *
@@ -671,9 +735,13 @@ type ReadyMember = Readonly<{ slot: number; incarnation: string; pid: number; en
  */
 export const managedServerCoordinatorAccess: Readonly<{
   readyMembers(coordinator: ManagedServerCoordinator): readonly ReadyMember[];
+  coordinatorEndpoint(coordinator: ManagedServerCoordinator): string | undefined;
 }> = Object.freeze({
   readyMembers(coordinator: ManagedServerCoordinator): readonly ReadyMember[] {
     return coordinator.readyMembers();
+  },
+  coordinatorEndpoint(coordinator: ManagedServerCoordinator): string | undefined {
+    return coordinator.coordinatorEndpoint();
   },
 });
 
@@ -685,9 +753,13 @@ export const managedServerCoordinatorAccess: Readonly<{
  */
 export const managedServerApplicationAccess: Readonly<{
   readyMembers(handle: ManagedServerApplicationHandle): readonly ReadyMember[];
+  coordinatorEndpoint(handle: ManagedServerApplicationHandle): string | undefined;
 }> = Object.freeze({
   readyMembers(handle: ManagedServerApplicationHandle): readonly ReadyMember[] {
     return handleMembers.get(handle)?.readyMembers() ?? [];
+  },
+  coordinatorEndpoint(handle: ManagedServerApplicationHandle): string | undefined {
+    return handleMembers.get(handle)?.coordinatorEndpoint();
   },
 });
 
@@ -710,6 +782,7 @@ const ManagedServerCoordinatorValues = Object.freeze({
         },
         stdio: ["inherit", "inherit", "inherit", "ipc"],
       }),
+    openCoordinator: (options) => NodeCoordinator.open(options),
   } satisfies ManagedServerCoordinatorDependencies,
   restart(options: ManagedServerApplicationOptions): Required<ManagedServerRestartOptions> {
     const restart = {
