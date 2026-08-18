@@ -1,6 +1,6 @@
 # T-0206 — Managed complete-replica process lifecycle
 
-**Status:** Framed; implementation pending
+**Status:** Review corrections required
 
 ## Classification and baseline
 

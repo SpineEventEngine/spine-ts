@@ -135,3 +135,18 @@ lifecycle has not started.` before parent/child implementation.
 - Focused coverage is 95.58% executable lines, 93.58% statements, and 90.21%
   branches for `managed-server-application.ts` (23 tests). This satisfies the
   task's changed-source threshold before review.
+
+## 2026-08-18 — Complete specialist review wave
+
+- The four required concern-specific reviews completed against pushed
+  checkpoint `39806c10e`. Focused behavior remained green at 23/23, but review
+  found lifecycle and public-contract gaps that prevent integration.
+- The highest-severity proof sent `SIGTERM` to a real managed parent and found
+  its application child still alive. Parent signal ownership and IPC-disconnect
+  cleanup are therefore P0 correction requirements.
+- Other accepted findings cover async fork errors, disconnected close,
+  unread child output pipes, bounded loopback endpoints, lazy child-only
+  synchronization, removal of no-op `host`/`port`, internal-only topology,
+  API inventory, safe lifecycle logs, and readiness/strategy documentation.
+- `REVIEW.md` contains the single consolidated correction batch. No product
+  correction is accepted until all four affected concerns re-review it.
