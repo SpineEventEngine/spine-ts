@@ -146,21 +146,37 @@ interface SlotRecord {
   failures: number;
   initialReady: boolean;
   starting: boolean;
-  replacementTimer: ReturnType<typeof setTimeout> | undefined;
+  replacementTimer: unknown;
   replica: ReplicaRecord | undefined;
 }
 
-class ManagedServerCoordinator {
+/** @internal Deterministic private process-supervisor dependencies. */
+export interface ManagedServerCoordinatorDependencies {
+  readonly clock: {
+    now(): number;
+    setTimeout(action: () => void, delay: number): unknown;
+    clearTimeout(timer: unknown): void;
+  };
+  readonly spawn: (moduleUrl: string, slot: number, incarnation: string) => ChildProcess;
+}
+
+/** @internal Parent-only managed-replica lifecycle supervisor. */
+export class ManagedServerCoordinator {
   readonly #slots: SlotRecord[];
   readonly #restart: Required<ManagedServerRestartOptions>;
   readonly #options: ManagedServerApplicationOptions;
+  readonly #dependencies: ManagedServerCoordinatorDependencies;
   #closing = false;
   #starts = 0;
   #ready: Promise<void> | undefined;
   #resolveReady: (() => void) | undefined;
 
-  constructor(options: ManagedServerApplicationOptions) {
+  constructor(
+    options: ManagedServerApplicationOptions,
+    dependencies: ManagedServerCoordinatorDependencies = ManagedServerCoordinatorValues.dependencies,
+  ) {
     this.#options = options;
+    this.#dependencies = dependencies;
     this.#restart = ManagedServerCoordinatorValues.restart(options);
     this.#slots = Array.from({ length: options.processCount }, (_, slot) => ({
       slot,
@@ -206,15 +222,7 @@ class ManagedServerCoordinator {
     slot.starting = true;
     this.#starts++;
     const incarnation = randomUUID();
-    const child = fork(fileURLToPath(this.#options.moduleUrl), [], {
-      env: {
-        ...process.env,
-        [childMarker]: "true",
-        [slotMarker]: String(slot.slot),
-        [incarnationMarker]: incarnation,
-      },
-      silent: true,
-    });
+    const child = this.#dependencies.spawn(this.#options.moduleUrl, slot.slot, incarnation);
     const replica: ReplicaRecord = {
       slot: slot.slot,
       incarnation,
@@ -239,7 +247,7 @@ class ManagedServerCoordinator {
     slot.starting = false;
     this.#starts--;
     replica.endpoint = message.endpoint;
-    replica.readyAt = Date.now();
+    replica.readyAt = this.#dependencies.clock.now();
     slot.initialReady = true;
     if (this.#slots.every((candidate) => candidate.initialReady)) this.#resolveReady?.();
     this.#drainStarts();
@@ -255,7 +263,7 @@ class ManagedServerCoordinator {
     if (this.#closing || replica.expectedExit) return;
     if (
       replica.readyAt !== undefined &&
-      Date.now() - replica.readyAt >= this.#restart.healthyReadyMs
+      this.#dependencies.clock.now() - replica.readyAt >= this.#restart.healthyReadyMs
     ) {
       slot.failures = 0;
     }
@@ -264,7 +272,7 @@ class ManagedServerCoordinator {
       this.#restart.initialDelayMs * 2 ** Math.max(0, slot.failures - 1),
       this.#restart.maximumDelayMs,
     );
-    slot.replacementTimer = setTimeout(() => {
+    slot.replacementTimer = this.#dependencies.clock.setTimeout(() => {
       slot.replacementTimer = undefined;
       this.#start(slot);
     }, delay);
@@ -282,7 +290,8 @@ class ManagedServerCoordinator {
     if (this.#closing) return;
     this.#closing = true;
     for (const slot of this.#slots) {
-      if (slot.replacementTimer !== undefined) clearTimeout(slot.replacementTimer);
+      if (slot.replacementTimer !== undefined)
+        this.#dependencies.clock.clearTimeout(slot.replacementTimer);
       slot.replacementTimer = undefined;
     }
     await Promise.all(
@@ -292,6 +301,25 @@ class ManagedServerCoordinator {
 }
 
 const ManagedServerCoordinatorValues = Object.freeze({
+  dependencies: {
+    clock: {
+      now: () => Date.now(),
+      setTimeout: (action: () => void, delay: number) => setTimeout(action, delay),
+      clearTimeout: (timer: unknown) => {
+        clearTimeout(timer as ReturnType<typeof setTimeout>);
+      },
+    },
+    spawn: (moduleUrl: string, slot: number, incarnation: string) =>
+      fork(fileURLToPath(moduleUrl), [], {
+        env: {
+          ...process.env,
+          [childMarker]: "true",
+          [slotMarker]: String(slot),
+          [incarnationMarker]: incarnation,
+        },
+        silent: true,
+      }),
+  } satisfies ManagedServerCoordinatorDependencies,
   restart(options: ManagedServerApplicationOptions): Required<ManagedServerRestartOptions> {
     const restart = {
       initialDelayMs: options.restart?.initialDelayMs ?? initialRestartDelayMs,

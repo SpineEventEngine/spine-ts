@@ -13,10 +13,216 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
+import { EventEmitter } from "node:events";
+import type { ChildProcess } from "node:child_process";
 
 import { ManagedServerApplication } from "../../src/index.js";
+import { ManagedServerCoordinator } from "../../src/server/managed-server-application.js";
+
+class FakeClock {
+  #now = 0;
+  readonly delays: number[] = [];
+  readonly #timers = new Map<number, { readonly at: number; readonly action: () => void }>();
+  #nextTimer = 0;
+
+  now(): number {
+    return this.#now;
+  }
+
+  setTimeout(action: () => void, delay: number): number {
+    const timer = this.#nextTimer++;
+    this.delays.push(delay);
+    this.#timers.set(timer, { at: this.#now + delay, action });
+    return timer;
+  }
+
+  clearTimeout(timer: number): void {
+    this.#timers.delete(timer);
+  }
+
+  advance(delay: number): void {
+    this.#now += delay;
+    for (const [timer, pending] of [...this.#timers]) {
+      if (pending.at > this.#now) continue;
+      this.#timers.delete(timer);
+      pending.action();
+    }
+  }
+}
+
+const fakeChild = (pid: number): ChildProcess =>
+  Object.assign(new EventEmitter(), {
+    pid,
+    connected: true,
+    exitCode: null,
+    signalCode: null,
+    send: vi.fn(),
+  }) as unknown as ChildProcess;
 
 describe("ManagedServerApplication", () => {
+  it("delays repeated failed replacements exponentially and caps the delay", async () => {
+    const clock = new FakeClock();
+    const spawned: {
+      readonly child: ChildProcess;
+      readonly slot: number;
+      readonly incarnation: string;
+    }[] = [];
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        host: "127.0.0.1",
+        port: 0,
+        createServer: () => Promise.reject(new Error("not used")),
+        restart: { initialDelayMs: 2, maximumDelayMs: 5, healthyReadyMs: 100, concurrentStarts: 1 },
+      },
+      {
+        clock,
+        spawn: (_moduleUrl, slot, incarnation) => {
+          const child = fakeChild(spawned.length + 1);
+          spawned.push({ child, slot, incarnation });
+          return child;
+        },
+      },
+    );
+    const started = coordinator.start();
+    let current = spawned[0];
+    current.child.emit("message", {
+      type: "ready",
+      slot: String(current.slot),
+      incarnation: current.incarnation,
+      endpoint: "http://127.0.0.1:1",
+    });
+    const handle = await started;
+    for (const expectedDelay of [2, 4, 5]) {
+      current.child.emit("exit");
+      expect(clock.delays.at(-1)).toBe(expectedDelay);
+      clock.advance(expectedDelay);
+      const replacement = spawned.at(-1);
+      if (replacement === undefined) throw new Error("Replacement did not start.");
+      current = replacement;
+      current.child.emit("message", {
+        type: "ready",
+        slot: String(current.slot),
+        incarnation: current.incarnation,
+        endpoint: "http://127.0.0.1:2",
+      });
+    }
+    clock.advance(100);
+    current.child.emit("exit");
+    expect(clock.delays.at(-1)).toBe(2);
+    (current.child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      current.child.emit("exit");
+      return true;
+    });
+    await handle.close();
+  });
+
+  it("remains alive but unready at zero ready children and ignores malformed READY facts", async () => {
+    const clock = new FakeClock();
+    const spawned: {
+      readonly child: ChildProcess;
+      readonly slot: number;
+      readonly incarnation: string;
+    }[] = [];
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        host: "127.0.0.1",
+        port: 0,
+        createServer: () => Promise.reject(new Error("not used")),
+        restart: { initialDelayMs: 2, maximumDelayMs: 2, healthyReadyMs: 10, concurrentStarts: 1 },
+      },
+      {
+        clock,
+        spawn: (_moduleUrl, slot, incarnation) => {
+          const child = fakeChild(spawned.length + 1);
+          spawned.push({ child, slot, incarnation });
+          return child;
+        },
+      },
+    );
+    const started = coordinator.start();
+    const first = spawned[0];
+    first.child.emit("message", {
+      type: "ready",
+      slot: "wrong",
+      incarnation: "wrong",
+      endpoint: 1,
+    });
+    expect(spawned).toHaveLength(1);
+    first.child.emit("message", {
+      type: "ready",
+      slot: String(first.slot),
+      incarnation: first.incarnation,
+      endpoint: "http://127.0.0.1:1",
+    });
+    const handle = await started;
+    first.child.emit("exit");
+    expect(handle.ready).toBe(false);
+    clock.advance(2);
+    const replacement = spawned[1];
+    replacement.child.emit("message", {
+      type: "ready",
+      slot: String(replacement.slot),
+      incarnation: replacement.incarnation,
+      endpoint: "http://127.0.0.1:2",
+    });
+    expect(handle.ready).toBe(true);
+    (replacement.child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      replacement.child.emit("exit");
+      return true;
+    });
+    await coordinator.close();
+  });
+
+  it("limits concurrent starts while admitting every initial logical slot", async () => {
+    const clock = new FakeClock();
+    const spawned: {
+      readonly child: ChildProcess;
+      readonly slot: number;
+      readonly incarnation: string;
+    }[] = [];
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 2,
+        moduleUrl: import.meta.url,
+        host: "127.0.0.1",
+        port: 0,
+        createServer: () => Promise.reject(new Error("not used")),
+        restart: { concurrentStarts: 1 },
+      },
+      {
+        clock,
+        spawn: (_moduleUrl, slot, incarnation) => {
+          const child = fakeChild(spawned.length + 1);
+          spawned.push({ child, slot, incarnation });
+          return child;
+        },
+      },
+    );
+    const started = coordinator.start();
+    expect(spawned).toHaveLength(1);
+    for (const index of [0, 1]) {
+      const current = spawned[index];
+      current.child.emit("message", {
+        type: "ready",
+        slot: String(current.slot),
+        incarnation: current.incarnation,
+        endpoint: `http://127.0.0.1:${String(index + 1)}`,
+      });
+      if (index === 0) expect(spawned).toHaveLength(2);
+    }
+    await started;
+    for (const current of spawned) {
+      (current.child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
+        current.child.emit("exit");
+        return true;
+      });
+    }
+    await coordinator.close();
+  });
   it("sends a child READY fact only after local assembly and synchronization", async () => {
     const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
     const priorSlot = process.env.SPINE_MANAGED_SERVER_SLOT;
