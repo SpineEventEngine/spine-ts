@@ -1,5 +1,20 @@
 # T-0206 work log
 
+## 2026-08-18 — Release-preflight fixture correction
+
+- The converged `pnpm verify:release` reached repository ESLint before tests
+  and failed only because three managed-process fixture modules used implicit
+  Node globals (`process`, `console`, and `setTimeout`).
+- Fixtures now import those Node APIs explicitly. The gated child also replaces
+  its silently ignored obsolete `host`, `port`, and `synchronizationGates`
+  fields with the actual child-only `synchronize()` callback, so its readiness
+  acceptance now observes the intended 250-millisecond synchronization gate.
+  Parent READY reporting and runtime product behavior remain unchanged.
+- GREEN evidence: exact-fixture ESLint, tooling typecheck, focused managed
+  lifecycle Vitest (39/39), including the exact synchronization acceptance,
+  formatting, and diff checks passed. This
+  fixture-only release-preflight correction does not reopen completed reviews.
+
 ## 2026-08-18 — TSDoc-preflight correction
 
 - `pnpm lint:tsdoc` found only authored documentation structure gaps on the

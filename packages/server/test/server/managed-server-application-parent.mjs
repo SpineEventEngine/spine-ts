@@ -14,6 +14,7 @@
 
 import { ManagedServerApplication, Server } from "../../dist/index.js";
 import { managedServerApplicationAccess } from "../../dist/server/managed-server-application.js";
+import process from "node:process";
 
 const managed = await ManagedServerApplication.run({
   processCount: 1,
