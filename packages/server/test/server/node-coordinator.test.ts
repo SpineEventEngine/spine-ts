@@ -232,14 +232,32 @@ describe("NodeCoordinator", () => {
         GatewayAuthenticatedSubscriptionSchema,
       ]);
     } finally {
-      await replacementOwner?.close();
-      await replacementCoordinator?.close();
-      await reopenedBindings?.close();
+      const cleanupFailures: unknown[] = [];
+      for (const close of [
+        () => replacementOwner?.close(),
+        () => replacementCoordinator?.close(),
+        () => reopenedBindings?.close(),
+      ])
+        try {
+          await close();
+        } catch (error) {
+          cleanupFailures.push(error);
+        }
       if (!firstClosed) {
-        await firstOwner.close();
-        await firstCoordinator.close();
-        await firstBindings.close();
+        for (const close of [
+          () => firstOwner.close(),
+          () => firstCoordinator.close(),
+          () => firstBindings.close(),
+        ])
+          try {
+            await close();
+          } catch (error) {
+            cleanupFailures.push(error);
+          }
       }
+      if (cleanupFailures.length > 0)
+        // eslint-disable-next-line no-unsafe-finally -- reports only after every owned cleanup ran.
+        throw new AggregateError(cleanupFailures, "Gateway recovery cleanup failed.");
     }
   });
 

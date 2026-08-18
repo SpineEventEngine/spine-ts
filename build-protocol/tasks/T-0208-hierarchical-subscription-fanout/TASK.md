@@ -1,7 +1,7 @@
 # T-0208 — Hierarchical subscription fan-out
 
-**Status:** In progress  
-**Baseline:** `origin/main@b00cb4c21`  
+**Status:** In progress
+**Baseline:** `origin/main@b00cb4c21`
 **Branch/worktree:** `codex/t0208-subscription-fanout` / `/tmp/spine-ts-t0208`
 
 ## Classification and objective

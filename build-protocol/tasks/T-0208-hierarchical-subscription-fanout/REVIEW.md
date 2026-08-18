@@ -71,3 +71,27 @@ an external trust principal.
 - Cheap preflight and the one scoped `verify:task --coverage` invocation are
   complete. The terminal LCOV artifact reports 512/568 branches (90.14%) and
   983/1036 lines (94.88%) for the four changed production files.
+
+## Final review-correction disposition (2026-08-19)
+
+- Performance/reliability P1: accepted after behavior-focused RED/GREEN. RED
+  proved an abort-unresponsive native activation could keep Cancel pending past
+  the fake-clock budget. GREEN bounds only private completion waiting using the
+  existing cleanup duration while retaining the activation-incarnation fence;
+  focused kernel evidence is green.
+- Style/maintainability P2: accepted. Joined recovery cleanup attempts all
+  acquired resources in owner-before-Coordinator order and reports an
+  `AggregateError` only after those attempts. The retained-tombstone no-log
+  swallow uses the established adjacent containment annotation and manifest
+  rationale.
+- Final focused runtime matrix: **248/248**. Scoped runtime coverage:
+  **735/762 executable lines (96.45%)** and **412/455 branches (90.54%)**.
+  Deployment/server/tooling typechecks; scoped ESLint; logging containment;
+  cleanup; TSDoc; and copyright pass. Changed-file Prettier passes; the
+  repository-wide formatter exceeded the execution surface's 30-second command
+  window without reporting a changed-file issue.
+- Authoring metadata: existing `implementer`, configured `gpt-5.6-terra` /
+  `medium`; no subagents; runtime telemetry unavailable. TypeScript/API and
+  documentation dispositions remain accepted from the prior wave; security is
+  N/A because no wire contract or trust boundary changed. T-0209 remains the
+  Delivery-admission handoff.

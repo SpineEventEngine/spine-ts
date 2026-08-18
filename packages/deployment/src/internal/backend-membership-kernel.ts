@@ -513,7 +513,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
         child.controller.abort();
         child.activationController?.abort();
         // spine-log-boundary: deployment.membership_child_completion
-        await child.activation.catch(() => undefined);
+        await this.#awaitActivationCompletion(child);
         if (generation !== this.#generation || this.#closed) return;
       }
     const missing = [...this.#members.entries()].filter(([key]) => !state.children.has(key));
@@ -636,6 +636,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       try {
         await this.#cleanupChild(child, client);
       } catch (error) {
+        // spine-log-boundary: deployment.membership_child_cleanup_retained
         void error;
       }
     }
@@ -651,7 +652,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       if (client !== undefined && !(await this.#compensateChild(client, child.child, signal)))
         throw new Error("backend child cleanup remains incomplete.");
       // spine-log-boundary: deployment.membership_child_cleanup
-      await child.activation.catch(() => undefined);
+      await this.#awaitActivationCompletion(child);
     };
     if (client === undefined) {
       await cleanup();
@@ -677,6 +678,18 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     if (!(await this.#disposeChild(pending, signal))) return false;
     this.#failedChildCleanup.delete(pending);
     return true;
+  }
+  async #awaitActivationCompletion(child: ChildState<Child>): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, childCleanupTimeoutMs);
+      timer.unref();
+    });
+    try {
+      await Promise.race([child.activation, timeout]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
   }
   async #retryChildCleanup(): Promise<void> {
     for (const pending of [...this.#failedChildCleanup])

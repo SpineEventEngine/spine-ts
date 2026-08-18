@@ -428,6 +428,14 @@
       "test": "packages/deployment/test/membership-kernel.test.ts"
     },
     {
+      "id": "deployment.membership_child_cleanup_retained",
+      "source": "../../packages/deployment/src/internal/backend-membership-kernel.ts",
+      "operation": "deployment.membership.child_cleanup_retained",
+      "disposition": "no-log",
+      "test": "packages/deployment/test/membership-kernel.test.ts",
+      "rationale": "Member removal retains failed child-cleanup tombstones for bounded later retry; the reconciliation path deliberately does not duplicate a diagnostic."
+    },
+    {
       "id": "deployment.membership_reconciliation",
       "source": "../../packages/deployment/src/internal/backend-membership-kernel.ts",
       "operation": "deployment.membership.reconcile",

@@ -322,3 +322,28 @@ incomplete.` The test's generic parallel cleanup closed the replacement
 - GREEN: each definition now owns one activation controller. Concurrent
   activation rejects with `subscription activation is already active`; Cancel
   aborts that controller, its child streams, and the original public wait.
+
+## 2026-08-19 — Final review-correction convergence
+
+- Reliability P1 RED: with a native child activation that ignores abort,
+  `Cancel` did not settle inside the deterministic two-second fake-clock
+  budget. GREEN: the private kernel now races the already terminalized child
+  activation completion against its existing one-second cleanup bound. The
+  focused kernel proof passes and preserves activation-incarnation fencing.
+- Style P2 GREEN: the joined Gateway recovery fixture attempts every acquired
+  owner, Coordinator, and bindings cleanup in owner-before-Coordinator order;
+  it aggregates failures only after all cleanup attempts. The retained
+  tombstone swallow has the established adjacent `spine-log-boundary` entry
+  and containment-manifest rationale, with no production logging policy added.
+- Final focused matrix (`membership-kernel`, `node-coordinator`, managed
+  application, Server) passes **248/248**. Scoped V8 coverage is **96.45%
+  lines (735/762)** and **90.54% branches (412/455)**.
+- Final mechanical evidence: deployment and server no-emit typechecks,
+  `typecheck:tooling`, scoped ESLint, logging containment, cleanup, TSDoc, and
+  copyright all pass. Changed-file Prettier passes. The repository-wide
+  formatter did not complete within the execution surface's 30-second command
+  window; no changed-file formatting issue was reported. The TASK status and
+  baseline trailing spaces were removed for the post-commit range diff check.
+- Ownership/profile remains existing `implementer`, explicitly configured
+  `gpt-5.6-terra` / `medium`; no subagents were used and runtime telemetry is
+  unavailable. T-0209 remains the Delivery-admission handoff.
