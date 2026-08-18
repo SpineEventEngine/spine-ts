@@ -23,6 +23,10 @@ import {
   CommandService,
   QueryService,
   QueryResponseSchema,
+  SubscriptionIdSchema,
+  SubscriptionSchema,
+  SubscriptionService,
+  TopicSchema,
 } from "@spine-event-engine/proto/client";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -82,6 +86,27 @@ describe("NodeCoordinator", () => {
         create(QueryService.method.read.input),
       ),
     ).resolves.toEqual(create(QueryResponseSchema));
+  });
+
+  it("creates a native subscription on every current replica", async () => {
+    const first = await backend("first");
+    const second = await backend("second");
+    closeables.push(first.close, second.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([first.member, second.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+
+    const subscription = await createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    ).subscribe(create(TopicSchema));
+
+    expect(subscription.id?.value).toBeTruthy();
+    expect(first.subscriptions()).toBe(1);
+    expect(second.subscriptions()).toBe(1);
+    await coordinator.close();
   });
 
   it("reconciles replacement membership without exposing or polling child topology", async () => {
@@ -376,8 +401,9 @@ async function backend(
   readonly member: ReadyMember;
   readonly close: () => Promise<void>;
   readonly commands: () => number;
+  readonly subscriptions: () => number;
 }> {
-  const value = { commands: 0 };
+  const value = { commands: 0, subscriptions: 0 };
   const server = http2.createServer(
     connectNodeAdapter({
       routes: (router) => {
@@ -392,6 +418,17 @@ async function backend(
         });
         router.service(QueryService, {
           read: (): MessageShape<typeof QueryResponseSchema> => create(QueryResponseSchema),
+        });
+        router.service(SubscriptionService, {
+          subscribe: (topic) => {
+            value.subscriptions++;
+            return create(SubscriptionSchema, {
+              id: create(SubscriptionIdSchema, { value: `${name}-native` }),
+              topic,
+            });
+          },
+          activate: async function* () {},
+          cancel: () => create(SubscriptionService.method.cancel.output),
         });
       },
     }),
@@ -413,6 +450,7 @@ async function backend(
       endpoint: `http://127.0.0.1:${address.port.toString()}`,
     },
     commands: () => value.commands,
+    subscriptions: () => value.subscriptions,
     close,
   };
 }

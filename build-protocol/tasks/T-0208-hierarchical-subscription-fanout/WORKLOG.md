@@ -38,3 +38,27 @@
   packages/deployment/test/membership-kernel.test.ts` — 31/31 tests passed.
 - Next: commit and push this green checkpoint, then add the Coordinator
   `SubscriptionService` HTTP/2 RED.
+
+## 2026-08-18 — Coordinator subscribe RED/GREEN
+
+- The first direct test invocation could not resolve the previously cleaned
+  generated Proto package. Frozen generation/build restored the baseline; the
+  ten usual generated manifest/stamp byproducts were restored before product
+  work continued.
+- RED: real HTTP/2 `SubscriptionService.Subscribe` through the Coordinator
+  failed with `ConnectError: [unimplemented] HTTP 404` at
+  `node-coordinator.test.ts:101` (17 passing, 1 failing), proving the existing
+  unary-only listener did not register the route.
+- GREEN: the Coordinator registers only the existing generated
+  `SubscriptionService`; it makes an ephemeral Coordinator logical definition,
+  delegates child `Subscribe`, `Activate`, and `Cancel` to ordinary HTTP/2
+  child endpoints, rewrites only immediate child IDs, and uses the shared
+  kernel for bounded envelopes, compensation, cancellation, and cleanup.
+  Its private async queue awaits the update consumer before admitting the next
+  queued update, preserving relay backpressure. No IPC payload or public wire
+  form was added.
+- `pnpm exec tsc -p packages/server/tsconfig.json --noEmit` and
+  `pnpm exec vitest run packages/server/test/server/node-coordinator.test.ts`
+  pass; the latter has 18/18 real HTTP/2 tests.
+- Next: commit and push this green checkpoint, then add activation/cancellation
+  and late-member RED cases.
