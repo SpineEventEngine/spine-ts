@@ -114,8 +114,6 @@ The planned public shape is intentionally small:
 await ManagedServerApplication.run({
   processCount: deployment.processCount,
   moduleUrl: import.meta.url,
-  host: deployment.host,
-  port: deployment.port,
   createServer: async ({ host, port }) => {
     return assembleCompleteApplicationServer({ host, port });
   },
@@ -138,7 +136,6 @@ Node's existing parent/child IPC carries only bounded lifecycle facts:
 
 - startup hello and private generation identity;
 - internal listener endpoint;
-- deterministic complete-replica manifest digest;
 - READY, DRAIN, CLOSE, and terminal failure state.
 
 It never carries Commands, Events, Queries, SubscriptionUpdates,
@@ -147,21 +144,18 @@ their established Protobuf/HTTP2 or storage boundaries. The private control
 seam is not a public Proto contract or an application-facing configuration
 surface.
 
-### Complete-replica proof
+### Complete-replica construction
 
-Before a child becomes READY, the framework derives a private manifest from the
-built Server:
+The framework starts the same application entry module for every managed child,
+and that module invokes the same `createServer()` assembly. The framework user
+is responsible for making that assembly a complete replica and for deploying
+the same application code and configuration to every node.
 
-- Bounded Context name and tenant mode;
-- accepted Command and Event type URLs;
-- repository state type URLs;
-- generated handler-registry/application schema digest;
-- explicit Delivery shard strategy identity.
-
-All children in one process group must have identical manifests. A mismatch
-fails node startup before the public listener becomes ready or the node is
-registered/discovered. The manifest is exchanged only over the parent-owned IPC
-channel and is never returned to clients.
+The framework does not add runtime application manifests, schema or handler
+digests, build attestations, Delivery-strategy identities, behavioral sampling,
+or restrictions on custom strategies. Complete-replica behavior is proven by
+real application acceptance through the normal services, Buses, Delivery, and
+subscriptions in the dependent tasks.
 
 ## Node Coordinator service behavior
 
@@ -314,9 +308,9 @@ Child states are:
 STARTING -> SYNCHRONIZING -> READY -> DRAINING -> CLOSED
 ```
 
-- STARTING: build the complete application and private listener.
+- STARTING: run the application's complete assembly and private listener.
 - SYNCHRONIZING: open IntegrationBrokers and Delivery observation, validate the
-  replica manifest, and install all current subscriptions.
+  required readiness gates, and install all current subscriptions.
 - READY: eligible for unary requests and new Delivery shard pickup.
 - DRAINING: removed from unary selection and new Delivery pickup, but active
   Delivery work may finish and its subscription updates remain connected.
@@ -425,8 +419,8 @@ slice. The final topology must prove all of these:
    without CPU inspection.
 4. `processCount: 1` starts a coordinator parent and one separate complete child.
 5. `processCount: 4` starts four distinct application PIDs behind one endpoint.
-6. A child with a different Bounded Context/schema/delivery manifest prevents
-   node readiness.
+6. Every child executes the configured application entry module, invokes its
+   local `createServer()`, and reports the actual private listener before READY.
 7. A command sent to the Coordinator enters exactly one child's normal
    CommandService and CommandBus and returns its Ack.
 8. Repeated commands use all READY children in round-robin order.
@@ -483,8 +477,8 @@ slice. The final topology must prove all of these:
     slot's backoff to the initial delay.
 37. Simultaneous child failures never exceed the configured concurrent-start
     limit and do not create unbounded timers, listeners, or child records.
-38. A replacement cannot become READY until replica-manifest equality, initial
-    Delivery snapshot, and all current subscription definitions are complete.
+38. A replacement cannot become READY until the initial Delivery snapshot and
+    all current subscription definitions are complete.
 39. If no child is READY, the Coordinator remains alive and keeps replacing,
     but public readiness is false and application calls receive UNAVAILABLE;
     readiness returns when one synchronized replacement is admitted.
@@ -524,8 +518,8 @@ ID rewriting/backpressure tests. No process spawning yet.
 **Depends on:** T-0204.
 
 **Owns:** managed server application API, parent/child lifecycle, internal IPC,
-private listener startup, process-count validation, replica manifest, readiness,
-termination, and real child fixtures.
+private listener startup, process-count validation, readiness, termination, and
+real child fixtures.
 
 **Outcome:** one parent controls exactly N complete application children; no
 client operation is proxied yet.
@@ -702,9 +696,8 @@ that node may be the deployment's only node.
   and producing subscription updates. An in-flight unary call owned by the
   failed child fails normally; it is never retried automatically.
 - Each replacement receives a new immutable incarnation identity, builds the
-  complete application, proves replica-manifest equality, opens its direct
-  Delivery observation and initial snapshot, and installs all active
-  subscriptions before entering READY.
+  complete application, opens its direct Delivery observation and initial
+  snapshot, and installs all active subscriptions before entering READY.
 - Restarts continue indefinitely. There is no permanent attempt limit which
   could leave the only node degraded forever. Instead, the framework bounds
   restart rate and resource use with per-slot exponential backoff, one

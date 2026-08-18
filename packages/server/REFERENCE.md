@@ -258,6 +258,26 @@ successful-start order, retains failed final environment closure for later
 signal or explicit-close retry, and sets `process.exitCode` to `1` after a
 signal-driven failure.
 
+`ManagedServerApplication.run()` is the Node-only deployment entrypoint for a
+complete-replica process cohort. It requires a positive safe-integer
+`processCount` and an ESM `moduleUrl`; it never derives a process count from
+the machine. Every child executes that same module and calls its own
+`createServer({ host: "127.0.0.1", port: 0 })`. The child reports its actual
+loopback endpoint only after its local readiness gates settle. The parent
+initially waits until every configured child is ready. Afterwards it is ready
+while at least one child is ready; it remains alive and keeps replacing while
+degraded, and reports unready if no child is ready. It replaces an unexpected
+child exit after a bounded exponential delay (250 ms initially, capped at 30 s;
+reset after 60 s READY). It does not restart a child being closed. Restart
+values are optional `restart` settings and must be positive safe integers;
+concurrent starts default to `min(4, processCount)`. Parent `SIGINT` and
+`SIGTERM` use the same shared child-close path. This private lifecycle channel
+does not transport application signals or proxy public services; Coordinator
+HTTP/2 forwarding belongs to a later deployment slice. Process count does not
+inspect CPU availability and does not constrain the application's independently
+chosen `DeliveryStrategy` or shard count. Direct `Server.run()` and browser
+hosting remain independent of managed Node deployment.
+
 `ServerOptions.browser` changes the public listener, not the bounded-context
 services. The native HTTP/2 backend binds to an ephemeral loopback port and is
 never returned. After it is ready, the server creates `UnaryGateway`,

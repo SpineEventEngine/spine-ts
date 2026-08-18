@@ -17,6 +17,27 @@ import { describe, expect, it, vi } from "vitest";
 import { emitServerError, emitServerWarning } from "../../src/server/server-log.js";
 
 describe("server logging containment", () => {
+  it("retains only bounded managed replica lifecycle facts", () => {
+    const warn = vi.fn();
+    const logger = { withMetadata: vi.fn(() => ({ warn })) };
+    emitServerWarning(logger as never, "managed", {
+      operation: "managed_replica.replace",
+      reasonCode: "unexpected_exit",
+      slot: "1",
+      incarnation: "incarnation",
+      attempt: "2",
+      delay: "250",
+      payload: "must-not-log",
+    });
+    expect(logger.withMetadata).toHaveBeenCalledWith({
+      operation: "managed_replica.replace",
+      reasonCode: "unexpected_exit",
+      slot: "1",
+      incarnation: "incarnation",
+      attempt: "2",
+      delay: "250",
+    });
+  });
   it("emits only allowlisted bounded facts and omits secrets", () => {
     const warn = vi.fn();
     const logger = {

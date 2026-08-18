@@ -65,6 +65,12 @@ export {
   type ServerOptions,
 } from "./server/server.js";
 export {
+  ManagedServerApplication,
+  type ManagedServerApplicationHandle,
+  type ManagedServerApplicationOptions,
+  type ManagedServerRestartOptions,
+} from "./server/managed-server-application.js";
+export {
   DurableSubscriptionBindings,
   isDurableSubscriptionBindings,
   type DurableSubscriptionBindingsOptions,

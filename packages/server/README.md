@@ -22,6 +22,40 @@ Add the
 and trusted-context collaborators to serve Connect and gRPC-Web without
 application listener or CORS code.
 
+### Run complete replicas on one deployment node
+
+For a deployment node that uses several application processes, put the same
+application assembly in one ESM entry module and start it with
+`ManagedServerApplication.run()`. `processCount` is an explicit deployment
+setting. It is not inferred from CPU cores, and it has no relationship to the
+Delivery shard count chosen by the application.
+
+```ts
+import { ManagedServerApplication, Server } from "@spine-event-engine/server";
+
+await ManagedServerApplication.run({
+  processCount: 4,
+  moduleUrl: import.meta.url,
+  createServer: ({ host, port }) => Server.atPort(port, { host }).start(),
+});
+```
+
+The parent starts four separate children. Each child runs this same entry
+module, assembles the complete application, opens its own loopback listener,
+and completes its local readiness work before it is admitted. `run()` first
+waits for every configured child. Afterwards it stays ready while at least one
+child is ready; replacements continue while it is degraded, and it becomes
+unready if no child remains ready. A crashed child is replaced with bounded
+exponential delay; surviving children keep serving.
+The small parent/child channel carries only lifecycle facts such as readiness
+and close. It never carries Commands, Events, queries, subscriptions, or
+Delivery notifications. The parent owns `SIGINT` and `SIGTERM` cleanup for its
+children. It is private lifecycle topology only: it does not yet forward public
+gRPC requests. Use direct `Server.run()` for one explicit local process or
+browser-oriented hosting. The application remains free to use any
+`DeliveryStrategy`; managed process count neither detects CPU cores nor changes
+Delivery shard selection.
+
 For detailed contracts intended for coding agents, see the
 [REFERENCE.md documentation for agents](REFERENCE.md).
 

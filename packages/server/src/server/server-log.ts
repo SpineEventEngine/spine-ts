@@ -30,6 +30,10 @@ const allowedFields = new Set([
   "contextName",
   "operation",
   "reasonCode",
+  "slot",
+  "incarnation",
+  "attempt",
+  "delay",
   "count",
 ]);
 const code = /^[a-z0-9][a-z0-9_.-]{0,63}$/;

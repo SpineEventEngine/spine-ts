@@ -269,6 +269,7 @@ describe("@spine-event-engine/server", () => {
         "Inbox",
         "InboxMessageError",
         "InboxStorage",
+        "ManagedServerApplication",
         "ProcessManager",
         "Projection",
         "Repository",

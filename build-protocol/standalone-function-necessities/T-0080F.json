@@ -1,6 +1,15 @@
 [
   {
     "rule": "standalone-function",
+    "file": "packages/server/src/server/managed-server-application.ts",
+    "kind": "function-declaration",
+    "identity": "canonicalLoopbackEndpoint()#1",
+    "name": "canonicalLoopbackEndpoint",
+    "disposition": "necessity",
+    "reason": "TypeScript private IPC boundary: canonicalLoopbackEndpoint validates child READY loopback facts before coordinator state accepts an endpoint."
+  },
+  {
+    "rule": "standalone-function",
     "file": "packages/server/src/integration/integration-broker.ts",
     "kind": "function-declaration",
     "identity": "isControlIdentity()#1",
