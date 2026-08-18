@@ -84,7 +84,7 @@ export class NodeCoordinator {
     never
   >;
   readonly #server: http2.Http2Server;
-  readonly #sessions = new Set<http2.ServerHttp2Session>();
+  readonly #sessions: Set<http2.ServerHttp2Session>;
   readonly #stopMembers: () => void;
   readonly host: string;
   readonly port: number;
@@ -96,6 +96,7 @@ export class NodeCoordinator {
     options: NodeCoordinatorOptions,
     server: http2.Http2Server,
     address: AddressInfo,
+    sessions: Set<http2.ServerHttp2Session>,
   ) {
     this.#members = options.members;
     this.#kernel = new BackendMembershipKernel({
@@ -107,6 +108,7 @@ export class NodeCoordinator {
       childSize: () => 0,
     });
     this.#server = server;
+    this.#sessions = sessions;
     this.host = typeof address.address === "string" ? address.address : defaultHost;
     this.port = address.port;
     this.baseUrl = `http://${NodeCoordinatorValues.formatHostForUrl(this.host)}:${this.port.toString()}`;
@@ -136,6 +138,7 @@ export class NodeCoordinator {
       options.writeMaxBytes ?? defaultMessageMaxBytes,
     );
     let coordinator: NodeCoordinator | undefined;
+    const sessions = new Set<http2.ServerHttp2Session>();
     const server = http2.createServer(
       connectNodeAdapter({
         routes: (router) => {
@@ -159,13 +162,11 @@ export class NodeCoordinator {
       }),
     );
     server.on("session", (session) => {
-      if (coordinator !== undefined) coordinator.#sessions.add(session);
-      session.once("close", () => {
-        if (coordinator !== undefined) coordinator.#sessions.delete(session);
-      });
+      sessions.add(session);
+      session.once("close", () => sessions.delete(session));
     });
     const address = await NodeCoordinatorValues.listen(server, host, port);
-    coordinator = new NodeCoordinator(options, server, address);
+    coordinator = new NodeCoordinator(options, server, address, sessions);
     await coordinator.#reconcile();
     return coordinator;
   }
@@ -219,6 +220,7 @@ export class NodeCoordinator {
 
   async #closeOnce(): Promise<void> {
     this.#stopMembers();
+    await this.#membershipReconciliation;
     const network = NodeCoordinatorValues.closeNetwork(this.#server, this.#sessions);
     await Promise.all([network, this.#kernel.close()]);
   }
@@ -295,7 +297,7 @@ const NodeCoordinatorValues = Object.freeze({
   },
   applicationHeaders(headers: Headers): Headers {
     const forwarded = new Headers(headers);
-    for (const name of forwarded.keys()) {
+    for (const name of [...forwarded.keys()]) {
       if (
         name === "content-type" ||
         name === "te" ||

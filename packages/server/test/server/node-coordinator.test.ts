@@ -83,12 +83,35 @@ describe("NodeCoordinator", () => {
       ),
     ).resolves.toEqual(create(QueryResponseSchema));
   });
+
+  it("reconciles replacement membership without exposing or polling child topology", async () => {
+    const first = await backend("first");
+    const replacement = await backend("replacement");
+    closeables.push(first.close, replacement.close);
+    const members = new TestReadyMembers([first.member]);
+    const coordinator = await NodeCoordinator.open({ members, port: 0 });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      CommandService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+
+    await client.post(create(CommandService.method.post.input));
+    members.set([replacement.member]);
+    await expect
+      .poll(async () => {
+        await client.post(create(CommandService.method.post.input));
+        return replacement.commands();
+      })
+      .toBe(1);
+    expect(first.commands()).toBe(1);
+  });
 });
 
 class TestReadyMembers implements ReadyMemberSource {
   readonly #listeners = new Set<() => void>();
 
-  readonly #members: readonly ReadyMember[];
+  #members: readonly ReadyMember[];
 
   constructor(members: readonly ReadyMember[]) {
     this.#members = members;
@@ -101,6 +124,11 @@ class TestReadyMembers implements ReadyMemberSource {
   onReadyMembersChange(listener: () => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
+  }
+
+  set(members: readonly ReadyMember[]): void {
+    this.#members = members;
+    for (const listener of this.#listeners) listener();
   }
 }
 

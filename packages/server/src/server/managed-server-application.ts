@@ -586,8 +586,10 @@ export class ManagedServerCoordinator {
           this.#dependencies.clock.clearTimeout(slot.replacementTimer);
         slot.replacementTimer = undefined;
       }
-      if (this.#nodeCoordinator !== undefined) await this.#nodeCoordinator.close();
-      await Promise.all(this.#slots.map((slot) => this.#closeReplica(slot.replica)));
+      const childClose = Promise.all(this.#slots.map((slot) => this.#closeReplica(slot.replica)));
+      const coordinatorClose = this.#nodeCoordinator?.close();
+      if (coordinatorClose === undefined) await childClose;
+      else await Promise.all([coordinatorClose, childClose]);
       await Promise.all([...this.#retired].map((replica) => this.#closeRetired(replica)));
     })();
     this.#close = close;
