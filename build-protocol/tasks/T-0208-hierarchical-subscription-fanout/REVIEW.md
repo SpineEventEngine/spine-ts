@@ -95,3 +95,19 @@ an external trust principal.
   documentation dispositions remain accepted from the prior wave; security is
   N/A because no wire contract or trust boundary changed. T-0209 remains the
   Delivery-admission handoff.
+
+## Reliability P2 re-review (2026-08-19)
+
+- Accepted. Test-only deterministic proofs cover the two remaining
+  abort-unresponsive activation shutdown paths: member removal/reconciliation
+  and real HTTP/2 `NodeCoordinator.close()`. Each completes within the existing
+  one-second fake-clock cleanup bound; the latter also proves ownership by
+  observing the native abort and Connect `CANCELED` public iterator result.
+- No new product defect or production change was required. Initial fixture-only
+  failures (missing fake-timer import and unobserved deliberate cancellation)
+  were repaired before the final passing run.
+- Evidence: focused kernel + Coordinator suite **72/72**; scoped coverage
+  **96.95% lines (477/492)** and **90.55% branches (259/286)**; deployment,
+  server, and tooling typechecks; scoped ESLint; cleanup; changed-file Prettier;
+  and `git diff --check` pass. Existing authoring metadata remains implementer
+  `gpt-5.6-terra` / `medium`, no subagents, telemetry unavailable.

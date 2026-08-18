@@ -347,3 +347,22 @@ incomplete.` The test's generic parallel cleanup closed the replacement
 - Ownership/profile remains existing `implementer`, explicitly configured
   `gpt-5.6-terra` / `medium`; no subagents were used and runtime telemetry is
   unavailable. T-0209 remains the Delivery-admission handoff.
+
+## 2026-08-19 — Reliability P2 abort-unresponsive activation proofs
+
+- Added deterministic focused proofs without changing production code. A member
+  reconciliation that removes an active native child which ignores abort
+  completes after advancing the existing one-second fake-clock bound. A real
+  HTTP/2 `NodeCoordinator.close()` path does the same, aborts the native stream,
+  and its pending public read settles as Connect `CANCELED` without an unhandled
+  rejection.
+- The initial test run exposed only fixture omissions (`vi` import and an
+  unobserved deliberately canceled iterator); both were corrected in the test,
+  not production behavior. No runtime RED was found: the prior bounded private
+  activation-completion implementation already satisfies both paths.
+- Evidence: kernel + Coordinator suite **72/72**; scoped V8 coverage
+  **477/492 lines (96.95%)** and **259/286 branches (90.55%)**. Deployment,
+  server, and tooling typechecks; scoped ESLint; cleanup; changed-file Prettier;
+  and diff hygiene pass.
+- Ownership/profile remains existing `implementer`, configured
+  `gpt-5.6-terra` / `medium`; no subagents and telemetry unavailable.

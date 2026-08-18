@@ -297,6 +297,27 @@ describe("BackendMembershipKernel", () => {
       vi.useRealTimers();
     }
   }, 2_000);
+  it("bounds member removal when a native activation ignores abort", async () => {
+    vi.useFakeTimers();
+    const owner = kernel({
+      create: async (member) =>
+        client(member, { activate: async () => new Promise<void>(() => undefined) }),
+    });
+    try {
+      await owner.reconcile([{ id: "a" }]);
+      await owner.subscribe(definition("x"), new AbortController().signal);
+      void owner.activate(definition("x"), async () => {}, new AbortController().signal);
+      await Promise.resolve();
+
+      const removed = owner.reconcile([]);
+      const complete = expect(removed).resolves.toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1_000);
+      await complete;
+      await owner.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 2_000);
   it("rejects a concurrent activation and cancellation terminates its owner", async () => {
     const owner = kernel({
       create: async (member) =>
@@ -756,9 +777,11 @@ describe("BackendMembershipKernel", () => {
     const owner = kernel({
       create: async (member) =>
         // The native boundary must normalize non-Error rejections.
-        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
         client(member, {
-          subscribe: async () => Promise.reject({ reason: "broken" }),
+          subscribe: async () => {
+            // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+            return Promise.reject({ reason: "broken" });
+          },
         }),
     });
     try {

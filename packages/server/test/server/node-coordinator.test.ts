@@ -48,7 +48,7 @@ import {
   type RecordSpec as StorageRecordSpec,
   type StorageContext,
 } from "@spine-event-engine/storage";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   NodeCoordinator,
@@ -312,6 +312,43 @@ describe("NodeCoordinator", () => {
     await expect.poll(() => replica.activationAborts()).toBe(1);
     await coordinator.close();
   });
+
+  it("bounds Coordinator close when a native activation ignores abort", async () => {
+    vi.useFakeTimers();
+    const replica = await backend("close-ignores-abort", {
+      ignoreActivationAbort: true,
+      observeActivationAbort: true,
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+    const subscription = await client.subscribe(create(TopicSchema));
+    const pending = client
+      .activate(subscription)
+      [Symbol.asyncIterator]()
+      .next()
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    await vi.waitFor(() => {
+      expect(replica.activations()).toBe(1);
+    });
+
+    const closing = coordinator.close();
+    const complete = expect(closing).resolves.toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1_000);
+    await complete;
+    await expect(pending).resolves.toMatchObject({ code: Code.Canceled });
+    expect(replica.activationAborts()).toBe(1);
+    vi.useRealTimers();
+  }, 5_000);
 
   it("cancels an active public iterator from a second client", async () => {
     const replica = await backend("cancel-second-client", { holdActivation: true });
@@ -768,6 +805,7 @@ async function backend(
     readonly post?: (context: HandlerContext) => Promise<never> | MessageShape<typeof AckSchema>;
     readonly updates?: number;
     readonly holdActivation?: boolean;
+    readonly ignoreActivationAbort?: boolean;
     readonly releaseActivation?: Promise<void>;
     readonly observeActivationAbort?: boolean;
   } = {},
@@ -822,6 +860,7 @@ async function backend(
               );
             for (let update = 0; update < (options.updates ?? 0); update += 1)
               yield create(SubscriptionUpdateSchema, { subscription });
+            if (options.ignoreActivationAbort) await new Promise<void>(() => undefined);
             if (options.holdActivation)
               await new Promise<void>((resolve) => {
                 context.signal.addEventListener(
