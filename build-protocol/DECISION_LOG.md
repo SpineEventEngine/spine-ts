@@ -4,6 +4,59 @@ Navigation: [README](README.md)
 
 Future implementation must append every decision here or to a task-specific decision file linked from here.
 
+## D-0126: Use Complete Application Replicas Behind Node-Local HTTP/2 Coordinators
+
+Status: Accepted; unexpected-child-exit policy remains open in T-0203
+
+Date: 2026-08-18
+
+Decision: A managed Spine TS deployment starts an explicitly configured number
+of complete application-process replicas on every deployment node. Each replica
+contains the application's complete Bounded Context set, observes the shared
+Delivery Server directly, and uses one process-wide in-memory
+`TransportFactory` by default for IntegrationBroker exchange between its local
+contexts. A node-local, service-aware HTTP/2 Coordinator exposes the node's
+normal Spine gRPC services: Command and Query calls select one ready replica,
+while Subscription calls fan one logical node child to every ready replica and
+merge their updates. The Gateway remains the only durable logical subscription
+owner and performs the outer fan-out across discovered node Coordinators.
+
+The process count is a required deployer-supplied startup value. It is never
+derived from CPU count and never changes Delivery shard identity. Integration
+traffic and Delivery notifications do not pass through the Gateway or Node
+Coordinator. No new public Protobuf service is introduced.
+
+The current same-host ZeroMQ command/event and IntegrationBroker paths are
+removed only after the HTTP/2 Coordinator, direct Delivery, and hierarchical
+subscription replacement have real acceptance. This decision supersedes the
+deployment conclusions of D-0007 and D-0064 and the cross-process-transport
+portion of Wave 13; it preserves their historical record and all Wave 13
+same-process domain/event semantics.
+
+Rationale: Node.js uses one JavaScript execution thread per process. Complete
+replicas allow the deployer to use multiple cores without splitting domain
+roles or bypassing CommandBus/EventBus. Shared Delivery already provides the
+correct cross-process/node work notification and exclusive shard ownership.
+Installing each subscription on every current replica lets the process which
+actually observes an Event or commits state emit the update, while the Gateway
+retains one durable client-facing subscription. Process-local integration is
+sufficient because every replica contains every application Bounded Context.
+
+Consequences:
+
+- Production no longer requires an explicit IntegrationBroker channel factory;
+  the optional setting is named `integrationChannelFactory`.
+- Managed replicas use ephemeral native subscription registries; the Gateway
+  retains durable logical bindings.
+- GKE/GCE discovery points to ready Node Coordinators rather than individual
+  application workers.
+- Managed deployment requires explicitly configured remote/shared Delivery and
+  shard strategy, but process and shard counts remain independent.
+- The future Gateway-hosted Integration Hub for physically split server
+  applications is outside the first release.
+- T-0203 must resolve whether an unexpected child exit terminates the whole
+  node or triggers bounded child replacement before implementation begins.
+
 ## D-0125: Use Node DNS promises for GKE DNS discovery
 
 Status: Accepted
