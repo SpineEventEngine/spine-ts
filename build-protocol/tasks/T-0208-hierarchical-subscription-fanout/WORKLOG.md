@@ -1,5 +1,21 @@
 # T-0208 work log
 
+## 2026-08-18 — Correction ownership transfer
+
+- Correction ownership transferred to the existing `implementer`, explicitly
+  configured `gpt-5.6-terra` / `medium`; runtime telemetry is unavailable on
+  this surface. The prior owner is idle/completed; this owner is the sole
+  writer in `/tmp/spine-ts-t0208` on `codex/t0208-subscription-fanout`.
+- No subagents may run. The inherited head is pushed as `53a41bce3` and the
+  worktree was clean at transfer.
+- Accepted correction batch: managed-registry matrix/lifecycle proofs,
+  cleanup-safe fixture ownership, managed-option TSDoc, reader documentation,
+  review dispositions, and the confirmed reliability extension that bounds
+  retry cleanup and makes `close()` retry retained failed child cleanup.
+- Next: establish RED coverage for the bounded retry/terminal close behavior,
+  then make the smallest kernel correction before completing the remaining
+  tests and documentation.
+
 ## 2026-08-18 — Framing and TDD lock
 
 - Read `AGENTS.md`, `BUILD_PROTOCOL.md`, the accepted T-0203 plan and human

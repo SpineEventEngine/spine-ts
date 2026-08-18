@@ -150,6 +150,7 @@ interface DefinitionState<Child, Update> {
   readonly children: Map<string, ChildState<Child>>;
   readonly starts: Set<AbortController>;
   active: boolean;
+  activationController: AbortController | undefined;
   updates: ((update: Update) => Promise<void>) | undefined;
   failure: Error | undefined;
 }
@@ -325,7 +326,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     const abort = () => {
       controller.abort();
       for (const start of state.starts) start.abort();
-      for (const child of state.children.values()) child.controller.abort();
+      for (const child of state.children.values()) child.activationController?.abort();
     };
     if (signal.aborted) {
       abort();
@@ -504,6 +505,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       if (!this.#members.has(key)) {
         state.children.delete(key);
         child.controller.abort();
+        child.activationController?.abort();
         // spine-log-boundary: deployment.membership_child_completion
         await child.activation.catch(() => undefined);
         if (generation !== this.#generation || this.#closed) return;
@@ -559,7 +561,13 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       await this.#compensateChild(current.client, child, controller.signal);
       return;
     }
-    const stored = { child, controller, active: false, activation: Promise.resolve() };
+    const stored = {
+      child,
+      controller,
+      active: false,
+      activationController: undefined,
+      activation: Promise.resolve(),
+    };
     state.children.set(key, stored);
     if (state.active && state.updates !== undefined)
       this.#activateChild(state, key, stored, current.client);
@@ -572,13 +580,17 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
   ): void {
     if (child.active || state.updates === undefined) return;
     child.active = true;
+    const controller = new AbortController();
+    child.activationController = controller;
     // spine-log-boundary: deployment.membership_child_activation
     child.activation = client
-      .activate(child.child, state.updates, child.controller.signal)
+      .activate(child.child, state.updates, controller.signal)
       .catch(() => undefined)
       .then(() => {
-        if (state.children.get(key) === child && !child.controller.signal.aborted)
-          state.children.delete(key);
+        if (child.activationController !== controller) return;
+        child.activationController = undefined;
+        child.active = false;
+        if (state.children.get(key) === child && !controller.signal.aborted) state.children.delete(key);
       });
   }
   async #removeDefinition(key: string, signal: AbortSignal): Promise<void> {
@@ -587,6 +599,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     this.#definitions.delete(key);
     state.activationController?.abort();
     for (const start of state.starts) start.abort();
+    for (const child of state.children.values()) child.activationController?.abort();
     await Promise.all(
       [...state.children.entries()].map(async ([memberKey, child]) => {
         state.children.delete(memberKey);
@@ -615,6 +628,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     signal: AbortSignal = new AbortController().signal,
   ): Promise<void> {
     child.controller.abort();
+    child.activationController?.abort();
     const cleanup = async (): Promise<void> => {
       if (client !== undefined && !(await this.#compensateChild(client, child.child, signal)))
         throw new Error("backend child cleanup remains incomplete.");
@@ -641,6 +655,24 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     child: Child,
     signal: AbortSignal,
   ): Promise<boolean> {
+    if (await this.#disposeChild(client, child, signal)) return true;
+    this.#retainFailedChildCleanup(client, child);
+    return false;
+  }
+  async #retryChildCleanup(): Promise<void> {
+    for (const pending of [...this.#failedChildCleanup])
+      if (await this.#disposeChild(pending.client, pending.child, new AbortController().signal))
+        this.#failedChildCleanup.delete(pending);
+      else {
+        // spine-log-boundary: deployment.membership_child_cleanup_retry
+        /* later reconciliation retries */
+      }
+  }
+  async #disposeChild(
+    client: BackendMemberClient<Request, Child, Update>,
+    child: Child,
+    signal: AbortSignal,
+  ): Promise<boolean> {
     try {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<never>((_resolve, reject) => {
@@ -657,20 +689,20 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       }
       return true;
     } catch {
-      this.#failedChildCleanup.add({ client, child });
       return false;
     }
   }
-  async #retryChildCleanup(): Promise<void> {
-    for (const pending of [...this.#failedChildCleanup])
-      try {
-        await pending.client.dispose(pending.child, new AbortController().signal);
-        this.#failedChildCleanup.delete(pending);
-      } catch (error) {
-        // spine-log-boundary: deployment.membership_child_cleanup_retry
-        void error;
-        /* later reconciliation retries */
-      }
+  #retainFailedChildCleanup(
+    client: BackendMemberClient<Request, Child, Update>,
+    child: Child,
+  ): void {
+    if (
+      [...this.#failedChildCleanup].some(
+        (pending) => pending.client === client && pending.child === child,
+      )
+    )
+      return;
+    this.#failedChildCleanup.add({ client, child });
   }
   async #dispose(client: BackendMemberClient<Request, Child, Update>): Promise<void> {
     try {
@@ -694,12 +726,15 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     for (const start of this.#childStarts) start.abort();
     for (const state of this.#definitions.values()) for (const start of state.starts) start.abort();
     await this.#running;
-    for (const key of [...this.#definitions.keys()])
-      await this.#removeDefinition(key, new AbortController().signal);
+    await Promise.allSettled(
+      [...this.#definitions.keys()].map((key) =>
+        this.#removeDefinition(key, new AbortController().signal),
+      ),
+    );
+    await this.#retryChildCleanup();
     await Promise.all([...this.#members.values()].map(({ client }) => this.#dispose(client)));
     this.#members.clear();
     await this.#retryDisposals();
-    await this.#retryChildCleanup();
     if (this.#failedDisposals.size > 0)
       throw new Error("backend client cleanup remains incomplete.");
     if (this.#failedChildCleanup.size > 0)

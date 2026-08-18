@@ -254,6 +254,50 @@ describe("BackendMembershipKernel", () => {
     await expect(first).resolves.toBeUndefined();
     await owner.close();
   });
+  it("reactivates retained children after the prior caller aborts", async () => {
+    const delivered: string[] = [];
+    let activations = 0;
+    const owner = kernel({
+      create: async (member) =>
+        client(member, {
+          activate: async (_child, updates, signal) => {
+            activations++;
+            await updates(`${member.id}-${activations}`);
+            await waitForAbort(signal);
+          },
+        }),
+    });
+    try {
+      await owner.reconcile([{ id: "a" }]);
+      await owner.subscribe(definition("x"), new AbortController().signal);
+      const firstController = new AbortController();
+      const first = owner.activate(
+        definition("x"),
+        async (update) => {
+          delivered.push(update);
+        },
+        firstController.signal,
+      );
+      await vi.waitFor(() => expect(delivered).toEqual(["a-1"]));
+      firstController.abort();
+      await first;
+
+      const secondController = new AbortController();
+      const second = owner.activate(
+        definition("x"),
+        async (update) => {
+          delivered.push(update);
+        },
+        secondController.signal,
+      );
+      await vi.waitFor(() => expect(delivered).toEqual(["a-1", "a-2"]));
+      secondController.abort();
+      await second;
+      expect(activations).toBe(2);
+    } finally {
+      await owner.close().catch(() => undefined);
+    }
+  });
   it("forwards no request without members and selects members round robin", async () => {
     const owner = kernel({
       create: async (member) => client(member, { forward: async () => encoder.encode(member.id) }),
@@ -604,6 +648,26 @@ describe("BackendMembershipKernel", () => {
       vi.useRealTimers();
     }
   });
+  it("bounds a never-settling failed-child cleanup retry during close", async () => {
+    let attempts = 0;
+    const owner = kernel({
+      create: async (member) =>
+        client(member, {
+          dispose: async () => {
+            attempts++;
+            if (attempts === 1) throw new Error("initial dispose");
+            await new Promise<void>(() => undefined);
+          },
+        }),
+    });
+    await owner.reconcile([{ id: "a" }]);
+    await owner.subscribe(definition("x"), new AbortController().signal);
+    await expect(owner.cancel(definition("x"), new AbortController().signal)).rejects.toThrow(
+      "cleanup remains incomplete",
+    );
+    await expect(owner.close()).rejects.toThrow("cleanup remains incomplete");
+    expect(attempts).toBe(2);
+  }, 5_000);
   it("aborts pending starts during close and retries an incomplete terminal cleanup", async () => {
     let startAborted = false;
     let closes = 0;
