@@ -16,9 +16,9 @@
   process signal coordinator are reusable lifecycle patterns. Delivery's
   reconnect backoff is evidence for bounded timers but is not reused as child
   restart policy because the ownership and healthy-reset semantics differ.
-- Current built-server state is intentionally private. The task may add one
-  immutable internal assembly report for manifest derivation rather than
-  reflection or a new public control API.
+- At framing, an immutable internal assembly report was considered for runtime
+  manifest derivation. The later human correction below rejects that
+  precautionary mechanism.
 - No conceptual blocker was found. Product implementation remains pending
   until this framing checkpoint is pushed.
 
@@ -74,10 +74,24 @@ lifecycle has not started.` before parent/child implementation.
   responsibility and every deployed replica must use the same application
   code. The framework therefore must not identify, serialize, compare, sample,
   or restrict the strategy in managed mode.
-- Removed the overreaching strategy-identity requirement from the accepted
-  plan and this task. The private replica manifest remains responsible for
-  Bounded Context, tenant, schema, repository-state, and generated-handler
-  composition only. No new public strategy field or built-in-only restriction
-  is introduced.
-- This resolves the architecture blocker. Implementation resumes with
-  manifest equality and synchronization gates.
+- This intermediate disposition removed only strategy identity while retaining
+  a narrower replica manifest. The later human correction below supersedes it
+  and removes runtime application attestation entirely.
+- This initially appeared to resolve the architecture blocker by narrowing the
+  manifest, but the following human correction removes the unrequested
+  manifest mechanism entirely.
+
+## 2026-08-18 — Remove invented runtime attestation
+
+- The human rejected the Delivery-strategy identity and the broader runtime
+  application-manifest mechanism as unrequested precautionary architecture.
+- The managed launcher already runs the same configured application entry
+  module in every child. Framework users own complete application assembly,
+  Delivery strategy, code, and deployment configuration across nodes.
+- Removed runtime manifests, schema/handler digests, build attestations,
+  strategy identities, sampling, and custom-strategy restrictions from the
+  accepted plan and T-0206 contract. No product implementation of those ideas
+  was committed.
+- T-0206 now implements only necessary deployment behavior: explicit process
+  count, real child assembly/listeners, synchronization readiness gates,
+  bounded replacement, graceful drain, and deterministic cleanup.

@@ -31,8 +31,6 @@ Owned paths:
 
 - new managed-application and private child-control modules under
   `packages/server/src/server/**`;
-- the narrow internal `Server`/`BoundedContext` assembly-report seam needed to
-  derive the replica manifest;
 - the public server entrypoint/export, TSDoc, API inventory, and directly
   affected reference documentation;
 - real child fixtures and focused server lifecycle tests;
@@ -44,14 +42,14 @@ provider packages, examples, generic signal routing, or ZeroMQ removal.
 
 ## Human-imposed requirements
 
-| ID    | Binding requirement                                                                                                                         | Behavioral proof                                                             |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| H-005 | Every managed child is a complete replica of the application's Bounded Contexts, schema, and generated handlers.                            | Deterministic private manifest equality and real-process mismatch rejection. |
-| H-009 | `processCount` is an explicit deployer setting; no CPU inspection or inferred default exists.                                               | Missing/invalid value matrix and forbidden-import scan.                      |
-| H-010 | Process count and Delivery strategy remain independent user-selected concepts.                                                              | No numeric coupling, strategy identity, sampling, or managed restriction.    |
-| H-011 | Children will observe Delivery directly; the parent IPC carries no Delivery notification or application signal.                             | Control-frame allowlist/dependency scan and synchronization-hook proof.      |
-| H-017 | Direct single-process `Server.run()` and browser use remain independent of managed Node machinery.                                          | Existing lifecycle/browser tests and import-boundary scan.                   |
-| H-022 | Unexpected child exit preserves reduced service and starts a bounded replacement; it never fails the whole node solely for one child crash. | Real-process crash/replacement and fake-clock policy tests.                  |
+| ID    | Binding requirement                                                                                                                         | Behavioral proof                                                          |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| H-005 | Every managed child runs the same complete application entry module and local server assembly.                                              | Real children invoke the configured module and normal `createServer()`.   |
+| H-009 | `processCount` is an explicit deployer setting; no CPU inspection or inferred default exists.                                               | Missing/invalid value matrix and forbidden-import scan.                   |
+| H-010 | Process count and Delivery strategy remain independent user-selected concepts.                                                              | No numeric coupling, strategy identity, sampling, or managed restriction. |
+| H-011 | Children will observe Delivery directly; the parent IPC carries no Delivery notification or application signal.                             | Control-frame allowlist/dependency scan and synchronization-hook proof.   |
+| H-017 | Direct single-process `Server.run()` and browser use remain independent of managed Node machinery.                                          | Existing lifecycle/browser tests and import-boundary scan.                |
+| H-022 | Unexpected child exit preserves reduced service and starts a bounded replacement; it never fails the whole node solely for one child crash. | Real-process crash/replacement and fake-clock policy tests.               |
 
 ## Frozen lifecycle contract
 
@@ -63,13 +61,12 @@ provider packages, examples, generic signal routing, or ZeroMQ removal.
   separate application child.
 - Stable logical slots receive immutable per-incarnation identities.
 - States are `STARTING -> SYNCHRONIZING -> READY -> DRAINING -> CLOSED`.
-- A child is not READY until its manifest equals the first accepted cohort
-  manifest and all registered synchronization gates resolve. T-0208 and T-0209
-  later bind subscription and Delivery readiness to those gates; T-0206 proves
-  the gate without owning those subsystems.
-- The manifest does not identify or compare `DeliveryStrategy`. Managed mode
-  accepts arbitrary strategies selected by the framework user. The deployed
-  replicas' common application code is the authority for that policy.
+- A child is not READY until all registered synchronization gates resolve.
+  T-0208 and T-0209 later bind subscription and Delivery readiness to those
+  gates; T-0206 proves the gate without owning those subsystems.
+- The framework does not inspect or attest application composition. The same
+  entry module and its `createServer()` function are the construction boundary;
+  framework users own complete assembly and common deployment code.
 - Initial node readiness requires every configured slot to synchronize at
   least once. Thereafter the node stays ready while at least one child is
   READY. With zero READY children it remains alive and continues replacements.
@@ -87,8 +84,8 @@ provider packages, examples, generic signal routing, or ZeroMQ removal.
   timer, pending start, child, IPC listener, and signal handler. Failed cleanup
   remains observable and retryable where the existing server lifecycle does.
 - IPC accepts only bounded lifecycle/control facts: hello, slot/incarnation,
-  private endpoint, manifest digest, readiness state, drain, close, and terminal
-  failure. No Command, Event, Query, SubscriptionUpdate, ExternalMessage,
+  private endpoint, readiness state, drain, close, and terminal failure. No
+  Command, Event, Query, SubscriptionUpdate, ExternalMessage,
   InboxMessage, application payload, callback, or public Proto is introduced.
 - Logs expose only safe slot, incarnation, attempt, delay, operation, and reason
   codes—never raw child errors or application payloads.
@@ -103,16 +100,16 @@ Retain RED evidence before product changes for plan cases 3–6 and 33–41:
    child PID.
 3. `processCount: 4` starts four distinct child PIDs owned by one parent
    lifecycle.
-4. One child with a different context/schema/handler manifest prevents
-   initial readiness and cleans the cohort.
+4. Every real child executes the configured entry module, invokes its local
+   `createServer()`, and reports its actual private listener before READY.
 5. Unexpected READY-child exit removes only that incarnation; survivors
    continue and one replacement for the same slot receives a fresh identity.
 6. Fake-clock restart delays double, cap, never spin, and reset after the
    configured healthy READY interval.
 7. Simultaneous failures never exceed the concurrent-start limit and leave no
    unbounded timers, listeners, records, or children.
-8. A replacement remains ineligible until manifest equality and every current
-   synchronization gate complete.
+8. A replacement remains ineligible until every current synchronization gate
+   completes.
 9. After first cohort readiness, zero READY children makes the handle unready
    while replacements continue; readiness returns with one synchronized child.
 10. A child exit rejects an admitted-operation lease without retry. T-0207 will
