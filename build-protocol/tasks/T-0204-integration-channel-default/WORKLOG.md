@@ -136,3 +136,18 @@ once'`.
   immutable package was intentionally transient.
 - Because the first release invocation did not reach the test phase, the
   converged release profile must be rerun after this deterministic correction.
+
+## 2026-08-18 — Release-suite scheduling correction
+
+- The replacement release invocation passed every deterministic gate, then
+  finished with 4,269 passing tests, 19 skipped tests, and one failure: the
+  real two-process IntegrationBroker fixture exhausted its child-local
+  three-second delivery deadline while 270 test files competed for CPU.
+- Running that exact cross-process test alone immediately passed in 582 ms.
+  The fixture uses an explicit ZeroMQ integration-channel factory, so the
+  T-0204 default selection is not on this path. The evidence classifies this
+  as a release-load harness budget, not a product regression.
+- The bounded child and parent phase deadlines are widened to 15 and 20
+  seconds respectively. This adds no sleep, retry policy, or runtime change;
+  normal focused execution still completes immediately. The focused native
+  proof and the release profile must be rerun before acceptance.
