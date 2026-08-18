@@ -339,6 +339,44 @@ describe("BackendMembershipKernel", () => {
       await owner.close().catch(() => undefined);
     }
   });
+  it("restarts a held aborted child for an immediate replacement activation", async () => {
+    const release = deferred();
+    const delivered: string[] = [];
+    let calls = 0;
+    const owner = kernel({
+      create: async (member) =>
+        client(member, {
+          activate: async (_child, updates) => {
+            calls++;
+            if (calls === 1) await release.promise;
+            await updates(`${member.id}-${calls}`);
+          },
+        }),
+    });
+    try {
+      await owner.reconcile([{ id: "a" }]);
+      await owner.subscribe(definition("x"), new AbortController().signal);
+      const firstController = new AbortController();
+      const first = owner.activate(definition("x"), async () => {}, firstController.signal);
+      await vi.waitFor(() => expect(calls).toBe(1));
+      firstController.abort();
+      await first;
+      const secondController = new AbortController();
+      const second = owner.activate(
+        definition("x"),
+        async (update) => {
+          delivered.push(update);
+        },
+        secondController.signal,
+      );
+      release.resolve(undefined);
+      await vi.waitFor(() => expect(delivered).toEqual(["a-2"]));
+      secondController.abort();
+      await second;
+    } finally {
+      await owner.close().catch(() => undefined);
+    }
+  });
   it("activates a late synchronized member without a concurrent second owner", async () => {
     const activated: string[] = [];
     const owner = kernel({
@@ -666,10 +704,11 @@ describe("BackendMembershipKernel", () => {
     await owner.cancel(definition("without"), new AbortController().signal);
     await owner.reconcile([{ id: "a" }]);
     await owner.subscribe(definition("with"), new AbortController().signal);
-    await Promise.all([
+    const removals = await Promise.allSettled([
       owner.cancel(definition("with"), new AbortController().signal),
       owner.cancel(definition("with"), new AbortController().signal),
     ]);
+    expect(removals.filter((result) => result.status === "rejected")).toHaveLength(1);
     expect(disposals).toBe(1);
     await owner.close();
   });
@@ -706,15 +745,20 @@ describe("BackendMembershipKernel", () => {
       await owner.close().catch(() => undefined);
     }
   });
-  it("bounds a never-settling disposal and clears its private timer after retry", async () => {
+  it("retains one ignored-abort disposal until its underlying attempt settles", async () => {
     vi.useFakeTimers();
     let attempts = 0;
+    const settled = deferred();
+    const underlyingSettled = deferred();
     const owner = kernel({
       create: async (member) =>
         client(member, {
           dispose: async () => {
             attempts++;
-            if (attempts === 1) await new Promise<void>(() => undefined);
+            if (attempts === 1) {
+              await settled.promise;
+              underlyingSettled.resolve(undefined);
+            }
           },
         }),
     });
@@ -726,33 +770,56 @@ describe("BackendMembershipKernel", () => {
       await vi.advanceTimersByTimeAsync(1_000);
       await rejected;
       await owner.reconcile([{ id: "a" }]);
-      expect(attempts).toBe(2);
+      await expect(owner.cancel(definition("x"), new AbortController().signal)).rejects.toThrow(
+        "cleanup remains incomplete",
+      );
+      expect(attempts).toBe(1);
       expect(vi.getTimerCount()).toBe(0);
+      settled.resolve(undefined);
+      await underlyingSettled.promise;
+      await Promise.resolve();
+      await Promise.resolve();
+      await expect(owner.cancel(definition("x"), new AbortController().signal)).resolves.toBeUndefined();
+      expect(attempts).toBe(2);
       await owner.close();
     } finally {
       vi.useRealTimers();
     }
   });
-  it("bounds a never-settling failed-child cleanup retry during close", async () => {
+  it("retries a rejected underlying cleanup attempt after it settles", async () => {
+    vi.useFakeTimers();
     let attempts = 0;
+    const rejected = deferred();
+    const underlyingSettled = deferred();
     const owner = kernel({
       create: async (member) =>
         client(member, {
           dispose: async () => {
             attempts++;
-            if (attempts === 1) throw new Error("initial dispose");
-            if (attempts === 2) await new Promise<void>(() => undefined);
+            if (attempts === 1)
+              try {
+                await rejected.promise;
+              } finally {
+                underlyingSettled.resolve(undefined);
+              }
           },
         }),
     });
     await owner.reconcile([{ id: "a" }]);
     await owner.subscribe(definition("x"), new AbortController().signal);
-    await expect(owner.cancel(definition("x"), new AbortController().signal)).rejects.toThrow(
-      "cleanup remains incomplete",
-    );
-    await expect(owner.close()).rejects.toThrow("cleanup remains incomplete");
-    await expect(owner.close()).resolves.toBeUndefined();
-    expect(attempts).toBe(3);
+    const cancelled = owner.cancel(definition("x"), new AbortController().signal);
+    const cancellation = expect(cancelled).rejects.toThrow("cleanup remains incomplete");
+    await vi.advanceTimersByTimeAsync(1_000);
+    await cancellation;
+    expect(attempts).toBe(1);
+    rejected.reject(new Error("late rejection"));
+    await underlyingSettled.promise;
+    await Promise.resolve();
+    await Promise.resolve();
+    await expect(owner.cancel(definition("x"), new AbortController().signal)).resolves.toBeUndefined();
+    expect(attempts).toBe(2);
+    await owner.close();
+    vi.useRealTimers();
   }, 5_000);
   it("aborts pending starts during close and retries an incomplete terminal cleanup", async () => {
     let startAborted = false;

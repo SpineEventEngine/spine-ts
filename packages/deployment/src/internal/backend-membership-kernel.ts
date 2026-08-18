@@ -163,6 +163,7 @@ interface Current<Member, Request, Child, Update> {
 interface FailedChildCleanup<Request, Child, Update> {
   readonly client: BackendMemberClient<Request, Child, Update>;
   readonly child: Child;
+  running: Promise<void> | undefined;
 }
 const childCleanupTimeoutMs = 1_000;
 
@@ -360,7 +361,12 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
    */
   async cancel(definition: Uint8Array, signal: AbortSignal): Promise<void> {
     const key = this.#options.definitionKey(definition);
-    if (key !== undefined) await this.#removeDefinition(key, signal);
+    if (key === undefined) return;
+    if (this.#definitions.has(key)) await this.#removeDefinition(key, signal);
+    if (this.#failedChildCleanup.size === 0) return;
+    await this.#retryChildCleanup();
+    if (this.#failedChildCleanup.size > 0)
+      throw new Error("backend child cleanup remains incomplete.");
   }
 
   /**
@@ -590,6 +596,17 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
         if (child.activationController !== controller) return;
         child.activationController = undefined;
         child.active = false;
+        if (
+          controller.signal.aborted &&
+          state.children.get(key) === child &&
+          state.active &&
+          state.activationController !== undefined &&
+          !state.activationController.signal.aborted &&
+          state.updates !== undefined
+        ) {
+          this.#activateChild(state, key, child, client);
+          return;
+        }
         if (state.children.get(key) === child && !controller.signal.aborted)
           state.children.delete(key);
       });
@@ -641,6 +658,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       return;
     }
     const running = cleanup();
+    void running.catch(() => undefined);
     const cleanups = this.#childCleanup.get(client) ?? new Set<Promise<void>>();
     cleanups.add(running);
     this.#childCleanup.set(client, cleanups);
@@ -656,13 +674,14 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     child: Child,
     signal: AbortSignal,
   ): Promise<boolean> {
-    if (await this.#disposeChild(client, child, signal)) return true;
-    this.#retainFailedChildCleanup(client, child);
-    return false;
+    const pending = this.#retainFailedChildCleanup(client, child);
+    if (!(await this.#disposeChild(pending, signal))) return false;
+    this.#failedChildCleanup.delete(pending);
+    return true;
   }
   async #retryChildCleanup(): Promise<void> {
     for (const pending of [...this.#failedChildCleanup])
-      if (await this.#disposeChild(pending.client, pending.child, new AbortController().signal))
+      if (await this.#disposeChild(pending, new AbortController().signal))
         this.#failedChildCleanup.delete(pending);
       else {
         // spine-log-boundary: deployment.membership_child_cleanup_retry
@@ -670,10 +689,14 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       }
   }
   async #disposeChild(
-    client: BackendMemberClient<Request, Child, Update>,
-    child: Child,
+    pending: FailedChildCleanup<Request, Child, Update>,
     signal: AbortSignal,
   ): Promise<boolean> {
+    if (pending.running !== undefined) return false;
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) abort();
     try {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<never>((_resolve, reject) => {
@@ -684,26 +707,34 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
         timer.unref();
       });
       try {
-        await Promise.race([client.dispose(child, signal), timeout]);
+        const running = pending.client.dispose(pending.child, controller.signal);
+        pending.running = running;
+        void running.catch(() => undefined).finally(() => {
+          if (pending.running === running) pending.running = undefined;
+        });
+        await Promise.race([running, timeout]);
       } finally {
         if (timer !== undefined) clearTimeout(timer);
       }
       return true;
     } catch {
+      controller.abort();
       return false;
+    } finally {
+      signal.removeEventListener("abort", abort);
     }
   }
   #retainFailedChildCleanup(
     client: BackendMemberClient<Request, Child, Update>,
     child: Child,
-  ): void {
-    if (
-      [...this.#failedChildCleanup].some(
-        (pending) => pending.client === client && pending.child === child,
-      )
-    )
-      return;
-    this.#failedChildCleanup.add({ client, child });
+  ): FailedChildCleanup<Request, Child, Update> {
+    const existing = [...this.#failedChildCleanup].find(
+      (pending) => pending.client === client && pending.child === child,
+    );
+    if (existing !== undefined) return existing;
+    const pending = { client, child, running: undefined };
+    this.#failedChildCleanup.add(pending);
+    return pending;
   }
   async #dispose(client: BackendMemberClient<Request, Child, Update>): Promise<void> {
     try {
