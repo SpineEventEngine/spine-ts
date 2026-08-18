@@ -560,7 +560,10 @@ describe("NodeCoordinator", () => {
 
 describe("SubscriptionUpdateQueue", () => {
   it("closes terminally on overflow, resolves blocked producers, and ignores later updates", async () => {
-    const queue = new SubscriptionUpdateQueue(1);
+    let overflowed = false;
+    const queue = new SubscriptionUpdateQueue(1, () => {
+      overflowed = true;
+    });
     const first = queue.push(create(SubscriptionUpdateSchema));
     await queue.push(create(SubscriptionUpdateSchema));
     await expect(first).resolves.toBeUndefined();
@@ -569,6 +572,7 @@ describe("SubscriptionUpdateQueue", () => {
       done: true,
     });
     await expect(queue.push(create(SubscriptionUpdateSchema))).resolves.toBeUndefined();
+    expect(overflowed).toBe(true);
   });
 
   it("delivers directly to an awaiting consumer", async () => {

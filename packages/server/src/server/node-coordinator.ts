@@ -335,7 +335,11 @@ export class NodeCoordinator {
     context: HandlerContext,
   ): AsyncIterable<SubscriptionUpdate> {
     const definition = toBinary(SubscriptionSchema, subscription);
-    const updates = new SubscriptionUpdateQueue(subscriptionQueueLimit);
+    const overflow = new AbortController();
+    const abort = () => overflow.abort();
+    context.signal.addEventListener("abort", abort, { once: true });
+    if (context.signal.aborted) abort();
+    const updates = new SubscriptionUpdateQueue(subscriptionQueueLimit, abort);
     const activation = this.#kernel
       .activate(
         definition,
@@ -344,7 +348,7 @@ export class NodeCoordinator {
           update.subscription = clone(SubscriptionSchema, subscription);
           await updates.push(update);
         },
-        context.signal,
+        overflow.signal,
       )
       .finally(() => {
         updates.close();
@@ -352,6 +356,8 @@ export class NodeCoordinator {
     try {
       for await (const update of updates) yield update;
     } finally {
+      context.signal.removeEventListener("abort", abort);
+      overflow.abort();
       updates.close();
       await activation;
     }
@@ -414,6 +420,7 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
   readonly #waiters: ((value: IteratorResult<SubscriptionUpdate>) => void)[] = [];
   readonly #delivered: (() => void)[] = [];
   readonly #limit: number;
+  readonly #onOverflow: () => void;
   #closed = false;
 
   /**
@@ -421,8 +428,9 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
    *
    * @param limit Limits retained updates before terminal closure.
    */
-  constructor(limit: number) {
+  constructor(limit: number, onOverflow: () => void = () => undefined) {
     this.#limit = limit;
+    this.#onOverflow = onOverflow;
   }
 
   /**
@@ -439,6 +447,7 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
       return Promise.resolve();
     }
     if (this.#updates.length >= this.#limit) {
+      this.#onOverflow();
       this.close();
       return Promise.resolve();
     }
