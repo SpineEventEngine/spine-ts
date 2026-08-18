@@ -33,6 +33,7 @@ import {
   BoundedContextBuilder,
   boundedContextAccess,
 } from "../context/bounded-context.js";
+import type { StandSubscriptionRegistry } from "../stand/subscription-registry.js";
 import {
   SpineServices,
   spineServicesAccess,
@@ -55,6 +56,7 @@ const defaultMessageMaxBytes = 4_194_304;
 const maximumMessageMaxBytes = 0xffff_ffff;
 const gracefulSessionDrainMs = 100;
 type ServerContext = BoundedContext | BoundedContextBuilder;
+const runningContexts = new WeakMap<RunningServer, readonly BoundedContext[]>();
 
 /**
  * Performs work coupled to listener readiness and network shutdown.
@@ -409,6 +411,7 @@ export class Server {
       closeables,
       listenerLifecycles: this.#listenerLifecycles,
     });
+    runningContexts.set(running, contexts);
     try {
       await running.startLifecycles();
     } catch (error) {
@@ -860,6 +863,38 @@ export interface RunningServer {
    */
   close(): Promise<void>;
 }
+
+/**
+ * Exposes framework-only facts about a local running server.
+ *
+ * @internal
+ */
+export interface RunningServerAccess {
+  // prettier-ignore
+
+  /**
+   * Returns registry persistence facts for a framework-owned running server.
+   *
+   * @param server Supplies the local running server.
+   * @returns The context registry facts, or undefined for an opaque server.
+   */
+  subscriptionRegistries(
+    server: RunningServer,
+  ): readonly StandSubscriptionRegistry[] | undefined;
+}
+
+/**
+ * Provides framework-only `RunningServer` context facts.
+ *
+ * @internal
+ */
+export const runningServerAccess: RunningServerAccess = Object.freeze({
+  subscriptionRegistries(server: RunningServer): readonly StandSubscriptionRegistry[] | undefined {
+    return runningContexts
+      .get(server)
+      ?.map((context) => boundedContextAccess.subscriptionRegistry(context));
+  },
+});
 
 class RunningHttp2Server implements RunningServer {
   readonly #server: http2.Http2Server;

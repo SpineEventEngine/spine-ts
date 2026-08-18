@@ -16,9 +16,10 @@ import { fork, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { LogLayer, StructuredTransport, type ILogLayer } from "loglayer";
-import type { RunningServer } from "./server.js";
+import { runningServerAccess, type RunningServer } from "./server.js";
 import { emitServerWarning } from "./server-log.js";
 import { NodeCoordinator, type ReadyCoordinatorMember } from "./node-coordinator.js";
+import { InMemorySubscriptionRegistry } from "../stand/subscription-registry.js";
 
 const childMarker = "SPINE_MANAGED_SERVER_CHILD";
 const slotMarker = "SPINE_MANAGED_SERVER_SLOT";
@@ -30,6 +31,7 @@ const closeGraceMs = 1_000;
 const closeKillMs = 1_000;
 const endpointMaximumBytes = 256;
 const handleMembers = new WeakMap<ManagedServerApplicationHandle, ManagedServerCoordinator>();
+const managedTestRegistries = new WeakMap<RunningServer, readonly InMemorySubscriptionRegistry[]>();
 const lifecycleLogger: ILogLayer = new LogLayer({
   transport: new StructuredTransport({
     logger: console,
@@ -108,6 +110,12 @@ export interface ManagedServerApplicationOptions {
   /**
    *
    * Builds one complete local application server in a child process.
+   *
+   * The framework owns the returned `Server` for the managed child lifetime.
+   * Every assembled Bounded Context must use its actual
+   * `InMemorySubscriptionRegistry`: managed mode rejects persistent and custom
+   * registries, then closes the assembled server before the child can report
+   * READY. This prevents child-local durable subscription ownership.
    *
    * @param options Supplies the child-only loopback listener address.
    * @returns The assembled local application server.
@@ -188,7 +196,20 @@ export const ManagedServerApplication: Readonly<{
 const ManagedServerValues = Object.freeze({
   async child(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle> {
     const server = await options.createServer({ host: "127.0.0.1", port: 0 });
-    await options.synchronize?.();
+    try {
+      ManagedServerValues.requireVolatileRegistries(server);
+      await options.synchronize?.();
+    } catch (error) {
+      try {
+        await server.close();
+      } catch (cleanup) {
+        throw new AggregateError(
+          [error, cleanup],
+          "Managed child setup and server cleanup failed.",
+        );
+      }
+      throw error;
+    }
     // Node may emit an IPC EPIPE after a parent has already disappeared. The
     // disconnect handler below owns shutdown; this listener prevents that
     // transport detail from becoming an unhandled child-process exception.
@@ -248,6 +269,17 @@ const ManagedServerValues = Object.freeze({
         reasonCode: "close_failed",
       });
     });
+  },
+  requireVolatileRegistries(server: RunningServer): void {
+    const registries =
+      runningServerAccess.subscriptionRegistries(server) ?? managedTestRegistries.get(server);
+    if (
+      registries === undefined ||
+      registries.some((registry) => !(registry instanceof InMemorySubscriptionRegistry))
+    )
+      throw new Error(
+        "Managed application replicas require an in-memory Stand subscription registry.",
+      );
   },
   send(message: {
     readonly type: "ready";
@@ -768,12 +800,22 @@ export const managedServerCoordinatorAccess: Readonly<{
 export const managedServerApplicationAccess: Readonly<{
   readyMembers(handle: ManagedServerApplicationHandle): readonly ReadyMember[];
   coordinatorEndpoint(handle: ManagedServerApplicationHandle): string | undefined;
+  installRegistriesForTest(
+    server: RunningServer,
+    registries: readonly InMemorySubscriptionRegistry[],
+  ): void;
 }> = Object.freeze({
   readyMembers(handle: ManagedServerApplicationHandle): readonly ReadyMember[] {
     return handleMembers.get(handle)?.readyMembers() ?? [];
   },
   coordinatorEndpoint(handle: ManagedServerApplicationHandle): string | undefined {
     return handleMembers.get(handle)?.coordinatorEndpoint();
+  },
+  installRegistriesForTest(
+    server: RunningServer,
+    registries: readonly InMemorySubscriptionRegistry[],
+  ): void {
+    managedTestRegistries.set(server, registries);
   },
 });
 

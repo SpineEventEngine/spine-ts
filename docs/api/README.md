@@ -69,6 +69,19 @@ contracts, `@spine-event-engine/storage` contracts, and the minimal
 `@spine-event-engine/testing` BlackBox test boundary, optional Datastore storage, and
 the MySQL-first RDBMS storage factory/errors/options.
 
+For managed Server cohorts, `SubscriptionService` is a live best-effort stream:
+it has no replay or cluster-completeness guarantee. The Gateway alone keeps
+durable logical bindings and rehydrates them on restart. A Coordinator fans one
+binding to READY complete replicas, merges their updates, and propagates
+cancellation without putting subscription payloads on parent/child IPC. Late
+and replacement replicas synchronize retained definitions before they become
+eligible. Standalone Servers retain the persistent registry default; framework-
+owned managed children require each actual context registry to be
+`InMemorySubscriptionRegistry`, rejecting and closing persistent or custom
+registries before READY. This subscription-fan-out contract does not itself
+claim real-process event and Delivery handoff acceptance; that acceptance
+remains future work in the correction sequence.
+
 The reference has 15 entry points, including `@spine-event-engine/client-web`,
 `@spine-event-engine/client-node`, `@spine-event-engine/delivery-client`, and
 `@spine-event-engine/delivery-server`. The latter is a listener-free, in-memory simple

@@ -13,10 +13,12 @@
  */
 
 import * as http2 from "node:http2";
+import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 
-import { create } from "@bufbuild/protobuf";
-import { Code, ConnectError, type HandlerContext } from "@connectrpc/connect";
+import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { EmptySchema } from "@bufbuild/protobuf/wkt";
+import { Code, ConnectError, createClient, type HandlerContext } from "@connectrpc/connect";
 import {
   connectNodeAdapter,
   createGrpcTransport,
@@ -27,19 +29,34 @@ import {
   BackendMembershipKernel,
   type BackendMembershipKernelOptions,
 } from "@spine-event-engine/deployment/internal/backend-membership-kernel";
-import { AckSchema, type Ack, type Command } from "@spine-event-engine/proto";
+import {
+  AckSchema,
+  ResponseSchema,
+  StatusSchema,
+  type Ack,
+  type Command,
+  type Response,
+} from "@spine-event-engine/proto";
 import {
   type Query,
   type QueryResponse,
   QueryResponseSchema,
   CommandService,
   QueryService,
+  type Subscription,
+  SubscriptionIdSchema,
+  SubscriptionSchema,
+  SubscriptionService,
+  type SubscriptionUpdate,
+  SubscriptionUpdateSchema,
+  type Topic,
 } from "@spine-event-engine/proto/client";
 
 const defaultHost = "127.0.0.1";
 const defaultPort = 0;
 const defaultMessageMaxBytes = 4_194_304;
 const gracefulSessionDrainMs = 100;
+const subscriptionQueueLimit = 100;
 
 /**
  * Describes one private managed child available for Coordinator forwarding.
@@ -161,8 +178,8 @@ export class NodeCoordinator {
   readonly #kernel: BackendMembershipKernel<
     ReadyCoordinatorMember,
     CoordinatorRequest,
-    unknown,
-    never
+    Uint8Array,
+    Uint8Array
   >;
   readonly #server: http2.Http2Server;
   readonly #sessions: Set<http2.ServerHttp2Session>;
@@ -201,7 +218,7 @@ export class NodeCoordinator {
     this.#kernel = new BackendMembershipKernel(NodeCoordinatorValues.unaryKernelOptions());
     this.#server = server;
     this.#sessions = sessions;
-    this.host = typeof address.address === "string" ? address.address : defaultHost;
+    this.host = address.address;
     this.port = address.port;
     this.baseUrl = `http://${NodeCoordinatorValues.formatHostForUrl(this.host)}:${this.port.toString()}`;
     this.#stopMembers = options.members.onReadyMembersChange(() => {
@@ -244,6 +261,11 @@ export class NodeCoordinator {
             read: async (query, context) => {
               return coordinator.#read(query, context);
             },
+          });
+          router.service(SubscriptionService, {
+            subscribe: (topic, context) => coordinator.#subscribe(topic, context),
+            activate: (subscription, context) => coordinator.#activate(subscription, context),
+            cancel: (subscription, context) => coordinator.#cancel(subscription, context),
           });
         },
         readMaxBytes,
@@ -295,14 +317,73 @@ export class NodeCoordinator {
     return request.response;
   }
 
+  async #subscribe(topic: Topic, context: HandlerContext): Promise<Subscription> {
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: `s-${randomUUID()}` }),
+      topic,
+    });
+    try {
+      await this.#kernel.subscribe(toBinary(SubscriptionSchema, subscription), context.signal);
+    } catch (error) {
+      throw this.#availabilityError(error);
+    }
+    return subscription;
+  }
+
+  async *#activate(
+    subscription: Subscription,
+    context: HandlerContext,
+  ): AsyncIterable<SubscriptionUpdate> {
+    const definition = toBinary(SubscriptionSchema, subscription);
+    const overflow = new AbortController();
+    const abort = () => {
+      overflow.abort();
+    };
+    context.signal.addEventListener("abort", abort, { once: true });
+    if (context.signal.aborted) abort();
+    const updates = new SubscriptionUpdateQueue(subscriptionQueueLimit, abort);
+    const activation = this.#kernel
+      .activate(
+        definition,
+        async (childUpdate) => {
+          const update = fromBinary(SubscriptionUpdateSchema, childUpdate);
+          update.subscription = clone(SubscriptionSchema, subscription);
+          await updates.push(update);
+        },
+        overflow.signal,
+      )
+      .finally(() => {
+        updates.close();
+      });
+    try {
+      for await (const update of updates) yield update;
+    } finally {
+      context.signal.removeEventListener("abort", abort);
+      overflow.abort();
+      updates.close();
+      await activation;
+    }
+  }
+
+  async #cancel(subscription: Subscription, context: HandlerContext): Promise<Response> {
+    await this.#kernel.cancel(toBinary(SubscriptionSchema, subscription), context.signal);
+    return create(ResponseSchema, {
+      status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
+    });
+  }
+
   async #forward(request: CoordinatorRequest): Promise<void> {
     try {
       await this.#kernel.forward(request);
     } catch (error) {
-      if (error instanceof Error && error.message === "backend membership is unavailable.")
-        throw new ConnectError("No ready application replica is available.", Code.Unavailable);
-      throw error;
+      throw this.#availabilityError(error);
     }
+  }
+
+  #availabilityError(error: unknown): unknown {
+    return error instanceof Error && error.message === "backend membership is unavailable."
+      ? new ConnectError("No ready application replica is available.", Code.Unavailable)
+      : error;
   }
 
   #reconcile(): Promise<void> {
@@ -331,12 +412,89 @@ interface CoordinatorQuery {
 }
 type CoordinatorRequest = CoordinatorCommand | CoordinatorQuery;
 
+/**
+ * Buffers bounded Coordinator subscription updates for one public stream.
+ *
+ * @internal
+ */
+export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate> {
+  readonly #updates: SubscriptionUpdate[] = [];
+  readonly #waiters: ((value: IteratorResult<SubscriptionUpdate>) => void)[] = [];
+  readonly #delivered: (() => void)[] = [];
+  readonly #limit: number;
+  readonly #onOverflow: () => void;
+  #closed = false;
+
+  /**
+   * Creates one terminal bounded update queue.
+   *
+   * @param limit Limits retained updates before terminal closure.
+   * @param onOverflow Aborts the public relay when the queue reaches its bound.
+   */
+  constructor(limit: number, onOverflow: () => void = () => undefined) {
+    this.#limit = limit;
+    this.#onOverflow = onOverflow;
+  }
+
+  /**
+   * Queues one update or closes terminally when its bound is reached.
+   *
+   * @param update Supplies the update to deliver.
+   * @returns Completion after direct delivery, queue closure, or consumer delivery.
+   */
+  push(update: SubscriptionUpdate): Promise<void> {
+    if (this.#closed) return Promise.resolve();
+    const waiter = this.#waiters.shift();
+    if (waiter !== undefined) {
+      waiter({ value: update, done: false });
+      return Promise.resolve();
+    }
+    if (this.#updates.length >= this.#limit) {
+      this.#onOverflow();
+      this.close();
+      return Promise.resolve();
+    }
+    this.#updates.push(update);
+    return new Promise((resolve) => this.#delivered.push(resolve));
+  }
+
+  /**
+   * Closes the queue and releases all waiting producers and consumers.
+   */
+  close(): void {
+    if (this.#closed) return;
+    this.#closed = true;
+    this.#updates.length = 0;
+    for (const waiter of this.#waiters.splice(0)) waiter({ value: undefined, done: true });
+    for (const delivered of this.#delivered.splice(0)) delivered();
+  }
+
+  /**
+   * Returns queued updates until the terminal close.
+   *
+   * @returns The asynchronous update iterator.
+   */
+  [Symbol.asyncIterator](): AsyncIterator<SubscriptionUpdate> {
+    return {
+      next: (): Promise<IteratorResult<SubscriptionUpdate>> => {
+        const update = this.#updates.shift();
+        if (update !== undefined) {
+          this.#delivered.shift()?.();
+          return Promise.resolve({ value: update, done: false });
+        }
+        if (this.#closed) return Promise.resolve({ value: undefined, done: true });
+        return new Promise((resolve) => this.#waiters.push(resolve));
+      },
+    };
+  }
+}
+
 const NodeCoordinatorValues = Object.freeze({
   unaryKernelOptions(): BackendMembershipKernelOptions<
     ReadyCoordinatorMember,
     CoordinatorRequest,
-    unknown,
-    never
+    Uint8Array,
+    Uint8Array
   > {
     // The Coordinator deliberately uses only the kernel's member lifecycle and
     // one-shot forwarding operations. Subscription fan-out is owned by T-0208.
@@ -347,12 +505,22 @@ const NodeCoordinatorValues = Object.freeze({
         `${member.slot.toString()}/${member.incarnation}`,
       sameMember: (left: ReadyCoordinatorMember, right: ReadyCoordinatorMember) =>
         left.endpoint === right.endpoint,
-      definitionKey: NodeCoordinatorValues.unsupported,
-      childDefinition: NodeCoordinatorValues.unsupported,
-      childSize: NodeCoordinatorValues.unsupported,
+      definitionKey: (definition) => fromBinary(SubscriptionSchema, definition).id?.value,
+      childDefinition: (definition, member) => {
+        const subscription = clone(SubscriptionSchema, fromBinary(SubscriptionSchema, definition));
+        const id = NodeCoordinatorValues.requiredValue(
+          subscription.id,
+          "Coordinator subscription definition is missing an ID.",
+        );
+        id.value = `${id.value}/${member.slot.toString()}-${member.incarnation}`;
+        return toBinary(SubscriptionSchema, subscription);
+      },
+      childSize: (child) => child.byteLength,
     };
   },
-  client(member: ReadyCoordinatorMember): BackendMemberClient<CoordinatorRequest, unknown, never> {
+  client(
+    member: ReadyCoordinatorMember,
+  ): BackendMemberClient<CoordinatorRequest, Uint8Array, Uint8Array> {
     const manager = new Http2SessionManager(member.endpoint);
     const transport = createGrpcTransport({ baseUrl: member.endpoint, sessionManager: manager });
     return {
@@ -392,13 +560,31 @@ const NodeCoordinatorValues = Object.freeze({
         manager.abort();
         return Promise.resolve();
       },
-      subscribe: NodeCoordinatorValues.unsupported,
-      activate: NodeCoordinatorValues.unsupported,
-      dispose: NodeCoordinatorValues.unsupported,
+      subscribe: async (definition, signal) => {
+        const subscription = fromBinary(SubscriptionSchema, definition);
+        const created = await createClient(SubscriptionService, transport).subscribe(
+          NodeCoordinatorValues.requiredValue(
+            subscription.topic,
+            "Coordinator subscription definition is missing a Topic.",
+          ),
+          { signal },
+        );
+        return toBinary(SubscriptionSchema, created);
+      },
+      activate: async (child, updates, signal) => {
+        for await (const update of createClient(SubscriptionService, transport).activate(
+          fromBinary(SubscriptionSchema, child),
+          { signal },
+        ))
+          await updates(toBinary(SubscriptionUpdateSchema, update));
+      },
+      dispose: async (child, signal) => {
+        await createClient(SubscriptionService, transport).cancel(
+          fromBinary(SubscriptionSchema, child),
+          { signal },
+        );
+      },
     };
-  },
-  unsupported(): never {
-    throw new Error("Node Coordinator subscription forwarding belongs to T-0208.");
   },
   responseMetadata(headers: Headers, trailers: Headers, context: HandlerContext): void {
     for (const [name, value] of NodeCoordinatorValues.applicationHeaders(headers))
@@ -419,6 +605,10 @@ const NodeCoordinatorValues = Object.freeze({
         forwarded.delete(name);
     }
     return forwarded;
+  },
+  requiredValue<Value>(value: Value | undefined, message: string): Value {
+    if (value === undefined) throw new Error(message);
+    return value;
   },
   host(value: string): string {
     const normalized = value.trim();

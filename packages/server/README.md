@@ -146,6 +146,23 @@ context using it is attached to a production `ServerEnvironment`, it emits one
 warning naming the context because definitions disappear on restart; startup
 still continues.
 
+### Managed subscription fan-out
+
+`SubscriptionService` remains a best-effort live stream: it has no replay or
+completeness promise. In standalone mode, its default registry is persistent.
+In managed complete-replica mode, the framework owns every child `Server` and
+requires each actual Bounded Context registry to be exactly an
+`InMemorySubscriptionRegistry`; persistent and custom registries are rejected
+and the assembled child is closed before READY.
+
+The Gateway alone owns durable logical subscription bindings. It rehydrates
+them after restart, while its Coordinator fans a definition out to READY
+replicas, merges their live updates, and propagates cancellation. Definition
+payloads never cross parent/child IPC. Late or replacement replicas first
+synchronize retained definitions and only then become eligible for ordinary
+traffic. Real-process event and Delivery handoff verification is documented
+separately from this server configuration guide.
+
 ### Follow one definition from creation to cleanup
 
 The registry stores a definition first, then makes it active. Applications use

@@ -145,6 +145,19 @@ explicit `SubscriptionId`. A complete custom implementation can instead be
 supplied with `withSubscriptionRegistry(registry)`; responsibility transfers to
 the builder on the first build attempt.
 
+`SubscriptionService` streams are live best-effort notifications, not replay,
+ordering, or completeness contracts. A standalone Server defaults to the
+persistent registry. In a managed complete-replica cohort, the framework owns
+each child Server and accepts only every context's actual
+`InMemorySubscriptionRegistry`; a persistent or custom registry is rejected
+and the assembled child is closed before READY. Durable logical bindings remain
+Gateway-only. The Coordinator fans each logical definition to ready children,
+merges updates, propagates cancellation, and carries no subscription payload on
+parent/child IPC. A late or replacement child synchronizes retained definitions
+before it is eligible for normal requests. This subscription-fan-out contract
+does not itself claim real-process event and Delivery handoff acceptance; that
+acceptance remains future work in the correction sequence.
+
 Create records begin `pending` and expire after 30 seconds unless activated.
 Active records have no framework TTL. Cancellation physically deletes the
 definition; no tombstone remains. A stored definition is at most 1 MiB

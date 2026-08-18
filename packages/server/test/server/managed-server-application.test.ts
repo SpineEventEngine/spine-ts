@@ -21,7 +21,11 @@ import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import { CommandService } from "@spine-event-engine/proto/client";
 
-import { ManagedServerApplication, type RunningServer } from "../../src/index.js";
+import {
+  InMemorySubscriptionRegistry,
+  ManagedServerApplication,
+  type RunningServer,
+} from "../../src/index.js";
 import {
   ManagedServerCoordinator,
   managedServerApplicationAccess,
@@ -65,12 +69,50 @@ const itemAt = <T>(values: readonly T[], index: number, description: string): T 
   return value;
 };
 
-const localRunningServer = (close: () => Promise<void>, port = 42): RunningServer => ({
-  host: "127.0.0.1",
-  port,
-  baseUrl: `http://127.0.0.1:${String(port)}`,
-  close,
-});
+const localRunningServer = (close: () => Promise<void>, port = 42): RunningServer => {
+  const server: RunningServer = {
+    host: "127.0.0.1",
+    port,
+    baseUrl: `http://127.0.0.1:${String(port)}`,
+    close,
+  };
+  managedServerApplicationAccess.installRegistriesForTest(server, [
+    new InMemorySubscriptionRegistry(),
+  ]);
+  return server;
+};
+
+function managedRegistryChild(registry?: "memory" | "custom"): ChildProcess {
+  return fork(
+    fileURLToPath(new URL("./managed-server-subscription-registry-child.mjs", import.meta.url)),
+    {
+      env: {
+        ...process.env,
+        SPINE_MANAGED_SERVER_CHILD: "true",
+        SPINE_MANAGED_SERVER_SLOT: "0",
+        SPINE_MANAGED_SERVER_INCARNATION: "registry-test",
+        ...(registry === undefined ? {} : { SPINE_MANAGED_REGISTRY: registry }),
+      },
+      stdio: ["ignore", "ignore", "pipe", "ipc"],
+    },
+  );
+}
+
+function childExit(child: ChildProcess): Promise<{ readonly code: number | null }> {
+  return new Promise((resolve) => {
+    child.once("exit", (code) => {
+      resolve({ code });
+    });
+  });
+}
+
+function childStderr(child: ChildProcess): { readonly text: () => string } {
+  let output = "";
+  child.stderr?.on("data", (chunk: Buffer) => {
+    output += chunk.toString();
+  });
+  return { text: () => output };
+}
 
 const managedSignalListener = (
   signal: NodeJS.Signals,
@@ -115,6 +157,16 @@ const fakeChild = (pid: number): ChildProcess => {
 };
 
 describe("ManagedServerApplication", () => {
+  it("keeps private Coordinator membership facts absent for opaque managed handles", () => {
+    const opaque = {
+      ready: false,
+      close: () => Promise.resolve(),
+    };
+
+    expect(managedServerApplicationAccess.readyMembers(opaque)).toEqual([]);
+    expect(managedServerApplicationAccess.coordinatorEndpoint(opaque)).toBeUndefined();
+  });
+
   it("uses the shared close path for a parent SIGINT", async () => {
     const clock = new FakeClock();
     const child = fakeChild(1);
@@ -778,8 +830,7 @@ describe("ManagedServerApplication", () => {
         processCount: 1,
         port: 50_051,
         moduleUrl: import.meta.url,
-        createServer: () =>
-          Promise.resolve({ host: "127.0.0.1", port: 42, baseUrl: "http://127.0.0.1:42", close }),
+        createServer: () => Promise.resolve(localRunningServer(close)),
         synchronize: () => Promise.resolve(),
       });
       expect(send).toHaveBeenCalledWith(
@@ -1060,6 +1111,63 @@ describe("ManagedServerApplication", () => {
       ).not.toBe(process.pid);
     } finally {
       await managed.close();
+    }
+  }, 20_000);
+
+  it("rejects a persistent normal Server registry before a managed child reports READY", async () => {
+    const child = managedRegistryChild();
+    const messages: unknown[] = [];
+    const stderr = childStderr(child);
+    child.on("message", (message) => messages.push(message));
+    const exited = childExit(child);
+    try {
+      await expect(exited).resolves.toMatchObject({ code: 1 });
+      expect(messages).toEqual([]);
+      expect(stderr.text()).toContain("in-memory Stand subscription registry");
+    } finally {
+      if (child.exitCode === null) child.kill("SIGKILL");
+      await exited;
+    }
+  }, 20_000);
+
+  it("rejects a custom non-persistent registry before a managed child reports READY", async () => {
+    const child = managedRegistryChild("custom");
+    const messages: unknown[] = [];
+    const stderr = childStderr(child);
+    child.on("message", (message) => messages.push(message));
+    const exited = childExit(child);
+    let completed = false;
+
+    try {
+      await expect(exited).resolves.toMatchObject({ code: 1 });
+      completed = true;
+      expect(messages).toEqual([]);
+      expect(stderr.text()).toContain("in-memory Stand subscription registry");
+    } finally {
+      if (!completed) {
+        child.kill("SIGKILL");
+        await exited;
+      }
+    }
+  }, 20_000);
+
+  it("admits an in-memory normal Server registry as a managed READY child", async () => {
+    const child = managedRegistryChild("memory");
+    childStderr(child);
+    const ready = new Promise<void>((resolve) => {
+      child.on("message", (message: { readonly type?: string }) => {
+        if (message.type === "ready") resolve();
+      });
+    });
+
+    const exited = childExit(child);
+    try {
+      await ready;
+      child.send({ type: "close" });
+      await expect(exited).resolves.toMatchObject({ code: 0 });
+    } finally {
+      if (child.exitCode === null) child.kill("SIGKILL");
+      await exited;
     }
   }, 20_000);
 
