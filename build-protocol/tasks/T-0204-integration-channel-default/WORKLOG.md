@@ -122,3 +122,17 @@ once'`.
   documentation audience/snippets, Prettier, and `git diff --check` passed.
 - Next: commit and push this correction batch for the required focused
   API/docs and reliability re-review.
+
+## 2026-08-18 — Release-readiness artifact correction
+
+- The one post-review `verify:release` invocation passed Node, Protobuf,
+  generated build, tooling typecheck, ESLint, cleanup, TSDoc, copyright,
+  formatting, and generated API/documentation gates before release-readiness
+  rejected internal `.superpowers/sdd` review Markdown as reader-facing prose.
+- This was evidence-placement debt, not a product or documentation failure.
+  Durable task evidence already lives in `TASK.md`, this work log, and
+  `REVIEW.md`. The tracked duplicate implementation report and transient
+  ignored review packages were removed; `REVIEW.md` now records that the
+  immutable package was intentionally transient.
+- Because the first release invocation did not reach the test phase, the
+  converged release profile must be rerun after this deterministic correction.

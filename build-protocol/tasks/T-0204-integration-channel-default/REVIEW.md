@@ -2,9 +2,9 @@
 
 ## Review wave 1 assignments
 
-The product checkpoint is `78eb44098`. Review package:
-`.superpowers/sdd/review-58fbccb61..78eb44098.diff`. Reviewers also receive
-`TASK.md` and `.superpowers/sdd/t0204-report.md`.
+The product checkpoint is `78eb44098`. Reviewers received an immutable
+checkpoint diff plus `TASK.md` and `WORKLOG.md`. The transient review package
+was removed after the findings and dispositions became durable in this file.
 
 All reviewers are existing project roles, may not spawn subagents, and are
 explicitly dispatched on their role's immutable `gpt-5.6-terra` / `high`
