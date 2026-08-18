@@ -83,7 +83,10 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     const state = this.#definitions.get(key);
     if (state === undefined) throw new Error("subscription creation was cancelled");
     await this.#schedule(this.#nodes, false);
-    if (!this.#definitions.has(key)) throw new Error("subscription creation was cancelled");
+    // Re-evaluate cancellation after reconciliation can yield to close().
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (signal.aborted || this.#isClosed() || !this.#definitions.has(key))
+      throw new Error("subscription creation was cancelled");
     if (state.failure !== undefined || state.children.size !== this.#members.size) {
       await this.#removeDefinition(key, new AbortController().signal);
       throw state.failure ?? new Error("Gateway backend is absent.");
@@ -169,7 +172,14 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     const controller = new AbortController(); state.starts.add(controller); this.#childStarts.add(controller); let child: Child;
     try { child = await current.client.subscribe(this.#options.childDefinition(state.definition, current.member), controller.signal); } finally { state.starts.delete(controller); this.#childStarts.delete(controller); }
     if (this.#options.childSize(child) > state.maxChildBytes) { await current.client.dispose(child, controller.signal); throw new Error("backend-envelope-too-large"); }
-    if (generation !== this.#generation || this.#members.get(key)?.incarnation !== current.incarnation) { await current.client.dispose(child, controller.signal); return; }
+    if (
+      generation !== this.#generation ||
+      this.#members.get(key)?.incarnation !== current.incarnation ||
+      this.#isClosed()
+    ) {
+      await current.client.dispose(child, controller.signal);
+      return;
+    }
     const stored = { child, controller, active: false, activation: Promise.resolve() }; state.children.set(key, stored);
     if (state.active && state.updates !== undefined) this.#activateChild(state, key, stored, current.client);
   }
@@ -183,5 +193,6 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
   async #retryChildCleanup(): Promise<void> { for (const pending of [...this.#failedChildCleanup]) try { await pending.client.dispose(pending.child, new AbortController().signal); this.#failedChildCleanup.delete(pending); } catch { /* later reconciliation retries */ } }
   async #dispose(client: BackendMemberClient<Request, Child, Update>): Promise<void> { try { const pending = this.#childCleanup.get(client); if (pending !== undefined) await Promise.allSettled(pending); await client.close(); this.#failedDisposals.delete(client); } catch { this.#failedDisposals.add(client); } }
   async #retryDisposals(): Promise<void> { for (const client of this.#failedDisposals) await this.#dispose(client); }
+  #isClosed(): boolean { return this.#closed; }
   async #closeOnce(): Promise<void> { this.#closed = true; for (const controller of this.#creating) controller.abort(); for (const start of this.#childStarts) start.abort(); for (const state of this.#definitions.values()) for (const start of state.starts) start.abort(); await this.#running; for (const key of [...this.#definitions.keys()]) await this.#removeDefinition(key, new AbortController().signal); await Promise.all([...this.#members.values()].map(({ client }) => this.#dispose(client))); this.#members.clear(); await this.#retryDisposals(); await this.#retryChildCleanup(); if (this.#failedDisposals.size > 0) throw new Error("backend client cleanup remains incomplete."); if (this.#failedChildCleanup.size > 0) throw new Error("backend child cleanup remains incomplete."); }
 }
