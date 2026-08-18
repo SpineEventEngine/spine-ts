@@ -183,6 +183,34 @@
       "test": "packages/server/test/server/server.test.ts"
     },
     {
+      "id": "server.managed_replica_start",
+      "source": "../../packages/server/src/server/managed-server-application.ts",
+      "operation": "managed_replica.start",
+      "disposition": "warn",
+      "test": "packages/server/test/server/managed-server-application.test.ts"
+    },
+    {
+      "id": "server.managed_replica_exit",
+      "source": "../../packages/server/src/server/managed-server-application.ts",
+      "operation": "managed_replica.exit",
+      "disposition": "warn",
+      "test": "packages/server/test/server/managed-server-application.test.ts"
+    },
+    {
+      "id": "server.managed_replica_retry",
+      "source": "../../packages/server/src/server/managed-server-application.ts",
+      "operation": "managed_replica.replace",
+      "disposition": "warn",
+      "test": "packages/server/test/server/managed-server-application.test.ts"
+    },
+    {
+      "id": "server.managed_replica_signal",
+      "source": "../../packages/server/src/server/managed-server-application.ts",
+      "operation": "managed_replica.signal",
+      "disposition": "warn",
+      "test": "packages/server/test/server/managed-server-application.test.ts"
+    },
+    {
       "id": "server.delivery_notify_start",
       "source": "../../packages/server/src/server/environment-delivery-worker.ts",
       "operation": "delivery.notify_start",

@@ -22,8 +22,15 @@
 - Evidence: `pnpm exec tsc -p packages/server/tsconfig.json`; `pnpm docs:api:check`
   (259 server exports); and `pnpm exec vitest run
 packages/server/test/server/managed-server-application.test.ts --pool=threads`
-  (28/28) passed. Full pre-review validation and coverage remain pending after
-  the remaining correction proofs and contained lifecycle logging disposition.
+  (28/28) passed. Parent SIGINT/SIGTERM cleanup, child IPC disconnect,
+  bounded TERM/KILL close, inherited child stdio, and endpoint/terminal fencing
+  are covered by this same focused suite. Parent lifecycle warnings use the
+  existing contained server logging helper with only bounded allowlisted
+  slot/incarnation/attempt/delay/reason facts; it never resolves a parent
+  `ServerEnvironment` merely to obtain a child application logger. Focused
+  changed-source coverage is 93.75% statements, 90.90% branches, 92.30%
+  functions, and 96.42% lines across the changed managed lifecycle and logging
+  source. Full pre-review validation remains pending.
 
 ## 2026-08-18 — Framing and code map
 

@@ -66,6 +66,19 @@ manifests, schema/handler digests, build attestations, strategy identities,
 behavioral sampling, custom-strategy restrictions, application signals over
 IPC, or automatic request retry.
 
+## Correction implementation status
+
+The correction batch is implemented on `5c23cdd77` plus the pending focused
+lint/test cleanup. The public handle is reduced to `ready` and `close`; private
+topology is available only through an internal handoff accessor. No runtime
+manifest, strategy identity, application IPC, or retry mechanism was added.
+Lifecycle warnings use the contained server logger with only allowlisted slot,
+incarnation, attempt, delay, operation, and reason values. The parent does not
+resolve `ServerEnvironment` merely to obtain a logger, because that would
+construct application facilities outside a complete replica. Re-review must
+assess this explicit logging and ownership disposition with the other behavior
+corrections.
+
 Re-review every technical concern after the single correction batch.
 Documentation re-review is required because public examples and semantics
 change.

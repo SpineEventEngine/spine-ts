@@ -55,18 +55,22 @@ class FakeClock {
   }
 }
 
-const fakeChild = (pid: number): ChildProcess =>
-  Object.assign(new EventEmitter(), {
+const fakeChild = (pid: number): ChildProcess => {
+  const killCalls: string[] = [];
+  return Object.assign(new EventEmitter(), {
     pid,
     connected: true,
     exitCode: null,
     signalCode: null,
     send: vi.fn(),
-    kill: vi.fn(function (this: EventEmitter) {
+    kill: vi.fn(function (this: EventEmitter, signal: string) {
+      killCalls.push(signal);
       this.emit("exit");
       return true;
     }),
+    killCalls,
   }) as unknown as ChildProcess;
+};
 
 describe("ManagedServerApplication", () => {
   it.each(["SIGTERM", "SIGINT"] as const)(
@@ -90,7 +94,11 @@ describe("ManagedServerApplication", () => {
         parent.once("error", reject);
       });
       parent.kill(signal);
-      await new Promise<void>((resolve) => parent.once("exit", () => resolve()));
+      await new Promise<void>((resolve) =>
+        parent.once("exit", () => {
+          resolve();
+        }),
+      );
       await expect
         .poll(
           () => {
@@ -123,6 +131,9 @@ describe("ManagedServerApplication", () => {
     child.emit("error", new Error("fork channel failed"));
     child.emit("exit", 1);
     expect(clock.delays).toEqual([2]);
+    expect((child as unknown as { readonly killCalls: readonly string[] }).killCalls).toContain(
+      "SIGTERM",
+    );
     clock.advance(2);
     await coordinator.close();
   });
@@ -151,6 +162,8 @@ describe("ManagedServerApplication", () => {
       "https://127.0.0.1:1",
       "http://localhost:1",
       "http://127.0.0.1:1/path",
+      "http://user@127.0.0.1:1",
+      "http://127.0.0.1:0",
       `http://127.0.0.1:1/${"x".repeat(300)}`,
     ]) {
       first.child.emit("message", {
@@ -462,7 +475,7 @@ describe("ManagedServerApplication", () => {
     const priorListeners = new Set(process.listeners("message"));
     const priorSend = Object.getOwnPropertyDescriptor(process, "send");
     const priorConnected = Object.getOwnPropertyDescriptor(process, "connected");
-    const send = vi.fn((_message, callback) => {
+    const send = vi.fn((_message: unknown, callback: (error: Error | null) => void) => {
       callback(null);
       return true;
     });
@@ -507,13 +520,14 @@ describe("ManagedServerApplication", () => {
     const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
     const priorSend = Object.getOwnPropertyDescriptor(process, "send");
     const priorConnected = Object.getOwnPropertyDescriptor(process, "connected");
-    const send = vi.fn((_message, callback) => {
+    const send = vi.fn((_message: unknown, callback: (error: Error | null) => void) => {
       callback(new Error("closed"));
       return false;
     });
     Object.defineProperty(process, "send", { configurable: true, value: send });
     Object.defineProperty(process, "connected", { configurable: true, value: true });
     process.env.SPINE_MANAGED_SERVER_CHILD = "true";
+    const close = vi.fn(() => Promise.resolve());
     try {
       await expect(
         ManagedServerApplication.run({
@@ -522,10 +536,141 @@ describe("ManagedServerApplication", () => {
           createServer: () =>
             Promise.resolve({
               baseUrl: "http://127.0.0.1:42",
-              close: () => Promise.resolve(),
+              close,
             }),
         }),
       ).rejects.toThrow("closed");
+      expect(close).toHaveBeenCalledOnce();
+    } finally {
+      if (priorSend === undefined) delete (process as { send?: unknown }).send;
+      else Object.defineProperty(process, "send", priorSend);
+      if (priorConnected === undefined) delete (process as { connected?: unknown }).connected;
+      else Object.defineProperty(process, "connected", priorConnected);
+      if (priorChild === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
+      else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
+    }
+  });
+
+  it("ignores one private control fact before accepting close", async () => {
+    const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
+    const priorSend = Object.getOwnPropertyDescriptor(process, "send");
+    const priorConnected = Object.getOwnPropertyDescriptor(process, "connected");
+    const send = vi.fn((_message: unknown, callback: (error: Error | null) => void) => {
+      callback(null);
+      return true;
+    });
+    Object.defineProperty(process, "send", { configurable: true, value: send });
+    Object.defineProperty(process, "connected", { configurable: true, value: true });
+    process.env.SPINE_MANAGED_SERVER_CHILD = "true";
+    const close = vi.fn(() => Promise.resolve());
+    try {
+      await ManagedServerApplication.run({
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.resolve({ baseUrl: "http://127.0.0.1:42", close }),
+      });
+      process.emit("message", { type: "ignored" });
+      expect(close).not.toHaveBeenCalled();
+      Object.defineProperty(process, "connected", { configurable: true, value: false });
+      process.emit("message", { type: "close" });
+      await Promise.resolve();
+      expect(close).toHaveBeenCalledOnce();
+    } finally {
+      if (priorSend === undefined) delete (process as { send?: unknown }).send;
+      else Object.defineProperty(process, "send", priorSend);
+      if (priorConnected === undefined) delete (process as { connected?: unknown }).connected;
+      else Object.defineProperty(process, "connected", priorConnected);
+      if (priorChild === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
+      else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
+    }
+  });
+
+  it("closes a child when its parent IPC disconnects", async () => {
+    const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
+    const priorSend = Object.getOwnPropertyDescriptor(process, "send");
+    const priorConnected = Object.getOwnPropertyDescriptor(process, "connected");
+    const priorDisconnect = Object.getOwnPropertyDescriptor(process, "disconnect");
+    const send = vi.fn((_message: unknown, callback: (error: Error | null) => void) => {
+      callback(null);
+      return true;
+    });
+    const disconnect = vi.fn();
+    Object.defineProperty(process, "send", { configurable: true, value: send });
+    Object.defineProperty(process, "connected", { configurable: true, value: true });
+    Object.defineProperty(process, "disconnect", { configurable: true, value: disconnect });
+    process.env.SPINE_MANAGED_SERVER_CHILD = "true";
+    const close = vi.fn(() => Promise.resolve());
+    try {
+      await ManagedServerApplication.run({
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.resolve({ baseUrl: "http://127.0.0.1:42", close }),
+      });
+      process.emit("disconnect");
+      await Promise.resolve();
+      expect(close).toHaveBeenCalledOnce();
+      expect(disconnect).toHaveBeenCalledOnce();
+    } finally {
+      if (priorSend === undefined) delete (process as { send?: unknown }).send;
+      else Object.defineProperty(process, "send", priorSend);
+      if (priorConnected === undefined) delete (process as { connected?: unknown }).connected;
+      else Object.defineProperty(process, "connected", priorConnected);
+      if (priorDisconnect === undefined) delete (process as { disconnect?: unknown }).disconnect;
+      else Object.defineProperty(process, "disconnect", priorDisconnect);
+      if (priorChild === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
+      else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
+    }
+  });
+
+  it("closes local assembly when a marked child has no parent IPC", async () => {
+    const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
+    const priorSend = Object.getOwnPropertyDescriptor(process, "send");
+    const priorConnected = Object.getOwnPropertyDescriptor(process, "connected");
+    Object.defineProperty(process, "send", { configurable: true, value: undefined });
+    Object.defineProperty(process, "connected", { configurable: true, value: false });
+    process.env.SPINE_MANAGED_SERVER_CHILD = "true";
+    const close = vi.fn(() => Promise.resolve());
+    try {
+      await expect(
+        ManagedServerApplication.run({
+          processCount: 1,
+          moduleUrl: import.meta.url,
+          createServer: () => Promise.resolve({ baseUrl: "http://127.0.0.1:42", close }),
+        }),
+      ).rejects.toThrow("no parent IPC");
+      expect(close).toHaveBeenCalledOnce();
+    } finally {
+      if (priorSend === undefined) delete (process as { send?: unknown }).send;
+      else Object.defineProperty(process, "send", priorSend);
+      if (priorConnected === undefined) delete (process as { connected?: unknown }).connected;
+      else Object.defineProperty(process, "connected", priorConnected);
+      if (priorChild === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
+      else process.env.SPINE_MANAGED_SERVER_CHILD = priorChild;
+    }
+  });
+
+  it("contains a synchronous READY IPC failure after closing local assembly", async () => {
+    const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
+    const priorSend = Object.getOwnPropertyDescriptor(process, "send");
+    const priorConnected = Object.getOwnPropertyDescriptor(process, "connected");
+    Object.defineProperty(process, "send", {
+      configurable: true,
+      value: () => {
+        throw new Error("ipc write failed");
+      },
+    });
+    Object.defineProperty(process, "connected", { configurable: true, value: true });
+    process.env.SPINE_MANAGED_SERVER_CHILD = "true";
+    const close = vi.fn(() => Promise.resolve());
+    try {
+      await expect(
+        ManagedServerApplication.run({
+          processCount: 1,
+          moduleUrl: import.meta.url,
+          createServer: () => Promise.resolve({ baseUrl: "http://127.0.0.1:42", close }),
+        }),
+      ).rejects.toThrow("ipc write failed");
+      expect(close).toHaveBeenCalledOnce();
     } finally {
       if (priorSend === undefined) delete (process as { send?: unknown }).send;
       else Object.defineProperty(process, "send", priorSend);
@@ -551,6 +696,22 @@ describe("ManagedServerApplication", () => {
       ).not.toBe(process.pid);
     } finally {
       await managed.close();
+    }
+  }, 20_000);
+
+  it("does not block readiness when a child writes verbose standard output", async () => {
+    const priorVerbose = process.env.SPINE_MANAGED_SERVER_VERBOSE;
+    process.env.SPINE_MANAGED_SERVER_VERBOSE = "true";
+    try {
+      const managed = await ManagedServerApplication.run({
+        processCount: 1,
+        moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
+        createServer: () => Promise.reject(new Error("Parent must not assemble a child.")),
+      });
+      await managed.close();
+    } finally {
+      if (priorVerbose === undefined) delete process.env.SPINE_MANAGED_SERVER_VERBOSE;
+      else process.env.SPINE_MANAGED_SERVER_VERBOSE = priorVerbose;
     }
   }, 20_000);
 

@@ -15,7 +15,9 @@
 import { fork, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { LogLayer, StructuredTransport, type ILogLayer } from "loglayer";
 import type { RunningServer } from "./server.js";
+import { emitServerWarning } from "./server-log.js";
 
 const childMarker = "SPINE_MANAGED_SERVER_CHILD";
 const slotMarker = "SPINE_MANAGED_SERVER_SLOT";
@@ -27,6 +29,17 @@ const closeGraceMs = 1_000;
 const closeKillMs = 1_000;
 const endpointMaximumBytes = 256;
 const handleMembers = new WeakMap<ManagedServerApplicationHandle, ManagedServerCoordinator>();
+const lifecycleLogger: ILogLayer = new LogLayer({
+  transport: new StructuredTransport({
+    logger: console,
+    level: "warn",
+    stringify: true,
+    messageField: "message",
+    dateField: "timestamp",
+    levelField: "severity",
+    levelFn: (level) => level.toUpperCase(),
+  }),
+}).child();
 
 /** Configures bounded replacement after an unexpected replica exit. */
 export interface ManagedServerRestartOptions {
@@ -92,25 +105,33 @@ const ManagedServerValues = Object.freeze({
     // transport detail from becoming an unhandled child-process exception.
     const containIpcError = () => undefined;
     process.on("error", containIpcError);
-    await ManagedServerValues.send({
-      type: "ready",
-      slot: process.env[slotMarker],
-      incarnation: process.env[incarnationMarker],
-      endpoint: server.baseUrl,
-    });
+    try {
+      await ManagedServerValues.send({
+        type: "ready",
+        slot: process.env[slotMarker],
+        incarnation: process.env[incarnationMarker],
+        endpoint: server.baseUrl,
+      });
+    } catch (error) {
+      await server.close();
+      process.off("error", containIpcError);
+      throw error;
+    }
     let closing: Promise<void> | undefined;
     const close = () => {
       closing ??= server.close().finally(() => {
         if (process.connected && typeof process.disconnect === "function") process.disconnect();
         process.off("error", containIpcError);
+        process.off("message", onMessage);
       });
       return closing;
     };
-    process.once("message", (message: { readonly type?: string }) => {
+    const onMessage = (message: { readonly type?: string }) => {
       if (message.type === "close") {
         void close();
       }
-    });
+    };
+    process.on("message", onMessage);
     process.once("disconnect", () => {
       void close();
     });
@@ -139,7 +160,7 @@ const ManagedServerValues = Object.freeze({
           else reject(error);
         });
       } catch (error) {
-        reject(error);
+        reject(error instanceof Error ? error : new Error("Managed child READY IPC failed."));
       }
     });
   },
@@ -239,6 +260,14 @@ export class ManagedServerCoordinator {
     } catch {
       slot.starting = false;
       this.#starts--;
+      // spine-log-boundary: server.managed_replica_start
+      emitServerWarning(lifecycleLogger, "Managed replica start failed.", {
+        operation: "managed_replica.start",
+        reasonCode: "start_failed",
+        slot: String(slot.slot),
+        incarnation,
+        attempt: String(slot.failures + 1),
+      });
       this.#scheduleReplacement(slot);
       this.#drainStarts();
       return;
@@ -260,7 +289,7 @@ export class ManagedServerCoordinator {
       this.#onExit(slot, replica);
     });
     child.once("error", () => {
-      this.#onExit(slot, replica);
+      this.#onError(slot, replica);
     });
   }
 
@@ -292,8 +321,25 @@ export class ManagedServerCoordinator {
     ) {
       slot.failures = 0;
     }
+    // spine-log-boundary: server.managed_replica_exit
+    emitServerWarning(lifecycleLogger, "Managed replica exited unexpectedly.", {
+      operation: "managed_replica.exit",
+      reasonCode: "unexpected_exit",
+      slot: String(slot.slot),
+      incarnation: replica.incarnation,
+      attempt: String(slot.failures + 1),
+    });
     this.#scheduleReplacement(slot);
     this.#drainStarts();
+  }
+
+  #onError(slot: SlotRecord, replica: ReplicaRecord): void {
+    if (slot.replica !== replica || replica.terminal) return;
+    // A ChildProcess error can precede exit while the OS process still lives.
+    // Retire the incarnation once, then actively terminate that known child.
+    this.#onExit(slot, replica);
+    if (replica.child.exitCode === null && replica.child.signalCode === null)
+      replica.child.kill("SIGTERM");
   }
 
   #scheduleReplacement(slot: SlotRecord): void {
@@ -306,6 +352,14 @@ export class ManagedServerCoordinator {
       slot.replacementTimer = undefined;
       this.#start(slot);
     }, delay);
+    // spine-log-boundary: server.managed_replica_retry
+    emitServerWarning(lifecycleLogger, "Managed replica replacement scheduled.", {
+      operation: "managed_replica.replace",
+      reasonCode: "unexpected_exit",
+      slot: String(slot.slot),
+      attempt: String(slot.failures),
+      delay: String(delay),
+    });
   }
 
   #drainStarts(): void {
@@ -363,9 +417,17 @@ export class ManagedServerCoordinator {
   #installSignalHandlers(): void {
     if (this.#onSignal !== undefined) return;
     this.#onSignal = () => {
-      void this.close().finally(() => {
-        if (process.connected && typeof process.disconnect === "function") process.disconnect();
-      });
+      // spine-log-boundary: server.managed_replica_signal
+      void this.close()
+        .then(() => {
+          if (process.connected && typeof process.disconnect === "function") process.disconnect();
+        })
+        .catch(() => {
+          emitServerWarning(lifecycleLogger, "Managed replica signal close failed.", {
+            operation: "managed_replica.signal",
+            reasonCode: "close_failed",
+          });
+        });
     };
     process.on("SIGINT", this.#onSignal);
     process.on("SIGTERM", this.#onSignal);
@@ -474,7 +536,9 @@ const ManagedServerCoordinatorValues = Object.freeze({
   },
   within(promise: Promise<void>, delay: number): Promise<boolean> {
     return new Promise((resolve) => {
-      const timer = setTimeout(() => resolve(false), delay);
+      const timer = setTimeout(() => {
+        resolve(false);
+      }, delay);
       void promise.then(() => {
         clearTimeout(timer);
         resolve(true);
