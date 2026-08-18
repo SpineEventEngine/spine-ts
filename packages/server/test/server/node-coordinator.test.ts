@@ -169,6 +169,93 @@ describe("NodeCoordinator", () => {
     await expect(request).rejects.toMatchObject({ code: Code.Canceled });
     await expect.poll(() => aborted).toBe(true);
   });
+
+  it("preserves application metadata and downstream response headers and trailers", async () => {
+    const replica = await backend("metadata", {
+      post: (context) => {
+        context.responseHeader.set("x-child", context.requestHeader.get("x-tenant") ?? "missing");
+        context.responseTrailer.set("x-trailer", "child");
+        return create(AckSchema, { status: { case: "ok", value: {} } });
+      },
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+
+    const response = await createGrpcTransport({ baseUrl: coordinator.baseUrl }).unary(
+      CommandService.method.post,
+      undefined,
+      undefined,
+      { "x-tenant": "acme" },
+      create(CommandService.method.post.input),
+    );
+    expect(response.header.get("x-child")).toBe("acme");
+    expect(response.trailer.get("x-trailer")).toBe("child");
+  });
+
+  it("forwards the remaining deadline to the selected child", async () => {
+    let deadlineObserved = false;
+    const replica = await backend("deadline", {
+      post: (context) =>
+        new Promise((_, reject) => {
+          context.signal.addEventListener(
+            "abort",
+            () => {
+              deadlineObserved = true;
+              reject(new ConnectError("deadline", Code.DeadlineExceeded));
+            },
+            { once: true },
+          );
+        }),
+    });
+    closeables.push(replica.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+
+    await expect(
+      createGrpcTransport({ baseUrl: coordinator.baseUrl, defaultTimeoutMs: 20 }).unary(
+        CommandService.method.post,
+        undefined,
+        undefined,
+        undefined,
+        create(CommandService.method.post.input),
+      ),
+    ).rejects.toMatchObject({ code: Code.DeadlineExceeded });
+    await expect.poll(() => deadlineObserved).toBe(true);
+  });
+
+  it("enforces configured inbound and outbound message bounds at the Coordinator", async () => {
+    const replica = await backend("bounds");
+    closeables.push(replica.close);
+    const request = create(CommandService.method.post.input, { id: { value: "request" } });
+    const inbound = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      readMaxBytes: 1,
+    });
+    closeables.push(() => inbound.close());
+    await expect(
+      createClient(CommandService, createGrpcTransport({ baseUrl: inbound.baseUrl })).post(request),
+    ).rejects.toBeInstanceOf(ConnectError);
+
+    const outbound = await NodeCoordinator.open({
+      members: new TestReadyMembers([replica.member]),
+      port: 0,
+      writeMaxBytes: 1,
+    });
+    closeables.push(() => outbound.close());
+    await expect(
+      createClient(CommandService, createGrpcTransport({ baseUrl: outbound.baseUrl })).post(
+        request,
+      ),
+    ).rejects.toBeInstanceOf(ConnectError);
+  });
 });
 
 class TestReadyMembers implements ReadyMemberSource {
@@ -204,7 +291,9 @@ interface ReadyMember {
 
 async function backend(
   name: string,
-  options: { readonly post?: (context: HandlerContext) => Promise<never> } = {},
+  options: {
+    readonly post?: (context: HandlerContext) => Promise<never> | MessageShape<typeof AckSchema>;
+  } = {},
 ): Promise<{
   readonly member: ReadyMember;
   readonly close: () => Promise<void>;

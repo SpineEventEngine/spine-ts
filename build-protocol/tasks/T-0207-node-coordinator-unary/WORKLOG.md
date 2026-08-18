@@ -36,3 +36,12 @@
   to its child `Server` normal service. Focused fork verification passed 43/43;
   server typechecking passed. Generated manifest IDs created by the temporary
   generation step were restored and are not part of this task.
+
+## 2026-08-18 — Forwarding contract completion
+
+- Generated HTTP/2 acceptance proves selected-child failure has no retry,
+  cancellation and deadlines reach the selected child, application metadata and
+  downstream response headers/trailers cross the coordinator, and configured
+  inbound/outbound message bounds reject oversized calls at the coordinator.
+- Replacement selection uses the internal READY-member notification rather
+  than polling or public topology.
