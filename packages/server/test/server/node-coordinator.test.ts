@@ -26,6 +26,7 @@ import {
   SubscriptionIdSchema,
   SubscriptionSchema,
   SubscriptionService,
+  SubscriptionUpdateSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
 import { afterEach, describe, expect, it } from "vitest";
@@ -103,9 +104,28 @@ describe("NodeCoordinator", () => {
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     ).subscribe(create(TopicSchema));
 
-    expect(subscription.id?.value).toBeTruthy();
+    expect(subscription.id?.value).toMatch(/^s-[0-9a-f-]{36}$/u);
     expect(first.subscriptions()).toBe(1);
     expect(second.subscriptions()).toBe(1);
+    await coordinator.close();
+  });
+
+  it("merges native update streams and relays the Coordinator logical subscription", async () => {
+    const first = await backend("first", { updates: 1 });
+    const second = await backend("second", { updates: 1 });
+    closeables.push(first.close, second.close);
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([first.member, second.member]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(SubscriptionService, createGrpcTransport({ baseUrl: coordinator.baseUrl }));
+    const subscription = await client.subscribe(create(TopicSchema));
+    const updates = client.activate(subscription)[Symbol.asyncIterator]();
+
+    expect((await updates.next()).value?.subscription?.id).toEqual(subscription.id);
+    expect((await updates.next()).value?.subscription?.id).toEqual(subscription.id);
+
     await coordinator.close();
   });
 
@@ -396,6 +416,7 @@ async function backend(
   name: string,
   options: {
     readonly post?: (context: HandlerContext) => Promise<never> | MessageShape<typeof AckSchema>;
+    readonly updates?: number;
   } = {},
 ): Promise<{
   readonly member: ReadyMember;
@@ -427,7 +448,10 @@ async function backend(
               topic,
             });
           },
-          activate: async function* () {},
+          activate: async function* (subscription) {
+            for (let update = 0; update < (options.updates ?? 0); update += 1)
+              yield create(SubscriptionUpdateSchema, { subscription });
+          },
           cancel: () => create(SubscriptionService.method.cancel.output),
         });
       },

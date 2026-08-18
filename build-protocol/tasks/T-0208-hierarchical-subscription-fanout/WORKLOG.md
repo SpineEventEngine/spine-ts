@@ -62,3 +62,22 @@
   pass; the latter has 18/18 real HTTP/2 tests.
 - Next: commit and push this green checkpoint, then add activation/cancellation
   and late-member RED cases.
+
+## 2026-08-18 — Checkpoint correction
+
+- Verified the three checkpoint findings against the existing subscription
+  service and kernel. The generated service's `Subscribe(Topic)` does not carry
+  a parent subscription ID downstream, so child-definition identity is an
+  internal kernel collision fence rather than a new wire observable.
+- RED: the real Coordinator subscribe proof changed to require the established
+  `s-<UUID>` form. It failed exactly with `expected
+  '9dd73ec2-fbd5-4311-ad69-7fe602cb11f2' to match
+  /^s-[0-9a-f-]{36}$/u` at `node-coordinator.test.ts:107`.
+- GREEN: Coordinator logical IDs now use `s-${randomUUID()}`; immediate child
+  definitions use `slot-incarnation`, preventing replacement collisions. The
+  merged update queue is capped at the existing server subscription delivery
+  limit (100); overflow closes the relay and releases pending producers rather
+  than retaining unbounded update envelopes.
+- Focused real HTTP/2 proof is green: 19/19 `node-coordinator` tests; server
+  no-emit typecheck also passes. Next: commit and push the correction before
+  continuing cancellation and membership tests.

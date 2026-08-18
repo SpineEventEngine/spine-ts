@@ -49,6 +49,7 @@ const defaultHost = "127.0.0.1";
 const defaultPort = 0;
 const defaultMessageMaxBytes = 4_194_304;
 const gracefulSessionDrainMs = 100;
+const subscriptionQueueLimit = 100;
 
 /**
  * Describes one private managed child available for Coordinator forwarding.
@@ -311,7 +312,7 @@ export class NodeCoordinator {
 
   async #subscribe(topic: Topic, context: HandlerContext): Promise<Subscription> {
     const subscription = create(SubscriptionSchema, {
-      id: create(SubscriptionIdSchema, { value: randomUUID() }),
+      id: create(SubscriptionIdSchema, { value: `s-${randomUUID()}` }),
       topic,
     });
     await this.#kernel.subscribe(toBinary(SubscriptionSchema, subscription), context.signal);
@@ -323,7 +324,7 @@ export class NodeCoordinator {
     context: HandlerContext,
   ): AsyncIterable<SubscriptionUpdate> {
     const definition = toBinary(SubscriptionSchema, subscription);
-    const updates = new SubscriptionUpdateQueue();
+    const updates = new SubscriptionUpdateQueue(subscriptionQueueLimit);
     const activation = this.#kernel
       .activate(
         definition,
@@ -388,13 +389,22 @@ class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate> {
   readonly #updates: SubscriptionUpdate[] = [];
   readonly #waiters: ((value: IteratorResult<SubscriptionUpdate>) => void)[] = [];
   readonly #delivered: (() => void)[] = [];
+  readonly #limit: number;
   #closed = false;
+
+  constructor(limit: number) {
+    this.#limit = limit;
+  }
 
   push(update: SubscriptionUpdate): Promise<void> {
     if (this.#closed) return Promise.resolve();
     const waiter = this.#waiters.shift();
     if (waiter !== undefined) {
       waiter({ value: update, done: false });
+      return Promise.resolve();
+    }
+    if (this.#updates.length >= this.#limit) {
+      this.close();
       return Promise.resolve();
     }
     this.#updates.push(update);
@@ -443,7 +453,7 @@ const NodeCoordinatorValues = Object.freeze({
       childDefinition: (definition, member) => {
         const subscription = clone(SubscriptionSchema, fromBinary(SubscriptionSchema, definition));
         const id = subscription.id;
-        if (id !== undefined) id.value = `${id.value}/${member.slot.toString()}`;
+        if (id !== undefined) id.value = `${id.value}/${member.slot.toString()}-${member.incarnation}`;
         return toBinary(SubscriptionSchema, subscription);
       },
       childSize: (child) => child.byteLength,
