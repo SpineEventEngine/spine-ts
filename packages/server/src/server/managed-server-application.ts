@@ -206,7 +206,7 @@ interface SlotRecord {
 export interface ManagedServerCoordinatorDependencies {
   readonly clock: {
     now(): number;
-    setTimeout(action: () => void, delay: number): unknown;
+    setTimeout(onTimeout: () => void, delay: number): unknown;
     clearTimeout(timer: unknown): void;
   };
   readonly spawn: (moduleUrl: string, slot: number, incarnation: string) => ChildProcess;
@@ -529,7 +529,7 @@ const ManagedServerCoordinatorValues = Object.freeze({
   dependencies: {
     clock: {
       now: () => Date.now(),
-      setTimeout: (action: () => void, delay: number) => setTimeout(action, delay),
+      setTimeout: (onTimeout: () => void, delay: number) => setTimeout(onTimeout, delay),
       clearTimeout: (timer: unknown) => {
         clearTimeout(timer as ReturnType<typeof setTimeout>);
       },

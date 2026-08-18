@@ -1,5 +1,18 @@
 # T-0206 work log
 
+## 2026-08-18 — Cleanup-preflight correction
+
+- `pnpm lint:cleanup` found only two deterministic policy gaps: the injected
+  clock callback was named `action` rather than `onTimeout`, and the private
+  canonical READY loopback validator lacked its exact standalone-function
+  necessity disposition.
+- Renamed both callback declarations consistently and recorded the validator in
+  the canonical server cleanup ledger. This changes neither lifecycle behavior
+  nor public API.
+- GREEN evidence: fresh cleanup lint, tooling typecheck, focused
+  lifecycle/logging Vitest (45/45), formatting, and diff checks passed. This
+  naming/ledger correction does not reopen completed reviews.
+
 ## 2026-08-18 — Tooling-preflight correction
 
 - Mandatory cheap preflight `pnpm typecheck:tooling` initially failed only in
