@@ -33,6 +33,8 @@ export interface ManagedServerApplicationOptions {
     readonly host: string;
     readonly port: number;
   }) => Promise<RunningServer>;
+  /** Child-local readiness work that must settle before the private READY fact. */
+  readonly synchronizationGates?: readonly Promise<unknown>[];
 }
 
 /** One managed complete-replica cohort. */
@@ -41,6 +43,8 @@ export interface ManagedServerApplicationHandle {
   readonly childPids: readonly number[];
   /** Whether all initial children completed the private readiness handshake. */
   readonly ready: boolean;
+  /** Loopback endpoints reported by ready child processes. */
+  readonly childEndpoints: readonly string[];
   /** Stops all child processes and waits for their exit. */
   close(): Promise<void>;
 }
@@ -61,12 +65,18 @@ export const ManagedServerApplication: Readonly<{
 const ManagedServerValues = Object.freeze({
   async child(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle> {
     const server = await options.createServer({ host: "127.0.0.1", port: 0 });
-    await ManagedServerValues.send({ type: "ready" });
+    await Promise.all(options.synchronizationGates ?? []);
+    await ManagedServerValues.send({ type: "ready", endpoint: server.baseUrl });
     let closing: Promise<void> | undefined;
     process.once("message", (message: { readonly type?: string }) => {
       if (message.type === "close") closing ??= server.close().finally(() => process.disconnect());
     });
-    return { childPids: [], ready: true, close: () => (closing ??= server.close()) };
+    return {
+      childPids: [],
+      childEndpoints: [server.baseUrl],
+      ready: true,
+      close: () => (closing ??= server.close()),
+    };
   },
   parent(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle> {
     const children = Array.from({ length: options.processCount }, () =>
@@ -76,13 +86,16 @@ const ManagedServerValues = Object.freeze({
       }),
     );
     return new Promise((resolve, reject) => {
-      let ready = 0;
+      const endpoints: string[] = [];
       for (const child of children) {
         child.once("exit", () => reject(new Error("Managed child exited before ready.")));
-        child.on("message", (message: { readonly type?: string }) => {
-          if (message.type !== "ready" || ++ready !== children.length) return;
+        child.on("message", (message: { readonly type?: string; readonly endpoint?: string }) => {
+          if (message.type !== "ready" || typeof message.endpoint !== "string") return;
+          endpoints.push(message.endpoint);
+          if (endpoints.length !== children.length) return;
           resolve({
             childPids: children.map((candidate) => candidate.pid ?? 0),
+            childEndpoints: endpoints,
             ready: true,
             close: () => ManagedServerValues.close(children),
           });
@@ -102,7 +115,7 @@ const ManagedServerValues = Object.freeze({
       ),
     );
   },
-  send(message: { readonly type: "ready" }): Promise<void> {
+  send(message: { readonly type: "ready"; readonly endpoint: string }): Promise<void> {
     return new Promise((resolve, reject) => {
       if (process.send === undefined || !process.connected) {
         reject(new Error("Managed child has no parent IPC channel."));

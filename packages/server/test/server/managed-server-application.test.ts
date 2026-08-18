@@ -53,6 +53,23 @@ describe("ManagedServerApplication", () => {
       await managed.close();
     }
   }, 20_000);
+
+  it("reports each child's actual local listener only after that child is ready", async () => {
+    const managed = await ManagedServerApplication.run({
+      processCount: 1,
+      moduleUrl: new URL("./managed-server-application-child.mjs", import.meta.url).href,
+      host: "127.0.0.1",
+      port: 0,
+      createServer: async () => {
+        throw new Error("Parent must not assemble a child.");
+      },
+    });
+    try {
+      expect(managed.childEndpoints).toEqual([expect.stringMatching(/^http:\/\/127\.0\.0\.1:\d+$/)]);
+    } finally {
+      await managed.close();
+    }
+  }, 20_000);
   it.each([undefined, 0, -1, 1.5, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
     "rejects invalid explicit process count %s without deriving a machine default",
     async (processCount) => {
