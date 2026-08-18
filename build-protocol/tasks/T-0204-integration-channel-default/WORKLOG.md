@@ -177,3 +177,10 @@ once'`.
   This follows the Wave 13 rule that live cross-process evidence is separate
   from V8 coverage, keeps delivery deadlines meaningful, and avoids hiding a
   deployment failure behind an arbitrarily large timeout.
+- With RED-22 isolated, the coverage pool exposed a separate Delivery-client
+  fixture bug: a test intentionally used a 10 ms graceful timeout to force
+  `SIGKILL`, and the helper incorrectly reused that same 10 ms for observing
+  the forced exit. Under coverage load both observations timed out. The helper
+  now separates graceful and forced-exit budgets; the test retains its 10 ms
+  graceful trigger and uses the existing five-second bounded forced-exit
+  observation. No Delivery runtime behavior changes.
