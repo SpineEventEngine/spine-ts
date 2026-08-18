@@ -47,3 +47,12 @@ remains the retained-subscription readiness gate.
 - Regression: after `pnpm typecheck:build:generated` refreshed fixtures that
   import `packages/server/dist`, the full focused managed lifecycle suite
   passed **52/52** using the default process-capable Vitest profile.
+
+## Existing direct remote Delivery regression
+
+`pnpm exec vitest run packages/delivery-client/test/remote-supervisor-grpc.integration.test.ts`
+passed **5/5** with a real Delivery Server and two separate application
+processes. It proves direct remote Admin fan-out, exclusive fenced commit,
+restart snapshot recovery, and tiny-buffer overflow recovery. This is retained
+RED 22–26 regression evidence only: its children are environment assemblies,
+not `ManagedServerApplication` replicas, so it does not close RED 27–28.

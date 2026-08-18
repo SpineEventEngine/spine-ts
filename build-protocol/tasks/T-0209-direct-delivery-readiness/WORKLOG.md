@@ -65,3 +65,13 @@
   passed**. The temporary Vite threads pool lacks `process.connected`, so the
   process-IPC signal assertion is valid only on the default fork-capable test
   profile used above.
+
+## 2026-08-19 — remote supervisor regression
+
+- Existing real-process remote suite passed **5/5**: `pnpm exec vitest run
+  packages/delivery-client/test/remote-supervisor-grpc.integration.test.ts`.
+  It reuses the accepted Delivery Server topology for direct Admin fan-out,
+  exclusive fencing, snapshot recovery, and observation overflow.
+- It is not counted as the required managed complete-replica acceptance: its
+  child fixture assembles `ServerEnvironment` directly. RED 27–28 still need a
+  managed-replica fixture with retained subscription behavior.
