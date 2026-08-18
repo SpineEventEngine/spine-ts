@@ -15,11 +15,14 @@ the legacy-named local `catchUpReadSide()` helper resets and replays the whole
 process-local read side and is not Projection catch-up. Generated source records
 provenance and has no copyright header.
 
-They explain the server scope: delivery/inbox processing,
-command/query/subscription services, same-host ZeroMQ transport for
-multi-process use, and a `Server` lifecycle owner that starts and closes those
-pieces together. Gateway hosting and remote delivery are supported integration
-paths, not claims of production deployment supervision or a prescribed topology.
+They explain the server scope: delivery/inbox processing and
+command/query/subscription services. `Server` owns one ordinary application
+process. For a Node deployment that needs complete replicas on one machine,
+`ManagedServerApplication` supervises the deployer-configured child cohort and
+its HTTP/2 Coordinator. The same-host ZeroMQ transport is the legacy
+application-composed path pending T-0212 removal; it is not the Coordinator
+deployment path. Gateway hosting and remote delivery are supported integration
+paths, not a prescribed topology.
 Read the [browser and Gateway guide](../BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 and the [delivery-client](../../packages/delivery-client/README.md) and
 [delivery-server](../../packages/delivery-server/README.md) guides for those
@@ -692,10 +695,13 @@ same-builder calls coalesce, run-managed siblings share one active generation,
 and the last run-managed retirement closes that environment. Mixed active
 caller-managed/run-managed admission rejects before listener open. A failed
 final close stays reachable for explicit or later-signal retry without
-rerunning completed close hooks. It still does not export a production transport endpoint runner,
-durable retry owner, process supervisor, event storage
-policy beyond existing seams, retained active-stream/update replay storage, or
-worker topology as part of this closure.
+rerunning completed close hooks. This ordinary `Server` lifecycle still does
+not export a production transport endpoint runner, durable retry owner, event
+storage policy beyond existing seams, retained active-stream/update replay
+storage, or worker topology. `ManagedServerApplication` is the separate
+Node-only process supervisor for complete replicas: it owns bounded replacement
+and its front-facing unary Coordinator while leaving child listener topology
+private.
 
 The same local runtime boundary provides a narrow generated-signal metadata
 policy through `SignalMetadata`. Repository-produced follow-up commands/events

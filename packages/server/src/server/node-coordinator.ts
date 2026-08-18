@@ -347,14 +347,12 @@ const NodeCoordinatorValues = Object.freeze({
         `${member.slot.toString()}/${member.incarnation}`,
       sameMember: (left: ReadyCoordinatorMember, right: ReadyCoordinatorMember) =>
         left.endpoint === right.endpoint,
-    } as unknown as BackendMembershipKernelOptions<
-      ReadyCoordinatorMember,
-      CoordinatorRequest,
-      unknown,
-      never
-    >;
+      definitionKey: NodeCoordinatorValues.unsupported,
+      childDefinition: NodeCoordinatorValues.unsupported,
+      childSize: NodeCoordinatorValues.unsupported,
+    };
   },
-  client(member: ReadyCoordinatorMember) {
+  client(member: ReadyCoordinatorMember): BackendMemberClient<CoordinatorRequest, unknown, never> {
     const manager = new Http2SessionManager(member.endpoint);
     const transport = createGrpcTransport({ baseUrl: member.endpoint, sessionManager: manager });
     return {
@@ -394,7 +392,13 @@ const NodeCoordinatorValues = Object.freeze({
         manager.abort();
         return Promise.resolve();
       },
-    } as BackendMemberClient<CoordinatorRequest, unknown, never>;
+      subscribe: NodeCoordinatorValues.unsupported,
+      activate: NodeCoordinatorValues.unsupported,
+      dispose: NodeCoordinatorValues.unsupported,
+    };
+  },
+  unsupported<T>(): T {
+    throw new Error("Node Coordinator subscription forwarding belongs to T-0208.");
   },
   responseMetadata(headers: Headers, trailers: Headers, context: HandlerContext): void {
     for (const [name, value] of NodeCoordinatorValues.applicationHeaders(headers))

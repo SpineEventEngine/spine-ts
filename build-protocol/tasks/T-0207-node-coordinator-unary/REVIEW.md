@@ -22,3 +22,17 @@ the existing local HTTP/2 service contract and adds no new public wire form.
   and whitespace checks pass.
 - `verify:task` with the two focused suites and both changed runtime sources
   passes after the deterministic preflight.
+
+## Consolidated correction batch
+
+| Review role                        | Configured profile         | Finding                                                                                                                                                                                                  | Disposition                                                                                                                                                                 |
+| ---------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `typescript_api_docs_reviewer`     | `gpt-5.6-terra` / high     | P1: unsafe double assertions left required kernel/client subscription operations undefined. P1: managed public listener defaulted to undiscoverable port zero. P2: README contradicted unary forwarding. | Fixed: truthful explicit unsupported callbacks, required validated `1..65535` managed port before assembly, and corrected unary-only README wording.                        |
+| `documentation_reviewer`           | `gpt-5.6-luna` / medium    | P1: package README and architecture notes contradicted Coordinator forwarding/supervision and still described ZeroMQ as current deployment. P2: reference lacked zero-READY operation.                   | Fixed: current Coordinator versus legacy T-0212 ZeroMQ distinction, ordinary `Server` versus managed supervisor distinction, and `UNAVAILABLE`/no-intake/no-retry contract. |
+| `style_maintainability_reviewer`   | Pending affected re-review | No correction finding was delivered in this consolidated batch.                                                                                                                                          | Re-review only because the runtime implementation changed.                                                                                                                  |
+| `performance_reliability_reviewer` | Pending affected re-review | No correction finding was delivered in this consolidated batch.                                                                                                                                          | Re-review only because listener validation and close-adjacent contracts changed.                                                                                            |
+
+The two completed reviewers did not expose runtime telemetry; their immutable
+configured role/profile is the recorded evidence. Security remains deferred to
+the final correction convergence: no new wire form, trust principal, or public
+topology was added.

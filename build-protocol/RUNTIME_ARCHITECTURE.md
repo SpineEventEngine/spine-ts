@@ -84,7 +84,13 @@ For tests, a direct/local mode may exist, but it must be clearly marked as a
 testing utility and must preserve the same observable ordering guarantees as
 much as possible.
 
-## Transport Abstraction
+## Legacy Signal Transport (pending T-0212 removal)
+
+The generic `SignalTransport` and its same-host ZeroMQ adapter are legacy
+application-composed IPC. They remain documented only while T-0212 removes
+their command/event deployment path. The current complete-replica Coordinator
+does not use them: it forwards generated unary Command and Query HTTP/2 calls
+to ordinary child `SpineServices`, which remain the only Bus intake.
 
 ZeroMQ must not leak into domain, repository, or service APIs. The runtime depends on interfaces such as:
 
@@ -125,29 +131,31 @@ The broker keeps three logical exchanges distinct: status announces a context
 online; configuration replaces each foreign context's complete wanted-event
 set and withdraws the local set at close; events use one logical channel per
 domain-event type. Local/test environments use `InMemoryTransportFactory`.
-Production supplies an explicit factory, such as the same-host ZeroMQ
-`createZeroMqTransportFactory()` adapter. Delivery, retry, replay, and
+When no factory is configured, each application process uses its shared
+in-memory factory. A configured adapter remains optional for the separate
+external-event transport responsibility. Delivery, retry, replay, and
 durability remain transport responsibilities; the broker adds no Inbox,
 deduplication record, cursor, or retry queue.
 
-## ZeroMQ Same-Host Adapter
+## Legacy ZeroMQ Same-Host Adapter
 
-ZeroMQ provides local IPC between application-composed Node.js processes on one
-host. The adapter uses request/reply for command routing and publish/subscribe
-for event fan-out while keeping endpoint and socket details outside domain,
-repository, and service APIs. Query and subscription behavior remains exposed
-through the existing gRPC-compatible services rather than a promised transport
-broker topology.
+ZeroMQ provides the legacy local IPC path between application-composed Node.js
+processes. It is not used inside CommandBus or EventBus and is not used by the
+complete-replica Coordinator. T-0212 removes this path after its Coordinator,
+Delivery, and subscription replacements have acceptance evidence.
 
 ## Process Model
 
-The supported runtime scope is single-process execution and application-composed
-local multi-process execution over the same-host transport adapter. The
-framework does not start, restart, supervise, or health-check brokers or worker
-processes and does not require public worker declarations. Distributed
-transport, production topology, process supervision, restart handling, and
-health/readiness policy are outside the initial release; no future design for
-those policies is committed.
+`Server.start()` and `Server.run()` create one ordinary application process;
+neither supervises child processes. `ManagedServerApplication.run()` is the
+separate Node deployment entrypoint: it starts the deployer-configured number
+of complete replicas, supervises their bounded replacement, and owns a
+front-facing Coordinator listener at the deployer-supplied nonzero port. The
+Coordinator forwards generated unary Command and Query calls once to a READY
+child; it has no public child-topology API and does not yet fan out
+subscriptions. Delivery stays direct between every replica and the shared
+Delivery Server. The legacy ZeroMQ path above is pending T-0212 removal, not a
+parallel requirement for managed deployment.
 
 ## Bus Semantics
 

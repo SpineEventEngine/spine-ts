@@ -49,13 +49,13 @@ waits for every configured child. Afterwards it stays ready while at least one
 child is ready; replacements continue while it is degraded, and it becomes
 unready if no child remains ready. A crashed child is replaced with bounded
 exponential delay; surviving children keep serving.
-The parent listens at the configured `host` and `port` (defaulting to
-`127.0.0.1` and an ephemeral port) and forwards generated Command and Query
-gRPC calls to one READY child. The small parent/child channel carries only lifecycle facts such as readiness
+The parent listens at the configured `host` and required nonzero `port` and
+forwards generated unary Command and Query gRPC calls to one READY child.
+Subscription fan-out is introduced in the later subscription slice; it is not
+part of this Coordinator. The small parent/child channel carries only lifecycle facts such as readiness
 and close. It never carries Commands, Events, queries, subscriptions, or
 Delivery notifications. The parent owns `SIGINT` and `SIGTERM` cleanup for its
-children. It is private lifecycle topology only: it does not yet forward public
-gRPC requests. Child listener topology remains private. Use direct `Server.run()` for one explicit local process or
+children. Child listener topology remains private. Use direct `Server.run()` for one explicit local process or
 browser-oriented hosting. The application remains free to use any
 `DeliveryStrategy`; managed process count neither detects CPU cores nor changes
 Delivery shard selection.

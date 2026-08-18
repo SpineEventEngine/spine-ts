@@ -95,9 +95,9 @@ export interface ManagedServerApplicationOptions {
 
   /**
    *
-   * Selects the front-facing Coordinator listener port. Defaults to zero.
+   * Selects the known front-facing Coordinator listener port.
    */
-  readonly port?: number;
+  readonly port: number;
 
   /**
    *
@@ -179,6 +179,7 @@ export const ManagedServerApplication: Readonly<{
     if (!Number.isSafeInteger(options.processCount) || options.processCount < 1) {
       throw new Error("Managed server processCount must be a positive safe integer.");
     }
+    ManagedServerCoordinatorValues.coordinatorPort(options.port);
     if (process.env[childMarker] === "true") return ManagedServerValues.child(options);
     return ManagedServerValues.parent(options);
   },
@@ -358,6 +359,10 @@ export interface ManagedServerCoordinatorDependencies {
   }) => Promise<NodeCoordinator>;
 }
 
+type ManagedServerCoordinatorOptions = Omit<ManagedServerApplicationOptions, "port"> & {
+  readonly port?: number;
+};
+
 /**
  *
  * Coordinates the parent-only lifecycle of managed application replicas.
@@ -367,7 +372,7 @@ export interface ManagedServerCoordinatorDependencies {
 export class ManagedServerCoordinator {
   readonly #slots: SlotRecord[];
   readonly #restart: Required<ManagedServerRestartOptions>;
-  readonly #options: ManagedServerApplicationOptions;
+  readonly #options: ManagedServerCoordinatorOptions;
   readonly #dependencies: ManagedServerCoordinatorDependencies;
   #closing = false;
   #starts = 0;
@@ -388,7 +393,7 @@ export class ManagedServerCoordinator {
    * @param dependencies Supplies private process and clock dependencies.
    */
   constructor(
-    options: ManagedServerApplicationOptions,
+    options: ManagedServerCoordinatorOptions,
     dependencies: ManagedServerCoordinatorDependencies = ManagedServerCoordinatorValues.dependencies,
   ) {
     this.#options = options;
@@ -766,6 +771,13 @@ export const managedServerApplicationAccess: Readonly<{
 });
 
 const ManagedServerCoordinatorValues = Object.freeze({
+  coordinatorPort(value: number): number {
+    if (!Number.isSafeInteger(value) || value < 1 || value > 65_535)
+      throw new Error(
+        "Managed server Coordinator port must be a safe integer between 1 and 65535.",
+      );
+    return value;
+  },
   dependencies: {
     clock: {
       now: () => Date.now(),
@@ -786,7 +798,7 @@ const ManagedServerCoordinatorValues = Object.freeze({
       }),
     openCoordinator: (options) => NodeCoordinator.open(options),
   } satisfies ManagedServerCoordinatorDependencies,
-  restart(options: ManagedServerApplicationOptions): Required<ManagedServerRestartOptions> {
+  restart(options: ManagedServerCoordinatorOptions): Required<ManagedServerRestartOptions> {
     const restart = {
       initialDelayMs: options.restart?.initialDelayMs ?? initialRestartDelayMs,
       maximumDelayMs: options.restart?.maximumDelayMs ?? maximumRestartDelayMs,

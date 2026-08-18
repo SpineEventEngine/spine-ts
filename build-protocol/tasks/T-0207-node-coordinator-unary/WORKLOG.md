@@ -77,3 +77,31 @@ packages/server/src/server/managed-server-application.ts` is green. It ran
   the frozen Proto checks/generation, generated build, package-wide ESLint and
   deterministic policy gates, release-readiness check, and the focused
   coverage suite. The branch is ready for its required specialist review wave.
+
+## 2026-08-18 — Consolidated review correction batch
+
+- The TypeScript/API reviewer (`typescript_api_docs_reviewer`, configured
+  `gpt-5.6-terra` / high; runtime telemetry unavailable) found two P1 issues:
+  the unary Coordinator lied about its full membership-kernel contract, and the
+  public managed listener defaulted to undiscoverable port zero. The code now
+  supplies every required kernel/client callback; unsupported subscription
+  operations throw the explicit T-0208 boundary error rather than becoming an
+  `undefined` call. `ManagedServerApplicationOptions.port` is now required and
+  accepts only `1..65535` before parent or child assembly.
+- RED/GREEN: six invalid public port cases initially entered local child
+  assembly; the new test failed with a resolved child handle. After validation,
+  all six reject before `createServer` runs. Direct private `NodeCoordinator`
+  tests still use port zero for ephemeral loopback listeners.
+- The documentation reviewer (`documentation_reviewer`, configured
+  `gpt-5.6-luna` / medium; runtime telemetry unavailable) found stale claims
+  about no Coordinator forwarding, no process supervisor, and ZeroMQ as the
+  current multi-process deployment path. The package README, package reference,
+  architecture notes, runtime architecture, and D-0126 now distinguish unary
+  Coordinator deployment from legacy ZeroMQ pending T-0212 removal, reserve
+  subscription fan-out for T-0208, state zero-READY `UNAVAILABLE`/no-retry
+  behavior, and remove prohibited manifest/attestation/strategy-identity
+  wording.
+- Focused managed/coordinator acceptance is green: 63 tests, 93.34%
+  statements, 90.29% branches, 91.26% functions, and 95.49% lines. The next
+  action is affected TypeScript/API and documentation re-review after the
+  deterministic correction preflight.
