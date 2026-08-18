@@ -1,6 +1,6 @@
 # T-0205 — Provider-neutral backend membership kernel
 
-**Status:** In progress
+**Status:** Review-ready
 
 ## Classification and baseline
 
@@ -76,6 +76,19 @@ process spawning, service Protobufs, provider packages, or examples.
   declaration changes; documentation is N/A if no public prose changes.
 - Commit and push every checkpoint to
   `origin/codex/t0205-membership-kernel`.
+
+## Coverage-convergence acceptance
+
+- Direct kernel behavior coverage is at least 90% for both executable lines
+  and branches. The converged result is **214/220 lines (97.27%)** and
+  **141/156 branches (90.38%)** for
+  `packages/deployment/src/internal/backend-membership-kernel.ts`.
+- The direct test suite now proves constructor bounds; subscribe, rehydrate,
+  activation, forwarding, duplicate/replacement, stale child, cleanup/retry,
+  close, and abort behavior through the kernel's actual composition seam.
+- No production source changed during convergence. The defensive no-await
+  `#definitions.get()`-after-`set()` condition remains an intentionally
+  unforced defensive branch.
 
 ## Skill applicability
 

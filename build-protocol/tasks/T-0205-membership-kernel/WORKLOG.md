@@ -120,3 +120,33 @@ removal waits for disposal`. This is a cross-generation disposal/coalescing
   pass 17 files / 450 tests with the same kernel coverage. This remains below
   the required 90% changed executable line and branch threshold. Do not review
   or mark T-0205 complete.
+
+## 2026-08-18 — Coverage convergence
+
+- The assigned existing `implementer` role completed the bounded test-only
+  convergence scope with the explicitly dispatched `gpt-5.6-terra` / `medium`
+  profile. Runtime self-telemetry is not exposed by this surface; the immutable
+  dispatch configuration is the available profile evidence. No subagents ran.
+- Added 22 direct behavior cases in
+  `packages/deployment/test/membership-kernel.test.ts`; they characterize the
+  existing kernel seam without changing production source. Two initial failing
+  assertions were corrected after the focused run established existing behavior:
+  a completed child can be activated again after replacement, and close retries
+  a failed client cleanup within the same close attempt.
+- Exact-source coverage passes the task threshold:
+  `backend-membership-kernel.ts` has 214/220 executable lines (97.27%) and
+  141/156 branches (90.38%). The deliberately defensive get-after-set
+  cancellation guard was not distorted solely to raise coverage.
+- Focused combined regression passed: deployment kernel plus dynamic unary and
+  dynamic subscription creator, 3 files / 81 tests. The count is 22 higher than
+  the prior 59 because this convergence adds direct kernel behavior cases.
+- Targeted deployment/auth TypeScript project build passed. Scoped ESLint,
+  Prettier, cleanup, TSDoc, copyright, and `git diff --check` passed. Final
+  task verifier was then run with the same focused coverage paths. It reached
+  release-readiness after passing generated build, tooling typecheck, cleanup,
+  TSDoc, copyright, containment, Prettier, docs, TypeDoc, Buf, and generated
+  cleanliness, but failed on ignored/untracked
+  `.superpowers/sdd/t0205-report.md`: its stale reader documentation contains
+  the prohibited internal execution-history term `T-0205`. That external path
+  is outside this owner's scope. The verification profile therefore cannot be
+  accepted until its owner removes or corrects that stale ignored report.
