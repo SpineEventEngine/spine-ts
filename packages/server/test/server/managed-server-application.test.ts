@@ -93,7 +93,7 @@ function managedRegistryChild(registry?: "memory" | "custom"): ChildProcess {
         SPINE_MANAGED_SERVER_INCARNATION: "registry-test",
         ...(registry === undefined ? {} : { SPINE_MANAGED_REGISTRY: registry }),
       },
-      stdio: ["ignore", "ignore", "ignore", "ipc"],
+      stdio: ["ignore", "ignore", "pipe", "ipc"],
     },
   );
 }
@@ -104,6 +104,14 @@ function childExit(child: ChildProcess): Promise<{ readonly code: number | null 
       resolve({ code });
     });
   });
+}
+
+function childStderr(child: ChildProcess): { readonly text: () => string } {
+  let output = "";
+  child.stderr?.on("data", (chunk: Buffer) => {
+    output += chunk.toString();
+  });
+  return { text: () => output };
 }
 
 const managedSignalListener = (
@@ -1109,15 +1117,23 @@ describe("ManagedServerApplication", () => {
   it("rejects a persistent normal Server registry before a managed child reports READY", async () => {
     const child = managedRegistryChild();
     const messages: unknown[] = [];
+    const stderr = childStderr(child);
     child.on("message", (message) => messages.push(message));
-
-    await expect(childExit(child)).resolves.toMatchObject({ code: 1 });
-    expect(messages).toEqual([]);
+    const exited = childExit(child);
+    try {
+      await expect(exited).resolves.toMatchObject({ code: 1 });
+      expect(messages).toEqual([]);
+      expect(stderr.text()).toContain("in-memory Stand subscription registry");
+    } finally {
+      if (child.exitCode === null) child.kill("SIGKILL");
+      await exited;
+    }
   }, 20_000);
 
   it("rejects a custom non-persistent registry before a managed child reports READY", async () => {
     const child = managedRegistryChild("custom");
     const messages: unknown[] = [];
+    const stderr = childStderr(child);
     child.on("message", (message) => messages.push(message));
     const exited = childExit(child);
     let completed = false;
@@ -1126,6 +1142,7 @@ describe("ManagedServerApplication", () => {
       await expect(exited).resolves.toMatchObject({ code: 1 });
       completed = true;
       expect(messages).toEqual([]);
+      expect(stderr.text()).toContain("in-memory Stand subscription registry");
     } finally {
       if (!completed) {
         child.kill("SIGKILL");
@@ -1136,15 +1153,22 @@ describe("ManagedServerApplication", () => {
 
   it("admits an in-memory normal Server registry as a managed READY child", async () => {
     const child = managedRegistryChild("memory");
+    childStderr(child);
     const ready = new Promise<void>((resolve) => {
       child.on("message", (message: { readonly type?: string }) => {
         if (message.type === "ready") resolve();
       });
     });
 
-    await ready;
-    child.send({ type: "close" });
-    await expect(childExit(child)).resolves.toMatchObject({ code: 0 });
+    const exited = childExit(child);
+    try {
+      await ready;
+      child.send({ type: "close" });
+      await expect(exited).resolves.toMatchObject({ code: 0 });
+    } finally {
+      if (child.exitCode === null) child.kill("SIGKILL");
+      await exited;
+    }
   }, 20_000);
 
   it("does not block readiness when a child writes verbose standard output", async () => {
