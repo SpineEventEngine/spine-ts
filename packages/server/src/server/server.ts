@@ -55,6 +55,7 @@ const defaultMessageMaxBytes = 4_194_304;
 const maximumMessageMaxBytes = 0xffff_ffff;
 const gracefulSessionDrainMs = 100;
 type ServerContext = BoundedContext | BoundedContextBuilder;
+const runningContexts = new WeakMap<RunningServer, readonly BoundedContext[]>();
 
 /**
  * Performs work coupled to listener readiness and network shutdown.
@@ -409,6 +410,7 @@ export class Server {
       closeables,
       listenerLifecycles: this.#listenerLifecycles,
     });
+    runningContexts.set(running, contexts);
     try {
       await running.startLifecycles();
     } catch (error) {
@@ -860,6 +862,25 @@ export interface RunningServer {
    */
   close(): Promise<void>;
 }
+
+/**
+ * Exposes framework-only facts about a local running server.
+ *
+ * @internal
+ */
+export interface RunningServerAccess {
+  subscriptionRegistries(
+    server: RunningServer,
+  ): readonly { readonly persistent: boolean }[] | undefined;
+}
+
+export const runningServerAccess: RunningServerAccess = Object.freeze({
+  subscriptionRegistries(server: RunningServer): readonly { readonly persistent: boolean }[] | undefined {
+    return runningContexts
+      .get(server)
+      ?.map((context) => boundedContextAccess.subscriptionRegistry(context));
+  },
+});
 
 class RunningHttp2Server implements RunningServer {
   readonly #server: http2.Http2Server;

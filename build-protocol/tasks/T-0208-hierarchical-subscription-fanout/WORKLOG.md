@@ -111,3 +111,15 @@
   member becoming selectable before the retained definition is installed.
 - Focused Coordinator suite: 20/20 passing. Replacement and managed-registry
   paths remain next.
+
+## 2026-08-18 — Managed registry guard
+
+- Added the smallest private `RunningServer` WeakMap inspection seam. A managed
+  child inspects framework-owned assembled contexts immediately after
+  `createServer()` and rejects persistent Stand subscription registries before
+  synchronization or READY. Plain/custom `RunningServer` values remain opaque
+  and preserve the existing public contract.
+- Rejection closes the created server; if cleanup also fails, it reports an
+  ordered `AggregateError`, matching existing startup cleanup behavior.
+- Server typecheck is green. Focused managed lifecycle proof and an actual
+  persistent/in-memory assembly fixture remain required before acceptance.

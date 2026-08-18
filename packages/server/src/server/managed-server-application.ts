@@ -16,7 +16,7 @@ import { fork, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { LogLayer, StructuredTransport, type ILogLayer } from "loglayer";
-import type { RunningServer } from "./server.js";
+import { runningServerAccess, type RunningServer } from "./server.js";
 import { emitServerWarning } from "./server-log.js";
 import { NodeCoordinator, type ReadyCoordinatorMember } from "./node-coordinator.js";
 
@@ -188,7 +188,20 @@ export const ManagedServerApplication: Readonly<{
 const ManagedServerValues = Object.freeze({
   async child(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle> {
     const server = await options.createServer({ host: "127.0.0.1", port: 0 });
-    await options.synchronize?.();
+    try {
+      ManagedServerValues.requireVolatileRegistries(server);
+      await options.synchronize?.();
+    } catch (error) {
+      try {
+        await server.close();
+      } catch (cleanup) {
+        throw new AggregateError(
+          [error, cleanup],
+          "Managed child setup and server cleanup failed.",
+        );
+      }
+      throw error;
+    }
     // Node may emit an IPC EPIPE after a parent has already disappeared. The
     // disconnect handler below owns shutdown; this listener prevents that
     // transport detail from becoming an unhandled child-process exception.
@@ -248,6 +261,11 @@ const ManagedServerValues = Object.freeze({
         reasonCode: "close_failed",
       });
     });
+  },
+  requireVolatileRegistries(server: RunningServer): void {
+    const registries = runningServerAccess.subscriptionRegistries(server);
+    if (registries?.some((registry) => registry.persistent))
+      throw new Error("Managed application replicas require an in-memory Stand subscription registry.");
   },
   send(message: {
     readonly type: "ready";
