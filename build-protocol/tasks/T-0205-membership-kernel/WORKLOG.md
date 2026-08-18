@@ -150,3 +150,19 @@ removal waits for disposal`. This is a cross-generation disposal/coalescing
   the prohibited internal execution-history term `T-0205`. That external path
   is outside this owner's scope. The verification profile therefore cannot be
   accepted until its owner removes or corrects that stale ignored report.
+
+## 2026-08-18 — Complete specialist review wave
+
+- The stale internal scratch report was subsequently removed in pushed commit
+  `e2c363bf9`; release-readiness now passes that evidence-placement check.
+- TypeScript/API review passed: no root export, public declaration, TypeDoc, or
+  wire-contract leak was found.
+- Performance/reliability review found two P1 defects: a superseded removal
+  can close a member retained by the latest snapshot after an await, and
+  rejected cleanup of oversized/stale created children is not retained for
+  retry.
+- Style/maintainability review found one P1 proof gap in the Gateway-level
+  recursive Protobuf child-ID rewrite and one P2 use of Gateway/Auth vocabulary
+  inside the provider-neutral deployment kernel.
+- `REVIEW.md` contains the exact consolidated correction batch. No correction
+  is accepted until both affected concerns re-review it.

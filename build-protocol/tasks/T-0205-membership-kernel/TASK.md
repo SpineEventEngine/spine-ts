@@ -1,6 +1,6 @@
 # T-0205 — Provider-neutral backend membership kernel
 
-**Status:** Review-ready
+**Status:** Review corrections required
 
 ## Classification and baseline
 
