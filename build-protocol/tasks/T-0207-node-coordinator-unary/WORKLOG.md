@@ -144,3 +144,7 @@ packages/server/src/server/managed-server-application.ts` is green. It ran
   established `Server` startup semantics. A fake-clock regression proves both
   causes and later successful cleanup. Logging containment, tooling typecheck,
   focused ESLint, and all 64 managed/coordinator tests pass.
+- The affected performance/reliability re-review passed at `3db9a2915` with
+  64/64 focused tests. It confirmed ordered aggregate failure reporting,
+  bounded child termination, and the retained retryable cleanup path; no P0-P2
+  finding remains.
