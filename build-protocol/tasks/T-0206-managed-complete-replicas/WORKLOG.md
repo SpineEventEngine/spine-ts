@@ -1,5 +1,20 @@
 # T-0206 work log
 
+## 2026-08-18 — Release-test inventory correction
+
+- The converged release ran 264 files and 4,269 tests successfully except for
+  the exact root-export inventory: `ManagedServerApplication` is an approved
+  value export but was absent from the `Object.keys()` expectation. Added that
+  value only; type-only managed exports do not appear in the runtime list.
+- Vitest also reported one worker exited unexpectedly without a test stack.
+  Static lifecycle inspection and fresh focused index/managed-lifecycle runs
+  found no leaked managed child, helper, or Vitest process; the post-run audit
+  is empty. This is recorded as a non-reproduced runner artifact, with no
+  speculative lifecycle change.
+- GREEN evidence: paired root-export and managed lifecycle suites, tooling
+  typecheck, focused lint, formatting, and diff checks passed. This test
+  inventory correction does not reopen completed reviews.
+
 ## 2026-08-18 — Release-preflight fixture correction
 
 - The converged `pnpm verify:release` reached repository ESLint before tests
