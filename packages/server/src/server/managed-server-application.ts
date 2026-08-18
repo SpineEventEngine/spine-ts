@@ -170,6 +170,7 @@ export class ManagedServerCoordinator {
   #starts = 0;
   #ready: Promise<void> | undefined;
   #resolveReady: (() => void) | undefined;
+  #close: Promise<void> | undefined;
 
   constructor(
     options: ManagedServerApplicationOptions,
@@ -222,7 +223,16 @@ export class ManagedServerCoordinator {
     slot.starting = true;
     this.#starts++;
     const incarnation = randomUUID();
-    const child = this.#dependencies.spawn(this.#options.moduleUrl, slot.slot, incarnation);
+    let child: ChildProcess;
+    try {
+      child = this.#dependencies.spawn(this.#options.moduleUrl, slot.slot, incarnation);
+    } catch {
+      slot.starting = false;
+      this.#starts--;
+      this.#scheduleReplacement(slot);
+      this.#drainStarts();
+      return;
+    }
     const replica: ReplicaRecord = {
       slot: slot.slot,
       incarnation,
@@ -267,6 +277,11 @@ export class ManagedServerCoordinator {
     ) {
       slot.failures = 0;
     }
+    this.#scheduleReplacement(slot);
+    this.#drainStarts();
+  }
+
+  #scheduleReplacement(slot: SlotRecord): void {
     slot.failures++;
     const delay = Math.min(
       this.#restart.initialDelayMs * 2 ** Math.max(0, slot.failures - 1),
@@ -276,7 +291,6 @@ export class ManagedServerCoordinator {
       slot.replacementTimer = undefined;
       this.#start(slot);
     }, delay);
-    this.#drainStarts();
   }
 
   #drainStarts(): void {
@@ -286,17 +300,22 @@ export class ManagedServerCoordinator {
     }
   }
 
-  async close(): Promise<void> {
-    if (this.#closing) return;
-    this.#closing = true;
-    for (const slot of this.#slots) {
-      if (slot.replacementTimer !== undefined)
-        this.#dependencies.clock.clearTimeout(slot.replacementTimer);
-      slot.replacementTimer = undefined;
-    }
-    await Promise.all(
-      this.#slots.map((slot) => ManagedServerCoordinatorValues.close(slot.replica)),
-    );
+  close(): Promise<void> {
+    const closing = this.#close;
+    if (closing !== undefined) return closing;
+    const close = (async () => {
+      this.#closing = true;
+      for (const slot of this.#slots) {
+        if (slot.replacementTimer !== undefined)
+          this.#dependencies.clock.clearTimeout(slot.replacementTimer);
+        slot.replacementTimer = undefined;
+      }
+      await Promise.all(
+        this.#slots.map((slot) => ManagedServerCoordinatorValues.close(slot.replica)),
+      );
+    })();
+    this.#close = close;
+    return close;
   }
 }
 

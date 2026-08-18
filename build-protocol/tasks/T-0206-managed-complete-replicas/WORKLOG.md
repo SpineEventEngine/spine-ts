@@ -118,3 +118,20 @@ lifecycle has not started.` before parent/child implementation.
 - No application manifest, schema/handler digest, Delivery-strategy identity,
   sampling, build attestation, new public Proto, signal IPC, or application
   payload transport was introduced.
+
+## 2026-08-18 — Deterministic lifecycle convergence
+
+- Added an internal-only clock/spawner seam to the parent-only coordinator. It
+  replaces direct Node timers and `fork()` only for deterministic module tests;
+  production retains Node timers and `fork()`, and no root export or deployment
+  setting was added.
+- RED/GREEN proofs now cover capped exponential retry (including healthy READY
+  reset), malformed and stale READY facts, unexpected pre-READY exit,
+  synchronous child-start failure, zero-ready recovery, bounded concurrent
+  starts, shared close completion, and close-time removal of PIDs/endpoints.
+- The supervisor catches only synchronous private spawn failure and schedules
+  the same bounded replacement path. It carries no error payload over IPC and
+  adds no retry for application requests.
+- Focused coverage is 95.58% executable lines, 93.58% statements, and 90.21%
+  branches for `managed-server-application.ts` (23 tests). This satisfies the
+  task's changed-source threshold before review.

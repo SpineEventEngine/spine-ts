@@ -145,6 +145,7 @@ describe("ManagedServerApplication", () => {
     );
     const started = coordinator.start();
     const first = spawned[0];
+    first.child.emit("message", null);
     first.child.emit("message", {
       type: "ready",
       slot: "wrong",
@@ -163,6 +164,8 @@ describe("ManagedServerApplication", () => {
     expect(handle.ready).toBe(false);
     clock.advance(2);
     const replacement = spawned[1];
+    first.child.emit("exit");
+    expect(clock.delays).toHaveLength(1);
     replacement.child.emit("message", {
       type: "ready",
       slot: String(replacement.slot),
@@ -174,7 +177,12 @@ describe("ManagedServerApplication", () => {
       replacement.child.emit("exit");
       return true;
     });
-    await coordinator.close();
+    const firstClose = coordinator.close();
+    const secondClose = coordinator.close();
+    expect(secondClose).toBe(firstClose);
+    await firstClose;
+    expect(handle.childPids).toEqual([]);
+    expect(handle.childEndpoints).toEqual([]);
   });
 
   it("limits concurrent starts while admitting every initial logical slot", async () => {
@@ -222,6 +230,96 @@ describe("ManagedServerApplication", () => {
       });
     }
     await coordinator.close();
+  });
+
+  it("replaces a child which exits before READY without abandoning initial readiness", async () => {
+    const clock = new FakeClock();
+    const spawned: {
+      readonly child: ChildProcess;
+      readonly slot: number;
+      readonly incarnation: string;
+    }[] = [];
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        host: "127.0.0.1",
+        port: 0,
+        createServer: () => Promise.reject(new Error("not used")),
+        restart: { initialDelayMs: 2, maximumDelayMs: 2 },
+      },
+      {
+        clock,
+        spawn: (_moduleUrl, slot, incarnation) => {
+          const child = fakeChild(spawned.length + 1);
+          spawned.push({ child, slot, incarnation });
+          return child;
+        },
+      },
+    );
+    const started = coordinator.start();
+    spawned[0].child.emit("exit");
+    expect(clock.delays).toEqual([2]);
+    clock.advance(2);
+    const replacement = spawned[1];
+    replacement.child.emit("message", {
+      type: "ready",
+      slot: String(replacement.slot),
+      incarnation: replacement.incarnation,
+      endpoint: "http://127.0.0.1:2",
+    });
+    const handle = await started;
+    (replacement.child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      replacement.child.emit("exit");
+      return true;
+    });
+    await handle.close();
+  });
+
+  it("keeps replacing after a synchronous child-start failure", async () => {
+    const clock = new FakeClock();
+    const spawned: {
+      readonly child: ChildProcess;
+      readonly slot: number;
+      readonly incarnation: string;
+    }[] = [];
+    let starts = 0;
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        host: "127.0.0.1",
+        port: 0,
+        createServer: () => Promise.reject(new Error("not used")),
+        restart: { initialDelayMs: 2, maximumDelayMs: 2 },
+      },
+      {
+        clock,
+        spawn: (_moduleUrl, slot, incarnation) => {
+          starts++;
+          if (starts === 1) throw new Error("fork failed");
+          const child = fakeChild(starts);
+          spawned.push({ child, slot, incarnation });
+          return child;
+        },
+      },
+    );
+    const started = coordinator.start();
+    expect(clock.delays).toEqual([2]);
+    clock.advance(2);
+    const replacement = spawned[0];
+    replacement.child.emit("message", {
+      type: "ready",
+      slot: String(replacement.slot),
+      incarnation: replacement.incarnation,
+      endpoint: "http://127.0.0.1:2",
+    });
+    const handle = await started;
+    (replacement.child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      replacement.child.emit("exit");
+      return true;
+    });
+    await handle.close();
   });
   it("sends a child READY fact only after local assembly and synchronization", async () => {
     const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
