@@ -52,3 +52,20 @@ private field. No public Protobuf or TypeScript contract changed.
 Re-review only performance/reliability and style/maintainability after the
 single correction batch. TypeScript/API need not reopen unless the correction
 changes exports or declarations.
+
+## Correction re-review
+
+- Performance/reliability re-review passed with no P0-P2 findings. It verified
+  latest-generation fencing after awaited cleanup, retained retry for failed
+  stale/oversized child compensation, serialized reconciliation, bounded
+  starts, cleanup ordering, and close idempotency. The focused 88-test suite
+  and `git diff --check` passed.
+- Style/maintainability re-review passed with no P0-P2 findings. It verified
+  the real two-level Protobuf child identity proof, provider-neutral kernel
+  vocabulary, narrow Gateway compatibility translation, and absence of a
+  duplicated membership algorithm. Its focused four regressions and diff
+  hygiene passed.
+- Both re-reviews used the existing configured reviewer roles with
+  `gpt-5.6-terra` / `high`; runtime telemetry was unavailable. TypeScript/API
+  did not reopen because no export or declaration changed in the correction.
+- The complete review wave is converged.

@@ -203,3 +203,11 @@ packages/deployment/src/internal/backend-membership-kernel.ts
 packages/auth/src/gateway/dynamic-unary-forwarder.ts`. Its final LCOV keeps
   the kernel at 219/226 lines and 162/180 branches; the adapter is 41/43 lines
   and 32/35 branches. T-0205 remains pending the targeted re-reviews.
+
+## 2026-08-18 — Re-review convergence
+
+- Performance/reliability and style/maintainability re-reviews both passed
+  with no remaining P0-P2 findings. The already-passing TypeScript/API review
+  stayed closed because the correction changed no public declaration.
+- T-0205 is complete on its feature branch and ready for isolated integration
+  and post-merge tree proof.

@@ -1,6 +1,6 @@
 # T-0205 — Provider-neutral backend membership kernel
 
-**Status:** Review corrections implemented; re-review pending
+**Status:** Complete and task-verified; isolated integration pending
 
 ## Classification and baseline
 
