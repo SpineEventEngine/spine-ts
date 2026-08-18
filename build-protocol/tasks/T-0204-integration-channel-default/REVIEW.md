@@ -71,3 +71,16 @@ focused and no product structure changes.
 The API/docs and reliability concerns require focused re-review. Style remains
 mechanically satisfied because the new test uses existing runtime behavior and
 no product structure changed.
+
+## Focused re-review outcome
+
+- TypeScript/API docs: PASS; no remaining P0/P1/P2.
+- Performance/reliability: PASS; H-002's combined default-path proof is
+  complete and no remaining P0/P1/P2 exists.
+- Documentation: PASS; all prior Production-reference, TSDoc, and beginner
+  claims are corrected with no remaining P0/P1/P2.
+- Style/maintainability was not reopened: the correction added a focused test
+  and prose/TSDoc only, with no production structure change.
+
+Review is converged. The task proceeds to its one post-review
+`pnpm verify:release` gate.

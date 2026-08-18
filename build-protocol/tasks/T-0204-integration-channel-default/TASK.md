@@ -1,6 +1,6 @@
 # T-0204 — Integration channel default and terminology
 
-**Status:** In progress
+**Status:** Review converged; release verification pending
 
 ## Classification and baseline
 

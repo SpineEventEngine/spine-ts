@@ -89,6 +89,21 @@ once'`.
   correction batch. No runtime telemetry surface is available; immutable
   dispatch evidence remains existing `implementer`, `gpt-5.6-terra`/`medium`.
 
+## 2026-08-18 — Review correction convergence
+
+- The complete review wave produced four accepted findings: one P1 combined
+  H-002 proof gap, one P1 Production-reference contradiction, and two P2
+  TSDoc/beginner-documentation omissions.
+- Correction commit `45e56f421` proves the default channel lifecycle in one
+  real two-context external-event scenario and corrects all affected public
+  prose. Focused validation passed 5 files and 81 tests plus generated build,
+  tooling, API docs, audience/snippets, ESLint, Prettier, and diff hygiene.
+- Focused TypeScript/API, performance/reliability, and documentation re-reviews
+  all passed with no remaining P0/P1/P2. Maintainability did not reopen because
+  production structure was unchanged by the correction.
+- Next: run the single post-review `pnpm verify:release` required for this
+  shared public runtime change.
+
 ## 2026-08-18 — Review-correction batch
 
 - Accepted four findings from the complete review wave. Added one focused H-002
