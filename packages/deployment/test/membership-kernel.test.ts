@@ -557,6 +557,26 @@ describe("BackendMembershipKernel", () => {
     expect(disposals).toBe(1);
     await owner.close();
   });
+  it("rejects incomplete child disposal and retries it on later reconciliation", async () => {
+    let attempts = 0;
+    const owner = kernel({
+      create: async (member) =>
+        client(member, {
+          dispose: async () => {
+            attempts++;
+            if (attempts === 1) throw new Error("transient dispose");
+          },
+        }),
+    });
+    await owner.reconcile([{ id: "a" }]);
+    await owner.subscribe(definition("x"), new AbortController().signal);
+    await expect(owner.cancel(definition("x"), new AbortController().signal)).rejects.toThrow(
+      "cleanup remains incomplete",
+    );
+    await owner.reconcile([{ id: "a" }]);
+    expect(attempts).toBe(2);
+    await owner.close();
+  });
   it("aborts pending starts during close and retries an incomplete terminal cleanup", async () => {
     let startAborted = false;
     let closes = 0;

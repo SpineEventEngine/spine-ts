@@ -163,6 +163,7 @@ interface FailedChildCleanup<Request, Child, Update> {
   readonly client: BackendMemberClient<Request, Child, Update>;
   readonly child: Child;
 }
+const childCleanupTimeoutMs = 100;
 
 /**
  * Manages ephemeral backend membership and its native subscription children.
@@ -601,7 +602,11 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
       const child = state.children.get(key);
       if (child === undefined) continue;
       state.children.delete(key);
-      await this.#cleanupChild(child, client);
+      try {
+        await this.#cleanupChild(child, client);
+      } catch {
+        /* reconciliation retains failed cleanup for the next snapshot */
+      }
     }
   }
   async #cleanupChild(
@@ -611,7 +616,8 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
   ): Promise<void> {
     child.controller.abort();
     const cleanup = async (): Promise<void> => {
-      if (client !== undefined) await this.#compensateChild(client, child.child, signal);
+      if (client !== undefined && !(await this.#compensateChild(client, child.child, signal)))
+        throw new Error("backend child cleanup remains incomplete.");
       // spine-log-boundary: deployment.membership_child_cleanup
       await child.activation.catch(() => undefined);
     };
@@ -634,11 +640,22 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     client: BackendMemberClient<Request, Child, Update>,
     child: Child,
     signal: AbortSignal,
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
-      await client.dispose(child, signal);
+      await Promise.race([
+        client.dispose(child, signal),
+        new Promise<never>((_resolve, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error("backend child cleanup timed out")),
+            childCleanupTimeoutMs,
+          );
+          timer.unref();
+        }),
+      ]);
+      return true;
     } catch {
       this.#failedChildCleanup.add({ client, child });
+      return false;
     }
   }
   async #retryChildCleanup(): Promise<void> {
