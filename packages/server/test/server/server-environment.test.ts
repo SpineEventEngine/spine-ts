@@ -13,9 +13,12 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { create } from "@bufbuild/protobuf";
+import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { SignalEnvelopes, spineCoreRegistry } from "@spine-event-engine/core";
+import { EventContextSchema, EventIdSchema } from "@spine-event-engine/proto";
 import { InMemoryStorageFactory, type StorageContext } from "@spine-event-engine/storage";
 import { InMemoryTransportFactory } from "@spine-event-engine/transport";
-import { spineCoreRegistry } from "@spine-event-engine/core";
 
 import {
   ServerEnvironment,
@@ -41,6 +44,7 @@ import type { ILogLayer } from "loglayer";
 
 afterEach(async () => {
   await resetServerEnvironmentForTest();
+  vi.restoreAllMocks();
 });
 
 function configured(
@@ -51,16 +55,90 @@ function configured(
 }
 
 describe("ServerEnvironment delivery lifecycle", () => {
-  it("requires an explicit transport factory in production", () => {
+  it("defaults one process-wide integration channel factory in production", async () => {
     EnvironmentTests.use(EnvironmentType.Production);
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
+      typeRegistry: spineCoreRegistry,
     });
 
-    expect(() => ServerEnvironment.instance()).toThrow(
-      "Production ServerEnvironment requires transportFactory.",
-    );
+    const close = vi.spyOn(InMemoryTransportFactory.prototype, "close");
+    const environment = ServerEnvironment.instance() as unknown as {
+      readonly integrationChannelFactory: InMemoryTransportFactory;
+    };
+
+    expect(environment.integrationChannelFactory).toBeInstanceOf(InMemoryTransportFactory);
+    expect(ServerEnvironment.instance()).toBe(environment);
+    await ServerEnvironment.instance().close();
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("shares the default integration channel across local brokers and closes it once", async () => {
+    const createdPublishers = vi.spyOn(InMemoryTransportFactory.prototype, "createPublisher");
+    const createdSubscribers = vi.spyOn(InMemoryTransportFactory.prototype, "createSubscriber");
+    const close = vi.spyOn(InMemoryTransportFactory.prototype, "close");
+    const received: unknown[] = [];
+    const consumer = BoundedContext.singleTenant("DefaultChannelConsumer")
+      .addEventDispatcher({
+        messageSchemas: () => [StringValueSchema],
+        externalEventSchemas: () => [StringValueSchema],
+        dispatch: (event: unknown) => Promise.resolve(received.push(event)).then(() => undefined),
+      })
+      .build();
+    const producer = BoundedContext.singleTenant("DefaultChannelProducer")
+      .addEventDispatcher({
+        messageSchemas: () => [StringValueSchema],
+        dispatch: () => Promise.resolve(),
+      })
+      .build();
+    const environment = ServerEnvironment.instance();
+
+    try {
+      await producer.eventBus().post(
+        SignalEnvelopes.event({
+          id: create(EventIdSchema, { value: "default-channel-event" }),
+          context: create(EventContextSchema),
+          schema: StringValueSchema,
+          message: create(StringValueSchema, { value: "default-channel-event" }),
+        }),
+      );
+
+      expect(received).toHaveLength(1);
+      expect([...createdPublishers.mock.instances, ...createdSubscribers.mock.instances]).toEqual(
+        expect.arrayContaining([environment.integrationChannelFactory]),
+      );
+      expect(
+        [...createdPublishers.mock.instances, ...createdSubscribers.mock.instances].every(
+          (factory) => factory === environment.integrationChannelFactory,
+        ),
+      ).toBe(true);
+    } finally {
+      await Promise.all([producer.close(), consumer.close()]);
+      await environment.close();
+    }
+
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses and closes a supplied integration channel factory once", async () => {
+    const close = vi.fn();
+    const factory = { close } as never;
+    EnvironmentTests.use(EnvironmentType.Production);
+    ServerEnvironment.when(EnvironmentType.Production).use({
+      storageFactory: new InMemoryStorageFactory(),
+      transport: { close: () => undefined } as never,
+      integrationChannelFactory: factory,
+      typeRegistry: spineCoreRegistry,
+    });
+
+    const environment = ServerEnvironment.instance() as unknown as {
+      readonly integrationChannelFactory: unknown;
+    };
+
+    expect(environment.integrationChannelFactory).toBe(factory);
+    await ServerEnvironment.instance().close();
+    expect(close).toHaveBeenCalledTimes(1);
   });
 
   it("requires an application schema registry in production", () => {
@@ -68,7 +146,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
-      transportFactory: new InMemoryTransportFactory(),
+      integrationChannelFactory: new InMemoryTransportFactory(),
     });
 
     expect(() => ServerEnvironment.instance()).toThrow(
@@ -250,7 +328,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
-      transportFactory: new InMemoryTransportFactory(),
+      integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
     });
@@ -284,7 +362,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
-      transportFactory: new InMemoryTransportFactory(),
+      integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
     });
@@ -340,7 +418,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
-      transportFactory: new InMemoryTransportFactory(),
+      integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
     });
@@ -370,7 +448,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
       transport: { close: () => undefined } as never,
-      transportFactory: new InMemoryTransportFactory(),
+      integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
     });

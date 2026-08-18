@@ -299,14 +299,18 @@ function receive(child: ChildProcess, type: string, id?: string): Promise<unknow
   });
 }
 
-async function stop(child: ChildProcess, timeoutMs = 5_000): Promise<void> {
+async function stop(
+  child: ChildProcess,
+  gracefulTimeoutMs = 5_000,
+  forcedTimeoutMs = 5_000,
+): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
   child.kill("SIGTERM");
   try {
-    await exitWithin(child, timeoutMs);
+    await exitWithin(child, gracefulTimeoutMs);
   } catch (gracefulFailure) {
     if (gracefulFailure instanceof FixtureExitError) throw gracefulFailure;
-    const forcedExit = exitWithin(child, timeoutMs);
+    const forcedExit = exitWithin(child, forcedTimeoutMs);
     child.kill("SIGKILL");
     try {
       await forcedExit;

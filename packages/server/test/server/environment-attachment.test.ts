@@ -1124,11 +1124,12 @@ describe("ServerEnvironment attachment", () => {
     expect(transferred.readyCallbacks).toBe(4_097);
     expect(exactDrains).toBe(0);
     expect(transferred.replayed).toEqual([]);
-    await expect(
-      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
-    ).resolves.toMatchObject([
-      { inboxId: { targetId: Identifiers.pack("string", "startup-row") } },
-      { inboxId: { targetId: Identifiers.pack("string", "after-failure") } },
+    const pending = await delivery.inbox.read(ShardIndex.single(), {
+      statuses: ["TO_DELIVER"],
+    });
+    expect(pending.map(({ signalId }) => signalId).sort()).toEqual([
+      "after-failure",
+      "startup-row",
     ]);
   });
 

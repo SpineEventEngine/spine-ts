@@ -1,8 +1,8 @@
 # Spine TS Project Completion Plan
 
-Status: Waves 9, 10, 11, and 12 complete, release-verified, and integrated;
-Wave 13 implementation and live acceptance are integrated; T-0202 convergence
-is current
+Status: Waves 9 through 13 are complete, release-verified, integrated, and
+remotely closed. T-0203 post-Wave-13 complete-replica deployment correction
+planning is current.
 
 Plan date: 2026-07-12
 
@@ -43,6 +43,26 @@ release-verified, merged as `964d24c0`, post-merge verified, and pushed. T-0119
 documentation and correction closure is reviewed, release-verified, merged as
 `5d3ac54d`, post-merge verified, and pushed. The T-0114 through T-0119
 correction sequence is complete and supplied Wave 7's required baseline.
+
+## Post-Wave-13 Deployment Architecture Correction
+
+On 2026-08-18 the human rejected the earlier role-split/ZeroMQ deployment path
+and approved complete application replicas behind a node-local service-aware
+HTTP/2 Coordinator. T-0203 is a high-risk planning-only prerequisite which
+freezes explicit process count, complete-replica verification, direct
+per-process Delivery observation, Gateway-to-node-to-process subscription
+fan-out, process-local IntegrationBroker channels, and ordered ZeroMQ/generic
+signal-layer removal. It does not reopen Wave 13's accepted external-event
+domain semantics or begin Wave 14 package/SPI work.
+
+The approved architecture is recorded in D-0126 and
+`build-protocol/planning/T-0203_COMPLETE_REPLICA_DEPLOYMENT_PLAN.md`. Product
+planning is accepted. An unexpected child is replaced with bounded backoff
+while surviving children keep serving; T-0204 is the next implementation task.
+The Gateway-hosted Integration Hub for physically split server applications is
+outside the first release. ZeroMQ and the generic signal-routing layer are a
+mandatory ordered deletion in T-0212 after replacement acceptance, not a
+retained fallback.
 
 ## Purpose
 

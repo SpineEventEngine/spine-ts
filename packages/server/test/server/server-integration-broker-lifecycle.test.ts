@@ -29,7 +29,7 @@ describe("Wave 13 broker lifecycle", () => {
       " and supports retry cleanup",
     async () => {
     const factory = new RecordingTransportFactory();
-    ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
+    ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
     const first = await BoundedContext.singleTenant(`Wave13LifecycleA${crypto.randomUUID()}`)
       .addEventDispatcher({
         messageSchemas: () => [StringValueSchema],
@@ -40,9 +40,11 @@ describe("Wave 13 broker lifecycle", () => {
     const second = await BoundedContext.singleTenant(
       `Wave13LifecycleB${crypto.randomUUID()}`,
     ).buildAsync();
-    const environment = ServerEnvironment.instance() as unknown as { transportFactory: unknown };
+    const environment = ServerEnvironment.instance() as unknown as {
+      integrationChannelFactory: unknown;
+    };
     try {
-      expect(environment.transportFactory).toBe(factory);
+      expect(environment.integrationChannelFactory).toBe(factory);
       for (const [targetType, publishers] of [
         ["type.spine.io/spine.server.integration.BoundedContextOnline", 2],
         ["type.spine.io/spine.server.integration.ExternalEventsWanted", 3],

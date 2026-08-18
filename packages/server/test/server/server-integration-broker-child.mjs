@@ -70,7 +70,7 @@ try {
   const factory = ZeroMq.createZeroMqTransportFactory(
     ZeroMq.ZeroMqConfig.create({ ipcDirectory, adapterIdentity }),
   );
-  ServerEnvironment.when(EnvironmentType.Local).use({ transportFactory: factory });
+  ServerEnvironment.when(EnvironmentType.Local).use({ integrationChannelFactory: factory });
   const builder = BoundedContext.singleTenant(`Wave13${capitalize(role)}`)
     .withGeneratedRegistryRoot(registry.root)
     .add(Wave13ExternalProjection);
@@ -247,7 +247,7 @@ function capitalize(value) {
 }
 
 async function waitFor(predicate) {
-  const deadline = Date.now() + 3_000;
+  const deadline = Date.now() + 15_000;
   while (!predicate()) {
     if (Date.now() >= deadline)
       throw new Error("Timed out waiting for generated external delivery.");

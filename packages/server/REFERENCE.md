@@ -65,33 +65,36 @@ valid event with no interested external receptor is simply not delivered.
 ## Server environment facilities
 
 `ServerEnvironment.instance()` is a process-wide singleton. Production
-resolution requires all four application facilities:
+resolution requires three application facilities:
 
 ```ts
 import { EnvironmentType, ServerEnvironment } from "@spine-event-engine/server";
 import type { TypeRegistryLookup } from "@spine-event-engine/core";
-import type { SignalTransport, TransportFactory } from "@spine-event-engine/transport";
+import type { SignalTransport } from "@spine-event-engine/transport";
 import type { StorageFactory } from "@spine-event-engine/storage";
 
 declare const storageFactory: StorageFactory;
 declare const transport: SignalTransport;
-declare const transportFactory: TransportFactory;
 declare const typeRegistry: TypeRegistryLookup;
 
 ServerEnvironment.when(EnvironmentType.Production).use({
   storageFactory,
   transport,
-  transportFactory,
   typeRegistry,
 });
 ```
 
 `storageFactory` supplies records and events, `transport` is the existing
-signal/runtime transport, `transportFactory` supplies private integration
-message channels, and `typeRegistry` is the complete application schema
-universe used by `ThirdPartyContext` to encode outgoing imported events. Local and test environments default
-storage and message channels in memory and use the core registry only as a
+signal/runtime transport, and `integrationChannelFactory` optionally overrides
+the process-wide private integration message channel factory. When it is
+absent, all local bounded contexts share one in-memory factory, including in
+production. `typeRegistry` is the complete application schema universe used by
+`ThirdPartyContext` to encode outgoing imported events. Local and test
+environments default storage in memory and use the core registry only as a
 fallback; those defaults are not production configuration.
+
+To override the default channel factory, add
+`integrationChannelFactory: customFactory` to the same settings object.
 
 ## Routing lifecycle
 

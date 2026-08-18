@@ -2019,7 +2019,7 @@ const ContextParts = Object.freeze({
     const broker = new IntegrationBroker({
       contextName: create(BoundedContextNameSchema, { value: context.name.value }),
       pairedContextName: create(BoundedContextNameSchema, { value: systemSpec.name.value }),
-      transportFactory: ServerEnvironment.instance().transportFactory,
+      transportFactory: ServerEnvironment.instance().integrationChannelFactory,
       eventBus,
       externalEventSchemas,
       postImported: async (event) => {

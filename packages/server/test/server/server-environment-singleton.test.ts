@@ -48,7 +48,7 @@ describe("ServerEnvironment singleton", () => {
       production.ServerEnvironment.when(production.EnvironmentType.Production).use({
         storageFactory,
         transport,
-        transportFactory: new InMemoryTransportFactory(),
+        integrationChannelFactory: new InMemoryTransportFactory(),
         typeRegistry: spineCoreRegistry,
       });
       const environment = production.ServerEnvironment.instance();

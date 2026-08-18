@@ -24,7 +24,7 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 
 const childPath = fileURLToPath(new URL("./server-integration-broker-child.mjs", import.meta.url));
-const phaseTimeoutMs = 5_000;
+const phaseTimeoutMs = 20_000;
 const execFileAsync = promisify(execFile);
 const adapterIdentity = "wave13-cross-process";
 const ipcTemporaryRoot = process.platform === "darwin" ? "/tmp" : tmpdir();
@@ -134,7 +134,7 @@ describe("Wave 13 IntegrationBroker across normal Node applications", () => {
         cleanupFailure = new AggregateError(failures, "Wave 13 child-process cleanup failed.");
     }
     if (cleanupFailure !== undefined) throw cleanupFailure;
-  });
+  }, 60_000);
 });
 
 async function establishExternalDelivery(

@@ -296,11 +296,12 @@ the broker continues. The transport is best effort: it has no broker retry,
 replay, deduplication, or durable queue, so consumers should re-query or make
 effects idempotent when appropriate.
 
-For one process, the default `InMemoryTransportFactory` is sufficient. For two
-Node processes on one host, call `createZeroMqTransportFactory()` with
+For one process, the default `InMemoryTransportFactory` is sufficient.
+`ServerEnvironment` owns one shared factory for all local contexts and closes it
+once when the environment closes. For two Node processes on one host, call `createZeroMqTransportFactory()` with
 `ZeroMqConfig.create({ ipcDirectory })` in both applications; this is local IPC,
 not a multi-machine transport. In production, configure `ServerEnvironment`
-with storage, signal transport, message `transportFactory`, and the complete
+with storage, signal transport, an optional `integrationChannelFactory`, and the complete
 application `typeRegistry`.
 
 To import an event from a third-party producer, use `ThirdPartyContext`. The
