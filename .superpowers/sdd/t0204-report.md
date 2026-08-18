@@ -56,3 +56,17 @@ once'` failed with the same obsolete requirement.
   expensive shared-runtime profile until after review corrections.
 - Runtime self-telemetry is unavailable. Configured dispatch evidence is the
   existing implementer role, `gpt-5.6-terra` / `medium`.
+
+## Review-correction evidence
+
+- The accepted H-002 review finding is now covered by one focused scenario:
+  two local contexts use the environment-selected default factory, exchange a
+  real external event, use only that factory for broker publisher/subscriber
+  creation, and observe one environment-owned close.
+- Focused public-index, environment, singleton, broker lifecycle, and broker
+  module validation passed: 5 files, 81 tests. Generated build, tooling
+  typecheck, changed-file ESLint, TSDoc, TypeDoc/API inventory, documentation
+  audience/snippets, Prettier, and diff hygiene also passed.
+- The Production reference now teaches the three required facilities and puts
+  the custom channel factory in a separate optional override. Public TSDoc and
+  the beginner guide now document default sharing, ownership, and close.

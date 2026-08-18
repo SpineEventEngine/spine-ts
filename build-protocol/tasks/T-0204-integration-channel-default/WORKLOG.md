@@ -88,3 +88,22 @@ once'`.
   until the orchestrator completes the required review wave and returns any
   correction batch. No runtime telemetry surface is available; immutable
   dispatch evidence remains existing `implementer`, `gpt-5.6-terra`/`medium`.
+
+## 2026-08-18 — Review-correction batch
+
+- Accepted four findings from the complete review wave. Added one focused H-002
+  scenario using the real default `InMemoryTransportFactory`: two local bounded
+  contexts exchange an external event, all broker publisher/subscriber factory
+  calls use the environment-selected identity, and environment close invokes
+  the factory close once. No test-only public seam or production change was
+  needed; the test passed on the reviewed implementation.
+- Corrected the Production reference to list and demonstrate only the three
+  required facilities, with the channel factory as a separate optional
+  override. Expanded public setting/property TSDoc and the beginner guide with
+  one environment-owned, process-wide sharing/once-close statement.
+- Validation: `pnpm typecheck:build:generated`, tooling typecheck, focused
+  public-index/environment/singleton/broker lifecycle/broker module tests
+  (5 files, 81 tests), changed-file ESLint, TSDoc, TypeDoc/API inventory,
+  documentation audience/snippets, Prettier, and `git diff --check` passed.
+- Next: commit and push this correction batch for the required focused
+  API/docs and reliability re-review.

@@ -58,3 +58,16 @@ All four findings are accepted. One consolidated correction batch returns to
 the original T-0204 implementer. Only API/docs and reliability concerns require
 re-review; style/maintainability is satisfied mechanically if the new test is
 focused and no product structure changes.
+
+## Review wave 1 correction disposition
+
+| Finding                   | Disposition | Correction evidence                                                                                                                                                                          |
+| ------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1 H-002 behavioral proof | Resolved    | Focused environment test builds two local contexts with the default factory, observes real external-event delivery and a single factory identity, then verifies one environment-owned close. |
+| P1 Production reference   | Resolved    | Reference now demonstrates only `storageFactory`, `transport`, and `typeRegistry`; the custom integration channel is described separately as optional.                                       |
+| P2 public TSDoc           | Resolved    | Setting and resolved-property comments now state defaulting, process-wide sharing, environment ownership, and once-only closure.                                                             |
+| P2 beginner guide         | Resolved    | One concise sentence states the shared environment ownership and close behavior.                                                                                                             |
+
+The API/docs and reliability concerns require focused re-review. Style remains
+mechanically satisfied because the new test uses existing runtime behavior and
+no product structure changed.

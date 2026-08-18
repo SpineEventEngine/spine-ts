@@ -102,7 +102,10 @@ export interface ServerEnvironmentSettings {
   readonly transport?: SignalTransport;
 
   /**
-   * Message-channel factory used by private bounded-context integration brokers.
+   * Optional message-channel factory for private bounded-context integration brokers.
+   *
+   * When omitted, this environment owns one `InMemoryTransportFactory` shared
+   * by every local broker in the process and closes it once with the environment.
    */
   readonly integrationChannelFactory?: TransportFactory;
 
@@ -168,6 +171,10 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
 
   /**
    * Message-channel factory selected for private bounded-context integration.
+   *
+   * This is either the configured override or one environment-owned
+   * `InMemoryTransportFactory` shared by every local broker in the process and
+   * closed once with the environment.
    */
   readonly integrationChannelFactory: TransportFactory;
 
