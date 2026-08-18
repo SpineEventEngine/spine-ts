@@ -229,7 +229,11 @@ describe("ManagedServerApplication", () => {
       expect(response.status).toBeDefined();
     } finally {
       parent.kill("SIGTERM");
-      await new Promise<void>((resolve) => parent.once("exit", () => resolve()));
+      await new Promise<void>((resolve) => {
+        parent.once("exit", () => {
+          resolve();
+        });
+      });
     }
   }, 20_000);
   it("treats one asynchronous child error and its later exit as one failed incarnation", async () => {

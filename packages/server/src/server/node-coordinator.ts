@@ -41,9 +41,34 @@ const gracefulSessionDrainMs = 100;
  * @internal
  */
 export interface ReadyCoordinatorMember {
+  // prettier-ignore
+
+  /**
+   *
+   * Private loopback child endpoint.
+   */
+
   readonly endpoint: string;
+
+  /**
+   *
+   * Immutable child incarnation.
+   */
+
   readonly incarnation: string;
+
+  /**
+   *
+   * Operating-system child process identifier.
+   */
+
   readonly pid: number;
+
+  /**
+   *
+   * Stable managed logical slot.
+   */
+
   readonly slot: number;
 }
 
@@ -53,7 +78,24 @@ export interface ReadyCoordinatorMember {
  * @internal
  */
 export interface ReadyMemberSource {
+  // prettier-ignore
+
+  /**
+   *
+   * Returns the current complete READY-member snapshot.
+   *
+   * @returns The current private member facts.
+   */
+
   readyMembers(): readonly ReadyCoordinatorMember[];
+
+  /**
+   *
+   * Subscribes one callback after READY membership changes.
+   *
+   * @param listener Runs after a new snapshot becomes current.
+   * @returns Stops later membership callbacks.
+   */
   onReadyMembersChange(listener: () => void): () => void;
 }
 
@@ -63,10 +105,41 @@ export interface ReadyMemberSource {
  * @internal
  */
 export interface NodeCoordinatorOptions {
+  // prettier-ignore
+
+  /**
+   *
+   * Supplies private managed READY membership.
+   */
+
   readonly members: ReadyMemberSource;
+
+  /**
+   *
+   * Selects the public listener host.
+   */
+
   readonly host?: string;
+
+  /**
+   *
+   * Selects the public listener port.
+   */
+
   readonly port?: number;
+
+  /**
+   *
+   * Limits inbound unary message bytes.
+   */
+
   readonly readMaxBytes?: number;
+
+  /**
+   *
+   * Limits outbound unary message bytes.
+   */
+
   readonly writeMaxBytes?: number;
 }
 
@@ -76,6 +149,8 @@ export interface NodeCoordinatorOptions {
  * @internal
  */
 export class NodeCoordinator {
+  // prettier-ignore
+
   readonly #members: ReadyMemberSource;
   readonly #kernel: BackendMembershipKernel<
     ReadyCoordinatorMember,
@@ -86,8 +161,26 @@ export class NodeCoordinator {
   readonly #server: http2.Http2Server;
   readonly #sessions: Set<http2.ServerHttp2Session>;
   readonly #stopMembers: () => void;
+
+  /**
+   *
+   * Bound listener host.
+   */
+
   readonly host: string;
+
+  /**
+   *
+   * Bound listener port.
+   */
+
   readonly port: number;
+
+  /**
+   *
+   * Bound Connect/gRPC base URL.
+   */
+
   readonly baseUrl: string;
   #close: Promise<void> | undefined;
   #membershipReconciliation = Promise.resolve();
@@ -100,7 +193,7 @@ export class NodeCoordinator {
   ) {
     this.#members = options.members;
     this.#kernel = new BackendMembershipKernel({
-      create: async (member) => NodeCoordinatorValues.client(member),
+      create: (member) => Promise.resolve(NodeCoordinatorValues.client(member)),
       memberKey: (member) => `${member.slot.toString()}/${member.incarnation}`,
       sameMember: (left, right) => left.endpoint === right.endpoint,
       definitionKey: () => undefined,
@@ -137,7 +230,7 @@ export class NodeCoordinator {
     const writeMaxBytes = NodeCoordinatorValues.messageLimit(
       options.writeMaxBytes ?? defaultMessageMaxBytes,
     );
-    let coordinator: NodeCoordinator | undefined;
+    let coordinator: NodeCoordinator | undefined = undefined;
     const sessions = new Set<http2.ServerHttp2Session>();
     const server = http2.createServer(
       connectNodeAdapter({
@@ -226,22 +319,22 @@ export class NodeCoordinator {
   }
 }
 
-type CoordinatorCommand = {
+interface CoordinatorCommand {
   readonly kind: "command";
   readonly command: Command;
   readonly context: HandlerContext;
   response?: Ack;
-};
-type CoordinatorQuery = {
+}
+interface CoordinatorQuery {
   readonly kind: "query";
   readonly query: Query;
   readonly context: HandlerContext;
   response?: QueryResponse;
-};
+}
 type CoordinatorRequest = CoordinatorCommand | CoordinatorQuery;
 
 const NodeCoordinatorValues = Object.freeze({
-  async client(member: ReadyCoordinatorMember) {
+  client(member: ReadyCoordinatorMember) {
     const manager = new Http2SessionManager(member.endpoint);
     const transport = createGrpcTransport({ baseUrl: member.endpoint, sessionManager: manager });
     return {
@@ -277,15 +370,14 @@ const NodeCoordinatorValues = Object.freeze({
         }
         return new Uint8Array();
       },
-      subscribe: async () => {
-        throw new Error("Coordinator subscription forwarding belongs to T-0208.");
-      },
-      activate: async () => {
-        throw new Error("Coordinator subscription forwarding belongs to T-0208.");
-      },
-      dispose: async () => undefined,
-      close: async () => {
+      subscribe: () =>
+        Promise.reject(new Error("Coordinator subscription forwarding belongs to T-0208.")),
+      activate: () =>
+        Promise.reject(new Error("Coordinator subscription forwarding belongs to T-0208.")),
+      dispose: () => Promise.resolve(),
+      close: () => {
         manager.abort();
+        return Promise.resolve();
       },
     };
   },
