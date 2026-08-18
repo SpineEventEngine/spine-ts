@@ -19,6 +19,7 @@ import { LogLayer, StructuredTransport, type ILogLayer } from "loglayer";
 import { runningServerAccess, type RunningServer } from "./server.js";
 import { emitServerWarning } from "./server-log.js";
 import { NodeCoordinator, type ReadyCoordinatorMember } from "./node-coordinator.js";
+import { InMemorySubscriptionRegistry } from "../stand/subscription-registry.js";
 
 const childMarker = "SPINE_MANAGED_SERVER_CHILD";
 const slotMarker = "SPINE_MANAGED_SERVER_SLOT";
@@ -264,7 +265,10 @@ const ManagedServerValues = Object.freeze({
   },
   requireVolatileRegistries(server: RunningServer): void {
     const registries = runningServerAccess.subscriptionRegistries(server);
-    if (registries?.some((registry) => registry.persistent))
+    if (
+      registries === undefined ||
+      registries.some((registry) => !(registry instanceof InMemorySubscriptionRegistry))
+    )
       throw new Error(
         "Managed application replicas require an in-memory Stand subscription registry.",
       );

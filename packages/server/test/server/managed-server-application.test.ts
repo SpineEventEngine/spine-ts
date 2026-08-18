@@ -21,7 +21,12 @@ import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import { CommandService } from "@spine-event-engine/proto/client";
 
-import { ManagedServerApplication, type RunningServer } from "../../src/index.js";
+import {
+  InMemorySubscriptionRegistry,
+  ManagedServerApplication,
+  type RunningServer,
+} from "../../src/index.js";
+import { installRunningServerRegistriesForTest } from "../../src/testing/index.js";
 import {
   ManagedServerCoordinator,
   managedServerApplicationAccess,
@@ -65,12 +70,16 @@ const itemAt = <T>(values: readonly T[], index: number, description: string): T 
   return value;
 };
 
-const localRunningServer = (close: () => Promise<void>, port = 42): RunningServer => ({
-  host: "127.0.0.1",
-  port,
-  baseUrl: `http://127.0.0.1:${String(port)}`,
-  close,
-});
+const localRunningServer = (close: () => Promise<void>, port = 42): RunningServer => {
+  const server: RunningServer = {
+    host: "127.0.0.1",
+    port,
+    baseUrl: `http://127.0.0.1:${String(port)}`,
+    close,
+  };
+  installRunningServerRegistriesForTest(server, [new InMemorySubscriptionRegistry()]);
+  return server;
+};
 
 function managedRegistryChild(registry?: "memory"): ChildProcess {
   return fork(
@@ -812,8 +821,7 @@ describe("ManagedServerApplication", () => {
         processCount: 1,
         port: 50_051,
         moduleUrl: import.meta.url,
-        createServer: () =>
-          Promise.resolve({ host: "127.0.0.1", port: 42, baseUrl: "http://127.0.0.1:42", close }),
+        createServer: () => Promise.resolve(localRunningServer(close)),
         synchronize: () => Promise.resolve(),
       });
       expect(send).toHaveBeenCalledWith(

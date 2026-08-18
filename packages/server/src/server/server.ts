@@ -33,6 +33,7 @@ import {
   BoundedContextBuilder,
   boundedContextAccess,
 } from "../context/bounded-context.js";
+import type { StandSubscriptionRegistry } from "../stand/subscription-registry.js";
 import {
   SpineServices,
   spineServicesAccess,
@@ -56,6 +57,10 @@ const maximumMessageMaxBytes = 0xffff_ffff;
 const gracefulSessionDrainMs = 100;
 type ServerContext = BoundedContext | BoundedContextBuilder;
 const runningContexts = new WeakMap<RunningServer, readonly BoundedContext[]>();
+const runningServerTestRegistries = new WeakMap<
+  RunningServer,
+  readonly StandSubscriptionRegistry[]
+>();
 
 /**
  * Performs work coupled to listener readiness and network shutdown.
@@ -879,7 +884,11 @@ export interface RunningServerAccess {
    */
   subscriptionRegistries(
     server: RunningServer,
-  ): readonly { readonly persistent: boolean }[] | undefined;
+  ): readonly StandSubscriptionRegistry[] | undefined;
+  installRegistriesForTest(
+    server: RunningServer,
+    registries: readonly StandSubscriptionRegistry[],
+  ): void;
 }
 
 /**
@@ -888,12 +897,19 @@ export interface RunningServerAccess {
  * @internal
  */
 export const runningServerAccess: RunningServerAccess = Object.freeze({
-  subscriptionRegistries(
+  subscriptionRegistries(server: RunningServer): readonly StandSubscriptionRegistry[] | undefined {
+    return (
+      runningContexts
+        .get(server)
+        ?.map((context) => boundedContextAccess.subscriptionRegistry(context)) ??
+      runningServerTestRegistries.get(server)
+    );
+  },
+  installRegistriesForTest(
     server: RunningServer,
-  ): readonly { readonly persistent: boolean }[] | undefined {
-    return runningContexts
-      .get(server)
-      ?.map((context) => boundedContextAccess.subscriptionRegistry(context));
+    registries: readonly StandSubscriptionRegistry[],
+  ): void {
+    runningServerTestRegistries.set(server, registries);
   },
 });
 

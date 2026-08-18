@@ -13,6 +13,20 @@
  */
 
 import { ServerEnvironmentLifecycle } from "../server/server-environment.js";
+import { runningServerAccess, type RunningServer } from "../server/server.js";
+import type { StandSubscriptionRegistry } from "../stand/subscription-registry.js";
+
+/**
+ * Installs registry facts for a structural running-server test double.
+ *
+ * @internal
+ */
+export function installRunningServerRegistriesForTest(
+  server: RunningServer,
+  registries: readonly StandSubscriptionRegistry[],
+): void {
+  runningServerAccess.installRegistriesForTest(server, registries);
+}
 
 /**
  * Provides deterministic server-environment cleanup for package tests.
