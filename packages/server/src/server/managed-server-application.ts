@@ -110,6 +110,12 @@ export interface ManagedServerApplicationOptions {
    *
    * Builds one complete local application server in a child process.
    *
+   * The framework owns the returned `Server` for the managed child lifetime.
+   * Every assembled Bounded Context must use its actual
+   * `InMemorySubscriptionRegistry`: managed mode rejects persistent and custom
+   * registries, then closes the assembled server before the child can report
+   * READY. This prevents child-local durable subscription ownership.
+   *
    * @param options Supplies the child-only loopback listener address.
    * @returns The assembled local application server.
    */

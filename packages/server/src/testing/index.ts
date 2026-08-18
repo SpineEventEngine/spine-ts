@@ -17,8 +17,10 @@ import { runningServerAccess, type RunningServer } from "../server/server.js";
 import type { StandSubscriptionRegistry } from "../stand/subscription-registry.js";
 
 /**
- * Installs registry facts for a structural running-server test double.
+ * Adds registry facts for a structural running-server test double.
  *
+ * @param server Supplies the structural running server.
+ * @param registries Supplies its context registry facts.
  * @internal
  */
 export function installRunningServerRegistriesForTest(

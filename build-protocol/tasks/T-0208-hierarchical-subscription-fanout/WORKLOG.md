@@ -16,6 +16,25 @@
   then make the smallest kernel correction before completing the remaining
   tests and documentation.
 
+## 2026-08-18 — Correction convergence
+
+- RED proved both an activation-disconnect poison (the second activation did
+  not relay) and an unbounded retained-child retry (close timed out). The
+  kernel now separates child lifetime from activation lifetime, retries every
+  retained pair through one bounded disposal helper, and continues close
+  cleanup after individual definition failures. A late member also proves it
+  synchronizes and activates under the existing owner while a concurrent
+  second owner remains rejected.
+- The managed registry matrix is explicit: opaque handles expose no registry
+  facts; an actual default persistent Server and a structural custom registry
+  with `persistent: false` both exit before READY; only an actual
+  `InMemorySubscriptionRegistry` reports READY and closes cleanly. The forked
+  fixture imports `dist`; `pnpm typecheck:build:generated` was required before
+  the custom structural-registry proof and left no tracked generator outputs.
+- Focused evidence: membership kernel 37/37; managed application 51/51;
+  package/deployment no-emit typechecks pass. Next: run the correction
+  preflight and record final reviewer dispositions before affected re-review.
+
 ## 2026-08-18 — Framing and TDD lock
 
 - Read `AGENTS.md`, `BUILD_PROTOCOL.md`, the accepted T-0203 plan and human

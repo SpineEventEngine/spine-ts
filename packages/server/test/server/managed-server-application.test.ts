@@ -81,7 +81,7 @@ const localRunningServer = (close: () => Promise<void>, port = 42): RunningServe
   return server;
 };
 
-function managedRegistryChild(registry?: "memory"): ChildProcess {
+function managedRegistryChild(registry?: "memory" | "custom"): ChildProcess {
   return fork(
     fileURLToPath(new URL("./managed-server-subscription-registry-child.mjs", import.meta.url)),
     {
@@ -1112,6 +1112,25 @@ describe("ManagedServerApplication", () => {
 
     await expect(childExit(child)).resolves.toMatchObject({ code: 1 });
     expect(messages).toEqual([]);
+  }, 20_000);
+
+  it("rejects a custom non-persistent registry before a managed child reports READY", async () => {
+    const child = managedRegistryChild("custom");
+    const messages: unknown[] = [];
+    child.on("message", (message) => messages.push(message));
+    const exited = childExit(child);
+    let completed = false;
+
+    try {
+      await expect(exited).resolves.toMatchObject({ code: 1 });
+      completed = true;
+      expect(messages).toEqual([]);
+    } finally {
+      if (!completed) {
+        child.kill("SIGKILL");
+        await exited;
+      }
+    }
   }, 20_000);
 
   it("admits an in-memory normal Server registry as a managed READY child", async () => {

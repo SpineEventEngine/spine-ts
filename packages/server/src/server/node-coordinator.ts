@@ -427,6 +427,7 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
    * Creates one terminal bounded update queue.
    *
    * @param limit Limits retained updates before terminal closure.
+   * @param onOverflow Aborts the public relay when the queue reaches its bound.
    */
   constructor(limit: number, onOverflow: () => void = () => undefined) {
     this.#limit = limit;

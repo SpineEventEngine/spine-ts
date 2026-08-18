@@ -2,6 +2,30 @@
 
 **Status:** Awaiting specialist review after deterministic convergence.
 
+## Correction intake and dispositions
+
+- Existing implementer ownership is explicitly `gpt-5.6-terra` / `medium`;
+  telemetry remains unavailable. No subagents were dispatched.
+- Performance/reliability findings: accepted. Child cleanup retry now shares
+  the bounded disposal path, retains one client/child pair, and `close()`
+  retries retained cleanup before client shutdown. Caller stream disconnect no
+  longer poisons the retained child lifetime; activation can reconnect.
+- Style/maintainability findings: accepted for fixture ownership and cleanup;
+  joined Gateway recovery closes bindings owner before its Coordinator, and
+  registry forks retain/await child exit in `finally` on test failure.
+- TypeScript/API documentation findings: accepted. Managed `createServer`
+  TSDoc now records framework ownership, exact managed registry admission, and
+  rejection cleanup.
+- Documentation findings: accepted. Server/package/API docs now describe
+  Gateway-only durable bindings, Coordinator fan-out/merge/cancel, no IPC
+  payload, eligibility synchronization, best-effort/no-replay behavior, and
+  T-0210 handoff.
+- Security: N/A; corrections add no wire form, secret, or trust boundary.
+- Registry evidence is complete: opaque `RunningServer` access is absent;
+  default persistent and structural non-persistent custom registries reject
+  before READY; only actual `InMemorySubscriptionRegistry` reaches READY and
+  closes. The real fork fixture was rebuilt from `dist` before this evidence.
+
 The required review wave is style/maintainability, TypeScript/API
 documentation, documentation, and performance/reliability. Each dispatch must
 record its existing role and explicit configured profile; runtime telemetry is

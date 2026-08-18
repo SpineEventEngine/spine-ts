@@ -885,6 +885,13 @@ export interface RunningServerAccess {
   subscriptionRegistries(
     server: RunningServer,
   ): readonly StandSubscriptionRegistry[] | undefined;
+
+  /**
+   * Adds registry facts for one structural test double.
+   *
+   * @param server Supplies the structural running server.
+   * @param registries Supplies its context registry facts.
+   */
   installRegistriesForTest(
     server: RunningServer,
     registries: readonly StandSubscriptionRegistry[],

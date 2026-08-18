@@ -590,7 +590,8 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
         if (child.activationController !== controller) return;
         child.activationController = undefined;
         child.active = false;
-        if (state.children.get(key) === child && !controller.signal.aborted) state.children.delete(key);
+        if (state.children.get(key) === child && !controller.signal.aborted)
+          state.children.delete(key);
       });
   }
   async #removeDefinition(key: string, signal: AbortSignal): Promise<void> {
