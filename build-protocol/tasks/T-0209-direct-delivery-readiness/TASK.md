@@ -35,9 +35,11 @@ attestation, examples, or T-0210 external-event proof.
 
 1. Each managed complete-replica child independently observes configured
    remote/shared Delivery directly; Coordinator and Gateway never proxy it.
-2. Managed mode requires explicit remote/shared Delivery and a separately
-   selected shard strategy, without strategy identity/equality/manifest/
-   attestation, CPU or shard-count inference, or numeric process/shard coupling.
+2. Managed application assembly configures remote/shared Delivery and selects
+   its shard strategy. T-0209 fixtures do so and T-0211 documents it; runtime
+   does not certify configuration provenance, strategy identity/equality,
+   manifests, attestation, CPU or shard-count inference, or numeric
+   process/shard coupling.
 3. A child proceeds `STARTING -> SYNCHRONIZING -> READY`; unary and Delivery
    admission wait for initial Delivery snapshot and retained subscription
    installation.
@@ -57,4 +59,3 @@ green. Changed executable lines and branches require at least 90% coverage.
 Use `verify:task` after focused convergence; do not run release verification
 before review convergence. T-0210 retains real-process RED 17–19/29
 external-event acceptance.
-

@@ -16,7 +16,7 @@
   the first narrow failing readiness/drain behavior test and capture its RED
   output before implementation.
 
-## 2026-08-19 — contract blocker found before RED
+## 2026-08-19 — superseded contract investigation
 
 - `ManagedServerApplicationOptions` currently conveys only `createServer()` and
   opaque optional `synchronize()`. The child can report only an endpoint; it
@@ -27,11 +27,11 @@
   and optional `source`, but cannot prove remote/shared identity. Existing
   `BoundedContextBuilder` snapshots a strategy and defaults it to one shard,
   losing whether the user explicitly selected it.
-- Consequently no current private seam can implement the binding admission
-  rule “explicit remote/shared Delivery facility and explicitly selected shard
-  strategy” without either (a) adding a managed-readiness configuration/
-  declaration contract, or (b) weakening it to structural post-assembly
-  inference, which would violate the frozen prohibition on inferred strategy
-  behavior and would not prove explicit selection. This is a genuine required
-  public-concept decision under the T-0209 instruction. No product test or
-  source edit has been made pending disposition.
+- Disposition from the controlling human directive: this is **not** a public
+  contract blocker. Delivery and strategy provenance remain the application
+  user's concern; runtime must not certify them. `Server.start()`/environment
+  attachment already awaits openable Delivery `open()` (including
+  `RemoteDelivery` initial snapshot) before `createServer()` resolves, and
+  child-only `synchronize()` already installs retained subscriptions before
+  READY. Fixtures supply the behavioral configuration and T-0211 will document
+  it. Resume test-first implementation through the private lifecycle seam.

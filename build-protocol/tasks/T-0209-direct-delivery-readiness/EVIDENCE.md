@@ -24,7 +24,7 @@
 
 No test-forwarder or direct fake notification will be recorded as complete-replica acceptance.
 
-## Blocking evidence
+## Superseded provenance investigation
 
 `ManagedServerApplicationOptions` has `createServer` and optional opaque
 `synchronize` only. `ServerEnvironment.delivery` is a generic closeable, and
@@ -32,3 +32,7 @@ its internal openable form establishes ports/source only after assembly.
 `BoundedContextBuilder` defaults and snapshots its strategy. Therefore the
 current contracts cannot distinguish an explicitly configured remote/shared
 facility or explicit strategy selection from the default/local alternatives.
+The controlling disposition is that this distinction must not be certified by
+runtime. Fixture application assembly configures it; existing `Server.start()`
+already waits for openable Delivery readiness, and managed `synchronize()`
+remains the retained-subscription readiness gate.
