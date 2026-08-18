@@ -114,8 +114,6 @@ The planned public shape is intentionally small:
 await ManagedServerApplication.run({
   processCount: deployment.processCount,
   moduleUrl: import.meta.url,
-  host: deployment.host,
-  port: deployment.port,
   createServer: async ({ host, port }) => {
     return assembleCompleteApplicationServer({ host, port });
   },

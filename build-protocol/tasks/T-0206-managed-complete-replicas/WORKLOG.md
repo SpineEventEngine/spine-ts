@@ -1,5 +1,30 @@
 # T-0206 work log
 
+## 2026-08-18 — Review-correction checkpoint A
+
+- Returned to the existing bounded implementation role after the first review
+  wave. The configured profile is `gpt-5.6-terra` / `medium`; this surface does
+  not reveal runtime model telemetry. No subagents were used.
+- RED: the prior public-handle assertions failed after topology facts were
+  removed from the handle; the revised tests now use the explicit internal
+  handoff accessor. The focused lifecycle suite also exposed missing endpoint
+  validation and parent signal ownership before the correction.
+- GREEN: public options no longer contain unused Coordinator `host`/`port`;
+  child synchronization is the lazy child-only `synchronize()` callback; the
+  public handle contains only `ready` and `close()`. Ready PIDs, endpoints,
+  slots, and incarnations remain available only through the internal handoff
+  for T-0207 and lifecycle tests.
+- GREEN: parent `SIGTERM`/`SIGINT` follows the shared close path and a real
+  fork proof verifies its child is gone afterwards. Child IPC disconnect starts
+  local close. `error` and later `exit` are fenced as one failed incarnation.
+  READY accepts only bounded canonical `http://127.0.0.1:<port>` loopback
+  origins. Child stdio is inherited rather than unread `silent` pipes.
+- Evidence: `pnpm exec tsc -p packages/server/tsconfig.json`; `pnpm docs:api:check`
+  (259 server exports); and `pnpm exec vitest run
+packages/server/test/server/managed-server-application.test.ts --pool=threads`
+  (28/28) passed. Full pre-review validation and coverage remain pending after
+  the remaining correction proofs and contained lifecycle logging disposition.
+
 ## 2026-08-18 — Framing and code map
 
 - Fresh baseline is integrated `origin/main` at `ec9a382b9`; the protected

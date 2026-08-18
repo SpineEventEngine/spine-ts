@@ -36,20 +36,25 @@ import { ManagedServerApplication, Server } from "@spine-event-engine/server";
 await ManagedServerApplication.run({
   processCount: 4,
   moduleUrl: import.meta.url,
-  host: "127.0.0.1",
-  port: 0,
   createServer: ({ host, port }) => Server.atPort(port, { host }).start(),
 });
 ```
 
 The parent starts four separate children. Each child runs this same entry
 module, assembles the complete application, opens its own loopback listener,
-and completes its local readiness work before it is admitted. A crashed child
-is replaced with bounded exponential delay; surviving children keep serving.
+and completes its local readiness work before it is admitted. `run()` first
+waits for every configured child. Afterwards it stays ready while at least one
+child is ready; replacements continue while it is degraded, and it becomes
+unready if no child remains ready. A crashed child is replaced with bounded
+exponential delay; surviving children keep serving.
 The small parent/child channel carries only lifecycle facts such as readiness
 and close. It never carries Commands, Events, queries, subscriptions, or
-Delivery notifications. Use direct `Server.run()` for one explicit local
-process or browser-oriented hosting.
+Delivery notifications. The parent owns `SIGINT` and `SIGTERM` cleanup for its
+children. It is private lifecycle topology only: it does not yet forward public
+gRPC requests. Use direct `Server.run()` for one explicit local process or
+browser-oriented hosting. The application remains free to use any
+`DeliveryStrategy`; managed process count neither detects CPU cores nor changes
+Delivery shard selection.
 
 For detailed contracts intended for coding agents, see the
 [REFERENCE.md documentation for agents](REFERENCE.md).

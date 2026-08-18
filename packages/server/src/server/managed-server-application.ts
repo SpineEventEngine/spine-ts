@@ -23,6 +23,10 @@ const incarnationMarker = "SPINE_MANAGED_SERVER_INCARNATION";
 const initialRestartDelayMs = 250;
 const maximumRestartDelayMs = 30_000;
 const healthyReadyMs = 60_000;
+const closeGraceMs = 1_000;
+const closeKillMs = 1_000;
+const endpointMaximumBytes = 256;
+const handleMembers = new WeakMap<ManagedServerApplicationHandle, ManagedServerCoordinator>();
 
 /** Configures bounded replacement after an unexpected replica exit. */
 export interface ManagedServerRestartOptions {
@@ -42,29 +46,26 @@ export interface ManagedServerApplicationOptions {
   readonly processCount: number;
   /** URL of the ESM entry module that invokes this method in parent and child processes. */
   readonly moduleUrl: string;
-  /** Host for the future coordinator listener. */
-  readonly host: string;
-  /** Port for the future coordinator listener. */
-  readonly port: number;
   /** Builds one complete local application server in a child process. */
   readonly createServer: (options: {
     readonly host: string;
     readonly port: number;
   }) => Promise<RunningServer>;
-  /** Child-local readiness work that must settle before the private READY fact. */
-  readonly synchronizationGates?: readonly Promise<unknown>[];
+  /**
+   * Starts child-local readiness work after local server assembly.
+   *
+   * This callback runs only in a managed child. It is deliberately lazy so a
+   * parent never starts application synchronization work.
+   */
+  readonly synchronize?: () => Promise<void>;
   /** Bounded private process-replacement settings. */
   readonly restart?: ManagedServerRestartOptions;
 }
 
 /** One managed complete-replica cohort. */
 export interface ManagedServerApplicationHandle {
-  /** Child process identifiers in logical-slot order. */
-  readonly childPids: readonly number[];
-  /** Whether all initial children completed the private readiness handshake. */
+  /** Whether at least one managed child is currently ready. */
   readonly ready: boolean;
-  /** Loopback endpoints reported by ready child processes. */
-  readonly childEndpoints: readonly string[];
   /** Stops all child processes and waits for their exit. */
   close(): Promise<void>;
 }
@@ -85,7 +86,12 @@ export const ManagedServerApplication: Readonly<{
 const ManagedServerValues = Object.freeze({
   async child(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle> {
     const server = await options.createServer({ host: "127.0.0.1", port: 0 });
-    await Promise.all(options.synchronizationGates ?? []);
+    await options.synchronize?.();
+    // Node may emit an IPC EPIPE after a parent has already disappeared. The
+    // disconnect handler below owns shutdown; this listener prevents that
+    // transport detail from becoming an unhandled child-process exception.
+    const containIpcError = () => undefined;
+    process.on("error", containIpcError);
     await ManagedServerValues.send({
       type: "ready",
       slot: process.env[slotMarker],
@@ -93,21 +99,24 @@ const ManagedServerValues = Object.freeze({
       endpoint: server.baseUrl,
     });
     let closing: Promise<void> | undefined;
+    const close = () => {
+      closing ??= server.close().finally(() => {
+        if (process.connected && typeof process.disconnect === "function") process.disconnect();
+        process.off("error", containIpcError);
+      });
+      return closing;
+    };
     process.once("message", (message: { readonly type?: string }) => {
       if (message.type === "close") {
-        closing ??= server.close().finally(() => {
-          process.disconnect();
-        });
+        void close();
       }
     });
+    process.once("disconnect", () => {
+      void close();
+    });
     return {
-      childPids: [],
-      childEndpoints: [server.baseUrl],
       ready: true,
-      close: () => {
-        closing ??= server.close();
-        return closing;
-      },
+      close,
     };
   },
   parent(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle> {
@@ -124,10 +133,14 @@ const ManagedServerValues = Object.freeze({
         reject(new Error("Managed child has no parent IPC channel."));
         return;
       }
-      process.send(message, (error) => {
-        if (error === null) resolve();
-        else reject(error);
-      });
+      try {
+        process.send(message, (error) => {
+          if (error === null) resolve();
+          else reject(error);
+        });
+      } catch (error) {
+        reject(error);
+      }
     });
   },
 });
@@ -139,6 +152,7 @@ interface ReplicaRecord {
   endpoint: string | undefined;
   readyAt: number | undefined;
   expectedExit: boolean;
+  terminal: boolean;
 }
 
 interface SlotRecord {
@@ -171,6 +185,7 @@ export class ManagedServerCoordinator {
   #ready: Promise<void> | undefined;
   #resolveReady: (() => void) | undefined;
   #close: Promise<void> | undefined;
+  #onSignal: (() => void) | undefined;
 
   constructor(
     options: ManagedServerApplicationOptions,
@@ -193,23 +208,18 @@ export class ManagedServerCoordinator {
     this.#ready = new Promise<void>((resolve) => {
       this.#resolveReady = resolve;
     });
+    this.#installSignalHandlers();
     for (const slot of this.#slots) this.#start(slot);
     await this.#ready;
-    const childPids = () => ManagedServerCoordinatorValues.pids(this.#slots);
-    const childEndpoints = () => ManagedServerCoordinatorValues.endpoints(this.#slots);
     const isReady = () => this.#slots.some((slot) => slot.replica?.readyAt !== undefined);
-    return {
-      get childPids() {
-        return childPids();
-      },
-      get childEndpoints() {
-        return childEndpoints();
-      },
+    const handle: ManagedServerApplicationHandle = {
       get ready() {
         return isReady();
       },
       close: () => this.close(),
     };
+    handleMembers.set(handle, this);
+    return handle;
   }
 
   #start(slot: SlotRecord): void {
@@ -240,12 +250,16 @@ export class ManagedServerCoordinator {
       endpoint: undefined,
       readyAt: undefined,
       expectedExit: false,
+      terminal: false,
     };
     slot.replica = replica;
     child.on("message", (message: unknown) => {
       this.#onMessage(slot, replica, message);
     });
     child.once("exit", () => {
+      this.#onExit(slot, replica);
+    });
+    child.once("error", () => {
       this.#onExit(slot, replica);
     });
   }
@@ -264,7 +278,8 @@ export class ManagedServerCoordinator {
   }
 
   #onExit(slot: SlotRecord, replica: ReplicaRecord): void {
-    if (slot.replica !== replica) return;
+    if (slot.replica !== replica || replica.terminal) return;
+    replica.terminal = true;
     slot.replica = undefined;
     if (slot.starting) {
       slot.starting = false;
@@ -305,6 +320,7 @@ export class ManagedServerCoordinator {
     if (closing !== undefined) return closing;
     const close = (async () => {
       this.#closing = true;
+      this.#removeSignalHandlers();
       for (const slot of this.#slots) {
         if (slot.replacementTimer !== undefined)
           this.#dependencies.clock.clearTimeout(slot.replacementTimer);
@@ -317,7 +333,71 @@ export class ManagedServerCoordinator {
     this.#close = close;
     return close;
   }
+
+  /** @internal Supplies ready child facts to the next Coordinator slice. */
+  readyMembers(): readonly Readonly<{
+    slot: number;
+    incarnation: string;
+    pid: number;
+    endpoint: string;
+  }>[] {
+    return this.#slots.flatMap((slot) => {
+      const replica = slot.replica;
+      if (
+        replica?.readyAt === undefined ||
+        replica.endpoint === undefined ||
+        replica.child.pid === undefined
+      )
+        return [];
+      return [
+        {
+          slot: slot.slot,
+          incarnation: replica.incarnation,
+          pid: replica.child.pid,
+          endpoint: replica.endpoint,
+        },
+      ];
+    });
+  }
+
+  #installSignalHandlers(): void {
+    if (this.#onSignal !== undefined) return;
+    this.#onSignal = () => {
+      void this.close().finally(() => {
+        if (process.connected && typeof process.disconnect === "function") process.disconnect();
+      });
+    };
+    process.on("SIGINT", this.#onSignal);
+    process.on("SIGTERM", this.#onSignal);
+  }
+
+  #removeSignalHandlers(): void {
+    if (this.#onSignal === undefined) return;
+    process.off("SIGINT", this.#onSignal);
+    process.off("SIGTERM", this.#onSignal);
+    this.#onSignal = undefined;
+  }
 }
+
+/** @internal Explicit handoff for the following Coordinator forwarding slice. */
+type ReadyMember = Readonly<{ slot: number; incarnation: string; pid: number; endpoint: string }>;
+
+export const managedServerCoordinatorAccess: Readonly<{
+  readyMembers(coordinator: ManagedServerCoordinator): readonly ReadyMember[];
+}> = Object.freeze({
+  readyMembers(coordinator: ManagedServerCoordinator): readonly ReadyMember[] {
+    return coordinator.readyMembers();
+  },
+});
+
+/** @internal Reads private managed child facts for Coordinator forwarding tests. */
+export const managedServerApplicationAccess: Readonly<{
+  readyMembers(handle: ManagedServerApplicationHandle): readonly ReadyMember[];
+}> = Object.freeze({
+  readyMembers(handle: ManagedServerApplicationHandle): readonly ReadyMember[] {
+    return handleMembers.get(handle)?.readyMembers() ?? [];
+  },
+});
 
 const ManagedServerCoordinatorValues = Object.freeze({
   dependencies: {
@@ -336,7 +416,7 @@ const ManagedServerCoordinatorValues = Object.freeze({
           [slotMarker]: String(slot),
           [incarnationMarker]: incarnation,
         },
-        silent: true,
+        stdio: ["inherit", "inherit", "inherit", "ipc"],
       }),
   } satisfies ManagedServerCoordinatorDependencies,
   restart(options: ManagedServerApplicationOptions): Required<ManagedServerRestartOptions> {
@@ -356,16 +436,6 @@ const ManagedServerCoordinatorValues = Object.freeze({
       throw new Error("Managed server restart concurrentStarts must not exceed processCount.");
     return restart;
   },
-  pids(slots: readonly SlotRecord[]): readonly number[] {
-    return slots.flatMap((slot) =>
-      slot.replica?.readyAt === undefined ? [] : [slot.replica.child.pid ?? 0],
-    );
-  },
-  endpoints(slots: readonly SlotRecord[]): readonly string[] {
-    return slots.flatMap((slot) =>
-      slot.replica?.endpoint === undefined ? [] : [slot.replica.endpoint],
-    );
-  },
   readyMessage(
     message: unknown,
     slot: number,
@@ -377,7 +447,8 @@ const ManagedServerCoordinatorValues = Object.freeze({
       candidate.type === "ready" &&
       candidate.slot === String(slot) &&
       candidate.incarnation === incarnation &&
-      typeof candidate.endpoint === "string"
+      typeof candidate.endpoint === "string" &&
+      canonicalLoopbackEndpoint(candidate.endpoint) !== undefined
     );
   },
   async close(replica: ReplicaRecord | undefined): Promise<void> {
@@ -390,7 +461,47 @@ const ManagedServerCoordinatorValues = Object.freeze({
         resolve();
       }),
     );
-    if (child.connected) child.send({ type: "close" });
+    if (child.connected) child.send({ type: "close" }, () => undefined);
+    else child.kill("SIGTERM");
+    await ManagedServerCoordinatorValues.waitForExit(child, exited);
+  },
+  async waitForExit(child: ChildProcess, exited: Promise<void>): Promise<void> {
+    if (await ManagedServerCoordinatorValues.within(exited, closeGraceMs)) return;
+    child.kill("SIGTERM");
+    if (await ManagedServerCoordinatorValues.within(exited, closeKillMs)) return;
+    child.kill("SIGKILL");
     await exited;
   },
+  within(promise: Promise<void>, delay: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(false), delay);
+      void promise.then(() => {
+        clearTimeout(timer);
+        resolve(true);
+      });
+    });
+  },
 });
+
+function canonicalLoopbackEndpoint(value: string): string | undefined {
+  if (Buffer.byteLength(value, "utf8") > endpointMaximumBytes) return undefined;
+  try {
+    const endpoint = new URL(value);
+    if (
+      endpoint.protocol !== "http:" ||
+      endpoint.hostname !== "127.0.0.1" ||
+      endpoint.port === "" ||
+      endpoint.username !== "" ||
+      endpoint.password !== "" ||
+      endpoint.pathname !== "/" ||
+      endpoint.search !== "" ||
+      endpoint.hash !== "" ||
+      endpoint.origin !== value
+    )
+      return undefined;
+    const port = Number(endpoint.port);
+    return Number.isSafeInteger(port) && port >= 1 && port <= 65_535 ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
