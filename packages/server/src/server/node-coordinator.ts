@@ -397,7 +397,7 @@ const NodeCoordinatorValues = Object.freeze({
       dispose: NodeCoordinatorValues.unsupported,
     };
   },
-  unsupported<T>(): T {
+  unsupported(): never {
     throw new Error("Node Coordinator subscription forwarding belongs to T-0208.");
   },
   responseMetadata(headers: Headers, trailers: Headers, context: HandlerContext): void {

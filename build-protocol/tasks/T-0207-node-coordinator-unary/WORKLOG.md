@@ -123,3 +123,16 @@ packages/server/src/server/managed-server-application.ts` is green. It ran
   reliability used `gpt-5.6-terra` / high; documentation used
   `gpt-5.6-luna` / medium. Runtime telemetry was unavailable to every lane.
   No reviewer reported a remaining P0-P2 finding.
+
+## 2026-08-18 — Release preflight correction
+
+- The first converged release run reached repository-wide ESLint and stopped
+  on two deterministic findings: an unsupported helper carried an unnecessary
+  one-use type parameter, and the invalid-port fixture used a disallowed type
+  assertion form. The helper now returns `never`, which is its exact behavior,
+  and the fixture uses an explicit expected TypeScript error for the omitted
+  required port.
+- Tooling typecheck, affected ESLint, the 63 focused managed/coordinator tests,
+  formatting, and whitespace checks pass after the correction. The release
+  profile must be rerun because the stopped attempt did not reach its test
+  phase.

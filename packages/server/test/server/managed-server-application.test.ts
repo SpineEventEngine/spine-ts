@@ -1188,7 +1188,8 @@ describe("ManagedServerApplication", () => {
         await expect(
           ManagedServerApplication.run({
             processCount: 1,
-            port: port as number,
+            // @ts-expect-error Exercises runtime validation of an omitted port.
+            port,
             moduleUrl: import.meta.url,
             createServer,
           }),
