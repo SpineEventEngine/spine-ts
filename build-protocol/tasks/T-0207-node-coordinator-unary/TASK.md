@@ -1,6 +1,6 @@
 # T-0207: Node Coordinator Unary HTTP/2 Services
 
-Status: Review-ready
+Status: Reviewed; release verification pending
 Start: `2026-08-18`
 Baseline: `origin/main@45396bce6`
 Branch: `codex/t0207-node-coordinator`

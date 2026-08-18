@@ -105,3 +105,21 @@ packages/server/src/server/managed-server-application.ts` is green. It ran
   statements, 90.29% branches, 91.26% functions, and 95.49% lines. The next
   action is affected TypeScript/API and documentation re-review after the
   deterministic correction preflight.
+
+## 2026-08-18 — Affected specialist re-review
+
+- TypeScript/API re-review passed: the full kernel/client contracts are
+  explicit, the public managed port is truthful and validated before startup,
+  and no new public topology, transport, or Proto contract leaked.
+- Documentation re-review passed: unary-only forwarding, zero-READY behavior,
+  process supervision, legacy ZeroMQ disposition, and T-0208 subscription
+  ownership are consistent across the package and architecture guides.
+- Style/maintainability re-review passed: the unsafe assertions and stale
+  wording are gone, while Coordinator/topology seams remain internal.
+- Performance/reliability re-review passed with the 63 focused tests green:
+  port validation precedes side effects and existing forwarding, no-retry,
+  cancellation, deadline, and bounded-close behavior remains intact.
+- Reviewers used the existing configured roles. TypeScript/API, style, and
+  reliability used `gpt-5.6-terra` / high; documentation used
+  `gpt-5.6-luna` / medium. Runtime telemetry was unavailable to every lane.
+  No reviewer reported a remaining P0-P2 finding.
