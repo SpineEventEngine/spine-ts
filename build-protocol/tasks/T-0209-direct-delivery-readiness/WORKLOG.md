@@ -75,3 +75,17 @@
 - It is not counted as the required managed complete-replica acceptance: its
   child fixture assembles `ServerEnvironment` directly. RED 27–28 still need a
   managed-replica fixture with retained subscription behavior.
+
+## 2026-08-19 — joined managed remote fixture RED
+
+- Added a real parent plus two managed-child fixture against a real
+  `DeliveryServer`. Each child configures `RemoteDelivery`, explicitly selects
+  `UniformAcrossAllShards.forNumber(2)` in application assembly, and waits for
+  remote open/snapshot in child-only synchronization before READY. IPC reports
+  only slot/PID readiness facts.
+- RED command: `pnpm exec vitest run
+  packages/server/test/server/managed-remote-delivery-readiness.integration.test.ts`.
+  It reaches both READY members, then fails only on the unimplemented joined
+  drain/relay observation: `ready.finalRelayAfterDrain` is `undefined`, where
+  the acceptance requires `true`. Earlier module-resolution failures were
+  corrected before accepting this RED.

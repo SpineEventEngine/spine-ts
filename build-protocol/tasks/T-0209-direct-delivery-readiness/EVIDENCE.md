@@ -56,3 +56,13 @@ processes. It proves direct remote Admin fan-out, exclusive fenced commit,
 restart snapshot recovery, and tiny-buffer overflow recovery. This is retained
 RED 22–26 regression evidence only: its children are environment assemblies,
 not `ManagedServerApplication` replicas, so it does not close RED 27–28.
+
+## Joined managed remote fixture RED
+
+The new integration fixture starts one managed parent with **two** real child
+replicas against a real `DeliveryServer`; children configure `RemoteDelivery`,
+select a two-shard strategy during assembly, and await child-only
+synchronization before READY. Its focused test confirms two READY members and
+then intentionally fails `finalRelayAfterDrain === true`: received
+`undefined`. This is valid RED evidence for the still-missing joined
+subscription/drain observation, not acceptance credit.
