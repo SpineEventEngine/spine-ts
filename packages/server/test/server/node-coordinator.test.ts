@@ -18,7 +18,7 @@ import type { AddressInfo } from "node:net";
 import { create, type MessageShape } from "@bufbuild/protobuf";
 import { Code, ConnectError, createClient, type HandlerContext } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
-import { AckSchema } from "@spine-event-engine/proto";
+import { AckSchema, CommandIdSchema, StatusSchema } from "@spine-event-engine/proto";
 import {
   CommandService,
   QueryService,
@@ -175,7 +175,9 @@ describe("NodeCoordinator", () => {
       post: (context) => {
         context.responseHeader.set("x-child", context.requestHeader.get("x-tenant") ?? "missing");
         context.responseTrailer.set("x-trailer", "child");
-        return create(AckSchema, { status: { case: "ok", value: {} } });
+        return create(AckSchema, {
+          status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+        });
       },
     });
     closeables.push(replica.close);
@@ -233,7 +235,9 @@ describe("NodeCoordinator", () => {
   it("enforces configured inbound and outbound message bounds at the Coordinator", async () => {
     const replica = await backend("bounds");
     closeables.push(replica.close);
-    const request = create(CommandService.method.post.input, { id: { value: "request" } });
+    const request = create(CommandService.method.post.input, {
+      id: create(CommandIdSchema, { uuid: "request" }),
+    });
     const inbound = await NodeCoordinator.open({
       members: new TestReadyMembers([replica.member]),
       port: 0,
@@ -307,7 +311,9 @@ async function backend(
           post: (_command, context) => {
             value.commands++;
             if (options.post !== undefined) return options.post(context);
-            return create(AckSchema, { status: { case: "ok", value: {} } });
+            return create(AckSchema, {
+              status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+            });
           },
         });
         router.service(QueryService, {
