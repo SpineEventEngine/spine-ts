@@ -137,3 +137,15 @@
 - `managed-server-application.test.ts` is green at 49/49. This closes the
   managed-registry acceptance and confirms rejection cleanup does not leave a
   running child.
+
+## 2026-08-18 — Scoped coverage measurement
+
+- The scoped task-verifier build/Proto phase completed without tracked generated
+  byproducts. Exact LCOV on the focused suite identifies outstanding branch
+  work: `node-coordinator.ts` 166/180 lines and 48/59 branches;
+  `managed-server-application.ts` 256/267 lines and 148/165 branches; kernel
+  226/233 lines and 169/188 branches.
+- The new private `server.ts` inspection seam has only 9/353 whole-file lines
+  and 0/160 branches under this focused suite. It is intentionally private but
+  still needs a changed-line-compatible coverage disposition before the task
+  verifier can be accepted. No verification-pass claim is made.
