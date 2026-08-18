@@ -547,6 +547,49 @@ describe("ManagedServerApplication", () => {
     });
     await coordinator.close();
   });
+
+  it("removes a draining child from Coordinator admission before its server closes", async () => {
+    const clock = new FakeClock();
+    const child = fakeChild(1);
+    const spawned: { slot: number; incarnation: string }[] = [];
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.reject(new Error("unused")),
+      },
+      {
+        clock,
+        spawn: (_url, slot, incarnation) => {
+          spawned.push({ slot, incarnation });
+          return child;
+        },
+      },
+    );
+    const started = coordinator.start();
+    const replica = itemAt(spawned, 0, "the initial replica");
+    child.emit("message", {
+      type: "ready",
+      slot: String(replica.slot),
+      incarnation: replica.incarnation,
+      endpoint: "http://127.0.0.1:1",
+    });
+    await started;
+    (child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      child.emit("message", {
+        type: "draining",
+        slot: String(replica.slot),
+        incarnation: replica.incarnation,
+      });
+      return true;
+    });
+
+    const closing = coordinator.close();
+
+    expect(managedServerCoordinatorAccess.readyMembers(coordinator)).toEqual([]);
+    child.emit("exit");
+    await closing;
+  });
   it("delays repeated failed replacements exponentially and caps the delay", async () => {
     const clock = new FakeClock();
     const spawned: {
@@ -917,8 +960,7 @@ describe("ManagedServerApplication", () => {
       expect(close).not.toHaveBeenCalled();
       Object.defineProperty(process, "connected", { configurable: true, value: false });
       onMessage({ type: "close" }, undefined);
-      await Promise.resolve();
-      expect(close).toHaveBeenCalledOnce();
+      await expect.poll(() => close).toHaveBeenCalledOnce();
     } finally {
       if (priorSend === undefined) delete (process as { send?: unknown }).send;
       else Object.defineProperty(process, "send", priorSend);
@@ -955,8 +997,7 @@ describe("ManagedServerApplication", () => {
       const onDisconnect = managedDisconnectListener(priorDisconnects);
       onDisconnect();
       process.off("disconnect", onDisconnect);
-      await Promise.resolve();
-      expect(close).toHaveBeenCalledOnce();
+      await expect.poll(() => close).toHaveBeenCalledOnce();
       expect(disconnect).toHaveBeenCalledOnce();
       expect(process.listeners("disconnect")).toEqual([...priorDisconnects]);
     } finally {

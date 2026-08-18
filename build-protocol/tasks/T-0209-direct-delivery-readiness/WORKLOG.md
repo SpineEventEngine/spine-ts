@@ -35,3 +35,33 @@
   child-only `synchronize()` already installs retained subscriptions before
   READY. Fixtures supply the behavioral configuration and T-0211 will document
   it. Resume test-first implementation through the private lifecycle seam.
+
+## 2026-08-19 — RED/GREEN: private DRAINING admission
+
+- RED command: `pnpm exec vitest run
+  packages/server/test/server/managed-server-application.test.ts
+  --testNamePattern "removes a draining child"`. It failed as intended: after
+  an authenticated private `draining` frame, Coordinator READY membership still
+  contained the child (`1` received; `[]` expected).
+- GREEN adds only a bounded `draining` slot/incarnation IPC frame. The child
+  emits it before its existing `server.close()` chain; the parent removes that
+  exact READY incarnation and marks its exit expected before listener/context
+  delivery quiescence proceeds. The same focused command passed 1/1.
+- This changes neither public API/wire nor Delivery lease/retry behavior. The
+  next TDD cycle will establish real-child close ordering and direct remote
+  Delivery readiness evidence.
+
+## 2026-08-19 — focused regression evidence
+
+- The initial full fixture run failed with EPIPE because real managed-child
+  fixtures import `packages/server/dist` while the source-only test run had not
+  rebuilt it. `pnpm typecheck:build:generated` refreshed the child module.
+- The rebuilt run exposed two existing child-close tests which observed only one
+  microtask. DRAINING is intentionally asynchronous IPC, so both now await the
+  observable close call. This was a fixture timing correction, not a runtime
+  retry/policy change.
+- Final focused command: `pnpm exec vitest run
+  packages/server/test/server/managed-server-application.test.ts`; **52/52
+  passed**. The temporary Vite threads pool lacks `process.connected`, so the
+  process-IPC signal assertion is valid only on the default fork-capable test
+  profile used above.

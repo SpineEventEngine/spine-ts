@@ -36,3 +36,14 @@ The controlling disposition is that this distinction must not be certified by
 runtime. Fixture application assembly configures it; existing `Server.start()`
 already waits for openable Delivery readiness, and managed `synchronize()`
 remains the retained-subscription readiness gate.
+
+## RED/GREEN evidence: DRAINING admission
+
+- RED: focused managed-server test failed with a DRAINING child still present
+  in `readyMembers()`.
+- GREEN: the same command passed **1/1** after private child-to-parent
+  `draining` notification removes the exact READY incarnation before existing
+  server close/delivery settlement. No payload is sent over IPC.
+- Regression: after `pnpm typecheck:build:generated` refreshed fixtures that
+  import `packages/server/dist`, the full focused managed lifecycle suite
+  passed **52/52** using the default process-capable Vitest profile.

@@ -230,17 +230,24 @@ const ManagedServerValues = Object.freeze({
     let closing: Promise<void> | undefined;
     const close = () => {
       if (closing !== undefined) return closing;
-      const attempt = server.close().then(
-        () => {
-          if (process.connected && typeof process.disconnect === "function") process.disconnect();
-          process.off("error", containIpcError);
-          process.off("message", onMessage);
-        },
-        (error: unknown) => {
-          if (closing === attempt) closing = undefined;
-          throw error;
-        },
-      );
+      const attempt = ManagedServerValues.send({
+        type: "draining",
+        slot: process.env[slotMarker],
+        incarnation: process.env[incarnationMarker],
+      })
+        .catch(() => undefined)
+        .then(() => server.close())
+        .then(
+          () => {
+            if (process.connected && typeof process.disconnect === "function") process.disconnect();
+            process.off("error", containIpcError);
+            process.off("message", onMessage);
+          },
+          (error: unknown) => {
+            if (closing === attempt) closing = undefined;
+            throw error;
+          },
+        );
       closing = attempt;
       return attempt;
     };
@@ -282,10 +289,10 @@ const ManagedServerValues = Object.freeze({
       );
   },
   send(message: {
-    readonly type: "ready";
+    readonly type: "ready" | "draining";
     readonly slot: string | undefined;
     readonly incarnation: string | undefined;
-    readonly endpoint: string;
+    readonly endpoint?: string;
   }): Promise<void> {
     return new Promise((resolve, reject) => {
       if (process.send === undefined || !process.connected) {
@@ -310,6 +317,7 @@ interface ReplicaRecord {
   readonly child: ChildProcess;
   endpoint: string | undefined;
   readyAt: number | undefined;
+  draining: boolean;
   expectedExit: boolean;
   terminal: boolean;
 }
@@ -519,6 +527,7 @@ export class ManagedServerCoordinator {
       child,
       endpoint: undefined,
       readyAt: undefined,
+      draining: false,
       expectedExit: false,
       terminal: false,
     };
@@ -537,6 +546,13 @@ export class ManagedServerCoordinator {
   }
 
   #onMessage(slot: SlotRecord, replica: ReplicaRecord, message: unknown): void {
+    if (ManagedServerCoordinatorValues.drainingMessage(message, slot.slot, replica.incarnation)) {
+      if (slot.replica !== replica || replica.draining) return;
+      replica.draining = true;
+      replica.expectedExit = true;
+      this.#notifyReadyMembers();
+      return;
+    }
     if (!ManagedServerCoordinatorValues.readyMessage(message, slot.slot, replica.incarnation))
       return;
     if (slot.replica !== replica || replica.readyAt !== undefined || this.#closing) return;
@@ -697,6 +713,7 @@ export class ManagedServerCoordinator {
       const replica = slot.replica;
       if (
         replica?.readyAt === undefined ||
+        replica.draining ||
         replica.endpoint === undefined ||
         replica.child.pid === undefined
       )
@@ -877,6 +894,23 @@ const ManagedServerCoordinatorValues = Object.freeze({
       candidate.incarnation === incarnation &&
       typeof candidate.endpoint === "string" &&
       canonicalLoopbackEndpoint(candidate.endpoint) !== undefined
+    );
+  },
+  drainingMessage(
+    message: unknown,
+    slot: number,
+    incarnation: string,
+  ): message is {
+    readonly type: "draining";
+    readonly slot: string;
+    readonly incarnation: string;
+  } {
+    if (typeof message !== "object" || message === null) return false;
+    const candidate = message as Record<string, unknown>;
+    return (
+      candidate.type === "draining" &&
+      candidate.slot === String(slot) &&
+      candidate.incarnation === incarnation
     );
   },
   async close(
