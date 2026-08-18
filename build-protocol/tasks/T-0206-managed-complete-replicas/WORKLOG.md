@@ -95,3 +95,26 @@ lifecycle has not started.` before parent/child implementation.
 - T-0206 now implements only necessary deployment behavior: explicit process
   count, real child assembly/listeners, synchronization readiness gates,
   bounded replacement, graceful drain, and deterministic cleanup.
+
+## 2026-08-18 — Ownership transfer and managed lifecycle checkpoints
+
+- Ownership transferred to the current existing `implementer` role with the
+  explicit configured profile `gpt-5.6-terra` / `medium`; this surface does not
+  expose runtime model telemetry and no subagents were used.
+- The predecessor's uncommitted endpoint/gate prototype was restored to its
+  pushed `HEAD` before implementation. A new real-child endpoint acceptance
+  test then failed against that head (`childEndpoints` was `undefined`), and
+  passed after the smallest readiness message implementation. This is the
+  retained RED/GREEN evidence for the transferred hunk.
+- `979efe2e7` reports the actual child listener endpoint only after its local
+  server and synchronization gates settle. Focused real-child suite: 9/9.
+- `8bd24ca2c` adds stable parent slots, private per-incarnation UUIDs,
+  replacement after unexpected exit, bounded restart settings, and close-time
+  timer cancellation. The real-child suite passed 11/11 after a generated
+  build refreshed the fixture's `dist` import. The initially hung run was
+  diagnosed as a source-vs-built-child IPC-shape mismatch; only its known stale
+  test parents and child fixtures were terminated, and a subsequent single run
+  left no process handles.
+- No application manifest, schema/handler digest, Delivery-strategy identity,
+  sampling, build attestation, new public Proto, signal IPC, or application
+  payload transport was introduced.
