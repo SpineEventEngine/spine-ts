@@ -1,5 +1,29 @@
 # T-0206 work log
 
+## 2026-08-18 — Fork-pool coverage correction
+
+- RED: the default Vitest fork-pool command for the managed lifecycle file
+  reproducibly reported `Worker exited unexpectedly` and produced zero V8
+  coverage. The focused `SIGINT` case alone reproduced the failure, while an
+  adjacent asynchronous-error case passed. The private message/disconnect
+  retry cases also reproduced an IPC `write EPIPE`.
+- Root cause: unit tests broadcast framework process signals/messages into the
+  Vitest worker and successfully closed simulated children while leaving the
+  worker's real `process.disconnect()` active. Those actions terminate the
+  runner IPC before V8 can flush coverage. The real forked parent
+  SIGTERM/SIGINT acceptance remains unchanged.
+- GREEN: tests capture pre-existing listeners and directly invoke only the
+  managed listener; direct `once("disconnect")` invocation removes its
+  registered listener explicitly. Every simulated connected parent or child
+  now stubs and restores `process.disconnect`. No managed lifecycle product
+  code changed.
+- GREEN evidence: the formerly failing single SIGINT fork-pool selection now
+  passes with nonzero coverage; lifecycle/logging under default forks passes
+  45/45; paired root-export/lifecycle fork-pool run passes 49/49. Scoped
+  coverage is 95.53% statements, 90.00% branches, 97.22% functions, and
+  99.14% lines. Tooling typecheck, scoped lint, formatting, and diff checks
+  passed. This test-runner isolation correction does not reopen reviews.
+
 ## 2026-08-18 — Release-test inventory correction
 
 - The converged release ran 264 files and 4,269 tests successfully except for

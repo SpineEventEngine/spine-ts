@@ -68,8 +68,29 @@ const localRunningServer = (close: () => Promise<void>, port = 42): RunningServe
   close,
 });
 
-const emitProcessMessage = (message: unknown): void => {
-  EventEmitter.prototype.emit.call(process, "message", message);
+const managedSignalListener = (
+  signal: NodeJS.Signals,
+  prior: ReadonlySet<NodeJS.SignalsListener>,
+): NodeJS.SignalsListener => {
+  const listener = process.listeners(signal).find((candidate) => !prior.has(candidate));
+  if (listener === undefined) throw new Error(`Expected a managed ${signal} listener.`);
+  return listener;
+};
+
+const managedMessageListener = (
+  prior: ReadonlySet<NodeJS.MessageListener>,
+): NodeJS.MessageListener => {
+  const listener = process.listeners("message").find((candidate) => !prior.has(candidate));
+  if (listener === undefined) throw new Error("Expected a managed message listener.");
+  return listener;
+};
+
+const managedDisconnectListener = (
+  prior: ReadonlySet<NodeJS.DisconnectListener>,
+): NodeJS.DisconnectListener => {
+  const listener = process.listeners("disconnect").find((candidate) => !prior.has(candidate));
+  if (listener === undefined) throw new Error("Expected a managed disconnect listener.");
+  return listener;
 };
 
 const fakeChild = (pid: number): ChildProcess => {
@@ -93,6 +114,10 @@ describe("ManagedServerApplication", () => {
   it("uses the shared close path for a parent SIGINT", async () => {
     const clock = new FakeClock();
     const child = fakeChild(1);
+    const priorSignals = new Set(process.listeners("SIGINT"));
+    const priorDisconnect = Object.getOwnPropertyDescriptor(process, "disconnect");
+    const disconnect = vi.fn();
+    Object.defineProperty(process, "disconnect", { configurable: true, value: disconnect });
     const spawned: { slot: number; incarnation: string }[] = [];
     const coordinator = new ManagedServerCoordinator(
       {
@@ -108,21 +133,28 @@ describe("ManagedServerApplication", () => {
         },
       },
     );
-    const started = coordinator.start();
-    child.emit("message", {
-      type: "ready",
-      slot: "0",
-      incarnation: itemAt(spawned, 0, "the initial replica").incarnation,
-      endpoint: "http://127.0.0.1:1",
-    });
-    await started;
-    (child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      child.emit("exit");
-      return true;
-    });
-    process.emit("SIGINT");
-    await Promise.resolve();
-    await expect(coordinator.close()).resolves.toBeUndefined();
+    try {
+      const started = coordinator.start();
+      child.emit("message", {
+        type: "ready",
+        slot: "0",
+        incarnation: itemAt(spawned, 0, "the initial replica").incarnation,
+        endpoint: "http://127.0.0.1:1",
+      });
+      await started;
+      (child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
+        child.emit("exit");
+        return true;
+      });
+      managedSignalListener("SIGINT", priorSignals)("SIGINT");
+      await Promise.resolve();
+      await expect(coordinator.close()).resolves.toBeUndefined();
+      expect(disconnect).toHaveBeenCalledOnce();
+      expect(process.listeners("SIGINT")).toEqual([...priorSignals]);
+    } finally {
+      if (priorDisconnect === undefined) delete (process as { disconnect?: unknown }).disconnect;
+      else Object.defineProperty(process, "disconnect", priorDisconnect);
+    }
   });
 
   it.each(["SIGTERM", "SIGINT"] as const)(
@@ -644,12 +676,15 @@ describe("ManagedServerApplication", () => {
     const priorListeners = new Set(process.listeners("message"));
     const priorSend = Object.getOwnPropertyDescriptor(process, "send");
     const priorConnected = Object.getOwnPropertyDescriptor(process, "connected");
+    const priorDisconnect = Object.getOwnPropertyDescriptor(process, "disconnect");
     const send = vi.fn((_message: unknown, callback: (error: Error | null) => void) => {
       callback(null);
       return true;
     });
+    const disconnect = vi.fn();
     Object.defineProperty(process, "send", { configurable: true, value: send });
     Object.defineProperty(process, "connected", { configurable: true, value: true });
+    Object.defineProperty(process, "disconnect", { configurable: true, value: disconnect });
     process.env.SPINE_MANAGED_SERVER_CHILD = "true";
     process.env.SPINE_MANAGED_SERVER_SLOT = "0";
     process.env.SPINE_MANAGED_SERVER_INCARNATION = "incarnation";
@@ -672,11 +707,14 @@ describe("ManagedServerApplication", () => {
       await expect(handle.close()).rejects.toThrow("retry child close");
       await expect(handle.close()).resolves.toBeUndefined();
       expect(close).toHaveBeenCalledTimes(2);
+      expect(disconnect).toHaveBeenCalledOnce();
     } finally {
       if (priorSend === undefined) delete (process as { send?: unknown }).send;
       else Object.defineProperty(process, "send", priorSend);
       if (priorConnected === undefined) delete (process as { connected?: unknown }).connected;
       else Object.defineProperty(process, "connected", priorConnected);
+      if (priorDisconnect === undefined) delete (process as { disconnect?: unknown }).disconnect;
+      else Object.defineProperty(process, "disconnect", priorDisconnect);
       for (const listener of process.listeners("message")) {
         if (!priorListeners.has(listener)) process.off("message", listener);
       }
@@ -724,6 +762,7 @@ describe("ManagedServerApplication", () => {
     const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
     const priorSend = Object.getOwnPropertyDescriptor(process, "send");
     const priorConnected = Object.getOwnPropertyDescriptor(process, "connected");
+    const priorMessages = new Set(process.listeners("message"));
     const send = vi.fn((_message: unknown, callback: (error: Error | null) => void) => {
       callback(null);
       return true;
@@ -738,10 +777,11 @@ describe("ManagedServerApplication", () => {
         moduleUrl: import.meta.url,
         createServer: () => Promise.resolve(localRunningServer(close)),
       });
-      emitProcessMessage({ type: "ignored" });
+      const onMessage = managedMessageListener(priorMessages);
+      onMessage({ type: "ignored" }, undefined);
       expect(close).not.toHaveBeenCalled();
       Object.defineProperty(process, "connected", { configurable: true, value: false });
-      emitProcessMessage({ type: "close" });
+      onMessage({ type: "close" }, undefined);
       await Promise.resolve();
       expect(close).toHaveBeenCalledOnce();
     } finally {
@@ -759,6 +799,7 @@ describe("ManagedServerApplication", () => {
     const priorSend = Object.getOwnPropertyDescriptor(process, "send");
     const priorConnected = Object.getOwnPropertyDescriptor(process, "connected");
     const priorDisconnect = Object.getOwnPropertyDescriptor(process, "disconnect");
+    const priorDisconnects = new Set(process.listeners("disconnect"));
     const send = vi.fn((_message: unknown, callback: (error: Error | null) => void) => {
       callback(null);
       return true;
@@ -775,10 +816,13 @@ describe("ManagedServerApplication", () => {
         moduleUrl: import.meta.url,
         createServer: () => Promise.resolve(localRunningServer(close)),
       });
-      process.emit("disconnect");
+      const onDisconnect = managedDisconnectListener(priorDisconnects);
+      onDisconnect();
+      process.off("disconnect", onDisconnect);
       await Promise.resolve();
       expect(close).toHaveBeenCalledOnce();
       expect(disconnect).toHaveBeenCalledOnce();
+      expect(process.listeners("disconnect")).toEqual([...priorDisconnects]);
     } finally {
       if (priorSend === undefined) delete (process as { send?: unknown }).send;
       else Object.defineProperty(process, "send", priorSend);
@@ -797,14 +841,17 @@ describe("ManagedServerApplication", () => {
       const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
       const priorSend = Object.getOwnPropertyDescriptor(process, "send");
       const priorConnected = Object.getOwnPropertyDescriptor(process, "connected");
+      const priorDisconnect = Object.getOwnPropertyDescriptor(process, "disconnect");
       const priorMessages = new Set(process.listeners("message"));
       const priorDisconnects = new Set(process.listeners("disconnect"));
       const send = vi.fn((_message: unknown, callback: (error: Error | null) => void) => {
         callback(null);
         return true;
       });
+      const disconnect = vi.fn();
       Object.defineProperty(process, "send", { configurable: true, value: send });
       Object.defineProperty(process, "connected", { configurable: true, value: true });
+      Object.defineProperty(process, "disconnect", { configurable: true, value: disconnect });
       process.env.SPINE_MANAGED_SERVER_CHILD = "true";
       const close = vi
         .fn<() => Promise<void>>()
@@ -818,18 +865,26 @@ describe("ManagedServerApplication", () => {
           moduleUrl: import.meta.url,
           createServer: () => Promise.resolve(localRunningServer(close)),
         });
-        if (trigger === "message") emitProcessMessage({ type: "close" });
-        else process.emit("disconnect");
+        if (trigger === "message")
+          managedMessageListener(priorMessages)({ type: "close" }, undefined);
+        else {
+          const onDisconnect = managedDisconnectListener(priorDisconnects);
+          onDisconnect();
+          process.off("disconnect", onDisconnect);
+        }
         await new Promise((resolve) => setImmediate(resolve));
         expect(unhandled).not.toHaveBeenCalled();
         await expect(handle.close()).resolves.toBeUndefined();
         expect(close).toHaveBeenCalledTimes(2);
+        expect(disconnect).toHaveBeenCalledOnce();
       } finally {
         process.off("unhandledRejection", unhandled);
         if (priorSend === undefined) delete (process as { send?: unknown }).send;
         else Object.defineProperty(process, "send", priorSend);
         if (priorConnected === undefined) delete (process as { connected?: unknown }).connected;
         else Object.defineProperty(process, "connected", priorConnected);
+        if (priorDisconnect === undefined) delete (process as { disconnect?: unknown }).disconnect;
+        else Object.defineProperty(process, "disconnect", priorDisconnect);
         for (const listener of process.listeners("message")) {
           if (!priorMessages.has(listener)) process.off("message", listener);
         }
