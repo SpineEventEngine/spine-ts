@@ -141,6 +141,7 @@ interface ChildState<Child> {
   readonly child: Child;
   readonly controller: AbortController;
   active: boolean;
+  activationController: AbortController | undefined;
   activation: Promise<void>;
 }
 interface DefinitionState<Child, Update> {
@@ -249,6 +250,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
         children: new Map(),
         starts: new Set(),
         active: false,
+        activationController: undefined,
         updates: undefined,
         failure: undefined,
       });
@@ -288,6 +290,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
         children: new Map(),
         starts: new Set(),
         active: false,
+        activationController: undefined,
         updates: undefined,
         failure: undefined,
       });
@@ -312,22 +315,37 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     const key = this.#options.definitionKey(definition);
     const state = key === undefined ? undefined : this.#definitions.get(key);
     if (state === undefined) return;
+    if (state.activationController !== undefined)
+      throw new Error("subscription activation is already active");
+    const controller = new AbortController();
+    state.activationController = controller;
     state.active = true;
     state.updates = updates;
     const abort = () => {
+      controller.abort();
       for (const start of state.starts) start.abort();
       for (const child of state.children.values()) child.controller.abort();
     };
     if (signal.aborted) {
       abort();
+      state.activationController = undefined;
+      state.active = false;
       return;
     }
     signal.addEventListener("abort", abort, { once: true });
     try {
       await this.#schedule(this.#nodes, false);
-      await BackendMembershipKernel.waitForAbort(signal);
+      await Promise.race([
+        BackendMembershipKernel.waitForAbort(signal),
+        BackendMembershipKernel.waitForAbort(controller.signal),
+      ]);
     } finally {
       signal.removeEventListener("abort", abort);
+      if (state.activationController === controller) {
+        state.activationController = undefined;
+        state.active = false;
+        state.updates = undefined;
+      }
     }
   }
 
@@ -566,6 +584,7 @@ export class BackendMembershipKernel<Member, Request, Child, Update> {
     const state = this.#definitions.get(key);
     if (state === undefined) return;
     this.#definitions.delete(key);
+    state.activationController?.abort();
     for (const start of state.starts) start.abort();
     await Promise.all(
       [...state.children.entries()].map(async ([memberKey, child]) => {

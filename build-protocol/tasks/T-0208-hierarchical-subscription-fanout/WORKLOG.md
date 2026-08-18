@@ -245,3 +245,12 @@ incomplete.` The test's generic parallel cleanup closed the replacement
   build, but its sole process completed and wrote the final coverage artifact;
   no second expensive profile was run. Specialist review is the remaining
   completion gate.
+
+## 2026-08-18 — Review correction: activation ownership
+
+- RED: a second `BackendMembershipKernel.activate()` overwrote the first
+  definition update sink and resolved when pre-aborted rather than rejecting;
+  exact focused assertion: `promise resolved "undefined" instead of rejecting`.
+- GREEN: each definition now owns one activation controller. Concurrent
+  activation rejects with `subscription activation is already active`; Cancel
+  aborts that controller, its child streams, and the original public wait.

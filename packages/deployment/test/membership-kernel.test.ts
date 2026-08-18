@@ -236,6 +236,24 @@ describe("BackendMembershipKernel", () => {
     expect(delivered).toEqual(["a"]);
     await owner.close();
   });
+  it("rejects a concurrent activation and cancellation terminates its owner", async () => {
+    const owner = kernel({
+      create: async (member) =>
+        client(member, { activate: async (_child, _updates, signal) => waitForAbort(signal) }),
+    });
+    await owner.reconcile([{ id: "a" }]);
+    await owner.subscribe(definition("x"), new AbortController().signal);
+    const first = owner.activate(definition("x"), async () => {}, new AbortController().signal);
+    const aborted = new AbortController();
+    aborted.abort();
+
+    await expect(owner.activate(definition("x"), async () => {}, aborted.signal)).rejects.toThrow(
+      "already active",
+    );
+    await owner.cancel(definition("x"), new AbortController().signal);
+    await expect(first).resolves.toBeUndefined();
+    await owner.close();
+  });
   it("forwards no request without members and selects members round robin", async () => {
     const owner = kernel({
       create: async (member) => client(member, { forward: async () => encoder.encode(member.id) }),
