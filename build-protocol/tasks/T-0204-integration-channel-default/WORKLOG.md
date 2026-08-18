@@ -170,3 +170,10 @@ once'`.
   and the test reached Vitest's 15-second ceiling under suite load. The test
   now has an explicit 60-second total ceiling while retaining those tighter
   internal phase bounds.
+- A further full-suite run showed the child-local 15-second deadline expiring:
+  the forked applications were starved while hundreds of coverage workers ran.
+  The release profile now keeps the real two-process acceptance out of the V8
+  coverage pool and runs it immediately afterward as a separate native proof.
+  This follows the Wave 13 rule that live cross-process evidence is separate
+  from V8 coverage, keeps delivery deadlines meaningful, and avoids hiding a
+  deployment failure behind an arbitrarily large timeout.
