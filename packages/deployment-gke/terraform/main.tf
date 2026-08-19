@@ -141,7 +141,7 @@ resource "kubernetes_deployment_v1" "application" {
 
           readiness_probe {
             tcp_socket {
-              port = "grpc"
+              port = "coordinator"
             }
           }
         }

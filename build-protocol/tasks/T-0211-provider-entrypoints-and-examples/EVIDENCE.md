@@ -17,3 +17,19 @@
   equivalent passed.
 - Scoped changed-entrypoint coverage passed the required threshold: **94.50%
   statements, 90.00% branches, 95.65% functions, 98.78% lines**.
+
+## Provider review-correction checkpoint — 2026-08-19
+
+- Consolidated API and performance/reliability review corrections were applied
+  by the existing implementation owner. Reviewer profiles: `gpt-5.6-terra` /
+  `high`; runtime telemetry unavailable.
+- Retained REDs proved the old GKE readiness port mismatch, omitted partial
+  registrar rollback, and competing inner signal listener. GREEN proofs cover
+  the Coordinator probe, `start → withdraw → managed → registry` rollback, and
+  simulated `SIGTERM` outer-path ordering.
+- Fresh post-correction provider suite: **114/114** tests in 15 files;
+  typecheck build/tooling, documentation snippets, Terraform formatting, and
+  diff check passed.
+- The changed GCE entrypoint itself is above the required line and branch gate:
+  **96.38% statements, 90.24% branches, 95.00% functions, 100.00% lines**.
+- `pnpm lint:generated` passed after the final tooling typecheck.

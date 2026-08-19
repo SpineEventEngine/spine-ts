@@ -93,7 +93,10 @@ export const GceApplicationEntrypoint = Object.freeze({
         });
     const registrar = registry === undefined ? undefined : new GceRegistrar({ registry, port });
     let managed: ManagedServerApplicationHandle | undefined;
+    let application: ManagedServerApplicationHandle | undefined;
+    let signalSnapshots: SignalSnapshots | undefined;
     try {
+      if (!child) signalSnapshots = GceApplicationEntrypointValues.signalSnapshots();
       managed = await ManagedServerApplication.run({
         processCount: GceDeploymentSettings.processCount(environment),
         host: "0.0.0.0",
@@ -105,35 +108,51 @@ export const GceApplicationEntrypoint = Object.freeze({
         ...(options.restart === undefined ? {} : { restart: options.restart }),
       });
       if (registrar === undefined || registry === undefined) return managed;
+      GceApplicationEntrypointValues.removeAddedSignalHandlers(signalSnapshots);
+      application = GceApplicationEntrypointValues.handle(managed, registrar, registry, signalSnapshots);
       await registrar.start();
     } catch (error) {
-      await GceApplicationEntrypointValues.closeAfterStartFailure(managed, registry, error);
+      await GceApplicationEntrypointValues.closeAfterStartFailure(
+        managed,
+        registrar,
+        registry,
+        signalSnapshots,
+        error,
+        application,
+      );
     }
-    return GceApplicationEntrypointValues.handle(managed, registrar, registry);
+    if (application === undefined) throw new Error("GCE managed application did not start.");
+    return application;
   },
 });
 
 const GceApplicationEntrypointValues = Object.freeze({
   async closeAfterStartFailure(
     managed: ManagedServerApplicationHandle | undefined,
+    registrar: GceRegistrar | undefined,
     registry: LeasedNodeRegistry | undefined,
+    signalSnapshots: SignalSnapshots | undefined,
     error: unknown,
+    application: ManagedServerApplicationHandle | undefined,
   ): Promise<never> {
     const failures = [error];
-    if (managed !== undefined) {
+    if (application !== undefined) {
       try {
-        await managed.close();
+        await application.close();
+      } catch (cleanup) {
+        if (cleanup instanceof AggregateError) failures.push(...cleanup.errors);
+        else failures.push(cleanup);
+      }
+      if (failures.length === 1) throw error;
+      throw new AggregateError(failures, "GCE managed application startup and cleanup failed.");
+    }
+    this.removeAddedSignalHandlers(signalSnapshots);
+    for (const close of [() => registrar?.close(), () => managed?.close(), () => registry?.close()])
+      try {
+        await close();
       } catch (cleanup) {
         failures.push(cleanup);
       }
-    }
-    if (registry !== undefined) {
-      try {
-        await registry.close();
-      } catch (cleanup) {
-        failures.push(cleanup);
-      }
-    }
     if (failures.length === 1) throw error;
     throw new AggregateError(failures, "GCE managed application startup and cleanup failed.");
   },
@@ -142,18 +161,31 @@ const GceApplicationEntrypointValues = Object.freeze({
     managed: ManagedServerApplicationHandle | undefined,
     registrar: GceRegistrar | undefined,
     registry: LeasedNodeRegistry | undefined,
+    signalSnapshots: SignalSnapshots | undefined,
   ): ManagedServerApplicationHandle {
     if (managed === undefined) throw new Error("GCE managed application did not start.");
     if (registrar === undefined || registry === undefined) return managed;
     let closing: Promise<void> | undefined;
+    const onSignal = () => {
+      void close().catch(() => undefined);
+    };
+    const close = (): Promise<void> => {
+      if (closing !== undefined) return closing;
+      closing = GceApplicationEntrypointValues.close(managed, registrar, registry).finally(() => {
+        process.off("SIGINT", onSignal);
+        process.off("SIGTERM", onSignal);
+      });
+      return closing;
+    };
+    this.removeAddedSignalHandlers(signalSnapshots);
+    process.on("SIGINT", onSignal);
+    process.on("SIGTERM", onSignal);
     return {
       get ready() {
         return managed.ready;
       },
       close(): Promise<void> {
-        if (closing !== undefined) return closing;
-        closing = GceApplicationEntrypointValues.close(managed, registrar, registry);
-        return closing;
+        return close();
       },
     };
   },
@@ -175,4 +207,25 @@ const GceApplicationEntrypointValues = Object.freeze({
     if (failures.length > 1)
       throw new AggregateError(failures, "GCE managed application shutdown failed.");
   },
+
+  signalSnapshots(): SignalSnapshots {
+    return signalNames.map((signal) => ({
+      signal,
+      listeners: process.listeners(signal) as SignalListener[],
+    }));
+  },
+
+  removeAddedSignalHandlers(snapshots: SignalSnapshots | undefined): void {
+    if (snapshots === undefined) return;
+    for (const { signal, listeners } of snapshots)
+      for (const listener of process.listeners(signal) as SignalListener[])
+        if (!listeners.includes(listener)) process.off(signal, listener);
+  },
 });
+
+const signalNames = ["SIGINT", "SIGTERM"] as const;
+type SignalListener = () => void;
+type SignalSnapshots = readonly {
+  readonly signal: (typeof signalNames)[number];
+  readonly listeners: readonly SignalListener[];
+}[];

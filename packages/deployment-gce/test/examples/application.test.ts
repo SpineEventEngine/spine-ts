@@ -106,12 +106,39 @@ describe("the GCE managed application entrypoint", () => {
     expect(registry.close).toHaveBeenCalledOnce();
   });
 
+  it("rejects an invalid managed startup result before a Coordinator can be leased", async () => {
+    managed.run.mockResolvedValueOnce(undefined);
+
+    await expect(GceApplicationEntrypoint.run(options(), environment())).rejects.toThrow(
+      "GCE managed application did not start.",
+    );
+    expect(registrar.start).not.toHaveBeenCalled();
+    expect(registry.close).toHaveBeenCalledOnce();
+  });
+
+  it("retains registry cleanup failure when managed startup fails", async () => {
+    const startup = new Error("children failed");
+    const cleanup = new Error("registry cleanup failed");
+    managed.run.mockRejectedValueOnce(startup);
+    registry.close.mockRejectedValueOnce(cleanup);
+
+    const failure = await GceApplicationEntrypoint.run(options(), environment()).catch(
+      (error: unknown) => error,
+    );
+
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([startup, cleanup]);
+  });
+
   it("keeps the VM Coordinator lease out of each managed child", async () => {
     const previous = process.env.SPINE_MANAGED_SERVER_CHILD;
     process.env.SPINE_MANAGED_SERVER_CHILD = "true";
-    managed.run.mockResolvedValueOnce({ ready: true, close: async () => undefined });
+    const handle = { ready: true, close: vi.fn(async () => undefined) };
+    managed.run.mockResolvedValueOnce(handle);
     try {
-      await GceApplicationEntrypoint.run(options(), environment());
+      const running = await GceApplicationEntrypoint.run(options(), environment());
+      expect(running).toBe(handle);
+      await running.close();
       expect(registrar.start).not.toHaveBeenCalled();
     } finally {
       if (previous === undefined) delete process.env.SPINE_MANAGED_SERVER_CHILD;
@@ -137,6 +164,73 @@ describe("the GCE managed application entrypoint", () => {
     expect((failure as AggregateError).errors).toEqual([startup, managedClose, registryClose]);
   });
 
+  it("withdraws a partially started lease before managed startup rollback", async () => {
+    const events: string[] = [];
+    const failure = new Error("registration failed");
+    managed.run.mockResolvedValueOnce({
+      ready: true,
+      close: async () => {
+        events.push("managed");
+      },
+    });
+    registrar.start.mockImplementationOnce(async () => {
+      events.push("start");
+      throw failure;
+    });
+    registrar.close.mockImplementationOnce(async () => {
+      events.push("withdraw");
+    });
+    registry.close.mockImplementationOnce(async () => {
+      events.push("registry");
+    });
+
+    await expect(GceApplicationEntrypoint.run(options(), environment())).rejects.toBe(failure);
+    expect(events).toEqual(["start", "withdraw", "managed", "registry"]);
+  });
+
+  it("retains a direct registrar cleanup failure after registration startup fails", async () => {
+    const startup = new Error("registration failed");
+    const withdrawal = new Error("withdraw failed");
+    managed.run.mockResolvedValueOnce({ ready: true, close: async () => undefined });
+    registrar.start.mockRejectedValueOnce(startup);
+    registrar.close.mockRejectedValueOnce(withdrawal);
+
+    const failure = await GceApplicationEntrypoint.run(options(), environment()).catch(
+      (error: unknown) => error,
+    );
+
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([startup, withdrawal]);
+  });
+
+  it("handles SIGTERM through the outer withdrawal path instead of an inner managed listener", async () => {
+    const events: string[] = [];
+    const inner = () => {
+      events.push("inner");
+    };
+    managed.run.mockImplementationOnce(async () => {
+      process.on("SIGTERM", inner);
+      return {
+        ready: true,
+        close: async () => {
+          events.push("managed");
+        },
+      };
+    });
+    registrar.close.mockImplementationOnce(async () => {
+      events.push("withdraw");
+    });
+    registry.close.mockImplementationOnce(async () => {
+      events.push("registry");
+    });
+
+    const running = await GceApplicationEntrypoint.run(options(), environment());
+    process.emit("SIGTERM");
+    await running.close();
+
+    expect(events).toEqual(["withdraw", "managed", "registry"]);
+  });
+
   it("retains every graceful shutdown failure", async () => {
     const first = new Error("withdraw failed");
     const second = new Error("managed close failed");
@@ -150,6 +244,31 @@ describe("the GCE managed application entrypoint", () => {
     const failure = await running.close().catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(AggregateError);
     expect((failure as AggregateError).errors).toEqual([first, second, third]);
+  });
+
+  it("returns one shutdown failure directly", async () => {
+    const failure = new Error("withdraw failed");
+    managed.run.mockResolvedValueOnce({ ready: true, close: async () => undefined });
+    registrar.close.mockRejectedValueOnce(failure);
+    const running = await GceApplicationEntrypoint.run(options(), environment());
+
+    await expect(running.close()).rejects.toBe(failure);
+  });
+
+  it("forwards optional managed-child synchronization and replacement settings", async () => {
+    const synchronize = vi.fn(async () => undefined);
+    const restart = { initialDelayMs: 10, concurrentStarts: 2 };
+    const handle = { ready: true, close: vi.fn(async () => undefined) };
+    managed.run.mockResolvedValueOnce(handle);
+
+    const running = await GceApplicationEntrypoint.run(
+      { ...options(), synchronize, restart },
+      environment(),
+    );
+
+    expect(running.ready).toBe(true);
+    expect(managed.run.mock.calls[0]?.[0]).toMatchObject({ synchronize, restart });
+    await running.close();
   });
 });
 

@@ -208,6 +208,9 @@ describe("the GKE deployment guide", () => {
     expect(resource(terraform, "kubernetes_deployment_v1", "application")).toContain(
       'name           = "coordinator"',
     );
+    expect(resource(terraform, "kubernetes_deployment_v1", "application")).toContain(
+      'port = "coordinator"',
+    );
     expect(application).toContain("DeploymentSettings.processCount(environment)");
     expect(application).toContain("DeploymentSettings.deliveryShardCount(environment)");
     expect(gateway).toContain("GkeNodeDiscovery");
