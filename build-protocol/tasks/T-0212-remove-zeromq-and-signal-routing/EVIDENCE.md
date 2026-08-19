@@ -70,3 +70,10 @@ deterministic preflight, reviews, isolated integration, and post-merge proof.
   passed; the lifecycle suite passed 51/51.
 - Targeted Prettier and `git diff --check` passed. The change is wording-only,
   so no additional runtime acceptance profile was required.
+
+## Post-review verifier correction
+
+- The full verifier's only failure was ESLint `no-invalid-void-type` at the two
+  retained test deferred declarations. Exact-file ESLint, `pnpm typecheck:tooling`,
+  the in-memory message-channel test (7/7), targeted Prettier, and
+  `git diff --check` pass after the mechanical `undefined` correction.

@@ -97,12 +97,12 @@ describe("InMemoryTransportFactory", () => {
     const factory = new InMemoryTransportFactory();
     const channel = create(ChannelIdSchema, { targetType: "type.spine.io/wave13.FactoryClose" });
     const subscriber = await factory.createSubscriber(channel);
-    const consumerStarted = Promise.withResolvers<void>();
-    const releaseConsumer = Promise.withResolvers<void>();
+    const consumerStarted = Promise.withResolvers<undefined>();
+    const releaseConsumer = Promise.withResolvers<undefined>();
     const values: string[] = [];
     await subscriber.addConsumer(async (message) => {
       values.push(message.originalMessage?.typeUrl ?? "");
-      consumerStarted.resolve();
+      consumerStarted.resolve(undefined);
       await releaseConsumer.promise;
     });
     const publisher = await factory.createPublisher(channel);
@@ -111,7 +111,7 @@ describe("InMemoryTransportFactory", () => {
 
     const firstClose = factory.close();
     expect(factory.close()).toBe(firstClose);
-    releaseConsumer.resolve();
+    releaseConsumer.resolve(undefined);
 
     await Promise.all([publication, firstClose]);
     expect(values).toEqual([frame("accepted").typeUrl]);

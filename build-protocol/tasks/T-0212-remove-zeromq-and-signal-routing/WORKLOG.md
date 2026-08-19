@@ -145,3 +145,13 @@
   cleanup gate. No runtime code changed.
 - Owner/profile remains existing `implementer`, explicitly
   `gpt-5.6-terra` / `medium`; runtime telemetry unavailable.
+
+## 2026-08-19 — post-review verifier correction
+
+- The full verifier exposed only ESLint `no-invalid-void-type` in the retained
+  in-memory factory test: its two `Promise.withResolvers<void>()` deferreds
+  used the repository-disallowed `void` type. Replaced them with
+  `Promise.withResolvers<undefined>()` and explicit `resolve(undefined)`.
+- This is a mechanical test typing correction with no behavior or review-scope
+  change. Owner/profile remains existing `implementer`, explicitly
+  `gpt-5.6-terra` / `medium`; runtime telemetry unavailable.
