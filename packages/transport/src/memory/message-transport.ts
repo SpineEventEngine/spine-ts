@@ -24,7 +24,7 @@ import type {
   Subscriber,
   TransportFactory,
 } from "../internal/message-channel.js";
-import { isCanonicalChannelTargetType } from "../internal/message-channel.js";
+import { isCanonicalChannelType } from "../internal/message-channel.js";
 
 /**
  * Provides an in-process typed transport factory for local and test environments.
@@ -226,7 +226,7 @@ class MemorySubscriber implements Subscriber {
 }
 
 function copyChannel(id: ChannelId): ChannelId {
-  if (!isCanonicalChannelTargetType(id.targetType))
+  if (!isCanonicalChannelType(id.targetType))
     throw new Error("Message channel targetType must be a canonical type URL.");
   return create(ChannelIdSchema, { targetType: id.targetType });
 }

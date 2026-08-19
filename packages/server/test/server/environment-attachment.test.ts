@@ -487,7 +487,7 @@ describe("EnvironmentDeliveryWorker", () => {
     await worker.retire();
   });
 
-  it("routes matching shared endpoint candidates by the imported event tenant", async () => {
+  it("routes matching shared endpoint candidates by an imported or past-message Event tenant", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const first = descriptor("TenantFirst", "type.example.dev/Tenant", storageFactory);
     const second = descriptor("TenantSecond", "type.example.dev/Tenant", storageFactory);
@@ -532,6 +532,99 @@ describe("EnvironmentDeliveryWorker", () => {
     await until(() => second.replayed.includes("tenant-second"));
     expect(first.replayed).not.toContain("tenant-second");
 
+    await delivery.inbox.receive({
+      ...message(secondReady, "past-message-second"),
+      signal: create(AnySchema, {
+        typeUrl: "type.spine.io/spine.core.Event",
+        value: toBinary(
+          EventSchema,
+          create(EventSchema, {
+            context: create(EventContextSchema, {
+              origin: {
+                case: "pastMessage",
+                value: { actorContext: { tenantId: secondReady.tenantId } },
+              },
+            }),
+          }),
+        ),
+      }),
+    });
+    worker.notify(firstScope);
+    await until(() => second.replayed.includes("past-message-second"));
+    expect(first.replayed).not.toContain("past-message-second");
+
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
+  });
+
+  it("routes ownerless imported and past-message Events to a singleton runtime", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const target = descriptor(
+      "SingletonOrigin",
+      "type.example.dev/SingletonOrigin",
+      storageFactory,
+    );
+    const scope = runScope("singleton-origin-owner", target.ready);
+    const delivery = new Delivery({ context: target.context, storageFactory });
+    const Worker = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly ports: {
+        readonly inbox: typeof delivery.inbox;
+        readonly workRegistry: typeof delivery.shards;
+        readonly source: DeliverySource;
+      };
+    }) => EnvironmentDeliveryWorker;
+    const worker = new Worker({
+      ports: {
+        inbox: delivery.inbox,
+        workRegistry: delivery.shards,
+        source: inertDeliverySource(),
+      },
+    });
+    worker.add({
+      owner: scope.owner,
+      descriptor: target.value,
+      storageFactory,
+      tenant: {},
+      context: target.context,
+      scopes: [scope],
+    });
+    await worker.start({ scopes: [scope] }, [scope.ready.shard]);
+    const ownerlessImport = {
+      ...message(target.ready, "ownerless-import"),
+      signal: create(AnySchema, {
+        typeUrl: "type.spine.io/spine.core.Event",
+        value: toBinary(
+          EventSchema,
+          create(EventSchema, {
+            context: create(EventContextSchema, {
+              origin: { case: "importContext", value: create(ActorContextSchema) },
+            }),
+          }),
+        ),
+      }),
+    };
+    const ownerlessPastMessage = {
+      ...message(target.ready, "ownerless-past-message"),
+      signal: create(AnySchema, {
+        typeUrl: "type.spine.io/spine.core.Event",
+        value: toBinary(
+          EventSchema,
+          create(EventSchema, {
+            context: create(EventContextSchema, {
+              origin: { case: "pastMessage", value: { actorContext: {} } },
+            }),
+          }),
+        ),
+      }),
+    };
+    await delivery.inbox.receive(ownerlessImport);
+    worker.notify(scope);
+    await until(() => target.replayed.includes("ownerless-import"));
+    await delivery.inbox.receive(ownerlessPastMessage);
+    worker.notify(scope);
+    await until(() => target.replayed.includes("ownerless-past-message"));
+    expect(target.replayed).toEqual(["ownerless-import", "ownerless-past-message"]);
     worker.stop();
     await worker.awaitSettled();
     await worker.retire();
@@ -634,35 +727,94 @@ describe("EnvironmentDeliveryWorker", () => {
   it("routes a shared remote HANDLE_COMMAND row to its matching multitenant runtime", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const target = descriptor("CommandTenant", "type.example.dev/CommandTenant", storageFactory);
-    const ready = Object.freeze({ ...target.ready, label: "HANDLE_COMMAND" as const, tenantId: tenant("match") });
+    const ready = Object.freeze({
+      ...target.ready,
+      label: "HANDLE_COMMAND" as const,
+      tenantId: tenant("match"),
+    });
     const scope = runScope("command-tenant", ready);
     const delivery = new Delivery({ context: target.context, storageFactory });
-    const Worker = EnvironmentDeliveryWorker as unknown as new (options: { readonly ports: { readonly inbox: typeof delivery.inbox; readonly workRegistry: typeof delivery.shards; readonly source: DeliverySource } }) => EnvironmentDeliveryWorker;
-    const worker = new Worker({ ports: { inbox: delivery.inbox, workRegistry: delivery.shards, source: inertDeliverySource() } });
-    worker.add({ owner: scope.owner, descriptor: target.value, storageFactory, tenant: { tenantId: ready.tenantId }, context: target.context, scopes: [scope] });
+    const Worker = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly ports: {
+        readonly inbox: typeof delivery.inbox;
+        readonly workRegistry: typeof delivery.shards;
+        readonly source: DeliverySource;
+      };
+    }) => EnvironmentDeliveryWorker;
+    const worker = new Worker({
+      ports: {
+        inbox: delivery.inbox,
+        workRegistry: delivery.shards,
+        source: inertDeliverySource(),
+      },
+    });
+    worker.add({
+      owner: scope.owner,
+      descriptor: target.value,
+      storageFactory,
+      tenant: { tenantId: ready.tenantId },
+      context: target.context,
+      scopes: [scope],
+    });
     await worker.start({ scopes: [scope] }, [scope.ready.shard]);
     await delivery.inbox.receive(commandMessage(ready, "command-match"));
     worker.notify(scope);
     await until(() => target.replayed.includes("command-match"));
-    worker.stop(); await worker.awaitSettled(); await worker.retire();
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
   });
 
   it("keeps a multitenant HANDLE_COMMAND row pending when its actor tenant mismatches", async () => {
     const storageFactory = new InMemoryStorageFactory();
-    const target = descriptor("CommandMismatch", "type.example.dev/CommandMismatch", storageFactory);
-    const configured = Object.freeze({ ...target.ready, label: "HANDLE_COMMAND" as const, tenantId: tenant("configured") });
+    const target = descriptor(
+      "CommandMismatch",
+      "type.example.dev/CommandMismatch",
+      storageFactory,
+    );
+    const configured = Object.freeze({
+      ...target.ready,
+      label: "HANDLE_COMMAND" as const,
+      tenantId: tenant("configured"),
+    });
     const mismatch = Object.freeze({ ...configured, tenantId: tenant("other") });
     const scope = runScope("command-mismatch", configured);
     const delivery = new Delivery({ context: target.context, storageFactory });
-    const Worker = EnvironmentDeliveryWorker as unknown as new (options: { readonly ports: { readonly inbox: typeof delivery.inbox; readonly workRegistry: typeof delivery.shards; readonly source: DeliverySource } }) => EnvironmentDeliveryWorker;
-    const worker = new Worker({ ports: { inbox: delivery.inbox, workRegistry: delivery.shards, source: inertDeliverySource() } });
-    worker.add({ owner: scope.owner, descriptor: target.value, storageFactory, tenant: { tenantId: configured.tenantId }, context: target.context, scopes: [scope] });
+    const Worker = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly ports: {
+        readonly inbox: typeof delivery.inbox;
+        readonly workRegistry: typeof delivery.shards;
+        readonly source: DeliverySource;
+      };
+    }) => EnvironmentDeliveryWorker;
+    const worker = new Worker({
+      ports: {
+        inbox: delivery.inbox,
+        workRegistry: delivery.shards,
+        source: inertDeliverySource(),
+      },
+    });
+    worker.add({
+      owner: scope.owner,
+      descriptor: target.value,
+      storageFactory,
+      tenant: { tenantId: configured.tenantId },
+      context: target.context,
+      scopes: [scope],
+    });
     await worker.start({ scopes: [scope] }, [scope.ready.shard]);
-    await delivery.inbox.receive(commandMessage(mismatch, "command-mismatch")); worker.notify(scope);
+    await delivery.inbox.receive(commandMessage(mismatch, "command-mismatch"));
+    worker.notify(scope);
     await new Promise<void>((resolve) => setTimeout(resolve, 20));
-    expect((await delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] })).some(({ signalId }) => signalId === "command-mismatch")).toBe(true);
+    expect(
+      (await delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] })).some(
+        ({ signalId }) => signalId === "command-mismatch",
+      ),
+    ).toBe(true);
     expect(target.replayed).toEqual([]);
-    worker.stop(); await worker.awaitSettled(); await worker.retire();
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
   });
 
   it("fences an owner retirement until its admitted callback settles", async () => {
@@ -717,6 +869,116 @@ describe("EnvironmentDeliveryWorker", () => {
     expect(() => {
       worker.notify(scope);
     }).toThrow("Environment delivery owner is not configured.");
+  });
+
+  it("settles a reserved route exactly once when its owner retires before dispatch", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const releaseDispatch = Promise.withResolvers<undefined>();
+    const target = descriptor(
+      "RetirementReservation",
+      "type.example.dev/RetirementReservation",
+      storageFactory,
+      { onReplay: () => releaseDispatch.promise },
+    );
+    const sibling = descriptor(
+      "RetirementReservationSibling",
+      "type.example.dev/RetirementReservationSibling",
+      storageFactory,
+    );
+    const scope = runScope("retirement-reservation-owner", target.ready);
+    const siblingScope = runScope("retirement-reservation-sibling", sibling.ready);
+    const delivery = new Delivery({ context: target.context, storageFactory });
+    const Worker = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly ports: {
+        readonly inbox: typeof delivery.inbox;
+        readonly workRegistry: typeof delivery.shards;
+        readonly source: DeliverySource;
+      };
+    }) => EnvironmentDeliveryWorker;
+    const worker = new Worker({
+      ports: {
+        inbox: delivery.inbox,
+        workRegistry: delivery.shards,
+        source: inertDeliverySource(),
+      },
+    });
+    worker.add({
+      owner: scope.owner,
+      descriptor: target.value,
+      storageFactory,
+      tenant: {},
+      context: target.context,
+      scopes: [scope],
+    });
+    worker.add({
+      owner: siblingScope.owner,
+      descriptor: sibling.value,
+      storageFactory,
+      tenant: {},
+      context: sibling.context,
+      scopes: [siblingScope],
+    });
+    await worker.start({ scopes: [scope] }, [scope.ready.shard]);
+    // Captures native Map#set before the temporary test spy.
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    const originalSet = Reflect.apply.bind(null, Map.prototype.set) as (
+      thisArgument: Map<unknown, unknown>,
+      argumentsList: readonly unknown[],
+    ) => Map<unknown, unknown>;
+    let fenced = false;
+    let retired = false;
+    let retiring: Promise<void> | undefined;
+    const reservationKey = `retirement-reservation/${JSON.stringify([
+      target.ready.label,
+      target.ready.targetTypeUrl,
+      target.ready.shard.index,
+      target.ready.shard.ofTotal,
+    ])}`;
+    const mapSet = vi.spyOn(Map.prototype, "set").mockImplementation(function (
+      this: Map<unknown, unknown>,
+      key: unknown,
+      value: unknown,
+    ): Map<unknown, unknown> {
+      const result = originalSet(this, [key, value]);
+      if (key === reservationKey && value !== null && typeof value === "object" && !fenced) {
+        fenced = true;
+        worker.stopOwners([scope.owner.key]);
+        retiring = worker.retireOwners([scope.owner.key]).finally(() => {
+          retired = true;
+        });
+      }
+      return result;
+    });
+    await delivery.inbox.receive(message(target.ready, "retirement-reservation"));
+    try {
+      worker.notify(scope);
+      await until(() => target.replayed.includes("retirement-reservation"));
+    } finally {
+      mapSet.mockRestore();
+    }
+    expect(fenced).toBe(true);
+    expect(retiring).toBeDefined();
+    await Promise.resolve();
+    expect(retired).toBe(false);
+    expect(target.replayed).toEqual(["retirement-reservation"]);
+    expect(
+      (await delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] })).some(
+        ({ signalId }) => signalId === "retirement-reservation",
+      ),
+    ).toBe(true);
+
+    releaseDispatch.resolve(undefined);
+    await retiring;
+    expect(target.replayed).toEqual(["retirement-reservation"]);
+    let settled = false;
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      settled = !(
+        await delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] })
+      ).some(({ signalId }) => signalId === "retirement-reservation");
+      if (settled) break;
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    expect(settled).toBe(true);
   });
 
   it("keeps a shared group open for a sibling and closes it after the last owner retires", async () => {

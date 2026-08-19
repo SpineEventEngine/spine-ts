@@ -1,6 +1,6 @@
 # T-0210 — Complete-replica external-event acceptance
 
-**Status:** In progress  
+**Status:** Review-ready
 **Baseline:** `origin/main@bc45eae2008589daf50c9b668360ed6ea65d1e2a`  
 **Branch/worktree:** `codex/t0210-external-replicas` / `/tmp/spine-ts-t0210`
 
@@ -71,6 +71,15 @@ while the process is alive; their tenant scopes remain part of the registered
 endpoint dispatch. An unknown endpoint is not acknowledged and remains
 observable for a later valid runtime. Close drains and releases the same owner
 without changing Delivery failure policy.
+
+## Final convergence addition
+
+The reservation-to-retirement boundary is covered by a deterministic, gated
+race. It reserves the exact route, invokes `stopOwners()` and `retireOwners()`
+before callback dispatch, holds that callback, and retains a sibling route.
+The selected owner cannot retire and the Inbox row remains `TO_DELIVER` until
+the callback is released; it then replays once and settles. This proof covers
+the actual private admission/dispatch boundary without widening a public API.
 
 ## Skill applicability
 

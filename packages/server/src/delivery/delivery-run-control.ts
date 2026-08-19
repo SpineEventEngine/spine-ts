@@ -93,8 +93,10 @@ export interface DeliveryControlledRun extends DeliveryRunOptions {
   readonly signal: AbortSignal;
 
   /**
-   * Selects pending rows owned by the private controlled run before dispatch or acknowledgment.
+   * Determines whether the private controlled run owns a pending row before dispatch or acknowledgment.
    *
+   * @param message Contains the pending Inbox row.
+   * @returns `true` if this controlled run owns the row.
    * @internal
    */
   readonly acceptMessage?: (message: InboxMessage) => boolean;

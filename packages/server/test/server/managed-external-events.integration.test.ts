@@ -65,47 +65,60 @@ afterEach(async () => {
   triggerDirectories.clear();
 });
 
-it("RED-17/18/29 delivers domestic Todo Events through local brokers and Delivery-backed external state subscriptions", async () => {
-  const source = await readFile(childPath, "utf8");
-  expect(source).toContain("createTodoContext");
-  expect(source).toContain('origin: "external"');
-  expect(source).not.toMatch(
-    /ZeroMQ|SignalTransport|ContextTransport|RuntimeTransportBinding|ExternalMessage|forwarder/iu,
-  );
+it(
+  "RED-17/18/29 delivers domestic Todo Events through local brokers and " +
+    "Delivery-backed external state subscriptions",
+  async () => {
+    const source = await readFile(childPath, "utf8");
+    expect(source).toContain("createTodoContext");
+    expect(source).toContain('origin: "external"');
+    expect(source).not.toMatch(
+      /ZeroMQ|SignalTransport|ContextTransport|RuntimeTransportBinding|ExternalMessage|forwarder/iu,
+    );
 
-  const { child, endpoint } = await start();
-  const transport = createGrpcTransport({ baseUrl: endpoint });
-  const subscriptions = createClient(SubscriptionService, transport);
-  const subscription = await subscriptions.subscribe(externalStateTopic());
-  const updates = subscriptions.activate(subscription)[Symbol.asyncIterator]();
-  const commands = createClient(CommandService, transport);
+    const { child, endpoint } = await start();
+    const transport = createGrpcTransport({ baseUrl: endpoint });
+    const subscriptions = createClient(SubscriptionService, transport);
+    const subscription = await subscriptions.subscribe(externalStateTopic());
+    const updates = subscriptions.activate(subscription)[Symbol.asyncIterator]();
+    const commands = createClient(CommandService, transport);
 
-  await bounded(commands.post(createTaskCommand("t0210-domestic-one")), "first domestic command");
-  await expect(bounded(updates.next(), "first external state update")).resolves.toMatchObject({
-    done: false,
-  });
-  await bounded(commands.post(createTaskCommand("t0210-domestic-two")), "second domestic command");
-  await expect(bounded(updates.next(), "second external state update")).resolves.toMatchObject({
-    done: false,
-  });
-
-  expect(child.connected).toBe(true);
-}, 20_000);
-
-it("RED-19 imports a ThirdParty Event through the local broker and reaches the same Delivery-backed subscription", async () => {
-  const { directory, endpoint } = await start();
-  const transport = createGrpcTransport({ baseUrl: endpoint });
-  const subscriptions = createClient(SubscriptionService, transport);
-  const subscription = await subscriptions.subscribe(externalStateTopic());
-  const updates = subscriptions.activate(subscription)[Symbol.asyncIterator]();
-
-  await writeFile(join(directory, "third-party-request"), "");
-  await expect(bounded(updates.next(), "third-party external state update")).resolves.toMatchObject(
-    {
+    await bounded(commands.post(createTaskCommand("t0210-domestic-one")), "first domestic command");
+    await expect(bounded(updates.next(), "first external state update")).resolves.toMatchObject({
       done: false,
-    },
-  );
-}, 20_000);
+    });
+    await bounded(
+      commands.post(createTaskCommand("t0210-domestic-two")),
+      "second domestic command",
+    );
+    await expect(bounded(updates.next(), "second external state update")).resolves.toMatchObject({
+      done: false,
+    });
+
+    expect(child.connected).toBe(true);
+  },
+  20_000,
+);
+
+it(
+  "RED-19 imports a ThirdParty Event through the local broker and reaches the same " +
+    "Delivery-backed subscription",
+  async () => {
+    const { directory, endpoint } = await start();
+    const transport = createGrpcTransport({ baseUrl: endpoint });
+    const subscriptions = createClient(SubscriptionService, transport);
+    const subscription = await subscriptions.subscribe(externalStateTopic());
+    const updates = subscriptions.activate(subscription)[Symbol.asyncIterator]();
+
+    await writeFile(join(directory, "third-party-request"), "");
+    await expect(
+      bounded(updates.next(), "third-party external state update"),
+    ).resolves.toMatchObject({
+      done: false,
+    });
+  },
+  20_000,
+);
 
 async function start(): Promise<{
   readonly child: ChildProcess;

@@ -58,3 +58,30 @@ separately owned transport correction.
 - The fixture's ThirdParty broker now opens before managed readiness, allowing
   the existing IntegrationBroker online/wanted exchange to establish interest;
   it carries no application payload over fixture control or a new transport.
+
+## Final admission-to-retirement race
+
+- RED: the test holds a selected callback while a sibling route remains live.
+  It calls `stopOwners()` and `retireOwners()` immediately after the private
+  admission reservation is installed. Before correction, the reservation was
+  resolved before the callback joined the selected owner's active set, allowing
+  retirement to complete early.
+- GREEN: `#route()` registers the callback as active before it deletes and
+  resolves its reservation. `awaitOwnersSettled()` first awaits reservations,
+  then observes the active callback set. The held row remains `TO_DELIVER` and
+  the owner remains unretired; release causes one replay and eventual durable
+  settlement.
+- Final focused command:
+  `pnpm exec vitest run packages/server/test/server/environment-attachment.test.ts packages/server/test/server/managed-external-events.integration.test.ts`.
+  Result: 2 files / 96 tests passed.
+- Changed-source coverage command adds direct Delivery builder, supervisor, and
+  run-control behavior suites. LCOV intersected with
+  `git diff --unified=0 58963dc8f07e92a38000576ba84cad0746b287d2 -- packages/server/src`
+  reports 135/141 lines (95.74%) and 66/72 branches (91.67%).
+- Declaration convergence: the admission predicate remains private to
+  `DeliveryControlledRun` and `deliverySupervisorAccess`; emitted root exports
+  do not widen `DeliveryRunOptions` or `DeliverySupervisorOptions`.
+- Final generated build, repository ESLint, cleanup, TSDoc, copyright,
+  logging-containment, local-formatter, audience/API docs, Buf, generated
+  output, release-readiness, and `git diff --check` gates pass after the
+  inherited transport cleanup correction.

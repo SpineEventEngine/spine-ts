@@ -149,3 +149,39 @@ only.
   callbacks, closing the accept-to-fence TOCTOU without a public API addition.
 - Focused environment plus managed acceptance passes 94 tests / 2 files,
   including the managed domestic and ThirdParty cases.
+
+## 2026-08-19 — final retirement-race convergence
+
+- The existing `implementer` role retained its explicitly dispatched
+  `gpt-5.6-terra` / `medium` profile. Runtime telemetry remains unavailable;
+  no subagent was used. The final work preserves the existing dispatcher and
+  Delivery interfaces.
+- A new deterministic RED retained a live sibling route, reserved the selected
+  route, then invoked `stopOwners()` and `retireOwners()` synchronously at the
+  actual private reservation point. Before the correction, retirement resolved
+  while the selected callback remained blocked. This is the former
+  reservation-to-active TOCTOU.
+- GREEN retains the reservation until the selected callback is registered as
+  active. Owner settlement first drains matching reservations and then reads
+  the active set, so the callback cannot disappear between those two checks.
+  The route is removed only after its callback settles. No public, serialized,
+  configuration, or lifecycle concept was added.
+- Additional Event-origin cases prove that singleton delivery routes accept
+  ownerless import and past-message envelopes, while a multitenant route
+  selects the tenant in either imported or past-message origin. These are
+  direct behavior proofs for the existing tenant decoder, not a new policy.
+- Final focused behavior is 96 tests across the environment and managed
+  external-event files. The broader five-file source coverage run passes 175
+  tests. LCOV intersection against post-T-0210a baseline
+  `58963dc8f07e92a38000576ba84cad0746b287d2` reports 135/141 changed
+  executable lines (95.74%) and 66/72 changed executable branches (91.67%).
+- Scoped ESLint, TSDoc, API, audience-doc, generated build, and tooling
+  typechecks pass. The repository formatter wrapper cannot discover a bare
+  `prettier` executable in this environment; the identical workspace-local
+  formatter invocation passes. The final task verifier is run with that local
+  executable on `PATH`.
+- The full cleanup gate also found inherited T-0210a validation cleanup debt.
+  The shared validator is now `isCanonicalChannelType` (the same contract with
+  a bounded semantic name), and its TypeScript transport-boundary necessity is
+  recorded in the existing T-0080D ledger. The transport conformance title and
+  managed acceptance titles are split without changing behavior.

@@ -579,14 +579,14 @@ class RuntimeDeliverySupervisorGroup {
 
   async awaitOwnersSettled(ownerKeys: readonly string[]): Promise<void> {
     await Promise.all(
-      ownerKeys.map(async (ownerKey) => {
-        const active = this.#active.get(ownerKey);
-        if (active !== undefined) await Promise.allSettled(active);
+      Array.from(this.#reserved.values(), async (reservation) => {
+        if (ownerKeys.includes(reservation.route.ownerKey)) await reservation.settled.promise;
       }),
     );
     await Promise.all(
-      Array.from(this.#reserved.values(), async (reservation) => {
-        if (ownerKeys.includes(reservation.route.ownerKey)) await reservation.settled.promise;
+      ownerKeys.map(async (ownerKey) => {
+        const active = this.#active.get(ownerKey);
+        if (active !== undefined) await Promise.allSettled(active);
       }),
     );
   }
@@ -658,21 +658,22 @@ class RuntimeDeliverySupervisorGroup {
   }
 
   #route(message: Parameters<OnDeliveryMessage>[0]): void | Promise<void> {
-    const reservation = this.#reserved.get(RuntimeDeliverySupervisorGroup.messageKey(message));
-    const route = reservation?.route ?? this.#select(message);
-    this.#reserved.delete(RuntimeDeliverySupervisorGroup.messageKey(message));
-    reservation?.settled.resolve(undefined);
-    if (route === undefined) throw new Error("Environment delivery endpoint is not configured.");
+    const key = RuntimeDeliverySupervisorGroup.messageKey(message);
+    // `Delivery` invokes the callback only after this group's admission reserved its route.
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const reservation = this.#reserved.get(key)!;
+    const route = reservation.route;
     const active = this.#active.get(route.ownerKey) ?? new Set<Promise<void>>();
     this.#active.set(route.ownerKey, active);
-    let replay: Promise<void>;
-    replay = Promise.resolve(route.descriptor.replay(message, route.tenant.tenantId)).finally(
-      () => {
+    const replay = Promise.resolve()
+      .then(() => route.descriptor.replay(message, route.tenant.tenantId))
+      .finally(() => {
         active.delete(replay);
         if (active.size === 0) this.#active.delete(route.ownerKey);
-      },
-    );
+      });
     active.add(replay);
+    this.#reserved.delete(key);
+    reservation.settled.resolve(undefined);
     return replay;
   }
 
@@ -707,7 +708,9 @@ class RuntimeDeliverySupervisorGroup {
       }
       const commandTenant = fromBinary(CommandSchema, message.signal.value).context?.actorContext
         ?.tenantId;
-      return commandTenant === undefined ? undefined : String(TenantBoundary.from(commandTenant).key);
+      return commandTenant === undefined
+        ? undefined
+        : String(TenantBoundary.from(commandTenant).key);
     } catch {
       return undefined;
     }

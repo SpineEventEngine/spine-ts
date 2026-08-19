@@ -334,7 +334,8 @@ async function assertNativeManifestContract(directory: string, factory: Factory)
 describe("Wave 13 message transport conformance", () => {
   // prettier-ignore
   it(
-    "RED-21 gives memory and ZeroMQ factories canonical type URL, typed channel, fan-out, stale, FIFO, and close contracts",
+    "RED-21 gives memory and ZeroMQ factories canonical type URL, typed channel, fan-out, " +
+      "stale, FIFO, and close contracts",
     async () => {
     expectTransportContractToCompile();
     const memory = await discoverFactory("../src/index.js", "InMemoryTransportFactory");

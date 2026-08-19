@@ -15,6 +15,7 @@
 import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { Buffer } from "node:buffer";
 import { join } from "node:path";
+import { clearInterval, setInterval } from "node:timers";
 import { pathToFileURL } from "node:url";
 import process from "node:process";
 

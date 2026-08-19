@@ -376,5 +376,14 @@
     "name": "retainFailure",
     "disposition": "necessity",
     "reason": "TypeScript lifecycle boundary: retainFailure bounds native close failures for one aggregate report."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/transport/src/internal/message-channel.ts",
+    "kind": "function-declaration",
+    "identity": "isCanonicalChannelType()#1",
+    "name": "isCanonicalChannelType",
+    "disposition": "necessity",
+    "reason": "TypeScript transport boundary: isCanonicalChannelType validates shared generated channel identities before either adapter allocates lifecycle state."
   }
 ]

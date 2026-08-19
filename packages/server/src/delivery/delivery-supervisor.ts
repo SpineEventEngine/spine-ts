@@ -32,7 +32,10 @@ const deliverySupervisors = new WeakSet<DeliverySupervisor>();
 interface DeliverySupervisorAccess {
   installLogger(supervisor: DeliverySupervisor, logger: ILogLayer): void;
   loggerFor(supervisor: DeliverySupervisor): ILogLayer;
-  installAdmission(supervisor: DeliverySupervisor, admission: (message: InboxMessage) => boolean): void;
+  installAdmission(
+    supervisor: DeliverySupervisor,
+    admission: (message: InboxMessage) => boolean,
+  ): void;
 }
 
 /**
@@ -537,7 +540,10 @@ export const deliverySupervisorAccess: DeliverySupervisorAccess = Object.freeze(
     return logger;
   },
 
-  installAdmission(supervisor: DeliverySupervisor, admission: (message: InboxMessage) => boolean): void {
+  installAdmission(
+    supervisor: DeliverySupervisor,
+    admission: (message: InboxMessage) => boolean,
+  ): void {
     if (!deliverySupervisors.has(supervisor)) {
       throw new TypeError("Delivery supervisor admission requires a DeliverySupervisor instance.");
     }
@@ -565,7 +571,6 @@ export interface DeliverySupervisorOptions {
    * Framework endpoint invoked for each supported admitted delivery row.
    */
   readonly onMessage: OnDeliveryMessage;
-
 
   /**
    * Positive safe-integer active-shard limit. Defaults to `1`.
