@@ -82,7 +82,7 @@ export interface ListenerLifecycle {
  * Configures and starts local Spine Connect/gRPC-compatible services.
  *
  * A server assembles its bounded contexts, completes finite environment
- * delivery recovery, and opens their transport intake before accepting network
+ * delivery recovery, and opens its generated services before accepting network
  * requests. It also owns the ordered cleanup of contexts and resources added
  * to this assembly.
  */
@@ -144,7 +144,7 @@ export class Server {
    * Builders assemble during {@link start} before recovery and listener open.
    * They use {@link ServerEnvironment.storageFactory} unless a more specific
    * `withStorageFactory(...)` factory is selected. The running server owns and
-   * closes added contexts only after intake, sessions, and active work stop.
+   * closes added contexts only after services, sessions, and active work stop.
    *
    * @param context Supplies the context or builder to expose.
    * @returns This server builder.
@@ -182,10 +182,10 @@ export class Server {
   /**
    * Starts the server after completing assembly and delivery recovery.
    *
-   * Built contexts open their transport registrations in deterministic input
-   * order before the listener opens. A failed assembly, registration, or
-   * listener open leaves no listener and closes acquired resources. Network
-   * and transport cleanup are hard gates before delivery or dependencies close.
+   * Built contexts attach to delivery in deterministic input order before the
+   * generated services and listener open. A failed assembly or listener open
+   * leaves no listener and closes acquired resources. Network cleanup is a hard
+   * gate before delivery or dependencies close.
    * It shares only a caller-managed active environment generation, rejects
    * while run-managed ownership is active, installs no signal handlers, and
    * never closes the environment.

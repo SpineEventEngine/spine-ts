@@ -109,3 +109,14 @@
   only in `Server` TSDoc: three comments still describe the deleted context
   transport intake/cleanup lifecycle. Return those comments to the same
   explicitly configured implementation owner; only style re-review is affected.
+
+## Final narrow correction disposition
+
+- Replaced the three stale `Server` TSDoc claims with the actual lifecycle:
+  contexts attach to Delivery, generated services open before the listener, and
+  network cleanup gates later Delivery/dependency closure. No runtime behavior
+  changed.
+- The existing `implementer` owner is explicitly configured
+  `gpt-5.6-terra` / `medium`; runtime telemetry is unavailable. Focused TSDoc,
+  tooling typecheck, lifecycle test, formatting, and diff checks pass. This is
+  style re-review-ready.

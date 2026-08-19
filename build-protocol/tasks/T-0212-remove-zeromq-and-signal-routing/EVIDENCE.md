@@ -62,3 +62,11 @@ deterministic preflight, reviews, isolated integration, and post-merge proof.
     Prettier, and `git diff --check` passed.
 - This correction is affected re-review-ready only. It changes no runtime
   behavior and leaves threat-model redesign explicitly to T-0213.
+
+## Final narrow TSDoc correction
+
+- `pnpm lint:tsdoc`, `pnpm typecheck:tooling`, and
+  `pnpm exec vitest run packages/server/test/server/server-lifecycle-integration.test.ts`
+  passed; the lifecycle suite passed 51/51.
+- Targeted Prettier and `git diff --check` passed. The change is wording-only,
+  so no additional runtime acceptance profile was required.

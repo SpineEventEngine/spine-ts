@@ -123,3 +123,12 @@
   preserved behavior, so no runtime code change was needed.
 - Owner/profile: existing `implementer`, explicitly `gpt-5.6-terra` /
   `medium`; runtime telemetry unavailable.
+
+## 2026-08-19 — final TSDoc correction
+
+- Rewrote only the three stale context-transport lifecycle descriptions in
+  `server.ts`. They now describe context assembly, Delivery attachment,
+  generated-service opening, listener readiness, and the remaining network
+  cleanup gate. No runtime code changed.
+- Owner/profile remains existing `implementer`, explicitly
+  `gpt-5.6-terra` / `medium`; runtime telemetry unavailable.
