@@ -32,6 +32,7 @@
   "scripts": {
     "build": "vite build",
     "serve": "node scripts/static-server.mjs",
+    "start:dev-server": "vite --host 127.0.0.1 --port 5173",
     "start": "pnpm -C ../../.. typecheck:build && vite --host 127.0.0.1 --port 5173",
     "test:browser": "pnpm -C ../../.. typecheck:build && playwright test -c test/browser/playwright.config.ts"
   }
