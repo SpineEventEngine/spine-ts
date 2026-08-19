@@ -12,13 +12,45 @@
  * the License.
  */
 
-/** Internal configuration for the To-Do managed executable. */
+/**
+ *
+ * Internal configuration for the To-Do managed executable.
+ */
 export interface TodoManagedDeployment {
+  /**
+   *
+   * The managed Coordinator listener host.
+   */
   readonly host: string;
+
+  /**
+   *
+   * The managed Coordinator listener port.
+   */
   readonly port: number;
+
+  /**
+   *
+   * The shared Datastore project identifier.
+   */
   readonly projectId: string;
+
+  /**
+   *
+   * The external Delivery server endpoint.
+   */
   readonly deliveryServerUrl: string;
+
+  /**
+   *
+   * The number of complete local application replicas.
+   */
   readonly processCount: number;
+
+  /**
+   *
+   * The application-selected number of Delivery shards.
+   */
   readonly deliveryShardCount: number;
 }
 
