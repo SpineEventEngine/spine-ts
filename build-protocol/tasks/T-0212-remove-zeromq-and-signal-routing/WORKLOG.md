@@ -76,3 +76,22 @@
 - T-0212 is ready for the required style, TypeScript/API, documentation, and
   performance/reliability review wave. Security remains the final T-0213
   release-readiness concern per the project protocol.
+
+## 2026-08-19 — specialist review assignments
+
+- Style and maintainability: existing `style_maintainability_reviewer` role,
+  explicitly configured `gpt-5.6-terra` / `high`, scoped to deletion
+  completeness, residual dead abstractions, and maintainable retained seams.
+- TypeScript/API documentation: existing `typescript_api_docs_reviewer` role,
+  explicitly configured `gpt-5.6-terra` / `high`, scoped to root/package
+  exports, generated declarations, compatibility, and public documentation.
+- Performance and reliability: existing `performance_reliability_reviewer`
+  role, explicitly configured `gpt-5.6-terra` / `high`, scoped to remaining
+  lifecycle ownership, shutdown, Delivery/Coordinator acceptance, and hidden
+  fallback risks after deletion.
+- Documentation completeness: existing `documentation_reviewer` role,
+  configured by the project as `gpt-5.6-luna` / `medium`, scoped to current
+  normative docs and examples; historical records remain truthful archives.
+- The Desktop surface does not expose child runtime-model telemetry. The
+  immutable explicit dispatch/profile is retained as evidence; no subagent may
+  spawn another subagent.
