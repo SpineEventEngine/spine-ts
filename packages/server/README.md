@@ -46,6 +46,8 @@ When another host owns process signals, use the same options with `start()`
 and close the returned handle from that host:
 
 ```ts
+import { ManagedServerApplication, Server } from "@spine-event-engine/server";
+
 const managed = await ManagedServerApplication.start({
   processCount: 4,
   host: "0.0.0.0",
