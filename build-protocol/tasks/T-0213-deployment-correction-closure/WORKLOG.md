@@ -134,3 +134,13 @@
 - Narrow performance/reliability re-review passed; it confirmed that the
   acknowledgement corrects fixture ordering without weakening the lifecycle
   acceptance.
+
+## 2026-08-19 — final canonical release run
+
+- `pnpm --config.verify-deps-before-run=false verify:release` passed.
+- 264 test files and 4,269 tests passed; 4 files and 19 tests were skipped.
+- Coverage passed: 93.89% statements, 90.35% branches, 93.74% functions, and
+  95.04% lines.
+- Node/Proto generation and lint, generated/tooling builds, repository ESLint,
+  cleanup, TSDoc, copyright, formatting, docs/API/snippets/audience, generated
+  currency, logging containment, and release readiness all passed.

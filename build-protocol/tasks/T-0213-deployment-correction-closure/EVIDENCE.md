@@ -42,4 +42,6 @@
   exposed a missing private drain-IPC causal boundary. The exact assertion
   passes under coverage and the full real-process file passes three consecutive
   runs after a test-only acknowledgement; mechanical checks pass.
-- Required release verification, post-merge verification, and remote cleanup.
+- Final canonical release verification passes 4,269 tests with 90.35% branch
+  coverage; every deterministic release gate passes.
+- Pending: post-merge verification and remote cleanup.
