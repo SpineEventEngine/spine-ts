@@ -446,16 +446,6 @@ export class Server {
     throw new Error("Server deferred cleanup completed after an earlier failed start.");
   }
 
-  async #cleanupFailedContextStart(
-    cleanup: FailedStartCleanup,
-    startError: unknown,
-  ): Promise<never> {
-    const errors: unknown[] = [];
-
-    await this.#advanceFailedStartCleanup(cleanup, errors);
-    return ServerValues.throwContextStartError(startError, errors);
-  }
-
   async #cleanupFailedListenerStart(
     cleanup: FailedStartCleanup,
     startError: unknown,
@@ -1142,21 +1132,6 @@ const ServerValues = Object.freeze({
     throw new AggregateError(
       errors,
       "Server start failed while opening listener and cleanup also failed.",
-    );
-  },
-
-  throwContextStartError(startError: unknown, cleanupErrors: readonly unknown[]): never {
-    if (cleanupErrors.length === 0) {
-      throw startError;
-    }
-    const errors: unknown[] = [];
-    CloseErrors.collect(startError, errors);
-    for (const error of cleanupErrors) {
-      CloseErrors.collect(error, errors);
-    }
-    throw new AggregateError(
-      errors,
-      "Server start failed while assembling contexts and cleanup also failed.",
     );
   },
 
