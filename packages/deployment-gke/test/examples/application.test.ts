@@ -20,7 +20,9 @@ import type {
 } from "@spine-event-engine/server";
 
 const managed = vi.hoisted(() => ({
-  run: vi.fn<(options: ManagedServerApplicationOptions) => Promise<ManagedServerApplicationHandle>>(),
+  run: vi.fn<
+    (options: ManagedServerApplicationOptions) => Promise<ManagedServerApplicationHandle>
+  >(),
 }));
 
 vi.mock("@spine-event-engine/server", () => ({

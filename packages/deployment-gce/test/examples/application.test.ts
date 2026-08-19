@@ -20,7 +20,9 @@ import type {
 } from "@spine-event-engine/server";
 
 const managed = vi.hoisted(() => ({
-  run: vi.fn<(options: ManagedServerApplicationOptions) => Promise<ManagedServerApplicationHandle>>(),
+  run: vi.fn<
+    (options: ManagedServerApplicationOptions) => Promise<ManagedServerApplicationHandle>
+  >(),
 }));
 const registry = vi.hoisted(() => ({ close: vi.fn(() => Promise.resolve()) }));
 const registrar = vi.hoisted(() => ({

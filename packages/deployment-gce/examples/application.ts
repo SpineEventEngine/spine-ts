@@ -200,5 +200,4 @@ const GceApplicationEntrypointValues = Object.freeze({
     if (failures.length > 1)
       throw new AggregateError(failures, "GCE managed application shutdown failed.");
   },
-
 });
