@@ -19,6 +19,7 @@ import {
   type DeliveryRunOptions,
 } from "./delivery-builder.js";
 import type { ShardIndex } from "./shard-index.js";
+import type { InboxMessage } from "./inbox.js";
 
 /**
  * Controls admission for one finite delivery run.
@@ -90,4 +91,11 @@ export interface DeliveryControlledRun extends DeliveryRunOptions {
    * Cancels the controlled run.
    */
   readonly signal: AbortSignal;
+
+  /**
+   * Selects pending rows owned by the private controlled run before dispatch or acknowledgment.
+   *
+   * @internal
+   */
+  readonly acceptMessage?: (message: InboxMessage) => boolean;
 }

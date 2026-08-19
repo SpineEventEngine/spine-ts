@@ -125,6 +125,7 @@ async function start(): Promise<{
     stdio: ["ignore", "ignore", "pipe", "ipc"],
   });
   children.add(child);
+  child.stderr?.on("data", (chunk: Buffer) => process.stderr.write(chunk));
   const ready = await receive(child, "managed-ready");
   expect(ready.members).toHaveLength(2);
   return { child, directory, endpoint: String(ready.endpoint) };
@@ -134,7 +135,7 @@ function externalStateTopic() {
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "t0210-external-state" }),
     target: create(TargetSchema, {
-      type: "type.spine.io/ProjectionState",
+      type: "type.googleapis.com/ProjectionState",
       criterion: { case: "includeAll", value: true },
     }),
     context: metadata.actorContext({ actor: create(UserIdSchema, { value: "t0210" }) }),
@@ -161,16 +162,16 @@ function receive(child: ChildProcess, type: string): Promise<Record<string, unkn
     child.stderr?.on("data", (chunk: Buffer) => {
       stderr += chunk.toString();
     });
-    const timer = setTimeout(
-      () => finish(new Error(`Managed fixture ${type} timed out: ${stderr}`)),
-      10_000,
-    );
-    const onExit = (code: number | null, signal: NodeJS.Signals | null) =>
+    const timer = setTimeout(() => {
+      finish(new Error(`Managed fixture ${type} timed out: ${stderr}`));
+    }, 10_000);
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
       finish(
         new Error(
           `Managed fixture exited before ${type}: ${String(code)}/${String(signal)}: ${stderr}`,
         ),
       );
+    };
     const onMessage = (value: unknown) => {
       if (
         typeof value === "object" &&
@@ -234,7 +235,11 @@ class DeliveryListener {
     this.#assembly.closeAdmin();
     for (const session of this.#sessions) session.close();
     if (this.#server?.listening)
-      await new Promise<void>((resolve) => this.#server?.close(() => resolve()));
+      await new Promise<void>((resolve) => {
+        this.#server?.close(() => {
+          resolve();
+        });
+      });
   }
 }
 
@@ -254,7 +259,11 @@ function bounded<T>(work: Promise<T>, description: string, timeout = 8_000): Pro
   return Promise.race([
     work,
     new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => reject(new Error(`${description} timed out.`)), timeout);
+      timer = setTimeout(() => {
+        reject(new Error(`${description} timed out.`));
+      }, timeout);
     }),
-  ]).finally(() => clearTimeout(timer));
+  ]).finally(() => {
+    clearTimeout(timer);
+  });
 }

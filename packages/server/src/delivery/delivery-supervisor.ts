@@ -13,6 +13,7 @@
  */
 
 import type { OnDeliveryMessage } from "./delivery.js";
+import type { InboxMessage } from "./inbox.js";
 import type { Delivery } from "./delivery-builder.js";
 import type { DeliveryOperationOptions } from "./delivery-ports.js";
 import { DeliveryRunControl } from "./delivery-run-control.js";
@@ -119,6 +120,7 @@ export class DeliverySupervisor {
   readonly #source: DeliverySource;
   readonly #runs: DeliveryRunControl;
   readonly #onMessage: OnDeliveryMessage;
+  readonly #acceptMessage: ((message: InboxMessage) => boolean) | undefined;
   readonly #concurrency: number;
   readonly #pendingLimit: number;
   readonly #recoveryMs: number;
@@ -153,6 +155,7 @@ export class DeliverySupervisor {
     this.#source = options.source;
     this.#runs = new DeliveryRunControl(options.delivery);
     this.#onMessage = options.onMessage;
+    this.#acceptMessage = options.acceptMessage;
     this.#concurrency = DeliverySupervisor.#requireBound(
       "Delivery supervisor concurrency",
       options.concurrency ?? 1,
@@ -313,7 +316,12 @@ export class DeliverySupervisor {
 
   async #run(shard: ShardIndex, key: string): Promise<void> {
     try {
-      await this.#runs.run({ shard, onMessage: this.#onMessage, signal: this.#controller.signal });
+      await this.#runs.run({
+        shard,
+        onMessage: this.#onMessage,
+        ...(this.#acceptMessage === undefined ? {} : { acceptMessage: this.#acceptMessage }),
+        signal: this.#controller.signal,
+      });
     } finally {
       this.#active.delete(key);
       this.#startNext(key);
@@ -546,6 +554,13 @@ export interface DeliverySupervisorOptions {
    * Framework endpoint invoked for each supported admitted delivery row.
    */
   readonly onMessage: OnDeliveryMessage;
+
+  /**
+   * Selects pending rows owned by this supervisor before they are dispatched or acknowledged.
+   *
+   * @internal
+   */
+  readonly acceptMessage?: (message: InboxMessage) => boolean;
 
   /**
    * Positive safe-integer active-shard limit. Defaults to `1`.

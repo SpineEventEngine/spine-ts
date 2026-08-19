@@ -15,7 +15,12 @@
 import { InMemoryStorageFactory, type StorageContext } from "@spine-event-engine/storage";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
-import { EventSchema, type TenantId } from "@spine-event-engine/proto";
+import {
+  ActorContextSchema,
+  EventContextSchema,
+  EventSchema,
+  type TenantId,
+} from "@spine-event-engine/proto";
 import { Identifiers } from "@spine-event-engine/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -29,6 +34,7 @@ import {
   type OnDeliveryReady,
 } from "../../src/context/local-inbox-handoff.js";
 import { Delivery, type DeliveryEndpointMessage } from "../../src/delivery/delivery.js";
+import type { DeliverySource } from "../../src/delivery/delivery-supervisor.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import {
   EnvironmentAttachments,
@@ -421,6 +427,316 @@ describe("EnvironmentDeliveryWorker", () => {
     worker.stop();
     await worker.awaitSettled();
     await worker.retire();
+  });
+
+  it("routes a known shared-shard endpoint to its runtime and retains its sibling after owner retirement", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const first = descriptor("SharedFirst", "type.example.dev/First", storageFactory);
+    const second = descriptor("SharedSecond", "type.example.dev/Second", storageFactory);
+    const firstScope = runScope("shared-first", first.ready);
+    const secondScope = runScope("shared-second", second.ready);
+    const delivery = new Delivery({ context: first.context, storageFactory });
+    const Worker = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly ports: {
+        readonly inbox: typeof delivery.inbox;
+        readonly workRegistry: typeof delivery.shards;
+        readonly source: DeliverySource;
+      };
+    }) => EnvironmentDeliveryWorker;
+    const worker = new Worker({
+      ports: {
+        inbox: delivery.inbox,
+        workRegistry: delivery.shards,
+        source: inertDeliverySource(),
+      },
+    });
+    worker.add({
+      owner: firstScope.owner,
+      descriptor: first.value,
+      storageFactory,
+      tenant: {},
+      context: first.context,
+      scopes: [firstScope],
+    });
+    worker.add({
+      owner: secondScope.owner,
+      descriptor: second.value,
+      storageFactory,
+      tenant: {},
+      context: first.context,
+      scopes: [secondScope],
+    });
+    await worker.start({ scopes: [firstScope] }, [firstScope.ready.shard]);
+    await worker.start({ scopes: [secondScope] }, [secondScope.ready.shard]);
+    await delivery.inbox.receive(message(second.ready, "shared-known-target"));
+
+    worker.notify(firstScope);
+    await until(() => second.replayed.includes("shared-known-target"));
+    expect(first.replayed).not.toContain("shared-known-target");
+
+    worker.stopOwners([firstScope.owner.key]);
+    await worker.awaitOwnersSettled([firstScope.owner.key]);
+    await worker.retireOwners([firstScope.owner.key]);
+    await delivery.inbox.receive(message(second.ready, "shared-live-sibling"));
+    worker.notify(secondScope);
+    await until(() => second.replayed.includes("shared-live-sibling"));
+
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
+  });
+
+  it("routes matching shared endpoint candidates by the imported event tenant", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const first = descriptor("TenantFirst", "type.example.dev/Tenant", storageFactory);
+    const second = descriptor("TenantSecond", "type.example.dev/Tenant", storageFactory);
+    const firstReady = Object.freeze({ ...first.ready, tenantId: tenant("first") });
+    const secondReady = Object.freeze({ ...second.ready, tenantId: tenant("second") });
+    const firstScope = runScope("tenant-first", firstReady);
+    const secondScope = runScope("tenant-second", secondReady);
+    const delivery = new Delivery({ context: first.context, storageFactory });
+    const Worker = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly ports: {
+        readonly inbox: typeof delivery.inbox;
+        readonly workRegistry: typeof delivery.shards;
+        readonly source: DeliverySource;
+      };
+    }) => EnvironmentDeliveryWorker;
+    const worker = new Worker({
+      ports: {
+        inbox: delivery.inbox,
+        workRegistry: delivery.shards,
+        source: inertDeliverySource(),
+      },
+    });
+    worker.add({
+      owner: firstScope.owner,
+      descriptor: first.value,
+      storageFactory,
+      tenant: { tenantId: firstReady.tenantId },
+      context: first.context,
+      scopes: [firstScope],
+    });
+    worker.add({
+      owner: secondScope.owner,
+      descriptor: second.value,
+      storageFactory,
+      tenant: { tenantId: secondReady.tenantId },
+      context: first.context,
+      scopes: [secondScope],
+    });
+    await delivery.inbox.receive(message(secondReady, "tenant-second"));
+
+    worker.notify(firstScope);
+    await until(() => second.replayed.includes("tenant-second"));
+    expect(first.replayed).not.toContain("tenant-second");
+
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
+  });
+
+  it("keeps an unknown shared-supervisor route pending for a later runtime", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const configured = descriptor("KnownRoute", "type.example.dev/Known", storageFactory);
+    const unknown = Object.freeze({
+      ...configured.ready,
+      targetTypeUrl: "type.example.dev/Unknown",
+    });
+    const scope = runScope("known-route-owner", configured.ready);
+    const delivery = new Delivery({ context: configured.context, storageFactory });
+    const Worker = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly ports: {
+        readonly inbox: typeof delivery.inbox;
+        readonly workRegistry: typeof delivery.shards;
+        readonly source: DeliverySource;
+      };
+    }) => EnvironmentDeliveryWorker;
+    const worker = new Worker({
+      ports: {
+        inbox: delivery.inbox,
+        workRegistry: delivery.shards,
+        source: inertDeliverySource(),
+      },
+    });
+    worker.add({
+      owner: scope.owner,
+      descriptor: configured.value,
+      storageFactory,
+      tenant: {},
+      context: configured.context,
+      scopes: [scope],
+    });
+    await worker.start({ scopes: [scope] }, [scope.ready.shard]);
+    await delivery.inbox.receive(message(unknown, "unknown-route"));
+
+    worker.notify(scope);
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    expect(
+      (await delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] })).some(
+        ({ signalId }) => signalId === "unknown-route",
+      ),
+    ).toBe(true);
+    expect(configured.replayed).toEqual([]);
+
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
+  });
+
+  it("keeps a singleton tenant route pending when its Event tenant does not match", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const configured = descriptor("TenantRoute", "type.example.dev/TenantRoute", storageFactory);
+    const configuredReady = Object.freeze({ ...configured.ready, tenantId: tenant("configured") });
+    const mismatchReady = Object.freeze({ ...configured.ready, tenantId: tenant("other") });
+    const scope = runScope("tenant-route-owner", configuredReady);
+    const delivery = new Delivery({ context: configured.context, storageFactory });
+    const Worker = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly ports: {
+        readonly inbox: typeof delivery.inbox;
+        readonly workRegistry: typeof delivery.shards;
+        readonly source: DeliverySource;
+      };
+    }) => EnvironmentDeliveryWorker;
+    const worker = new Worker({
+      ports: {
+        inbox: delivery.inbox,
+        workRegistry: delivery.shards,
+        source: inertDeliverySource(),
+      },
+    });
+    worker.add({
+      owner: scope.owner,
+      descriptor: configured.value,
+      storageFactory,
+      tenant: { tenantId: configuredReady.tenantId },
+      context: configured.context,
+      scopes: [scope],
+    });
+    await worker.start({ scopes: [scope] }, [scope.ready.shard]);
+    await delivery.inbox.receive(message(mismatchReady, "tenant-mismatch"));
+
+    worker.notify(scope);
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    expect(
+      (await delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] })).some(
+        ({ signalId }) => signalId === "tenant-mismatch",
+      ),
+    ).toBe(true);
+    expect(configured.replayed).toEqual([]);
+
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
+  });
+
+  it("fences an owner retirement until its admitted callback settles", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const release = Promise.withResolvers<undefined>();
+    const target = descriptor(
+      "RetirementFence",
+      "type.example.dev/RetirementFence",
+      storageFactory,
+      {
+        onReplay: () => release.promise,
+      },
+    );
+    const scope = runScope("retirement-fence-owner", target.ready);
+    const delivery = new Delivery({ context: target.context, storageFactory });
+    const Worker = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly ports: {
+        readonly inbox: typeof delivery.inbox;
+        readonly workRegistry: typeof delivery.shards;
+        readonly source: DeliverySource;
+      };
+    }) => EnvironmentDeliveryWorker;
+    const worker = new Worker({
+      ports: {
+        inbox: delivery.inbox,
+        workRegistry: delivery.shards,
+        source: inertDeliverySource(),
+      },
+    });
+    worker.add({
+      owner: scope.owner,
+      descriptor: target.value,
+      storageFactory,
+      tenant: {},
+      context: target.context,
+      scopes: [scope],
+    });
+    await worker.start({ scopes: [scope] }, [scope.ready.shard]);
+    await delivery.inbox.receive(message(target.ready, "retirement-active"));
+    worker.notify(scope);
+    await until(() => target.replayed.includes("retirement-active"));
+
+    worker.stopOwners([scope.owner.key]);
+    let settled = false;
+    const retiring = worker.retireOwners([scope.owner.key]).finally(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    release.resolve(undefined);
+    await retiring;
+    expect(() => {
+      worker.notify(scope);
+    }).toThrow("Environment delivery owner is not configured.");
+  });
+
+  it("keeps a shared group open for a sibling and closes it after the last owner retires", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const first = descriptor("CloseFirst", "type.example.dev/CloseFirst", storageFactory);
+    const second = descriptor("CloseSecond", "type.example.dev/CloseSecond", storageFactory);
+    const firstScope = runScope("close-first", first.ready);
+    const secondScope = runScope("close-second", second.ready);
+    const delivery = new Delivery({ context: first.context, storageFactory });
+    let releases = 0;
+    const source: DeliverySource = {
+      ...inertDeliverySource(),
+      releaseExpired: () => {
+        releases += 1;
+        return Promise.resolve([]);
+      },
+    };
+    const Worker = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly ports: {
+        readonly inbox: typeof delivery.inbox;
+        readonly workRegistry: typeof delivery.shards;
+        readonly source: DeliverySource;
+      };
+    }) => EnvironmentDeliveryWorker;
+    const worker = new Worker({
+      ports: { inbox: delivery.inbox, workRegistry: delivery.shards, source },
+    });
+    for (const [scope, target] of [
+      [firstScope, first],
+      [secondScope, second],
+    ] as const)
+      worker.add({
+        owner: scope.owner,
+        descriptor: target.value,
+        storageFactory,
+        tenant: {},
+        context: first.context,
+        scopes: [scope],
+      });
+    await worker.start({ scopes: [firstScope] }, [firstScope.ready.shard]);
+    await worker.start({ scopes: [secondScope] }, [secondScope.ready.shard]);
+    const beforeRetirement = releases;
+
+    worker.stopOwners([firstScope.owner.key]);
+    await worker.awaitOwnersSettled([firstScope.owner.key]);
+    await worker.retireOwners([firstScope.owner.key]);
+    expect(releases).toBe(beforeRetirement);
+    await delivery.inbox.receive(message(second.ready, "close-sibling-live"));
+    worker.notify(secondScope);
+    await until(() => second.replayed.includes("close-sibling-live"));
+
+    worker.stopOwners([secondScope.owner.key]);
+    await worker.awaitOwnersSettled([secondScope.owner.key]);
+    await worker.retireOwners([secondScope.owner.key]);
+    expect(releases).toBeGreaterThan(beforeRetirement);
   });
 
   it("routes post-start work through the real runtime supervisor", async () => {
@@ -3423,6 +3739,15 @@ function descriptor(
 }
 
 function message(ready: DeliveryReady, signalId: string) {
+  const context =
+    ready.tenantId === undefined
+      ? create(EventContextSchema)
+      : create(EventContextSchema, {
+          origin: {
+            case: "importContext",
+            value: create(ActorContextSchema, { tenantId: ready.tenantId }),
+          },
+        });
   return {
     inboxId: {
       targetId: Identifiers.pack("string", signalId),
@@ -3436,8 +3761,20 @@ function message(ready: DeliveryReady, signalId: string) {
     version: 1n,
     signal: create(AnySchema, {
       typeUrl: "type.spine.io/spine.core.Event",
-      value: toBinary(EventSchema, create(EventSchema)),
+      value: toBinary(EventSchema, create(EventSchema, { context })),
     }),
+  };
+}
+
+function inertDeliverySource(): DeliverySource {
+  return {
+    shardSnapshot: () => Promise.resolve([]),
+    observeShardUpdates: () => ({
+      [Symbol.asyncIterator]: () => ({
+        next: () => Promise.resolve({ done: true, value: undefined as never }),
+      }),
+    }),
+    releaseExpired: () => Promise.resolve([]),
   };
 }
 

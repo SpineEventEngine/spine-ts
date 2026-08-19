@@ -22,6 +22,7 @@ import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { RemoteDelivery } from "../../../delivery-client/dist/index.js";
+import { TypeRegistry } from "@spine-event-engine/core";
 import { TaskCreatedSchema } from "../../../../examples/todo/dist/generated/spine/examples/todo/task_events_pb.js";
 import {
   TaskIdSchema,
@@ -64,7 +65,11 @@ class ExternalTaskProjection extends Projection {
   }
 }
 
-if (isManagedChild) ServerEnvironment.when(EnvironmentType.Local).use({ delivery });
+if (isManagedChild)
+  ServerEnvironment.when(EnvironmentType.Local).use({
+    delivery,
+    typeRegistry: new TypeRegistry([TaskCreatedSchema]),
+  });
 
 const managed = await ManagedServerApplication.run({
   processCount: 2,
@@ -91,8 +96,8 @@ const managed = await ManagedServerApplication.run({
         })
         .buildAsync(),
     );
-    const running = await server.start();
     const thirdParty = await ThirdPartyContext.singleTenant("T0210ThirdParty");
+    const running = await server.start();
     const close = running.close.bind(running);
     let timer;
     const importThirdParty = async () => {

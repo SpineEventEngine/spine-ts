@@ -12,7 +12,13 @@
  * the License.
  */
 
-import type { StorageContext, StorageFactory } from "@spine-event-engine/storage";
+import {
+  TenantBoundary,
+  type StorageContext,
+  type StorageFactory,
+} from "@spine-event-engine/storage";
+import { fromBinary } from "@bufbuild/protobuf";
+import { EventSchema } from "@spine-event-engine/proto";
 import type { ILogLayer } from "loglayer";
 
 import type { ContextDeliveryDescriptor, DeliveryTenantScope } from "../context/bounded-context.js";
@@ -25,7 +31,11 @@ import {
   type DeliveryRunWorker,
 } from "../delivery/delivery-run-coordinator.js";
 import { DeliveryBuilder, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
-import { Delivery, type OnDeliveryMessage } from "../delivery/delivery.js";
+import {
+  Delivery,
+  type DeliveryEndpointMessage,
+  type OnDeliveryMessage,
+} from "../delivery/delivery.js";
 import type { DeliveryOperationOptions } from "../delivery/delivery-ports.js";
 import {
   DeliverySupervisor,
@@ -156,7 +166,7 @@ export interface EnvironmentGenerationWorker extends DeliveryRunWorker {
  */
 export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
   readonly #workers = new Map<string, DeliveryRunWorker>();
-  readonly #supervisors = new Map<string, RuntimeDeliverySupervisor>();
+  readonly #supervisor: RuntimeDeliverySupervisor;
   readonly #stoppedWorkers = new Set<string>();
   readonly #stoppedSupervisors = new Set<string>();
   readonly #stoppedOwners = new Set<string>();
@@ -177,6 +187,7 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     this.#createWorker = options.createWorker ?? EnvironmentDeliveryValues.createWorker;
     this.#ports = options.ports;
     this.#nodeId = options.nodeId;
+    this.#supervisor = new RuntimeDeliverySupervisor(this.#ports, this.#nodeId);
   }
 
   /**
@@ -188,14 +199,14 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
       throw new Error("Environment delivery owner is already configured.");
     }
     const worker = this.#createWorker(runtime, this.#ports, this.#nodeId);
-    const supervisor = EnvironmentDeliveryValues.createSupervisor(
-      runtime,
-      this.#ports,
-      this.#nodeId,
-    );
     this.#workers.set(runtime.owner.key, worker);
-    this.#supervisors.set(runtime.owner.key, supervisor);
-    void supervisor.start();
+    try {
+      this.#supervisor.add(runtime);
+    } catch (error) {
+      this.#workers.delete(runtime.owner.key);
+      throw error;
+    }
+    void this.#supervisor.start();
   }
 
   /**
@@ -215,7 +226,7 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
       return Promise.reject(new Error("Environment delivery owner is not configured."));
     }
     return worker.start(obligation, shards).then(async (evidence) => {
-      await this.#requiredSupervisor(owner.key).start();
+      await this.#supervisor.start();
       return evidence;
     });
   }
@@ -225,10 +236,8 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
    * @param scope Identifies the changed scope.
    */
   notify(scope: DeliveryRunScope): void {
-    if (this.#stoppedSupervisors.has(scope.owner.key)) {
-      return;
-    }
-    this.#requiredSupervisor(scope.owner.key).notify(scope.ready.shard);
+    this.#requiredWorker(scope.owner.key);
+    this.#supervisor.notify(scope.owner.key, scope.ready.shard);
   }
 
   /**
@@ -240,7 +249,12 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
       if (this.#stoppedOwners.has(key)) {
         continue;
       }
-      this.#stopOwner(key, worker, this.#requiredSupervisor(key), failures);
+      this.#stopOwner(key, worker, failures);
+    }
+    try {
+      this.#supervisor.stop();
+    } catch (error) {
+      failures.push(error);
     }
     EnvironmentDeliveryValues.throwFailures(failures, "Environment delivery worker stop failed.");
   }
@@ -253,7 +267,7 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
   async awaitSettled(): Promise<void> {
     await Promise.all([
       ...Array.from(this.#workers.values(), (worker) => worker.awaitSettled()),
-      ...Array.from(this.#supervisors.values(), (supervisor) => supervisor.awaitSettled()),
+      this.#supervisor.awaitSettled(),
     ]);
   }
 
@@ -267,9 +281,7 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
       ...Array.from(this.#workers.values(), (worker) =>
         EnvironmentDeliveryValues.attempt(() => worker.retire()),
       ),
-      ...Array.from(this.#supervisors.values(), (supervisor) =>
-        EnvironmentDeliveryValues.attempt(() => supervisor.retire()),
-      ),
+      EnvironmentDeliveryValues.attempt(() => this.#supervisor.retire()),
     ]);
     const failures: unknown[] = [];
     for (const result of settled) {
@@ -293,14 +305,15 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
       if (worker === undefined) {
         throw new Error("Environment delivery owner is not configured.");
       }
-      return { key, worker, supervisor: this.#requiredSupervisor(key) };
+      return { key, worker };
     });
     const failures: unknown[] = [];
-    for (const { key, worker, supervisor } of selected) {
+    this.#supervisor.fenceOwners(ownerKeys);
+    for (const { key, worker } of selected) {
       if (this.#stoppedOwners.has(key)) {
         continue;
       }
-      this.#stopOwner(key, worker, supervisor, failures);
+      this.#stopOwner(key, worker, failures);
     }
     EnvironmentDeliveryValues.throwFailures(
       failures,
@@ -315,16 +328,10 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
    * @returns A promise that resolves after selected owner work settles.
    */
   async awaitOwnersSettled(ownerKeys: readonly string[]): Promise<void> {
-    const selected = ownerKeys.map((key) => ({
-      worker: this.#requiredWorker(key),
-      supervisor: this.#requiredSupervisor(key),
-    }));
-    await Promise.all(
-      selected.flatMap(({ worker, supervisor }) => [
-        worker.awaitSettled(),
-        supervisor.awaitSettled(),
-      ]),
-    );
+    await Promise.all([
+      ...ownerKeys.map((key) => this.#requiredWorker(key).awaitSettled()),
+      this.#supervisor.awaitOwnersSettled(ownerKeys),
+    ]);
   }
 
   /**
@@ -334,20 +341,13 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
    * @returns A promise that settles after selected owners retire.
    */
   async retireOwners(ownerKeys: readonly string[]): Promise<void> {
-    const selected = ownerKeys.map((key) => ({
-      key,
-      worker: this.#requiredWorker(key),
-      supervisor: this.#requiredSupervisor(key),
-    }));
+    const selected = ownerKeys.map((key) => ({ key, worker: this.#requiredWorker(key) }));
     const retired = await Promise.allSettled(
-      selected.flatMap(({ worker, supervisor }) => [
-        EnvironmentDeliveryValues.attempt(() => worker.retire()),
-        EnvironmentDeliveryValues.attempt(() => supervisor.retire()),
-      ]),
+      selected.map(({ worker }) => EnvironmentDeliveryValues.attempt(() => worker.retire())),
     );
+    await this.#supervisor.retireOwners(ownerKeys);
     for (const { key } of selected) {
       this.#workers.delete(key);
-      this.#supervisors.delete(key);
       this.#stoppedWorkers.delete(key);
       this.#stoppedSupervisors.delete(key);
       this.#stoppedOwners.delete(key);
@@ -369,20 +369,7 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     return worker;
   }
 
-  #requiredSupervisor(key: string): RuntimeDeliverySupervisor {
-    const supervisor = this.#supervisors.get(key);
-    if (supervisor === undefined) {
-      throw new Error("Environment delivery owner is not configured.");
-    }
-    return supervisor;
-  }
-
-  #stopOwner(
-    key: string,
-    worker: DeliveryRunWorker,
-    supervisor: RuntimeDeliverySupervisor,
-    failures: unknown[],
-  ): void {
+  #stopOwner(key: string, worker: DeliveryRunWorker, failures: unknown[]): void {
     if (!this.#stoppedWorkers.has(key)) {
       try {
         worker.stop();
@@ -392,12 +379,7 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
       }
     }
     if (!this.#stoppedSupervisors.has(key)) {
-      try {
-        supervisor.stop();
-        this.#stoppedSupervisors.add(key);
-      } catch (error) {
-        failures.push(error);
-      }
+      this.#stoppedSupervisors.add(key);
     }
     if (this.#stoppedWorkers.has(key) && this.#stoppedSupervisors.has(key)) {
       this.#stoppedOwners.add(key);
@@ -415,10 +397,43 @@ interface EnvironmentDeliveryWorkerOptions {
   readonly nodeId?: string;
 }
 class RuntimeDeliverySupervisor {
-  readonly #groups: readonly RuntimeDeliverySupervisorGroup[];
+  readonly #groups = new Map<string, RuntimeDeliverySupervisorGroup>();
+  readonly #ports: EnvironmentDeliveryPorts | undefined;
+  readonly #nodeId: string | undefined;
 
-  constructor(groups: readonly RuntimeDeliverySupervisorGroup[]) {
-    this.#groups = Object.freeze([...groups]);
+  constructor(ports?: EnvironmentDeliveryPorts, nodeId?: string) {
+    this.#ports = ports;
+    this.#nodeId = nodeId;
+  }
+
+  add(runtime: EnvironmentDeliveryRuntime): void {
+    const grouped = new Map<number, ShardIndex[]>();
+    for (const shard of EnvironmentDeliveryValues.uniqueShards(runtime.scopes)) {
+      const shards = grouped.get(shard.ofTotal) ?? [];
+      shards.push(shard);
+      grouped.set(shard.ofTotal, shards);
+    }
+    if (grouped.size === 0) {
+      throw new Error("Environment delivery supervisor requires at least one shard.");
+    }
+    for (const [shardCount, shards] of grouped) {
+      const key = this.#groupKey(runtime.owner.key, shardCount);
+      let group = this.#groups.get(key);
+      if (group === undefined) {
+        group = EnvironmentDeliveryValues.createSupervisorGroup(
+          runtime,
+          shards,
+          this.#ports,
+          this.#nodeId,
+        );
+        this.#groups.set(key, group);
+      }
+      group.add(runtime.owner.key, runtime, shards);
+    }
+  }
+
+  remove(ownerKey: string): void {
+    for (const group of this.#groups.values()) group.remove(ownerKey);
   }
 
   async start(): Promise<void> {
@@ -429,16 +444,33 @@ class RuntimeDeliverySupervisor {
       return;
     }
     if (cancelManagedDelivery) return;
-    await Promise.all(this.#groups.map((group) => group.start()));
+    await Promise.all(Array.from(this.#groups.values(), (group) => group.start()));
   }
 
-  notify(shard: ShardIndex): void {
-    this.#groups.find((group) => group.shardCount === shard.ofTotal)?.notify(shard);
+  notify(ownerKey: string, shard: ShardIndex): void {
+    this.#groups.get(this.#groupKey(ownerKey, shard.ofTotal))?.notify(shard);
+  }
+
+  fenceOwners(ownerKeys: readonly string[]): void {
+    for (const group of this.#groups.values()) group.fenceOwners(ownerKeys);
+  }
+
+  async awaitOwnersSettled(ownerKeys: readonly string[]): Promise<void> {
+    await Promise.all(
+      Array.from(this.#groups.values(), (group) => group.awaitOwnersSettled(ownerKeys)),
+    );
+  }
+
+  async retireOwners(ownerKeys: readonly string[]): Promise<void> {
+    for (const [key, group] of this.#groups) {
+      await group.retireOwners(ownerKeys);
+      if (group.empty) this.#groups.delete(key);
+    }
   }
 
   stop(): void {
     const failures: unknown[] = [];
-    for (const group of this.#groups) {
+    for (const group of this.#groups.values()) {
       try {
         group.stop();
       } catch (error) {
@@ -452,7 +484,9 @@ class RuntimeDeliverySupervisor {
   }
 
   async awaitSettled(): Promise<void> {
-    const settled = await Promise.allSettled(this.#groups.map((group) => group.awaitSettled()));
+    const settled = await Promise.allSettled(
+      Array.from(this.#groups.values(), (group) => group.awaitSettled()),
+    );
     EnvironmentDeliveryValues.throwFailures(
       settled.flatMap((result) => (result.status === "rejected" ? [result.reason as unknown] : [])),
       "Environment delivery supervisor settlement failed.",
@@ -461,18 +495,29 @@ class RuntimeDeliverySupervisor {
 
   async retire(): Promise<void> {
     const settled = await Promise.allSettled(
-      this.#groups.map((group) => EnvironmentDeliveryValues.attempt(() => group.retire())),
+      Array.from(this.#groups.values(), (group) =>
+        EnvironmentDeliveryValues.attempt(() => group.retire()),
+      ),
     );
     EnvironmentDeliveryValues.throwFailures(
       settled.flatMap((result) => (result.status === "rejected" ? [result.reason as unknown] : [])),
       "Environment delivery supervisor retirement failed.",
     );
   }
+
+  #groupKey(ownerKey: string, shardCount: number): string {
+    return this.#ports?.source === undefined
+      ? `${ownerKey}/${String(shardCount)}`
+      : `remote/${String(shardCount)}`;
+  }
 }
 
 class RuntimeDeliverySupervisorGroup {
   readonly #source: DeliverySource;
   readonly #supervisor: DeliverySupervisor;
+  readonly #routes = new Map<string, RuntimeDeliveryRoute[]>();
+  readonly #retiringOwners = new Set<string>();
+  readonly #active = new Map<string, Set<Promise<void>>>();
   readonly shardCount: number;
   #start: Promise<void> | undefined;
   #stopped = false;
@@ -481,7 +526,6 @@ class RuntimeDeliverySupervisorGroup {
   constructor(options: {
     readonly delivery: ReturnType<DeliveryBuilder["build"]>;
     readonly shards: readonly ShardIndex[];
-    readonly onMessage: OnDeliveryMessage;
     readonly source?: DeliverySource;
     readonly logger?: ILogLayer;
   }) {
@@ -497,10 +541,62 @@ class RuntimeDeliverySupervisorGroup {
     this.#supervisor = new DeliverySupervisor({
       source: this.#source,
       delivery: options.delivery,
-      onMessage: options.onMessage,
+      onMessage: (message) => this.#route(message),
+      acceptMessage: (message) => this.#accept(message),
     });
     if (options.logger !== undefined) {
       deliverySupervisorAccess.installLogger(this.#supervisor, options.logger);
+    }
+  }
+
+  add(ownerKey: string, runtime: EnvironmentDeliveryRuntime, shards: readonly ShardIndex[]): void {
+    if (this.#source instanceof LocalDeliverySource) this.#source.add(shards);
+    for (const scope of runtime.scopes) {
+      if (scope.ready.shard.ofTotal !== this.shardCount) continue;
+      const key = RuntimeDeliverySupervisorGroup.key(scope.ready);
+      const routes = this.#routes.get(key) ?? [];
+      routes.push({
+        ownerKey,
+        descriptor: runtime.descriptor,
+        tenant: runtime.tenant,
+        tenantKey:
+          runtime.tenant.tenantId === undefined
+            ? undefined
+            : String(TenantBoundary.from(runtime.tenant.tenantId).key),
+      });
+      this.#routes.set(key, routes);
+    }
+  }
+
+  get empty(): boolean {
+    return this.#routes.size === 0;
+  }
+
+  fenceOwners(ownerKeys: readonly string[]): void {
+    for (const ownerKey of ownerKeys) this.#retiringOwners.add(ownerKey);
+  }
+
+  async awaitOwnersSettled(ownerKeys: readonly string[]): Promise<void> {
+    await Promise.all(
+      ownerKeys.map(async (ownerKey) => {
+        const active = this.#active.get(ownerKey);
+        if (active !== undefined) await Promise.allSettled(active);
+      }),
+    );
+  }
+
+  async retireOwners(ownerKeys: readonly string[]): Promise<void> {
+    this.fenceOwners(ownerKeys);
+    await this.awaitOwnersSettled(ownerKeys);
+    for (const ownerKey of ownerKeys) this.remove(ownerKey);
+    if (this.empty) await this.retire();
+  }
+
+  remove(ownerKey: string): void {
+    for (const [key, routes] of this.#routes) {
+      const retained = routes.filter((route) => route.ownerKey !== ownerKey);
+      if (retained.length === 0) this.#routes.delete(key);
+      else this.#routes.set(key, retained);
     }
   }
 
@@ -543,14 +639,91 @@ class RuntimeDeliverySupervisorGroup {
     this.stop();
     await this.awaitSettled();
   }
+
+  #accept(message: DeliveryEndpointMessage): boolean {
+    return this.#select(message) !== undefined;
+  }
+
+  #route(message: Parameters<OnDeliveryMessage>[0]): void | Promise<void> {
+    const route = this.#select(message);
+    if (route === undefined) throw new Error("Environment delivery endpoint is not configured.");
+    const active = this.#active.get(route.ownerKey) ?? new Set<Promise<void>>();
+    this.#active.set(route.ownerKey, active);
+    let replay: Promise<void>;
+    replay = Promise.resolve(route.descriptor.replay(message, route.tenant.tenantId)).finally(
+      () => {
+        active.delete(replay);
+        if (active.size === 0) this.#active.delete(route.ownerKey);
+      },
+    );
+    active.add(replay);
+    return replay;
+  }
+
+  #select(message: DeliveryEndpointMessage): RuntimeDeliveryRoute | undefined {
+    const key = RuntimeDeliverySupervisorGroup.key(message);
+    const routes = this.#routes.get(key);
+    const route = RuntimeDeliverySupervisorGroup.select(routes, message);
+    return route === undefined || this.#retiringOwners.has(route.ownerKey) ? undefined : route;
+  }
+
+  static select(
+    routes: readonly RuntimeDeliveryRoute[] | undefined,
+    message: DeliveryEndpointMessage,
+  ): RuntimeDeliveryRoute | undefined {
+    if (routes === undefined || routes.length === 0) return undefined;
+    const tenantKey = RuntimeDeliverySupervisorGroup.tenantKey(message);
+    return routes.find((route) => route.tenantKey === tenantKey);
+  }
+
+  static tenantKey(message: DeliveryEndpointMessage): string | undefined {
+    if (message.signal === undefined) return undefined;
+    try {
+      const tenantId = fromBinary(EventSchema, message.signal.value).context?.origin;
+      if (tenantId?.case === "importContext") {
+        const value = tenantId.value.tenantId;
+        return value === undefined ? undefined : String(TenantBoundary.from(value).key);
+      }
+      if (tenantId?.case === "pastMessage") {
+        const value = tenantId.value.actorContext?.tenantId;
+        return value === undefined ? undefined : String(TenantBoundary.from(value).key);
+      }
+    } catch {
+      return undefined;
+    }
+    return undefined;
+  }
+
+  static key(
+    route: Pick<DeliveryEndpointMessage, "label" | "shard"> & {
+      readonly inboxId?: { readonly targetTypeUrl: string };
+      readonly targetTypeUrl?: string;
+    },
+  ): string {
+    const targetTypeUrl = route.inboxId?.targetTypeUrl ?? route.targetTypeUrl;
+    if (targetTypeUrl === undefined)
+      throw new Error("Environment delivery route has no target type.");
+    return JSON.stringify([route.label, targetTypeUrl, route.shard.index, route.shard.ofTotal]);
+  }
+}
+
+interface RuntimeDeliveryRoute {
+  readonly ownerKey: string;
+  readonly descriptor: ContextDeliveryDescriptor;
+  readonly tenant: DeliveryTenantScope;
+  readonly tenantKey: string | undefined;
 }
 
 class LocalDeliverySource {
-  readonly #shards: readonly ShardIndex[];
+  readonly #shards = new Map<string, ShardIndex>();
   #recoveryEnabled = false;
 
   constructor(shards: readonly ShardIndex[]) {
-    this.#shards = shards;
+    this.add(shards);
+  }
+
+  add(shards: readonly ShardIndex[]): void {
+    for (const shard of shards) this.#shards.set(shard.key(), shard);
   }
 
   enableRecovery(): void {
@@ -560,7 +733,11 @@ class LocalDeliverySource {
   shardSnapshot(): Promise<readonly DeliveryShardUpdate[]> {
     return Promise.resolve(
       this.#recoveryEnabled
-        ? this.#shards.map((shard) => ({ shard, status: "NOT_PICKED" as const, messages: 1 }))
+        ? Array.from(this.#shards.values(), (shard) => ({
+            shard,
+            status: "NOT_PICKED" as const,
+            messages: 1,
+          }))
         : [],
     );
   }
@@ -609,40 +786,28 @@ const EnvironmentDeliveryValues = Object.freeze({
     });
     return deliveryRunWorkers.worker(worker);
   },
-  createSupervisor(
+  createSupervisorGroup(
     runtime: EnvironmentDeliveryRuntime,
+    shards: readonly ShardIndex[],
     ports?: EnvironmentDeliveryPorts,
     nodeId?: string,
-  ): RuntimeDeliverySupervisor {
-    const shards = EnvironmentDeliveryValues.uniqueShards(runtime.scopes);
-    if (shards.length === 0) {
+  ): RuntimeDeliverySupervisorGroup {
+    const first = shards[0];
+    if (first === undefined) {
       throw new Error("Environment delivery supervisor requires at least one shard.");
     }
-    const groups = new Map<number, ShardIndex[]>();
-    for (const shard of shards) {
-      const group = groups.get(shard.ofTotal) ?? [];
-      group.push(shard);
-      groups.set(shard.ofTotal, group);
-    }
-    return new RuntimeDeliverySupervisor(
-      [...groups].map(([shardCount, exactShards]) => {
-        const builder = new DeliveryBuilder()
-          .withContext(runtime.context)
-          .withStorageFactory(runtime.storageFactory)
-          .withStrategy(UniformAcrossAllShards.forNumber(shardCount))
-          .withNode(nodeId ?? runtime.context.name);
-        if (ports !== undefined)
-          builder.withInbox(ports.inbox).withWorkRegistry(ports.workRegistry);
-        const delivery = builder.build();
-        return new RuntimeDeliverySupervisorGroup({
-          delivery,
-          shards: exactShards,
-          onMessage: (message) => runtime.descriptor.replay(message, runtime.tenant.tenantId),
-          ...(ports?.source === undefined ? {} : { source: ports.source }),
-          ...(runtime.logger === undefined ? {} : { logger: runtime.logger }),
-        });
-      }),
-    );
+    const builder = new DeliveryBuilder()
+      .withContext(runtime.context)
+      .withStorageFactory(runtime.storageFactory)
+      .withStrategy(UniformAcrossAllShards.forNumber(first.ofTotal))
+      .withNode(nodeId ?? runtime.context.name);
+    if (ports !== undefined) builder.withInbox(ports.inbox).withWorkRegistry(ports.workRegistry);
+    return new RuntimeDeliverySupervisorGroup({
+      delivery: builder.build(),
+      shards,
+      ...(ports?.source === undefined ? {} : { source: ports.source }),
+      ...(runtime.logger === undefined ? {} : { logger: runtime.logger }),
+    });
   },
   updatesUntilAborted(signal: AbortSignal | undefined): AsyncIterable<never> {
     return {

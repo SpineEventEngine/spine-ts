@@ -230,6 +230,7 @@ export class Delivery {
     const shard = options.shard;
     return this.drain(shard, {
       onMessage: options.onMessage,
+      ...(options.acceptMessage === undefined ? {} : { acceptMessage: options.acceptMessage }),
       operation: { signal: options.signal },
     }).then((run) =>
       Object.freeze({

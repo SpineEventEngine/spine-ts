@@ -49,3 +49,77 @@ only.
   Both cases fail with `Message channel targetType must be a canonical type URL`
   from `packages/transport/src/memory/message-transport.ts` during
   `IntegrationBroker` opening.
+
+## 2026-08-19 — Delivery cross-context root cause
+
+- The repaired type URL adapter allowed the real process RED to reach normal
+  broker import, external Event routing, remote Inbox persistence, and shard
+  pickup. The imported Event and nested payload remain intact.
+- The current environment creates a worker and long-lived supervisor per
+  context runtime while the configured remote Delivery server exposes global
+  shards. A `Tasks` supervisor receives the global update for an
+  `ExternalTasks` projection row, picks the shard before endpoint filtering,
+  then repeatedly scans and rejects that row. The `ExternalTasks` supervisor
+  cannot acquire the shard. This is a bounded product defect, not a broker,
+  codec, handler-metadata, or fixture failure.
+- Approved correction: replace per-context competing pickup with one internal
+  process-level shard owner/dispatcher. It dispatches after pickup using the
+  registered endpoint label/type/shard, supports runtime join/leave and tenant
+  scope, does not acknowledge unknown targets, and preserves close/drain.
+
+## 2026-08-19 — shared remote dispatcher implementation
+
+- Accepted reliability review batch received from the existing
+  `performance_reliability_reviewer`, configured `gpt-5.6-terra` / `high`;
+  runtime telemetry unavailable. It requires shared-supervisor stop quiescence,
+  predicate admission for unmatched/tenant-mismatched rows, retirement fencing,
+  and empty-group closure before acceptance.
+
+- Added a focused RED where two remote-backed runtime endpoints share a shard:
+  notifying the first after persisting the second endpoint's row left the
+  rightful runtime unreached. The existing per-runtime supervisor ownership was
+  the observed cause.
+- Replaced remote per-runtime supervisors with one private supervisor group per
+  shard cardinality. It retains endpoint route candidates by label, target type,
+  and shard, dispatches known rows to the selected runtime callback, and removes
+  only stopped/retired owner routes. Local/no-source supervisors remain
+  owner-specific.
+- Candidate route selection reads the existing imported/past-message Event
+  tenant envelope and retains the selected runtime's tenant callback. A focused
+  two-tenant test verifies equal endpoint keys do not overwrite one another.
+- `pnpm typecheck:build:generated` passed. Focused environment worker tests:
+  86 passing. The rebuilt managed domestic path (RED-17/18/29) passes.
+- The managed ThirdParty fixture now registers `TaskCreatedSchema` in its
+  environment type registry (removing the prior unsupported-schema crash), but
+  RED-19 still times out after `ThirdPartyContext.emittedEvent()` resolves. The
+  remaining failure is the fixture broker-interest lifecycle; it occurs after
+  the dispatcher is no longer implicated and remains unresolved.
+
+## 2026-08-19 — reliability correction convergence
+
+- Retained new RED evidence: the shared supervisor consumed both an unknown
+  endpoint row and a singleton tenant route with a nonmatching imported Event
+  tenant. A selected owner whose finite worker stop failed also remained
+  dispatchable through the shared group.
+- The group now provides a private controlled-run admission predicate. It
+  decodes only the existing Event import/past-message envelope and accepts a
+  row only when a non-retiring route matches its endpoint and tenant, leaving
+  all unmatched rows pending without invoking DeliveryMonitor failure policy.
+- Owner stop fences fresh route admission. Retirement awaits that owner's
+  admitted callbacks before removing its routes; a sibling retains its group,
+  while retirement of the last owner closes and deletes it. Full worker stop
+  closes the shared supervisor once after finite worker stop attempts and
+  `awaitSettled()` includes its close.
+- Focused evidence: environment delivery regressions pass 90/90, including
+  unknown route pending, singleton tenant mismatch pending, blocked callback
+  retirement, sibling-vs-last group close, and whole-worker stop behavior.
+- The ThirdParty fixture creates its private broker before the managed process
+  reports ready. This gives the existing online/wanted control exchange time to
+  establish consumer interest before the test trigger; no product or wire
+  contract changed. Managed acceptance passes 2/2, including two sequential
+  domestic updates and ThirdParty import.
+- Reviewer batch disposition: the accepted `performance_reliability_reviewer`
+  (`gpt-5.6-terra`/`high`; runtime telemetry unavailable) findings on close
+  quiescence, admission, tenant selection, retirement fencing, and empty-group
+  closure are resolved by the focused regressions above. No new reviewer was
+  dispatched in this continuation.

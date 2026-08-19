@@ -9,7 +9,9 @@
 This is a **high-risk acceptance** task: it proves the intersection of
 complete-replica process lifecycle, IntegrationBroker ownership, Delivery, and
 subscription fan-out. It changes fixtures and durable evidence only unless a
-real product defect is demonstrated.
+real product defect is demonstrated. A demonstrated Delivery defect extends
+the bounded correction only to the internal process-level dispatcher described
+below; it adds no public or wire contract.
 
 - Existing role: `implementer`; explicitly configured profile:
   `gpt-5.6-terra` / `medium`.
@@ -58,6 +60,17 @@ Retain RED evidence then prove in real managed processes:
   executable line and branch coverage (each at least 90%), cheap preflight,
   then one `pnpm verify:task` after convergence.
 - Update the work log/evidence with RED and GREEN command output before review.
+
+## Proven Delivery correction invariants
+
+The remote Delivery server owns global shards, not one shard namespace per
+Bounded Context. Therefore an application process must have one pickup owner
+per global shard. That owner dispatches a picked row to the registered endpoint
+whose label, target type, and shard match. Context runtimes may join and leave
+while the process is alive; their tenant scopes remain part of the registered
+endpoint dispatch. An unknown endpoint is not acknowledged and remains
+observable for a later valid runtime. Close drains and releases the same owner
+without changing Delivery failure policy.
 
 ## Skill applicability
 
