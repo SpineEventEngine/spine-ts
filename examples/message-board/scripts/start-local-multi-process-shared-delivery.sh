@@ -4,7 +4,7 @@ set -euo pipefail
 root=${MESSAGE_BOARD_REPO_ROOT:-$(cd "$(dirname "$0")/../../.." && pwd)}
 name="message-board-delivery-$(node -e 'process.stdout.write(require("node:crypto").randomUUID())')"
 pnpm -C "$root" images:build:local --target simple-delivery-server
-delivery_id=$(docker run --detach --name "$name" -p 8484:8484 spine-ts/simple-delivery-server:local)
+delivery_id=$(docker run --detach --name "$name" -p 8484:8484 --env HOST=0.0.0.0 --env PORT=8484 spine-ts/simple-delivery-server:local)
 trap 'docker rm -f "$delivery_id" 2>/dev/null || true' EXIT INT TERM
 for attempt in $(seq 1 30); do
   docker logs "$delivery_id" 2>&1 | grep -q 'Delivery server listening' && break

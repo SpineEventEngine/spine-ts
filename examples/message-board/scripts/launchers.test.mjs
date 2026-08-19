@@ -19,6 +19,7 @@ const shared = readFileSync(
 test("shared Delivery launcher builds only its matching image before exact-ID startup", () => {
   assert.match(shared, /images:build:local --target simple-delivery-server/u);
   assert.match(shared, /delivery_id=\$\(docker run --detach/u);
+  assert.match(shared, /--env HOST=0\.0\.0\.0 --env PORT=8484/u);
   assert.match(shared, /docker logs "\$delivery_id"/u);
   assert.match(shared, /MESSAGE_BOARD_DELIVERY_CONTAINER="\$delivery_id"/u);
   assert.doesNotMatch(shared, /curl --fail --silent http:\/\/127\.0\.0\.1:8484/u);
