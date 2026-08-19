@@ -27,7 +27,7 @@ test("local launcher refuses to start Gateway or UI after its Coordinator exits"
     writeFileSync(join(temp, "setup"), "", "utf8");
     for (const [name, body] of Object.entries({
       docker:
-        "#!/usr/bin/env bash\necho docker >>$HARNESS_LOG\n[[ \"$1\" == rm ]] && exit 0\ntrap 'exit 0' TERM INT\nwhile true; do sleep 1; done\n",
+        "#!/usr/bin/env bash\necho docker:$1 >>$HARNESS_LOG\n[[ \"$1\" == run ]] && { echo captured-id; exit 0; }\n[[ \"$1\" == inspect ]] && { echo true; exit 0; }\nexit 0\n",
       curl: "#!/usr/bin/env bash\nexit 0\n",
       node: "#!/usr/bin/env bash\necho node >>$HARNESS_LOG\necho fixed-id\n",
       pnpm: '#!/usr/bin/env bash\necho "pnpm:$*" >>$HARNESS_LOG\n[[ "$*" == *start:multi-process* ]] && exit 1\nexit 0\n',
