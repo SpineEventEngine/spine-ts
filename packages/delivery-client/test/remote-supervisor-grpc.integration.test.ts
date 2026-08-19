@@ -226,12 +226,16 @@ it("recovers an overflowed tiny-buffer RemoteDelivery source through its environ
 }, 15_000);
 
 it("forces a child that ignores graceful shutdown and settles its forced exit", async () => {
-  const child = spawn(process.execPath, [
-    "-e",
-    "setInterval(() => undefined, 1000); process.on('SIGTERM', () => undefined)",
-  ]);
+  const child = spawn(
+    process.execPath,
+    [
+      "-e",
+      "setInterval(() => undefined, 1000); process.on('SIGTERM', () => undefined); process.send?.({ type: 'ready' })",
+    ],
+    { stdio: ["ignore", "ignore", "ignore", "ipc"] },
+  );
   applications.add(child);
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await ready(child);
 
   await expect(stop(child, 10)).resolves.toBeUndefined();
   expect(child.signalCode).toBe("SIGKILL");

@@ -44,4 +44,8 @@
   runs after a test-only acknowledgement; mechanical checks pass.
 - Final canonical release verification passes 4,269 tests with 90.35% branch
   coverage; every deterministic release gate passes.
-- Pending: post-merge verification and remote cleanup.
+- Post-merge deterministic gates passed; the coverage run exposed one fixed-
+  delay child-readiness race after 4,268 passing tests. Its test-only IPC-ready
+  correction passes under coverage and three additional runs plus mechanical
+  checks.
+- Pending: final post-merge release rerun and remote cleanup.

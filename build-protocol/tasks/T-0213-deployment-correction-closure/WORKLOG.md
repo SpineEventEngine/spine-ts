@@ -144,3 +144,16 @@
 - Node/Proto generation and lint, generated/tooling builds, repository ESLint,
   cleanup, TSDoc, copyright, formatting, docs/API/snippets/audience, generated
   currency, logging containment, and release readiness all passed.
+
+## 2026-08-19 — post-merge verification correction
+
+- Merged and pushed correction-only `main@c019a41bb` from an isolated clean
+  checkout; the primary user checkout was untouched.
+- Post-merge deterministic gates passed and coverage reached 4,268 passing
+  tests before one unrelated fixture-timing failure: a stubborn-child test used
+  a fixed 100 ms sleep before sending `SIGTERM`, so under load the signal could
+  arrive before the child installed its handler.
+- Replaced the sleep with the existing private IPC-ready pattern. The exact
+  assertion passed under coverage and in three further fresh runs. Tooling
+  typecheck, scoped ESLint, formatting, and diff hygiene passed. No production
+  behavior or public contract changed.
