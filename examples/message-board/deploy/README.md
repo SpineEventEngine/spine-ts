@@ -54,7 +54,7 @@ pnpm images:build:local
 docker compose --file examples/message-board/deploy/compose/combined.compose.yaml up --detach
 ```
 
-Open the stock browser UI at http://localhost:8080. Stop it with:
+Open the stock browser UI at http://localhost:18080. Stop it with:
 
 ```bash
 docker compose --file examples/message-board/deploy/compose/combined.compose.yaml down --volumes --remove-orphans
@@ -72,7 +72,7 @@ Start it with:
 docker compose --file examples/message-board/deploy/compose/standalone.compose.yaml up --detach
 ```
 
-Open http://localhost:8080, then stop it with the matching `down --volumes --remove-orphans` command.
+Open http://localhost:18080, then stop it with the matching `down --volumes --remove-orphans` command.
 
 The Kubernetes YAML files are static references, not local-Kubernetes
 instructions. They deploy the same stock UI behind Envoy and set its sole

@@ -72,6 +72,11 @@ for (const envoy of [combinedEnvoy, standaloneEnvoy]) {
   });
 }
 
+test("documents the Envoy browser port published by both Compose topologies", () => {
+  const deployment = readFileSync(join(composeRoot, "..", "README.md"), "utf8");
+  assert.match(deployment, /http:\/\/localhost:18080/gu);
+});
+
 const browserRoutes = [
   ["/spine.auth.AuthenticationService/ResolveContext", "30s"],
   ["/spine.client.CommandService/Post", "30s"],
