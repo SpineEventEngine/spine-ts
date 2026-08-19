@@ -37,3 +37,13 @@
   completion-plan status.
 - Do not modify runtime behavior, restore ZeroMQ, introduce compatibility
   aliases, or pre-empt the T-0213 security review.
+
+## Correction disposition
+
+- In-memory message-channel validation, FIFO drain, consumer-failure
+  propagation, and defensive-copy coverage were restored without restoring the
+  removed adapter or routing abstractions.
+- Current user and API documentation references were removed; the threat model
+  is explicitly deferred to T-0213.
+- Remaining build-protocol wording is being reconciled in this task without
+  rewriting truthful historical task and review records.

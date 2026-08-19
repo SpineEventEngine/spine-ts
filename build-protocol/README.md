@@ -8,7 +8,7 @@ The JVM research corpus lives in `../spine-jvm-docs`. This specification treats 
 
 1. [TECHNICAL_SPEC.md](TECHNICAL_SPEC.md) - product-level architecture, non-negotiable constraints, runtime model, process topology, and module boundaries.
 2. [PROTOBUF_CONTRACT.md](PROTOBUF_CONTRACT.md) - Protobuf compatibility rules, copied proto sources, Buf/Protobuf-ES generation, type URL registry, and generated/runtime metadata.
-3. [RUNTIME_ARCHITECTURE.md](RUNTIME_ARCHITECTURE.md) - bounded contexts, buses, ZeroMQ-backed IPC abstraction, async signal processing, worker processes, read/write segregation, and storage boundaries.
+3. [RUNTIME_ARCHITECTURE.md](RUNTIME_ARCHITECTURE.md) - bounded contexts, buses, process-local IntegrationBroker message channels, async processing, worker processes, read/write segregation, and storage boundaries.
 4. [DEVELOPER_API.md](DEVELOPER_API.md) - OOP APIs, generic entity classes, decorators, repositories, command/event/query/subscription services, validation, and user-facing coding model.
 5. [TODO_EXAMPLE_SPEC.md](TODO_EXAMPLE_SPEC.md) - required standalone to-do list server-side example application.
 6. [BUILD_PROTOCOL.md](BUILD_PROTOCOL.md) - autonomous Codex-on-macOS development protocol, sub-agent orchestration, worktrees, reviews, logs, quality gates, and interruption recovery.
@@ -38,4 +38,4 @@ New task logs use the canonical directory-style path `build-protocol/tasks/<task
 - Protobuf runtime: Buf `@bufbuild/protobuf` / `@bufbuild/protoc-gen-es` generated TypeScript.
 - Validation runtime: `@spine-event-engine/validation` `2.0.0-snapshot.7`.
 - Decorator baseline: TypeScript 5+ standard decorators. Legacy `experimentalDecorators` semantics and `emitDecoratorMetadata` must not be assumed unless explicitly isolated behind a compatibility adapter.
-- Local IPC baseline: ZeroMQ over local IPC only, hidden behind framework transport abstractions.
+- Local integration baseline: process-local typed message channels owned by the environment.
