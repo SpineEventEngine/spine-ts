@@ -13,7 +13,7 @@
  */
 
 import { create, toBinary } from "@bufbuild/protobuf";
-import { StringValueSchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import {
   BoundedContextNameSchema,
   ChannelIdSchema,
@@ -30,8 +30,12 @@ describe("InMemoryTransportFactory", () => {
     const first = await factory.createSubscriber(channel);
     const second = await factory.createSubscriber(channel);
     const values: string[] = [];
-    const firstHandle = await first.addConsumer((message) => values.push(message.originalMessage.typeUrl));
-    const secondHandle = await second.addConsumer((message) => values.push(message.originalMessage.typeUrl));
+    const firstHandle = await first.addConsumer((message) => {
+      values.push(message.originalMessage?.typeUrl ?? "");
+    });
+    const secondHandle = await second.addConsumer((message) => {
+      values.push(message.originalMessage?.typeUrl ?? "");
+    });
     const publisher = await factory.createPublisher(channel);
 
     await publisher.publish(
@@ -52,10 +56,10 @@ describe("InMemoryTransportFactory", () => {
 
   it("rejects noncanonical channel target type URLs", async () => {
     const factory = new InMemoryTransportFactory();
-    await expect(factory.createPublisher({ targetType: "not-a-type-url" })).rejects.toThrow(
+    await expect(factory.createPublisher(create(ChannelIdSchema, { targetType: "not-a-type-url" }))).rejects.toThrow(
       /targetType|canonical/u,
     );
-    await expect(factory.createSubscriber({ targetType: "type.spine.io/" })).rejects.toThrow(
+    await expect(factory.createSubscriber(create(ChannelIdSchema, { targetType: "type.spine.io/" }))).rejects.toThrow(
       /targetType|canonical/u,
     );
     await factory.close();
@@ -63,10 +67,10 @@ describe("InMemoryTransportFactory", () => {
 });
 
 function frame(value: string) {
-  return {
+  return create(AnySchema, {
     typeUrl: "type.spine.io/google.protobuf.StringValue",
     value: toBinary(StringValueSchema, create(StringValueSchema, { value })),
-  };
+  });
 }
 
 function externalMessage(value: string) {

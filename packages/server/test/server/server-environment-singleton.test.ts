@@ -48,7 +48,6 @@ describe("ServerEnvironment singleton", () => {
 
       expect(environment.environment.type).toBe(production.EnvironmentType.Production);
       expect(environment.storageFactory).toBe(storageFactory);
-      expect(environment.transport).toBeUndefined();
 
       const running = await production.Server.atPort(0)
         .add(production.BoundedContext.singleTenant("NoLegacyTransport").build())
@@ -84,7 +83,6 @@ describe("ServerEnvironment singleton", () => {
   it("gives sibling server builders the same singleton facilities", () => {
     const closed: string[] = [];
     ServerEnvironment.when(EnvironmentType.Local).use({
-      transport: { close: () => closed.push("transport") } as never,
       storageFactory: { close: () => closed.push("storage") } as never,
     });
     const first = Server.atPort(0);
@@ -95,7 +93,6 @@ describe("ServerEnvironment singleton", () => {
     expect(ServerEnvironment.instance().storageFactory).toBe(
       ServerEnvironment.instance().storageFactory,
     );
-    expect(ServerEnvironment.instance().transport).toBe(ServerEnvironment.instance().transport);
     expect(closed).toEqual([]);
   });
 
@@ -187,11 +184,6 @@ describe("ServerEnvironment singleton", () => {
           closed.push("tracer");
         },
       },
-      transport: {
-        close: () => {
-          closed.push("transport");
-        },
-      } as never,
       storageFactory: {
         close: () => {
           closed.push("storage");
