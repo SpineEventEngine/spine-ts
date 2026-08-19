@@ -659,7 +659,7 @@ handlers. The package root exports a small
 executable bus layer, direct Stand, repository-backed handler invocation through
 built contexts, command payload validation and rejection/Ack mapping through
 `SpineServices`, the `SpineServices` route registrar, and this local runtime
-transport binding. The package also exports `Server` as a small HTTP/2
+lifecycle/queue capability. The package also exports `Server` as a small HTTP/2
 owner over `SpineServices`: it defaults to `127.0.0.1`, returns
 `host`/`port`/`baseUrl`, and builds its service routing once when `start()` is
 called. `Environment` and `ServerEnvironment` are one lazy process singleton

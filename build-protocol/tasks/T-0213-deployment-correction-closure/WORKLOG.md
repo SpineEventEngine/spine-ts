@@ -78,3 +78,19 @@
   performance/reliability, and documentation completeness.
 - Review scope is the deployment correction only. Security, dependencies,
   retained-subscription capacity, and GKE rollout policy remain excluded.
+
+## 2026-08-19 — review correction batch
+
+- The complete review wave found no runtime/API/resource defect. Accepted one
+  bounded current-documentation/guard batch.
+- Replaced stale active local-IPC completion requirements with managed replica,
+  Coordinator, Delivery, and subscription acceptance.
+- Marked retired capability rows and former export counts as historical;
+  current inventory remains 247 server and 7 transport exports.
+- The managed README now requires complete application assembly and links the
+  real To-do entry. Architecture wording calls `SingleProcessServerRuntime` a
+  lifecycle/queue capability.
+- Strengthened the removal guard only for active deployment-requirement prose;
+  explicitly historical records remain permitted.
+- Guard, metadata 11/11, documentation audience/snippets/API, cleanup, TSDoc,
+  format, and diff checks passed.

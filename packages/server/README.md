@@ -31,29 +31,46 @@ setting. It is not inferred from CPU cores, and it has no relationship to the
 Delivery shard count chosen by the application.
 
 ```ts
-import { ManagedServerApplication, Server } from "@spine-event-engine/server";
+import { ManagedServerApplication, type RunningServer } from "@spine-event-engine/server";
+
+declare function startCompleteApplicationReplica(endpoint: {
+  host: string;
+  port: number;
+}): Promise<RunningServer>;
 
 await ManagedServerApplication.run({
   processCount: 4,
   host: "0.0.0.0",
   port: 50051,
   moduleUrl: import.meta.url,
-  createServer: ({ host, port }) => Server.atPort(port, { host }).start(),
+  createServer: startCompleteApplicationReplica,
 });
 ```
+
+`startCompleteApplicationReplica()` is application code: it configures the
+production `ServerEnvironment`, opens the application's Delivery facility,
+assembles every Bounded Context, adds them to `Server`, and starts that server
+at the supplied private endpoint. See the complete
+[To-do managed entry](../../examples/todo/src/managed-entry.ts) for a concrete
+implementation.
 
 When another host owns process signals, use the same options with `start()`
 and close the returned handle from that host:
 
 ```ts
-import { ManagedServerApplication, Server } from "@spine-event-engine/server";
+import { ManagedServerApplication, type RunningServer } from "@spine-event-engine/server";
+
+declare function startCompleteApplicationReplica(endpoint: {
+  host: string;
+  port: number;
+}): Promise<RunningServer>;
 
 const managed = await ManagedServerApplication.start({
   processCount: 4,
   host: "0.0.0.0",
   port: 50051,
   moduleUrl: import.meta.url,
-  createServer: ({ host, port }) => Server.atPort(port, { host }).start(),
+  createServer: startCompleteApplicationReplica,
 });
 
 await managed.close();

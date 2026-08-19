@@ -31,5 +31,8 @@
 - Fresh container images passed their contract 5/5. One-node Compose passed
   3/3 and the two-node, four-replica distributed topology passed 4/4, with
   clean resource teardown.
-- Affected specialist reviews.
+- Four focused reviews completed. The accepted current-documentation/guard
+  batch passes the removal guard, metadata 11/11, docs audience/snippets/API,
+  cleanup, TSDoc, formatting, and diff checks.
+- Affected specialist re-reviews.
 - Required release verification, post-merge verification, and remote cleanup.

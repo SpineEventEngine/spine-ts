@@ -2,8 +2,8 @@
 
 Status: Waves 9 through 13 are complete, release-verified, integrated, and
 remotely closed. The T-0203 complete-replica correction is implemented through
-the T-0212 generic-routing removal checkpoint; T-0213 security reconciliation
-is the remaining documented follow-up.
+the T-0212 generic-routing removal checkpoint; deployment-correction release
+closure is the remaining documented follow-up.
 
 Plan date: 2026-07-12
 
@@ -64,8 +64,8 @@ ordered deployment correction, not the next implementation task.
 The Gateway-hosted Integration Hub for physically split server applications is
 outside the first release. T-0212 completed the mandatory deletion of the
 generic signal-routing layer after replacement acceptance; it is not a
-retained fallback. T-0213 owns the explicitly deferred security-record
-reconciliation.
+retained fallback. The remaining closure reconciles only release commands,
+current documentation, and acceptance evidence for this correction.
 
 ## Purpose
 
@@ -80,8 +80,8 @@ true together:
 - the framework user guide describes supported workflows without exposing
   framework internals;
 - the to-do example is runnable, documented, and proves the required real
-  command, delivery, query, subscription, validation, refusal, gRPC, and local
-  multi-process behavior;
+  command, delivery, query, subscription, validation, refusal, gRPC, and
+  managed complete-replica behavior;
 - the final security review is clean or has explicit accepted exceptions;
 - the full repository release gate passes with at least 90% branch coverage;
 - generated output remains reproducible and untracked;
@@ -571,8 +571,8 @@ The project is complete only when every item below has evidence on final
 - The app starts a real local gRPC-compatible server.
 - Black-box tests prove acknowledgement, asynchronous handling, projection
   delivery, query, subscription, validation failure, and business refusal.
-- A real child-process/local-IPC test demonstrates the required local
-  multi-process bus mode without framework-internal application wiring.
+- Real managed-process tests demonstrate complete replicas, Coordinator
+  forwarding, direct Delivery observation, and Gateway subscription fan-out.
 - Example source passes all forbidden end-user API scans.
 - Example README and user guide are copy-paste accurate.
 

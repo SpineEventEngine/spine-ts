@@ -60,6 +60,12 @@ const removedSettingProse = new RegExp(
     "(?:delivery|environment)\\s+close\\s+runs.{0,80}\\btransport\\b",
   "iu",
 );
+const removedActiveRequirementProse = new RegExp(
+  "T-0213 security reconciliation|T-0213 owns.{0,80}security-record reconciliation|" +
+    "proves.{0,120}local\\s+multi-process behavior|" +
+    "real child-process/local-IPC test demonstrates.{0,120}local\\s+multi-process bus mode",
+  "isu",
+);
 const currentPaths = globSync("**/*", {
   nodir: true,
   ignore: ["**/node_modules/**", "**/dist/**", ".git/**"],
@@ -76,6 +82,10 @@ const failures = [
     .filter(existsSync)
     .filter((path) => readFileSync(path, "utf8").match(removedSettingProse) !== null)
     .map((path) => `removed routing setting prose remains: ${path}`),
+  ...["build-protocol/PROJECT_COMPLETION_PLAN.md"]
+    .filter(existsSync)
+    .filter((path) => readFileSync(path, "utf8").match(removedActiveRequirementProse) !== null)
+    .map((path) => `removed active deployment requirement remains: ${path}`),
 ];
 
 if (failures.length > 0) throw new Error(failures.join("\n"));
