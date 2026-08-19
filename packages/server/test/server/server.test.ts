@@ -516,7 +516,6 @@ describe("Server", () => {
     EnvironmentTests.use(EnvironmentType.Production);
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
-      transport: new CloseTrackingTransport([]),
       integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
     });
@@ -1589,7 +1588,6 @@ describe("Server", () => {
     let stops = 0;
     ServerEnvironment.when(EnvironmentType.Local).use({
       storageFactory: new CloseTrackingStorageFactory(closed),
-      transport: new CloseTrackingTransport(closed),
     });
     const gateway = await new Server({
       browser: {
@@ -1616,7 +1614,6 @@ describe("Server", () => {
     let stops = 0;
     ServerEnvironment.when(EnvironmentType.Local).use({
       storageFactory: new CloseTrackingStorageFactory(closed),
-      transport: new CloseTrackingTransport(closed),
     });
     const application = await Server.atPort(0).run();
     const gateway = await new Server({
@@ -1634,7 +1631,7 @@ describe("Server", () => {
 
     await application.close();
 
-    expect(closed).toEqual(["transport", "storage"]);
+    expect(closed).toEqual(["storage"]);
     expect(stops).toBe(0);
     await gateway.close();
     expect(stops).toBe(1);
@@ -1748,19 +1745,18 @@ describe("Server", () => {
     const sigtermListeners = process.listenerCount("SIGTERM");
     ServerEnvironment.when(EnvironmentType.Local).use({
       storageFactory: new FlakyCloseStorageFactory(closed, storageError),
-      transport: new CloseTrackingTransport(closed),
     });
     const server = await Server.atPort(0).run();
 
     try {
       process.emit("SIGTERM");
-      await waitFor(() => closed.length === 2);
+      await waitFor(() => closed.length === 1);
       expect(process.listenerCount("SIGINT")).toBe(sigintListeners + 1);
       expect(process.listenerCount("SIGTERM")).toBe(sigtermListeners + 1);
 
       process.emit("SIGTERM");
-      await waitFor(() => closed.length === 3);
-      expect(closed).toEqual(["transport", "storage", "storage"]);
+      await waitFor(() => closed.length === 2);
+      expect(closed).toEqual(["storage", "storage"]);
       expect(process.listenerCount("SIGINT")).toBe(sigintListeners);
       expect(process.listenerCount("SIGTERM")).toBe(sigtermListeners);
     } finally {
@@ -1851,7 +1847,6 @@ describe("Server", () => {
     const closed: string[] = [];
     ServerEnvironment.when(EnvironmentType.Local).use({
       storageFactory: new CloseTrackingStorageFactory(closed),
-      transport: new CloseTrackingTransport(closed),
     });
     const first = await Server.atPort(0).run();
     const second = await Server.atPort(0).run();
@@ -1865,7 +1860,7 @@ describe("Server", () => {
     expect(closed).toEqual([]);
 
     await second.close();
-    expect(closed).toEqual(["transport", "storage"]);
+    expect(closed).toEqual(["storage"]);
   });
 
   it("retries a failed final run-managed environment close without repeating server cleanup", async () => {
@@ -1874,7 +1869,6 @@ describe("Server", () => {
     let resourceCloses = 0;
     ServerEnvironment.when(EnvironmentType.Local).use({
       storageFactory: new FlakyCloseStorageFactory(closed, storageError),
-      transport: new CloseTrackingTransport(closed),
     });
     const server = await Server.atPort(0)
       .addResource({
@@ -1888,7 +1882,7 @@ describe("Server", () => {
     expect(resourceCloses).toBe(1);
     await expect(server.close()).resolves.toBeUndefined();
     expect(resourceCloses).toBe(1);
-    expect(closed).toEqual(["transport", "storage", "storage"]);
+    expect(closed).toEqual(["storage", "storage"]);
   });
 
   it("serves browser preflight only to configured origins", async () => {
@@ -2700,7 +2694,6 @@ describe("Server", () => {
     const storageError = new Error("storage close failed once");
     ServerEnvironment.when(EnvironmentType.Local).use({
       storageFactory: new FlakyCloseStorageFactory(closed, storageError),
-      transport: new CloseTrackingTransport(closed),
     });
     const environment = ServerEnvironment.instance();
 
@@ -2710,7 +2703,7 @@ describe("Server", () => {
     });
     await expect(environment.close()).resolves.toBeUndefined();
 
-    expect(closed).toEqual(["transport", "storage", "storage"]);
+    expect(closed).toEqual(["storage", "storage"]);
   });
 
   it("closes configured optional singleton facilities", async () => {
@@ -2728,7 +2721,6 @@ describe("Server", () => {
     const closed: string[] = [];
     ServerEnvironment.when(EnvironmentType.Local).use({
       storageFactory: new CloseTrackingStorageFactory(closed),
-      transport: new CloseTrackingTransport(closed),
     });
     const environment = ServerEnvironment.instance();
     const server = await Server.atPort(0)
@@ -2747,14 +2739,13 @@ describe("Server", () => {
 
     expect(closed).toEqual(["session", "resource"]);
     await environment.close();
-    expect(closed).toEqual(["session", "resource", "transport", "storage"]);
+    expect(closed).toEqual(["session", "resource", "storage"]);
   });
 
   it("cleans up owned resources but leaves the singleton open when listener open fails", async () => {
     const closed: string[] = [];
     ServerEnvironment.when(EnvironmentType.Local).use({
       storageFactory: new CloseTrackingStorageFactory(closed),
-      transport: new CloseTrackingTransport(closed),
     });
     const environment = ServerEnvironment.instance();
     const first = await Server.atPort(0).start();
@@ -2773,7 +2764,7 @@ describe("Server", () => {
       expect(closed).toEqual(["resource"]);
       await first.close();
       await environment.close();
-      expect(closed).toEqual(["resource", "transport", "storage"]);
+      expect(closed).toEqual(["resource", "storage"]);
     } finally {
       await first.close();
     }

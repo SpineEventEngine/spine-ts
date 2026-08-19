@@ -15,3 +15,10 @@ deterministic preflight, reviews, isolated integration, and post-merge proof.
 - `pnpm install --lockfile-only` refreshed dependency resolution but exited
   nonzero with `ERR_PNPM_IGNORED_BUILDS` for `zeromq@6.5.0`; it is not
   acceptance evidence and needs removal/audit during convergence.
+
+## Retained behavior and convergence
+
+- `pnpm exec vitest run packages/server/test/server/server.test.ts
+  packages/transport/test/memory/message-transport.test.ts` passed 126 tests.
+- `pnpm check:t0212-removed-routing` passed after deleting current source,
+  package, test, fixture, export, and normative-document references.

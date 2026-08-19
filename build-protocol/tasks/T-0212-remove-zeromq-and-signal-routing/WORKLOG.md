@@ -28,3 +28,13 @@
   reported an ignored historical ZeroMQ build, which requires lock audit.
 - This is an implementation checkpoint only. Current docs/API inventory and
   remaining tests still require cleanup before any green or completion claim.
+
+## 2026-08-19 — convergence
+
+- Rewrote the remaining current normative API and architecture documents around
+  ServerEnvironment, IntegrationBroker message channels, normal generated
+  services, managed replicas, Coordinator, Gateway, and durable Delivery.
+- RED-30 now passes: `pnpm check:t0212-removed-routing` exits zero.
+- Focused retained server and memory-channel tests pass (126 tests). The
+  canonical task verifier was started with coverage after this green gate; its
+  final result must be recorded separately before completion.
