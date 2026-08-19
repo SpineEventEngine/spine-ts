@@ -105,6 +105,19 @@
   recorded in `REVIEW.md`. One correction batch returns to the existing
   implementation context before affected re-review.
 
+## 2026-08-19 — review convergence
+
+- Restored retained in-memory channel validation, ordering, failure,
+  defensive-copy, and factory-close lifecycle coverage without restoring any
+  deleted adapter or generic routing API.
+- Corrected current user/server/API/architecture/specification/quality and
+  completion-plan documentation; strengthened RED-30 for deleted-setting prose.
+- The final three stale `Server` lifecycle TSDoc comments were corrected at
+  `21a8cf411`; focused lifecycle verification passed 51/51.
+- Style, TypeScript/API documentation, documentation completeness, and
+  performance/reliability now all pass with no P0–P2 findings. Final
+  post-review verification is next.
+
 ## 2026-08-19 — residual affected-review correction
 
 - Removed the remaining current server README/reference claims that

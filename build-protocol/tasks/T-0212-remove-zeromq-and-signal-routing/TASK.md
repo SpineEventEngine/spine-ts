@@ -1,6 +1,6 @@
 # T-0212 — Remove ZeroMQ and generic signal routing
 
-**Status:** Review-ready
+**Status:** Final verification
 
 **Baseline:** `origin/main@bc65f784856db4040b28f0b0b7ce2c163adc601e`
 
