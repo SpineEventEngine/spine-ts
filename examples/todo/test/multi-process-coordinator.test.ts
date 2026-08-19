@@ -30,10 +30,14 @@ describe("To-Do multi-process Coordinator", () => {
   ] as const)("closes all replicas once after %s", async (signal, close, expectedExitCode) => {
     const handlers = new Map<string, () => void>();
     vi.spyOn(process, "once").mockImplementation((event, listener) => {
-      if (typeof event === "string") handlers.set(event, () => listener());
+      if (typeof event === "string") {
+        handlers.set(event, () => {
+          listener();
+        });
+      }
       return process;
     });
-    const handle = { close: vi.fn(close) };
+    const handle = { ready: true, close: vi.fn(close) };
 
     runTodoCoordinator(handle, {
       host: "127.0.0.1",

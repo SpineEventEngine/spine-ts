@@ -43,5 +43,5 @@ export function runTodoCoordinator(
   };
   process.once("SIGINT", close);
   process.once("SIGTERM", close);
-  console.log(`To-Do multi-process Coordinator ready at ${settings.host}:${settings.port}`);
+  console.log(`To-Do multi-process Coordinator ready at ${settings.host}:${settings.port.toString()}`);
 }
