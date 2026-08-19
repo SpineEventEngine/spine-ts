@@ -23,6 +23,19 @@ test("local image builds regenerate application output before packing it", () =>
   );
 });
 
+test("the Delivery-only image target prepares only Delivery runtime artifacts", () => {
+  const builder = readFileSync(new URL("build-local-images.mjs", containerRoot), "utf8");
+  const plan = builder.slice(
+    builder.indexOf('"simple-delivery-server": {'),
+    builder.indexOf("const requestedTarget"),
+  );
+
+  assert.match(plan, /packages\/delivery-server/u);
+  assert.match(plan, /pnpm", \["exec", "tsc", "-b", "packages\/delivery-server"\]/u);
+  assert.doesNotMatch(plan, /examples\/message-board\/web/u);
+  assert.doesNotMatch(plan, /\["typecheck:build"\]/u);
+});
+
 test("local images have a fixed build contract", () => {
   assert.equal(existsSync(new URL("Dockerfile", containerRoot)), true);
   assert.equal(existsSync(new URL("build-local-images.mjs", containerRoot)), true);

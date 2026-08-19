@@ -18,7 +18,7 @@ const packageManager = JSON.parse(
 const context = mkdtempSync(join(tmpdir(), "spine-message-board-images-"));
 const tarballs = join(context, "tarballs");
 const store = join(context, "pnpm-store");
-const packages = [
+const fullPackages = [
   "packages/auth",
   "packages/client-node",
   "packages/client-react",
@@ -43,6 +43,17 @@ const targets = [
   "simple-delivery-server",
   "message-board-web",
 ];
+const targetPlans = {
+  "simple-delivery-server": {
+    packages: ["packages/proto", "packages/delivery-server"],
+    build() {
+      phase("generate Delivery Protobuf artifacts");
+      run("pnpm", ["proto:generate"]);
+      phase("build Delivery server");
+      run("pnpm", ["exec", "tsc", "-b", "packages/delivery-server"]);
+    },
+  },
+};
 const requestedTarget = process.argv[2] === "--target" ? process.argv[3] : undefined;
 if (
   process.argv.length > (requestedTarget === undefined ? 2 : 4) ||
@@ -50,17 +61,22 @@ if (
 )
   throw new Error(`Usage: ${process.argv[1]} [--target <${targets.join("|")}>]`);
 const selectedTargets = requestedTarget === undefined ? targets : [requestedTarget];
+const targetPlan = requestedTarget === undefined ? undefined : targetPlans[requestedTarget];
+const packages = targetPlan?.packages ?? fullPackages;
 const cleanup = new BuildContextCleanup(context);
 
 cleanup.install();
 try {
   mkdirSync(tarballs);
-  phase("build Message Board application");
-  run("pnpm", ["typecheck:build"]);
-  phase("build stock browser UI");
-  run("pnpm", ["--dir", "examples/message-board/web", "build"], {
-    VITE_MESSAGE_BOARD_GATEWAY_URL: "http://localhost:18080",
-  });
+  if (targetPlan !== undefined) targetPlan.build();
+  else {
+    phase("build Message Board application");
+    run("pnpm", ["typecheck:build"]);
+    phase("build stock browser UI");
+    run("pnpm", ["--dir", "examples/message-board/web", "build"], {
+      VITE_MESSAGE_BOARD_GATEWAY_URL: "http://localhost:18080",
+    });
+  }
   phase("pack local artifacts");
   for (const source of packages) {
     run("pnpm", [
