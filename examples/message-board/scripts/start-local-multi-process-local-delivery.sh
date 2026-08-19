@@ -7,7 +7,17 @@ pids=()
 coordinator_log=$(mktemp)
 gateway_log=$(mktemp)
 ui_log=$(mktemp)
-cleanup() { for pid in "${pids[@]:-}"; do kill "$pid" 2>/dev/null || true; done; wait "${pids[@]:-}" 2>/dev/null || true; docker rm -f "$name-datastore" "${MESSAGE_BOARD_DELIVERY_CONTAINER:-}" 2>/dev/null || true; rm -f "$coordinator_log" "$gateway_log" "$ui_log"; }
+cleanup() {
+  trap - EXIT INT TERM
+  docker rm -f "$name-datastore" "${MESSAGE_BOARD_DELIVERY_CONTAINER:-}" 2>/dev/null || true
+  for pid in "${pids[@]:-}"; do kill "$pid" 2>/dev/null || true; done
+  for pid in "${pids[@]:-}"; do
+    for attempt in $(seq 1 5); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+    kill -KILL "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  done
+  rm -f "$coordinator_log" "$gateway_log" "$ui_log"
+}
 trap cleanup EXIT INT TERM
 docker run --rm --name "$name-datastore" -p 8081:8081 gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators gcloud emulators firestore start --database-mode=datastore-mode --host-port=0.0.0.0:8081 --quiet & pids+=($!)
 for attempt in $(seq 1 30); do curl --fail --silent http://127.0.0.1:8081 >/dev/null 2>&1 && break; kill -0 "${pids[0]}" 2>/dev/null || exit 1; sleep 1; done
