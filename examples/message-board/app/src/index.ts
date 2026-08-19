@@ -270,7 +270,15 @@ export class MessageBoardApplication {
     return (await this.#server(options, storageFactory, false)).run();
   }
 
-  /** Starts one native complete replica without installing process shutdown handlers. */
+  /**
+   * Starts one native complete replica without installing process shutdown handlers.
+   *
+   * @param options Supplies the child listener configuration.
+   * @param storageFactory Stores the replica state.
+   * @param deliveryStrategy Selects Delivery shards for the replica.
+   * @param subscriptionRegistry Holds volatile child subscription state.
+   * @returns The started native application server.
+   */
   async startManagedApplication(
     options: BoardServerOptions,
     storageFactory: StorageFactory,
