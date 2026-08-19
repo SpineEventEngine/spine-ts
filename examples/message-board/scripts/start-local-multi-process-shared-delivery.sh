@@ -21,4 +21,5 @@ docker logs "$delivery_id" 2>&1 | grep -q 'Delivery server listening' || {
 export DELIVERY_SERVER_URL=http://127.0.0.1:8484
 export MESSAGE_BOARD_DELIVERY_MODE=shared
 export MESSAGE_BOARD_DELIVERY_CONTAINER="$delivery_id"
+export NODE_ENV=production
 exec "$root/examples/message-board/scripts/start-local-multi-process-local-delivery.sh"
