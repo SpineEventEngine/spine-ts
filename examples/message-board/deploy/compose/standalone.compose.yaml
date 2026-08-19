@@ -1,4 +1,8 @@
 services:
+  web:
+    image: spine-ts/message-board-web:local
+    environment: { VITE_MESSAGE_BOARD_GATEWAY_URL: http://localhost:18080 }
+
   datastore:
     image: gcr.io/google.com/cloudsdktool/google-cloud-cli@sha256:cda01b8c880e9161992c3fd61d7d0e153b4dd073aa4a9d62ad79243907cf8dd4
     command:

@@ -18,6 +18,7 @@ test("declares a combined topology with its durable registry and one delivery se
   assert.match(document, /^services:/mu);
   assert.match(document, /^ {2}combined:/mu);
   assert.match(document, /^ {2}envoy:/mu);
+  assert.match(document, /^ {2}web:/mu);
   assert.match(document, /^ {2}delivery:/mu);
   assert.match(document, /^ {2}datastore:/mu);
   assert.match(document, /SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-combined/mu);
@@ -34,6 +35,7 @@ test("declares one local-fixture gateway and one managed complete-replica node",
   assert.match(document, /^ {2}gateway:/mu);
   assert.doesNotMatch(document, /^ {2}gateway-[0-9]+:/mu);
   assert.match(document, /^ {2}envoy:/mu);
+  assert.match(document, /^ {2}web:/mu);
   assert.match(document, /^ {2}delivery:/mu);
   assert.match(document, /BACKEND_URLS: http:\/\/application-node:8080/mu);
   assert.match(document, /PROCESS_COUNT: "2"/u);
