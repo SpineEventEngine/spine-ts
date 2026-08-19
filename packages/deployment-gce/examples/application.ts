@@ -135,7 +135,8 @@ const GceApplicationEntrypointValues = Object.freeze({
       try {
         await application.close();
       } catch (cleanup) {
-        if (cleanup instanceof AggregateError) failures.push(...cleanup.errors);
+        if (cleanup instanceof AggregateError)
+          for (const cleanupError of cleanup.errors) failures.push(cleanupError);
         else failures.push(cleanup);
       }
       if (failures.length === 1) throw error;

@@ -222,8 +222,8 @@ describe("the GKE deployment guide", () => {
 
     for (const name of ["application_process_count", "delivery_shard_count"] as const) {
       const declaration = variables.slice(
-        variables.indexOf(`variable \"${name}\"`),
-        variables.indexOf("\nvariable ", variables.indexOf(`variable \"${name}\"`) + 1),
+        variables.indexOf(`variable "${name}"`),
+        variables.indexOf("\nvariable ", variables.indexOf(`variable "${name}"`) + 1),
       );
       expect(declaration).not.toMatch(/default\s*=/u);
       expect(values).toMatch(new RegExp(`^${name}\\s*=`, "mu"));

@@ -13,9 +13,15 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import type { RunningServer } from "@spine-event-engine/server";
+import type {
+  ManagedServerApplicationHandle,
+  ManagedServerApplicationOptions,
+  RunningServer,
+} from "@spine-event-engine/server";
 
-const managed = vi.hoisted(() => ({ run: vi.fn() }));
+const managed = vi.hoisted(() => ({
+  run: vi.fn<(options: ManagedServerApplicationOptions) => Promise<ManagedServerApplicationHandle>>(),
+}));
 
 vi.mock("@spine-event-engine/server", () => ({
   ManagedServerApplication: { run: managed.run },
@@ -25,8 +31,8 @@ const { ApplicationEntrypoint } = await import("../../examples/application.js");
 
 describe("the GKE managed application entrypoint", () => {
   it("starts the Coordinator with explicit deployer counts and loopback-only children", async () => {
-    const handle = { ready: true, close: vi.fn(async () => undefined) };
-    const createServer = vi.fn(async () => runningServer());
+    const handle = { ready: true, close: vi.fn(() => Promise.resolve()) };
+    const createServer = vi.fn(() => Promise.resolve(runningServer()));
     managed.run.mockResolvedValueOnce(handle);
 
     await expect(
@@ -52,15 +58,15 @@ describe("the GKE managed application entrypoint", () => {
   });
 
   it("passes optional synchronization and restart configuration through unchanged", async () => {
-    const handle = { ready: true, close: vi.fn(async () => undefined) };
-    const synchronize = vi.fn(async () => undefined);
+    const handle = { ready: true, close: vi.fn(() => Promise.resolve()) };
+    const synchronize = vi.fn(() => Promise.resolve());
     const restart = { initialDelayMs: 10 };
     managed.run.mockResolvedValueOnce(handle);
 
     await ApplicationEntrypoint.run(
       {
         moduleUrl: import.meta.url,
-        createServer: async () => runningServer(),
+        createServer: () => Promise.resolve(runningServer()),
         synchronize,
         restart,
       },
