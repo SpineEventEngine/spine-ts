@@ -102,3 +102,5 @@
   T-0042 package inventory, accepted exclusions, and taxonomy still looked
   current. Labeled those sections explicitly historical without altering the
   correction's verified current API inventory.
+- Final affected documentation and reliability re-reviews passed. All four
+  focused review concerns are clean with no remaining P0-P2 finding.

@@ -34,5 +34,5 @@
 - Four focused reviews completed. The accepted current-documentation/guard
   batch passes the removal guard, metadata 11/11, docs audience/snippets/API,
   cleanup, TSDoc, formatting, and diff checks.
-- Affected specialist re-reviews.
+- All affected specialist re-reviews pass with no remaining P0-P2 finding.
 - Required release verification, post-merge verification, and remote cleanup.
