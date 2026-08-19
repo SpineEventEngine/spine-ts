@@ -49,7 +49,7 @@ docker logs "$delivery_id" 2>&1 | grep -q 'Delivery server listening' || {
 }
 
 datastore_id=$(docker run --detach --name "$name-datastore" -p 8081:8081 \
-  gcr.io/google.com/cloudsdktool/google-cloud-cli:578.0.0-emulators \
+  google/cloud-sdk:578.0.0-emulators \
   gcloud emulators firestore start --database-mode=datastore-mode --host-port=0.0.0.0:8081 --quiet)
 for attempt in $(seq 1 30); do
   curl --fail --silent http://127.0.0.1:8081 >/dev/null 2>&1 && break

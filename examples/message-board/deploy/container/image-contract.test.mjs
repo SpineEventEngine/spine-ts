@@ -10,7 +10,7 @@ import test from "node:test";
 import { URL } from "node:url";
 
 const containerRoot = new URL(".", import.meta.url);
-const datastoreEmulator = "gcr.io/google.com/cloudsdktool/google-cloud-cli:578.0.0-emulators";
+const datastoreEmulator = "google/cloud-sdk:578.0.0-emulators";
 
 test("local image builds regenerate application output before packing it", () => {
   const builder = readFileSync(new URL("build-local-images.mjs", containerRoot), "utf8");

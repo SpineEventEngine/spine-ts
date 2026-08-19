@@ -1,6 +1,6 @@
 services:
   datastore:
-    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:578.0.0-emulators
+    image: google/cloud-sdk:578.0.0-emulators
     command:
       [
         gcloud,
