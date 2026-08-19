@@ -95,3 +95,12 @@
 - The Desktop surface does not expose child runtime-model telemetry. The
   immutable explicit dispatch/profile is retained as evidence; no subagent may
   spawn another subagent.
+
+## 2026-08-19 — review wave disposition
+
+- Reliability passed with no findings. TypeScript/API, style, and documentation
+  reviews found one consolidated documentation-removal gap; style also found
+  over-deleted retained in-memory message-channel regression coverage.
+- The complete accepted finding batch and explicit correction-owner profile are
+  recorded in `REVIEW.md`. One correction batch returns to the existing
+  implementation context before affected re-review.
