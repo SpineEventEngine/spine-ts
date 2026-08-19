@@ -43,10 +43,6 @@ services:
       DELIVERY_SERVER_URL: http://delivery:8484
       PROCESS_COUNT: "2"
       DELIVERY_SHARD_COUNT: "2"
-      MESSAGE_BOARD_SESSION_ISSUER: message-board
-      MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
-      MESSAGE_BOARD_SESSION_KEY_ID: compose-fixture
-      MESSAGE_BOARD_SESSION_PRIVATE_KEY: ${MESSAGE_BOARD_SESSION_PRIVATE_KEY:?Set MESSAGE_BOARD_SESSION_PRIVATE_KEY to a P-256 PKCS8 PEM.}
     depends_on:
       datastore:
         condition: service_healthy
@@ -64,10 +60,6 @@ services:
       SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-standalone
       DATASTORE_PROJECT_ID: message-board-compose
       DATASTORE_EMULATOR_HOST: datastore:8081
-      MESSAGE_BOARD_SESSION_ISSUER: message-board
-      MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
-      MESSAGE_BOARD_SESSION_KEY_ID: compose-fixture
-      MESSAGE_BOARD_SESSION_PRIVATE_KEY: ${MESSAGE_BOARD_SESSION_PRIVATE_KEY:?Set MESSAGE_BOARD_SESSION_PRIVATE_KEY to a P-256 PKCS8 PEM.}
     networks:
       default:
         aliases:

@@ -22,11 +22,7 @@ test("declares a combined topology with its durable registry and one delivery se
   assert.match(document, /^ {2}datastore:/mu);
   assert.match(document, /SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-combined/mu);
   assert.match(document, /spine-ts\/simple-delivery-server:local/u);
-  assert.match(
-    document,
-    /MESSAGE_BOARD_SESSION_PRIVATE_KEY: \$\{MESSAGE_BOARD_SESSION_PRIVATE_KEY:\?/u,
-  );
-  assert.doesNotMatch(document, /BEGIN PRIVATE KEY/u);
+  assert.doesNotMatch(document, /MESSAGE_BOARD_SESSION_/u);
   assert.doesNotMatch(document, /replicas:/u);
 });
 
@@ -47,18 +43,11 @@ test("declares one local-fixture gateway and one managed complete-replica node",
   assert.doesNotMatch(document, /LOCAL_STATIC_BACKENDS/u);
   assert.match(document, /SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-standalone/mu);
   assert.match(document, /DATASTORE_EMULATOR_HOST: datastore:8081/mu);
-  assert.match(document, /MESSAGE_BOARD_SESSION_ISSUER: message-board/mu);
-  assert.match(document, /MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web/mu);
-  assert.match(document, /MESSAGE_BOARD_SESSION_KEY_ID: compose-fixture/mu);
   assert.match(
     document,
     /application-node:[\s\S]*?depends_on:[\s\S]*?delivery:[\s\S]*?condition: service_healthy/mu,
   );
-  assert.match(
-    document,
-    /MESSAGE_BOARD_SESSION_PRIVATE_KEY: \$\{MESSAGE_BOARD_SESSION_PRIVATE_KEY:\?/u,
-  );
-  assert.doesNotMatch(document, /BEGIN PRIVATE KEY/u);
+  assert.doesNotMatch(document, /MESSAGE_BOARD_SESSION_/u);
   assert.equal((document.match(/spine-ts\/simple-delivery-server:local/gu) ?? []).length, 1);
 });
 

@@ -93,8 +93,7 @@ explicit static fixture and accepts legacy `BACKEND_URL`. A missing registry nam
 browser-mode process before it opens a listener. Application data uses
 application Datastore storage; gateway subscription registry storage is
 separate. Production browser processes also require the shared
-`MESSAGE_BOARD_SESSION_ISSUER`, `MESSAGE_BOARD_SESSION_AUDIENCE`,
-`MESSAGE_BOARD_SESSION_KEY_ID`, and `MESSAGE_BOARD_SESSION_PRIVATE_KEY` values.
+The public demo gateway has no browser credential configuration.
 Each entrypoint constructs one Datastore client from
 `DATASTORE_PROJECT_ID` and hands that exact client to the storage factory.
 It also gives the storage factory the application's generated Protobuf type

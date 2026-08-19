@@ -9,11 +9,6 @@ const root = dirname(fileURLToPath(import.meta.url));
 const standalone = join(root, "standalone.compose.yaml");
 const combined = join(root, "combined.compose.yaml");
 const rpcClient = join(root, "rpc-client.mjs");
-const sessionKey = `-----BEGIN PRIVATE KEY-----
-MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQguffSvDX1/JxpSa58
-umttcOhLktfYmydcd8IV4+hm9zGhRANCAASbBkf9sjyAX3qpSQ0s3nh3pIK2IbeY
-WOYLX8/ohZI0479Vp6ZOV1NXnKt1c0e9ovpoGmfUuccITMasHL/rbs+3
------END PRIVATE KEY-----`;
 
 test("Compose readiness ignores a prior container incarnation's readiness log", () => {
   const startedAt = "2026-08-03T12:00:00.000Z";
@@ -121,7 +116,7 @@ function run(project, compose, arguments_, ignoreFailure = false) {
       ["compose", "--project-name", project, "--file", compose, ...arguments_],
       {
         encoding: "utf8",
-        env: { ...process.env, MESSAGE_BOARD_SESSION_PRIVATE_KEY: sessionKey },
+        env: process.env,
         timeout: 90_000,
       },
     );
@@ -228,8 +223,6 @@ function client(project, service, mode, subscription) {
       `MODE=${mode}`,
       "--env",
       `RUN_ID=${project}`,
-      "--env",
-      `MESSAGE_BOARD_SESSION_PRIVATE_KEY=${sessionKey}`,
       ...(subscription === undefined ? [] : ["--env", `SUBSCRIPTION=${subscription}`]),
       "--entrypoint",
       "node",

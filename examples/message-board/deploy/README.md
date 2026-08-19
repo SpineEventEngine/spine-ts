@@ -53,7 +53,6 @@ Create the signing key once; keep this file out of source control:
 
 ```bash
 openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out session-key.pem
-export MESSAGE_BOARD_SESSION_PRIVATE_KEY="$(cat session-key.pem)"
 ```
 
 Set a P-256 PKCS#8 private key, then start the combined reference:
@@ -84,7 +83,6 @@ the references:
 ```bash
 kubectl create secret generic message-board-storage --from-literal=DATASTORE_PROJECT_ID=message-board-production
 # Add DATASTORE_EMULATOR_HOST only for a local emulator test.
-kubectl create secret generic message-board-runtime --from-file=MESSAGE_BOARD_SESSION_PRIVATE_KEY=session-key.pem
 kubectl create secret tls message-board-envoy-tls --cert=tls.crt --key=tls.key
 ```
 

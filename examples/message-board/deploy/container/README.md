@@ -43,8 +43,7 @@ The images set `NODE_ENV=production`. Supply these values when starting them:
 | Delivery server          | `HOST`, `PORT`                                                                                                                                     |
 
 Every browser process additionally requires one shared
-`MESSAGE_BOARD_SESSION_ISSUER`, `MESSAGE_BOARD_SESSION_AUDIENCE`,
-`MESSAGE_BOARD_SESSION_KEY_ID`, and `MESSAGE_BOARD_SESSION_PRIVATE_KEY`.
+No browser credential or signing value is required for this public demo.
 Each process constructs a Datastore client from
 `DATASTORE_PROJECT_ID` and passes that same client into its storage factory.
 Browser-capable replicas must share both the signing values and the registry

@@ -27,7 +27,7 @@ for (const mode of ["combined", "standalone"]) {
     assert.match(document, /terminationGracePeriodSeconds:/u);
     assert.match(document, /secretRef:/u);
     assert.match(document, /configMapRef:/u);
-    assert.match(document, /MESSAGE_BOARD_SESSION_ISSUER/u);
+    assert.doesNotMatch(document, /MESSAGE_BOARD_SESSION_/u);
     assert.match(document, /secretRef: \{ name: message-board-runtime \}/u);
     assert.doesNotMatch(document, /kind: Secret[\s\S]*name: message-board-runtime/u);
     assert.match(document, /name: message-board-envoy-config/u);

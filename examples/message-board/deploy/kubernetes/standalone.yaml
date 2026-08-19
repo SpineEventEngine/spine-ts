@@ -6,9 +6,6 @@ data:
   BROWSER_ORIGIN: https://message-board.example.test
   SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-production
   DELIVERY_SERVER_URL: http://simple-delivery-server:8484
-  MESSAGE_BOARD_SESSION_ISSUER: message-board
-  MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
-  MESSAGE_BOARD_SESSION_KEY_ID: replace-on-rotation
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:

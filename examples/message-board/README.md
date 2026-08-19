@@ -152,8 +152,12 @@ pnpm --config.verify-deps-before-run=false --dir examples/message-board/web test
 The browser suite needs Playwright browsers; install them once with
 `pnpm exec playwright install chromium firefox webkit`.
 
-Local mode uses in-memory application storage, sessions, and subscription
-bindings plus a fixed, non-secret identity for `ada`. It is not a sign-in flow.
+Local mode uses in-memory application storage and subscription bindings. It is
+a public demonstration: the actor ID in each command, query, and subscription
+context becomes the actor reconstructed by the Gateway; no browser credential is
+used. After a reconnect, the UI first queries the current board and then listens
+again. Think of live updates as a doorbell: Gateway remembers which doorbell the
+browser rang, but does not store every ring while the browser is away.
 After a reconnect, the UI must re-query; no subscription stream supplies a
 complete historical record.
 
@@ -208,10 +212,8 @@ request selects one private application node. The
 registry and delivery connections represent shared topology and subscription
 fan-in, not additional unary request routes.
 
-Application code selects and manages its storage. The example has no persisted
-session-revocation facility. Gateway code manages the separate durable subscription
-registry in one namespace, and browser-capable processes share session signing
-values. Operators configure TLS, identity-provider setup, secrets,
+Application code selects and manages its storage. Gateway code manages the separate durable subscription
+registry in one namespace. Operators configure TLS,
 image distribution, network policy, and production delivery infrastructure.
 The reference simple delivery server is in-memory and not highly available;
 the Gateway remembers what a browser watches, not a replayable history of every
