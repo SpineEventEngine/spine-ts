@@ -124,6 +124,25 @@ async function assertConformance(factory: Factory): Promise<void> {
   ]);
 }
 
+async function assertChannelTypeUrlContract(factory: Factory): Promise<void> {
+  const custom = { targetType: "type.spine.examples.todo/spine.examples.todo.TaskCreated" };
+  const publisher = await factory.createPublisher(custom);
+  const subscriber = await factory.createSubscriber(custom);
+  await Promise.all([publisher.close(), subscriber.close()]);
+
+  for (const targetType of [
+    "",
+    " ",
+    "type.spine.examples.todo /spine.examples.todo.TaskCreated",
+    "type.spine.examples.todo",
+    "type.spine.examples.todo/",
+    "type.spine.examples.todo//spine.examples.todo.TaskCreated",
+  ]) {
+    await expect(factory.createPublisher({ targetType })).rejects.toThrow(/targetType|canonical/u);
+    await expect(factory.createSubscriber({ targetType })).rejects.toThrow(/targetType|canonical/u);
+  }
+}
+
 async function assertNativeManifestContract(directory: string, factory: Factory): Promise<void> {
   const proto = await import("@spine-event-engine/proto");
   const targetType = "type.spine.io/wave13.Manifest";
@@ -308,10 +327,12 @@ async function assertNativeManifestContract(directory: string, factory: Factory)
 describe("Wave 13 message transport conformance", () => {
   // prettier-ignore
   it(
-    "RED-21 gives memory and ZeroMQ factories one typed channel, fan-out, stale, FIFO, and close contract",
+    "RED-21 gives memory and ZeroMQ factories canonical type URL, typed channel, fan-out, stale, FIFO, and close contracts",
     async () => {
     expectTransportContractToCompile();
-    await assertConformance(await discoverFactory("../src/index.js", "InMemoryTransportFactory"));
+    const memory = await discoverFactory("../src/index.js", "InMemoryTransportFactory");
+    await assertChannelTypeUrlContract(memory);
+    await assertConformance(memory);
     const zeroMqRoot = (await import("../src/zeromq/index.js")) as Record<string, unknown>;
     expect(zeroMqRoot.createZeroMqTransportFactory).toBeDefined();
     expect(zeroMqRoot.ZeroMqConfig).toBeDefined();
@@ -321,9 +342,9 @@ describe("Wave 13 message transport conformance", () => {
         ipcDirectory: directory,
         adapterIdentity: "wave13-red",
       });
-      await assertConformance(
-        (zeroMqRoot.createZeroMqTransportFactory as (config: unknown) => Factory)(config),
-      );
+      const zeroMq = (zeroMqRoot.createZeroMqTransportFactory as (config: unknown) => Factory)(config);
+      await assertChannelTypeUrlContract(zeroMq);
+      await assertConformance(zeroMq);
       await assertNativeManifestContract(
         directory,
         (zeroMqRoot.createZeroMqTransportFactory as (config: unknown) => Factory)(config),
