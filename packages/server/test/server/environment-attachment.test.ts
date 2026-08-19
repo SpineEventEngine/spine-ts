@@ -1061,24 +1061,24 @@ describe("EnvironmentDeliveryWorker", () => {
       if (this.has(reservationKey)) reservationCleared = true;
       originalClear(this, []);
     });
-    await delivery.inbox.receive(message(target.ready, "reservation-lease-loss"));
     try {
+      await delivery.inbox.receive(message(target.ready, "reservation-lease-loss"));
       worker.notify(scope);
       await until(() => admitted && validations > 0);
+      expect(target.replayed).toEqual([]);
+      expect(
+        (await delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] })).some(
+          ({ signalId }) => signalId === "reservation-lease-loss",
+        ),
+      ).toBe(true);
+
+      worker.stopOwners([scope.owner.key]);
+      await worker.retireOwners([scope.owner.key]);
+      expect(reservationCleared).toBe(true);
     } finally {
       mapSet.mockRestore();
+      mapClear.mockRestore();
     }
-    expect(target.replayed).toEqual([]);
-    expect(
-      (await delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] })).some(
-        ({ signalId }) => signalId === "reservation-lease-loss",
-      ),
-    ).toBe(true);
-
-    worker.stopOwners([scope.owner.key]);
-    await worker.retireOwners([scope.owner.key]);
-    expect(reservationCleared).toBe(true);
-    mapClear.mockRestore();
 
     const recoveryScope = runScope("reservation-lease-recovery", target.ready);
     const recovered = new Worker({

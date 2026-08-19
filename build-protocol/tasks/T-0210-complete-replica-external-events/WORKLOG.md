@@ -229,3 +229,8 @@ only.
   Focused coverage against `02447a1f3` is 1/1 changed executable lines (100%);
   no changed branches. Generated build/typecheck, tooling, scoped ESLint,
   TSDoc/API, cleanup, and diff checks pass.
+- Final maintainability confirmation found one P2 test-isolation issue: the
+  temporary `Map.prototype.clear` spy was restored only on the success path.
+  The test now restores both temporary `Map` prototype spies in `finally`.
+  The exact lease-loss regression passes, as do scoped ESLint, Prettier, and
+  diff hygiene. This test-only correction does not reopen product review.
