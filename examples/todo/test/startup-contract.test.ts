@@ -260,7 +260,13 @@ describe("To-Do managed entrypoint", () => {
     expect(readme).toContain("multi-process-coordinator.ts");
     expect(readme).toContain("multi-process-replica.ts");
     expect(readme).toContain("Event Store");
-    expect(readme).toContain("google-cloud-cli:emulators");
+    const emulatorLauncher = await readFile(
+      "examples/todo/scripts/start-datastore-emulator.sh",
+      "utf8",
+    );
+    const datastoreEmulatorImage = "google/cloud-sdk:578.0.0-emulators";
+    expect(readme).toContain(datastoreEmulatorImage);
+    expect(emulatorLauncher).toContain(datastoreEmulatorImage);
     expect(readme).not.toMatch(/⚠️|\\bwarning\\b|Why is the file called|sha256:/iu);
   });
 });

@@ -46,7 +46,7 @@ examples/todo/scripts/run-multi-process.sh
 ```
 
 The launcher builds the workspace, creates a uniquely named Datastore emulator
-container from `gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators`,
+container from `google/cloud-sdk:578.0.0-emulators`,
 starts the repository's Delivery server, waits for both, then starts the
 parent process that accepts requests and forwards them to workers (the
 Coordinator) in [`multi-process-app.ts`](src/multi-process-app.ts). The parent
