@@ -85,17 +85,13 @@ const topic = create(TopicSchema, {
   context,
 });
 
-try {
-  if (mode === "full") await fullFlow();
-  else if (mode === "distributed-full") await distributedFlow();
-  else if (mode === "subscribe") await createSubscription();
-  else if (mode === "cancel") await cancelSubscription();
-  else if (mode === "assert-cancelled") await assertCancelled();
-  else if (mode === "query") await authoritativeQuery();
-  else throw new Error(`Unknown Compose RPC client mode: ${mode}.`);
-} finally {
-  await signer.close();
-}
+if (mode === "full") await fullFlow();
+else if (mode === "distributed-full") await distributedFlow();
+else if (mode === "subscribe") await createSubscription();
+else if (mode === "cancel") await cancelSubscription();
+else if (mode === "assert-cancelled") await assertCancelled();
+else if (mode === "query") await authoritativeQuery();
+else throw new Error(`Unknown Compose RPC client mode: ${mode}.`);
 
 async function fullFlow() {
   await post("initial", "Compose public query");
