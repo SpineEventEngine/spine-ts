@@ -59,7 +59,7 @@ interface ManagedConfig extends DeploymentConfig {
 
 interface ManagedServerFacilities {
   readonly storageFactory: StorageFactory;
-  readonly delivery: ServerEnvironmentDelivery;
+  readonly delivery?: ServerEnvironmentDelivery;
 }
 
 interface DeploymentContract {
@@ -205,6 +205,14 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     logger?: ILogLayer,
   ): ManagedServerFacilities {
     const storageFactory = MessageBoardDeployment.storage(client);
+    if (environment.MESSAGE_BOARD_DELIVERY_MODE === "local") {
+      ServerEnvironment.when(EnvironmentType.Production).use({
+        storageFactory,
+        ...(logger === undefined ? {} : { logger }),
+        typeRegistry,
+      });
+      return { storageFactory };
+    }
     const delivery = RemoteDelivery.connectTo({
       endpoint: DeploymentValues.url(DeploymentValues.required(environment, "DELIVERY_SERVER_URL")),
     });
