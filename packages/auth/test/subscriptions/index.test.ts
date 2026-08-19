@@ -273,6 +273,48 @@ describe("SubscriptionGateway", () => {
     expect(bindings.size).toBe(0);
   });
 
+  it("keeps an active update stream open beyond the finite-operation timeout", async () => {
+    const bindings = new InMemorySubscriptionBindings({
+      nextId: () => "long-lived-activation",
+      limits: { operationTimeoutMs: 5 },
+      dispose: () => Promise.resolve(),
+    });
+    await bindings.create(canonicalBinding("long-lived-activation", 100));
+    const controller = new AbortController();
+    let settled = false;
+    const active = bindings.activate({
+      id: "long-lived-activation",
+      context: trustedContext(),
+      nowMs: 1,
+      signal: controller.signal,
+      onDefinition: async (_definition, signal) => {
+        await new Promise<void>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              resolve();
+            },
+            { once: true },
+          );
+        });
+      },
+    });
+    void active.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(settled).toBe(false);
+    controller.abort();
+
+    await expect(active).rejects.toThrow("aborted");
+  });
+
   it("retains a naturally completed native activation until cancellation or expiry", async () => {
     const fixture = setup();
     const subscriptionGateway = gateway(fixture);
@@ -922,6 +964,7 @@ describe("SubscriptionGateway", () => {
     });
     await tick();
     const activationOutcome = activating.catch((error: unknown) => error);
+    await bindings.purgeExpired(1);
     await bindings.purgeExpired(1);
     await tick();
     expect(disposeCalls).toBe(0);
