@@ -36,9 +36,10 @@ const removedPaths = [
   "packages/server/test/server/server-context-transport-lifecycle.test.ts",
 ];
 const removedReferences = new RegExp(
-  "ZeroMQ|zeromq|SignalTransport|ContextTransport|RuntimeTransportBinding|" +
+  "ZeroMQ|ZeroMq|zeromq|SignalTransport|ContextTransport|RuntimeTransportBinding|" +
     "TransportTopics|TransportSubscription|TransportRouting|runtime-routing|" +
-    "context-transport|runtime-transport",
+    "context-transport|runtime-transport|environment\\.transport|transport:\\s*" +
+    "(?:new\\s+)?(?:Local)?SignalTransport",
   "u",
 );
 const currentPaths = globSync("**/*", {

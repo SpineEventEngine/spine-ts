@@ -92,6 +92,41 @@ describe("InMemoryTransportFactory", () => {
     expect(values).toEqual([frame("first").typeUrl, frame("second").typeUrl]);
     await Promise.all([subscriber.close(), factory.close()]);
   });
+
+  it("propagates consumer failures through publication and publisher close", async () => {
+    const factory = new InMemoryTransportFactory();
+    const channel = create(ChannelIdSchema, { targetType: "type.spine.io/wave13.Failure" });
+    const subscriber = await factory.createSubscriber(channel);
+    await subscriber.addConsumer(() => {
+      throw new Error("consumer failed");
+    });
+    const publisher = await factory.createPublisher(channel);
+    await expect(publisher.publish(frame("failed"), externalMessage("failed"))).rejects.toThrow(
+      "consumer failed",
+    );
+    await expect(publisher.close()).rejects.toThrow("Accepted message publication failed");
+    await Promise.all([subscriber.close(), factory.close()]);
+  });
+
+  it("defensively copies frames before consumer delivery", async () => {
+    const factory = new InMemoryTransportFactory();
+    const channel = create(ChannelIdSchema, { targetType: "type.spine.io/wave13.Copy" });
+    const subscriber = await factory.createSubscriber(channel);
+    const values: string[] = [];
+    await subscriber.addConsumer((message) => {
+      values.push(message.boundedContextName?.value ?? "");
+      if (message.boundedContextName !== undefined) message.boundedContextName.value = "mutated";
+    });
+    await subscriber.addConsumer((message) => {
+      values.push(message.boundedContextName?.value ?? "");
+    });
+    const publisher = await factory.createPublisher(channel);
+    const message = externalMessage("copy");
+    await publisher.publish(frame("copy"), message);
+    expect(values).toEqual(["memory-test", "memory-test"]);
+    expect(message.boundedContextName?.value).toBe("memory-test");
+    await Promise.all([publisher.close(), subscriber.close(), factory.close()]);
+  });
 });
 
 function frame(value: string) {

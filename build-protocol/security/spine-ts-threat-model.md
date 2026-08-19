@@ -5,6 +5,10 @@ synchronized. SF-013 is the human-accepted Medium same-UID local IPC availabilit
 residual under D-0093. D-0094 remains accepted; D-0096 is coordinator-verified
 and canonically clean. Final focused security review and full verification pass.
 
+T-0212 removed the legacy transport implementation. Its threat-model
+reconciliation is pending T-0213 security review; this document is not
+redesigned by the deletion task.
+
 Baseline: `39f2c6f7`. Immutable implementation and review endpoints are recorded
 in the T-0041 task, work, and review logs.
 
