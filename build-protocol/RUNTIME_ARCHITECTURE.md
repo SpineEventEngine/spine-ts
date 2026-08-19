@@ -95,57 +95,19 @@ Production `ServerEnvironment` requires only `storageFactory` and the
 complete application `typeRegistry`; it can optionally receive an
 `integrationChannelFactory`.
 
-ZeroMQ must not leak into domain, repository, or service APIs. The runtime depends on interfaces such as:
-
-```typescript
-interface SignalTransport {
-  publish(envelope: SignalEnvelope): Promise<void>;
-  subscribe(subscription: SignalSubscription, handler: SignalHandler): Promise<SubscriptionHandle>;
-  request<TReq, TResp>(pattern: RequestPattern<TReq, TResp>, request: TReq): Promise<TResp>;
-  close(): Promise<void>;
-}
-```
-
-The implemented abstraction hides socket types and ZeroMQ-specific envelopes,
-supports adapter-neutral command/event request and publication flows, and manages
-graceful handle closure. The same interface is used by the in-process adapter
-and the same-host ZeroMQ adapter.
-
-T-0016f adds the first executable server-side bridge over this abstraction.
-`RuntimeTransportBinding.open()` consumes a `ServerRuntimeRoutingPlan`, a
-supplied `SignalTransport`, a supplied `SingleProcessServerRuntime`, and
-framework `onCommand` / `onEvent` callbacks. It registers command routes
-with request/respond semantics, registers event routes with publish/subscribe
-semantics, validates incoming generated Spine command/event envelope shape plus
-the enclosed message type URL before runtime intake, and enqueues accepted
-callbacks through the runtime. Its handle is idempotent and closes transport
-registrations before the runtime. It deliberately does not manage the transport
-instance, choose IPC endpoint names, expose ZeroMQ, supervise processes, retain
-delivery attempts, retry work, or create a JVM-style server environment.
-
-This signal-routing authority is separate from cross-context external events.
 Every built `BoundedContext` owns an internal `IntegrationBroker`, which obtains
 a typed `TransportFactory` from `ServerEnvironment`. The factory creates typed
 publisher/subscriber channels carrying only generated `ExternalMessage`
-Protobuf frames. It has no signal kind, subscriber ID, routing plan,
-request/respond operation, or command/query/subscription responsibility.
+Protobuf frames. This private boundary has no request/respond operation,
+routing plan, command/query/subscription responsibility, or process topology.
 
 The broker keeps three logical exchanges distinct: status announces a context
 online; configuration replaces each foreign context's complete wanted-event
 set and withdraws the local set at close; events use one logical channel per
 domain-event type. Local/test environments use `InMemoryTransportFactory`.
 When no factory is configured, each application process uses its shared
-in-memory factory. A configured adapter remains optional for the separate
-external-event transport responsibility. Delivery, retry, replay, and
-durability remain transport responsibilities; the broker adds no Inbox,
-deduplication record, cursor, or retry queue.
-
-## Legacy ZeroMQ Same-Host Adapter
-
-ZeroMQ provides the legacy local IPC path between application-composed Node.js
-processes. It is not used inside CommandBus or EventBus and is not used by the
-complete-replica Coordinator. T-0212 removes this path after its Coordinator,
-Delivery, and subscription replacements have acceptance evidence.
+in-memory factory. The broker adds no Inbox, deduplication record, cursor,
+delivery retry, replay, or durability queue.
 
 ## Process Model
 
@@ -157,11 +119,12 @@ supervises their bounded replacement, and owns a front-facing Coordinator
 listener at the deployer-supplied nonzero port. `ManagedServerApplication.start()`
 starts the same managed cohort without process-signal handlers; its embedding
 host owns signals and closes the returned handle. The Coordinator forwards
-generated unary Command and Query calls once to a READY child; it has no public
-child-topology API and does not yet fan out subscriptions. Delivery stays
-direct between every replica and the shared Delivery Server. The legacy ZeroMQ
-path above is pending T-0212 removal, not a parallel requirement for managed
-deployment.
+generated unary Command and Query calls once to a READY child. The Coordinator
+fans each Gateway-owned logical subscription to the complete replica cohort,
+merges their updates for the one public stream, and has no public child-topology
+API. Delivery stays direct between every replica and the shared Delivery Server;
+managed deployment does not add a second inter-process application-message
+channel.
 
 ## Bus Semantics
 

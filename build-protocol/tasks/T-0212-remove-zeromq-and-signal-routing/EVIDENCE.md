@@ -44,3 +44,21 @@ deterministic preflight, reviews, isolated integration, and post-merge proof.
   branch outcomes (100%); all other runtime changes are deletions,
   declarations, or error-text cleanup.
 - The review-ready checkpoint worktree was clean.
+
+## Residual affected-review correction
+
+- `pnpm exec vitest run packages/transport/test/memory/message-transport.test.ts`
+  passed 7/7, including delayed accepted publication draining through
+  `factory.close()`, idempotent close, and post-close channel rejection.
+- `pnpm check:t0212-removed-routing` passed after the guard added explicit
+  natural-language deleted-setting checks over current normative documents;
+  broad history remains excluded so truthful task/review records are retained.
+- Terminal affected gates:
+  - `pnpm typecheck:tooling` passed.
+  - `pnpm docs:audience:check`, `pnpm docs:snippets:check:generated`, and
+    `pnpm docs:api:check` passed; the API inventory retained all seven
+    transport exports.
+  - `pnpm lint:tsdoc`, `pnpm lint:cleanup`, `pnpm format:check`, targeted
+    Prettier, and `git diff --check` passed.
+- This correction is affected re-review-ready only. It changes no runtime
+  behavior and leaves threat-model redesign explicitly to T-0213.

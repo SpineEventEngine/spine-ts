@@ -21,6 +21,13 @@ const excludedPrefixes = [
   "node_modules/",
   "scripts/check-t0212-removed-routing.mjs",
 ];
+const currentNormativePaths = [
+  "docs/USER_GUIDE.md",
+  "packages/server/README.md",
+  "packages/server/REFERENCE.md",
+  "build-protocol/RUNTIME_ARCHITECTURE.md",
+  "build-protocol/PROJECT_COMPLETION_PLAN.md",
+];
 const removedPaths = [
   "packages/transport/src/zeromq",
   "packages/transport/test/zeromq",
@@ -42,6 +49,12 @@ const removedReferences = new RegExp(
     "(?:new\\s+)?(?:Local)?SignalTransport",
   "u",
 );
+const removedSettingProse = new RegExp(
+  "(?:legacy\\s+)?transport\\s+setting|opens?\\s+(?:legacy\\s+)?runtime\\s+signal\\s+bindings|" +
+    "(?:ServerEnvironment|environment)\\s+(?:exposes|owns|closes).{0,80}\\btransport\\b|" +
+    "(?:delivery|environment)\\s+close\\s+runs.{0,80}\\btransport\\b",
+  "iu",
+);
 const currentPaths = globSync("**/*", {
   nodir: true,
   ignore: ["**/node_modules/**", "**/dist/**", ".git/**"],
@@ -54,6 +67,10 @@ const failures = [
     .filter((path) => !excludedPrefixes.some((prefix) => path.startsWith(prefix)))
     .filter((path) => readFileSync(path, "utf8").match(removedReferences) !== null)
     .map((path) => `removed routing reference remains: ${path}`),
+  ...currentNormativePaths
+    .filter(existsSync)
+    .filter((path) => readFileSync(path, "utf8").match(removedSettingProse) !== null)
+    .map((path) => `removed routing setting prose remains: ${path}`),
 ];
 
 if (failures.length > 0) throw new Error(failures.join("\n"));

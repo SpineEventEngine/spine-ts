@@ -93,6 +93,33 @@ describe("InMemoryTransportFactory", () => {
     await Promise.all([subscriber.close(), factory.close()]);
   });
 
+  it("drains accepted publication when the factory closes and rejects later channels", async () => {
+    const factory = new InMemoryTransportFactory();
+    const channel = create(ChannelIdSchema, { targetType: "type.spine.io/wave13.FactoryClose" });
+    const subscriber = await factory.createSubscriber(channel);
+    const consumerStarted = Promise.withResolvers<void>();
+    const releaseConsumer = Promise.withResolvers<void>();
+    const values: string[] = [];
+    await subscriber.addConsumer(async (message) => {
+      values.push(message.originalMessage?.typeUrl ?? "");
+      consumerStarted.resolve();
+      await releaseConsumer.promise;
+    });
+    const publisher = await factory.createPublisher(channel);
+    const publication = publisher.publish(frame("accepted"), externalMessage("accepted"));
+    await consumerStarted.promise;
+
+    const firstClose = factory.close();
+    expect(factory.close()).toBe(firstClose);
+    releaseConsumer.resolve();
+
+    await Promise.all([publication, firstClose]);
+    expect(values).toEqual([frame("accepted").typeUrl]);
+    await expect(factory.createPublisher(channel)).rejects.toThrow(
+      "In-memory message transport is closed",
+    );
+  });
+
   it("propagates consumer failures through publication and publisher close", async () => {
     const factory = new InMemoryTransportFactory();
     const channel = create(ChannelIdSchema, { targetType: "type.spine.io/wave13.Failure" });

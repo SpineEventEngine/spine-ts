@@ -104,3 +104,22 @@
 - The complete accepted finding batch and explicit correction-owner profile are
   recorded in `REVIEW.md`. One correction batch returns to the existing
   implementation context before affected re-review.
+
+## 2026-08-19 — residual affected-review correction
+
+- Removed the remaining current server README/reference claims that
+  `ServerEnvironment` exposes, configures, or closes a general transport or
+  opens signal bindings. The optional `integrationChannelFactory` remains the
+  sole private IntegrationBroker channel-factory setting.
+- Removed the stale signal adapter, binding, and ZeroMQ architecture section;
+  retained the complete-replica Coordinator, subscription fan-out,
+  process-local broker, and direct Delivery descriptions. Reconciled the
+  completion plan: T-0212 is the completed removal checkpoint, T-0204 is a
+  predecessor, and threat-model reconciliation remains T-0213 work.
+- Extended RED-30's current-normative-document policy for natural-language
+  deleted-setting claims without scanning historical task/review records.
+- Added the retained direct factory-close lifecycle test. It was added before
+  the focused test run; the existing implementation already satisfied this
+  preserved behavior, so no runtime code change was needed.
+- Owner/profile: existing `implementer`, explicitly `gpt-5.6-terra` /
+  `medium`; runtime telemetry unavailable.

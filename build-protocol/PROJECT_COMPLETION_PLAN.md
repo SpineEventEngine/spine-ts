@@ -1,8 +1,9 @@
 # Spine TS Project Completion Plan
 
 Status: Waves 9 through 13 are complete, release-verified, integrated, and
-remotely closed. T-0203 post-Wave-13 complete-replica deployment correction
-planning is current.
+remotely closed. The T-0203 complete-replica correction is implemented through
+the T-0212 generic-routing removal checkpoint; T-0213 security reconciliation
+is the remaining documented follow-up.
 
 Plan date: 2026-07-12
 
@@ -58,11 +59,13 @@ domain semantics or begin Wave 14 package/SPI work.
 The approved architecture is recorded in D-0126 and
 `build-protocol/planning/T-0203_COMPLETE_REPLICA_DEPLOYMENT_PLAN.md`. Product
 planning is accepted. An unexpected child is replaced with bounded backoff
-while surviving children keep serving; T-0204 is the next implementation task.
+while surviving children keep serving. T-0204 is a completed predecessor in the
+ordered deployment correction, not the next implementation task.
 The Gateway-hosted Integration Hub for physically split server applications is
-outside the first release. The generic signal-routing layer is a mandatory
-ordered deletion in T-0212 after replacement acceptance, not a
-retained fallback.
+outside the first release. T-0212 completed the mandatory deletion of the
+generic signal-routing layer after replacement acceptance; it is not a
+retained fallback. T-0213 owns the explicitly deferred security-record
+reconciliation.
 
 ## Purpose
 

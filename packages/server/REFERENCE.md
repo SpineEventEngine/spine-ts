@@ -83,9 +83,8 @@ ServerEnvironment.when(EnvironmentType.Production).use({
 
 `storageFactory` supplies records and events. `typeRegistry` is the complete
 application schema universe used by `ThirdPartyContext` to encode outgoing
-imported events. The optional legacy `transport` setting opens legacy runtime
-signal bindings only when supplied; the Production default omits it. An
-optional `integrationChannelFactory` overrides the process-wide private
+imported events. An optional `integrationChannelFactory` overrides the
+process-wide private
 integration message channel factory. When it is absent, all local bounded
 contexts share one in-memory factory, including in production. Local and test
 environments default storage in memory and use the core registry only as a
@@ -460,8 +459,8 @@ target during the run, and does not prevent independent targets from running.
 
 `Environment` resolves the Node `local` or `production` profile once from
 `NODE_ENV`. `ServerEnvironment` resolves configured facilities once for that
-profile and exposes its `storageFactory`, `transport`, optional `delivery`,
-optional `tracerFactory`, `nodeId`, and `close()` lifecycle. Applications do
+profile and exposes its `storageFactory`, optional `delivery`, optional
+`tracerFactory`, `nodeId`, and `close()` lifecycle. Applications do
 not manage internal server attachments through this public API. Neither API
 authenticates requests or supplies a production scheduler, remote topology,
 storage adapter, or deployment policy.
@@ -473,8 +472,8 @@ environment supplies those ports to both existing delivery paths: direct finite
 invokes `open()` once before attachment admission and coalesces concurrent
 callers; rejection admits no attachment and a later attempt retries open. A
 close-only local delivery remains source-compatible. After attachments retire,
-environment close runs delivery, transport, tracer, then storage and preserves
-retry checkpoints for failed phases.
+environment close runs delivery, tracer, then storage and preserves retry
+checkpoints for failed phases.
 
 `ServerEnvironmentDelivery.source` is optional. When present, its Admin source
 is used by the environment supervisor for remote snapshots and

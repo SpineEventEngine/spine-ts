@@ -74,3 +74,30 @@
   is explicitly deferred to T-0213.
 - Remaining build-protocol wording is being reconciled in this task without
   rewriting truthful historical task and review records.
+
+## Residual affected-review disposition
+
+- The remaining `ServerEnvironment.transport`, signal-binding, and
+  transport-close claims were removed from the current server README and
+  reference. `integrationChannelFactory` now appears only as the optional
+  private IntegrationBroker channel-factory override.
+- `RUNTIME_ARCHITECTURE.md` now describes only process-local IntegrationBroker
+  message channels, ordinary service intake, complete replicas, Coordinator,
+  subscription fan-out, and direct Delivery; the deleted adapter and binding
+  section is gone. The completion plan records T-0212 as the completed removal
+  checkpoint and T-0204 as a predecessor, with security-record reconciliation
+  explicitly deferred to T-0213.
+- RED-30 now separately inspects current normative documents for natural
+  language transport-setting and transport-close claims while continuing to
+  exclude truthful historical task/review records from its broad scan.
+- A direct retained `InMemoryTransportFactory` test proves an accepted delayed
+  publication drains through `factory.close()`, repeated close returns the same
+  promise, and later channel creation rejects. It does not restore a removed
+  adapter or generic routing abstraction.
+- Implementation owner: existing `implementer` role, explicitly configured
+  `gpt-5.6-terra` / `medium`; runtime telemetry remains unavailable on this
+  execution surface.
+- Affected re-review is ready: focused retained behavior, RED-30, tooling
+  typecheck, documentation audience/snippet/API inventory, TSDoc, cleanup,
+  formatting, and diff checks have terminal passing evidence. No runtime
+  behavior changed, and T-0213 remains responsible for threat-model redesign.
