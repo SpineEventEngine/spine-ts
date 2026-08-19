@@ -153,6 +153,38 @@ describe("MessageBoard deployment entrypoints", () => {
       logger: calls.logger,
     });
   });
+
+  it("loads the Coordinator parent or replica child branch without starting both", async () => {
+    vi.resetModules();
+    const coordinator = vi.fn();
+    const replica = vi.fn();
+    vi.doMock("../src/multi-process-coordinator.js", () => {
+      coordinator();
+      return {};
+    });
+    vi.doMock("../src/multi-process-replica.js", () => {
+      replica();
+      return {};
+    });
+    delete process.env.SPINE_MANAGED_SERVER_CHILD;
+    await import("../src/multi-process-app.js");
+    expect(coordinator).toHaveBeenCalledOnce();
+    expect(replica).not.toHaveBeenCalled();
+
+    vi.resetModules();
+    vi.doMock("../src/multi-process-coordinator.js", () => {
+      coordinator();
+      return {};
+    });
+    vi.doMock("../src/multi-process-replica.js", () => {
+      replica();
+      return {};
+    });
+    process.env.SPINE_MANAGED_SERVER_CHILD = "true";
+    await import("../src/multi-process-app.js");
+    expect(replica).toHaveBeenCalledOnce();
+    delete process.env.SPINE_MANAGED_SERVER_CHILD;
+  });
 });
 
 function startupMocks() {
