@@ -84,18 +84,16 @@ For tests, a direct/local mode may exist, but it must be clearly marked as a
 testing utility and must preserve the same observable ordering guarantees as
 much as possible.
 
-## Legacy Signal Transport (pending T-0212 removal)
+## Integration message channels
 
-The generic `SignalTransport` and its same-host ZeroMQ adapter are legacy
-application-composed IPC. They remain documented only while T-0212 removes
-their command/event deployment path. The current complete-replica Coordinator
-does not use them: it forwards generated unary Command and Query HTTP/2 calls
-to ordinary child `SpineServices`, which remain the only Bus intake.
+The process-local IntegrationBroker boundary uses typed message channels for
+generated `ExternalMessage` exchange. The current complete-replica
+Coordinator forwards generated unary Command and Query HTTP/2 calls to ordinary
+child `SpineServices`, which remain the only Bus intake.
 
-Production `ServerEnvironment` requires only `storageFactory` and the complete
-application `typeRegistry`. Its legacy `transport` setting is optional: when
-supplied it opens the legacy runtime bindings below; when omitted, as in the
-default production configuration, no legacy signal bindings are opened.
+Production `ServerEnvironment` requires only `storageFactory` and the
+complete application `typeRegistry`; it can optionally receive an
+`integrationChannelFactory`.
 
 ZeroMQ must not leak into domain, repository, or service APIs. The runtime depends on interfaces such as:
 
