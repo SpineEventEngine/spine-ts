@@ -29,7 +29,7 @@ import { spawnSync } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
 
 import { TodoProcessSignals } from "../src/process.js";
-import { readMultiProcessSettings } from "../dist/src/multi-process-settings.js";
+import { readMultiProcessSettings } from "../src/multi-process-settings.js";
 
 const examplePackages = [
   "examples/projects/package.json",

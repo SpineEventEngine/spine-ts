@@ -74,9 +74,9 @@ vi.mock("@spine-event-engine/server", () => ({
   ServerEnvironment: { when: vi.fn(() => ({ use: calls.environmentUse })) },
   UniformAcrossAllShards: { forNumber: vi.fn(() => calls.shardStrategy) },
 }));
-vi.mock("../dist/src/todo-app.js", () => ({ createTodoContext: calls.createContext }));
+vi.mock("../src/todo-app.js", () => ({ createTodoContext: calls.createContext }));
 
-import { createTodoReplica } from "../dist/src/multi-process-replica.js";
+import { createTodoReplica } from "../src/multi-process-replica.js";
 
 describe("To-Do multi-process replica", () => {
   it("assembles storage, Delivery, and a ready server from the assigned child endpoint", async () => {

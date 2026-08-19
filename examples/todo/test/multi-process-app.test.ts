@@ -57,17 +57,17 @@ describe("To-Do multi-process app entry selection", () => {
       await options.synchronize?.();
       return { ready: true, close: vi.fn(() => Promise.resolve()) };
     });
-    vi.doMock("../dist/src/multi-process-coordinator.js", () => ({
+    vi.doMock("../src/multi-process-coordinator.js", () => ({
       runTodoCoordinator: calls.coordinator,
     }));
-    vi.doMock("../dist/src/multi-process-replica.js", () => ({
+    vi.doMock("../src/multi-process-replica.js", () => ({
       createTodoReplica: calls.createReplica,
     }));
-    vi.doMock("../dist/src/multi-process-settings.js", () => ({
+    vi.doMock("../src/multi-process-settings.js", () => ({
       readMultiProcessSettings: vi.fn(() => calls.settings),
     }));
 
-    await import("../dist/src/multi-process-app.js");
+    await import("../src/multi-process-app.js");
 
     expect(calls.run).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -87,17 +87,17 @@ describe("To-Do multi-process app entry selection", () => {
   it("leaves terminal shutdown with the managed child", async () => {
     process.env.SPINE_MANAGED_SERVER_CHILD = "true";
     calls.run.mockResolvedValueOnce({ ready: true, close: vi.fn(() => Promise.resolve()) });
-    vi.doMock("../dist/src/multi-process-coordinator.js", () => ({
+    vi.doMock("../src/multi-process-coordinator.js", () => ({
       runTodoCoordinator: calls.coordinator,
     }));
-    vi.doMock("../dist/src/multi-process-replica.js", () => ({
+    vi.doMock("../src/multi-process-replica.js", () => ({
       createTodoReplica: calls.createReplica,
     }));
-    vi.doMock("../dist/src/multi-process-settings.js", () => ({
+    vi.doMock("../src/multi-process-settings.js", () => ({
       readMultiProcessSettings: vi.fn(() => calls.settings),
     }));
 
-    await import("../dist/src/multi-process-app.js");
+    await import("../src/multi-process-app.js");
 
     expect(calls.coordinator).not.toHaveBeenCalled();
   });

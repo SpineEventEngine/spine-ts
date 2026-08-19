@@ -14,7 +14,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { runTodoCoordinator } from "../dist/src/multi-process-coordinator.js";
+import { runTodoCoordinator } from "../src/multi-process-coordinator.js";
 
 describe("To-Do multi-process Coordinator", () => {
   const originalExitCode = process.exitCode;
