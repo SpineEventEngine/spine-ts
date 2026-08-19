@@ -43,6 +43,7 @@ describe("MessageBoard deployment entrypoints", () => {
     expect(coordinatorSource).toContain("ManagedServerApplication.run");
     expect(coordinatorSource).toContain("processCount: config.processCount");
     expect(coordinatorSource).toContain('moduleUrl: new URL("./multi-process-app.js", import.meta.url).href');
+    expect(coordinatorSource).not.toContain("process.once");
     expect(replicaSource).toContain("UniformAcrossAllShards.forNumber(config.deliveryShardCount)");
     expect(replicaSource).toContain("new InMemorySubscriptionRegistry()");
     expect(replicaSource).toContain("MessageBoardDeployment.configureManagedServer");

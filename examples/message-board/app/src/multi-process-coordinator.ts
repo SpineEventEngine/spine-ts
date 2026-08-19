@@ -14,7 +14,7 @@
 
 /** Owns the Message Board Coordinator lifecycle and its managed child replicas. */
 
-import { ManagedServerApplication, type ManagedServerApplicationHandle } from "@spine-event-engine/server";
+import { ManagedServerApplication } from "@spine-event-engine/server";
 
 import { MessageBoardDeployment } from "./deployment-config.js";
 import { managedReplicaOptions } from "./multi-process-replica.js";
@@ -28,21 +28,4 @@ const managed = await ManagedServerApplication.run({
   ...managedReplicaOptions(config),
 });
 
-installShutdown(managed);
 console.log(`MessageBoard managed coordinator ready at ${config.host}:${config.port.toString()}`);
-
-function installShutdown(handle: ManagedServerApplicationHandle): void {
-  let closing: Promise<void> | undefined;
-  const close = () => {
-    closing ??= handle.close().then(
-      () => {
-        process.exitCode = 0;
-      },
-      () => {
-        process.exitCode = 1;
-      },
-    );
-  };
-  process.once("SIGINT", close);
-  process.once("SIGTERM", close);
-}
