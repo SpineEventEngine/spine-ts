@@ -3,7 +3,7 @@
 ## Provider lane checkpoint — 2026-08-19
 
 - RED: `pnpm exec vitest run packages/deployment-gce/test/terraform-policy.test.ts
-  packages/deployment-gke/test/terraform-policy.test.ts --reporter=verbose`
+packages/deployment-gke/test/terraform-policy.test.ts --reporter=verbose`
   failed in five required places before the product changes: no managed
   entrypoint, no explicit settings, and the old GKE Service target.
 - GREEN: the same policy suite passed 20/20 after implementation; the complete
@@ -43,8 +43,8 @@
 - Retained provider proof: an unrelated `SIGTERM` listener remains installed
   through GCE startup, simulated graceful signal shutdown, and outer-handle
   close. The managed coordinator itself owns no signals on this path.
-Evidence will be appended after retained REDs, implementation checkpoints,
-real deployment smoke, reviews, integration, and remote cleanup.
+  Evidence will be appended after retained REDs, implementation checkpoints,
+  real deployment smoke, reviews, integration, and remote cleanup.
 
 ## Managed Message Board checkpoint
 
