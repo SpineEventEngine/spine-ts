@@ -24,6 +24,7 @@ import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { RemoteDelivery } from "../../../delivery-client/dist/index.js";
 import { TypeRegistry } from "@spine-event-engine/core";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { TaskCreatedSchema } from "../../../../examples/todo/dist/generated/spine/examples/todo/task_events_pb.js";
 import {
   TaskIdSchema,
@@ -66,11 +67,14 @@ class ExternalTaskProjection extends Projection {
   }
 }
 
-if (isManagedChild)
-  ServerEnvironment.when(EnvironmentType.Local).use({
+if (isManagedChild) {
+  process.env.NODE_ENV = "production";
+  ServerEnvironment.when(EnvironmentType.Production).use({
     delivery,
+    storageFactory: new InMemoryStorageFactory(),
     typeRegistry: new TypeRegistry([TaskCreatedSchema]),
   });
+}
 
 const managed = await ManagedServerApplication.run({
   processCount: 2,

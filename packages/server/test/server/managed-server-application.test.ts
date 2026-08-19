@@ -182,6 +182,7 @@ describe("ManagedServerApplication", () => {
     const priorSignals = new Set(process.listeners("SIGINT"));
     const priorDisconnect = Object.getOwnPropertyDescriptor(process, "disconnect");
     const disconnect = vi.fn();
+    const unrelated = vi.fn();
     Object.defineProperty(process, "disconnect", { configurable: true, value: disconnect });
     const spawned: { slot: number; incarnation: string }[] = [];
     const coordinator = new ManagedServerCoordinator(
@@ -189,6 +190,54 @@ describe("ManagedServerApplication", () => {
         processCount: 1,
         moduleUrl: import.meta.url,
         createServer: () => Promise.reject(new Error("unused")),
+      },
+      {
+        clock,
+        spawn: (_url, slot, incarnation) => {
+          spawned.push({ slot, incarnation });
+          return child;
+        },
+      },
+    );
+    try {
+      const started = coordinator.start();
+      process.on("SIGINT", unrelated);
+      child.emit("message", {
+        type: "ready",
+        slot: "0",
+        incarnation: itemAt(spawned, 0, "the initial replica").incarnation,
+        endpoint: "http://127.0.0.1:1",
+      });
+      await started;
+      (child.send as ReturnType<typeof vi.fn>).mockImplementation(() => {
+        child.emit("exit");
+        return true;
+      });
+      managedSignalListener("SIGINT", priorSignals)("SIGINT");
+      await Promise.resolve();
+      await expect(coordinator.close()).resolves.toBeUndefined();
+      expect(disconnect).toHaveBeenCalledOnce();
+      expect(process.listeners("SIGINT")).toEqual([...priorSignals, unrelated]);
+    } finally {
+      process.off("SIGINT", unrelated);
+      if (priorDisconnect === undefined) delete (process as { disconnect?: unknown }).disconnect;
+      else Object.defineProperty(process, "disconnect", priorDisconnect);
+    }
+  });
+
+  it("leaves process signals to the caller when managed startup is caller-owned", async () => {
+    const clock = new FakeClock();
+    const child = fakeChild(1);
+    const priorSignals = new Set(process.listeners("SIGINT"));
+    const unrelated = vi.fn();
+    process.on("SIGINT", unrelated);
+    const spawned: { slot: number; incarnation: string }[] = [];
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.reject(new Error("unused")),
+        manageProcessSignals: false,
       },
       {
         clock,
@@ -211,14 +260,13 @@ describe("ManagedServerApplication", () => {
         child.emit("exit");
         return true;
       });
-      managedSignalListener("SIGINT", priorSignals)("SIGINT");
-      await Promise.resolve();
-      await expect(coordinator.close()).resolves.toBeUndefined();
-      expect(disconnect).toHaveBeenCalledOnce();
-      expect(process.listeners("SIGINT")).toEqual([...priorSignals]);
+
+      expect(process.listeners("SIGINT")).toEqual([...priorSignals, unrelated]);
+      await coordinator.close();
+      expect(process.listeners("SIGINT")).toEqual([...priorSignals, unrelated]);
     } finally {
-      if (priorDisconnect === undefined) delete (process as { disconnect?: unknown }).disconnect;
-      else Object.defineProperty(process, "disconnect", priorDisconnect);
+      process.off("SIGINT", unrelated);
+      await coordinator.close().catch(() => undefined);
     }
   });
 
@@ -264,6 +312,40 @@ describe("ManagedServerApplication", () => {
     },
     20_000,
   );
+
+  it("starts a public managed cohort without process signals and closes it idempotently", async () => {
+    const parent = fork(
+      fileURLToPath(new URL("./managed-server-application-start-parent.mjs", import.meta.url)),
+      [],
+      { silent: true },
+    );
+    const result = await new Promise<{
+      readonly addedAtStart: { readonly sigint: number; readonly sigterm: number };
+      readonly addedAfterClose: { readonly sigint: number; readonly sigterm: number };
+    }>((resolve, reject) => {
+      parent.once("message", (message: unknown) => {
+        if (
+          typeof message === "object" &&
+          message !== null &&
+          (message as { readonly type?: unknown }).type === "start-closed"
+        )
+          resolve(
+            message as {
+              readonly addedAtStart: { readonly sigint: number; readonly sigterm: number };
+              readonly addedAfterClose: { readonly sigint: number; readonly sigterm: number };
+            },
+          );
+        else reject(new Error("Managed start parent did not report closure."));
+      });
+      parent.once("error", reject);
+    });
+    await childExit(parent);
+
+    expect(result).toMatchObject({
+      addedAtStart: { sigint: 0, sigterm: 0 },
+      addedAfterClose: { sigint: 0, sigterm: 0 },
+    });
+  }, 15_000);
 
   it("forwards a command through the managed Coordinator to the child normal service", async () => {
     const parent = fork(
