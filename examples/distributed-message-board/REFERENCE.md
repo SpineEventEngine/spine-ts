@@ -14,10 +14,11 @@ uses dynamic discovery; this example intentionally does not.
 
 Commands may be accepted by either application node. Delivery chooses one
 owner for aggregate work; the corresponding event drives one Projection result
-in shared storage. Browser notices are best effort only. The UI applies a valid,
-complete subscription payload locally. It queries the Projection authoritatively
-after a gap, unusable payload, or disconnected-post recovery; reconnect
-resynchronization can also carry authoritative state directly.
+in shared storage. The Gateway stores the logical subscription definition, not
+a replay log of delivered browser updates. The UI applies a valid, complete
+subscription payload locally. After a gap, unusable payload, or disconnected
+post, it queries the Projection and replaces its local copy; reconnect
+resynchronization can also carry that authoritative state directly.
 
 Use `pnpm start` in this directory after building local images. It keeps the
 Compose processes attached so `Ctrl-C` requests their finite shutdown. For a

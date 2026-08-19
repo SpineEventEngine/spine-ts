@@ -12,6 +12,11 @@
  * the License.
  */
 
+/**
+ * Starts one managed Message Board node. The parent execution owns the Node
+ * Coordinator; each child execution builds one complete application replica.
+ */
+
 import {
   ManagedServerApplication,
   InMemorySubscriptionRegistry,

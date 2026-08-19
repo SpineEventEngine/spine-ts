@@ -56,10 +56,12 @@ Stop the topology with `Ctrl-C`, or from the repository root run
 
 ## Limits
 
-The simple delivery server is in-memory and is not highly available. Delivery
-and subscription updates are best effort. The UI queries through the single
-Gateway after reconnects, possible gaps, malformed payloads, or disconnected
-posts; it does not query again after every normal complete payload.
+The simple delivery server is in-memory and is not highly available. The
+Gateway durably remembers that a browser watches a board, but it does not keep a
+recording of every update sent to that browser. If the browser disconnects and
+misses an update, it asks the Gateway for the board's current state after it
+reconnects, replaces its local copy, and resumes listening. It does not make a
+new query after every normal update.
 
 See the reused [Message Board model and app](../message-board/README.md) for
 the domain and UI implementation, or the [operator reference](REFERENCE.md)

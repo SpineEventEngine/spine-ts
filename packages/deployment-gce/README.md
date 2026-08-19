@@ -107,76 +107,14 @@ on loopback and are never discoverable directly. The deployer must set both
 independent: the first selects Node processes, while the second is passed to
 your context assembly for its explicit Delivery strategy.
 
-```ts
-// docs-snippet-path: packages/deployment-gce/examples/application.ts
-import { LeasedNodeRegistry } from "@spine-event-engine/deployment";
-import { GceRegistrar } from "@spine-event-engine/deployment-gce";
-import {
-  ManagedServerApplication,
-  type ManagedServerApplicationHandle,
-  type ManagedServerApplicationOptions,
-  type RunningServer,
-} from "@spine-event-engine/server";
-import {
-  GceDeploymentSettings,
-  type DeploymentEnvironment,
-  type RegistryStorageResolver,
-} from "./deployment-settings.js";
-
-export interface ApplicationOptions {
-  readonly moduleUrl: string;
-  readonly createServer: (options: {
-    readonly host: string;
-    readonly port: number;
-    readonly deliveryShardCount: number;
-  }) => Promise<RunningServer>;
-  readonly synchronize?: ManagedServerApplicationOptions["synchronize"];
-  readonly restart?: ManagedServerApplicationOptions["restart"];
-  readonly registryStorage: RegistryStorageResolver;
-}
-
-export const GceApplicationEntrypoint = Object.freeze({
-  async run(
-    options: ApplicationOptions,
-    environment: DeploymentEnvironment = process.env,
-  ): Promise<ManagedServerApplicationHandle> {
-    const port = GceDeploymentSettings.port(environment, "PORT");
-    const deliveryShardCount = GceDeploymentSettings.deliveryShardCount(environment);
-    const child = process.env.SPINE_MANAGED_SERVER_CHILD === "true";
-    const registry = child
-      ? undefined
-      : new LeasedNodeRegistry({
-          factory: options.registryStorage.storageFactoryFor(
-            GceDeploymentSettings.registryStorageReference(environment),
-          ),
-          namespace: GceDeploymentSettings.registryNamespace(environment),
-        });
-    const registrar = registry === undefined ? undefined : new GceRegistrar({ registry, port });
-    const managed = await ManagedServerApplication.start({
-      processCount: GceDeploymentSettings.processCount(environment),
-      host: "0.0.0.0",
-      port,
-      moduleUrl: options.moduleUrl,
-      createServer: async ({ host, port: childPort }) =>
-        await options.createServer({ host, port: childPort, deliveryShardCount }),
-      ...(options.synchronize === undefined ? {} : { synchronize: options.synchronize }),
-      ...(options.restart === undefined ? {} : { restart: options.restart }),
-    });
-    if (registrar === undefined || registry === undefined) return managed;
-    await registrar.start(); // Publishes only the ready Coordinator endpoint.
-    return {
-      get ready() {
-        return managed.ready;
-      },
-      async close() {
-        await registrar.close();
-        await managed.close();
-        await registry.close();
-      },
-    };
-  },
-});
-```
+Use the complete, tested
+[`GceApplicationEntrypoint`](examples/application.ts) instead of copying only
+its happy path. It starts the managed application, publishes the Coordinator
+only after it is ready, withdraws that lease before shutdown, and preserves
+startup or cleanup failures. Supply your complete child assembly through
+`createServer`, and pass the same environment object when testing custom
+deployment values. The framework-owned `SPINE_MANAGED_SERVER_CHILD` marker is
+read from that environment so child executions do not publish separate leases.
 
 The Gateway resolves the same storage reference and namespace through its
 environment. It manages a GCE discovery lifecycle that refreshes the complete

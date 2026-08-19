@@ -12,6 +12,11 @@
  * the License.
  */
 
+/**
+ * Shows one GKE application pod running complete replicas behind its private
+ * Node Coordinator, which the headless Kubernetes Service exposes to the Gateway.
+ */
+
 import {
   ManagedServerApplication,
   type ManagedServerApplicationHandle,

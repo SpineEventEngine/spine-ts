@@ -68,6 +68,20 @@ pnpm exec vitest run examples/message-board/app/test
 
 ## ⚠️ Local-only defaults
 
+The production-shaped source files are named for the process they start:
+
+| File                                               | Process role                                                                                           |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| [`application-entry.ts`](src/application-entry.ts) | Starts only the Message Board Bounded Context; a separate Gateway is required.                         |
+| [`gateway-entry.ts`](src/gateway-entry.ts)         | Starts only the browser-facing Gateway; it contains no Bounded Context and does not run Delivery work. |
+| [`combined-entry.ts`](src/combined-entry.ts)       | Starts the application and Gateway together in one process.                                            |
+| [`managed-entry.ts`](src/managed-entry.ts)         | Starts one Coordinator parent and the configured number of complete child replicas.                    |
+| [`deployment-config.ts`](src/deployment-config.ts) | Validates the environment and assembles facilities shared by those entrypoints.                        |
+| [`index.ts`](src/index.ts)                         | Defines the domain handlers and reusable complete application assembly.                                |
+
+Start with `combined-entry.ts` to see the fewest production-shaped processes.
+Read `managed-entry.ts` when learning how one machine uses several CPU cores.
+
 Local commands use in-memory storage, sessions, and subscription bindings.
 Prebuilt production commands require `HOST`, `PORT`, `DATASTORE_PROJECT_ID`,
 `DELIVERY_SERVER_URL`; managed nodes additionally require `PROCESS_COUNT` and

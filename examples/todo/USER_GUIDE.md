@@ -682,7 +682,9 @@ validation/rejections, generated-registry recovery, and listener/session cleanup
 The startup-contract test verifies both entrypoints. The normal entry remains a
 single-process in-memory server. The managed entry requires explicit process
 and Delivery shard counts and assembles complete application replicas behind
-the Node Coordinator.
+the Node Coordinator. For a runnable three-terminal setup and a line-by-line
+map of why the file is named `managed-entry.ts`, follow the
+[managed node reference](README.md#managed-node-reference).
 
 ## Further reading and limits
 

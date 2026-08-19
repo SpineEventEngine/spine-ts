@@ -13,7 +13,8 @@
  */
 
 /**
- * Represents environment values injected into one deployment process.
+ * Validates the environment contract shared by the GKE application and Gateway
+ * examples. Kubernetes supplies these values; the framework does not infer them.
  */
 export type DeploymentEnvironment = Readonly<Record<string, string | undefined>>;
 

@@ -12,6 +12,11 @@
  * the License.
  */
 
+/**
+ * Validates the small environment contract shared by the GCE application and
+ * Gateway examples; applications still choose their own storage implementation.
+ */
+
 import type { StorageFactory } from "@spine-event-engine/storage";
 
 /**

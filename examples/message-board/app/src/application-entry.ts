@@ -12,6 +12,11 @@
  * the License.
  */
 
+/**
+ * Starts only the Message Board domain application for a production deployment.
+ * A separate Gateway must forward browser commands and queries to this server.
+ */
+
 import { MessageBoardDeployment } from "./deployment-config.js";
 import { MessageBoardApplication } from "./index.js";
 import { Datastore } from "@google-cloud/datastore";

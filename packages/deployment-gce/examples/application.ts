@@ -12,6 +12,11 @@
  * the License.
  */
 
+/**
+ * Shows how one GCE VM starts complete application replicas behind one Node
+ * Coordinator and publishes only that ready Coordinator through a leased registry.
+ */
+
 import { LeasedNodeRegistry } from "@spine-event-engine/deployment";
 import { GceRegistrar } from "@spine-event-engine/deployment-gce";
 import {
@@ -82,7 +87,7 @@ export const GceApplicationEntrypoint = Object.freeze({
   ): Promise<ManagedServerApplicationHandle> {
     const port = GceDeploymentSettings.port(environment, "PORT");
     const deliveryShardCount = GceDeploymentSettings.deliveryShardCount(environment);
-    const child = process.env.SPINE_MANAGED_SERVER_CHILD === "true";
+    const child = environment.SPINE_MANAGED_SERVER_CHILD === "true";
     const registry = child
       ? undefined
       : new LeasedNodeRegistry({

@@ -100,16 +100,77 @@ separate production assembly.
 ## Managed node reference
 
 The normal `start` command above deliberately remains a single-process local
-server. A deployment can instead start a managed node with the same complete
-Tasks context in every child process:
+server. The managed example needs two helper services: Datastore stores the
+application state, and Delivery tells the child processes when inbox work is
+ready. The following local setup is intentionally disposable.
+
+First build the workspace from the repository root:
+
+```bash
+pnpm typecheck:build
+```
+
+In a second terminal, start a Datastore emulator:
+
+```bash
+docker run --rm --name todo-datastore --publish 8081:8081 \
+  gcr.io/google.com/cloudsdktool/google-cloud-cli@sha256:cda01b8c880e9161992c3fd61d7d0e153b4dd073aa4a9d62ad79243907cf8dd4 \
+  gcloud emulators firestore start \
+  --database-mode=datastore-mode --host-port=0.0.0.0:8081 --quiet
+```
+
+In a third terminal, start the repository's in-memory Delivery server:
+
+```bash
+HOST=127.0.0.1 PORT=8484 \
+node packages/delivery-server/dist/bin/spine-delivery-server.js
+```
+
+Finally, start one managed To-Do node from the repository root:
 
 ```bash
 PROCESS_COUNT=2 DELIVERY_SHARD_COUNT=2 \
-HOST=0.0.0.0 PORT=8080 \
-DATASTORE_PROJECT_ID=todo-production \
-DELIVERY_SERVER_URL=http://delivery.example.test:8484 \
+HOST=127.0.0.1 PORT=8080 \
+DATASTORE_PROJECT_ID=todo-managed \
+DATASTORE_EMULATOR_HOST=127.0.0.1:8081 \
+DELIVERY_SERVER_URL=http://127.0.0.1:8484 \
 pnpm --dir examples/todo start:managed
 ```
+
+Wait for `To-do managed coordinator ready at 127.0.0.1:8080`. Stop the To-Do
+node, Delivery server, and emulator with `Ctrl-C` in their terminals.
+
+### Why is the file called `managed-entry.ts`?
+
+An _entrypoint_ is the first application file that Node executes. _Managed_
+means that Spine supervises several complete child processes behind one Node
+Coordinator. The same file is therefore executed in two roles:
+
+```mermaid
+flowchart TD
+  Start[Node runs managed-entry.ts] --> Parent[Parent: open Coordinator on port 8080]
+  Parent --> ChildOne[Child 1: complete Tasks context]
+  Parent --> ChildTwo[Child 2: complete Tasks context]
+  ChildOne --> Delivery[Observe shared Delivery server]
+  ChildTwo --> Delivery
+  ChildOne --> Datastore[(Shared Datastore)]
+  ChildTwo --> Datastore
+```
+
+Read [`managed-entry.ts`](src/managed-entry.ts) from top to bottom:
+
+1. `readTodoManagedDeployment()` validates the six required managed settings.
+   `DATASTORE_EMULATOR_HOST` is optional and only tells the Datastore client to
+   use the disposable local emulator.
+2. `ManagedServerApplication.run()` starts the parent Coordinator and the
+   requested number of child processes.
+3. `createServer` builds one complete Tasks Bounded Context inside each child.
+   Each child uses shared Datastore, observes Delivery directly, and keeps only
+   a volatile local subscription registry. The front-facing Gateway is the
+   durable owner of browser subscription definitions.
+4. `synchronize` opens the child's Delivery connection before that child is
+   announced as ready.
+5. Only the parent prints the ready message and owns terminal shutdown.
 
 `PROCESS_COUNT` is chosen by the deployer. `DELIVERY_SHARD_COUNT` is a separate
 application decision; this example chooses two of each only as a small

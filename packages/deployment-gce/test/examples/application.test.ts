@@ -13,6 +13,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFile } from "node:fs/promises";
 import type {
   ManagedServerApplicationHandle,
   ManagedServerApplicationOptions,
@@ -55,6 +56,13 @@ describe("the GCE managed application entrypoint", () => {
     registry.close.mockResolvedValue();
     registrar.start.mockResolvedValue();
     registrar.close.mockResolvedValue();
+  });
+
+  it("keeps the beginner guide on the complete lifecycle implementation", async () => {
+    const readme = await readFile("packages/deployment-gce/README.md", "utf8");
+
+    expect(readme).toContain("[`GceApplicationEntrypoint`](examples/application.ts)");
+    expect(readme).not.toContain("const child = process.env.SPINE_MANAGED_SERVER_CHILD");
   });
 
   it("leases a ready Coordinator and withdraws it before managed children stop", async () => {
@@ -144,11 +152,14 @@ describe("the GCE managed application entrypoint", () => {
 
   it("keeps the VM Coordinator lease out of each managed child", async () => {
     const previous = process.env.SPINE_MANAGED_SERVER_CHILD;
-    process.env.SPINE_MANAGED_SERVER_CHILD = "true";
+    delete process.env.SPINE_MANAGED_SERVER_CHILD;
     const handle = { ready: true, close: vi.fn(() => Promise.resolve()) };
     managed.run.mockResolvedValueOnce(handle);
     try {
-      const running = await GceApplicationEntrypoint.run(options(), environment());
+      const running = await GceApplicationEntrypoint.run(options(), {
+        ...environment(),
+        SPINE_MANAGED_SERVER_CHILD: "true",
+      });
       expect(running).toBe(handle);
       await running.close();
       expect(registrar.start).not.toHaveBeenCalled();

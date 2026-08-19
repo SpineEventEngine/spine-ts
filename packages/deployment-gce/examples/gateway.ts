@@ -12,6 +12,11 @@
  * the License.
  */
 
+/**
+ * Shows the standalone GCE Gateway: it discovers leased Node Coordinators and
+ * owns browser-facing concerns, but it does not run application replicas.
+ */
+
 import { LeasedNodeRegistry } from "@spine-event-engine/deployment";
 import { GceNodeDiscovery } from "@spine-event-engine/deployment-gce";
 import { Server, type BrowserServerOptions } from "@spine-event-engine/server";

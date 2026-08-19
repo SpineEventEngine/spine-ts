@@ -13,8 +13,8 @@
  */
 
 /**
- *
- * Internal configuration for the To-Do managed executable.
+ * Reads only the deployer-supplied settings used by the To-Do managed entrypoint.
+ * Process count and Delivery shard count stay separate application decisions.
  */
 export interface TodoManagedDeployment {
   // prettier-ignore

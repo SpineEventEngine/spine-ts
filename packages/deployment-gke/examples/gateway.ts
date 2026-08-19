@@ -12,6 +12,11 @@
  * the License.
  */
 
+/**
+ * Shows the standalone GKE Gateway: it discovers ready Node Coordinators through
+ * Kubernetes DNS and owns browser-facing concerns, not application replicas.
+ */
+
 import { GkeNodeDiscovery } from "@spine-event-engine/deployment-gke";
 import { Server, type BrowserServerOptions } from "@spine-event-engine/server";
 

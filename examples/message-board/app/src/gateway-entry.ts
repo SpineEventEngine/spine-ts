@@ -12,6 +12,11 @@
  * the License.
  */
 
+/**
+ * Starts the standalone browser-facing Gateway for Message Board.
+ * It owns browser sessions and subscriptions, but no Bounded Context or Delivery worker.
+ */
+
 import { Server } from "@spine-event-engine/server";
 import { GkeNodeDiscovery } from "@spine-event-engine/deployment-gke";
 import { Datastore } from "@google-cloud/datastore";

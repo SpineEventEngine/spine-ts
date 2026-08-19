@@ -12,6 +12,11 @@
  * the License.
  */
 
+/**
+ * Starts the Message Board application and browser Gateway in one process.
+ * This is the smallest production-shaped mode, not the multi-process managed mode.
+ */
+
 import { MessageBoardDeployment } from "./deployment-config.js";
 import { MessageBoardApplication } from "./index.js";
 import { Datastore } from "@google-cloud/datastore";

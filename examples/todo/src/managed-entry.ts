@@ -12,9 +12,15 @@
  * the License.
  */
 
+/**
+ * Starts the production-shaped, multi-process To-Do example. This same file is
+ * first run by the Coordinator parent and then by every complete-replica child.
+ */
+
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import {
   EnvironmentType,
+  InMemorySubscriptionRegistry,
   ManagedServerApplication,
   Server,
   ServerEnvironment,
@@ -24,7 +30,7 @@ import {
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { Datastore } from "@google-cloud/datastore";
 
-import { TypeRegistry } from "@spine-event-engine/core";
+import { StringifierRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { todoProtoModule } from "../generated/proto-module.js";
 import { createTodoContext } from "./index.js";
 import { readTodoManagedDeployment } from "./managed-deployment.js";
@@ -38,13 +44,17 @@ const managed = await ManagedServerApplication.run({
   port: deployment.port,
   moduleUrl: import.meta.url,
   createServer: async ({ host, port }) => {
+    const typeRegistry = TypeRegistry.from(todoProtoModule);
+    const stringifiers = new StringifierRegistry();
+    stringifiers.setTypeRegistry(typeRegistry);
     const storageFactory = DatastoreStorageFactory.newBuilder()
       .setClient(new Datastore({ projectId: deployment.projectId }))
+      .setStringifierRegistry(stringifiers)
       .build();
     const openedDelivery = RemoteDelivery.connectTo({ endpoint: deployment.deliveryServerUrl });
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory,
-      typeRegistry: TypeRegistry.from(todoProtoModule),
+      typeRegistry,
       delivery: openedDelivery,
     });
     delivery = openedDelivery;
@@ -53,6 +63,7 @@ const managed = await ManagedServerApplication.run({
         await createTodoContext({
           storageFactory,
           deliveryStrategy: UniformAcrossAllShards.forNumber(deployment.deliveryShardCount),
+          subscriptionRegistry: new InMemorySubscriptionRegistry(),
         }),
       )
       .start();

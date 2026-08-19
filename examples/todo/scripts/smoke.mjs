@@ -1,3 +1,6 @@
+// Posts one task through the configured Coordinator, then polls the
+// authoritative TaskList projection to prove the managed To-Do app works.
+
 import { log } from "node:console";
 import { randomUUID } from "node:crypto";
 import process from "node:process";
@@ -53,11 +56,13 @@ async function main() {
       "CreateTask acknowledgement",
       commandTimeoutMs,
     );
-    if (acknowledgement.status?.status.case !== "ok") {
+    const status = acknowledgement.status?.status;
+    if (status?.case !== "ok")
       throw new Error(
-        `CreateTask acknowledgement was ${SmokeTaskLists.sanitizeValue(acknowledgement.status?.status.case ?? "missing")}.`,
+        status?.case === "error"
+          ? `CreateTask acknowledgement failed (${SmokeTaskLists.sanitizeValue(status.value.type)}: ${SmokeTaskLists.sanitizeValue(status.value.message)}).`
+          : "CreateTask acknowledgement had no status.",
       );
-    }
 
     const taskList = await readTaskListEventually(taskId, actorContext);
     log(`to-do smoke ok: ${taskList.id.value} (${taskList.tasks[0]?.title ?? "untitled"})`);

@@ -12,6 +12,11 @@
  * the License.
  */
 
+/**
+ * Defines the Message Board domain handlers and reusable application assembly.
+ * Local and managed entrypoints both build their complete Bounded Context from this module.
+ */
+
 import { clone, create } from "@bufbuild/protobuf";
 import type { SessionResolver, SubscriptionBindings } from "@spine-event-engine/auth";
 import {

@@ -6,7 +6,7 @@
   "description": "Runnable server-side to-do example for Spine TS.",
   "scripts": {
     "start": "pnpm -C ../.. typecheck:build && node dist/src/index.js",
-    "start:managed": "node dist/src/managed-entry.js",
+    "start:managed": "pnpm -C ../.. typecheck:build && node dist/src/managed-entry.js",
     "smoke": "node scripts/smoke.mjs",
     "proto:generate": "spine-proto generate",
     "clean:generated-dist": "node scripts/clean-generated-dist.mjs",

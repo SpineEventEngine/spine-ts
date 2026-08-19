@@ -214,7 +214,9 @@ registry in one namespace, and browser-capable processes share session signing
 values. Operators configure TLS, identity-provider setup, secrets,
 image distribution, network policy, and production delivery infrastructure.
 The reference simple delivery server is in-memory and not highly available;
-delivery remains best effort, so clients still re-query after gaps.
+the Gateway remembers what a browser watches, not a replayable history of every
+update. After a disconnect, the browser queries the current board and then
+continues listening.
 
 ### Build local images
 

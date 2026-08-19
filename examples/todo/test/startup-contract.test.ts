@@ -154,14 +154,29 @@ describe("To-Do managed entrypoint", () => {
     };
 
     expect(source).toContain("ManagedServerApplication.run");
+    expect(source).toContain("InMemorySubscriptionRegistry");
+    expect(source).toContain("subscriptionRegistry: new InMemorySubscriptionRegistry()");
     expect(source).toContain("DatastoreStorageFactory");
+    expect(source).toContain("new StringifierRegistry()");
+    expect(source).toContain("stringifiers.setTypeRegistry(typeRegistry)");
+    expect(source).toContain(".setStringifierRegistry(stringifiers)");
     expect(source).toContain("RemoteDelivery.connectTo");
     expect(configurationSource).toContain("PROCESS_COUNT");
     expect(configurationSource).toContain("DELIVERY_SHARD_COUNT");
     expect(source).not.toMatch(/SPINE_IPC_DIRECTORY/u);
     expect(local).not.toContain("ManagedServerApplication");
-    expect(manifest.scripts["start:managed"]).toBe("node dist/src/managed-entry.js");
+    expect(manifest.scripts["start:managed"]).toContain("typecheck:build");
+    expect(manifest.scripts["start:managed"]).toContain("node dist/src/managed-entry.js");
     expect(manifest.dependencies["@spine-event-engine/delivery-client"]).toBe("workspace:*");
     expect(manifest.dependencies["@spine-event-engine/storage-datastore"]).toBe("workspace:*");
+  });
+
+  it("documents runnable local prerequisites for the managed node", async () => {
+    const readme = await readFile("examples/todo/README.md", "utf8");
+
+    expect(readme).toContain("DATASTORE_EMULATOR_HOST=127.0.0.1:8081");
+    expect(readme).toContain("packages/delivery-server/dist/bin/spine-delivery-server.js");
+    expect(readme).toContain("DELIVERY_SERVER_URL=http://127.0.0.1:8484");
+    expect(readme).not.toContain("delivery.example.test");
   });
 });

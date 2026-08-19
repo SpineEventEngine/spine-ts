@@ -12,6 +12,11 @@
  * the License.
  */
 
+/**
+ * Reads environment settings and assembles shared production facilities for
+ * the Message Board application, Gateway, combined, and managed entrypoints.
+ */
+
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import { SignedSessions } from "@spine-event-engine/auth";
 import { StringifierRegistry } from "@spine-event-engine/core";
