@@ -13,6 +13,7 @@
  */
 
 import type { OnDeliveryMessage } from "./delivery.js";
+import type { InboxMessage } from "./inbox.js";
 import type { Delivery } from "./delivery-builder.js";
 import type { DeliveryOperationOptions } from "./delivery-ports.js";
 import { DeliveryRunControl } from "./delivery-run-control.js";
@@ -22,11 +23,24 @@ import type { ILogLayer } from "loglayer";
 import { emitServerWarning } from "../server/server-log.js";
 
 const deliverySupervisorLoggers = new WeakMap<DeliverySupervisor, ILogLayer>();
+const deliverySupervisorAdmissions = new WeakMap<
+  DeliverySupervisor,
+  (message: InboxMessage) => boolean
+>();
+const deliverySupervisorFinalizers = new WeakMap<DeliverySupervisor, (shard: ShardIndex) => void>();
 const deliverySupervisors = new WeakSet<DeliverySupervisor>();
 
 interface DeliverySupervisorAccess {
   installLogger(supervisor: DeliverySupervisor, logger: ILogLayer): void;
   loggerFor(supervisor: DeliverySupervisor): ILogLayer;
+  installAdmission(
+    supervisor: DeliverySupervisor,
+    admission: (message: InboxMessage) => boolean,
+  ): void;
+  installFinalization(
+    supervisor: DeliverySupervisor,
+    onRunSettled: (shard: ShardIndex) => void,
+  ): void;
 }
 
 /**
@@ -313,7 +327,15 @@ export class DeliverySupervisor {
 
   async #run(shard: ShardIndex, key: string): Promise<void> {
     try {
-      await this.#runs.run({ shard, onMessage: this.#onMessage, signal: this.#controller.signal });
+      const admission = deliverySupervisorAdmissions.get(this);
+      const finalization = deliverySupervisorFinalizers.get(this);
+      await this.#runs.run({
+        shard,
+        onMessage: this.#onMessage,
+        ...(admission === undefined ? {} : { acceptMessage: admission }),
+        ...(finalization === undefined ? {} : { onRunSettled: () => finalization(shard) }),
+        signal: this.#controller.signal,
+      });
     } finally {
       this.#active.delete(key);
       this.#startNext(key);
@@ -523,6 +545,28 @@ export const deliverySupervisorAccess: DeliverySupervisorAccess = Object.freeze(
       throw new TypeError("Delivery supervisor logger is not installed.");
     }
     return logger;
+  },
+
+  installAdmission(
+    supervisor: DeliverySupervisor,
+    admission: (message: InboxMessage) => boolean,
+  ): void {
+    if (!deliverySupervisors.has(supervisor)) {
+      throw new TypeError("Delivery supervisor admission requires a DeliverySupervisor instance.");
+    }
+    deliverySupervisorAdmissions.set(supervisor, admission);
+  },
+
+  installFinalization(
+    supervisor: DeliverySupervisor,
+    onRunSettled: (shard: ShardIndex) => void,
+  ): void {
+    if (!deliverySupervisors.has(supervisor)) {
+      throw new TypeError(
+        "Delivery supervisor finalization requires a DeliverySupervisor instance.",
+      );
+    }
+    deliverySupervisorFinalizers.set(supervisor, onRunSettled);
   },
 });
 

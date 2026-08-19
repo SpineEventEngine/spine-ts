@@ -1,0 +1,236 @@
+# T-0210 Work Log
+
+## 2026-08-19 — initialization and contract inspection
+
+- Started from `origin/main@bc45eae2008589daf50c9b668360ed6ea65d1e2a` in the
+  supplied isolated worktree on `codex/t0210-external-replicas`.
+- Role/profile: existing `implementer`, explicitly dispatched as
+  `gpt-5.6-terra` / `medium`; runtime telemetry unavailable; no subagents.
+- Read the T-0203 plan (complete-replica construction, external event path,
+  RED 17–19/29, and T-0210 ownership), the Human Requirements Ledger, T-0204
+  in-memory factory decision, Wave 13 broker/ThirdParty acceptance, and T-0208/
+  T-0209 real managed Delivery fixtures.
+- Confirmed the intended topology: each managed child builds both Bounded
+  Contexts. Their broker exchange is process-local through the environment’s
+  default in-memory `TransportFactory`; it is deliberately not an inter-process
+  transport. The external receptor’s `LocalProjectionInbox` persists and
+  drains through the normal `Delivery` interface.
+- The prior Wave 13 cross-process test is explicitly not reused: it proves an
+  obsolete ZeroMQ adapter and is forbidden for this acceptance.
+
+## RED design
+
+The new fixture will use the normal Todo `CommandService` as the domestic
+producer, a separately generated external-receptor context in the same managed
+child, the existing managed Coordinator subscription fan-out, and the
+production `DeliveryAssembly`. A second case invokes `ThirdPartyContext` in
+the same complete application assembly. No IPC frame contains an event or
+other application payload; any fixture trigger is bounded local test control
+only.
+
+## 2026-08-19 — retained RED product defect
+
+- The first fixture implementation reached the actual managed child context
+  build. It failed before `READY`, while the consumer broker opened the
+  event-type channel.
+- `TaskCreatedSchema` correctly derives
+  `type.spine.examples.todo/spine.examples.todo.TaskCreated`, because
+  `examples/todo/proto/spine/examples/todo/task_events.proto` explicitly
+  declares `option (type_url_prefix) = "type.spine.examples.todo"`.
+- `InMemoryTransportFactory.copyChannel()` instead accepts only
+  `type.spine.io` and `type.googleapis.com` prefixes. The broker therefore
+  rejects the generated Todo domain Event before any fixture behavior runs.
+- This is a real integration-transport defect: `TypeUrls.derive()` explicitly
+  supports a non-empty, non-whitespace schema prefix, while the adapter rejects
+  a valid generated schema URL. It is outside T-0210 fixture ownership and was
+  returned to the orchestrator for a separately owned transport correction.
+- Retained exact RED command:
+  `pnpm exec vitest run packages/server/test/server/managed-external-events.integration.test.ts --pool=forks`.
+  Both cases fail with `Message channel targetType must be a canonical type URL`
+  from `packages/transport/src/memory/message-transport.ts` during
+  `IntegrationBroker` opening.
+
+## 2026-08-19 — Delivery cross-context root cause
+
+- The repaired type URL adapter allowed the real process RED to reach normal
+  broker import, external Event routing, remote Inbox persistence, and shard
+  pickup. The imported Event and nested payload remain intact.
+- The current environment creates a worker and long-lived supervisor per
+  context runtime while the configured remote Delivery server exposes global
+  shards. A `Tasks` supervisor receives the global update for an
+  `ExternalTasks` projection row, picks the shard before endpoint filtering,
+  then repeatedly scans and rejects that row. The `ExternalTasks` supervisor
+  cannot acquire the shard. This is a bounded product defect, not a broker,
+  codec, handler-metadata, or fixture failure.
+- Approved correction: replace per-context competing pickup with one internal
+  process-level shard owner/dispatcher. It dispatches after pickup using the
+  registered endpoint label/type/shard, supports runtime join/leave and tenant
+  scope, does not acknowledge unknown targets, and preserves close/drain.
+
+## 2026-08-19 — shared remote dispatcher implementation
+
+- Accepted reliability review batch received from the existing
+  `performance_reliability_reviewer`, configured `gpt-5.6-terra` / `high`;
+  runtime telemetry unavailable. It requires shared-supervisor stop quiescence,
+  predicate admission for unmatched/tenant-mismatched rows, retirement fencing,
+  and empty-group closure before acceptance.
+
+- Added a focused RED where two remote-backed runtime endpoints share a shard:
+  notifying the first after persisting the second endpoint's row left the
+  rightful runtime unreached. The existing per-runtime supervisor ownership was
+  the observed cause.
+- Replaced remote per-runtime supervisors with one private supervisor group per
+  shard cardinality. It retains endpoint route candidates by label, target type,
+  and shard, dispatches known rows to the selected runtime callback, and removes
+  only stopped/retired owner routes. Local/no-source supervisors remain
+  owner-specific.
+- Candidate route selection reads the existing imported/past-message Event
+  tenant envelope and retains the selected runtime's tenant callback. A focused
+  two-tenant test verifies equal endpoint keys do not overwrite one another.
+- `pnpm typecheck:build:generated` passed. Focused environment worker tests:
+  86 passing. The rebuilt managed domestic path (RED-17/18/29) passes.
+- The managed ThirdParty fixture now registers `TaskCreatedSchema` in its
+  environment type registry (removing the prior unsupported-schema crash), but
+  RED-19 still times out after `ThirdPartyContext.emittedEvent()` resolves. The
+  remaining failure is the fixture broker-interest lifecycle; it occurs after
+  the dispatcher is no longer implicated and remains unresolved.
+
+## 2026-08-19 — reliability correction convergence
+
+- Retained new RED evidence: the shared supervisor consumed both an unknown
+  endpoint row and a singleton tenant route with a nonmatching imported Event
+  tenant. A selected owner whose finite worker stop failed also remained
+  dispatchable through the shared group.
+- The group now provides a private controlled-run admission predicate. It
+  decodes only the existing Event import/past-message envelope and accepts a
+  row only when a non-retiring route matches its endpoint and tenant, leaving
+  all unmatched rows pending without invoking DeliveryMonitor failure policy.
+- Owner stop fences fresh route admission. Retirement awaits that owner's
+  admitted callbacks before removing its routes; a sibling retains its group,
+  while retirement of the last owner closes and deletes it. Full worker stop
+  closes the shared supervisor once after finite worker stop attempts and
+  `awaitSettled()` includes its close.
+- Focused evidence: environment delivery regressions pass 90/90, including
+  unknown route pending, singleton tenant mismatch pending, blocked callback
+  retirement, sibling-vs-last group close, and whole-worker stop behavior.
+- The ThirdParty fixture creates its private broker before the managed process
+  reports ready. This gives the existing online/wanted control exchange time to
+  establish consumer interest before the test trigger; no product or wire
+  contract changed. Managed acceptance passes 2/2, including two sequential
+  domestic updates and ThirdParty import.
+- Reviewer batch disposition: the accepted `performance_reliability_reviewer`
+  (`gpt-5.6-terra`/`high`; runtime telemetry unavailable) findings on close
+  quiescence, admission, tenant selection, retirement fencing, and empty-group
+  closure are resolved by the focused regressions above. No new reviewer was
+  dispatched in this continuation.
+
+## 2026-08-19 — consolidated review correction
+
+- Accepted consolidated findings: reliability review required Command-envelope
+  tenant admission and an admission-to-owner-fence race proof; TypeScript/API
+  review required removing the predicate from exported supervisor/delivery
+  option surfaces. Review profiles: existing reliability and TypeScript/API
+  reviewers, `gpt-5.6-terra`/`high`; runtime telemetry unavailable.
+- The predicate is now installed only through the existing internal
+  `deliverySupervisorAccess` seam. It is absent from root-exported
+  `DeliverySupervisorOptions` and public `DeliveryRunOptions`.
+- Route selection decodes Event origins first and Command actor-context tenants
+  second. Admission reserves its selected owner route, so a concurrent owner
+  fence cannot reselect the message into the default failure/acknowledgment
+  path; retirement observes the reserved callback as active.
+- Focused tooling typecheck and the environment worker suite pass after the
+  correction. Remaining final changed-coverage and full mechanical gates are
+  pending this continuation's final command budget.
+- Added deterministic shared-remote `HANDLE_COMMAND` regressions: actor-context
+  tenant match replays to the configured multitenant runtime; mismatch remains
+  `TO_DELIVER`. Focused environment suite: 92 passing.
+- Admission now retains a per-message owner reservation until dispatch consumes
+  it. Selected-owner settlement awaits these reservations as well as active
+  callbacks, closing the accept-to-fence TOCTOU without a public API addition.
+- Focused environment plus managed acceptance passes 94 tests / 2 files,
+  including the managed domestic and ThirdParty cases.
+
+## 2026-08-19 — final retirement-race convergence
+
+- The existing `implementer` role retained its explicitly dispatched
+  `gpt-5.6-terra` / `medium` profile. Runtime telemetry remains unavailable;
+  no subagent was used. The final work preserves the existing dispatcher and
+  Delivery interfaces.
+- A new deterministic RED retained a live sibling route, reserved the selected
+  route, then invoked `stopOwners()` and `retireOwners()` synchronously at the
+  actual private reservation point. Before the correction, retirement resolved
+  while the selected callback remained blocked. This is the former
+  reservation-to-active TOCTOU.
+- GREEN retains the reservation until the selected callback is registered as
+  active. Owner settlement first drains matching reservations and then reads
+  the active set, so the callback cannot disappear between those two checks.
+  The route is removed only after its callback settles. No public, serialized,
+  configuration, or lifecycle concept was added.
+- Additional Event-origin cases prove that singleton delivery routes accept
+  ownerless import and past-message envelopes, while a multitenant route
+  selects the tenant in either imported or past-message origin. These are
+  direct behavior proofs for the existing tenant decoder, not a new policy.
+- Final focused behavior is 96 tests across the environment and managed
+  external-event files. The broader five-file source coverage run passes 175
+  tests. LCOV intersection against post-T-0210a baseline
+  `58963dc8f07e92a38000576ba84cad0746b287d2` reports 135/141 changed
+  executable lines (95.74%) and 66/72 changed executable branches (91.67%).
+- Scoped ESLint, TSDoc, API, audience-doc, generated build, and tooling
+  typechecks pass. The repository formatter wrapper cannot discover a bare
+  `prettier` executable in this environment; the identical workspace-local
+  formatter invocation passes. The final task verifier is run with that local
+  executable on `PATH`.
+- The full cleanup gate also found inherited T-0210a validation cleanup debt.
+  The shared validator is now `isCanonicalChannelType` (the same contract with
+  a bounded semantic name), and its TypeScript transport-boundary necessity is
+  recorded in the existing T-0080D ledger. The transport conformance title and
+  managed acceptance titles are split without changing behavior.
+
+## 2026-08-19 — final consolidated re-review correction
+
+- The same existing `implementer` role completed this bounded correction with
+  explicit `gpt-5.6-terra` / `medium` configuration. Runtime telemetry is not
+  exposed; no subagent was used.
+- Retained RED:
+  `pnpm exec vitest run packages/server/test/server/environment-attachment.test.ts -t 'releases an admitted reservation after lease loss'`.
+  Before the hook, `retireOwners()` timed out because the admitted reservation
+  was never dispatched or settled after lease loss.
+- GREEN adds `onRunSettled` only to the internal `DeliveryControlledRun` and
+  existing `deliverySupervisorAccess` seam. The environment group releases
+  undelivered reservations for the settling shard at every controlled-run
+  terminal path; a concurrently running shard keeps its reservations. The
+  release does not acknowledge the pending Inbox row. A recovery worker then
+  delivers the row once.
+- Affected behavior and coverage command passes 4 files / 145 tests. LCOV
+  intersection against `4a6d2c2ae68348a7297efaea0eea7f27c90564e7` is 22/22
+  changed executable lines and 4/4 changed branches (100% each).
+- Generated build/typecheck, tooling typecheck, scoped ESLint, cleanup,
+  TSDoc, API docs, copyright, logging containment, workspace-local format
+  check, audience docs, Buf/generated-output checks, release-readiness, and
+  `git diff --check` pass. Emitted declarations retain the original root
+  `DeliveryRunOptions` and `DeliverySupervisorOptions`; the new hook occurs
+  only in the internal `delivery-run-control` declaration.
+
+## 2026-08-19 — final reservation-retention correction
+
+- Consolidated re-review found that shard-scoped terminal cleanup settled
+  undelivered reservations but left their message-ID entries in the private
+  per-shard map. This could retain route objects across repeated interrupted
+  runs while a sibling route remained alive.
+- Retained RED adds a deterministic private-map cleanup assertion to the
+  lease-loss test. Before this correction, after owner retirement the captured
+  reservation entry was never cleared (`expected false, received true` for the
+  stale-entry condition). GREEN resolves each pending reservation and clears
+  its settling shard map; the row stays `TO_DELIVER` and the existing recovery
+  worker still delivers it exactly once.
+- Same explicit implementer profile (`gpt-5.6-terra` / `medium`), unavailable
+  runtime telemetry, and no subagents. No public, wire, configuration, or
+  lifecycle surface changes. The affected four-file suite passes 145/145.
+  Focused coverage against `02447a1f3` is 1/1 changed executable lines (100%);
+  no changed branches. Generated build/typecheck, tooling, scoped ESLint,
+  TSDoc/API, cleanup, and diff checks pass.
+- Final maintainability confirmation found one P2 test-isolation issue: the
+  temporary `Map.prototype.clear` spy was restored only on the success path.
+  The test now restores both temporary `Map` prototype spies in `finally`.
+  The exact lease-loss regression passes, as do scoped ESLint, Prettier, and
+  diff hygiene. This test-only correction does not reopen product review.

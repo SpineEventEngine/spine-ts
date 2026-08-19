@@ -19,6 +19,7 @@ import {
   type DeliveryRunOptions,
 } from "./delivery-builder.js";
 import type { ShardIndex } from "./shard-index.js";
+import type { InboxMessage } from "./inbox.js";
 
 /**
  * Controls admission for one finite delivery run.
@@ -67,6 +68,7 @@ export class DeliveryRunControl {
       )
       .finally(() => {
         options.signal.removeEventListener("abort", abort);
+        options.onRunSettled?.();
       });
   }
 
@@ -90,4 +92,20 @@ export interface DeliveryControlledRun extends DeliveryRunOptions {
    * Cancels the controlled run.
    */
   readonly signal: AbortSignal;
+
+  /**
+   * Determines whether the private controlled run owns a pending row before dispatch or acknowledgment.
+   *
+   * @param message Contains the pending Inbox row.
+   * @returns `true` if this controlled run owns the row.
+   * @internal
+   */
+  readonly acceptMessage?: (message: InboxMessage) => boolean;
+
+  /**
+   * Completes private admission cleanup when the controlled run settles before dispatch.
+   *
+   * @internal
+   */
+  readonly onRunSettled?: () => void;
 }
