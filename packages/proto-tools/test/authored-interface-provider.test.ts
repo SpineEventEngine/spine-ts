@@ -350,7 +350,7 @@ describe("AuthoredInterfaceProvider", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  }, 15_000);
+  }, 30_000);
 
   it("rejects generated and declaration outputs as authored candidates before analysis", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-authored-interface-path-"));

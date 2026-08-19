@@ -48,4 +48,8 @@
   delay child-readiness race after 4,268 passing tests. Its test-only IPC-ready
   correction passes under coverage and three additional runs plus mechanical
   checks.
+- Reliability re-review passes that correction. A subsequent global run found
+  one compiler-diagnostic test's 15-second bound marginal under full coverage
+  concurrency; its assertion file passes 16/16 under coverage after a narrow
+  30-second local test bound, plus mechanical checks.
 - Pending: final post-merge release rerun and remote cleanup.

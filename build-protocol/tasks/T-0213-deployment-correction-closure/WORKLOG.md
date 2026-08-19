@@ -157,3 +157,9 @@
   assertion passed under coverage and in three further fresh runs. Tooling
   typecheck, scoped ESLint, formatting, and diff hygiene passed. No production
   behavior or public contract changed.
+- Narrow reliability re-review passed the child-readiness correction.
+- The next post-merge coverage run reached one unrelated compiler-diagnostic
+  test's explicit 15-second timeout under full concurrency. Measurements were
+  ~0.53 seconds normally, 3.9 seconds under isolated coverage, and 15.7 seconds
+  in the global run. Raised only that test's bound to 30 seconds; its full
+  16-test file passes under coverage, with tooling/lint/format/diff checks.
