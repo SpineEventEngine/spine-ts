@@ -27,9 +27,8 @@ const logger = MessageBoardDeployment.logger(config.projectId, process.env);
 const storage =
   MessageBoardDeployment.configureServer(config, client, process.env, logger) ??
   MessageBoardDeployment.storage(client);
-const sessions = MessageBoardDeployment.sessions(process.env);
 const server = await new MessageBoardApplication().runCombined(
-  { ...config, bindings: MessageBoardDeployment.bindings(config, storage), sessions },
+  { ...config, bindings: MessageBoardDeployment.bindings(config, storage) },
   storage,
 );
 console.log(`MessageBoard combined server ready at ${server.baseUrl}`);

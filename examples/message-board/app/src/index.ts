@@ -18,7 +18,7 @@
  */
 
 import { clone, create } from "@bufbuild/protobuf";
-import type { SessionResolver, SubscriptionBindings } from "@spine-event-engine/auth";
+import type { SubscriptionBindings } from "@spine-event-engine/auth";
 import {
   Aggregate,
   Assign,
@@ -55,7 +55,7 @@ import {
 import { MessageAlreadyPosted } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/rejections.js";
 
 import { BoardAccessPolicy, BoardContextResolver } from "./board-access.js";
-import { LocalBoardSession } from "./local-session.js";
+import { PublicBoardAdmission } from "./public-board-admission.js";
 import { typeRegistry } from "./model-registry.js";
 
 export { typeRegistry } from "./model-registry.js";
@@ -199,13 +199,6 @@ export interface BoardServerOptions {
    */
   readonly bindings?: SubscriptionBindings;
 
-  /**
-   * Resolves browser credentials for this server process.
-   *
-   * Local startup uses the built-in local fixture when this option is omitted.
-   * Production supplies shared signed sessions from deployment configuration.
-   */
-  readonly sessions?: SessionResolver;
 }
 
 /**
@@ -327,10 +320,10 @@ export class MessageBoardApplication {
             browser: {
               origins: [options.webOrigin ?? "http://127.0.0.1:5173"],
               registry: typeRegistry,
-              sessions: options.sessions ?? LocalBoardSession.resolver(),
+              sessions: PublicBoardAdmission.resolver(),
               authorize: policy.authorize.bind(policy),
               contexts: new BoardContextResolver(),
-              clock: LocalBoardSession.clock,
+              clock: PublicBoardAdmission.clock,
               ...(options.bindings === undefined ? {} : { bindings: options.bindings }),
             },
           }

@@ -102,7 +102,7 @@ describe("MessageBoard deployment entrypoints", () => {
       calls.logger,
     );
     expect(calls.runCombined).toHaveBeenCalledWith(
-      expect.objectContaining({ bindings: calls.bindings, sessions: calls.sessions }),
+      expect.objectContaining({ bindings: calls.bindings }),
       calls.storageResult,
     );
   });
@@ -147,7 +147,6 @@ function startupMocks() {
   vi.resetModules();
   const storage = {};
   const bindings = {};
-  const sessions = {};
   const applicationConfig = { projectId: "project", port: 0 };
   const combinedConfig = { projectId: "project", port: 0 };
   const gatewayConfig: {
@@ -192,7 +191,6 @@ function startupMocks() {
       logger: createLogger,
       storage: storageFactory,
       bindings: () => bindings,
-      sessions: () => sessions,
     },
   }));
   vi.doMock("../src/index.js", () => ({
@@ -211,7 +209,6 @@ function startupMocks() {
     },
     BoardContextResolver: class {},
   }));
-  vi.doMock("../src/local-session.js", () => ({ LocalBoardSession: { clock: {} } }));
   vi.doMock("../src/model-registry.js", () => ({ typeRegistry: {} }));
   /* eslint-enable @typescript-eslint/no-extraneous-class, @typescript-eslint/no-empty-function */
 
@@ -233,7 +230,6 @@ function startupMocks() {
     runApplication,
     runCombined,
     serverAtPort,
-    sessions,
     storage: storageFactory,
     storageResult: storage,
   };

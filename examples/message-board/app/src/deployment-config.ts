@@ -18,7 +18,6 @@
  */
 
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
-import { SignedSessions } from "@spine-event-engine/auth";
 import { StringifierRegistry } from "@spine-event-engine/core";
 import {
   DurableSubscriptionBindings,
@@ -33,7 +32,6 @@ import { Logging, type Log } from "@google-cloud/logging";
 import { GoogleCloudLoggingTransport } from "@loglayer/transport-google-cloud-logging";
 import { LogLayer, type ILogLayer } from "loglayer";
 import { randomUUID } from "node:crypto";
-import { createPrivateKey } from "node:crypto";
 
 import type { BoardServerOptions } from "./index.js";
 import { typeRegistry } from "./model-registry.js";
@@ -74,13 +72,6 @@ interface DeploymentContract {
   logger(projectId: string, environment: NodeJS.ProcessEnv): ILogLayer | undefined;
   cloudLogger(log: Log): ILogLayer;
 
-  /**
-   * Creates production browser sessions from shared signing configuration.
-   *
-   * @param environment The process environment that supplies shared settings.
-   * @returns The configured signed-session resolver and issuer.
-   */
-  sessions(environment: NodeJS.ProcessEnv): SignedSessions;
   configureServer(
     config: DeploymentConfig,
     client: Datastore,
@@ -181,21 +172,6 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
   cloudLogger(log: Log): ILogLayer {
     return new LogLayer({
       transport: new GoogleCloudLoggingTransport({ logger: log }),
-    });
-  },
-
-  sessions(environment: NodeJS.ProcessEnv): SignedSessions {
-    if (environment.NODE_ENV !== "production")
-      throw new Error("Signed MessageBoard sessions require production configuration.");
-    return new SignedSessions({
-      issuer: DeploymentValues.required(environment, "MESSAGE_BOARD_SESSION_ISSUER"),
-      audience: DeploymentValues.required(environment, "MESSAGE_BOARD_SESSION_AUDIENCE"),
-      activeKey: {
-        kid: DeploymentValues.required(environment, "MESSAGE_BOARD_SESSION_KEY_ID"),
-        privateKey: createPrivateKey(
-          DeploymentValues.required(environment, "MESSAGE_BOARD_SESSION_PRIVATE_KEY"),
-        ),
-      },
     });
   },
 

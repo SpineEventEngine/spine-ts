@@ -139,15 +139,6 @@ describe("MessageBoard deployment configuration", () => {
     ).toThrow("Invalid required configuration: BACKEND_URLS.");
   });
 
-  it("rejects signed sessions outside production", () => {
-    expect(() =>
-      MessageBoardDeployment.sessions({
-        ...completeEnvironment,
-        NODE_ENV: "development",
-      }),
-    ).toThrow("require production configuration");
-  });
-
   it.each([
     ["HOST", undefined],
     ["DATASTORE_PROJECT_ID", ""],

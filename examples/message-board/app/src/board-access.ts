@@ -41,15 +41,15 @@ const MAX_AUTHORIZATION_COMPOSITE_FILTERS = 8;
 const MAX_AUTHORIZATION_SIMPLE_FILTERS = 16;
 
 /**
- * Authorizes MessageBoard requests against the authenticated actor's board access.
+ * Authorizes public-demo requests against their declared board and actor facts.
  */
 export class BoardAccessPolicy implements AuthorizationPolicy {
   // prettier-ignore
 
   /**
-   * Checks whether an authenticated principal may make a MessageBoard request.
+   * Checks whether a public-demo request keeps its message author and board consistent.
    *
-   * @param principal Identifies the authenticated actor and permitted boards.
+   * @param _principal Supplies the Gateway-owned admission principal.
    * @param request Describes the command, query, subscription, or lifecycle call to authorize.
    * @returns A promise that resolves to `true` when allowed and `false` otherwise.
    */
@@ -60,9 +60,9 @@ export class BoardAccessPolicy implements AuthorizationPolicy {
       if (request.kind === "command" && request.message?.$typeName === PostMessageSchema.typeName) {
         const message = request.message as PostMessage;
         return Promise.resolve(
-          message.author?.value === principal.id &&
-            message.board !== undefined &&
-            boards.includes(message.board.value),
+          message.author?.value === this.actorFor(principal, request) &&
+          message.board !== undefined &&
+          boards.includes(message.board.value),
         );
       }
       if (request.kind !== "query" && request.kind !== "subscribe") return Promise.resolve(false);
@@ -72,8 +72,16 @@ export class BoardAccessPolicy implements AuthorizationPolicy {
     }
   }
 
+  private actorFor(principal: AuthenticatedPrincipal, request: IncomingRequest): string | undefined {
+    return principal.id === "message-board-public-demo"
+      ? request.requestedContext.actor?.value
+      : principal.id;
+  }
+
   private boardNames(principal: AuthenticatedPrincipal): readonly string[] {
-    return principal.attributes?.boards?.split(",").filter(Boolean) ?? [];
+    return principal.id === "message-board-public-demo"
+      ? ["general"]
+      : (principal.attributes?.boards?.split(",").filter(Boolean) ?? []);
   }
 
   private authorizesBoard(target: Target, boards: readonly string[]): boolean {
@@ -130,7 +138,7 @@ export class BoardAccessPolicy implements AuthorizationPolicy {
 }
 
 /**
- * Resolves trusted actor context for an authenticated MessageBoard principal.
+ * Rebuilds trusted public-demo actor context from a decoded request.
  */
 export class BoardContextResolver implements ContextResolver {
   // prettier-ignore
@@ -138,21 +146,24 @@ export class BoardContextResolver implements ContextResolver {
   /**
    * Resolves trusted context for a gateway request.
    *
-   * @param principal Identifies the authenticated MessageBoard actor.
-   * @param _request Supplies the gateway request whose context is being resolved.
+   * @param _principal Supplies the Gateway-owned admission principal.
+   * @param request Supplies the decoded gateway request containing the chosen actor.
    * @param clock Supplies the gateway-owned timestamp.
    * @returns A promise that resolves to trusted actor, tenant, and timestamp context.
    */
   async resolve(
-    principal: AuthenticatedPrincipal,
-    _request: IncomingRequest,
+    _principal: AuthenticatedPrincipal,
+    request: IncomingRequest,
     clock: Clock,
   ): Promise<AuthorizedRequestContext> {
-    return this.resolveContext(principal, clock);
+    if (_principal.id !== "message-board-public-demo") return this.resolveContext(_principal, clock);
+    const actor = request.requestedContext.actor?.value;
+    if (actor === undefined || actor.length === 0) throw new Error("Public demo actor is required.");
+    return Promise.resolve({ actor: create(UserIdSchema, { value: actor }), timestamp: clock.now() });
   }
 
   /**
-   * Resolves trusted context from an authenticated principal.
+   * Resolves the display-only public-demo context when no request is present.
    *
    * @param principal Identifies the authenticated MessageBoard actor.
    * @param clock Supplies the gateway-owned timestamp.
