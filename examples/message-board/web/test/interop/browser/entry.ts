@@ -16,10 +16,9 @@ import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createConnectTransport, createGrpcWebTransport } from "@connectrpc/connect-web";
-import { BrowserSession, Client } from "@spine-event-engine/client-web";
+import { Client } from "@spine-event-engine/client-web";
 import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
 import { ActorContextSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
-import { ResolveContextRequestSchema, AuthenticationService } from "@spine-event-engine/proto/auth";
 import {
   CompositeFilterSchema,
   CompositeFilter_CompositeOperator,
@@ -44,8 +43,6 @@ import { UserIdSchema as BoardUserIdSchema } from "@spine-event-engine/example-m
 const parameters = new URLSearchParams(location.search);
 const baseUrl = parameters.get("baseUrl");
 if (baseUrl === null) throw new Error("baseUrl is required");
-const csrf = parameters.get("csrf");
-const bearer = parameters.get("auth") === "invalid" ? "invalid" : "test";
 const protocol = parameters.get("protocol") ?? "grpc-web";
 if (protocol !== "connect" && protocol !== "grpc-web")
   throw new Error("protocol must be connect or grpc-web");
@@ -54,33 +51,15 @@ const tenant = parameters.get("tenant");
 const board = parameters.get("board") ?? "board-a";
 const messageIdPrefix = parameters.get("messageIdPrefix") ?? crypto.randomUUID();
 
-const session = csrf === null ? BrowserSession.bearer({ token: bearer }) : BrowserSession.cookie();
-const sessionFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
-  const headers = new Headers(init.headers);
-  if (csrf !== null) headers.set("x-spine-csrf", csrf);
-  return session.fetch(input, { ...init, headers });
-};
 const createBrowserTransport =
   protocol === "connect" ? createConnectTransport : createGrpcWebTransport;
-const auth = createClient(
-  AuthenticationService,
-  createBrowserTransport({ baseUrl, fetch: sessionFetch }),
-);
 const wireSubscriptions = createClient(
   SubscriptionService,
-  createBrowserTransport({ baseUrl, fetch: sessionFetch }),
+  createBrowserTransport({ baseUrl }),
 );
 const client = (
   protocol === "connect" ? Client.forConnect.bind(Client) : Client.forGrpcWeb.bind(Client)
-)(baseUrl, {
-  credentials: session.credentials,
-  ...(tenant === null ? {} : { tenant }),
-  onRequestMetadata: () => {
-    const headers = session.requestMetadata();
-    if (csrf !== null) headers.set("x-spine-csrf", csrf);
-    return headers;
-  },
-});
+)(baseUrl, { ...(tenant === null ? {} : { tenant }) });
 const request = client.onBehalfOf(actor);
 const query = create(QuerySchema, {
   target: create(TargetSchema, {
@@ -120,13 +99,7 @@ let passiveUpdates: AsyncIterator<unknown> | undefined;
 const bigintAsString = (_key: string, value: unknown): unknown =>
   typeof value === "bigint" ? value.toString() : value;
 
-const resolveContext = async () => {
-  await session.reauthenticate(async ({ signal }) => {
-    const context = await auth.resolveContext(create(ResolveContextRequestSchema), { signal });
-    return context.actor === undefined ? {} : { actor: context.actor.value };
-  });
-  return session.context;
-};
+const resolveContext = async () => ({ actor });
 
 const createPublicSubscription = async () =>
   Array.from(toBinary(SubscriptionSchema, await wireSubscriptions.subscribe(topic)));
@@ -192,7 +165,6 @@ const subscribe = async () => {
     await updates.return?.();
     await subscription.cancel();
     await client.close();
-    await session.close();
   }
 };
 
@@ -221,7 +193,6 @@ const stopPassiveSubscription = async () => {
   await updates?.return?.();
   await subscription?.cancel();
   await client.close();
-  await session.close();
 };
 
 Object.assign(window, {
