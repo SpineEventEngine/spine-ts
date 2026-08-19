@@ -15,8 +15,6 @@ minimumReleaseAgeExclude:
 verifyDepsBeforeRun: error
 onlyBuiltDependencies:
   - "@bufbuild/buf"
-  - zeromq
 allowBuilds:
   "@bufbuild/buf": true
   protobufjs: false
-  zeromq: true

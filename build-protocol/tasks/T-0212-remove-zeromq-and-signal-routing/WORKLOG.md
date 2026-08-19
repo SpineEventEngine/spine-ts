@@ -12,3 +12,19 @@
 - One bounded implementation owner will receive the converged inventory. It
   must not preserve aliases, move the rejected layer, or alter the process-local
   IntegrationBroker SPI.
+
+## 2026-08-19 — RED-30 and deletion checkpoint
+
+- Implementation owner: existing `implementer` role, explicitly configured
+  `gpt-5.6-terra` / `medium`. This execution surface does not expose
+  runtime-model telemetry, so the immutable configured profile is the evidence.
+- Added `scripts/check-t0212-removed-routing.mjs` and
+  `check:t0212-removed-routing`. Its baseline RED-30 run failed for the
+  expected reason: rejected source paths and current references remained.
+- Removed the ZeroMQ source/test trees, the generic transport root contract,
+  context transport/routing/runtime files, cross-process fixtures, and the Todo
+  local-multi-process fixture. Dependency manifest and workspace approval edits
+  are included; `pnpm install --lockfile-only` refreshed the lock but still
+  reported an ignored historical ZeroMQ build, which requires lock audit.
+- This is an implementation checkpoint only. Current docs/API inventory and
+  remaining tests still require cleanup before any green or completion claim.

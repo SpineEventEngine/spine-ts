@@ -39,7 +39,6 @@ import {
   spineServicesAccess,
   type SpineServicesOptions,
 } from "../services/spine-services.js";
-import { ContextTransportGroup } from "./context-transport-group.js";
 import { BrowserServer } from "./browser-server.js";
 import type {
   EnvironmentAttachmentHandle,
@@ -335,7 +334,6 @@ export class Server {
       if (serverEnvironmentAccess.failedStartRetryPending(this.#environment, error)) {
         this.#failedStartCleanup = {
           closeGroup,
-          contextTransports: undefined,
           failedStartRollback: { rejection: error },
         };
       } else {
@@ -344,7 +342,6 @@ export class Server {
         } catch (cleanupError) {
           this.#failedStartCleanup = {
             closeGroup,
-            contextTransports: undefined,
             failedStartRollback: undefined,
           };
           throw ServerValues.attachmentCleanupError(error, cleanupError);
@@ -354,25 +351,6 @@ export class Server {
       throw error;
     }
     const closeables = [...contexts, ...this.#resources];
-    const contextTransports =
-      this.#environment.transport === undefined
-        ? undefined
-        : new ContextTransportGroup(this.#environment.transport);
-    try {
-      await contextTransports?.open(contexts);
-    } catch (error) {
-      const cleanup: FailedStartCleanup = {
-        closeGroup: new RetryableCloseGroup(
-          closeables,
-          "Server start cleanup failed while closing owned contexts/resources.",
-        ),
-        contextTransports,
-        attachment,
-        failedStartRollback: undefined,
-      };
-      this.#failedStartCleanup = cleanup;
-      return this.#cleanupFailedContextStart(cleanup, error);
-    }
     const services = new SpineServices({
       contexts,
       ...this.#services,
@@ -397,7 +375,6 @@ export class Server {
             "Server start cleanup failed while closing owned contexts/resources.",
           ),
           network: { server: httpServer, sessions },
-          contextTransports,
           attachment,
           failedStartRollback: undefined,
         };
@@ -412,7 +389,6 @@ export class Server {
       sessions,
       environment: this.#environment,
       attachment,
-      contextTransports,
       services,
       host,
       port: address.port,
@@ -494,9 +470,6 @@ export class Server {
   }
 
   async #advanceFailedStartCleanup(cleanup: FailedStartCleanup, errors: unknown[]): Promise<void> {
-    if (!(await this.#closeFailedStartContextTransports(cleanup, errors))) {
-      return;
-    }
     if (!(await this.#advanceFailedStartAttachment(cleanup, errors))) {
       return;
     }
@@ -533,7 +506,6 @@ export class Server {
     }
     if (
       !closeFailed &&
-      cleanup.contextTransports === undefined &&
       cleanup.attachment === undefined &&
       this.#failedStartCleanup === cleanup
     ) {
@@ -550,24 +522,6 @@ export class Server {
     try {
       await ServerValues.closeNetwork(network.server, network.sessions);
       delete cleanup.network;
-      return true;
-    } catch (error) {
-      CloseErrors.collect(error, errors);
-      return false;
-    }
-  }
-
-  async #closeFailedStartContextTransports(
-    cleanup: FailedStartCleanup,
-    errors: unknown[],
-  ): Promise<boolean> {
-    const contextTransports = cleanup.contextTransports;
-    if (contextTransports === undefined) {
-      return true;
-    }
-    try {
-      await contextTransports.close();
-      cleanup.contextTransports = undefined;
       return true;
     } catch (error) {
       CloseErrors.collect(error, errors);
@@ -616,7 +570,6 @@ interface FailedStartCleanup {
   readonly closeGroup: RetryableCloseGroup;
   readonly failedStartRollback: FailedStartRollbackCapability | undefined;
   network?: FailedStartNetwork;
-  contextTransports: ContextTransportGroup | undefined;
   attachment?: EnvironmentAttachmentHandle;
 }
 
@@ -923,7 +876,6 @@ class RunningHttp2Server implements RunningServer {
   readonly #startedLifecycles: { close(): unknown }[] = [];
   readonly #environment: ServerEnvironment;
   readonly #attachment: EnvironmentAttachmentHandle;
-  readonly #contextTransports: ContextTransportGroup | undefined;
   readonly #services: SpineServices;
   readonly host: string;
   readonly port: number;
@@ -940,7 +892,6 @@ class RunningHttp2Server implements RunningServer {
     this.#listenerLifecycles = options.listenerLifecycles;
     this.#environment = options.environment;
     this.#attachment = options.attachment;
-    this.#contextTransports = options.contextTransports;
     this.#services = options.services;
     this.host = options.host;
     this.port = options.port;
@@ -1016,7 +967,6 @@ class RunningHttp2Server implements RunningServer {
       await ServerValues.closeNetwork(this.#server, this.#sessions);
       this.#networkClosed = true;
     }
-    await this.#contextTransports?.close();
     const detachErrors: unknown[] = [];
     let detachRejected = false;
     if (!this.#attachmentDetached) {
@@ -1069,7 +1019,6 @@ interface RunningHttp2ServerOptions {
   readonly listenerLifecycles: readonly { start(): unknown; close(): unknown }[];
   readonly environment: ServerEnvironment;
   readonly attachment: EnvironmentAttachmentHandle;
-  readonly contextTransports: ContextTransportGroup | undefined;
   readonly services: SpineServices;
   readonly host: string;
   readonly port: number;
@@ -1211,7 +1160,7 @@ const ServerValues = Object.freeze({
     }
     throw new AggregateError(
       errors,
-      "Server start failed while opening context transport and cleanup also failed.",
+      "Server start failed while assembling contexts and cleanup also failed.",
     );
   },
 
