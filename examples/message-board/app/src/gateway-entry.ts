@@ -15,7 +15,6 @@
 import { Server } from "@spine-event-engine/server";
 import { GkeNodeDiscovery } from "@spine-event-engine/deployment-gke";
 import { Datastore } from "@google-cloud/datastore";
-import { Logging } from "@google-cloud/logging";
 
 import { MessageBoardDeployment } from "./deployment-config.js";
 import { BoardAccessPolicy, BoardContextResolver } from "./board-access.js";
@@ -24,9 +23,7 @@ import { typeRegistry } from "./model-registry.js";
 
 const config = MessageBoardDeployment.gateway(process.env);
 const client = new Datastore({ projectId: config.projectId });
-const logger = MessageBoardDeployment.logger(
-  new Logging({ projectId: config.projectId }).log("message-board"),
-);
+const logger = MessageBoardDeployment.logger(config.projectId, process.env);
 const storage = MessageBoardDeployment.storage(client);
 MessageBoardDeployment.configureGatewayServer(config, storage, logger);
 const policy = new BoardAccessPolicy();

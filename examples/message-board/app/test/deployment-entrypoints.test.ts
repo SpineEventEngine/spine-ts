@@ -83,9 +83,7 @@ describe("MessageBoard deployment entrypoints", () => {
 
     await import("../src/application-entry.js");
     expect(calls.datastore).toHaveBeenCalledWith({ projectId: "project" });
-    expect(calls.logging).toHaveBeenCalledWith({ projectId: "project" });
-    expect(calls.loggingLog).toHaveBeenCalledWith("message-board");
-    expect(calls.createLogger).toHaveBeenCalledWith(calls.googleLog);
+    expect(calls.createLogger).toHaveBeenCalledWith("project", process.env);
     expect(calls.storage).toHaveBeenCalledWith(calls.client);
     expect(calls.configureServer).toHaveBeenCalledWith(
       calls.applicationConfig,

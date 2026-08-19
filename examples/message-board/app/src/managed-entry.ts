@@ -20,7 +20,6 @@ import {
   type ManagedServerApplicationHandle,
 } from "@spine-event-engine/server";
 import { Datastore } from "@google-cloud/datastore";
-import { Logging } from "@google-cloud/logging";
 
 import { MessageBoardDeployment } from "./deployment-config.js";
 import { MessageBoardApplication } from "./index.js";
@@ -35,9 +34,7 @@ const managed = await ManagedServerApplication.run({
   moduleUrl: import.meta.url,
   createServer: async ({ host, port }) => {
     const client = new Datastore({ projectId: config.projectId });
-    const logger = MessageBoardDeployment.logger(
-      new Logging({ projectId: config.projectId }).log("message-board"),
-    );
+    const logger = MessageBoardDeployment.logger(config.projectId, process.env);
     const facilities = MessageBoardDeployment.configureManagedServer(
       config,
       client,

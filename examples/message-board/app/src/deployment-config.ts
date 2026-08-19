@@ -24,7 +24,7 @@ import {
 import type { StorageFactory } from "@spine-event-engine/storage";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import type { Datastore } from "@google-cloud/datastore";
-import type { Log } from "@google-cloud/logging";
+import { Logging, type Log } from "@google-cloud/logging";
 import { GoogleCloudLoggingTransport } from "@loglayer/transport-google-cloud-logging";
 import { LogLayer, type ILogLayer } from "loglayer";
 import { randomUUID } from "node:crypto";
@@ -66,7 +66,8 @@ interface DeploymentContract {
   managed(environment: NodeJS.ProcessEnv): ManagedConfig;
   storage(client: Datastore): StorageFactory;
   bindings(config: CombinedConfig, storageFactory: StorageFactory): DurableSubscriptionBindings;
-  logger(log: Log): ILogLayer;
+  logger(projectId: string, environment: NodeJS.ProcessEnv): ILogLayer | undefined;
+  cloudLogger(log: Log): ILogLayer;
 
   /**
    * Creates production browser sessions from shared signing configuration.
@@ -84,7 +85,7 @@ interface DeploymentContract {
   configureGatewayServer(
     config: GatewayConfig,
     storageFactory: StorageFactory,
-    logger: ILogLayer,
+    logger?: ILogLayer,
   ): void;
   configureManagedServer(
     config: DeploymentConfig,
@@ -167,7 +168,12 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     });
   },
 
-  logger(log: Log): ILogLayer {
+  logger(projectId: string, environment: NodeJS.ProcessEnv): ILogLayer | undefined {
+    if (environment.DATASTORE_EMULATOR_HOST !== undefined) return undefined;
+    return DeploymentValues.cloudLogger(new Logging({ projectId }).log("message-board"));
+  },
+
+  cloudLogger(log: Log): ILogLayer {
     return new LogLayer({
       transport: new GoogleCloudLoggingTransport({ logger: log }),
     });
@@ -202,11 +208,11 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
   configureGatewayServer(
     _config: GatewayConfig,
     storageFactory: StorageFactory,
-    logger: ILogLayer,
+    logger?: ILogLayer,
   ): void {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory,
-      logger,
+      ...(logger === undefined ? {} : { logger }),
       typeRegistry,
     });
   },

@@ -38,7 +38,7 @@ describe("MessageBoard deployment configuration", () => {
   it("composes an application logger with the official Google Cloud transport", () => {
     const entry = vi.fn((_metadata: unknown, data: unknown) => data);
     const write = vi.fn();
-    const logger = MessageBoardDeployment.logger({ entry, write } as never);
+    const logger = MessageBoardDeployment.cloudLogger({ entry, write } as never);
 
     logger.withMetadata({ entityId: "message-1" }).warn("Message delivery was delayed.");
 
@@ -170,7 +170,7 @@ describe("MessageBoard deployment configuration", () => {
 
   it("configures production storage and transport as environment-owned facilities", () => {
     const config = MessageBoardDeployment.application(completeEnvironment);
-    const logger = MessageBoardDeployment.logger({
+    const logger = MessageBoardDeployment.cloudLogger({
       entry: vi.fn((_metadata: unknown, data: unknown) => data),
       write: vi.fn(),
     } as never);
