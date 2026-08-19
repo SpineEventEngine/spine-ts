@@ -60,3 +60,24 @@ Final endpoint `e0d2f03d` replaces the watchdog with scoped Vitest fake time.
 Final affected style re-review and performance/reliability re-review both PASS
 with no P0-P3 finding. Runtime telemetry was unavailable; the explicitly
 configured immutable reviewer profiles are the provenance.
+
+## To-Do review wave
+
+The complete initial wave used the existing style/maintainability,
+documentation, performance/reliability, and TypeScript/API-doc reviewer roles.
+Their profiles were dispatched explicitly (`gpt-5.6-terra` / `high` except the
+documentation reviewer at `gpt-5.6-luna` / `medium`); runtime telemetry was not
+exposed.
+
+Accepted findings were returned in one batch to the existing To-Do owner:
+
+- replace Delivery process-liveness with bounded observable readiness;
+- propagate custom prerequisite ports consistently and clean up only the exact
+  emulator created by the launcher;
+- remove a duplicate workspace build, brittle source-fragment tests, and a
+  misleading signal callback name;
+- state prerequisites and correct moved-source links;
+- restore the checked TypeScript snippet and `TodoServer` type compatibility;
+- correct the `createTodoContext()` in-memory-default TSDoc wording.
+
+Affected concern re-reviews remain pending the correction endpoint.
