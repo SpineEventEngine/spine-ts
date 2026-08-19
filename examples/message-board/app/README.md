@@ -73,7 +73,9 @@ The production-shaped source files are named for the process they start:
 | [`application-server.ts`](src/application-server.ts) | Starts only the Message Board Bounded Context; a separate Gateway is required.                         |
 | [`gateway-server.ts`](src/gateway-server.ts)         | Starts only the browser-facing Gateway; it contains no Bounded Context and does not run Delivery work. |
 | [`combined-server.ts`](src/combined-server.ts)       | Starts the application and Gateway together in one process.                                            |
-| [`multi-process-app.ts`](src/multi-process-app.ts)   | Starts one Coordinator parent and the configured number of complete child replicas.                    |
+| [`multi-process-app.ts`](src/multi-process-app.ts)   | Selects the Coordinator parent or complete replica startup role.                                       |
+| [`multi-process-coordinator.ts`](src/multi-process-coordinator.ts) | Owns parent lifecycle and starts the configured child replicas.                         |
+| [`multi-process-replica.ts`](src/multi-process-replica.ts) | Builds and synchronizes one complete replica with shared Delivery.                         |
 | [`deployment-config.ts`](src/deployment-config.ts)   | Validates the environment and assembles facilities shared by those entrypoints.                        |
 | [`index.ts`](src/index.ts)                           | Defines the domain handlers and reusable complete application assembly.                                |
 
@@ -90,8 +92,8 @@ in Kubernetes; local Compose alone uses comma-separated `BACKEND_URLS` as an
 explicit static fixture and accepts legacy `BACKEND_URL`. A missing registry namespace stops a
 browser-mode process before it opens a listener. Application data uses
 application Datastore storage; gateway subscription registry storage is
-separate. Production browser processes also require the shared
-The public demo gateway has no browser credential configuration.
+separate. Production browser processes require the shared registry namespace.
+The public-demo Gateway has no browser credential configuration.
 Each entrypoint constructs one Datastore client from
 `DATASTORE_PROJECT_ID` and hands that exact client to the storage factory.
 It also gives the storage factory the application's generated Protobuf type
@@ -107,5 +109,4 @@ commands, fixed image tags, and runtime values.
 
 - [Complete Message Board example](../README.md)
 - [Server package](../../../packages/server/README.md)
-- [Authentication package](../../../packages/auth/README.md)
 - [Detailed coding-agent reference](REFERENCE.md)

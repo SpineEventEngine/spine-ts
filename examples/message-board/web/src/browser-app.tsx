@@ -19,6 +19,8 @@ import "./index.css";
 import { MessageBoardApp } from "./index.js";
 import { LocalBoardGateway } from "./board-config.js";
 
+/** Starts the stock browser Message Board application against its configured Gateway. */
+
 declare global {
   interface Window {
     readonly MESSAGE_BOARD_RUNTIME_CONFIG?: Readonly<Record<string, string | undefined>>;

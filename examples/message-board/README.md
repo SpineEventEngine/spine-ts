@@ -31,12 +31,10 @@ build outputs, so build them once before starting local processes.
 | Mode                                | Storage            | Delivery          | Gateway/UI route       | Owner            |
 | ----------------------------------- | ------------------ | ----------------- | ---------------------- | ---------------- |
 | local single-process                | in-memory          | local             | direct UI to Gateway   | launcher         |
-| local multi-process                 | Datastore emulator | local per replica | direct UI to Gateway   | coordinator      |
-| local multi-process shared Delivery | Datastore emulator | shared server     | direct UI to Gateway   | coordinator      |
+| local multi-process                 | Datastore emulator | shared server     | direct UI to Gateway   | launcher         |
 | combined container                  | Datastore emulator | shared server     | stock UI through Envoy | Compose          |
 | one-node managed container          | Datastore emulator | shared server     | stock UI through Envoy | Compose          |
 | distributed multi-node container    | shared Datastore   | shared server     | stock UI through Envoy | Compose          |
-| Kubernetes cluster                  | shared Datastore   | shared server     | stock UI through Envoy | cluster operator |
 
 Install and build from the repository root:
 
@@ -57,6 +55,21 @@ Open [http://127.0.0.1:5173](http://127.0.0.1:5173), enter a username and a
 message, and post it to `general`. Command+Enter on macOS, or Control+Enter
 elsewhere, posts; plain Enter adds a line. Stop either process with `Ctrl-C`.
 
+For the local multi-process mode, run:
+
+```bash
+examples/message-board/scripts/start-local-multi-process.sh
+```
+
+It builds the matching Delivery image, owns a Datastore emulator and one shared
+Delivery server, starts two managed application replicas plus the Gateway and
+stock UI, then prints [http://127.0.0.1:5173](http://127.0.0.1:5173). `Ctrl-C`
+stops every process and container that this launcher created. Multiple replicas
+share Delivery; the in-memory single-process launcher above is the local-only path.
+
+Kubernetes manifests are static deployment references, not a locally runnable
+mode. See [`deploy/kubernetes`](deploy/kubernetes) when a cluster is available.
+
 Empty fields demonstrate the validation text declared in
 [`commands.proto`](model/proto/spine/examples/messageboard/commands.proto): the
 browser displays the server's structured response instead of duplicating rules.
@@ -65,8 +78,8 @@ browser displays the server's structured response instead of duplicating rules.
 
 ```mermaid
 flowchart LR
-  React[React in the browser] -->|gRPC-Web or Connect| Gateway[Authenticated gateway]
-  Gateway -->|trusted context| Native[Private native gRPC services]
+  React[React in the browser] -->|gRPC-Web or Connect| Gateway[Public browser gateway]
+  Gateway --> Native[Private native gRPC services]
   Native --> Context[Message Board bounded context]
   Context --> Aggregate[BoardMessageAggregate]
   Aggregate -->|MessagePosted| Projection[BoardViewProjection]
@@ -83,7 +96,7 @@ flowchart LR
 
 The browser never receives the native backend address. For local development,
 `Server` starts a private native HTTP/2 backend and a public loopback browser
-gateway on port 8090. The public-demo Gateway rebuilds the trusted actor context
+gateway on port 8090. The public-demo Gateway rebuilds the selected actor context
 from the request actor and forwards only approved traffic; the bounded context
 does not read browser credentials. The React client may use either gRPC-Web or
 Connect at that public boundary.
@@ -183,7 +196,6 @@ replica-oriented standalone application modes.
 - [Message Board server](app/README.md)
 - [Message Board model](model/README.md)
 - [Message Board web UI](web/README.md)
-- [Browser client, authentication, and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 - [Detailed coding-agent reference](REFERENCE.md)
 
 ## Deployment
@@ -199,7 +211,7 @@ flowchart LR
   Browser[Browser] --> Envoy[Envoy / public TLS edge]
   D[Simple delivery server]
   subgraph Combined[Combined topology]
-    C[Message Board app + authenticated gateway]
+    C[Message Board app + public browser gateway]
     C --> CS[(Application storage)]
     C --> CR[(Subscription registry)]
     C --> D

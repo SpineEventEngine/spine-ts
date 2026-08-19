@@ -55,7 +55,7 @@ export interface PostFormProps {
   readonly board: string;
 
   /**
-   * Identifies the authenticated actor.
+   * Identifies the public-demo actor.
    */
   readonly actor: string;
 

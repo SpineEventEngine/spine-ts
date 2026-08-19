@@ -104,7 +104,7 @@ Install Playwright browsers once with
 
 ## Public demo
 
-The visible demo creates no browser credential. It sends the selected actor in each request, and the Gateway rebuilds trusted actor context before forwarding it. Production hosts choose their own admission policy.
+The visible demo creates no browser credential. It sends the selected actor in each request, and the Gateway rebuilds that actor context before forwarding it. Production hosts choose their own admission policy.
 
 ## 🔗 Learn more
 

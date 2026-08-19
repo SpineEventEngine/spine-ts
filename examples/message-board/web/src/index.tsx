@@ -56,7 +56,7 @@ export interface MessageBoardAppProps {
 /**
  * Renders the MessageBoard browser application.
  *
- * @param props The session, client request, and selected board.
+ * @param props The public-demo actor, client request, and selected board.
  * @returns The MessageBoard user interface.
  */
 export const MessageBoardApp = (props: MessageBoardAppProps): ReactElement => {

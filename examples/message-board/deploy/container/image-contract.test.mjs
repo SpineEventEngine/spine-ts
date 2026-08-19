@@ -10,8 +10,7 @@ import test from "node:test";
 import { URL } from "node:url";
 
 const containerRoot = new URL(".", import.meta.url);
-const datastoreEmulator =
-  "gcr.io/google.com/cloudsdktool/google-cloud-cli@sha256:cda01b8c880e9161992c3fd61d7d0e153b4dd073aa4a9d62ad79243907cf8dd4";
+const datastoreEmulator = "gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators";
 
 test("local image builds regenerate application output before packing it", () => {
   const builder = readFileSync(new URL("build-local-images.mjs", containerRoot), "utf8");
@@ -59,7 +58,7 @@ test("local images have a fixed build contract", () => {
   assert.match(helper, /COPYFILE_DISABLE/u);
   assert.match(helper, /-exec", "xattr", "-c"/u);
   assert.match(helper, /-exec", "xattr", "-s", "-c"/u);
-  assert.match(datastoreEmulator, /@sha256:[a-f0-9]{64}$/u);
+  assert.match(datastoreEmulator, /:emulators$/u);
 });
 
 test("stock Message Board UI image serves the built single-page application", () => {

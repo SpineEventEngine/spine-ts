@@ -1,3 +1,4 @@
+// Assembles the private native and public browser test topology used by interop tests.
 import * as http2 from "node:http2";
 import * as tls from "node:tls";
 import { execFile } from "node:child_process";

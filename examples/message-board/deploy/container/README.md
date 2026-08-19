@@ -65,15 +65,14 @@ remains its legacy single-backend form. Production Kubernetes gateways use
 `BACKEND_DISCOVERY_SERVICE` and `BACKEND_DISCOVERY_PORT` for GKE service DNS;
 they do not configure a fixed backend list.
 
-For example, start the native application against a disposable Datastore
-emulator:
+For example, start the native application against the local Datastore emulator:
 
 ```bash
 docker network create message-board-local
 
 docker run --detach --name message-board-datastore \
   --network message-board-local --network-alias datastore \
-  gcr.io/google.com/cloudsdktool/google-cloud-cli@sha256:cda01b8c880e9161992c3fd61d7d0e153b4dd073aa4a9d62ad79243907cf8dd4 \
+  gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators \
   gcloud emulators firestore start \
   --database-mode=datastore-mode --host-port=0.0.0.0:8081 --quiet
 
