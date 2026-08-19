@@ -7,7 +7,8 @@ reference records the exact package and Terraform-template contract.
 
 `GkeNodeDiscovery` implements `NodeDiscovery`. It reads A and AAAA answers for
 a headless-Service DNS name and publishes each successful answer as a complete
-application-node snapshot. Its default refresh interval is 10 seconds. A
+ready-Coordinator snapshot. Each answer reaches one node-local Coordinator,
+not a managed child listener. Its default refresh interval is 10 seconds. A
 positive DNS TTL can schedule an earlier refresh; zero, missing, and unusable
 TTLs use the configured interval. Empty and name-not-found answers publish an
 empty snapshot immediately and retry at the configured interval.
@@ -29,8 +30,8 @@ URLs are not reconciled.
 `terraform/` targets an existing Kubernetes context. It does not provision a
 GKE cluster. The module uses versioned Kubernetes-provider resources and keeps
 the three process Services private. `application` is headless with
-`publish_not_ready_addresses = false`; its ready endpoint addresses are the
-Gateway discovery source. `gateway` and `delivery` each have exactly one
+`publish_not_ready_addresses = false`; its ready Coordinator endpoint addresses
+are the Gateway discovery source. `gateway` and `delivery` each have exactly one
 replica. The delivery server is in-memory and not highly available.
 
 The module creates no Kubernetes Secret and accepts only the names of

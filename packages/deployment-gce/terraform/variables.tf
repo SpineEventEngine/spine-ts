@@ -120,6 +120,26 @@ variable "application_replicas" {
   }
 }
 
+variable "application_process_count" {
+  description = "Number of complete application replicas started in each application VM."
+  type        = number
+
+  validation {
+    condition     = var.application_process_count >= 1 && floor(var.application_process_count) == var.application_process_count
+    error_message = "Application process count must be a positive integer."
+  }
+}
+
+variable "delivery_shard_count" {
+  description = "Delivery shard count passed explicitly to each application image's context assembly."
+  type        = number
+
+  validation {
+    condition     = var.delivery_shard_count >= 1 && floor(var.delivery_shard_count) == var.delivery_shard_count
+    error_message = "Delivery shard count must be a positive integer."
+  }
+}
+
 variable "application_port" {
   description = "Private native gRPC listener port of each application node."
   type        = number

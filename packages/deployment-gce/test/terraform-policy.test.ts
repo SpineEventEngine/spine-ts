@@ -194,12 +194,41 @@ describe("the GCE deployment guide", () => {
       "// docs-snippet-path: packages/deployment-gce/examples/application.ts",
     );
     expect(guide).toContain("// docs-snippet-path: packages/deployment-gce/examples/gateway.ts");
+    expect(application).toContain("ManagedServerApplication");
     expect(application).toContain("GceRegistrar");
+    expect(application).toContain("processCount");
+    expect(application).toContain("deliveryShardCount");
+    expect(application).toContain("await registrar.start()");
+    expect(application).toContain("() => registrar.close()");
     expect(application).toContain("storageFactoryFor");
-    expect(application).toContain("addResource(registry)");
-    expect(application).toContain("Server.atPort");
+    expect(application).not.toContain("Server.atPort");
     expect(gateway).toContain("GceNodeDiscovery");
     expect(gateway).toContain("storageFactoryFor");
+  });
+
+  it("publishes each ready node Coordinator rather than a managed child listener", async () => {
+    const terraform = await readOptional(new URL("main.tf", terraformRoot));
+    const application = await readOptional(new URL("examples/application.ts", packageRoot));
+
+    expect(template(terraform, "application")).toContain("APPLICATION_PROCESS_COUNT");
+    expect(template(terraform, "application")).toContain("DELIVERY_SHARD_COUNT");
+    expect(application).toContain("GceDeploymentSettings.processCount(environment)");
+    expect(application).toContain("GceDeploymentSettings.deliveryShardCount(environment)");
+    expect(application).toContain("new GceRegistrar({ registry, port })");
+  });
+
+  it("requires deployer-selected process and Delivery shard counts", async () => {
+    const variables = await readOptional(new URL("variables.tf", terraformRoot));
+    const values = await readOptional(new URL("terraform.tfvars.example", terraformRoot));
+
+    for (const name of ["application_process_count", "delivery_shard_count"] as const) {
+      const declaration = variables.slice(
+        variables.indexOf(`variable \"${name}\"`),
+        variables.indexOf("\nvariable ", variables.indexOf(`variable \"${name}\"`) + 1),
+      );
+      expect(declaration).not.toMatch(/default\s*=/u);
+      expect(values).toMatch(new RegExp(`^${name}\\s*=`, "mu"));
+    }
   });
 
   it("packs the Terraform template and entrypoints", async () => {

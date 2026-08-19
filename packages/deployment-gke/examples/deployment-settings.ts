@@ -50,4 +50,35 @@ export const DeploymentSettings = Object.freeze({
       throw new Error("BACKEND_DISCOVERY_SERVICE must not be blank.");
     return value;
   },
+
+  /**
+   * Reads the deployer-selected number of complete application replicas in this Node process.
+   *
+   * @param environment Provides injected process settings.
+   * @returns The positive managed child count.
+   */
+  processCount(environment: DeploymentEnvironment): number {
+    return DeploymentSettings.count(environment, "APPLICATION_PROCESS_COUNT");
+  },
+
+  /**
+   * Reads the application-selected Delivery shard count passed to server assembly.
+   *
+   * @param environment Provides injected process settings.
+   * @returns The positive Delivery shard count.
+   */
+  deliveryShardCount(environment: DeploymentEnvironment): number {
+    return DeploymentSettings.count(environment, "DELIVERY_SHARD_COUNT");
+  },
+
+  count(
+    environment: DeploymentEnvironment,
+    name: "APPLICATION_PROCESS_COUNT" | "DELIVERY_SHARD_COUNT",
+  ): number {
+    const value = environment[name];
+    const count = Number(value);
+    if (typeof value !== "string" || !Number.isSafeInteger(count) || count < 1)
+      throw new Error(`${name} must be a positive safe integer.`);
+    return count;
+  },
 });
