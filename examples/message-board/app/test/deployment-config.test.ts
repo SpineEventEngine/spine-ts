@@ -73,6 +73,33 @@ describe("MessageBoard deployment configuration", () => {
     });
   });
 
+  it("reads independent explicit managed process and Delivery shard counts", () => {
+    expect(
+      MessageBoardDeployment.managed({
+        ...completeEnvironment,
+        PROCESS_COUNT: "3",
+        DELIVERY_SHARD_COUNT: "5",
+      }),
+    ).toMatchObject({ processCount: 3, deliveryShardCount: 5 });
+  });
+
+  it.each([
+    [undefined, "1", "PROCESS_COUNT"],
+    ["0", "1", "PROCESS_COUNT"],
+    ["1", "1.5", "DELIVERY_SHARD_COUNT"],
+  ])(
+    "rejects invalid managed count configuration",
+    (processCount, deliveryShardCount, expected) => {
+      expect(() =>
+        MessageBoardDeployment.managed({
+          ...completeEnvironment,
+          PROCESS_COUNT: processCount,
+          DELIVERY_SHARD_COUNT: deliveryShardCount,
+        }),
+      ).toThrow(expected);
+    },
+  );
+
   it("prefers the ordered fixed BACKEND_URLS topology over the legacy backend URL", () => {
     expect(
       MessageBoardDeployment.gateway({

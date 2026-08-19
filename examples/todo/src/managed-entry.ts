@@ -27,8 +27,9 @@ import { Datastore } from "@google-cloud/datastore";
 import { TypeRegistry } from "@spine-event-engine/core";
 import { todoProtoModule } from "../generated/proto-module.js";
 import { createTodoContext } from "./index.js";
+import { readTodoManagedDeployment } from "./managed-deployment.js";
 
-const deployment = readDeployment(process.env);
+const deployment = readTodoManagedDeployment(process.env);
 const isManagedChild = process.env.SPINE_MANAGED_SERVER_CHILD === "true";
 let delivery: { open(): unknown } | undefined;
 const managed = await ManagedServerApplication.run({
@@ -66,55 +67,6 @@ if (!isManagedChild) {
   console.log(
     `To-do managed coordinator ready at ${deployment.host}:${deployment.port.toString()}`,
   );
-}
-
-function readDeployment(environment: NodeJS.ProcessEnv): {
-  readonly host: string;
-  readonly port: number;
-  readonly projectId: string;
-  readonly deliveryServerUrl: string;
-  readonly processCount: number;
-  readonly deliveryShardCount: number;
-} {
-  return {
-    host: required(environment, "HOST"),
-    port: port(required(environment, "PORT")),
-    projectId: required(environment, "DATASTORE_PROJECT_ID"),
-    deliveryServerUrl: httpUrl(required(environment, "DELIVERY_SERVER_URL")),
-    processCount: positiveSafeInteger(required(environment, "PROCESS_COUNT"), "PROCESS_COUNT"),
-    deliveryShardCount: positiveSafeInteger(
-      required(environment, "DELIVERY_SHARD_COUNT"),
-      "DELIVERY_SHARD_COUNT",
-    ),
-  };
-}
-
-function required(environment: NodeJS.ProcessEnv, name: string): string {
-  const value = environment[name];
-  if (value === undefined || value.length === 0)
-    throw new Error(`Missing required configuration: ${name}.`);
-  return value;
-}
-
-function port(value: string): number {
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65_535)
-    throw new Error("Invalid required configuration: PORT.");
-  return parsed;
-}
-
-function positiveSafeInteger(value: string, name: string): number {
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1)
-    throw new Error(`Invalid required configuration: ${name}.`);
-  return parsed;
-}
-
-function httpUrl(value: string): string {
-  const url = new URL(value);
-  if (url.protocol !== "http:" && url.protocol !== "https:")
-    throw new Error("Invalid required configuration: DELIVERY_SERVER_URL.");
-  return url.toString().replace(/\/$/u, "");
 }
 
 function installShutdown(handle: ManagedServerApplicationHandle): void {
