@@ -17,6 +17,7 @@ import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import {
   ActorContextSchema,
+  CommandSchema,
   EventContextSchema,
   EventSchema,
   type TenantId,
@@ -628,6 +629,40 @@ describe("EnvironmentDeliveryWorker", () => {
     worker.stop();
     await worker.awaitSettled();
     await worker.retire();
+  });
+
+  it("routes a shared remote HANDLE_COMMAND row to its matching multitenant runtime", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const target = descriptor("CommandTenant", "type.example.dev/CommandTenant", storageFactory);
+    const ready = Object.freeze({ ...target.ready, label: "HANDLE_COMMAND" as const, tenantId: tenant("match") });
+    const scope = runScope("command-tenant", ready);
+    const delivery = new Delivery({ context: target.context, storageFactory });
+    const Worker = EnvironmentDeliveryWorker as unknown as new (options: { readonly ports: { readonly inbox: typeof delivery.inbox; readonly workRegistry: typeof delivery.shards; readonly source: DeliverySource } }) => EnvironmentDeliveryWorker;
+    const worker = new Worker({ ports: { inbox: delivery.inbox, workRegistry: delivery.shards, source: inertDeliverySource() } });
+    worker.add({ owner: scope.owner, descriptor: target.value, storageFactory, tenant: { tenantId: ready.tenantId }, context: target.context, scopes: [scope] });
+    await worker.start({ scopes: [scope] }, [scope.ready.shard]);
+    await delivery.inbox.receive(commandMessage(ready, "command-match"));
+    worker.notify(scope);
+    await until(() => target.replayed.includes("command-match"));
+    worker.stop(); await worker.awaitSettled(); await worker.retire();
+  });
+
+  it("keeps a multitenant HANDLE_COMMAND row pending when its actor tenant mismatches", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const target = descriptor("CommandMismatch", "type.example.dev/CommandMismatch", storageFactory);
+    const configured = Object.freeze({ ...target.ready, label: "HANDLE_COMMAND" as const, tenantId: tenant("configured") });
+    const mismatch = Object.freeze({ ...configured, tenantId: tenant("other") });
+    const scope = runScope("command-mismatch", configured);
+    const delivery = new Delivery({ context: target.context, storageFactory });
+    const Worker = EnvironmentDeliveryWorker as unknown as new (options: { readonly ports: { readonly inbox: typeof delivery.inbox; readonly workRegistry: typeof delivery.shards; readonly source: DeliverySource } }) => EnvironmentDeliveryWorker;
+    const worker = new Worker({ ports: { inbox: delivery.inbox, workRegistry: delivery.shards, source: inertDeliverySource() } });
+    worker.add({ owner: scope.owner, descriptor: target.value, storageFactory, tenant: { tenantId: configured.tenantId }, context: target.context, scopes: [scope] });
+    await worker.start({ scopes: [scope] }, [scope.ready.shard]);
+    await delivery.inbox.receive(commandMessage(mismatch, "command-mismatch")); worker.notify(scope);
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    expect((await delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] })).some(({ signalId }) => signalId === "command-mismatch")).toBe(true);
+    expect(target.replayed).toEqual([]);
+    worker.stop(); await worker.awaitSettled(); await worker.retire();
   });
 
   it("fences an owner retirement until its admitted callback settles", async () => {
@@ -3762,6 +3797,17 @@ function message(ready: DeliveryReady, signalId: string) {
     signal: create(AnySchema, {
       typeUrl: "type.spine.io/spine.core.Event",
       value: toBinary(EventSchema, create(EventSchema, { context })),
+    }),
+  };
+}
+
+function commandMessage(ready: DeliveryReady, signalId: string) {
+  const value = create(CommandSchema, { context: { actorContext: { tenantId: ready.tenantId } } });
+  return {
+    ...message(ready, signalId),
+    signal: create(AnySchema, {
+      typeUrl: "type.spine.io/spine.core.Command",
+      value: toBinary(CommandSchema, value),
     }),
   };
 }

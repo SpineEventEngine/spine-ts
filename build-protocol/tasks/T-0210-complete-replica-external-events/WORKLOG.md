@@ -141,3 +141,6 @@ only.
 - Focused tooling typecheck and the environment worker suite pass after the
   correction. Remaining final changed-coverage and full mechanical gates are
   pending this continuation's final command budget.
+- Added deterministic shared-remote `HANDLE_COMMAND` regressions: actor-context
+  tenant match replays to the configured multitenant runtime; mismatch remains
+  `TO_DELIVER`. Focused environment suite: 92 passing.
