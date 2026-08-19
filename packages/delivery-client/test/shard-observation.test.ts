@@ -166,7 +166,7 @@ describe("DeliveryClient shard observation", () => {
             emit = resolve;
           });
           await new Promise<void>((resolve) =>
-            signal.addEventListener("abort", resolve, { once: true }),
+            signal.addEventListener("abort", () => resolve(), { once: true }),
           );
         },
         acknowledge: (frame) => frame.value.case === "created",
@@ -200,7 +200,7 @@ describe("DeliveryClient shard observation", () => {
         reconnectBackoffMs: 0,
         open: async function* (signal) {
           await new Promise<void>((resolve) =>
-            signal.addEventListener("abort", resolve, { once: true }),
+            signal.addEventListener("abort", () => resolve(), { once: true }),
           );
         },
         acknowledge: () => true,
