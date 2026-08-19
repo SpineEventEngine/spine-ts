@@ -148,7 +148,7 @@ describe("TypeScript documentation snippets", () => {
 
     expect(guide).toContain('option (every_is).ts_type = "TaskEvent";');
     expect(guide).toContain('option (is).ts_type = "TaskAssignmentEvent";');
-    expect(guide).toContain("// docs-snippet-path: examples/todo/src/index.ts");
+    expect(guide).toContain("// docs-snippet-path: examples/todo/src/todo-app.ts");
     expect(guide).toContain("TaskReassigned");
     expect(guide).toContain("zero, one, and two");
     expect(guide).toContain(

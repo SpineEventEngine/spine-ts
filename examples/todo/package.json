@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Runnable server-side to-do example for Spine TS.",
   "scripts": {
-    "start": "pnpm -C ../.. typecheck:build && bash scripts/run-single-process.sh",
+    "start": "bash scripts/run-single-process.sh",
     "start:single-process": "bash scripts/run-single-process.sh",
     "start:multi-process": "bash scripts/run-multi-process.sh",
     "smoke": "node scripts/smoke.mjs",

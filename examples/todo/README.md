@@ -5,6 +5,11 @@ Projection, and serves commands, queries, and subscriptions on a local server.
 
 ## Running the app
 
+Install the workspace dependencies first. Use `pnpm install --frozen-lockfile`
+when you need the lockfile-exact dependency set, or `pnpm install` for normal
+local development. The multi-process app also requires Docker to run its local
+Datastore emulator container.
+
 ### Single-process app
 
 From the repository root, start it with:
@@ -13,7 +18,7 @@ From the repository root, start it with:
 examples/todo/scripts/run-single-process.sh
 ```
 
-The launcher builds the workspace and starts one Node process from
+The launcher builds the workspace once and starts one Node process from
 [`single-process-app.ts`](src/single-process-app.ts). It assembles the reusable
 To-Do Bounded Context in [`todo-app.ts`](src/todo-app.ts), listens at
 `http://127.0.0.1:8080`, and keeps its Event Store in memory. Run the smoke
@@ -67,12 +72,26 @@ complete app replicas with two Delivery shards. The launcher waits for the
 Coordinator's ready message and owns shutdown: normal exit, `Ctrl-C`, `SIGTERM`,
 and partial startup all stop only the processes and emulator container it made.
 The Datastore emulator holds data only while its container runs.
+It observes the emulator's ready log, the Delivery server's exact
+`Delivery server listening at …` message, and the Coordinator ready message;
+if any owned process exits before its message, the launcher reports that output
+and cleans up only resources it created.
 
 ## How it works
 
 `CreateTask` produces a stored `TaskCreated` Event. The Task List Projection
 observes that Event and makes the resulting task list readable. The walkthrough
 explains the generated Proto model, handlers, and routing in more depth.
+
+```ts
+// docs-snippet-path: examples/todo/src/todo-app.ts
+import { create } from "@bufbuild/protobuf";
+import { TaskCreatedSchema } from "../generated/spine/examples/todo/task_events_pb.js";
+
+function createTask(title: string) {
+  return create(TaskCreatedSchema, { title });
+}
+```
 
 ## Learn more
 

@@ -17,4 +17,4 @@
  */
 
 export * from "./todo-app.js";
-export { startTodoServer, type TodoServerOptions } from "./single-process-app.js";
+export { startTodoServer, type TodoServer, type TodoServerOptions } from "./single-process-app.js";

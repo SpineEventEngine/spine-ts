@@ -44,7 +44,7 @@ with `EPERM`.
 `generate = true`; its generated interface/token is at
 `generated/interfaces/task-event.ts`. `TaskAssigned` and `TaskUnassigned`
 declare `(is).ts_type = "TaskAssignmentEvent"`; their authored interface is in
-`src/index.ts`, and its generated token is at
+`src/todo-app.ts`, and its generated token is at
 `generated/interfaces/task-assignment-event.ts`. The authored declaration must
 stay in that model module; its property types may come from other modules.
 

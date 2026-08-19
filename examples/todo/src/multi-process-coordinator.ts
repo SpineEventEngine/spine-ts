@@ -31,7 +31,7 @@ export function runTodoCoordinator(
   settings: TodoMultiProcessSettings,
 ): void {
   let closing: Promise<void> | undefined;
-  const close = () => {
+  const onCoordinatorSignal = () => {
     closing ??= handle.close().then(
       () => {
         process.exitCode = 0;
@@ -41,8 +41,8 @@ export function runTodoCoordinator(
       },
     );
   };
-  process.once("SIGINT", close);
-  process.once("SIGTERM", close);
+  process.once("SIGINT", onCoordinatorSignal);
+  process.once("SIGTERM", onCoordinatorSignal);
   console.log(
     `To-Do multi-process Coordinator ready at ${settings.host}:${settings.port.toString()}`,
   );

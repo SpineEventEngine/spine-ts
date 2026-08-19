@@ -600,7 +600,7 @@ export class TaskAssigneeProjection extends Projection<UserId, typeof TaskAssign
 }
 
 /**
- * Creates the in-memory single-tenant Tasks bounded context.
+ * Creates the single-tenant Tasks bounded context with in-memory defaults.
  *
  * @param options Supplies application-owned bounded-context facilities.
  * @returns The assembled Tasks bounded context.

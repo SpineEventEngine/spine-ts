@@ -48,7 +48,7 @@ message TaskUnassigned {
 `pnpm proto:generate` creates `generated/interfaces/task-event.ts`: it exports
 both a TypeScript `TaskEvent` interface and a runtime `TaskEvent` token.
 `is.ts_type` names an interface you author in the same model module as the
-message source. Here, [`src/index.ts`](src/index.ts) exports the top-level named
+message source. Here, [`src/todo-app.ts`](src/todo-app.ts) exports the top-level named
 `interface TaskAssignmentEvent { readonly assignee?: UserId }`; generation
 creates `generated/interfaces/task-assignment-event.ts`, which exports that
 type and its token. After resolving real paths, only the requested authored
@@ -75,7 +75,7 @@ runtime value as the token passed to `.route(...)`. The application aliases the
 assignment token only to make that distinction easy to read.
 
 ```ts
-// docs-snippet-path: examples/todo/src/index.ts
+// docs-snippet-path: examples/todo/src/todo-app.ts
 import { EventRouting } from "@spine-event-engine/server";
 import { TaskReassignedSchema } from "../generated/spine/examples/todo/task_events_pb.js";
 import type { TaskListId } from "../generated/spine/examples/todo/task_id_pb.js";

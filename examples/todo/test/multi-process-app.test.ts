@@ -12,7 +12,7 @@
  * the License.
  */
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 interface ManagedRunOptions {
   createServer(endpoint: { readonly host: string; readonly port: number }): Promise<unknown>;
@@ -21,9 +21,8 @@ interface ManagedRunOptions {
 
 const calls = vi.hoisted(() => ({
   coordinator: vi.fn(),
-  createReplica: vi.fn(() =>
-    Promise.resolve({ server: {}, synchronize: vi.fn(() => Promise.resolve()) }),
-  ),
+  replica: { server: {}, synchronize: vi.fn(() => Promise.resolve()) },
+  createReplica: vi.fn(),
   run: vi.fn(),
   settings: {
     deliveryServerUrl: "http://127.0.0.1:8484",
@@ -41,6 +40,10 @@ vi.mock("@spine-event-engine/server", () => ({
 
 describe("To-Do multi-process app entry selection", () => {
   const originalEnvironment = { ...process.env };
+
+  beforeEach(() => {
+    calls.createReplica.mockResolvedValue(calls.replica);
+  });
 
   afterEach(() => {
     process.env = { ...originalEnvironment };
@@ -77,6 +80,7 @@ describe("To-Do multi-process app entry selection", () => {
       host: "127.0.0.2",
       port: 9000,
     });
+    expect(calls.replica.synchronize).toHaveBeenCalledOnce();
     expect(calls.coordinator).toHaveBeenCalledOnce();
   });
 

@@ -39,12 +39,17 @@ export interface TodoServerOptions {
 }
 
 /**
+ * Running listener returned by the To-Do single-process app.
+ */
+export type TodoServer = RunningServer;
+
+/**
  * Starts one To-Do server process with in-memory storage.
  *
  * @param options Optional listener host and port overrides.
  * @returns The running server, which callers must close when finished.
  */
-export async function startTodoServer(options: TodoServerOptions = {}): Promise<RunningServer> {
+export async function startTodoServer(options: TodoServerOptions = {}): Promise<TodoServer> {
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 8080;
   return Server.atPort(port, { host })
