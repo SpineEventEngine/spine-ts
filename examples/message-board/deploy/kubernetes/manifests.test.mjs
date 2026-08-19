@@ -34,6 +34,10 @@ for (const mode of ["combined", "standalone"]) {
     assert.match(document, /name: message-board-envoy-config/u);
     assert.match(document, /mountPath: \/etc\/envoy\/envoy.yaml/u);
     assert.match(document, /kind: Service[\s\S]*name: message-board-envoy/u);
+    assert.match(document, /kind: Deployment[\s\S]*name: message-board-web/u);
+    assert.match(document, /kind: Service[\s\S]*name: message-board-web/u);
+    assert.match(document, /match: \{ prefix: "\/" \}[\s\S]*cluster: web/u);
+    assert.match(document, /- name: web[\s\S]*message-board-web/u);
     assert.match(document, /secretName: message-board-envoy-tls/u);
     assertEnvoy(document, "https://message-board.example.test");
     assert.doesNotMatch(document, /kind: (Datastore|MySQL|Postgres|Redis|Hazelcast)/u);
@@ -111,6 +115,10 @@ function envoyRoutes(document) {
         const hosts = filter.typed_config?.route_config?.virtual_hosts ?? [];
         for (const host of hosts) {
           for (const item of host.routes ?? []) {
+            if (item.match?.prefix === "/" && item.route?.cluster === "web") {
+              assert.deepEqual(item.route, { cluster: "web", timeout: "30s" });
+              continue;
+            }
             if (
               Object.keys(item.match ?? {}).join(",") !== "path,headers" ||
               typeof item.match.path !== "string"

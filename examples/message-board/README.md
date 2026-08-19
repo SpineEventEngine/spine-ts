@@ -9,7 +9,7 @@ context, and a query-side view fit together.
 
 - ✅ How one Proto model is shared by the Node application and React UI.
 - ✅ How an Aggregate accepts a write and a Projection builds the read model.
-- ✅ Why browser traffic goes through an authenticated gateway while native
+- ✅ Why browser traffic goes through a public-demo gateway while native
   gRPC remains private.
 - ✅ How normal complete subscription payloads update rows locally and when to recover by query.
 
@@ -45,11 +45,12 @@ pnpm install --frozen-lockfile
 pnpm typecheck:build
 ```
 
-Start the server, then the UI, in separate terminals:
+For the local single-process mode, use the launcher. It builds the generated
+model, starts the in-memory application and Gateway, then keeps the stock UI
+in the foreground; `Ctrl-C` stops both processes:
 
 ```bash
-pnpm --dir examples/message-board/app start
-pnpm --dir examples/message-board/web start
+examples/message-board/scripts/start-local-single-process.sh
 ```
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173), enter a username and a
@@ -82,10 +83,10 @@ flowchart LR
 
 The browser never receives the native backend address. For local development,
 `Server` starts a private native HTTP/2 backend and a public loopback browser
-gateway on port 8090. The gateway authenticates first, resolves a trusted actor
-context, then forwards approved traffic; the bounded context does not read
-credentials. The React client may use either gRPC-Web or Connect at that public
-boundary.
+gateway on port 8090. The public-demo Gateway rebuilds the trusted actor context
+from the request actor and forwards only approved traffic; the bounded context
+does not read browser credentials. The React client may use either gRPC-Web or
+Connect at that public boundary.
 
 `BoardMessageAggregate` represents one message ID and refuses a duplicate before it
 changes state. This is the `postMessage()` handler excerpt from

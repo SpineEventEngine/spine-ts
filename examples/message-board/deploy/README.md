@@ -62,8 +62,10 @@ exactly one in-memory delivery server. `BACKEND_URLS` names that Coordinator in
 this local-only static fixture, not a child listener.
 
 The Kubernetes YAML files are static references, not local-Kubernetes
-instructions. They show the same stock UI routed through Envoy and leave image
-distribution, storage provisioning, and TLS material to the cluster operator.
+instructions. They deploy the same stock UI behind Envoy and set its sole
+runtime RPC URL (`MESSAGE_BOARD_GATEWAY_URL`) to the public Envoy origin. They
+leave image distribution, storage provisioning, and TLS material to the cluster
+operator.
 
 ```bash
 kubectl apply --filename examples/message-board/deploy/kubernetes/combined.yaml

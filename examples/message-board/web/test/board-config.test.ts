@@ -28,6 +28,9 @@ describe("LocalBoardGateway", () => {
     expect(LocalBoardGateway.url({ VITE_MESSAGE_BOARD_GATEWAY_URL: "https://board.example.test:8443" })).toBe(
       "https://board.example.test:8443",
     );
+    expect(LocalBoardGateway.url({ MESSAGE_BOARD_GATEWAY_URL: "https://board.example.test:443" })).toBe(
+      "https://board.example.test",
+    );
   });
 
   it.each(["not-a-url", "ftp://127.0.0.1:8090", "http://user@example.test:8090", "http://127.0.0.1:0"])(

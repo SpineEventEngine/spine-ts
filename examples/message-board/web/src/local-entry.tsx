@@ -20,13 +20,19 @@ import { MessageBoardApp } from "./index.js";
 import { LocalBoardGateway } from "./board-config.js";
 
 declare global {
+  interface Window {
+    readonly MESSAGE_BOARD_RUNTIME_CONFIG?: Readonly<Record<string, string | undefined>>;
+  }
+
   interface ImportMeta {
     readonly env: Readonly<Record<string, string | undefined>>;
     readonly hot?: Readonly<{ dispose(onDispose: () => void): void }>;
   }
 }
 
-const client = Client.forConnect(LocalBoardGateway.url(import.meta.env));
+const client = Client.forConnect(
+  LocalBoardGateway.url({ ...import.meta.env, ...window.MESSAGE_BOARD_RUNTIME_CONFIG }),
+);
 const request = client.onBehalfOf("ada");
 const root = createRoot(document.getElementById("root")!);
 
