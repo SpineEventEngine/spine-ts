@@ -62,6 +62,36 @@ describe("InMemoryTransportFactory", () => {
     ).rejects.toThrow(/targetType|canonical/u);
     await factory.close();
   });
+
+  it("rejects malformed or mismatched message identities", async () => {
+    const factory = new InMemoryTransportFactory();
+    const channel = create(ChannelIdSchema, { targetType: "type.spine.io/wave13.Validation" });
+    const publisher = await factory.createPublisher(channel);
+    await expect(
+      publisher.publish(frame("identity"), create(ExternalMessageSchema)),
+    ).rejects.toThrow("External message must contain identity");
+    await expect(publisher.publish(frame("identity"), externalMessage("other"))).rejects.toThrow(
+      "External message identity must match",
+    );
+    await expect(publisher.close()).rejects.toThrow("Accepted message publication failed");
+    await factory.close();
+  });
+
+  it("drains FIFO publications before publisher close", async () => {
+    const factory = new InMemoryTransportFactory();
+    const channel = create(ChannelIdSchema, { targetType: "type.spine.io/wave13.Fifo" });
+    const subscriber = await factory.createSubscriber(channel);
+    const values: string[] = [];
+    await subscriber.addConsumer((message) => {
+      values.push(message.originalMessage?.typeUrl ?? "");
+    });
+    const publisher = await factory.createPublisher(channel);
+    const first = publisher.publish(frame("first"), externalMessage("first"));
+    const second = publisher.publish(frame("second"), externalMessage("second"));
+    await Promise.all([first, second, publisher.close()]);
+    expect(values).toEqual([frame("first").typeUrl, frame("second").typeUrl]);
+    await Promise.all([subscriber.close(), factory.close()]);
+  });
 });
 
 function frame(value: string) {

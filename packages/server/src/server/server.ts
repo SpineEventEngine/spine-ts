@@ -798,7 +798,7 @@ export interface RunningServer {
   /**
    * Closes intake, delivery, contexts, and owned resources.
    *
-   * It stops network intake and sessions, closes context transport and drains
+   * It stops network intake and sessions, then drains
    * accepted work before detaching delivery. A failed intake close blocks later
    * phases until a retry. Sibling servers remain available. Caller-managed
    * servers leave process-wide facilities available; closing the final
