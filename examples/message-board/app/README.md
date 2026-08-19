@@ -64,7 +64,7 @@ pnpm proto:generate
 pnpm exec vitest run examples/message-board/app/test
 ```
 
-## ⚠️ Local-only defaults
+## Local-only defaults
 
 The production-shaped source files are named for the process they start:
 

@@ -42,7 +42,7 @@ The images set `NODE_ENV=production`. Supply these values when starting them:
 | Gateway (GKE)            | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `BROWSER_ORIGIN`, `SUBSCRIPTION_REGISTRY_NAMESPACE`, `BACKEND_DISCOVERY_SERVICE`, `BACKEND_DISCOVERY_PORT` |
 | Delivery server          | `HOST`, `PORT`                                                                                                                                     |
 
-No browser credential or signing value is required for this public demo.
+No browser login setup is required for this public demo.
 Each process constructs a Datastore client from
 `DATASTORE_PROJECT_ID` and passes that same client into its storage factory.
 Browser-capable replicas share the registry namespace.
@@ -103,12 +103,14 @@ docker rm --force message-board-datastore
 docker network rm message-board-local
 ```
 
+This is a backend-only container exercise. Use the [complete Compose browser workflow](../README.md) for the stock UI through Envoy.
+
 Node runs as PID 1. `SIGINT` and `SIGTERM` stop intake, close the server
 environment facilities, and must finish within ten seconds. The images do not
 add application health endpoints. Readiness is the process listener becoming
 available.
 
-## ⚠️ Limits
+## Limits
 
 - No image or npm package is published by these commands.
 - The simple delivery server keeps state only in memory and is neither durable
