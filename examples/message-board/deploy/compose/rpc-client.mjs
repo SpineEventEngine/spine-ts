@@ -1,3 +1,4 @@
+// Exercises Message Board RPCs from inside a Compose network during live checks.
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";

@@ -1,3 +1,4 @@
+// Runs the separate two-node Message Board Compose example and confirms shutdown.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";

@@ -1,3 +1,4 @@
+// Removes model build output so the next generation starts from source files.
 import { rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";

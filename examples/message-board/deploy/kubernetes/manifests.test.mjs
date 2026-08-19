@@ -1,3 +1,4 @@
+// Checks that the static Kubernetes reference keeps its documented topology.
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";

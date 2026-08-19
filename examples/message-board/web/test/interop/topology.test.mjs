@@ -1,3 +1,4 @@
+// Verifies browser-to-Gateway behavior against a live, test-owned Message Board topology.
 import assert from "node:assert/strict";
 import test from "node:test";
 

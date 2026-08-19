@@ -1,3 +1,4 @@
+// Builds the local application, Gateway, Delivery, and stock-UI images used by Compose.
 import { execFileSync } from "node:child_process";
 import console from "node:console";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -42,6 +43,8 @@ const cleanup = new BuildContextCleanup(context);
 cleanup.install();
 try {
   mkdirSync(tarballs);
+  phase("build Message Board application");
+  run("pnpm", ["typecheck:build"]);
   phase("build stock browser UI");
   run("pnpm", ["--dir", "examples/message-board/web", "build"], {
     VITE_MESSAGE_BOARD_GATEWAY_URL: "http://localhost:18080",

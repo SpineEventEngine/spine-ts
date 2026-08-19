@@ -1,3 +1,4 @@
+// Runs each local Compose example and verifies its public path and shutdown behavior.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";

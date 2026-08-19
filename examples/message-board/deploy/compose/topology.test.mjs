@@ -1,3 +1,4 @@
+// Checks that Compose files describe the services beginners start together.
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";

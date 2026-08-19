@@ -1,3 +1,4 @@
+// Serves the small browser fixture used only by the interop test suite.
 import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 

@@ -1,3 +1,4 @@
+// Checks the browser-acceptance runner's cleanup and observable test sequencing.
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { EventEmitter } from "node:events";

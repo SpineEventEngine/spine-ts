@@ -1,3 +1,4 @@
+// Checks that local images contain the entrypoints used by the documented topologies.
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -11,6 +12,15 @@ import { URL } from "node:url";
 const containerRoot = new URL(".", import.meta.url);
 const datastoreEmulator =
   "gcr.io/google.com/cloudsdktool/google-cloud-cli@sha256:cda01b8c880e9161992c3fd61d7d0e153b4dd073aa4a9d62ad79243907cf8dd4";
+
+test("local image builds regenerate application output before packing it", () => {
+  const builder = readFileSync(new URL("build-local-images.mjs", containerRoot), "utf8");
+  assert.match(builder, /phase\("build Message Board application"\)/u);
+  assert.match(builder, /\["typecheck:build"\]/u);
+  assert.ok(
+    builder.indexOf('phase("build Message Board application")') < builder.indexOf('phase("pack local artifacts")'),
+  );
+});
 
 test("local images have a fixed build contract", () => {
   assert.equal(existsSync(new URL("Dockerfile", containerRoot)), true);

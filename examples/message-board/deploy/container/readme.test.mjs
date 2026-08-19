@@ -1,3 +1,4 @@
+// Keeps container instructions runnable and suitable for the public demonstration.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath, URL } from "node:url";

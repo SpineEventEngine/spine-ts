@@ -1,3 +1,4 @@
+// Starts the browser fixture that drives the live Message Board interop tests.
 import { defineConfig } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 

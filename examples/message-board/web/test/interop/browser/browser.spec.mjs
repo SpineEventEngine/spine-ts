@@ -1,3 +1,4 @@
+// Drives two browser tabs through posting, live updates, and reconnect recovery.
 import { expect, test } from "@playwright/test";
 import { stdout } from "node:process";
 import { clearTimeout } from "node:timers";

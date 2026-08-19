@@ -1,3 +1,4 @@
+// Owns the live topology and Playwright process for the two-tab browser check.
 import { spawn } from "node:child_process";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
