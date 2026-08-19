@@ -131,3 +131,6 @@
 - Exact assertion passed under coverage. The two-test real-process file passed
   three consecutive fresh runs. Tooling typecheck, scoped ESLint, formatting,
   and diff hygiene passed. No production code or public contract changed.
+- Narrow performance/reliability re-review passed; it confirmed that the
+  acknowledgement corrects fixture ordering without weakening the lifecycle
+  acceptance.

@@ -61,3 +61,8 @@ maintainability, TypeScript/API documentation, documentation completeness, or
 performance/reliability. Security review is N/A because this closure neither
 changes security-sensitive runtime behavior nor adopts the explicitly excluded
 subscription-capacity/dependency/security-program work.
+
+The reliability reviewer also passed the later test-only drain-handshake
+correction. The acknowledgement establishes the private cross-process causal
+boundary after drain begins while preserving `Unavailable`, fenced Delivery,
+pending-update, and final stream-closure assertions.
