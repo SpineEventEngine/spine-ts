@@ -27,9 +27,7 @@ const client = new Datastore({ projectId: config.projectId });
 const logger = MessageBoardDeployment.logger(
   new Logging({ projectId: config.projectId }).log("message-board"),
 );
-const storage =
-  MessageBoardDeployment.configureServer(config, client, process.env, logger) ??
-  MessageBoardDeployment.storage(client);
+const storage = MessageBoardDeployment.storage(client);
 const policy = new BoardAccessPolicy();
 const bindings = MessageBoardDeployment.bindings(config, storage);
 const sessions = MessageBoardDeployment.sessions(process.env);

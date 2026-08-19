@@ -26,6 +26,22 @@ describe("MessageBoard deployment entrypoints", () => {
     expect(existsSync(join(sourceRoot, "combined-entry.ts"))).toBe(true);
   });
 
+  it("provides a managed complete-replica entrypoint without the retired signal transport", () => {
+    const managed = join(sourceRoot, "managed-entry.ts");
+    expect(existsSync(managed)).toBe(true);
+    const source = readFileSync(managed, "utf8");
+    const deployment = readFileSync(join(sourceRoot, "deployment-config.ts"), "utf8");
+
+    expect(source).toContain("ManagedServerApplication.run");
+    expect(source).toContain("processCount: config.processCount");
+    expect(source).toContain("UniformAcrossAllShards.forNumber(config.deliveryShardCount)");
+    expect(source).toContain("moduleUrl: import.meta.url");
+    expect(deployment).toContain('"PROCESS_COUNT"');
+    expect(deployment).toContain('"DELIVERY_SHARD_COUNT"');
+    expect(deployment).not.toContain("createZeroMqTransport");
+    expect(deployment).not.toContain('"SPINE_IPC_DIRECTORY"');
+  });
+
   it("configures both browser modes with one named durable binding assembly", () => {
     const gateway = readFileSync(join(sourceRoot, "gateway-entry.ts"), "utf8");
     const combined = readFileSync(join(sourceRoot, "combined-entry.ts"), "utf8");
@@ -40,7 +56,7 @@ describe("MessageBoard deployment entrypoints", () => {
 
   it("configures production storage and transport before resolving a server", () => {
     const deployment = readFileSync(join(sourceRoot, "deployment-config.ts"), "utf8");
-    for (const entrypoint of ["application-entry.ts", "combined-entry.ts", "gateway-entry.ts"]) {
+    for (const entrypoint of ["application-entry.ts", "combined-entry.ts"]) {
       const source = readFileSync(join(sourceRoot, entrypoint), "utf8");
       expect(source).toContain(
         "MessageBoardDeployment.configureServer(config, client, process.env, logger)",
@@ -48,8 +64,9 @@ describe("MessageBoard deployment entrypoints", () => {
       expect(source).toContain("MessageBoardDeployment.logger(");
     }
     expect(deployment).toContain("ServerEnvironment.when(EnvironmentType.Production)");
-    expect(deployment).toContain('"SPINE_IPC_DIRECTORY"');
-    expect(deployment).toContain("createZeroMqTransport");
+    expect(deployment).toContain("RemoteDelivery.connectTo");
+    expect(deployment).not.toContain('"SPINE_IPC_DIRECTORY"');
+    expect(deployment).not.toContain("createZeroMqTransport");
   });
 
   it("connects production MessageBoard processes to the configured delivery server", () => {
@@ -100,12 +117,7 @@ describe("MessageBoard deployment entrypoints", () => {
 
     expect(calls.datastore).toHaveBeenCalledWith({ projectId: "project" });
     expect(calls.storage).toHaveBeenCalledWith(calls.client);
-    expect(calls.configureServer).toHaveBeenCalledWith(
-      calls.gatewayConfig,
-      calls.client,
-      process.env,
-      calls.logger,
-    );
+    expect(calls.configureServer).not.toHaveBeenCalled();
 
     expect(calls.serverAtPort).toHaveBeenCalledWith(
       calls.gatewayConfig.port,

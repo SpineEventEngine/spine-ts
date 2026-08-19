@@ -17,3 +17,17 @@
   server acceptance supplies the replacement machinery.
 - Work is split between non-overlapping provider and example lanes. The parent
   integration worktree remains coordination-only until both lanes are green.
+
+## 2026-08-19 — example-lane managed Message Board checkpoint
+
+- RED-31 retained first: the Message Board deployment-entrypoint test required
+  `managed-entry.ts`, explicit `PROCESS_COUNT` and `DELIVERY_SHARD_COUNT`, a
+  Coordinator-managed entry module, and no ZeroMQ/IPC setting in the
+  replacement configuration. It failed because that entrypoint did not exist.
+- The managed entry now runs the same module in parent and child processes,
+  builds the full Message Board context only in each child, opens that child's
+  `RemoteDelivery`, and explicitly selects its application-owned shard
+  strategy. The Gateway keeps only browser/subscription responsibilities and
+  does not configure Delivery or a runtime environment.
+- Message Board's old production ZeroMQ configuration was removed from this
+  replacement path. Repository-wide transport deletion remains T-0212.

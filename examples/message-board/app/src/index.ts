@@ -23,6 +23,7 @@ import {
   Server,
   Subscribe,
   Where,
+  type DeliveryStrategy,
   type RunningServer,
 } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
@@ -215,19 +216,21 @@ export class MessageBoardApplication {
    */
   async createContext(
     storageFactory: StorageFactory = new InMemoryStorageFactory(),
+    deliveryStrategy?: DeliveryStrategy,
   ): Promise<BoundedContext> {
     const announcementRouting = EventRouting.create<BoardId>().route(
       MessagePostedSchema,
       (event) =>
         event.board?.value === "announcements" ? [clone(BoardIdSchema, event.board)] : [],
     );
-    return BoundedContext.singleTenant("MessageBoard")
+    const builder = BoundedContext.singleTenant("MessageBoard")
       .withStorageFactory(storageFactory)
       .withGeneratedRegistryRoot(new URL("..", import.meta.url))
       .add(BoardMessageAggregate)
       .add(BoardViewProjection)
-      .add(AnnouncementBoardProjection, { eventRouting: announcementRouting })
-      .buildAsync();
+      .add(AnnouncementBoardProjection, { eventRouting: announcementRouting });
+    if (deliveryStrategy !== undefined) builder.withDeliveryStrategy(deliveryStrategy);
+    return builder.buildAsync();
   }
 
   /**
