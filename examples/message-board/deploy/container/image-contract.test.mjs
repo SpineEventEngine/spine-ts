@@ -83,7 +83,9 @@ test("final images contain only runtime artifacts and no runtime secret", () => 
       const archive = join(directory, `${target}.tar`);
       try {
         execFileSync("sh", ["-c", `docker export ${container} > ${archive}`]);
-        const files = execFileSync("tar", ["-tf", archive], { encoding: "utf8" });
+        const listing = join(directory, `${target}.files`);
+        execFileSync("sh", ["-c", `tar -tf ${JSON.stringify(archive)} > ${JSON.stringify(listing)}`]);
+        const files = readFileSync(listing, "utf8");
         assert.doesNotMatch(
           files,
           /(^|\/)(tarballs|\.git|pnpm-store|tests?)(\/|$)|\.ts(?:$|\n)|\.map(?:$|\n)/u,
