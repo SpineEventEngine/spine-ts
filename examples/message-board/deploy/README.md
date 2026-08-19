@@ -8,11 +8,10 @@ Use this guide to run the local Message Board deployment examples. The nearby
 ```mermaid
 flowchart LR
   Browser --> Gateway[Authenticated Gateway]
-  Gateway --> Select[Unary routing: select one backend]
-  Select -->|one bounded round-robin attempt| AppOne[Application replica 1]
-  Select -->|one bounded round-robin attempt| AppTwo[Application replica 2]
-  Gateway -->|subscription fan-in| AppOne
-  Gateway -->|subscription fan-in| AppTwo
+  Gateway --> Coordinator[Node Coordinator]
+  Coordinator -->|one request| AppOne[Complete replica 1]
+  Coordinator -->|one request| AppTwo[Complete replica 2]
+  Gateway -->|subscription fan-in| Coordinator
 ```
 
 The two application connections shown for unary routing are alternatives, not
@@ -20,9 +19,9 @@ fan-out: one command or query is sent to one selected backend without retry.
 
 Combined mode runs one Message Board application and authenticated browser
 gateway in the same process. Use it to understand the smallest browser-facing
-deployment. Standalone mode runs application replicas separately from one
-Gateway; Envoy is the only public service and the Gateway reaches private native
-gRPC backends. Choose standalone mode when applications must scale separately.
+deployment. Standalone mode runs a managed application node separately from one
+Gateway; Envoy is the only public service and the Gateway reaches its private
+Coordinator, never a child listener.
 
 Both modes require application-selected storage and a delivery server. Browser
 processes share the session signing values and subscription-registry namespace.
@@ -59,11 +58,11 @@ docker compose --file examples/message-board/deploy/compose/combined.compose.yam
 docker compose --file examples/message-board/deploy/compose/combined.compose.yaml down --volumes --remove-orphans
 ```
 
-Use `standalone.compose.yaml` when running two application replicas. It starts
-two application processes, one Gateway, Envoy, one shared registry namespace,
-and exactly one in-memory delivery server. `BACKEND_URLS` is an explicit
-local-only static fixture, not production discovery. Stop either topology with the same
-command plus `down --volumes --remove-orphans`.
+Use `standalone.compose.yaml` for one managed node with two complete replicas.
+It sets `PROCESS_COUNT=2` and `DELIVERY_SHARD_COUNT=2` independently, then
+starts one Coordinator, one Gateway, Envoy, one shared registry namespace, and
+exactly one in-memory delivery server. `BACKEND_URLS` names that Coordinator in
+this local-only static fixture, not a child listener.
 
 The Kubernetes YAML files are storage-neutral references. Image distribution is
 managed by the operator and out of scope: for Kind, load local images instead of
@@ -96,10 +95,11 @@ passes that exact client to its storage factory.
 kubectl apply --filename examples/message-board/deploy/kubernetes/combined.yaml
 ```
 
-For replicated applications, apply `standalone.yaml`. Its public LoadBalancer
-service exposes Envoy only; the one Gateway uses `GkeNodeDiscovery` against the
-application headless Service. GKE manages application scaling and the Gateway
-follows ready-node DNS membership rather than a fixed backend list.
+For multiple managed nodes, apply `standalone.yaml`. Each pod chooses its own
+explicit process and shard counts. Its public LoadBalancer service exposes Envoy
+only; the one Gateway uses `GkeNodeDiscovery` against the application headless
+Service and follows ready Coordinator DNS membership rather than fixed child
+backend lists.
 The registry is durable and cancellation-fenced, but update delivery remains
 best effort: reconnecting clients must re-query authoritative state; gaps,
 duplicates, and no complete update history remain possible. The references use

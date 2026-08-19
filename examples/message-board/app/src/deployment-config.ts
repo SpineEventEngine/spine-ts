@@ -19,14 +19,14 @@ import {
   DurableSubscriptionBindings,
   EnvironmentType,
   ServerEnvironment,
+  type ServerEnvironmentDelivery,
 } from "@spine-event-engine/server";
 import type { StorageFactory } from "@spine-event-engine/storage";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import type { Datastore } from "@google-cloud/datastore";
-import type { Log } from "@google-cloud/logging";
+import { Logging, type Log } from "@google-cloud/logging";
 import { GoogleCloudLoggingTransport } from "@loglayer/transport-google-cloud-logging";
 import { LogLayer, type ILogLayer } from "loglayer";
-import { ZeroMqConfig, createZeroMqTransport } from "@spine-event-engine/transport/zeromq";
 import { randomUUID } from "node:crypto";
 import { createPrivateKey } from "node:crypto";
 
@@ -49,13 +49,25 @@ interface GatewayConfig extends CombinedConfig {
   readonly discovery?: { readonly serviceName: string; readonly port: number };
 }
 
+interface ManagedConfig extends DeploymentConfig {
+  readonly processCount: number;
+  readonly deliveryShardCount: number;
+}
+
+interface ManagedServerFacilities {
+  readonly storageFactory: StorageFactory;
+  readonly delivery: ServerEnvironmentDelivery;
+}
+
 interface DeploymentContract {
   application(environment: NodeJS.ProcessEnv): DeploymentConfig;
   combined(environment: NodeJS.ProcessEnv): CombinedConfig;
   gateway(environment: NodeJS.ProcessEnv): GatewayConfig;
+  managed(environment: NodeJS.ProcessEnv): ManagedConfig;
   storage(client: Datastore): StorageFactory;
   bindings(config: CombinedConfig, storageFactory: StorageFactory): DurableSubscriptionBindings;
-  logger(log: Log): ILogLayer;
+  logger(projectId: string, environment: NodeJS.ProcessEnv): ILogLayer | undefined;
+  cloudLogger(log: Log): ILogLayer;
 
   /**
    * Creates production browser sessions from shared signing configuration.
@@ -70,6 +82,17 @@ interface DeploymentContract {
     environment: NodeJS.ProcessEnv,
     logger?: ILogLayer,
   ): StorageFactory | undefined;
+  configureGatewayServer(
+    config: GatewayConfig,
+    storageFactory: StorageFactory,
+    logger?: ILogLayer,
+  ): void;
+  configureManagedServer(
+    config: DeploymentConfig,
+    client: Datastore,
+    environment: NodeJS.ProcessEnv,
+    logger?: ILogLayer,
+  ): ManagedServerFacilities;
 }
 
 /**
@@ -113,6 +136,20 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     };
   },
 
+  managed(environment: NodeJS.ProcessEnv): ManagedConfig {
+    return {
+      ...MessageBoardDeployment.application(environment),
+      processCount: DeploymentValues.positiveSafeInteger(
+        DeploymentValues.required(environment, "PROCESS_COUNT"),
+        "PROCESS_COUNT",
+      ),
+      deliveryShardCount: DeploymentValues.positiveSafeInteger(
+        DeploymentValues.required(environment, "DELIVERY_SHARD_COUNT"),
+        "DELIVERY_SHARD_COUNT",
+      ),
+    };
+  },
+
   storage(client: Datastore): StorageFactory {
     const stringifiers = new StringifierRegistry();
     stringifiers.setTypeRegistry(typeRegistry);
@@ -131,7 +168,12 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     });
   },
 
-  logger(log: Log): ILogLayer {
+  logger(projectId: string, environment: NodeJS.ProcessEnv): ILogLayer | undefined {
+    if (environment.DATASTORE_EMULATOR_HOST !== undefined) return undefined;
+    return MessageBoardDeployment.cloudLogger(new Logging({ projectId }).log("message-board"));
+  },
+
+  cloudLogger(log: Log): ILogLayer {
     return new LogLayer({
       transport: new GoogleCloudLoggingTransport({ logger: log }),
     });
@@ -159,22 +201,39 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     logger?: ILogLayer,
   ): StorageFactory | undefined {
     if (environment.NODE_ENV !== "production") return undefined;
-    const storageFactory = MessageBoardDeployment.storage(client);
+    return MessageBoardDeployment.configureManagedServer(config, client, environment, logger)
+      .storageFactory;
+  },
+
+  configureGatewayServer(
+    _config: GatewayConfig,
+    storageFactory: StorageFactory,
+    logger?: ILogLayer,
+  ): void {
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory,
       ...(logger === undefined ? {} : { logger }),
-      transport: createZeroMqTransport(
-        ZeroMqConfig.create({
-          ipcDirectory: DeploymentValues.required(environment, "SPINE_IPC_DIRECTORY"),
-        }),
-      ),
-      delivery: RemoteDelivery.connectTo({
-        endpoint: DeploymentValues.url(
-          DeploymentValues.required(environment, "DELIVERY_SERVER_URL"),
-        ),
-      }),
+      typeRegistry,
     });
-    return storageFactory;
+  },
+
+  configureManagedServer(
+    config: DeploymentConfig,
+    client: Datastore,
+    environment: NodeJS.ProcessEnv,
+    logger?: ILogLayer,
+  ): ManagedServerFacilities {
+    const storageFactory = MessageBoardDeployment.storage(client);
+    const delivery = RemoteDelivery.connectTo({
+      endpoint: DeploymentValues.url(DeploymentValues.required(environment, "DELIVERY_SERVER_URL")),
+    });
+    ServerEnvironment.when(EnvironmentType.Production).use({
+      storageFactory,
+      ...(logger === undefined ? {} : { logger }),
+      typeRegistry,
+      delivery,
+    });
+    return { storageFactory, delivery };
   },
 });
 
@@ -218,6 +277,13 @@ const DeploymentValues = Object.freeze({
     const parsed = Number(value);
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65_535)
       throw new Error("Invalid required configuration: PORT.");
+    return parsed;
+  },
+
+  positiveSafeInteger(value: string, name: string): number {
+    const parsed = Number(value);
+    if (!Number.isSafeInteger(parsed) || parsed < 1)
+      throw new Error(`Invalid required configuration: ${name}.`);
     return parsed;
   },
 

@@ -30,10 +30,10 @@ services:
       timeout: 2s
       retries: 30
 
-  application-1:
+  application-node:
     image: spine-ts/message-board:local
     command:
-      ["node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js"]
+      ["node_modules/@spine-event-engine/example-message-board-app/dist/src/managed-entry.js"]
     environment: &application-environment
       HOST: 0.0.0.0
       PORT: 8080
@@ -41,22 +41,12 @@ services:
       DATASTORE_PROJECT_ID: message-board-compose
       DATASTORE_EMULATOR_HOST: datastore:8081
       DELIVERY_SERVER_URL: http://delivery:8484
-      SPINE_IPC_DIRECTORY: /tmp/spine-ipc
+      PROCESS_COUNT: "2"
+      DELIVERY_SHARD_COUNT: "2"
       MESSAGE_BOARD_SESSION_ISSUER: message-board
       MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
       MESSAGE_BOARD_SESSION_KEY_ID: compose-fixture
       MESSAGE_BOARD_SESSION_PRIVATE_KEY: ${MESSAGE_BOARD_SESSION_PRIVATE_KEY:?Set MESSAGE_BOARD_SESSION_PRIVATE_KEY to a P-256 PKCS8 PEM.}
-    depends_on:
-      datastore:
-        condition: service_healthy
-      delivery:
-        condition: service_healthy
-
-  application-2:
-    image: spine-ts/message-board:local
-    command:
-      ["node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js"]
-    environment: *application-environment
     depends_on:
       datastore:
         condition: service_healthy
@@ -70,12 +60,10 @@ services:
       PORT: 8080
       NODE_ENV: production
       BROWSER_ORIGIN: http://localhost:18080
-      BACKEND_URLS: http://application-1:8080,http://application-2:8080
+      BACKEND_URLS: http://application-node:8080
       SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-standalone
       DATASTORE_PROJECT_ID: message-board-compose
       DATASTORE_EMULATOR_HOST: datastore:8081
-      DELIVERY_SERVER_URL: http://delivery:8484
-      SPINE_IPC_DIRECTORY: /tmp/spine-ipc
       MESSAGE_BOARD_SESSION_ISSUER: message-board
       MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
       MESSAGE_BOARD_SESSION_KEY_ID: compose-fixture
@@ -89,7 +77,7 @@ services:
         condition: service_healthy
       delivery:
         condition: service_healthy
-      application-1:
+      application-node:
         condition: service_started
 
   envoy:

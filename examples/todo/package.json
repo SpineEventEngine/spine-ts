@@ -6,6 +6,7 @@
   "description": "Runnable server-side to-do example for Spine TS.",
   "scripts": {
     "start": "pnpm -C ../.. typecheck:build && node dist/src/index.js",
+    "start:managed": "node dist/src/managed-entry.js",
     "smoke": "node scripts/smoke.mjs",
     "proto:generate": "spine-proto generate",
     "clean:generated-dist": "node scripts/clean-generated-dist.mjs",
@@ -37,9 +38,12 @@
     "@connectrpc/connect-node": "2.1.2",
     "@spine-event-engine/client-node": "workspace:*",
     "@spine-event-engine/core": "workspace:*",
+    "@spine-event-engine/delivery-client": "workspace:*",
     "@spine-event-engine/proto": "2.0.0-snapshot.1",
     "@spine-event-engine/server": "workspace:*",
-    "@spine-event-engine/storage": "workspace:*"
+    "@spine-event-engine/storage": "workspace:*",
+    "@spine-event-engine/storage-datastore": "workspace:*",
+    "@google-cloud/datastore": "10.1.1"
   },
   "devDependencies": {
     "@spine-event-engine/proto-tools": "2.0.0-snapshot.1",

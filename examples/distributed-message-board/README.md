@@ -7,8 +7,10 @@ code: use the packages under `../message-board/` for both.
 ```mermaid
 flowchart LR
   Browser --> Gateway[One authenticated Gateway]
-  Gateway -->|commands and queries select one node| AppOne[Application node 1]
-  Gateway -->|commands and queries select one node| AppTwo[Application node 2]
+  Gateway -->|commands and queries select one Coordinator| AppOne[Managed node 1]
+  Gateway -->|commands and queries select one Coordinator| AppTwo[Managed node 2]
+  AppOne --> ReplicaOne[Complete replicas]
+  AppTwo --> ReplicaTwo[Complete replicas]
   AppOne --> Store[(Shared Datastore)]
   AppTwo --> Store
   AppOne --> Delivery[Simple delivery server]
@@ -38,15 +40,16 @@ VITE_MESSAGE_BOARD_GATEWAY_URL=http://127.0.0.1:18080 \
   pnpm --dir examples/message-board/web start
 ```
 
-The Compose file starts exactly two identical Message Board application nodes,
-one Gateway, one in-memory simple delivery server, and one shared Datastore
-emulator. Both applications use the same application-selected storage and
-delivery endpoint. The simple delivery server coordinates which application
-node drains command work. The Gateway separately fans in subscription updates
-from both equal application nodes; it is not part of command delivery
-coordination. Normal complete payloads update the browser locally, while
-queries supply initial and recovery state. This is a fixed Compose topology
-with one Gateway, not a Multiple-Gateway example.
+The Compose file starts exactly two managed Message Board nodes. Each node has
+one Coordinator and two complete application replicas (`PROCESS_COUNT=2`),
+with a separately selected two-shard Delivery strategy
+(`DELIVERY_SHARD_COUNT=2`). It also starts one Gateway, one in-memory simple
+delivery server, and one shared Datastore emulator. Both nodes use the same
+application-selected storage and delivery endpoint. Delivery chooses which
+complete replica performs durable entity work; the Coordinator only selects a
+child for an incoming gRPC call. The Gateway separately fans in subscription
+updates from both Coordinators. This is a fixed Compose topology with one
+Gateway, not a Multiple-Gateway example.
 
 Stop the topology with `Ctrl-C`, or from the repository root run
 `docker compose --file examples/distributed-message-board/deploy/compose.yaml down`.

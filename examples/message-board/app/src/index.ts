@@ -23,7 +23,9 @@ import {
   Server,
   Subscribe,
   Where,
+  type DeliveryStrategy,
   type RunningServer,
+  type StandSubscriptionRegistry,
 } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import type { StorageFactory } from "@spine-event-engine/storage";
@@ -215,19 +217,23 @@ export class MessageBoardApplication {
    */
   async createContext(
     storageFactory: StorageFactory = new InMemoryStorageFactory(),
+    deliveryStrategy?: DeliveryStrategy,
+    subscriptionRegistry?: StandSubscriptionRegistry,
   ): Promise<BoundedContext> {
     const announcementRouting = EventRouting.create<BoardId>().route(
       MessagePostedSchema,
       (event) =>
         event.board?.value === "announcements" ? [clone(BoardIdSchema, event.board)] : [],
     );
-    return BoundedContext.singleTenant("MessageBoard")
+    const builder = BoundedContext.singleTenant("MessageBoard")
       .withStorageFactory(storageFactory)
       .withGeneratedRegistryRoot(new URL("..", import.meta.url))
       .add(BoardMessageAggregate)
       .add(BoardViewProjection)
-      .add(AnnouncementBoardProjection, { eventRouting: announcementRouting })
-      .buildAsync();
+      .add(AnnouncementBoardProjection, { eventRouting: announcementRouting });
+    if (deliveryStrategy !== undefined) builder.withDeliveryStrategy(deliveryStrategy);
+    if (subscriptionRegistry !== undefined) builder.withSubscriptionRegistry(subscriptionRegistry);
+    return builder.buildAsync();
   }
 
   /**
@@ -264,6 +270,18 @@ export class MessageBoardApplication {
     return (await this.#server(options, storageFactory, false)).run();
   }
 
+  /** Starts one native complete replica without installing process shutdown handlers. */
+  async startManagedApplication(
+    options: BoardServerOptions,
+    storageFactory: StorageFactory,
+    deliveryStrategy: DeliveryStrategy,
+    subscriptionRegistry: StandSubscriptionRegistry,
+  ): Promise<RunningServer> {
+    return (
+      await this.#server(options, storageFactory, false, deliveryStrategy, subscriptionRegistry)
+    ).start();
+  }
+
   /**
    * Starts the combined MessageBoard browser and native application server.
    *
@@ -282,6 +300,8 @@ export class MessageBoardApplication {
     options: BoardServerOptions,
     storageFactory: StorageFactory,
     browser: boolean,
+    deliveryStrategy?: DeliveryStrategy,
+    subscriptionRegistry?: StandSubscriptionRegistry,
   ): Promise<Server> {
     const policy = new BoardAccessPolicy();
     const server = Server.atPort(options.port ?? 0, {
@@ -301,7 +321,9 @@ export class MessageBoardApplication {
           }
         : {}),
     });
-    return server.add(await this.createContext(storageFactory));
+    return server.add(
+      await this.createContext(storageFactory, deliveryStrategy, subscriptionRegistry),
+    );
   }
 }
 
