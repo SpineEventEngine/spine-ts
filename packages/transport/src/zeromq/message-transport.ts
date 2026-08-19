@@ -38,6 +38,7 @@ import type {
   Subscriber,
   TransportFactory,
 } from "../internal/message-channel.js";
+import { isCanonicalChannelTargetType } from "../internal/message-channel.js";
 import type { ZeroMqConfig } from "./adapter-config.js";
 import { ChannelEndpoints } from "./channel-endpoints.js";
 
@@ -772,8 +773,8 @@ function socketPathFromEndpoint(endpoint: string): string {
 
 function canonicalChannelId(id: ChannelId): ChannelId {
   create(ChannelIdSchema, id);
-  if (!/^type\.spine\.io\/[A-Za-z_][A-Za-z0-9_.]*$/u.test(id.targetType))
-    throw new Error("Message channel targetType must be a canonical type.spine.io URL.");
+  if (!isCanonicalChannelTargetType(id.targetType))
+    throw new Error("Message channel targetType must be a canonical type URL.");
   return create(ChannelIdSchema, { targetType: id.targetType });
 }
 

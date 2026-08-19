@@ -16,6 +16,30 @@ import type { Any } from "@bufbuild/protobuf/wkt";
 import type { ChannelId, ExternalMessage } from "@spine-event-engine/proto";
 
 /**
+ * Checks whether a channel target uses the canonical type-URL syntax.
+ *
+ * Transport channels know only their generated type URL. They deliberately do
+ * not resolve that URL through an application schema registry.
+ *
+ * @param targetType Supplies the channel target type URL.
+ * @returns True when the target has a nonempty, whitespace-free prefix and a
+ *   Protobuf full name.
+ *
+ * @internal
+ */
+export function isCanonicalChannelTargetType(targetType: string): boolean {
+  const separator = targetType.lastIndexOf("/");
+  if (separator <= 0) return false;
+  const prefix = targetType.slice(0, separator);
+  const fullName = targetType.slice(separator + 1);
+  return (
+    !/\s/u.test(prefix) &&
+    !prefix.endsWith("/") &&
+    /^(?:[A-Za-z_][A-Za-z0-9_]*)(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/u.test(fullName)
+  );
+}
+
+/**
  * Accepts one integration external-message frame.
  *
  * @param message Provides the received frame.
