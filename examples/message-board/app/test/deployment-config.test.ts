@@ -153,7 +153,6 @@ describe("MessageBoard deployment configuration", () => {
       {
         ...completeEnvironment,
         NODE_ENV: "production",
-        SPINE_IPC_DIRECTORY: "/tmp/spine-message-board-config-test",
       },
       logger,
     );
@@ -171,7 +170,6 @@ describe("MessageBoard deployment configuration", () => {
       MessageBoardDeployment.configureServer(config, client, {
         ...completeEnvironment,
         NODE_ENV: "production",
-        SPINE_IPC_DIRECTORY: "/tmp/spine-message-board-config-test",
         DELIVERY_SERVER_URL: deliveryUrl,
       }),
     ).toThrow(expected);

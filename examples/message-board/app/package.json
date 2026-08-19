@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node dist/src/local-entry.js",
     "start:application": "node dist/src/application-entry.js",
+    "start:managed": "node dist/src/managed-entry.js",
     "start:combined": "node dist/src/combined-entry.js",
     "proto:compose": "spine-proto compose",
     "handlers:generate": "spine-proto handlers",
@@ -38,7 +39,6 @@
     "@spine-event-engine/server": "2.0.0-snapshot.1",
     "@spine-event-engine/storage": "2.0.0-snapshot.1",
     "@spine-event-engine/storage-datastore": "2.0.0-snapshot.1",
-    "@spine-event-engine/transport": "2.0.0-snapshot.1",
     "loglayer": "9.4.0"
   },
   "devDependencies": {

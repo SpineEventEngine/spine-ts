@@ -23,24 +23,24 @@ temporary context after success, failure, `SIGINT`, or `SIGTERM`.
 | `spine-ts/standalone-gateway:local`     | Browser gateway for a separate application      |
 | `spine-ts/simple-delivery-server:local` | The in-memory simple delivery server            |
 
-The Message Board image also contains the application-only entrypoint. A
+The Message Board image also contains application-only and managed entrypoints. A
 deployment can override its command with:
 
 ```text
-node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js
+node_modules/@spine-event-engine/example-message-board-app/dist/src/managed-entry.js
 ```
 
 ## ⚙️ Configure the processes
 
 The images set `NODE_ENV=production`. Supply these values when starting them:
 
-| Process          | Required environment variables                                                 |
-| ---------------- | ------------------------------------------------------------------------------ |
-| Application only | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `SPINE_IPC_DIRECTORY`                  |
-| Combined         | Application values plus `BROWSER_ORIGIN` and `SUBSCRIPTION_REGISTRY_NAMESPACE` |
-| Gateway (local)  | Combined values plus `BACKEND_URLS` or legacy `BACKEND_URL`                    |
-| Gateway (GKE)    | Combined values plus `BACKEND_DISCOVERY_SERVICE` and `BACKEND_DISCOVERY_PORT`  |
-| Delivery server  | `HOST`, `PORT`                                                                 |
+| Process                  | Required environment variables                                                                         |
+| ------------------------ | ------------------------------------------------------------------------------------------------------ |
+| Managed application node | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `DELIVERY_SERVER_URL`, `PROCESS_COUNT`, `DELIVERY_SHARD_COUNT` |
+| Combined                 | Application values plus `BROWSER_ORIGIN` and `SUBSCRIPTION_REGISTRY_NAMESPACE`                         |
+| Gateway (local)          | Combined values plus `BACKEND_URLS` or legacy `BACKEND_URL`                                            |
+| Gateway (GKE)            | Combined values plus `BACKEND_DISCOVERY_SERVICE` and `BACKEND_DISCOVERY_PORT`                          |
+| Delivery server          | `HOST`, `PORT`                                                                                         |
 
 Every browser process additionally requires one shared
 `MESSAGE_BOARD_SESSION_ISSUER`, `MESSAGE_BOARD_SESSION_AUDIENCE`,
@@ -50,15 +50,16 @@ Each process constructs a Datastore client from
 Browser-capable replicas must share both the signing values and the registry
 namespace.
 
-`DELIVERY_SERVER_URL` is the sole application and gateway delivery setting. In
-these references it is `http://delivery:8484` for Compose and
+`DELIVERY_SERVER_URL` is the sole application Delivery setting. In these
+references it is `http://delivery:8484` for Compose and
 `http://simple-delivery-server:8484` for Kubernetes; `8484` is the delivery
 server listener port, not an application browser port. Do not add separate
 delivery host or port variables.
 
-`SPINE_IPC_DIRECTORY` is an absolute, container-local directory used by the
-existing same-host ZeroMQ transport. Application code selects Datastore for
-Message Board data. The standalone gateway creates a separate Datastore-backed
+`PROCESS_COUNT` is the explicit number of full application replicas launched
+inside one managed node. `DELIVERY_SHARD_COUNT` is selected independently by
+the application; this reference uses two of each. Application code selects
+Datastore for Message Board data. The standalone gateway creates a separate Datastore-backed
 subscription registry and isolates its records with the required namespace.
 Infrastructure passes these values; it does not choose a storage provider.
 
@@ -84,9 +85,10 @@ docker run --rm --name message-board-app \
   --env HOST=0.0.0.0 --env PORT=8080 \
   --env DATASTORE_PROJECT_ID=message-board-local \
   --env DATASTORE_EMULATOR_HOST=datastore:8081 \
-  --env SPINE_IPC_DIRECTORY=/tmp/spine-ipc \
+  --env DELIVERY_SERVER_URL=http://delivery:8484 \
+  --env PROCESS_COUNT=2 --env DELIVERY_SHARD_COUNT=2 \
   spine-ts/message-board:local \
-  node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js
+  node_modules/@spine-event-engine/example-message-board-app/dist/src/managed-entry.js
 ```
 
 Stop the application with `Ctrl-C`, then remove the emulator and network:

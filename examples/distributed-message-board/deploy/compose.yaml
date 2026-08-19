@@ -32,10 +32,9 @@ services:
       timeout: 2s
       retries: 30
 
-  application-1: &application
+  application-node-1: &application
     image: spine-ts/message-board:local
-    command:
-      [node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js]
+    command: [node_modules/@spine-event-engine/example-message-board-app/dist/src/managed-entry.js]
     environment: &application-environment
       HOST: 0.0.0.0
       PORT: 8080
@@ -43,7 +42,8 @@ services:
       DATASTORE_PROJECT_ID: distributed-message-board
       DATASTORE_EMULATOR_HOST: datastore:8081
       DELIVERY_SERVER_URL: http://delivery:8484
-      SPINE_IPC_DIRECTORY: /tmp/spine-ipc
+      PROCESS_COUNT: "2"
+      DELIVERY_SHARD_COUNT: "2"
       MESSAGE_BOARD_SESSION_ISSUER: message-board
       MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
       MESSAGE_BOARD_SESSION_KEY_ID: compose-fixture
@@ -54,7 +54,7 @@ services:
       delivery:
         condition: service_healthy
 
-  application-2:
+  application-node-2:
     <<: *application
     environment: *application-environment
 
@@ -66,12 +66,10 @@ services:
       PORT: 8080
       NODE_ENV: production
       BROWSER_ORIGIN: http://127.0.0.1:5173
-      BACKEND_URLS: http://application-1:8080,http://application-2:8080
+      BACKEND_URLS: http://application-node-1:8080,http://application-node-2:8080
       SUBSCRIPTION_REGISTRY_NAMESPACE: distributed-message-board
       DATASTORE_PROJECT_ID: distributed-message-board
       DATASTORE_EMULATOR_HOST: datastore:8081
-      DELIVERY_SERVER_URL: http://delivery:8484
-      SPINE_IPC_DIRECTORY: /tmp/spine-ipc
       MESSAGE_BOARD_SESSION_ISSUER: message-board
       MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
       MESSAGE_BOARD_SESSION_KEY_ID: compose-fixture
@@ -81,7 +79,7 @@ services:
         condition: service_healthy
       delivery:
         condition: service_healthy
-      application-1:
+      application-node-1:
         condition: service_started
-      application-2:
+      application-node-2:
         condition: service_started

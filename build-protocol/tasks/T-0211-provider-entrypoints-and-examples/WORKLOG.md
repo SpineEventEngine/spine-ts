@@ -31,3 +31,18 @@
   does not configure Delivery or a runtime environment.
 - Message Board's old production ZeroMQ configuration was removed from this
   replacement path. Repository-wide transport deletion remains T-0212.
+
+## 2026-08-19 — example topology and Todo checkpoint
+
+- The Compose and Kubernetes RED fixtures were changed first to require node
+  Coordinators, explicit process/shard values, and no IPC configuration. They
+  failed against the previous application-listener topology; after conversion,
+  the one-node reference has one managed node with two complete replicas and
+  the distributed reference has two such nodes.
+- Todo retains its local in-memory `start` path. Its separate managed entry
+  uses the already accepted Datastore storage adapter and `RemoteDelivery`, so
+  every child has shared application state and direct Delivery observation.
+  This is bounded example configuration, not a new framework setting.
+- The managed Todo source contract was written RED first. It requires the
+  explicit process/shard settings and rejects the retired signal transport
+  terms. It now passes.

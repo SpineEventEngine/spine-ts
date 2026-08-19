@@ -96,6 +96,29 @@ State is in memory and disappears when the server stops. This example does not
 configure production storage, authentication, deployment, tracing, monitoring,
 or a multi-machine topology.
 
+## Managed node reference
+
+The normal `start` command above deliberately remains a single-process local
+server. A deployment can instead start a managed node with the same complete
+Tasks context in every child process:
+
+```bash
+PROCESS_COUNT=2 DELIVERY_SHARD_COUNT=2 \
+HOST=0.0.0.0 PORT=8080 \
+DATASTORE_PROJECT_ID=todo-production \
+DELIVERY_SERVER_URL=http://delivery.example.test:8484 \
+pnpm --dir examples/todo start:managed
+```
+
+`PROCESS_COUNT` is chosen by the deployer. `DELIVERY_SHARD_COUNT` is a separate
+application decision; this example chooses two of each only as a small
+reference. The managed parent exposes one Node Coordinator at `HOST:PORT` and
+starts the requested number of identical Tasks application replicas behind it.
+Each child has the whole bounded context, connects directly to the Delivery
+server, and uses the shared Datastore configured for the deployment. A Gateway
+or other front-facing proxy sends normal gRPC requests to the Coordinator, not
+to a child listener.
+
 ## 🔗 Learn more
 
 - [To-Do walkthrough](USER_GUIDE.md)

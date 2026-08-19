@@ -30,17 +30,20 @@ test("declares a combined topology with its durable registry and one delivery se
   assert.doesNotMatch(document, /replicas:/u);
 });
 
-test("declares one local-fixture gateway and two static application backends", () => {
+test("declares one local-fixture gateway and one managed complete-replica node", () => {
   assert.equal(existsSync(standalone), true, "standalone Compose reference must exist");
   const document = readFileSync(standalone, "utf8");
 
-  assert.match(document, /^ {2}application-1:/mu);
-  assert.match(document, /^ {2}application-2:/mu);
+  assert.match(document, /^ {2}application-node:/mu);
   assert.match(document, /^ {2}gateway:/mu);
   assert.doesNotMatch(document, /^ {2}gateway-[0-9]+:/mu);
   assert.match(document, /^ {2}envoy:/mu);
   assert.match(document, /^ {2}delivery:/mu);
-  assert.match(document, /BACKEND_URLS: http:\/\/application-1:8080,http:\/\/application-2:8080/mu);
+  assert.match(document, /BACKEND_URLS: http:\/\/application-node:8080/mu);
+  assert.match(document, /PROCESS_COUNT: "2"/u);
+  assert.match(document, /DELIVERY_SHARD_COUNT: "2"/u);
+  assert.match(document, /managed-entry\.js/u);
+  assert.doesNotMatch(document, /SPINE_IPC_DIRECTORY|ZeroMQ/u);
   assert.doesNotMatch(document, /LOCAL_STATIC_BACKENDS/u);
   assert.match(document, /SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-standalone/mu);
   assert.match(document, /DATASTORE_EMULATOR_HOST: datastore:8081/mu);
@@ -49,7 +52,7 @@ test("declares one local-fixture gateway and two static application backends", (
   assert.match(document, /MESSAGE_BOARD_SESSION_KEY_ID: compose-fixture/mu);
   assert.match(
     document,
-    /application-2:[\s\S]*?depends_on:[\s\S]*?delivery:[\s\S]*?condition: service_healthy/mu,
+    /application-node:[\s\S]*?depends_on:[\s\S]*?delivery:[\s\S]*?condition: service_healthy/mu,
   );
   assert.match(
     document,

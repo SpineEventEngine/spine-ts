@@ -10,16 +10,29 @@ const reference = join(root, "REFERENCE.md");
 const readme = join(root, "README.md");
 const gitignore = join(root, ".gitignore");
 
-test("declares one Gateway, two identical applications, shared storage, and simple delivery", () => {
+test("declares one Gateway, two managed complete-replica nodes, shared storage, and simple delivery", () => {
   assert.equal(existsSync(compose), true, "the distributed Compose topology must exist");
   const source = readFileSync(compose, "utf8");
 
-  for (const service of ["application-1", "application-2", "datastore", "delivery", "gateway"])
+  for (const service of [
+    "application-node-1",
+    "application-node-2",
+    "datastore",
+    "delivery",
+    "gateway",
+  ])
     assert.match(source, new RegExp(`^ {2}${service}:`, "mu"));
   assert.doesNotMatch(source, /^ {2}gateway-[0-9]+:/mu);
   assert.match(source, /spine-ts\/simple-delivery-server:local/u);
   assert.match(source, /DATASTORE_EMULATOR_HOST: datastore:8081/u);
-  assert.match(source, /BACKEND_URLS: http:\/\/application-1:8080,http:\/\/application-2:8080/u);
+  assert.match(
+    source,
+    /BACKEND_URLS: http:\/\/application-node-1:8080,http:\/\/application-node-2:8080/u,
+  );
+  assert.match(source, /PROCESS_COUNT: "2"/u);
+  assert.match(source, /DELIVERY_SHARD_COUNT: "2"/u);
+  assert.match(source, /managed-entry\.js/u);
+  assert.doesNotMatch(source, /SPINE_IPC_DIRECTORY|ZeroMQ/u);
   assert.match(source, /condition: service_healthy/u);
 });
 
