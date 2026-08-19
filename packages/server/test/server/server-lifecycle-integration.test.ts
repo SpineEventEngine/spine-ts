@@ -15,7 +15,6 @@
 import * as http2 from "node:http2";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { TransportTopics } from "@spine-event-engine/transport";
 
 import {
   BoundedContext,
@@ -512,10 +511,6 @@ describe("Server lifecycle integration", () => {
       });
       await once(session, "remoteSettings");
       releaseActive = worker.holdNextStart("STOPPED");
-      const transportTopic = TransportTopics.create({
-        signalKind: "system",
-        messageTypeUrl: "type.spine.io/server.lifecycle.ActiveClose",
-      });
       posting = fixture.postEvent(context, "active-last-close");
       await posting;
       await waitFor(() => worker.starts === 2);
@@ -542,12 +537,6 @@ describe("Server lifecycle integration", () => {
         true,
       );
       expect(storageFactory.isOpen()).toBe(true);
-      const transport = fixture.environment.transport;
-      if (transport === undefined) throw new Error("Expected local transport.");
-      await expect(
-        transport.publish({ topic: transportTopic, envelope: "active" }),
-      ).resolves.toBeUndefined();
-
       releaseActive();
       releaseActive = undefined;
       await Promise.all([firstClose, concurrentClose]);
@@ -566,9 +555,6 @@ describe("Server lifecycle integration", () => {
       expect(closeResource).toHaveBeenCalledOnce();
       expect(closeDelivery).toHaveBeenCalledOnce();
       expect(storageFactory.closeCalls).toBe(1);
-      await expect(
-        transport.publish({ topic: transportTopic, envelope: "closed" }),
-      ).rejects.toThrow("Local signal transport is closed.");
       expect(events.slice(-7)).toEqual([
         "stop",
         "await",

@@ -44,6 +44,7 @@
     "verify": "pnpm verify:release",
     "verify:task": "pnpm check:node && node scripts/verify-task.mjs",
     "lint:cleanup": "node scripts/check-cleanup-rules.mjs",
+    "check:t0212-removed-routing": "node scripts/check-t0212-removed-routing.mjs",
     "lint:tsdoc": "node scripts/check-tsdoc.mjs",
     "check:logging-containment": "node scripts/check-log-containment.mjs",
     "verify:generated-gates": "pnpm typecheck:build:generated && pnpm typecheck:tooling && eslint . && pnpm lint:cleanup && pnpm lint:tsdoc && pnpm lint:copyright && pnpm format:check && pnpm docs:check:generated && pnpm proto:lint:generated && pnpm proto:check-generated:current && pnpm check:logging-containment && pnpm check:release-readiness",

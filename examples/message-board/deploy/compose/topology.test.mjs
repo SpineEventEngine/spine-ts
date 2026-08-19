@@ -43,7 +43,7 @@ test("declares one local-fixture gateway and one managed complete-replica node",
   assert.match(document, /PROCESS_COUNT: "2"/u);
   assert.match(document, /DELIVERY_SHARD_COUNT: "2"/u);
   assert.match(document, /managed-entry\.js/u);
-  assert.doesNotMatch(document, /SPINE_IPC_DIRECTORY|ZeroMQ/u);
+  assert.doesNotMatch(document, /SPINE_IPC_DIRECTORY/u);
   assert.doesNotMatch(document, /LOCAL_STATIC_BACKENDS/u);
   assert.match(document, /SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-standalone/mu);
   assert.match(document, /DATASTORE_EMULATOR_HOST: datastore:8081/mu);

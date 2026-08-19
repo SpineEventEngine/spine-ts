@@ -433,9 +433,9 @@ updates, event replay for subscriptions, or exactly-once observation.
 page-size choices. `DeliverySupervisor({ source, delivery, onMessage })` receives
 the separate public `DeliverySource` used to observe remote shards.
 `Environment` resolves the Node deployment profile; the singleton
-`ServerEnvironment` exposes the configured storage, transport, optional
-delivery/tracing facilities, and their process lifecycle. They do not create a
-production transport topology or durable scheduler for you.
+`ServerEnvironment` exposes configured storage, optional delivery/tracing
+facilities, and its process lifecycle. They do not create a production topology
+or durable scheduler for you.
 
 `DeliveryMonitor` is the customizable explicit failure-policy seam. Its hooks
 may return a value or a promise; a failed reception defaults to durable
@@ -466,7 +466,7 @@ An openable `ServerEnvironmentDelivery` is opened before the first environment
 attachment is admitted, then supplies its inbox and work-registry ports to both
 the existing finite and supervisor delivery paths; a close-only local delivery
 remains supported. The environment stops attachments before closing delivery,
-transport, tracing, and storage in that order. Use `RemoteDelivery` from
+tracing, and storage in that order. Use `RemoteDelivery` from
 `@spine-event-engine/delivery-client` when an application selects a remote
 delivery endpoint with direct authoritative removal.
 
@@ -520,16 +520,15 @@ loop-prevention rule: there is no hop counter, broker Inbox, retry, replay,
 deduplication, or producer election. Delivery is best effort; many consumers
 may observe one domain producer at a time.
 
-The broker uses `TransportFactory` message channels, not `SignalTransport`.
+The broker uses private `TransportFactory` message channels.
 `ServerEnvironment` owns one process-wide `InMemoryTransportFactory` by
 default for private IntegrationBroker message channels, including production.
 An application may supply `integrationChannelFactory` to override that local
 channel factory. Production resolution still requires `storageFactory` and the
 complete application `typeRegistry`; it does not fall back to in-memory storage
-or to the core-only registry. Its legacy `transport` setting is optional: when
-present, it opens legacy runtime signal bindings; when absent, none are opened.
-See the [transport reference](../transport/REFERENCE.md) for same-host ZeroMQ
-setup.
+or to the core-only registry. No application signal-binding setting is part of
+the environment. The channel factory is private IntegrationBroker plumbing,
+not a general runtime transport.
 
 `ThirdPartyContext.singleTenant(name)` or `.multitenant(name)` creates the
 public import facade. `emittedEvent(event, actor)` requires a generated event,

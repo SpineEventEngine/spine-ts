@@ -251,24 +251,6 @@ export {
   type EventRegistrationSubscriberMetadata,
 } from "./handler/event-registration-readiness.js";
 
-export {
-  createRoutingPlan,
-  type CommandRuntimeRoutingPlan,
-  type DeferredRoutingSeam,
-  type EventRuntimeRoutingPlan,
-  type ServerRuntimeRoutingPlan,
-  type RoutingPlanInput,
-} from "./runtime/runtime-routing.js";
-
-export {
-  RuntimeTransportBinding,
-  RuntimeTransportEnvelopeError,
-  type CommandRuntimeTransportHandler,
-  type EventRuntimeTransportHandler,
-  type RuntimeTransportBindingHandle,
-  type RuntimeTransportBindingInput,
-} from "./runtime/runtime-transport.js";
-
 export { type MessageId, type PrimitiveId } from "./repository/primitive-id.js";
 export { CommandRouting, type CommandRoute } from "./repository/command-routing.js";
 export type { InterfaceRouteMessage } from "./repository/routing-declarations.js";

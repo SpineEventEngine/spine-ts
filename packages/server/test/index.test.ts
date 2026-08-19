@@ -16,7 +16,6 @@ import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { TypeUrls } from "@spine-event-engine/core";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { CommandSchema, file_spine_options } from "@spine-event-engine/proto";
@@ -97,7 +96,6 @@ import {
   type SignalMetadataOptions,
   SingleProcessServerRuntime,
   SystemClock,
-  createRoutingPlan,
 } from "../src/index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -274,8 +272,6 @@ describe("@spine-event-engine/server", () => {
         "Projection",
         "Repository",
         "RepositoryIdentityError",
-        "RuntimeTransportBinding",
-        "RuntimeTransportEnvelopeError",
         "Server",
         "ServerEnvironment",
         "ServerRuntimeStateError",
@@ -300,7 +296,6 @@ describe("@spine-event-engine/server", () => {
         "Subscribe",
         "Where",
         "acceptSignalIntake",
-        "createRoutingPlan",
         "EntityHandlers",
         "describeEntityMetadata",
         "createEntityTransaction",
@@ -520,12 +515,6 @@ describe("@spine-event-engine/server", () => {
     const registry = new HandlerMetadataRegistry([handlers]);
     const commandReadiness = CommandRegistrationReadiness.fromRegistry(registry);
     const eventReadiness = EventRegistrationReadiness.fromRegistry(registry);
-    const routingPlan = createRoutingPlan({
-      context,
-      commands: commandReadiness,
-      events: eventReadiness,
-    });
-
     expect(context.name.value).toBe("PublicRuntimeSmoke");
     expect(typeof context.commandBus().post).toBe("function");
     expect(typeof context.eventBus().post).toBe("function");
@@ -533,19 +522,7 @@ describe("@spine-event-engine/server", () => {
     expect("register" in context.eventBus()).toBe(false);
     expect(commandReadiness.commandTypeNames()).toEqual([CommandSchema.typeName]);
     expect(eventReadiness.eventTypeNames()).toEqual([AggregateStateSchema.typeName]);
-    expect(routingPlan.commands.topics.map(({ messageTypeUrl }) => messageTypeUrl)).toEqual([
-      "type.spine.io/spine.core.Command",
-    ]);
-    expect(routingPlan.events.topics.map(({ messageTypeUrl }) => messageTypeUrl)).toEqual([
-      TypeUrls.derive(AggregateStateSchema),
-    ]);
-    expect(routingPlan.deferred.map(({ signalKind }) => signalKind)).toEqual([
-      "query",
-      "subscription",
-      "system",
-    ]);
-
-    for (const member of ["ImportBus", "GrpcServer", "ZeroMqTransport"]) {
+    for (const member of ["ImportBus", "GrpcServer"]) {
       expect(Object.hasOwn(serverRoot, member)).toBe(false);
     }
 

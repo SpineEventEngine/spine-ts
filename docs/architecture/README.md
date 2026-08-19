@@ -19,9 +19,7 @@ They explain the server scope: delivery/inbox processing and
 command/query/subscription services. `Server` owns one ordinary application
 process. For a Node deployment that needs complete replicas on one machine,
 `ManagedServerApplication` supervises the deployer-configured child cohort and
-its HTTP/2 Coordinator. The same-host ZeroMQ transport is a legacy
-application-composed path scheduled for removal after its remaining consumers
-migrate; it is not the Coordinator deployment path. Gateway hosting and remote
+its HTTP/2 Coordinator. Gateway hosting and remote
 delivery are supported integration paths, not a prescribed topology.
 Read the [browser and Gateway guide](../BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 and the [delivery-client](../../packages/delivery-client/README.md) and
@@ -650,31 +648,14 @@ public composition is:
 - optionally use `SingleProcessServerRuntime` directly where a caller needs the
   lifecycle/queue kernel.
 
-The metadata-only runtime-routing/transport foundation derives an immutable
-runtime-routing plan from the built context plus command and event readiness using
-`createRoutingPlan()`.
+Command and event readiness remains local metadata used by the normal buses and
+generated service assembly.
 
 This gives runtime code shared vocabulary and
 tests around "context metadata plus lifecycle plus readiness." It is not an
 equivalent of Spine JVM `Server` or a running JVM-style `BoundedContext`.
 The readiness views remain metadata-only and do not dispatch or invoke
-handlers. The runtime-routing plan does not open transport endpoints, expose
-ZeroMQ details, or start workers; it only turns existing metadata into
-transport topics, subscriptions, planner-local worker IDs, explicit
-reserved seams, and sanitized route descriptors. Those route descriptors expose
-message type names/type URLs plus stable receiver-group and local route/worker
-identities, along with transport correlation keys back to topic/subscription
-arrays and planner-local worker IDs; they do not retain entity names, handler
-names, raw readiness metadata, or duplicate full transport contracts on each
-route. `RuntimeTransportBinding` is the executable transport bridge over
-that plan: it registers command routes through `SignalTransport.respond()`,
-event routes through `SignalTransport.subscribe()`, checks incoming generated
-Spine command/event envelope shape and enclosed message type URL, parses
-accepted envelopes into clean generated messages before enqueue, and queues
-accepted callbacks through `SingleProcessServerRuntime`. Its close handle is
-idempotent, stops binding intake before unregistering transport handles, attempts
-every transport registration close even after one rejects, and closes the
-runtime after transport registrations. The package root exports a small
+handlers. The package root exports a small
 executable bus layer, direct Stand, repository-backed handler invocation through
 built contexts, command payload validation and rejection/Ack mapping through
 `SpineServices`, the `SpineServices` route registrar, and this local runtime
@@ -682,10 +663,10 @@ transport binding. The package also exports `Server` as a small HTTP/2
 owner over `SpineServices`: it defaults to `127.0.0.1`, returns
 `host`/`port`/`baseUrl`, and builds its service routing once when `start()` is
 called. `Environment` and `ServerEnvironment` are one lazy process singleton
-graph for storage, transport, optional delivery, and optional tracing. Local
-environments get in-memory storage and same-process transport defaults. A
-production process must set `NODE_ENV=production` before the first environment
-or server resolution, then configure storage and transport through
+graph for storage, an integration message-channel factory, optional delivery,
+and optional tracing. Local environments get in-memory storage and a shared
+in-memory channel factory. A production process must set `NODE_ENV=production`
+before the first environment or server resolution, then configure storage through
 `ServerEnvironment.when(EnvironmentType.Production).use(...)` before that
 resolution. `Server` builds added `BoundedContextBuilder` values before listener
 open and uses the singleton storage factory unless the builder chose one
@@ -715,11 +696,8 @@ not introduced, and the seam does not discover handlers, load generated
 registries, materialize application handlers, or widen into transport,
 storage, tracing, or application handler APIs.
 
-The architectural consequence is that the integration broker consumes the
-origin-aware readiness views through its private broker adapter, while the
-ordinary runtime continues to consume the existing readiness views and
-runtime-routing plan independently. Broker intake and runtime signal intake are
-separate responsibilities.
+The integration broker consumes its private typed message channels while normal
+command and event work stays in the existing buses and generated services.
 
 ## Storage Boundary
 
@@ -821,96 +799,12 @@ provider indexes, operational monitoring, backups, and idempotent downstream
 effects. The framework deliberately provides no scheduler, timed retry policy,
 attempt history, quarantine, or exactly-once side-effect guarantee.
 
-## Transport Boundary
+## Integration message channels
 
-`@spine-event-engine/transport` defines an adapter-agnostic routing contract for
-local multi-process work. The package does not import `@spine-event-engine/server`
-runtime code or expose ZeroMQ through its root API. It defines immutable value
-objects and interfaces that adapters can implement:
-
-- `TransportSignalKind` names framework-level signal families (`command`,
-  `event`, `query`, `subscription`, and `system`);
-- `TransportTopics.create()` builds immutable topics from a signal kind and a
-  payload type URL; and
-- `TransportRoutingDescriptor.routingKey` is derived deterministically from the
-  signal kind and payload type URL;
-- `TransportSubscriptions.create()` builds immutable logical subscription
-  descriptors from a topic, a logical subscriber ID, and a transport delivery
-  mode; and
-- `SignalTransport` plus publish/request handler contracts define the minimal
-  adapter seam for runtime integration and graceful async close behavior.
-
-The same package also exports the distinct message-channel SPI used only by the
-integration broker: `Publisher`, `Subscriber`, `MessageChannel`,
-`ExternalMessageConsumer`, and `TransportFactory`. The generated `ChannelId`
-comes from `@spine-event-engine/proto`. A factory creates typed channels for
-exact `ExternalMessage` frames and owns their asynchronous close.
-These interfaces do not expose signal kinds, routing plans, subscriber IDs,
-request/reply, sockets, manifests, or paths. The broker never depends on
-`SignalTransport`.
-
-The boundary is intentionally smaller than a bus implementation. It does not
-choose durable delivery, retry loops or timers, process supervision, readiness
-probes over IPC, repository dispatch, storage lifecycle, read-side execution
-policy, participant lifecycle, worker registrations, delivery attempts/results,
-or retry classification. Those decisions remain application transport and runtime
-policy.
-
-The transport package pins the maintained official `zeromq@6.5.0` line for
-the local IPC adapter. The package root stays adapter-neutral, while the
-`@spine-event-engine/transport/zeromq` subpath exposes exactly
-`ZeroMqConfig`, `ZeroMqConfigInput`, `createZeroMqTransport`,
-`createZeroMqTransportFactory`, `ZeroMqTransportScope`, and
-`ZeroMqTransportOptions`. The adapter derives compact deterministic IPC socket
-paths from `ZeroMqConfig` plus transport routing descriptors and keeps
-endpoint strings, multipart frames, socket classes, and native module types out
-of framework APIs. Native tests prove publish/subscribe, request/reply, and
-`RuntimeTransportBinding` command/event callbacks over the ZeroMQ transport. A
-public-package Node child-process proof additionally assembles a `Server` with
-real aggregate/projection repositories: a parent command is handled in the
-child, its emitted event reaches projection behavior, and bounded observation
-and quiet windows check one observation from each matching child projection for
-one fixed parent event. The parent and child use separate adapter instances over
-one private same-host IPC directory. This bounded test does not establish a
-general exactly-once guarantee for durable redelivery, retries, process
-restarts, or remote transport.
-
-The runtime signal adapter does not add remote transport, worker registration
-handshakes, delivery retries, process supervision, or broad health checks. The
-workspace explicitly approves the `zeromq` install script in pnpm
-configuration, so dependency restoration must run in an environment that
-permits native package build/install scripts. Managed sandboxes may reject
-ZeroMQ `ipc://` binds with `EPERM`, so live local IPC tests can require native
-IPC filesystem/socket permissions outside the sandbox. This signal adapter path
-is limited to same-host IPC; remote and multi-host signal transport are
-excluded. Integration message transport has its own same-host ZeroMQ adapter:
-each subscriber binds a unique manifest-backed PULL endpoint, publishers retain
-dedicated PUSH connections to discovered endpoints, and endpoint bind/remove
-ordering protects discovery during lifecycle changes. The manifest is private
-adapter discovery metadata, not a broker frame or durable record. PUSH/PULL
-delivery is best effort (FIFO per publisher/subscriber pair where accepted),
-with no exactly-once or durable-redelivery claim. A real two-process application
-fixture proves the complete broker path with distinct processes and contexts,
-generated origin metadata, status/config discovery, and exact Protobuf event
-delivery.
-
-The ZeroMQ adapter uses generated Buf Protobuf binary for `command` and `event`
-envelopes, dispatching by the transport topic's signal kind. Its reserved
-`query`, `subscription`, and `system` kinds have no Protobuf wire contract and
-currently retain private V8 encoding. The public `TransportSignalEnvelope`
-conditional correlates `command` with generated `Command`, `event` with
-generated `Event`, and preserves caller-selected envelope types for the other
-kinds.
-
-Every inbound `Subscriber`, `Request`, and `Reply` frame has an exact
-8,388,608-byte rejection ceiling; ordinary frames allocate their actual sizes,
-not a fixed 8 MiB. Publish and request traffic places the route in frame 1 and
-the Buf command/event payload in frame 2. The existing private successful-result
-wrapper is V8-encoded in reply frame 1 and is not Spine `Ack`. Buf
-generated-message-shaped replies, including every object with a string
-`$typeName`, are rejected rather than V8-serialized. Receivers ignore trailers
-only after zeromq.js has materialized the multipart message, so SF-013 remains
-accepted and unbounded in aggregate. Old peers that use V8 for command/event
-frames cannot interoperate with the Buf wire and all cooperating peers must
-upgrade together. The `ipc://` frames are trusted same-host runtime traffic
-only, and `ipcDirectory` must be private to the cooperating runtime peers.
+`@spine-event-engine/transport` provides the process-local typed channel SPI
+used by IntegrationBroker: `TransportFactory`, `MessageChannel`,
+`Publisher`, `Subscriber`, `ConsumerHandle`, and
+`InMemoryTransportFactory`. A factory creates channels for exact generated
+`ExternalMessage` frames keyed by canonical generated type URLs and owns their
+asynchronous close. This boundary does not choose delivery policy, retries,
+process supervision, repository dispatch, or generated service behavior.

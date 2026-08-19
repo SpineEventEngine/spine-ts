@@ -505,24 +505,6 @@
   },
   {
     "rule": "standalone-function",
-    "file": "packages/server/src/runtime/runtime-routing.ts",
-    "kind": "function-declaration",
-    "identity": "createContextRoutingPlan()#1",
-    "name": "createContextRoutingPlan",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration createContextRoutingPlan()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/runtime/runtime-routing.ts",
-    "kind": "function-declaration",
-    "identity": "createRoutingPlan()#1",
-    "name": "createRoutingPlan",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration createRoutingPlan()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
     "file": "packages/server/src/runtime/signal-intake.ts",
     "kind": "function-declaration",
     "identity": "acceptSignalIntake()#1",

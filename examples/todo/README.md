@@ -83,18 +83,19 @@ create, assign, reassign, and unassign path.
 
 ```bash
 pnpm vitest run examples/todo/test/black-box.test.ts
-pnpm vitest run examples/todo/test/local-multi-process.test.ts
+pnpm vitest run examples/todo/test/startup-contract.test.ts
 ```
 
-The first suite uses the public `BlackBox` testing API. The second starts
-separate local processes and therefore needs permission to bind loopback and
-same-host IPC endpoints.
+The first suite uses the public `BlackBox` testing API. The second verifies the
+single-process and managed startup contracts, including deployer-supplied
+process and Delivery shard counts.
 
-## ⚠️ Local by design
+## ⚠️ Single-process mode is local by design
 
-State is in memory and disappears when the server stops. This example does not
-configure production storage, authentication, deployment, tracing, monitoring,
-or a multi-machine topology.
+The normal `start` command stores state in memory, which disappears when the
+server stops. It does not configure authentication, deployment, tracing,
+monitoring, or a multi-machine topology. The managed reference below has a
+separate production assembly.
 
 ## Managed node reference
 

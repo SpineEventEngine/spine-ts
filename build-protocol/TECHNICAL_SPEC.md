@@ -12,7 +12,7 @@ The framework provides a TypeScript/Node.js implementation of the core server-si
 - Asynchronous processing of domain signals.
 - OOP domain code with generic entity base classes.
 - Annotation-like handler declaration using modern TypeScript decorators when they fit.
-- Local multi-process execution over an abstract bus transport initially backed by ZeroMQ.
+- Process-local IntegrationBroker message exchange through typed channels.
 
 The framework does not need source-level compatibility with Spine JVM. It should feel familiar to JVM Spine users by preserving names, concepts, message contracts, and domain modeling conventions.
 
@@ -62,7 +62,7 @@ line.
 3. Preserve Spine modeling conventions, including command files ending in `commands.proto`, event files ending in `events.proto`, and entity state messages declaring `(entity).kind`.
 4. Maintain strict read-side/write-side segregation.
 5. Process commands, events, and other signals asynchronously.
-6. Use ZeroMQ only as a local IPC broker backbone behind a transport abstraction.
+6. Keep IntegrationBroker message exchange process-local through typed channels.
 7. Support multiple Node.js processes for command handling, event handling, read-side projection updates, query serving, subscription streaming, delivery, and system tasks.
 8. Prefer OOP APIs and TypeScript generics over procedural registration.
 9. Provide annotation-like handler declaration through standard TypeScript decorators if viable, with code generation or explicit registration as fallback where decorators cannot express the needed metadata.
@@ -264,23 +264,16 @@ flowchart LR
   Services --> Runtime["Bounded Context Runtime"]
   Runtime --> WriteBus["Write-side buses"]
   Runtime --> ReadSide["Read-side Stand"]
-  WriteBus --> Signal["SignalTransport runtime binding"]
   Runtime --> Integration["Context-owned IntegrationBroker"]
   Integration --> Channels["Typed ExternalMessage channels"]
-  Signal --> ZeroMQ["ZeroMQ signal adapter"]
-  Channels --> ZeroMQChannels["ZeroMQ message-channel adapter"]
-  ZeroMQ --> Workers["Node worker processes"]
-  ZeroMQChannels --> Peers["Peer Bounded Context processes"]
-  Workers --> Storage["Storage adapters"]
+  WriteBus --> Storage["Storage adapters"]
   Storage --> ReadSide
   ReadSide --> Services
 ```
 
-The gRPC services remain the public remote API. Runtime command/event routing
-uses `SignalTransport`; JVM-aligned cross-context external events use the
-separate typed message-channel SPI and exact integration Protobuf contracts.
-ZeroMQ supplies same-host implementations for both authorities without merging
-their routing or lifecycle concepts.
+The gRPC services remain the public remote API. JVM-aligned cross-context
+external events use the typed message-channel SPI and exact integration Protobuf
+contracts.
 
 ## Package Boundaries
 
@@ -289,8 +282,8 @@ The exact package manager and build tooling are deferred to the build protocol, 
 - `proto`: copied Spine `.proto` definitions, Buf configuration, and generated Protobuf-ES schemas.
 - `core`: signal envelopes, type URL registry, metadata registry, validation facade, actor/tenant context, and common errors.
 - `server`: bounded context, repositories, entities, buses, delivery, read-side stand, lifecycle, and gRPC service implementations.
-- `transport`: distinct SignalTransport routing and typed integration
-  message-channel interfaces, with in-memory and same-host ZeroMQ adapters.
+- `transport`: typed integration message-channel interfaces with an in-memory
+  implementation.
 - `storage`: record storage abstractions and initial in-memory storage.
 - `testing`: black-box bounded-context testing utilities.
 - `example-todo`: standalone server-side to-do list example.

@@ -59,7 +59,6 @@ describe("ServerEnvironment delivery lifecycle", () => {
     EnvironmentTests.use(EnvironmentType.Production);
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
-      transport: { close: () => undefined } as never,
       typeRegistry: spineCoreRegistry,
     });
 
@@ -127,7 +126,6 @@ describe("ServerEnvironment delivery lifecycle", () => {
     EnvironmentTests.use(EnvironmentType.Production);
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
-      transport: { close: () => undefined } as never,
       integrationChannelFactory: factory,
       typeRegistry: spineCoreRegistry,
     });
@@ -145,7 +143,6 @@ describe("ServerEnvironment delivery lifecycle", () => {
     EnvironmentTests.use(EnvironmentType.Production);
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
-      transport: { close: () => undefined } as never,
       integrationChannelFactory: new InMemoryTransportFactory(),
     });
 
@@ -327,7 +324,6 @@ describe("ServerEnvironment delivery lifecycle", () => {
     EnvironmentTests.use(EnvironmentType.Production);
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
-      transport: { close: () => undefined } as never,
       integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
@@ -361,7 +357,6 @@ describe("ServerEnvironment delivery lifecycle", () => {
     EnvironmentTests.use(EnvironmentType.Production);
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
-      transport: { close: () => undefined } as never,
       integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
@@ -417,7 +412,6 @@ describe("ServerEnvironment delivery lifecycle", () => {
     EnvironmentTests.use(EnvironmentType.Production);
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
-      transport: { close: () => undefined } as never,
       integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
@@ -447,7 +441,6 @@ describe("ServerEnvironment delivery lifecycle", () => {
     EnvironmentTests.use(EnvironmentType.Production);
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory: new InMemoryStorageFactory(),
-      transport: { close: () => undefined } as never,
       integrationChannelFactory: new InMemoryTransportFactory(),
       typeRegistry: spineCoreRegistry,
       ...{ logger: logger as unknown as ILogLayer },
@@ -770,18 +763,17 @@ describe("ServerEnvironment delivery lifecycle", () => {
     await serverEnvironmentAccess.detach(environment, attachment);
   });
 
-  it("closes delivery transport tracer and storage in the approved order", async () => {
+  it("closes delivery tracer and storage in the approved order", async () => {
     const events: string[] = [];
     ServerEnvironment.when(EnvironmentType.Local).use({
       delivery: { close: () => events.push("delivery") },
-      transport: { close: () => events.push("transport") } as never,
       tracerFactory: { close: () => events.push("tracer") },
       storageFactory: { close: () => events.push("storage") } as never,
     });
 
     await ServerEnvironment.instance().close();
 
-    expect(events).toEqual(["delivery", "transport", "tracer", "storage"]);
+    expect(events).toEqual(["delivery", "tracer", "storage"]);
   });
 
   it("retries only unfinished environment close phases after partial failure", async () => {

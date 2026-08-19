@@ -490,39 +490,13 @@ const expectedRdbmsStorageExports = [
   "MysqlTableSpec",
 ];
 const expectedTransportExports = [
-  "AsyncCloseable",
   "ConsumerHandle",
   "ExternalMessageConsumer",
   "InMemoryTransportFactory",
   "MessageChannel",
-  "PublishTransportHandler",
-  "PublishTransportOperation",
   "Publisher",
-  "RequestTransportHandler",
-  "RequestTransportOperation",
-  "SignalTransport",
   "Subscriber",
   "TransportFactory",
-  "TransportRoutingDescriptor",
-  "TransportSignalEnvelope",
-  "TransportSignalKind",
-  "TransportSubscription",
-  "TransportSubscriptionHandle",
-  "TransportSubscriptionInput",
-  "TransportSubscriptionMode",
-  "TransportTopic",
-  "TransportTopicInput",
-  "TransportSubscriptions",
-  "TransportTopics",
-  "TransportOperations",
-];
-const expectedZeroMqExports = [
-  "ZeroMqConfig",
-  "ZeroMqConfigInput",
-  "ZeroMqTransportOptions",
-  "ZeroMqTransportScope",
-  "createZeroMqTransport",
-  "createZeroMqTransportFactory",
 ];
 const expectedTestingExports = [
   "BlackBox",
@@ -548,8 +522,6 @@ const expectedServerExports = [
   "CommandEndpoint",
   "CommandDispatcher",
   "CommandAssignmentHandlerMetadata",
-  "CommandRuntimeRoutingPlan",
-  "CommandRuntimeTransportHandler",
   "CommandRegistrationAssigneeMetadata",
   "CommandRegistrationReadiness",
   "CommandRegistrationReadinessLookup",
@@ -599,8 +571,6 @@ const expectedServerExports = [
   "UniformAcrossAllShards",
   "DurableSubscriptionBindings",
   "DurableSubscriptionBindingsOptions",
-  "createRoutingPlan",
-  "DeferredRoutingSeam",
   "DeclaredEntityVisibility",
   "DescriptorFieldMetadata",
   "DescriptorMessageSchema",
@@ -661,18 +631,12 @@ const expectedServerExports = [
   "ServerOptions",
   "ServerRuntimeLifecycle",
   "ServerRuntimeRejectedState",
-  "ServerRuntimeRoutingPlan",
   "StateUpdateRoute",
   "StateUpdateRouting",
   "ThirdPartyContext",
-  "RoutingPlanInput",
   "ServerRuntimeState",
   "ServerRuntimeStateError",
   "RuntimeStateErrorCode",
-  "RuntimeTransportBinding",
-  "RuntimeTransportBindingHandle",
-  "RuntimeTransportBindingInput",
-  "RuntimeTransportEnvelopeError",
   "ServerRuntimeStateOperation",
   "ServerRuntimeWork",
   "SingleProcessServerRuntime",
@@ -753,8 +717,6 @@ const expectedServerExports = [
   "EventRegistrationReadinessLookup",
   "EventRegistrationReactorMetadata",
   "EventRegistrationSubscriberMetadata",
-  "EventRuntimeRoutingPlan",
-  "EventRuntimeTransportHandler",
   "EventReactionHandlerMetadata",
   "EventSubscriptionHandlerMetadata",
   "External",
@@ -835,7 +797,6 @@ const rdbmsStorageIndexPath = join("packages", "storage-rdbms", "src", "index.ts
 const serverIndexPath = join("packages", "server", "src", "index.ts");
 const testingIndexPath = join("packages", "testing", "src", "index.ts");
 const transportIndexPath = join("packages", "transport", "src", "index.ts");
-const zeroMqIndexPath = join("packages", "transport", "src", "zeromq", "index.ts");
 
 const typedocExecutable = process.platform === "win32" ? "typedoc.cmd" : "typedoc";
 const typedocBin = join("node_modules", ".bin", typedocExecutable);
@@ -880,7 +841,6 @@ const datastoreStorageModuleNames = collectDirectModuleNames(
 const rdbmsStorageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage-rdbms/src");
 const testingModuleNames = collectDirectModuleNames(apiDocs, "packages/testing/src");
 const transportModuleNames = collectDirectModuleNames(apiDocs, "packages/transport/src");
-const zeroMqModuleNames = collectDirectModuleNames(apiDocs, "packages/transport/src/zeromq");
 
 function collectNames(value) {
   if (Array.isArray(value)) {
@@ -1208,7 +1168,6 @@ const declaredDatastoreStorageExports = collectNamedExports(datastoreStorageInde
 const declaredRdbmsStorageExports = collectNamedExports(rdbmsStorageIndexPath);
 const declaredTestingExports = collectNamedExports(testingIndexPath);
 const declaredTransportExports = collectNamedExports(transportIndexPath);
-const declaredZeroMqExports = collectNamedExports(zeroMqIndexPath);
 const declaredIntegrationProtoExports = new Set([
   ...collectNamedExports(boundedContextProtoPath),
   ...collectNamedExports(brokerProtoPath),
@@ -1367,13 +1326,6 @@ const missingDeclaredTestingExports = expectedTestingExports.filter(
 );
 const unexpectedTestingExports = declaredTestingExports.filter(
   (name) => !expectedTestingExports.includes(name),
-);
-const missingZeroMqExports = expectedZeroMqExports.filter((name) => !zeroMqModuleNames.has(name));
-const missingZeroMqDeclarations = expectedZeroMqExports.filter(
-  (name) => !declaredZeroMqExports.includes(name),
-);
-const unexpectedZeroMqExports = declaredZeroMqExports.filter(
-  (name) => !expectedZeroMqExports.includes(name),
 );
 
 const missingExports = expectedProtoExports.filter((name) => !documentedNames.has(name));
@@ -1688,30 +1640,6 @@ if (unexpectedTransportExports.length > 0) {
   process.exit(1);
 }
 
-if (missingZeroMqExports.length > 0) {
-  console.error(
-    "TypeDoc JSON is missing expected @spine-event-engine/transport/zeromq exports: " +
-      missingZeroMqExports.join(", "),
-  );
-  process.exit(1);
-}
-
-if (missingZeroMqDeclarations.length > 0) {
-  console.error(
-    "@spine-event-engine/transport/zeromq root is missing expected exports: " +
-      missingZeroMqDeclarations.join(", "),
-  );
-  process.exit(1);
-}
-
-if (unexpectedZeroMqExports.length > 0) {
-  console.error(
-    "@spine-event-engine/transport/zeromq exports changed without updating docs expectations: " +
-      unexpectedZeroMqExports.join(", "),
-  );
-  process.exit(1);
-}
-
 if (missingTestingExports.length > 0) {
   console.error(
     `TypeDoc JSON is missing expected @spine-event-engine/testing exports: ${missingTestingExports.join(", ")}`,
@@ -1813,7 +1741,6 @@ console.log(
     `${expectedServerExports.length} expected @spine-event-engine/server exports`,
     `${expectedStorageExports.length} expected @spine-event-engine/storage exports`,
     `${expectedTransportExports.length} expected @spine-event-engine/transport exports`,
-    `${expectedZeroMqExports.length} expected @spine-event-engine/transport/zeromq exports`,
     `${expectedTestingExports.length} expected @spine-event-engine/testing exports.`,
   ].join(", "),
 );

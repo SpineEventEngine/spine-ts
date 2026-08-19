@@ -32,7 +32,7 @@ test("declares one Gateway, two managed complete-replica nodes, shared storage, 
   assert.match(source, /PROCESS_COUNT: "2"/u);
   assert.match(source, /DELIVERY_SHARD_COUNT: "2"/u);
   assert.match(source, /managed-entry\.js/u);
-  assert.doesNotMatch(source, /SPINE_IPC_DIRECTORY|ZeroMQ/u);
+  assert.doesNotMatch(source, /SPINE_IPC_DIRECTORY/u);
   assert.match(source, /condition: service_healthy/u);
 });
 

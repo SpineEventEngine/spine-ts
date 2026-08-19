@@ -1,8 +1,9 @@
 # Spine TS Project Completion Plan
 
 Status: Waves 9 through 13 are complete, release-verified, integrated, and
-remotely closed. T-0203 post-Wave-13 complete-replica deployment correction
-planning is current.
+remotely closed. The T-0203 complete-replica correction is implemented through
+the T-0212 generic-routing removal checkpoint; T-0213 security reconciliation
+is the remaining documented follow-up.
 
 Plan date: 2026-07-12
 
@@ -46,23 +47,25 @@ correction sequence is complete and supplied Wave 7's required baseline.
 
 ## Post-Wave-13 Deployment Architecture Correction
 
-On 2026-08-18 the human rejected the earlier role-split/ZeroMQ deployment path
+On 2026-08-18 the human rejected the earlier role-split deployment path
 and approved complete application replicas behind a node-local service-aware
 HTTP/2 Coordinator. T-0203 is a high-risk planning-only prerequisite which
 freezes explicit process count, complete-replica verification, direct
 per-process Delivery observation, Gateway-to-node-to-process subscription
-fan-out, process-local IntegrationBroker channels, and ordered ZeroMQ/generic
-signal-layer removal. It does not reopen Wave 13's accepted external-event
+fan-out, process-local IntegrationBroker channels, and ordered removal of the
+generic signal layer. It does not reopen Wave 13's accepted external-event
 domain semantics or begin Wave 14 package/SPI work.
 
 The approved architecture is recorded in D-0126 and
 `build-protocol/planning/T-0203_COMPLETE_REPLICA_DEPLOYMENT_PLAN.md`. Product
 planning is accepted. An unexpected child is replaced with bounded backoff
-while surviving children keep serving; T-0204 is the next implementation task.
+while surviving children keep serving. T-0204 is a completed predecessor in the
+ordered deployment correction, not the next implementation task.
 The Gateway-hosted Integration Hub for physically split server applications is
-outside the first release. ZeroMQ and the generic signal-routing layer are a
-mandatory ordered deletion in T-0212 after replacement acceptance, not a
-retained fallback.
+outside the first release. T-0212 completed the mandatory deletion of the
+generic signal-routing layer after replacement acceptance; it is not a
+retained fallback. T-0213 owns the explicitly deferred security-record
+reconciliation.
 
 ## Purpose
 
@@ -508,7 +511,7 @@ research, review, push, and cleanup closure, now complete.
 - Environment-owned delivery readiness, generation coordination, lifecycle,
   startup recovery, detach, reusable stop, permanent close, and server ordering.
 - Query and subscription services and real local gRPC-compatible server.
-- Adapter-neutral signal transport and ZeroMQ same-host IPC.
+- Process-local IntegrationBroker typed message channels.
 - Framework and example testing utilities.
 - Public docs, API reference, architecture notes, guides, and runnable example.
 
@@ -1098,7 +1101,7 @@ transport,testing}/README.md`; `docs/api/README.md`; public TSDoc; TypeDoc.
 - every exported symbol is covered by API checks;
 - examples compile against public package imports;
 - no internal coordinator, obligation, registration, generation, cursor,
-  lifecycle access, ZeroMQ endpoint, or storage implementation detail leaks;
+  lifecycle access, endpoint, or storage implementation detail leaks;
 - lifecycle docs state only observable `Server`, `RunningServer`, and
   `ServerEnvironment` behavior;
 - legacy compatibility symbols retain narrow accepted wording;
@@ -1144,7 +1147,7 @@ dispositions.
 
 **Objective:** Satisfy the remaining example requirement by demonstrating real
 same-host multi-process bus behavior with the existing transport abstraction
-and ZeroMQ adapter.
+and retired adapter.
 
 **Design investigation first:** Identify the smallest supported public runtime
 composition that allows a parent/test process and a child worker process to
@@ -1228,7 +1231,7 @@ review concern, recording justified N/A dispositions for the rest.
 docs, and example are stable.
 
 **Review scope:** all public packages, generated-code boundaries, server/gRPC,
-transport/ZeroMQ, storage, delivery, query/subscription, handler analyzer/
+transport, storage, delivery, query/subscription, handler analyzer/
 registry loader, testing utilities, example, docs, and dependencies.
 
 **Required threat checks:**

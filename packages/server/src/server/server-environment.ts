@@ -14,16 +14,6 @@
 
 import { InMemoryStorageFactory, type StorageFactory } from "@spine-event-engine/storage";
 import { LogLayer, StructuredTransport, type ILogLayer } from "loglayer";
-import type {
-  PublishTransportHandler,
-  PublishTransportOperation,
-  RequestTransportHandler,
-  RequestTransportOperation,
-  SignalTransport,
-  TransportSignalKind,
-  TransportSubscription,
-  TransportSubscriptionHandle,
-} from "@spine-event-engine/transport";
 import { InMemoryTransportFactory, type TransportFactory } from "@spine-event-engine/transport";
 import { spineCoreRegistry, type TypeRegistryLookup } from "@spine-event-engine/core";
 
@@ -97,13 +87,6 @@ export interface ServerEnvironmentSettings {
   readonly storageFactory?: StorageFactory;
 
   /**
-   * Optional legacy signal transport facility selected for server assembly.
-   *
-   * When omitted, the server does not open legacy context signal bindings.
-   */
-  readonly transport?: SignalTransport;
-
-  /**
    * Optional message-channel factory for private bounded-context integration brokers.
    *
    * When omitted, this environment owns one `InMemoryTransportFactory` shared
@@ -167,13 +150,6 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   readonly storageFactory: StorageFactory;
 
   /**
-   * Optional legacy transport facility selected for this environment.
-   *
-   * When omitted, no legacy context signal bindings are opened.
-   */
-  readonly transport: SignalTransport | undefined;
-
-  /**
    * Message-channel factory selected for private bounded-context integration.
    *
    * This is either the configured override or one environment-owned
@@ -207,7 +183,6 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     this.environment = environment;
     this.nodeId = crypto.randomUUID();
     this.storageFactory = settings.storageFactory;
-    this.transport = settings.transport;
     this.integrationChannelFactory = settings.integrationChannelFactory;
     this.typeRegistry = settings.typeRegistry;
     this.delivery = settings.delivery;
@@ -331,7 +306,6 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
 
 interface RequiredFacilities {
   readonly storageFactory: StorageFactory;
-  readonly transport: SignalTransport | undefined;
   readonly integrationChannelFactory: TransportFactory;
   readonly typeRegistry: TypeRegistryLookup;
   readonly delivery: ServerEnvironmentCloseable | undefined;
@@ -571,7 +545,6 @@ const ServerEnvironmentValues = Object.freeze({
     return Object.freeze([
       ...(options.delivery === undefined ? [] : [options.delivery]),
       options.integrationChannelFactory,
-      ...(options.transport === undefined ? [] : [options.transport]),
       ...(options.tracerFactory === undefined ? [] : [options.tracerFactory]),
       options.storageFactory,
     ]);
@@ -605,7 +578,6 @@ const ServerEnvironmentValues = Object.freeze({
       }
       return {
         storageFactory: settings.storageFactory,
-        transport: settings.transport,
         integrationChannelFactory:
           settings.integrationChannelFactory ?? new InMemoryTransportFactory(),
         typeRegistry: settings.typeRegistry,
@@ -616,7 +588,6 @@ const ServerEnvironmentValues = Object.freeze({
     }
     return {
       storageFactory: settings.storageFactory ?? new InMemoryStorageFactory(),
-      transport: settings.transport ?? new LocalSignalTransport(),
       integrationChannelFactory:
         settings.integrationChannelFactory ?? new InMemoryTransportFactory(),
       typeRegistry: settings.typeRegistry ?? spineCoreRegistry,
@@ -626,122 +597,3 @@ const ServerEnvironmentValues = Object.freeze({
     };
   },
 });
-
-class LocalSignalTransport implements SignalTransport {
-  readonly #publishHandlers = new Map<string, Set<PublishTransportHandler>>();
-  readonly #requestHandlers = new Map<string, RequestTransportHandler>();
-  #closed = false;
-
-  async publish<Envelope, Kind extends TransportSignalKind>(
-    operation: PublishTransportOperation<Envelope, Kind>,
-  ): Promise<void> {
-    this.#requireOpen();
-    const handlers = this.#publishHandlers.get(operation.topic.routing.routingKey);
-
-    if (handlers === undefined) {
-      return;
-    }
-
-    await Promise.all([...handlers].map(async (handler) => handler(operation)));
-  }
-
-  subscribe<Envelope, Kind extends TransportSignalKind>(
-    subscription: TransportSubscription<Kind>,
-    handler: PublishTransportHandler<Envelope, Kind>,
-  ): Promise<TransportSubscriptionHandle<Kind>> {
-    try {
-      this.#requireOpen();
-      const key = subscription.topic.routing.routingKey;
-      const handlers = this.#publishHandlers.get(key) ?? new Set();
-      const stored = handler as PublishTransportHandler;
-
-      handlers.add(stored);
-      this.#publishHandlers.set(key, handlers);
-
-      return Promise.resolve(
-        new LocalTransportSubscriptionHandle(subscription, () => {
-          handlers.delete(stored);
-          if (handlers.size === 0) {
-            this.#publishHandlers.delete(key);
-          }
-        }),
-      );
-    } catch (error: unknown) {
-      return Promise.reject(new Error(String(error)));
-    }
-  }
-
-  async request<RequestEnvelope, ResponseEnvelope, Kind extends TransportSignalKind>(
-    operation: RequestTransportOperation<RequestEnvelope, Kind>,
-  ): Promise<ResponseEnvelope> {
-    this.#requireOpen();
-    const handler = this.#requestHandlers.get(operation.topic.routing.routingKey);
-
-    if (handler === undefined) {
-      throw new Error(
-        `No local transport responder is registered for "${operation.topic.routing.routingKey}".`,
-      );
-    }
-
-    return Promise.resolve(handler(operation) as ResponseEnvelope | Promise<ResponseEnvelope>);
-  }
-
-  respond<RequestEnvelope, ResponseEnvelope, Kind extends TransportSignalKind>(
-    subscription: TransportSubscription<Kind>,
-    handler: RequestTransportHandler<RequestEnvelope, ResponseEnvelope, Kind>,
-  ): Promise<TransportSubscriptionHandle<Kind>> {
-    try {
-      this.#requireOpen();
-      const key = subscription.topic.routing.routingKey;
-
-      if (this.#requestHandlers.has(key)) {
-        throw new Error(`Local transport responder is already registered for "${key}".`);
-      }
-
-      const stored = handler as RequestTransportHandler;
-      this.#requestHandlers.set(key, stored);
-
-      return Promise.resolve(
-        new LocalTransportSubscriptionHandle(subscription, () => {
-          this.#requestHandlers.delete(key);
-        }),
-      );
-    } catch (error: unknown) {
-      return Promise.reject(new Error(String(error)));
-    }
-  }
-
-  close(): Promise<void> {
-    this.#closed = true;
-    this.#publishHandlers.clear();
-    this.#requestHandlers.clear();
-    return Promise.resolve();
-  }
-
-  #requireOpen(): void {
-    if (this.#closed) {
-      throw new Error("Local signal transport is closed.");
-    }
-  }
-}
-
-class LocalTransportSubscriptionHandle<
-  Kind extends TransportSignalKind,
-> implements TransportSubscriptionHandle<Kind> {
-  readonly subscription: TransportSubscription<Kind>;
-  readonly #onClose: () => void;
-  #closed = false;
-
-  constructor(subscription: TransportSubscription<Kind>, onClose: () => void) {
-    this.subscription = subscription;
-    this.#onClose = onClose;
-  }
-
-  close(): Promise<void> {
-    if (!this.#closed) {
-      this.#closed = true;
-      this.#onClose();
-    }
-    return Promise.resolve();
-  }
-}

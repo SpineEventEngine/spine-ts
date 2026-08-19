@@ -93,7 +93,7 @@ Candidate areas to investigate:
 - test runner and coverage;
 - mutation/property testing where useful;
 - gRPC server/client library;
-- ZeroMQ Node binding;
+- native transport binding;
 - structured logging;
 - OpenTelemetry;
 - TypeDoc/API docs;
@@ -122,7 +122,7 @@ Coverage must include:
 
 - unit tests for metadata, validation, routing, buses, storage, and decorators;
 - integration tests for bounded context command/event/query/subscription flows;
-- multi-process transport tests for the ZeroMQ adapter;
+- process-local integration message-channel tests;
 - black-box tests for the to-do example;
 - regression tests for every bug fix;
 - compatibility tests for copied Spine Protobuf message shapes and type URLs.

@@ -672,20 +672,17 @@ From a clean generated state:
 ```bash
 pnpm typecheck:build
 pnpm vitest run examples/todo/test/black-box.test.ts
-pnpm vitest run examples/todo/test/local-multi-process.test.ts
+pnpm vitest run examples/todo/test/startup-contract.test.ts
 ```
 
 The black-box test starts a real loopback server and proves public generated
 clients, acknowledgement handling, eventual projection reads, subscriptions,
 validation/rejections, generated-registry recovery, and listener/session cleanup.
 
-The local multi-process test starts a separate child process and same-host
-ZeroMQ IPC fixture, sends one generated command from the parent, and reads the
-row projected by the child. Its cleanup stops the child, closes the parent
-listener and transport, and removes the temporary IPC directory on success and
-failure paths. It is a focused test fixture—not a public multi-process
-supervisor or CLI. Sandboxes that deny loopback/IPC binds can report `EPERM`;
-run the native test in an environment that permits those local resources.
+The startup-contract test verifies both entrypoints. The normal entry remains a
+single-process in-memory server. The managed entry requires explicit process
+and Delivery shard counts and assembles complete application replicas behind
+the Node Coordinator.
 
 ## Further reading and limits
 
@@ -694,9 +691,10 @@ run the native test in an environment that permits those local resources.
 - [Testing package README](../../packages/testing/README.md)
 - [Transport package README](../../packages/transport/README.md)
 - [Example black-box test](test/black-box.test.ts)
-- [Example local multi-process test](test/local-multi-process.test.ts)
+- [Example startup-contract test](test/startup-contract.test.ts)
 
-The example is local-only and process-local: no production persistence,
-authentication, deployment, tracing, health checking, process supervision, or
-remote/multi-host transport is provided. Restarting the standalone server clears
-its tasks.
+The walkthrough uses the local single-process entry, so restarting that server
+clears its tasks. The managed entry is a separate production reference with
+shared storage, direct Delivery observation, and framework-owned child-process
+supervision; application-specific authentication, tracing, and monitoring
+remain deployment concerns.

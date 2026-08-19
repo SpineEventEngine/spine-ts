@@ -513,7 +513,6 @@ function linkThirdParty(app: string): void {
     ["@bufbuild", join(process.cwd(), "packages/proto-tools/node_modules/@bufbuild")],
     ["@connectrpc", join(process.cwd(), "packages/server/node_modules/@connectrpc")],
     ["typescript", join(process.cwd(), "node_modules/typescript")],
-    ["zeromq", join(process.cwd(), "node_modules/zeromq")],
     ["semver", join(process.cwd(), "packages/proto-tools/node_modules/semver")],
     [
       "@spine-event-engine/validation",
