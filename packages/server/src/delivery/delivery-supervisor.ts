@@ -333,7 +333,13 @@ export class DeliverySupervisor {
         shard,
         onMessage: this.#onMessage,
         ...(admission === undefined ? {} : { acceptMessage: admission }),
-        ...(finalization === undefined ? {} : { onRunSettled: () => finalization(shard) }),
+        ...(finalization === undefined
+          ? {}
+          : {
+              onRunSettled: () => {
+                finalization(shard);
+              },
+            }),
         signal: this.#controller.signal,
       });
     } finally {
