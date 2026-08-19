@@ -506,7 +506,6 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     );
   }
   async #runActiveEffect(binding: Binding, callback: OnSubscriptionDefinition): Promise<void> {
-    const effect = this.#startEffect(binding, callback);
     let observeAbort = () => undefined;
     const aborted = new Promise<"aborted">((resolve) => {
       observeAbort = () => {
@@ -515,6 +514,8 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
       binding.controller.signal.addEventListener("abort", observeAbort, { once: true });
     });
     try {
+      if (binding.controller.signal.aborted) throw new Error("subscription operation aborted");
+      const effect = this.#startEffect(binding, callback);
       const result = await Promise.race([effect.then(() => "settled" as const), aborted]);
       if (result === "settled" || binding.cancelRequested) return;
     } finally {
