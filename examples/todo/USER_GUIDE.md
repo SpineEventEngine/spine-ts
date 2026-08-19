@@ -679,9 +679,11 @@ The black-box test starts a real loopback server and proves public generated
 clients, acknowledgement handling, eventual projection reads, subscriptions,
 validation/rejections, generated-registry recovery, and listener/session cleanup.
 
-The startup-contract test verifies both app modes. The single-process app uses
-in-memory storage. The multi-process app requires explicit process and Delivery
-shard counts, then starts complete replicas behind the Node Coordinator. Read
+The startup-contract test verifies structural commands, public exports, settings,
+and documentation contracts. Behavioral launcher coverage and the documented
+live smoke paths exercise both app modes. The single-process app uses in-memory
+storage. The multi-process app requires explicit process and Delivery shard
+counts, then starts complete replicas behind the Node Coordinator. Read
 the implementation in order: `single-process-app.ts`, `multi-process-app.ts`,
 `multi-process-coordinator.ts`, and `multi-process-replica.ts`. For the runnable
 setup, follow the [multi-process app reference](README.md#multi-process-app).

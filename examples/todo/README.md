@@ -74,8 +74,9 @@ and partial startup all stop only the processes and emulator container it made.
 The Datastore emulator holds data only while its container runs.
 It observes the emulator's ready log, the Delivery server's exact
 `Delivery server listening at …` message, and the Coordinator ready message;
-if any owned process exits before its message, the launcher reports that output
-and cleans up only resources it created.
+if Delivery or the Coordinator exits before its message, the launcher reports
+its captured output; if the owned emulator stops or is missing, it reports its
+available container logs. It then cleans up only resources it created.
 
 ## How it works
 
@@ -86,10 +87,15 @@ explains the generated Proto model, handlers, and routing in more depth.
 ```ts
 // docs-snippet-path: examples/todo/src/todo-app.ts
 import { create } from "@bufbuild/protobuf";
+import { TaskIdSchema, TaskListIdSchema } from "../generated/spine/examples/todo/task_id_pb.js";
 import { TaskCreatedSchema } from "../generated/spine/examples/todo/task_events_pb.js";
 
-function createTask(title: string) {
-  return create(TaskCreatedSchema, { title });
+function createTask(id: string, taskListId: string, title: string) {
+  return create(TaskCreatedSchema, {
+    id: create(TaskIdSchema, { value: id }),
+    taskListId: create(TaskListIdSchema, { value: taskListId }),
+    title,
+  });
 }
 ```
 

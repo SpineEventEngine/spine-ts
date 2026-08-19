@@ -29,9 +29,18 @@ cd "$repo_root"
 pnpm typecheck:build
 container_id="$(TODO_DATASTORE_CONTAINER_NAME="$container_name" "$script_root/start-datastore-emulator.sh")"
 for attempt in {1..30}; do
+  if ! docker inspect --format '{{.State.Running}}' "$container_id" 2>/dev/null | grep -qx "true"; then
+    echo "Datastore emulator exited before readiness." >&2
+    docker logs "$container_id" >&2 || true
+    exit 1
+  fi
   if docker logs "$container_id" 2>&1 | grep -q "Dev App Server is now running"; then break; fi
+  if [[ "$attempt" == 30 ]]; then
+    echo "Datastore emulator did not become ready." >&2
+    docker logs "$container_id" >&2 || true
+    exit 1
+  fi
   sleep 1
-  if [[ "$attempt" == 30 ]]; then echo "Datastore emulator did not become ready." >&2; exit 1; fi
 done
 "$script_root/start-delivery-server.sh" >"$delivery_log" 2>&1 &
 delivery_pid=$!
