@@ -4,7 +4,7 @@
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  * in compliance with the License. You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under the License
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
@@ -22,14 +22,18 @@
 let installed: ((id: string) => void) | undefined;
 let reported = new Set<string>();
 
-/** @internal Private managed-child subscription lifecycle access. */
+/**
+ * Coordinates private managed-child subscription installation notification.
+ *
+ * @internal
+ */
 export const managedChildSubscriptionAccess: Readonly<{
-  install(observer: (id: string) => void): void;
+  install(onInstalled: (id: string) => void): void;
   clear(): void;
   installed(id: string): void;
 }> = Object.freeze({
-  install(observer): void {
-    installed = observer;
+  install(onInstalled): void {
+    installed = onInstalled;
     reported = new Set();
   },
   clear(): void {

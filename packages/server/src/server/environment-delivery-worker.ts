@@ -38,30 +38,26 @@ import { DeliveryWorker } from "../delivery/delivery-worker.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 
 const managedChild = process.env.SPINE_MANAGED_SERVER_CHILD === "true";
-let activateManagedDelivery: (() => void) | undefined;
 let cancelManagedDelivery = false;
 let managedDeliveryActivated = !managedChild;
 const waitingManagedSupervisors = new Set<() => void>();
-const managedDeliveryActivation = managedChild
-  ? new Promise<void>((resolve) => {
-      activateManagedDelivery = resolve;
-    })
-  : Promise.resolve();
 
-/** @internal Private managed-child Delivery admission control. */
+/**
+ * Controls private managed-child Delivery admission.
+ *
+ * @internal
+ */
 export const environmentDeliveryWorkerAccess: Readonly<{
   activateManagedChild(): void;
   cancelManagedChild(): void;
 }> = Object.freeze({
   activateManagedChild(): void {
     managedDeliveryActivated = true;
-    activateManagedDelivery?.();
     for (const start of waitingManagedSupervisors) start();
     waitingManagedSupervisors.clear();
   },
   cancelManagedChild(): void {
     cancelManagedDelivery = true;
-    activateManagedDelivery?.();
     waitingManagedSupervisors.clear();
   },
 });
@@ -432,7 +428,6 @@ class RuntimeDeliverySupervisor {
       });
       return;
     }
-    await managedDeliveryActivation;
     if (cancelManagedDelivery) return;
     await Promise.all(this.#groups.map((group) => group.start()));
   }

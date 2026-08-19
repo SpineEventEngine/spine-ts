@@ -294,11 +294,12 @@ Every managed child must independently create/open its `RemoteDelivery`, attach
 its `DeliverySupervisor`, and complete its initial snapshot before READY. The
 Coordinator neither observes nor forwards Delivery notifications.
 
-Managed multi-process mode requires an explicitly remote/shared Delivery
-facility and an explicitly selected shard strategy. It does not enforce a
-numeric relationship between `processCount` and shard count. Examples configure
-both and use at least as many shards as processes; framework documentation
-explains that the values remain independent.
+Managed multi-process application assembly chooses remote/shared Delivery and a
+shard strategy. The framework does not require or certify those choices at
+runtime: Delivery strategy remains the framework user's responsibility. It does
+not enforce a numeric relationship between `processCount` and shard count.
+Examples configure both and use at least as many shards as processes; framework
+documentation explains that the values remain independent.
 
 ### Readiness and graceful drain
 

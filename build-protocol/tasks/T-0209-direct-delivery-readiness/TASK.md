@@ -7,8 +7,8 @@
 ## Classification, owner, and scope
 
 This is **high-risk** lifecycle/concurrency work. It owns managed-child
-Delivery readiness admission, explicit remote/shared Delivery plus selected
-shard-strategy validation, graceful DRAINING sequencing, active-work
+Delivery readiness admission, application-configured remote/shared Delivery
+and shard-strategy acceptance proof, graceful DRAINING sequencing, active-work
 quiescence, and proportionate real managed-process/node proof for RED 22–28.
 
 - Existing role: `implementer`; explicit configured profile:

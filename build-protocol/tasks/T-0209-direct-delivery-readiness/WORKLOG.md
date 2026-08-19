@@ -39,8 +39,8 @@
 ## 2026-08-19 — RED/GREEN: private DRAINING admission
 
 - RED command: `pnpm exec vitest run
-  packages/server/test/server/managed-server-application.test.ts
-  --testNamePattern "removes a draining child"`. It failed as intended: after
+packages/server/test/server/managed-server-application.test.ts
+--testNamePattern "removes a draining child"`. It failed as intended: after
   an authenticated private `draining` frame, Coordinator READY membership still
   contained the child (`1` received; `[]` expected).
 - GREEN adds only a bounded `draining` slot/incarnation IPC frame. The child
@@ -61,7 +61,7 @@
   observable close call. This was a fixture timing correction, not a runtime
   retry/policy change.
 - Final focused command: `pnpm exec vitest run
-  packages/server/test/server/managed-server-application.test.ts`; **52/52
+packages/server/test/server/managed-server-application.test.ts`; **52/52
   passed**. The temporary Vite threads pool lacks `process.connected`, so the
   process-IPC signal assertion is valid only on the default fork-capable test
   profile used above.
@@ -69,7 +69,7 @@
 ## 2026-08-19 — remote supervisor regression
 
 - Existing real-process remote suite passed **5/5**: `pnpm exec vitest run
-  packages/delivery-client/test/remote-supervisor-grpc.integration.test.ts`.
+packages/delivery-client/test/remote-supervisor-grpc.integration.test.ts`.
   It reuses the accepted Delivery Server topology for direct Admin fan-out,
   exclusive fencing, snapshot recovery, and observation overflow.
 - It is not counted as the required managed complete-replica acceptance: its
@@ -84,7 +84,7 @@
   remote open/snapshot in child-only synchronization before READY. IPC reports
   only slot/PID readiness facts.
 - RED command: `pnpm exec vitest run
-  packages/server/test/server/managed-remote-delivery-readiness.integration.test.ts`.
+packages/server/test/server/managed-remote-delivery-readiness.integration.test.ts`.
   It reaches both READY members, then fails only on the unimplemented joined
   drain/relay observation: `ready.finalRelayAfterDrain` is `undefined`, where
   the acceptance requires `true`. Earlier module-resolution failures were
@@ -146,3 +146,30 @@
   releases the snapshot, and observes another normal update after replacement
   join. It passed **3/3** fresh runs. SIGTERM teardown now performs normal
   managed close, avoiding child/port leakage.
+
+## 2026-08-19 — deterministic convergence and coverage
+
+- Systematic lifecycle bisection found two child-mode tests which set
+  `process.connected = true` but did not replace `process.disconnect`. Their
+  cleanup disconnected Vitest's own fork IPC. Both now stub and restore the
+  method; the complete lifecycle file passes **53/53** and leaves no managed
+  child process.
+- The established EnvironmentDeliveryWorker suite found a real ordering
+  regression: an unnecessary await in the ordinary non-managed start path
+  allowed stop to overtake group start. The managed-child queue already owns
+  deferred admission, so the redundant promise/await was removed. The suite
+  passes **84/84** without unhandled rejections; real managed RED 27–28 pass
+  **2/2** standalone.
+- Added direct module-interface proof for replacement subscription waiters,
+  including stale, duplicate, missing-ID, unknown-ID, cancellation, exact
+  acknowledgement, and final activation behavior. Server source typecheck and
+  the focused test pass.
+- The six-file focused behavior matrix passes **130/130**. Exact changed-range
+  LCOV from clean process-isolated runs is **139/150 executable lines (92.67%)**
+  and **92/100 branches (92.00%)**, with no coverage exclusions.
+- Final post-format verification passed **243/243** focused tests, then the
+  fixed-port real managed RED 27–28 suite passed **2/2** alone. Generated and
+  tooling typechecks plus every deterministic cheap-preflight policy,
+  documentation, Proto, formatting, and release-readiness check passed. The
+  task is review-ready; release verification remains correctly deferred until
+  specialist convergence.

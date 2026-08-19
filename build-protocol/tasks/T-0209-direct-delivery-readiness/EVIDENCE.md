@@ -10,17 +10,19 @@
 - Current implementation evidence: `RemoteDelivery.source` and
   `DeliverySupervisor` implement existing remote snapshot/update, reconnect,
   fencing and active/pending-idle mechanics. `ManagedServerApplication.child()`
-  currently gates READY only through optional `synchronize()`.
+  gates final READY through child synchronization plus the exact local
+  retained-subscription installation acknowledgement.
 
 ## Planned RED/GREEN evidence
 
-| RED | Behavior to prove | Evidence status |
-| --- | --- | --- |
-| 22 | Each READY real managed child observes Delivery directly | pending |
-| 23–25 | Existing lease/fencing remains exclusive; cross-node work and drain do not strand work | pending/reuse existing suites |
-| 26 | Admin failure/overflow takes a fresh snapshot | pending/reuse existing supervisor suite |
-| 27 | DRAINING denies new work, completes active fenced work, relays final update before close | pending |
-| 28 | Replacement cannot receive unary/Delivery admission before Delivery snapshot and retained subscriptions | pending |
+| RED   | Behavior to prove                                                                                       | Evidence status                                                                                                            |
+| ----- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| 22    | Each READY child observes Delivery directly                                                             | `remote-supervisor-grpc.integration`: real two environment processes and Delivery Admin fan-out; not managed-replica proof |
+| 23    | One process owns/commits fenced shard work                                                              | same suite: real fencing/commit behavior; not managed-replica proof                                                        |
+| 24–25 | Cross-process remote work and drain do not strand work                                                  | same suite’s direct remote work/recovery cases; RED 27 additionally proves managed drain’s final active work               |
+| 26    | Admin stream failure/overflow receives a fresh snapshot                                                 | same suite: reconnect/snapshot and overflow recovery; not managed-replica proof                                            |
+| 27    | DRAINING denies new work, completes active fenced work, relays final update before close                | `managed-remote-delivery-readiness`: real managed parent/two children/Delivery Server, 3 fresh runs                        |
+| 28    | Replacement cannot receive unary/Delivery admission before Delivery snapshot and retained subscriptions | same real managed fixture, 3 fresh runs                                                                                    |
 
 No test-forwarder or direct fake notification will be recorded as complete-replica acceptance.
 
@@ -108,3 +110,37 @@ succeed; a rejection avoids Coordinator close and permits a later retry.
 Focused regression evidence: managed lifecycle + NodeCoordinator + durable
 subscription bindings passed **120/120**; server typecheck and focused ESLint
 passed.
+
+## Final implementation convergence
+
+- The established EnvironmentDeliveryWorker suite exposed an unnecessary
+  resolved-Promise await in the non-managed supervisor start path. Removing
+  that scheduling turn retained the private managed-child queue while restoring
+  ordinary start-before-stop ordering: **84/84** environment attachment tests
+  pass without asynchronous errors.
+- Two legacy child-mode lifecycle tests simulated a connected child while
+  retaining Vitest's real `process.disconnect()`. Production cleanup therefore
+  disconnected the test worker. Both fixtures now stub and restore that process
+  method; the complete normal fork-pool lifecycle file passes **53/53** without
+  worker exit or an orphaned child.
+- A direct replacement test proves exact waiter creation, duplicate/stale and
+  missing-ID rejection, cancellation cleanup, exact acknowledgement, and
+  activation only after the current child subscription is installed.
+- The focused behavior matrix passes **130/130** across managed lifecycle,
+  child subscription notification, NodeCoordinator, real managed Delivery,
+  durable subscription bindings, and direct remote Delivery. The fixed-port
+  real managed process test also passes **2/2** in its required standalone run.
+- Retained source LCOV is split by process ownership to avoid simulated-child
+  global state contaminating ordinary EnvironmentDeliveryWorker tests:
+  `/tmp/t0209-main-lcov.T7wRzM/lcov.info` and
+  `/tmp/t0209-env-lcov.IHiLIE/lcov.info`. Their exact
+  `origin/main...working-tree` changed-range intersection is **139/150 lines
+  (92.67%)** and **92/100 branches (92.00%)**, with no exclusions.
+- Final post-format behavior evidence is **243/243** across managed lifecycle,
+  subscription coordination, SpineServices, durable bindings, and direct
+  remote Delivery, followed by the fixed-port real managed process acceptance
+  **2/2** in isolation. No Vitest or managed child process remained.
+- Cheap preflight passed: generated build, tooling typecheck, changed-file
+  ESLint/Prettier, diff check, cleanup, TSDoc, copyright, logging containment,
+  TypeDoc/API inventory, documentation audience/snippets, Proto lint/current
+  output, and release-readiness.

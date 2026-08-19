@@ -219,12 +219,14 @@ const ManagedServerValues = Object.freeze({
     const containIpcError = () => undefined;
     process.on("error", containIpcError);
     managedChildSubscriptionAccess.install((subscriptionId) => {
-      void ManagedServerValues.send({
+      const notification = ManagedServerValues.send({
         type: "subscription-installed",
         slot: process.env[slotMarker],
         incarnation: process.env[incarnationMarker],
         subscriptionId,
-      }).catch(() => undefined);
+      });
+      // spine-log-boundary: server.managed_replica_subscription_ipc
+      void notification.catch(() => undefined);
     });
     let activated = false;
     let releaseActivation!: () => void;
@@ -234,11 +236,13 @@ const ManagedServerValues = Object.freeze({
     let closing: Promise<void> | undefined;
     const close = () => {
       if (closing !== undefined) return closing;
-      const attempt = ManagedServerValues.send({
+      const draining = ManagedServerValues.send({
         type: "draining",
         slot: process.env[slotMarker],
         incarnation: process.env[incarnationMarker],
-      })
+      });
+      // spine-log-boundary: server.managed_replica_drain_ipc
+      const attempt = draining
         .catch(() => undefined)
         .then(() => {
           environmentDeliveryWorkerAccess.cancelManagedChild();
@@ -798,10 +802,21 @@ export class ManagedServerCoordinator {
     return this.#members(false);
   }
 
+  /**
+   * Returns READY and synchronizing members whose relays remain eligible.
+   *
+   * @returns Private relay member facts.
+   */
   relayMembers(): readonly ReadyCoordinatorMember[] {
     return this.#members(true);
   }
 
+  /**
+   * Records an exact native subscription created for a member.
+   *
+   * @param member Supplies the member that owns the child subscription.
+   * @param subscription Supplies the created native subscription.
+   */
   onChildSubscriptionCreated(member: ReadyCoordinatorMember, subscription: Subscription): void {
     const replica = this.#replica(member);
     const id = subscription.id?.value;
@@ -809,12 +824,23 @@ export class ManagedServerCoordinator {
     replica.subscriptionWaiters.set(id, ManagedServerCoordinatorValues.deferred<undefined>());
   }
 
+  /**
+   * Clears a pending child-installation wait after cancellation.
+   *
+   * @param member Supplies the member that owns the cancelled subscription.
+   * @param subscription Supplies the cancelled native subscription.
+   */
   onChildSubscriptionCancelled(member: ReadyCoordinatorMember, subscription: Subscription): void {
     const replica = this.#replica(member);
     const id = subscription.id?.value;
     if (replica !== undefined && id !== undefined) this.#settleSubscriptionWaiter(replica, id);
   }
 
+  /**
+   * Activates synchronizing children after their retained relay children install.
+   *
+   * @returns Completion after each current child receives private activation.
+   */
   async onRelaySynchronized(): Promise<void> {
     const synchronizing = this.#slots
       .map((slot) => slot.replica)
@@ -882,6 +908,12 @@ export class ManagedServerCoordinator {
     return () => this.#memberListeners.delete(onChange);
   }
 
+  /**
+   * Subscribes one private Coordinator to relay-membership changes.
+   *
+   * @param onChange Runs after a relay member is admitted or removed.
+   * @returns Stops later relay-membership callbacks.
+   */
   onRelayMembersChange(onChange: () => void): () => void {
     return this.onReadyMembersChange(onChange);
   }

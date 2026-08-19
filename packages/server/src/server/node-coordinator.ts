@@ -112,7 +112,11 @@ export interface ReadyMemberSource {
 
   readyMembers(): readonly ReadyCoordinatorMember[];
 
-  /** Returns READY and DRAINING children while their relay remains live. */
+  /**
+   * Returns READY and DRAINING children while their relay remains live.
+   *
+   * @returns The current private relay-member facts.
+   */
   relayMembers(): readonly ReadyCoordinatorMember[];
 
   /**
@@ -124,16 +128,35 @@ export interface ReadyMemberSource {
    */
   onReadyMembersChange(onChange: () => void): () => void;
 
-  /** Subscribes relay-membership reconciliation. */
+  /**
+   * Subscribes one callback to relay-membership changes.
+   *
+   * @param onChange Runs after a new relay snapshot becomes current.
+   * @returns Stops later relay-membership callbacks.
+   */
   onRelayMembersChange(onChange: () => void): () => void;
 
-  /** Records the exact child subscription created during relay reconciliation. */
+  /**
+   * Records the exact child subscription created during relay reconciliation.
+   *
+   * @param member Supplies the member that owns the child subscription.
+   * @param subscription Supplies the created child subscription.
+   */
   onChildSubscriptionCreated?(member: ReadyCoordinatorMember, subscription: Subscription): void;
 
-  /** Clears a child-installation wait when the matching native child is cancelled. */
+  /**
+   * Clears a child-installation wait when the matching native child is cancelled.
+   *
+   * @param member Supplies the member that owns the child subscription.
+   * @param subscription Supplies the cancelled child subscription.
+   */
   onChildSubscriptionCancelled?(member: ReadyCoordinatorMember, subscription: Subscription): void;
 
-  /** Completes private child activation before the member becomes unary-ready. */
+  /**
+   * Completes private child activation before the member becomes unary-ready.
+   *
+   * @returns Completion after synchronizing relay children are installed.
+   */
   onRelaySynchronized?(): Promise<void>;
 }
 
@@ -323,7 +346,11 @@ export class NodeCoordinator {
     return this.#close;
   }
 
-  /** Removes unary admission while retaining active subscription relays. */
+  /**
+   * Removes unary admission while retaining active subscription relays.
+   *
+   * @returns Completion after the unary member snapshot becomes empty.
+   */
   beginDrain(): Promise<void> {
     return this.#unaryKernel.reconcile([]);
   }

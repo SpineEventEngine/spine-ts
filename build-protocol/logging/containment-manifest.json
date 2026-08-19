@@ -497,6 +497,20 @@
       "operation": "auth.subscription.cleanup",
       "disposition": "no-log",
       "test": "packages/auth/test/subscriptions/index.test.ts"
+    },
+    {
+      "id": "server.managed_replica_subscription_ipc",
+      "source": "../../packages/server/src/server/managed-server-application.ts",
+      "operation": "managed_replica.subscription_ipc",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/managed-server-application.test.ts"
+    },
+    {
+      "id": "server.managed_replica_drain_ipc",
+      "source": "../../packages/server/src/server/managed-server-application.ts",
+      "operation": "managed_replica.drain_ipc",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/managed-server-application.test.ts"
     }
   ]
 }
