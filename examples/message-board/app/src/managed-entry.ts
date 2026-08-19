@@ -15,7 +15,6 @@
 import {
   ManagedServerApplication,
   InMemorySubscriptionRegistry,
-  Server,
   UniformAcrossAllShards,
   type ManagedServerApplicationHandle,
 } from "@spine-event-engine/server";
@@ -42,15 +41,12 @@ const managed = await ManagedServerApplication.run({
       logger,
     );
     delivery = facilities.delivery;
-    return Server.atPort(port, { host })
-      .add(
-        await new MessageBoardApplication().createContext(
-          facilities.storageFactory,
-          UniformAcrossAllShards.forNumber(config.deliveryShardCount),
-          new InMemorySubscriptionRegistry(),
-        ),
-      )
-      .start();
+    return new MessageBoardApplication().startManagedApplication(
+      { host, port },
+      facilities.storageFactory,
+      UniformAcrossAllShards.forNumber(config.deliveryShardCount),
+      new InMemorySubscriptionRegistry(),
+    );
   },
   synchronize: async () => {
     await delivery?.open();

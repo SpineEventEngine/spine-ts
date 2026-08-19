@@ -34,7 +34,12 @@ const server = await Server.atPort(config.port, {
   browser: {
     ...(config.discovery === undefined
       ? { backend: { baseUrls: config.backendUrls ?? [] } }
-      : { discovery: new GkeNodeDiscovery({ ...config.discovery, logger }) }),
+      : {
+          discovery: new GkeNodeDiscovery({
+            ...config.discovery,
+            ...(logger === undefined ? {} : { logger }),
+          }),
+        }),
     origins: [config.webOrigin],
     registry: typeRegistry,
     sessions,

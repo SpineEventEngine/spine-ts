@@ -21,10 +21,6 @@ spec:
     metadata: { labels: { app: message-board-application } }
     spec:
       terminationGracePeriodSeconds: 10
-      initContainers:
-        - name: wait-for-delivery
-          image: busybox:1.37.0
-          command: ["sh", "-c", "until nc -z simple-delivery-server 8484; do sleep 1; done"]
       containers:
         - name: application
           image: spine-ts/message-board:local

@@ -37,9 +37,9 @@ The images set `NODE_ENV=production`. Supply these values when starting them:
 | Process                  | Required environment variables                                                                         |
 | ------------------------ | ------------------------------------------------------------------------------------------------------ |
 | Managed application node | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `DELIVERY_SERVER_URL`, `PROCESS_COUNT`, `DELIVERY_SHARD_COUNT` |
-| Combined                 | Application values plus `BROWSER_ORIGIN` and `SUBSCRIPTION_REGISTRY_NAMESPACE`                         |
-| Gateway (local)          | Combined values plus `BACKEND_URLS` or legacy `BACKEND_URL`                                            |
-| Gateway (GKE)            | Combined values plus `BACKEND_DISCOVERY_SERVICE` and `BACKEND_DISCOVERY_PORT`                          |
+| Combined                 | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `DELIVERY_SERVER_URL`, `BROWSER_ORIGIN`, `SUBSCRIPTION_REGISTRY_NAMESPACE` |
+| Gateway (local)          | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `BROWSER_ORIGIN`, `SUBSCRIPTION_REGISTRY_NAMESPACE`, `BACKEND_URLS` or `BACKEND_URL` |
+| Gateway (GKE)            | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `BROWSER_ORIGIN`, `SUBSCRIPTION_REGISTRY_NAMESPACE`, `BACKEND_DISCOVERY_SERVICE`, `BACKEND_DISCOVERY_PORT` |
 | Delivery server          | `HOST`, `PORT`                                                                                         |
 
 Every browser process additionally requires one shared

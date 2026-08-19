@@ -72,10 +72,9 @@ test("standalone Compose recovers its one Gateway from an expected client interr
     waitFor(
       project,
       standalone,
-      ["application-1", "application-2", "gateway", "delivery", "envoy"],
+      ["application-node", "gateway", "delivery", "envoy"],
       new Map([
-        ["application-1", /MessageBoard application ready/u],
-        ["application-2", /MessageBoard application ready/u],
+        ["application-node", /MessageBoard managed coordinator ready/u],
         ["gateway", /MessageBoard gateway ready/u],
       ]),
     );
@@ -85,7 +84,8 @@ test("standalone Compose recovers its one Gateway from an expected client interr
       output = client(project, "envoy", "distributed-full");
     } catch (error) {
       throw new Error(
-        `Standalone public subscription failed. ${String(error)}\n${serviceLogs(project, standalone, ["gateway", "application-1", "application-2"])}`,
+        `Standalone public subscription failed. ${String(error)}\n${serviceLogs(project, standalone, ["gateway", "application-node", "envoy"])}`,
+        { cause: error },
       );
     }
     assert.match(output, /full-ok/u);

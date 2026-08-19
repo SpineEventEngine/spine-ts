@@ -270,6 +270,18 @@ export class MessageBoardApplication {
     return (await this.#server(options, storageFactory, false)).run();
   }
 
+  /** Starts one native complete replica without installing process shutdown handlers. */
+  async startManagedApplication(
+    options: BoardServerOptions,
+    storageFactory: StorageFactory,
+    deliveryStrategy: DeliveryStrategy,
+    subscriptionRegistry: StandSubscriptionRegistry,
+  ): Promise<RunningServer> {
+    return (
+      await this.#server(options, storageFactory, false, deliveryStrategy, subscriptionRegistry)
+    ).start();
+  }
+
   /**
    * Starts the combined MessageBoard browser and native application server.
    *
@@ -288,6 +300,8 @@ export class MessageBoardApplication {
     options: BoardServerOptions,
     storageFactory: StorageFactory,
     browser: boolean,
+    deliveryStrategy?: DeliveryStrategy,
+    subscriptionRegistry?: StandSubscriptionRegistry,
   ): Promise<Server> {
     const policy = new BoardAccessPolicy();
     const server = Server.atPort(options.port ?? 0, {
@@ -307,7 +321,7 @@ export class MessageBoardApplication {
           }
         : {}),
     });
-    return server.add(await this.createContext(storageFactory));
+    return server.add(await this.createContext(storageFactory, deliveryStrategy, subscriptionRegistry));
   }
 }
 

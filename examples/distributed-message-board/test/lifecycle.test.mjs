@@ -25,7 +25,7 @@ test(
     const project = `t0111-${Date.now()}`;
     try {
       composeRun(project, ["up", "--detach"]);
-      waitFor(project, ["datastore", "delivery", "application-1", "application-2", "gateway"]);
+      waitFor(project, ["datastore", "delivery", "application-node-1", "application-node-2", "gateway"]);
       assert.match(clientRun(project, "first"), /full-ok/u);
       assert.match(clientRun(project, "second"), /full-ok/u);
       composeRun(project, ["kill", "--signal", "SIGTERM", "gateway"]);
@@ -106,7 +106,7 @@ function ready(project, service) {
     encoding: "utf8",
     timeout: remaining(),
   });
-  return /MessageBoard (application|gateway) ready/u.test(logs);
+  return /MessageBoard (managed coordinator|gateway) ready/u.test(logs);
 }
 
 function assertNoLeaks(project) {
