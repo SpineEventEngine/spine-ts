@@ -10,7 +10,7 @@ datastore_port="${TODO_DATASTORE_PORT:-8081}"
 delivery_host="${TODO_DELIVERY_HOST:-127.0.0.1}"
 delivery_port="${TODO_DELIVERY_PORT:-8484}"
 
-HOST="${TODO_APP_HOST:-127.0.0.1}" PORT="${TODO_APP_PORT:-8080}" \
+exec env HOST="${TODO_APP_HOST:-127.0.0.1}" PORT="${TODO_APP_PORT:-8080}" \
 DATASTORE_PROJECT_ID="${TODO_DATASTORE_PROJECT_ID:-todo-multi-process}" \
 DATASTORE_EMULATOR_HOST="${TODO_DATASTORE_EMULATOR_HOST:-$datastore_host:$datastore_port}" \
 DELIVERY_SERVER_URL="${TODO_DELIVERY_URL:-http://$delivery_host:$delivery_port}" \

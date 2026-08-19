@@ -5,7 +5,7 @@ set -euo pipefail
 
 repo_root="${TODO_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
 script_root="$repo_root/examples/todo/scripts"
-container_name="todo-datastore-$(uuidgen | tr '[:upper:]' '[:lower:]')"
+container_name="todo-datastore-$(node -e 'process.stdout.write(require("node:crypto").randomUUID())')"
 container_id=""
 delivery_pid=""
 app_pid=""
@@ -15,8 +15,10 @@ delivery_log="$(mktemp -t todo-delivery.XXXXXX)"
 cleanup() {
   status=$?
   trap - EXIT INT TERM
-  if [[ -n "$app_pid" ]] && kill -0 "$app_pid" 2>/dev/null; then kill "$app_pid" 2>/dev/null || true; fi
-  if [[ -n "$delivery_pid" ]] && kill -0 "$delivery_pid" 2>/dev/null; then kill "$delivery_pid" 2>/dev/null || true; fi
+  for pid in "$app_pid" "$delivery_pid"; do
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then kill -TERM "$pid" 2>/dev/null || true; fi
+    for _ in {1..50}; do [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null && break; sleep 0.1; done
+  done
   if [[ -n "$container_id" ]]; then docker rm --force "$container_id" >/dev/null 2>&1 || true; fi
   rm -f "$app_log" "$delivery_log"
   exit "$status"

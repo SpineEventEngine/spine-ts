@@ -38,7 +38,6 @@ function fixture(mode: string): {
   const temporary = join(root, "temporary");
   mkdirSync(temporary);
   executable(join(bin, "pnpm"), "#!/usr/bin/env bash\nexit 0\n");
-  executable(join(bin, "uuidgen"), "#!/usr/bin/env bash\necho fixed-id\n");
   executable(
     join(bin, "docker"),
     '#!/usr/bin/env bash\necho "$@" >> "$TRACE"; case "$1" in inspect) [[ "$MODE" != emulator-dead ]] && echo true;; logs) echo "Dev App Server is now running"; echo emulator-log;; esac\n',
@@ -49,7 +48,7 @@ function fixture(mode: string): {
   );
   executable(
     join(scripts, "start-delivery-server.sh"),
-    `#!/usr/bin/env bash\necho "delivery-pid:$BASHPID" >> "$TRACE"\n${mode === "delivery-dead" ? "echo delivery-failed; exit 7" : mode === "gated" ? "while [[ ! -e $RELEASE ]]; do sleep .05; done; echo 'Delivery server listening at fake'; sleep 30" : "sleep .2; echo 'Delivery server listening at fake'; sleep 30"}\n`,
+    `#!/usr/bin/env bash\necho "delivery-pid:$BASHPID" >> "$TRACE"\n${mode === "delivery-dead" ? "echo delivery-failed; exit 7" : mode === "gated" ? "echo entered-readiness-gate >> $TRACE; while [[ ! -e $RELEASE ]]; do sleep .05; done; echo 'Delivery server listening at fake'; sleep 30" : "sleep .2; echo 'Delivery server listening at fake'; sleep 30"}\n`,
   );
   executable(
     join(scripts, "start-multi-process-app.sh"),
@@ -90,7 +89,7 @@ async function run(
               readFileSync(trace, "utf8").includes("captured-container-id")
             ) {
               clearInterval(signalTimer);
-              process.kill(-child.pid!, signal);
+              child.kill(signal);
             }
           }, 20);
     child.on("close", (code) => {
@@ -104,7 +103,12 @@ describe("multi-process launcher", () => {
   it.each(["SIGINT", "SIGTERM"] as const)("gates app start and cleans on %s", async (signal) => {
     const { root, trace, release, temporary } = fixture("gated");
     const pending = run(root, trace, "gated", signal);
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if (existsSync(trace) && readFileSync(trace, "utf8").includes("entered-readiness-gate"))
+        break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(readFileSync(trace, "utf8")).toContain("entered-readiness-gate");
     expect(existsSync(trace) ? readFileSync(trace, "utf8") : "").not.toContain("app-start");
     writeFileSync(release, "ready");
     const result = await pending;
