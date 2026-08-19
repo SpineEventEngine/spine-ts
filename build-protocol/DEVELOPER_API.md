@@ -389,33 +389,11 @@ upstream ADR 0001 D1; ordinary aggregate `@React` handlers are generated
 reactor handlers with current transaction semantics, not event-sourcing
 import/applier work.
 
-## Runtime Transport Binding
+## Runtime lifecycle
 
-Framework runtime code can make command/event routing plans executable with:
-
-```typescript
-const handle = await RuntimeTransportBinding.open({
-  plan,
-  transport,
-  runtime,
-  onCommand(command, route) {
-    return frameworkCommandIntake(command, route);
-  },
-  onEvent(event, route) {
-    return frameworkEventIntake(event, route);
-  },
-});
-
-await handle.close();
-```
-
-The binding registers command routes through `SignalTransport.respond()` and
-event routes through `SignalTransport.subscribe()`. It validates incoming Spine
-command/event envelopes and the enclosed message type URL before calling
-`SingleProcessServerRuntime.enqueue()`. The returned handle closes registered
-transport handles before closing the runtime and can be closed repeatedly. It
-does not expose ZeroMQ, define endpoint naming, supervise processes, retry work,
-or create a public server/environment owner.
+Runtime lifecycle queues accepted local framework work through
+`SingleProcessServerRuntime`. Normal command and event behavior remains owned
+by bounded-context buses and generated services.
 
 ## Public Services
 
@@ -443,7 +421,7 @@ await running.close();
 
 `ServerOptions.host` defaults to local-only `127.0.0.1`; broader binding such
 as `0.0.0.0` must be explicit. `RunningServer.close()` is idempotent: it stops
-listener intake and sessions, closes context transport intake and accepted work,
+listener intake and sessions, then drains accepted work,
 then detaches delivery before closing contexts and resources. Process-wide
 facilities remain open until explicit `ServerEnvironment.instance().close()`
 shutdown. A failed close retains unfinished phases for a later retry.
