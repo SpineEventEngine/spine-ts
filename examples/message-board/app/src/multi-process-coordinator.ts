@@ -12,7 +12,7 @@
  * the License.
  */
 
-/** Owns the Message Board Coordinator lifecycle and its managed child replicas. */
+/* Owns the Message Board Coordinator lifecycle and its managed child replicas. */
 
 import { ManagedServerApplication } from "@spine-event-engine/server";
 

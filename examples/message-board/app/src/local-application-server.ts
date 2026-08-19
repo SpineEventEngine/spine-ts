@@ -14,7 +14,7 @@
 
 import { MessageBoardApplication } from "./index.js";
 
-/** Starts the in-memory local Message Board server for the single-process tutorial. */
+/* Starts the in-memory local Message Board server for the single-process tutorial. */
 
 const server = await new MessageBoardApplication().run({ port: 8090 });
 console.log(`MessageBoard local server ready at ${server.baseUrl}`);

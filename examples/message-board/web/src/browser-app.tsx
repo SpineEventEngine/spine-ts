@@ -19,7 +19,7 @@ import "./index.css";
 import { MessageBoardApp } from "./index.js";
 import { LocalBoardGateway } from "./board-config.js";
 
-/** Starts the stock browser Message Board application against its configured Gateway. */
+/* Starts the stock browser Message Board application against its configured Gateway. */
 
 declare global {
   interface Window {

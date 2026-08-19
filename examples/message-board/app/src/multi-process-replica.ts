@@ -12,7 +12,7 @@
  * the License.
  */
 
-/** Builds and synchronizes one complete Message Board managed replica. */
+/* Builds and synchronizes one complete Message Board managed replica. */
 
 import { Datastore } from "@google-cloud/datastore";
 import {
@@ -26,8 +26,10 @@ import { MessageBoardDeployment } from "./deployment-config.js";
 import { MessageBoardApplication } from "./index.js";
 
 /**
- * Supplies child-only assembly to the Coordinator without starting work in the
- * parent process that imports this module.
+ * Builds the child-only callbacks required by the Message Board Coordinator.
+ *
+ * @param config Describes managed replica storage, Delivery, and shard settings.
+ * @returns The factory and synchronization callbacks for one managed replica.
  */
 export function managedReplicaOptions(
   config: ReturnType<typeof MessageBoardDeployment.managed>,

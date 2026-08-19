@@ -49,7 +49,7 @@ export class BoardAccessPolicy implements AuthorizationPolicy {
   /**
    * Checks whether a public-demo request keeps its message author and board consistent.
    *
-   * @param _principal Supplies the Gateway-owned admission principal.
+   * @param principal Supplies the Gateway-owned admission principal.
    * @param request Describes the command, query, subscription, or lifecycle call to authorize.
    * @returns A promise that resolves to `true` when allowed and `false` otherwise.
    */
