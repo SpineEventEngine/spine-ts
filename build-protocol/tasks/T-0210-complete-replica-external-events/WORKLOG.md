@@ -210,3 +210,22 @@ only.
   `git diff --check` pass. Emitted declarations retain the original root
   `DeliveryRunOptions` and `DeliverySupervisorOptions`; the new hook occurs
   only in the internal `delivery-run-control` declaration.
+
+## 2026-08-19 — final reservation-retention correction
+
+- Consolidated re-review found that shard-scoped terminal cleanup settled
+  undelivered reservations but left their message-ID entries in the private
+  per-shard map. This could retain route objects across repeated interrupted
+  runs while a sibling route remained alive.
+- Retained RED adds a deterministic private-map cleanup assertion to the
+  lease-loss test. Before this correction, after owner retirement the captured
+  reservation entry was never cleared (`expected false, received true` for the
+  stale-entry condition). GREEN resolves each pending reservation and clears
+  its settling shard map; the row stays `TO_DELIVER` and the existing recovery
+  worker still delivers it exactly once.
+- Same explicit implementer profile (`gpt-5.6-terra` / `medium`), unavailable
+  runtime telemetry, and no subagents. No public, wire, configuration, or
+  lifecycle surface changes. The affected four-file suite passes 145/145.
+  Focused coverage against `02447a1f3` is 1/1 changed executable lines (100%);
+  no changed branches. Generated build/typecheck, tooling, scoped ESLint,
+  TSDoc/API, cleanup, and diff checks pass.

@@ -1043,8 +1043,23 @@ describe("EnvironmentDeliveryWorker", () => {
       value: unknown,
     ): Map<unknown, unknown> {
       const result = originalSet(this, [key, value]);
-      if (key === reservationKey && value !== null && typeof value === "object") admitted = true;
+      if (key === reservationKey && value !== null && typeof value === "object") {
+        admitted = true;
+      }
       return result;
+    });
+    let reservationCleared = false;
+    // Captures native Map#clear before the temporary test spy.
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    const originalClear = Reflect.apply.bind(null, Map.prototype.clear) as (
+      thisArgument: Map<unknown, unknown>,
+      argumentsList: readonly unknown[],
+    ) => void;
+    const mapClear = vi.spyOn(Map.prototype, "clear").mockImplementation(function (
+      this: Map<unknown, unknown>,
+    ): void {
+      if (this.has(reservationKey)) reservationCleared = true;
+      originalClear(this, []);
     });
     await delivery.inbox.receive(message(target.ready, "reservation-lease-loss"));
     try {
@@ -1062,6 +1077,8 @@ describe("EnvironmentDeliveryWorker", () => {
 
     worker.stopOwners([scope.owner.key]);
     await worker.retireOwners([scope.owner.key]);
+    expect(reservationCleared).toBe(true);
+    mapClear.mockRestore();
 
     const recoveryScope = runScope("reservation-lease-recovery", target.ready);
     const recovered = new Worker({

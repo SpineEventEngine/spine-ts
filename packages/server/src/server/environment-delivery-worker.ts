@@ -534,7 +534,9 @@ class RuntimeDeliverySupervisorGroup {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const first = options.shards[0]!;
     this.shardCount = first.ofTotal;
-    this.#reserved = new Map(options.shards.map((shard) => [shard.key(), new Map()]));
+    this.#reserved = new Map<string, Map<string, RuntimeDeliveryReservation>>(
+      options.shards.map((shard) => [shard.key(), new Map<string, RuntimeDeliveryReservation>()]),
+    );
     this.#source =
       options.source === undefined
         ? new LocalDeliverySource(options.shards)
@@ -696,6 +698,7 @@ class RuntimeDeliverySupervisorGroup {
     for (const reservation of reservations.values()) {
       reservation.settled.resolve(undefined);
     }
+    reservations.clear();
   }
 
   #select(message: DeliveryEndpointMessage): RuntimeDeliveryRoute | undefined {

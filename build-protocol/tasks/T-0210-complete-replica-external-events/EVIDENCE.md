@@ -109,3 +109,17 @@ separately owned transport correction.
   in internal `DeliveryControlledRun`. Generated build/typecheck, tooling,
   scoped ESLint, cleanup, TSDoc/API, copyright, logging, formatting, audience
   docs, Buf/generated outputs, release readiness, and diff checks pass.
+
+## Final reservation-retention correction
+
+- Retained RED extends the deterministic lease-loss-before-dispatch test with
+  a targeted private-map cleanup proof. Before the correction it observed the
+  stale reservation's message-ID during terminal cleanup: finalization had
+  resolved the reservation but kept its message-ID and route reference in the
+  live shard map.
+- GREEN clears the settling shard's map after resolving every undelivered
+  reservation. The same test proves the row is still pending and a fresh
+  normal worker replays it once; no acknowledgment or public behavior changes.
+- The affected four-file coverage command passes 145 tests. LCOV against
+  `02447a1f3122f1d202e963a4f44342bfa92dc408` reports 1/1 changed executable
+  lines (100%) and no changed branches.
