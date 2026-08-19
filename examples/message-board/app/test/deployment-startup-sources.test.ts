@@ -212,6 +212,44 @@ describe("MessageBoard deployment entrypoints", () => {
     expect(log).toHaveBeenCalledWith("MessageBoard managed coordinator ready at 127.0.0.1:8090");
     log.mockRestore();
   });
+
+  it("builds one complete replica and opens its configured shared Delivery", async () => {
+    vi.resetModules();
+    vi.doUnmock("../src/multi-process-replica.js");
+    const client = {};
+    const delivery = { open: vi.fn().mockResolvedValue(undefined) };
+    const facilities = { delivery, storageFactory: {} };
+    const started = {};
+    const startManagedApplication = vi.fn().mockResolvedValue(started);
+    const configureManagedServer = vi.fn(() => facilities);
+    vi.doMock("@google-cloud/datastore", () => ({
+      Datastore: vi.fn(function Datastore() {
+        return client;
+      }),
+    }));
+    vi.doMock("@spine-event-engine/server", () => ({
+      InMemorySubscriptionRegistry: class {},
+      ManagedServerApplication: { run: vi.fn() },
+      UniformAcrossAllShards: { forNumber: vi.fn(() => "shards") },
+    }));
+    vi.doMock("../src/deployment-config.js", () => ({
+      MessageBoardDeployment: {
+        logger: vi.fn(() => "logger"),
+        configureManagedServer,
+      },
+    }));
+    vi.doMock("../src/index.js", () => ({
+      MessageBoardApplication: class { startManagedApplication = startManagedApplication; },
+    }));
+    const { managedReplicaOptions } = await import("../src/multi-process-replica.js");
+    const config = { projectId: "project", deliveryShardCount: 2 } as never;
+    const options = managedReplicaOptions(config);
+    await expect(options.createServer({ host: "127.0.0.1", port: 8091 } as never)).resolves.toBe(started);
+    await options.synchronize();
+    expect(configureManagedServer).toHaveBeenCalledWith(config, client, process.env, "logger");
+    expect(startManagedApplication).toHaveBeenCalled();
+    expect(delivery.open).toHaveBeenCalledOnce();
+  });
 });
 
 function startupMocks() {
