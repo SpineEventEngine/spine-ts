@@ -72,9 +72,7 @@ it(
     const source = await readFile(childPath, "utf8");
     expect(source).toContain("createTodoContext");
     expect(source).toContain('origin: "external"');
-    expect(source).not.toMatch(
-      /ExternalMessage|forwarder/iu,
-    );
+    expect(source).not.toMatch(/ExternalMessage|forwarder/iu);
 
     const { child, endpoint } = await start();
     const transport = createGrpcTransport({ baseUrl: endpoint });

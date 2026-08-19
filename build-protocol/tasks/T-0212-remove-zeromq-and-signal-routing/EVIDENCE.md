@@ -18,7 +18,7 @@ deterministic preflight, reviews, isolated integration, and post-merge proof.
 
 ## Retained behavior and convergence
 
-- `pnpm exec vitest run packages/server/test/server/server.test.ts
-  packages/transport/test/memory/message-transport.test.ts` passed 126 tests.
+- `pnpm exec vitest run packages/server/test/server/server.test.ts packages/transport/test/memory/message-transport.test.ts`
+  passed 126 tests.
 - `pnpm check:t0212-removed-routing` passed after deleting current source,
   package, test, fixture, export, and normative-document references.

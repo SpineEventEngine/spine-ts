@@ -504,11 +504,7 @@ export class Server {
       closeFailed = true;
       CloseErrors.collect(error, errors);
     }
-    if (
-      !closeFailed &&
-      cleanup.attachment === undefined &&
-      this.#failedStartCleanup === cleanup
-    ) {
+    if (!closeFailed && cleanup.attachment === undefined && this.#failedStartCleanup === cleanup) {
       this.#failedStartCleanup = undefined;
       this.#failedStartConsumed = true;
     }

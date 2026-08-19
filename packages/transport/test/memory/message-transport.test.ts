@@ -38,30 +38,28 @@ describe("InMemoryTransportFactory", () => {
     });
     const publisher = await factory.createPublisher(channel);
 
-    await publisher.publish(
-      frame("first"),
-      externalMessage("first"),
-    );
+    await publisher.publish(frame("first"), externalMessage("first"));
     expect(values).toEqual([frame("first").typeUrl, frame("first").typeUrl]);
     await firstHandle.close();
     expect(first.isStale()).toBe(true);
-    await publisher.publish(
-      frame("second"),
-      externalMessage("second"),
-    );
-    expect(values).toEqual([frame("first").typeUrl, frame("first").typeUrl, frame("second").typeUrl]);
+    await publisher.publish(frame("second"), externalMessage("second"));
+    expect(values).toEqual([
+      frame("first").typeUrl,
+      frame("first").typeUrl,
+      frame("second").typeUrl,
+    ]);
     await secondHandle.close();
     await Promise.all([publisher.close(), first.close(), second.close(), factory.close()]);
   });
 
   it("rejects noncanonical channel target type URLs", async () => {
     const factory = new InMemoryTransportFactory();
-    await expect(factory.createPublisher(create(ChannelIdSchema, { targetType: "not-a-type-url" }))).rejects.toThrow(
-      /targetType|canonical/u,
-    );
-    await expect(factory.createSubscriber(create(ChannelIdSchema, { targetType: "type.spine.io/" }))).rejects.toThrow(
-      /targetType|canonical/u,
-    );
+    await expect(
+      factory.createPublisher(create(ChannelIdSchema, { targetType: "not-a-type-url" })),
+    ).rejects.toThrow(/targetType|canonical/u);
+    await expect(
+      factory.createSubscriber(create(ChannelIdSchema, { targetType: "type.spine.io/" })),
+    ).rejects.toThrow(/targetType|canonical/u);
     await factory.close();
   });
 });

@@ -16,7 +16,11 @@ import { existsSync } from "node:fs";
 import { globSync } from "node:fs";
 import { readFileSync, statSync } from "node:fs";
 
-const excludedPrefixes = ["build-protocol/", "node_modules/", "scripts/check-t0212-removed-routing.mjs"];
+const excludedPrefixes = [
+  "build-protocol/",
+  "node_modules/",
+  "scripts/check-t0212-removed-routing.mjs",
+];
 const removedPaths = [
   "packages/transport/src/zeromq",
   "packages/transport/test/zeromq",
@@ -31,7 +35,8 @@ const removedPaths = [
   "packages/server/test/server/server-context-transport-cross-process.test.ts",
   "packages/server/test/server/server-context-transport-lifecycle.test.ts",
 ];
-const removedReferences = /(?:ZeroMQ|zeromq|SignalTransport|ContextTransport|RuntimeTransportBinding|TransportTopics|TransportSubscription|TransportRouting|runtime-routing|context-transport|runtime-transport)/u;
+const removedReferences =
+  /(?:ZeroMQ|zeromq|SignalTransport|ContextTransport|RuntimeTransportBinding|TransportTopics|TransportSubscription|TransportRouting|runtime-routing|context-transport|runtime-transport)/u;
 const currentPaths = globSync("**/*", {
   nodir: true,
   ignore: ["**/node_modules/**", "**/dist/**", ".git/**"],
