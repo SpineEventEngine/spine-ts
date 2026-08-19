@@ -514,7 +514,6 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     wire: PublicSubscriptionWire,
     controller: AbortController,
   ): Promise<void> {
-    const effect = callback(wire, controller.signal);
     let observeAbort = () => undefined;
     const aborted = new Promise<"aborted">((resolve) => {
       observeAbort = () => {
@@ -523,6 +522,8 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       controller.signal.addEventListener("abort", observeAbort, { once: true });
     });
     try {
+      if (controller.signal.aborted) return;
+      const effect = callback(wire, controller.signal);
       const result = await Promise.race([effect.then(() => "settled" as const), aborted]);
       if (result === "settled") return;
     } finally {

@@ -22,7 +22,7 @@ import {
   type StorageFactory,
   type StorageContext,
 } from "@spine-event-engine/storage";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { DurableSubscriptionBindings, isDurableSubscriptionBindings } from "../../src/index.js";
 import { attachDurableSubscriptionCleanup } from "../../src/server/durable-subscription-bindings.js";
@@ -1035,6 +1035,44 @@ describe("DurableSubscriptionBindings", () => {
     await started;
     caller.abort();
     await expect(active).resolves.toEqual({ kind: "activated" });
+  });
+
+  it("observes caller cancellation triggered synchronously by active work", async () => {
+    vi.useFakeTimers();
+    try {
+      const bindings = new DurableSubscriptionBindings({
+        storageFactory: new InMemoryStorageFactory(),
+        namespace: "synchronous-caller-abort",
+        nextId: () => "s-one",
+        cleanup: () => Promise.resolve(),
+      });
+      await bindings.create({
+        topic: { kind: "subscription-topic", bytes: topic() },
+        whenExpires: 1_000,
+      });
+      const caller = new AbortController();
+      const active = bindings.activate({
+        id: "s-one",
+        context,
+        nowMs: 1,
+        signal: caller.signal,
+        onDefinition: () => {
+          caller.abort();
+          return new Promise<void>(() => undefined);
+        },
+      });
+      const settled = Promise.race([
+        active.then(() => "activated"),
+        new Promise<string>((resolve) => {
+          setTimeout(() => resolve("timed out"), 1);
+        }),
+      ]);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(settled).resolves.toBe("activated");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("releases local activation state after its callback throws so cancellation can retry", async () => {
