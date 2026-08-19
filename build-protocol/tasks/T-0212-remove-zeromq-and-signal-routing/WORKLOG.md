@@ -165,3 +165,16 @@
 - This is a mechanical test typing correction with no behavior or review-scope
   change. Owner/profile remains existing `implementer`, explicitly
   `gpt-5.6-terra` / `medium`; runtime telemetry unavailable.
+
+## 2026-08-19 — integration and closure
+
+- Merged the pushed task branch into isolated `main` at merge commit
+  `4ad39ef0c` with no conflicts.
+- Refreshed only local frozen dependency state after pnpm detected the intended
+  removal of the ZeroMQ build approval. Removed only confirmed ignored stale
+  TypeDoc and coverage artifacts before the removal audit.
+- Post-merge generated build, RED-30, 562 ordinary tests, 58 managed lifecycle
+  tests, and 4 real managed external-event/Delivery tests pass. The merged
+  worktree is clean.
+- T-0212 is complete. T-0213 owns final security-record reconciliation,
+  consolidated release documentation, and release verification.

@@ -94,3 +94,16 @@ deterministic preflight, reviews, isolated integration, and post-merge proof.
   retained test deferred declarations. Exact-file ESLint, `pnpm typecheck:tooling`,
   the in-memory message-channel test (7/7), targeted Prettier, and
   `git diff --check` pass after the mechanical `undefined` correction.
+
+## Post-merge acceptance
+
+- Merge commit: `4ad39ef0c1e0af2e419246b0e44b729dadb69846`.
+- `pnpm typecheck:build:generated` passed on merged `main`.
+- `pnpm check:t0212-removed-routing` passed after removing only confirmed
+  ignored stale TypeDoc/coverage artifacts from the integration worktree.
+- Merged ordinary retained matrix: 33 files, 562/562 tests.
+- Merged serialized process acceptance:
+  - managed lifecycle: 58/58;
+  - real managed external-event and remote-Delivery readiness: 4/4.
+- Post-merge retained total: 624/624 tests. The tracked worktree was clean
+  before the closure record commit.
