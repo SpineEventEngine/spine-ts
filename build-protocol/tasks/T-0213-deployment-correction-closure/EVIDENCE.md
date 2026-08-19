@@ -25,7 +25,11 @@
   readiness over 86 package imports, 54 package assets, and 390 Markdown links.
 - Current release-plan and capability-matrix language supersedes the deleted
   local-IPC requirement without rewriting its historical record.
+- Managed lifecycle passed 58/58; Coordinator/subscription acceptance passed
+  116/116; managed Delivery/external-event acceptance passed 4/4.
+- The real To-do smoke passed against a live server.
+- Fresh container images passed their contract 5/5. One-node Compose passed
+  3/3 and the two-node, four-replica distributed topology passed 4/4, with
+  clean resource teardown.
 - Affected specialist reviews.
-- Managed lifecycle, subscription, Delivery, external-event, Todo, Docker, and
-  Compose acceptance.
 - Required release verification, post-merge verification, and remote cleanup.

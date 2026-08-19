@@ -56,3 +56,25 @@
   correction. The former local-IPC To-do packet remains as explicitly
   superseded history; active gates now require managed complete replicas,
   Coordinator forwarding, Delivery, and external-event acceptance.
+
+## 2026-08-19 — correction-path acceptance
+
+- Managed replica lifecycle passed 58/58.
+- Coordinator, durable Gateway subscription bindings, dynamic subscription
+  fan-out, and child activation passed 116/116.
+- Real managed remote-Delivery readiness plus domestic and ThirdParty external
+  events passed 4/4.
+- A real To-do server accepted the documented smoke client and shut down
+  cleanly.
+- Fresh Message Board, Gateway, and Delivery images built successfully. Their
+  image contract passed 5/5, one-node Compose passed 3/3, and the two-node
+  distributed topology passed 4/4. All owned processes, containers, and
+  networks were removed.
+
+## 2026-08-19 — focused review wave assignment
+
+- Assigned the four existing relevant concerns with explicit configured
+  profiles in `REVIEW.md`: style/maintainability, TypeScript/API documentation,
+  performance/reliability, and documentation completeness.
+- Review scope is the deployment correction only. Security, dependencies,
+  retained-subscription capacity, and GKE rollout policy remain excluded.
