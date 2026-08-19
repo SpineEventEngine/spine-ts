@@ -1347,7 +1347,7 @@ describe("DurableSubscriptionBindings", () => {
     ).rejects.toThrow("record is invalid");
   });
 
-  it("aborts a timed-out activation and retains its durable row", async () => {
+  it("keeps an active update stream open until its caller aborts", async () => {
     const bindings = new DurableSubscriptionBindings({
       storageFactory: new InMemoryStorageFactory(),
       namespace: "timeout",
@@ -1359,27 +1359,40 @@ describe("DurableSubscriptionBindings", () => {
       topic: { kind: "subscription-topic", bytes: topic() },
       whenExpires: 2_000,
     });
+    const controller = new AbortController();
     let aborted = false;
-    await expect(
-      bindings.activate({
-        id: "s-timeout",
-        context,
-        nowMs: 1,
-        signal: new AbortController().signal,
-        onDefinition: async (_wire, signal) => {
-          await new Promise<void>((resolve) => {
-            signal.addEventListener(
-              "abort",
-              () => {
-                aborted = true;
-                resolve();
-              },
-              { once: true },
-            );
-          });
-        },
-      }),
-    ).rejects.toThrow("timed out");
+    let settled = false;
+    const active = bindings.activate({
+      id: "s-timeout",
+      context,
+      nowMs: 1,
+      signal: controller.signal,
+      onDefinition: async (_wire, signal) => {
+        await new Promise<void>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              aborted = true;
+              resolve();
+            },
+            { once: true },
+          );
+        });
+      },
+    });
+    void active.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(settled).toBe(false);
+    controller.abort();
+
+    await expect(active).resolves.toEqual({ kind: "activated" });
     expect(aborted).toBe(true);
     await expect(
       bindings.activate({

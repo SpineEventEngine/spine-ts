@@ -233,6 +233,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         input.onDefinition,
         DurableSubscriptionValues.wire(record),
         input.signal,
+        true,
       );
       return { kind: "activated" };
     });
@@ -490,18 +491,42 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     callback: OnSubscriptionDefinition,
     wire: PublicSubscriptionWire,
     signal?: AbortSignal,
+    active = false,
   ): Promise<void> {
     const controller = new AbortController();
     const abort = () => {
       controller.abort();
     };
     signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) controller.abort();
     this.#active.set(id, controller);
     try {
-      await this.#callback(callback, wire, controller);
+      if (active) await this.#runActiveCallback(callback, wire, controller);
+      else await this.#callback(callback, wire, controller);
     } finally {
       signal?.removeEventListener("abort", abort);
       if (this.#active.get(id) === controller) this.#active.delete(id);
+    }
+  }
+
+  async #runActiveCallback(
+    callback: OnSubscriptionDefinition,
+    wire: PublicSubscriptionWire,
+    controller: AbortController,
+  ): Promise<void> {
+    const effect = callback(wire, controller.signal);
+    let observeAbort = () => undefined;
+    const aborted = new Promise<"aborted">((resolve) => {
+      observeAbort = () => {
+        resolve("aborted");
+      };
+      controller.signal.addEventListener("abort", observeAbort, { once: true });
+    });
+    try {
+      const result = await Promise.race([effect.then(() => "settled" as const), aborted]);
+      if (result === "settled") return;
+    } finally {
+      controller.signal.removeEventListener("abort", observeAbort);
     }
   }
 }
