@@ -64,6 +64,9 @@ for await (const update of updates) {
 }
 ```
 
+Here `timeoutMs` bounds setup through the first acknowledgement only; it never
+ends an acknowledged observation stream.
+
 `RemoteInbox` and `RemoteWorkRegistry` adapt a client to a server
 `DeliveryBuilder`. The authoritative delivery state is the remote Inbox row and
 the current shard lease; the client keeps no local removal record. A delivered
