@@ -13,7 +13,7 @@
  */
 
 /**
- * Owns terminal shutdown and the ready message for the multi-process parent.
+ * Coordinates terminal shutdown and ready reporting for the multi-process parent.
  */
 
 import type { ManagedServerApplicationHandle } from "@spine-event-engine/server";
@@ -43,5 +43,7 @@ export function runTodoCoordinator(
   };
   process.once("SIGINT", close);
   process.once("SIGTERM", close);
-  console.log(`To-Do multi-process Coordinator ready at ${settings.host}:${settings.port.toString()}`);
+  console.log(
+    `To-Do multi-process Coordinator ready at ${settings.host}:${settings.port.toString()}`,
+  );
 }

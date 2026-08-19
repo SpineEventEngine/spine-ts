@@ -14,7 +14,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { runTodoCoordinator } from "../src/multi-process-coordinator.js";
+import { runTodoCoordinator } from "../dist/src/multi-process-coordinator.js";
 
 describe("To-Do multi-process Coordinator", () => {
   const originalExitCode = process.exitCode;
@@ -38,6 +38,7 @@ describe("To-Do multi-process Coordinator", () => {
       return process;
     });
     const handle = { ready: true, close: vi.fn(close) };
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     runTodoCoordinator(handle, {
       host: "127.0.0.1",

@@ -37,10 +37,18 @@ import type { TodoMultiProcessSettings } from "./multi-process-settings.js";
  * One running replica and the readiness work it must finish before receiving requests.
  */
 export interface TodoReplica {
-  /** The complete To-Do application server running in this child process. */
+  // prettier-ignore
+
+  /**
+   * The complete To-Do application server running in this child process.
+   */
   readonly server: RunningServer;
 
-  /** Opens the child's Delivery connection before the parent advertises it as ready. */
+  /**
+   * Opens the child's Delivery connection before the parent advertises it as ready.
+   *
+   * @returns A promise that settles after the Delivery connection is ready.
+   */
   synchronize(): Promise<void>;
 }
 

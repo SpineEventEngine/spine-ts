@@ -20,9 +20,9 @@ import { ManagedServerApplication } from "@spine-event-engine/server";
 
 import { runTodoCoordinator } from "./multi-process-coordinator.js";
 import { createTodoReplica, type TodoReplica } from "./multi-process-replica.js";
-import { readTodoMultiProcessSettings } from "./multi-process-settings.js";
+import { readMultiProcessSettings } from "./multi-process-settings.js";
 
-const settings = readTodoMultiProcessSettings(process.env);
+const settings = readMultiProcessSettings(process.env);
 let replica: TodoReplica | undefined;
 
 const managed = await ManagedServerApplication.run({

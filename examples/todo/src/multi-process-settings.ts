@@ -62,9 +62,7 @@ export interface TodoMultiProcessSettings {
  * @param environment Supplies the process settings.
  * @returns The validated managed deployment settings.
  */
-export function readTodoMultiProcessSettings(
-  environment: NodeJS.ProcessEnv,
-): TodoMultiProcessSettings {
+export function readMultiProcessSettings(environment: NodeJS.ProcessEnv): TodoMultiProcessSettings {
   return {
     host: required(environment, "HOST"),
     port: port(required(environment, "PORT")),

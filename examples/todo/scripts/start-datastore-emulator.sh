@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Starts one disposable Datastore emulator and prints its Docker container ID.
-# The caller owns cleanup by removing the returned container.
+# Starts the shared local Datastore emulator and prints this launcher's container ID.
+# The caller owns cleanup by removing only that named container.
 set -euo pipefail
 
 container_name="${TODO_DATASTORE_CONTAINER_NAME:?TODO_DATASTORE_CONTAINER_NAME is required}"

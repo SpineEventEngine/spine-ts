@@ -53,7 +53,9 @@ import {
   BoundedContext,
   DeliveryBuilder,
   EventRouting,
+  InMemorySubscriptionRegistry,
   SignalMetadata,
+  UniformAcrossAllShards,
 } from "@spine-event-engine/server";
 import { BlackBox, type BlackBoxScope } from "@spine-event-engine/testing";
 import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
@@ -162,6 +164,21 @@ describe("@spine-event-engine/example-todo", () => {
     const context = await createTodoContext({ storageFactory });
 
     expect(createRecordStorage).toHaveBeenCalled();
+    await context.close();
+    storageFactory.close();
+  });
+
+  it("accepts application-owned Delivery and subscription facilities", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const subscriptionRegistry = new InMemorySubscriptionRegistry();
+    const deliveryStrategy = UniformAcrossAllShards.forNumber(1);
+
+    const context = await createTodoContext({
+      deliveryStrategy,
+      storageFactory,
+      subscriptionRegistry,
+    });
+
     await context.close();
     storageFactory.close();
   });

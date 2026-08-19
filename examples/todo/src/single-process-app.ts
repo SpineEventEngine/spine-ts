@@ -25,10 +25,16 @@ import { TodoProcessSignals } from "./process.js";
  * Options for the single-process To-Do server.
  */
 export interface TodoServerOptions {
-  /** Host for the HTTP/2 listener. Defaults to `127.0.0.1`. */
+  // prettier-ignore
+
+  /**
+   * Host for the HTTP/2 listener. Defaults to `127.0.0.1`.
+   */
   readonly host?: string;
 
-  /** Port for the HTTP/2 listener. Defaults to `8080`; use `0` for a free port. */
+  /**
+   * Port for the HTTP/2 listener. Defaults to `8080`; use `0` for a free port.
+   */
   readonly port?: number;
 }
 
@@ -46,7 +52,10 @@ export async function startTodoServer(options: TodoServerOptions = {}): Promise<
     .start();
 }
 
-if (process.argv[1] !== undefined && new URL(`file://${process.argv[1]}`).href === import.meta.url) {
+if (
+  process.argv[1] !== undefined &&
+  new URL(`file://${process.argv[1]}`).href === import.meta.url
+) {
   startTodoServer()
     .then((server) => {
       console.log(`To-Do single-process app listening at ${server.baseUrl}`);

@@ -18,7 +18,7 @@ import { access, readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 
 import { TodoProcessSignals } from "../src/process.js";
-import { readTodoMultiProcessSettings } from "../src/multi-process-settings.js";
+import { readMultiProcessSettings } from "../dist/src/multi-process-settings.js";
 
 const examplePackages = [
   "examples/projects/package.json",
@@ -121,12 +121,12 @@ describe("To-Do managed entrypoint", () => {
       "DELIVERY_SERVER_URL",
     ],
   ])("rejects invalid managed deployment configuration", (environment, expected) => {
-    expect(() => readTodoMultiProcessSettings(environment)).toThrow(expected);
+    expect(() => readMultiProcessSettings(environment)).toThrow(expected);
   });
 
   it("keeps explicit process and shard counts independent", () => {
     expect(
-      readTodoMultiProcessSettings({
+      readMultiProcessSettings({
         HOST: "0.0.0.0",
         PORT: "8080",
         DATASTORE_PROJECT_ID: "todo",
