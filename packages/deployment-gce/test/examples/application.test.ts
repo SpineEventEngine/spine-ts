@@ -13,13 +13,19 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { RunningServer } from "@spine-event-engine/server";
+import type {
+  ManagedServerApplicationHandle,
+  ManagedServerApplicationOptions,
+  RunningServer,
+} from "@spine-event-engine/server";
 
-const managed = vi.hoisted(() => ({ run: vi.fn() }));
-const registry = vi.hoisted(() => ({ close: vi.fn(async () => undefined) }));
+const managed = vi.hoisted(() => ({
+  run: vi.fn<(options: ManagedServerApplicationOptions) => Promise<ManagedServerApplicationHandle>>(),
+}));
+const registry = vi.hoisted(() => ({ close: vi.fn(() => Promise.resolve()) }));
 const registrar = vi.hoisted(() => ({
-  start: vi.fn(async () => undefined),
-  close: vi.fn(async () => undefined),
+  start: vi.fn(() => Promise.resolve()),
+  close: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("@spine-event-engine/server", () => ({
@@ -44,30 +50,34 @@ describe("the GCE managed application entrypoint", () => {
     registry.close.mockReset();
     registrar.start.mockReset();
     registrar.close.mockReset();
-    registry.close.mockResolvedValue(undefined);
-    registrar.start.mockResolvedValue(undefined);
-    registrar.close.mockResolvedValue(undefined);
+    registry.close.mockResolvedValue();
+    registrar.start.mockResolvedValue();
+    registrar.close.mockResolvedValue();
   });
 
   it("leases a ready Coordinator and withdraws it before managed children stop", async () => {
     const events: string[] = [];
     const handle = {
       ready: true,
-      close: vi.fn(async () => {
+      close: vi.fn(() => {
         events.push("managed");
+        return Promise.resolve();
       }),
     };
-    registrar.start.mockImplementationOnce(async () => {
+    registrar.start.mockImplementationOnce(() => {
       events.push("registered");
+      return Promise.resolve();
     });
-    registrar.close.mockImplementationOnce(async () => {
+    registrar.close.mockImplementationOnce(() => {
       events.push("withdrawn");
+      return Promise.resolve();
     });
-    registry.close.mockImplementationOnce(async () => {
+    registry.close.mockImplementationOnce(() => {
       events.push("registry");
+      return Promise.resolve();
     });
     managed.run.mockResolvedValueOnce(handle);
-    const createServer = vi.fn(async () => runningServer());
+    const createServer = vi.fn(() => Promise.resolve(runningServer()));
 
     const running = await GceApplicationEntrypoint.run(
       {
@@ -87,7 +97,7 @@ describe("the GCE managed application entrypoint", () => {
     expect(events).toEqual(["registered"]);
     expect(managed.run.mock.calls[0]?.[0]).toMatchObject({ processCount: 2, port: 8080 });
     await expect(
-      managed.run.mock.calls[0]?.[0].createServer({ host: "127.0.0.1", port: 0 }),
+      managed.run.mock.calls[0]?.[0]?.createServer({ host: "127.0.0.1", port: 0 }),
     ).resolves.toBeDefined();
     expect(createServer).toHaveBeenCalledWith({
       host: "127.0.0.1",
@@ -107,7 +117,7 @@ describe("the GCE managed application entrypoint", () => {
   });
 
   it("rejects an invalid managed startup result before a Coordinator can be leased", async () => {
-    managed.run.mockResolvedValueOnce(undefined);
+    managed.run.mockResolvedValueOnce(undefined as never);
 
     await expect(GceApplicationEntrypoint.run(options(), environment())).rejects.toThrow(
       "GCE managed application did not start.",
@@ -133,7 +143,7 @@ describe("the GCE managed application entrypoint", () => {
   it("keeps the VM Coordinator lease out of each managed child", async () => {
     const previous = process.env.SPINE_MANAGED_SERVER_CHILD;
     process.env.SPINE_MANAGED_SERVER_CHILD = "true";
-    const handle = { ready: true, close: vi.fn(async () => undefined) };
+    const handle = { ready: true, close: vi.fn(() => Promise.resolve()) };
     managed.run.mockResolvedValueOnce(handle);
     try {
       const running = await GceApplicationEntrypoint.run(options(), environment());
@@ -152,7 +162,7 @@ describe("the GCE managed application entrypoint", () => {
     const registryClose = new Error("registry close failed");
     managed.run.mockResolvedValueOnce({
       ready: true,
-      close: async () => Promise.reject(managedClose),
+      close: () => Promise.reject(managedClose),
     });
     registrar.start.mockRejectedValueOnce(startup);
     registry.close.mockRejectedValueOnce(registryClose);
@@ -169,19 +179,22 @@ describe("the GCE managed application entrypoint", () => {
     const failure = new Error("registration failed");
     managed.run.mockResolvedValueOnce({
       ready: true,
-      close: async () => {
+      close: () => {
         events.push("managed");
+        return Promise.resolve();
       },
     });
-    registrar.start.mockImplementationOnce(async () => {
+    registrar.start.mockImplementationOnce(() => {
       events.push("start");
-      throw failure;
+      return Promise.reject(failure);
     });
-    registrar.close.mockImplementationOnce(async () => {
+    registrar.close.mockImplementationOnce(() => {
       events.push("withdraw");
+      return Promise.resolve();
     });
-    registry.close.mockImplementationOnce(async () => {
+    registry.close.mockImplementationOnce(() => {
       events.push("registry");
+      return Promise.resolve();
     });
 
     await expect(GceApplicationEntrypoint.run(options(), environment())).rejects.toBe(failure);
@@ -191,7 +204,7 @@ describe("the GCE managed application entrypoint", () => {
   it("retains a direct registrar cleanup failure after registration startup fails", async () => {
     const startup = new Error("registration failed");
     const withdrawal = new Error("withdraw failed");
-    managed.run.mockResolvedValueOnce({ ready: true, close: async () => undefined });
+    managed.run.mockResolvedValueOnce({ ready: true, close: () => Promise.resolve() });
     registrar.start.mockRejectedValueOnce(startup);
     registrar.close.mockRejectedValueOnce(withdrawal);
 
@@ -211,15 +224,18 @@ describe("the GCE managed application entrypoint", () => {
     process.on("SIGTERM", unrelated);
     managed.run.mockResolvedValueOnce({
       ready: true,
-      close: async () => {
+      close: () => {
         events.push("managed");
+        return Promise.resolve();
       },
     });
-    registrar.close.mockImplementationOnce(async () => {
+    registrar.close.mockImplementationOnce(() => {
       events.push("withdraw");
+      return Promise.resolve();
     });
-    registry.close.mockImplementationOnce(async () => {
+    registry.close.mockImplementationOnce(() => {
       events.push("registry");
+      return Promise.resolve();
     });
 
     try {
@@ -239,7 +255,7 @@ describe("the GCE managed application entrypoint", () => {
     const first = new Error("withdraw failed");
     const second = new Error("managed close failed");
     const third = new Error("registry close failed");
-    const handle = { ready: true, close: vi.fn(async () => Promise.reject(second)) };
+    const handle = { ready: true, close: vi.fn(() => Promise.reject(second)) };
     managed.run.mockResolvedValueOnce(handle);
     registrar.close.mockRejectedValueOnce(first);
     registry.close.mockRejectedValueOnce(third);
@@ -252,7 +268,7 @@ describe("the GCE managed application entrypoint", () => {
 
   it("returns one shutdown failure directly", async () => {
     const failure = new Error("withdraw failed");
-    managed.run.mockResolvedValueOnce({ ready: true, close: async () => undefined });
+    managed.run.mockResolvedValueOnce({ ready: true, close: () => Promise.resolve() });
     registrar.close.mockRejectedValueOnce(failure);
     const running = await GceApplicationEntrypoint.run(options(), environment());
 
@@ -260,9 +276,9 @@ describe("the GCE managed application entrypoint", () => {
   });
 
   it("forwards optional managed-child synchronization and replacement settings", async () => {
-    const synchronize = vi.fn(async () => undefined);
+    const synchronize = vi.fn(() => Promise.resolve());
     const restart = { initialDelayMs: 10, concurrentStarts: 2 };
-    const handle = { ready: true, close: vi.fn(async () => undefined) };
+    const handle = { ready: true, close: vi.fn(() => Promise.resolve()) };
     managed.run.mockResolvedValueOnce(handle);
 
     const running = await GceApplicationEntrypoint.run(
@@ -279,7 +295,7 @@ describe("the GCE managed application entrypoint", () => {
 function options() {
   return {
     moduleUrl: import.meta.url,
-    createServer: async () => runningServer(),
+    createServer: () => Promise.resolve(runningServer()),
     registryStorage: { storageFactoryFor: vi.fn(() => ({}) as never) },
   };
 }
