@@ -31,8 +31,18 @@
   typecheck build/tooling, documentation snippets, Terraform formatting, and
   diff check passed.
 - The changed GCE entrypoint itself is above the required line and branch gate:
-  **96.38% statements, 90.24% branches, 95.00% functions, 100.00% lines**.
+  **97.10% statements, 94.28% branches, 94.11% functions, 100.00% lines**.
 - `pnpm lint:generated` passed after the final tooling typecheck.
+
+## Provider caller-owned lifecycle handoff — 2026-08-19
+
+- Merged runtime prerequisite `origin/codex/t0211-runtime-prereq@ddd78fe81`.
+  GCE now calls `ManagedServerApplication.start()` and never sweeps process
+  listeners. Its provider-owned outer handlers are the only handlers it later
+  removes.
+- Retained provider proof: an unrelated `SIGTERM` listener remains installed
+  through GCE startup, simulated graceful signal shutdown, and outer-handle
+  close. The managed coordinator itself owns no signals on this path.
 Evidence will be appended after retained REDs, implementation checkpoints,
 real deployment smoke, reviews, integration, and remote cleanup.
 

@@ -23,7 +23,7 @@ const registrar = vi.hoisted(() => ({
 }));
 
 vi.mock("@spine-event-engine/server", () => ({
-  ManagedServerApplication: { run: managed.run },
+  ManagedServerApplication: { start: managed.run },
 }));
 vi.mock("@spine-event-engine/deployment", () => ({
   LeasedNodeRegistry: vi.fn(function LeasedNodeRegistry() {
@@ -203,19 +203,17 @@ describe("the GCE managed application entrypoint", () => {
     expect((failure as AggregateError).errors).toEqual([startup, withdrawal]);
   });
 
-  it("handles SIGTERM through the outer withdrawal path instead of an inner managed listener", async () => {
+  it("preserves an unrelated SIGTERM listener while closing through its outer withdrawal path", async () => {
     const events: string[] = [];
-    const inner = () => {
-      events.push("inner");
+    const unrelated = () => {
+      events.push("unrelated");
     };
-    managed.run.mockImplementationOnce(async () => {
-      process.on("SIGTERM", inner);
-      return {
-        ready: true,
-        close: async () => {
-          events.push("managed");
-        },
-      };
+    process.on("SIGTERM", unrelated);
+    managed.run.mockResolvedValueOnce({
+      ready: true,
+      close: async () => {
+        events.push("managed");
+      },
     });
     registrar.close.mockImplementationOnce(async () => {
       events.push("withdraw");
@@ -224,11 +222,17 @@ describe("the GCE managed application entrypoint", () => {
       events.push("registry");
     });
 
-    const running = await GceApplicationEntrypoint.run(options(), environment());
-    process.emit("SIGTERM");
-    await running.close();
+    try {
+      const running = await GceApplicationEntrypoint.run(options(), environment());
+      expect(process.listeners("SIGTERM")).toContain(unrelated);
+      process.emit("SIGTERM");
+      await running.close();
 
-    expect(events).toEqual(["withdraw", "managed", "registry"]);
+      expect(events).toEqual(["unrelated", "withdraw", "managed", "registry"]);
+      expect(process.listeners("SIGTERM")).toContain(unrelated);
+    } finally {
+      process.off("SIGTERM", unrelated);
+    }
   });
 
   it("retains every graceful shutdown failure", async () => {

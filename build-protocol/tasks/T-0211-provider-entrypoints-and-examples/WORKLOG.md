@@ -111,3 +111,13 @@
   `SIGTERM` gains a managed listener, and it calls the returned handle's
   `close()` twice before reporting completion. Existing direct coordinator and
   public `run()` listener-ownership proofs remain intact.
+
+## 2026-08-19 — provider caller-owned lifecycle adoption
+
+- Merged `origin/codex/t0211-runtime-prereq@ddd78fe81` without rewriting the
+  provider branch. GCE now selects `ManagedServerApplication.start()` and owns
+  only its exact outer signal callbacks; global listener discovery/removal was
+  removed.
+- The provider test preserves an unrelated `SIGTERM` listener across managed
+  startup, simulated graceful shutdown, and explicit outer close while proving
+  `withdraw → managed → registry` order.

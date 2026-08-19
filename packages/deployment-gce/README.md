@@ -152,7 +152,7 @@ export const GceApplicationEntrypoint = Object.freeze({
           namespace: GceDeploymentSettings.registryNamespace(environment),
         });
     const registrar = registry === undefined ? undefined : new GceRegistrar({ registry, port });
-    const managed = await ManagedServerApplication.run({
+    const managed = await ManagedServerApplication.start({
       processCount: GceDeploymentSettings.processCount(environment),
       host: "0.0.0.0",
       port,
