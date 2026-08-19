@@ -101,13 +101,24 @@ describe("To-Do managed entrypoint", () => {
     [
       {
         HOST: "127.0.0.1",
-        PORT: "8080",
+        PORT: "0",
         DATASTORE_PROJECT_ID: "todo",
         DELIVERY_SERVER_URL: "http://delivery:8484",
-        PROCESS_COUNT: "0",
+        PROCESS_COUNT: "1",
         DELIVERY_SHARD_COUNT: "1",
       },
-      "PROCESS_COUNT",
+      "PORT",
+    ],
+    [
+      {
+        HOST: "127.0.0.1",
+        PORT: "8080",
+        DATASTORE_PROJECT_ID: "todo",
+        DELIVERY_SERVER_URL: "ftp://delivery:8484",
+        PROCESS_COUNT: "1",
+        DELIVERY_SHARD_COUNT: "1",
+      },
+      "DELIVERY_SERVER_URL",
     ],
   ])("rejects invalid managed deployment configuration", (environment, expected) => {
     expect(() => readTodoManagedDeployment(environment)).toThrow(expected);

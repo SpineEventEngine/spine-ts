@@ -46,3 +46,10 @@
 - The managed Todo source contract was written RED first. It requires the
   explicit process/shard settings and rejects the retired signal transport
   terms. It now passes.
+
+## 2026-08-19 — configuration coverage correction
+
+- Moved Todo’s managed environment parsing into a private example module so
+  invalid and independent process/shard choices are behaviorally tested without
+  exposing a framework API. Message Board’s existing deployment configuration
+  already provides the equivalent private application seam.

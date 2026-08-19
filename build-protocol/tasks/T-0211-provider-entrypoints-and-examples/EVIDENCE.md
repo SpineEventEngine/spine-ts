@@ -32,3 +32,11 @@ real deployment smoke, reviews, integration, and remote cleanup.
   `spine-t0095`/`spine-t0096` containers cleaned up. This execution surface did
   not return the completed TAP status after its 30-second yield, so this is
   recorded as attempted live evidence rather than a passing assertion.
+
+## Managed configuration coverage correction
+
+- The focused V8 command with an include set limited to changed configuration
+  modules passed 37/37 and measured 94.2% lines and 94% branches:
+  `pnpm vitest run --coverage --coverage.include='examples/message-board/app/src/deployment-config.ts' --coverage.include='examples/todo/src/managed-deployment.ts' examples/message-board/app/test/deployment-config.test.ts examples/todo/test/startup-contract.test.ts`.
+- The static deployment gate passed 11/11 and the combined Message Board/Todo
+  focused suites passed 45/45 after the configuration extraction.
