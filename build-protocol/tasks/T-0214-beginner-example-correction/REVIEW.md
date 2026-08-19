@@ -80,4 +80,36 @@ Accepted findings were returned in one batch to the existing To-Do owner:
 - restore the checked TypeScript snippet and `TodoServer` type compatibility;
 - correct the `createTodoContext()` in-memory-default TSDoc wording.
 
-Affected concern re-reviews remain pending the correction endpoint.
+The To-Do correction endpoint passed the scoped verifier with 112 tests and the
+changed-code coverage recorded in `EVIDENCE.md`. Its final documentation
+correction received affected documentation re-review PASS; earlier accepted
+style, lifecycle, launcher, API, and documentation findings are reflected in
+the final branch.
+
+## Message Board review wave
+
+- Documentation reviewer: existing `documentation_reviewer`, explicitly
+  configured `gpt-5.6-luna` / `medium`; runtime telemetry unavailable. Findings
+  covered incomplete Compose workflows, warning-style headings, backend-only
+  wording, signing language, and the wrong Envoy host port. All were corrected;
+  final re-review PASS.
+- Performance/reliability reviewer: existing
+  `performance_reliability_reviewer`, explicitly configured
+  `gpt-5.6-terra` / `high`; runtime telemetry unavailable. PASS with no P0-P2
+  finding after 131 runtime and 14 topology/launcher tests.
+- Style/maintainability reviewer: existing `style_maintainability_reviewer`,
+  explicitly configured `gpt-5.6-terra` / `high`; runtime telemetry unavailable.
+  Accepted P1: the hidden local managed-Delivery bypass contradicted the one
+  valid shared topology. The original owner removed it in `3ef04678`; affected
+  re-review PASS.
+- TypeScript/API-doc reviewer: existing `typescript_api_docs_reviewer`,
+  explicitly configured `gpt-5.6-terra` / `high`; runtime telemetry unavailable.
+  Accepted P1: public timeout docs implied a lifetime bound on acknowledged
+  streams. Exported TSDoc, reference, and README were corrected through
+  `7aa6a45d`; final affected re-review PASS with no public/Proto/wire addition.
+- Final security reviewer: existing `security_reviewer`, explicitly configured
+  `gpt-5.6-terra` / `high`; runtime telemetry unavailable. PASS with no P0-P2
+  finding after 42 trust/stream tests and five deployment/credential checks.
+
+All canonical concerns have a recorded disposition. No review finding remains
+open before integrated release verification.

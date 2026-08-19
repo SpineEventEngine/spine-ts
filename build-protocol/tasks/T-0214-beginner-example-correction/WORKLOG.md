@@ -64,3 +64,61 @@
   from Message Board Compose/Kubernetes configuration. Static topology checks
   pass 8/8; the owner continues on remaining container fixtures, source
   structure, launchers, mode docs, and live acceptance.
+
+## 2026-08-19 — To-Do convergence and integration
+
+- The To-Do lane split the export barrel, reusable application assembly,
+  single-process executable, multi-process selector, Coordinator, replica, and
+  settings parser into purpose-named files. Commented launchers own Datastore,
+  Delivery, application processes, readiness, and shutdown.
+- Both documented launchers became ready, passed their smoke paths, stopped on
+  Ctrl-C, and left no owned process or container. The final scoped verifier
+  passed 112 tests with 90.15% statements, 93.15% branches, 100% functions, and
+  99.12% lines.
+- Documentation correction `c9140386` makes the README and launcher use the
+  same official versioned `google/cloud-sdk:578.0.0-emulators` image; its exact
+  contract suite passed 16/16. The reviewed branch merged and was pushed to the
+  integration branch as `0b559cbd`.
+
+## 2026-08-19 — Message Board live diagnosis and correction
+
+- Credential-free admission, one stock UI, purpose-named source files, and
+  complete local/Compose/Kubernetes wiring were implemented without changing
+  the independent framework `SignedSessions` feature.
+- The sustained two-tab failure was traced below Coordinator fan-in. Projection
+  work was stored but woke only on periodic recovery because the launcher set a
+  Delivery URL without selecting the Production environment; each replica was
+  therefore using process-local Delivery. A second defect placed the normal
+  operation timeout on the entire Delivery Admin server stream.
+- The valid local multi-process launcher now selects Production, owns one shared
+  Delivery server and one Datastore emulator, and starts one Coordinator, two
+  complete replicas, one Gateway, and one UI. Delivery stream timeout now
+  bounds setup through the first acknowledgement only; the acknowledged stream
+  remains open until cancellation or failure.
+- A fresh two-tab Chromium run posted eight alternating messages, waited longer
+  than 36 seconds, posted again, and kept both tabs live with no 401, 404, or
+  console error. Ctrl-C removed all owned processes, containers, and listeners.
+  Single-process, combined Compose, standalone Compose, and distributed Compose
+  live paths also passed with clean teardown.
+- Canonical task verification passed 118/118 tests with 96.83% statements,
+  92.35% branches, 97.29% functions, and 97.86% lines. Its controlling wrapper
+  lost the separate exit marker after terminal output, but the retained log
+  contains every green gate and process audit found no surviving verifier.
+
+## 2026-08-19 — Message Board review closure
+
+- Documentation review findings corrected Compose start/open/stop steps, the
+  Envoy host port, neutral headings, backend-only container wording, and the
+  last signing reference. Final documentation re-review passed.
+- Reliability review passed with 131 focused runtime tests and 14 topology and
+  launcher tests. Style review rejected the remaining hidden
+  `MESSAGE_BOARD_DELIVERY_MODE=local` branch; `3ef04678` removed it, made the
+  Delivery URL unconditional, and passed affected re-review.
+- TypeScript/API review required timeout wording to distinguish finite setup
+  from active-stream lifetime. Exported TSDoc, reference, and README now agree;
+  final re-review passed at `7aa6a45d`.
+- Final security review passed: trusted context copies only the requested actor,
+  tenant mismatches fail closed, no demo credential/signing configuration
+  remains, diagnostics contain no credential, and stream buffers/cancellation
+  remain bounded. The reviewed Message Board branch merged and was pushed to
+  integration as `6aba4ffb`.

@@ -55,8 +55,11 @@ immutable dispatch profile is the provenance. Subagents may not spawn subagents.
 - Message Board commands, queries, and subscriptions require no Authorization
   header and preserve the requested actor without trusting unrelated client
   context.
-- All seven documented Message Board topology modes state exact ownership and
-  every locally advertised path runs as written.
+- All six valid Message Board topology modes state exact ownership and every
+  locally advertised path runs as written. The rejected seventh candidate used
+  process-local Delivery across multiple replicas; live debugging proved that
+  it could not deliver cross-replica projection wakeups, so it is not presented
+  as a supported topology.
 - To-Do single- and multi-process launchers run as written and clean up owned
   resources.
 - Purpose names and file-level explanations cover every hand-written To-Do and
@@ -74,4 +77,3 @@ immutable dispatch profile is the provenance. Subagents may not spawn subagents.
 - No autoscaler, KEDA, kind, or minikube work.
 - No framework SignedSessions removal.
 - No rewrite of Orders, Projects, GCE, or GKE before separate approval.
-
