@@ -26,7 +26,7 @@ import {
   TargetSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   InMemorySubscriptionBindings,
   SubscriptionGateway,
@@ -317,33 +317,40 @@ describe("SubscriptionGateway", () => {
   });
 
   it("observes browser cancellation triggered synchronously by active work", async () => {
-    const bindings = new InMemorySubscriptionBindings({
-      nextId: () => "synchronous-cancellation",
-      dispose: () => Promise.resolve(),
-    });
-    await bindings.create(canonicalBinding("synchronous-cancellation", 100));
-    const controller = new AbortController();
-    const active = bindings.activate({
-      id: "synchronous-cancellation",
-      context: trustedContext(),
-      nowMs: 1,
-      signal: controller.signal,
-      onDefinition: () => {
-        controller.abort();
-        return new Promise<void>(() => undefined);
-      },
-    });
-
-    await expect(
-      Promise.race([
+    vi.useFakeTimers();
+    try {
+      const bindings = new InMemorySubscriptionBindings({
+        nextId: () => "synchronous-cancellation",
+        dispose: () => Promise.resolve(),
+      });
+      await bindings.create(canonicalBinding("synchronous-cancellation", 100));
+      const controller = new AbortController();
+      const active = bindings.activate({
+        id: "synchronous-cancellation",
+        context: trustedContext(),
+        nowMs: 1,
+        signal: controller.signal,
+        onDefinition: () => {
+          controller.abort();
+          return new Promise<void>(() => undefined);
+        },
+      });
+      const cancellation = Promise.race([
         active,
         new Promise<never>((_, reject) => {
           setTimeout(() => {
             reject(new Error("activation did not observe synchronous cancellation"));
-          }, 20);
+          }, 1);
         }),
-      ]),
-    ).rejects.toThrow("subscription operation aborted");
+      ]);
+      const assertion = expect(cancellation).rejects.toThrow("subscription operation aborted");
+
+      await vi.advanceTimersByTimeAsync(1);
+
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("retains a naturally completed native activation until cancellation or expiry", async () => {
