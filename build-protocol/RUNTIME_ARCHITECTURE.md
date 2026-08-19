@@ -92,6 +92,11 @@ their command/event deployment path. The current complete-replica Coordinator
 does not use them: it forwards generated unary Command and Query HTTP/2 calls
 to ordinary child `SpineServices`, which remain the only Bus intake.
 
+Production `ServerEnvironment` requires only `storageFactory` and the complete
+application `typeRegistry`. Its legacy `transport` setting is optional: when
+supplied it opens the legacy runtime bindings below; when omitted, as in the
+default production configuration, no legacy signal bindings are opened.
+
 ZeroMQ must not leak into domain, repository, or service APIs. The runtime depends on interfaces such as:
 
 ```typescript
@@ -148,14 +153,17 @@ Delivery, and subscription replacements have acceptance evidence.
 
 `Server.start()` and `Server.run()` create one ordinary application process;
 neither supervises child processes. `ManagedServerApplication.run()` is the
-separate Node deployment entrypoint: it starts the deployer-configured number
-of complete replicas, supervises their bounded replacement, and owns a
-front-facing Coordinator listener at the deployer-supplied nonzero port. The
-Coordinator forwards generated unary Command and Query calls once to a READY
-child; it has no public child-topology API and does not yet fan out
-subscriptions. Delivery stays direct between every replica and the shared
-Delivery Server. The legacy ZeroMQ path above is pending T-0212 removal, not a
-parallel requirement for managed deployment.
+separate Node deployment entrypoint when the framework owns `SIGINT` and
+`SIGTERM`: it starts the deployer-configured number of complete replicas,
+supervises their bounded replacement, and owns a front-facing Coordinator
+listener at the deployer-supplied nonzero port. `ManagedServerApplication.start()`
+starts the same managed cohort without process-signal handlers; its embedding
+host owns signals and closes the returned handle. The Coordinator forwards
+generated unary Command and Query calls once to a READY child; it has no public
+child-topology API and does not yet fan out subscriptions. Delivery stays
+direct between every replica and the shared Delivery Server. The legacy ZeroMQ
+path above is pending T-0212 removal, not a parallel requirement for managed
+deployment.
 
 ## Bus Semantics
 

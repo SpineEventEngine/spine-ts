@@ -53,3 +53,17 @@
 - Explicit caller close remains the existing idempotent/retryable coordinator
   close path. The process-owned `run()` proof verifies that it removes only its
   exact handlers and preserves an unrelated startup-time listener.
+
+## 2026-08-19 — API review P1 documentation correction
+
+- Review concern: `typescript_api_docs_reviewer`, configured
+  `gpt-5.6-terra` / `high`; runtime telemetry unavailable. Disposition:
+  accepted documentation-only P1.
+- `packages/server/REFERENCE.md` and `RUNTIME_ARCHITECTURE.md` now state that
+  Production requires `storageFactory` plus the complete `typeRegistry` only.
+  The legacy `transport` setting is optional and opens its bindings only when
+  explicitly supplied; the Production example omits it.
+- The same references now distinguish `ManagedServerApplication.run()`
+  (framework-owned `SIGINT`/`SIGTERM`) from `start()` (caller-owned signals and
+  explicit handle close). No product code or public shape changed in this
+  correction.
