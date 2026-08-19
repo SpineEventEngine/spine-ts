@@ -101,3 +101,11 @@
   typecheck, documentation audience/snippet/API inventory, TSDoc, cleanup,
   formatting, and diff checks have terminal passing evidence. No runtime
   behavior changed, and T-0213 remains responsible for threat-model redesign.
+
+## Final narrow re-review
+
+- Documentation and TypeScript/API documentation pass without findings.
+- Style accepts the restored direct factory lifecycle proof. One P1 remains
+  only in `Server` TSDoc: three comments still describe the deleted context
+  transport intake/cleanup lifecycle. Return those comments to the same
+  explicitly configured implementation owner; only style re-review is affected.
