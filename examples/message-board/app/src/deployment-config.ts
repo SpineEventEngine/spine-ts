@@ -81,6 +81,11 @@ interface DeploymentContract {
     environment: NodeJS.ProcessEnv,
     logger?: ILogLayer,
   ): StorageFactory | undefined;
+  configureGatewayServer(
+    config: GatewayConfig,
+    storageFactory: StorageFactory,
+    logger: ILogLayer,
+  ): void;
   configureManagedServer(
     config: DeploymentConfig,
     client: Datastore,
@@ -192,6 +197,18 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     if (environment.NODE_ENV !== "production") return undefined;
     return MessageBoardDeployment.configureManagedServer(config, client, environment, logger)
       .storageFactory;
+  },
+
+  configureGatewayServer(
+    _config: GatewayConfig,
+    storageFactory: StorageFactory,
+    logger: ILogLayer,
+  ): void {
+    ServerEnvironment.when(EnvironmentType.Production).use({
+      storageFactory,
+      logger,
+      typeRegistry,
+    });
   },
 
   configureManagedServer(

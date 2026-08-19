@@ -28,6 +28,7 @@ const logger = MessageBoardDeployment.logger(
   new Logging({ projectId: config.projectId }).log("message-board"),
 );
 const storage = MessageBoardDeployment.storage(client);
+MessageBoardDeployment.configureGatewayServer(config, storage, logger);
 const policy = new BoardAccessPolicy();
 const bindings = MessageBoardDeployment.bindings(config, storage);
 const sessions = MessageBoardDeployment.sessions(process.env);

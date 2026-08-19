@@ -333,7 +333,6 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     "DATASTORE_EMULATOR_HOST=datastore:8081",
     "--env",
     `SUBSCRIPTION_REGISTRY_NAMESPACE=message-board-smoke-${signal}`,
-    "--env",
     ...sessionEnvironment(),
     "spine-ts/standalone-gateway:local",
   ]);

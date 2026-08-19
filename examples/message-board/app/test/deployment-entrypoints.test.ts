@@ -118,7 +118,11 @@ describe("MessageBoard deployment entrypoints", () => {
 
     expect(calls.datastore).toHaveBeenCalledWith({ projectId: "project" });
     expect(calls.storage).toHaveBeenCalledWith(calls.client);
-    expect(calls.configureServer).not.toHaveBeenCalled();
+    expect(calls.configureGatewayServer).toHaveBeenCalledWith(
+      calls.gatewayConfig,
+      calls.storageResult,
+      calls.logger,
+    );
 
     expect(calls.serverAtPort).toHaveBeenCalledWith(
       calls.gatewayConfig.port,
@@ -169,6 +173,7 @@ function startupMocks() {
   });
   const storageFactory = vi.fn(() => storage);
   const configureServer = vi.fn(() => undefined);
+  const configureGatewayServer = vi.fn(() => undefined);
   const logger = {};
   const googleLog = {};
   const createLogger = vi.fn(() => logger);
@@ -187,6 +192,7 @@ function startupMocks() {
       combined: () => combinedConfig,
       gateway: () => gatewayConfig,
       configureServer,
+      configureGatewayServer,
       logger: createLogger,
       storage: storageFactory,
       bindings: () => bindings,
@@ -219,6 +225,7 @@ function startupMocks() {
     client,
     combinedConfig,
     configureServer,
+    configureGatewayServer,
     createLogger,
     datastore,
     gatewayConfig,
