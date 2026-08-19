@@ -68,7 +68,7 @@ async function run(
       env: {
         ...process.env,
         TODO_REPO_ROOT: root,
-        PATH: `${join(root, "bin")}:${process.env.PATH}`,
+        PATH: `${join(root, "bin")}:${process.env.PATH ?? ""}`,
         TRACE: trace,
         MODE: mode,
         RELEASE: join(root, "release"),
@@ -77,8 +77,12 @@ async function run(
       stdio: ["ignore", "pipe", "pipe"],
     });
     let out = "";
-    child.stdout.on("data", (d) => (out += d));
-    child.stderr.on("data", (d) => (out += d));
+    child.stdout.on("data", (data: Buffer) => {
+      out += data.toString();
+    });
+    child.stderr.on("data", (data: Buffer) => {
+      out += data.toString();
+    });
     const signalTimer =
       signal === undefined
         ? undefined
@@ -98,7 +102,11 @@ async function run(
     });
   });
 }
-afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })));
+afterEach(() => {
+  roots.splice(0).forEach((root) => {
+    rmSync(root, { recursive: true, force: true });
+  });
+});
 describe("multi-process launcher", () => {
   it.each(["SIGINT", "SIGTERM"] as const)("gates app start and cleans on %s", async (signal) => {
     const { root, trace, release, temporary } = fixture("gated");
