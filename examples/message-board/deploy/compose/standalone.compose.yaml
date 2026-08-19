@@ -71,8 +71,6 @@ services:
     depends_on:
       datastore:
         condition: service_healthy
-      delivery:
-        condition: service_healthy
       application-node:
         condition: service_started
 

@@ -50,6 +50,10 @@ test("declares one local-fixture gateway and one managed complete-replica node",
     document,
     /application-node:[\s\S]*?depends_on:[\s\S]*?delivery:[\s\S]*?condition: service_healthy/mu,
   );
+  assert.doesNotMatch(
+    document,
+    /gateway:[\s\S]*?depends_on:[\s\S]*?delivery:[\s\S]*?condition: service_healthy/mu,
+  );
   assert.doesNotMatch(document, /MESSAGE_BOARD_SESSION_/u);
   assert.equal((document.match(/spine-ts\/simple-delivery-server:local/gu) ?? []).length, 1);
 });
