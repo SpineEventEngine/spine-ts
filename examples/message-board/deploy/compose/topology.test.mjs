@@ -60,7 +60,11 @@ for (const envoy of [combinedEnvoy, standaloneEnvoy]) {
     const httpConnectionManager = httpConnectionManagers(configuration).at(0);
     assert.notEqual(httpConnectionManager, undefined, "missing HTTP connection manager");
     assert.equal(httpConnectionManager.stream_idle_timeout, "0s");
-    assert.deepEqual(routes(httpConnectionManager), [...browserRoutes, ["/", "30s"]]);
+    assert.deepEqual(routes(httpConnectionManager), [
+      ...browserRoutes,
+      ["/spine.", 404],
+      ["/", "30s"],
+    ]);
   });
 }
 
@@ -90,6 +94,8 @@ function routes(httpConnectionManager) {
   return (httpConnectionManager.route_config?.virtual_hosts ?? []).flatMap((host) =>
     (host.routes ?? []).map((route) => {
       if (route.match?.prefix === "/") return ["/", route.route?.timeout];
+      if (route.match?.prefix === "/spine.")
+        return ["/spine.", route.direct_response?.status];
       assert.deepEqual(Object.keys(route.match ?? {}), ["path", "headers"]);
       assert.deepEqual(route.match.headers, [{ name: ":method", exact_match: "POST" }]);
       return [route.match.path, route.route?.timeout];

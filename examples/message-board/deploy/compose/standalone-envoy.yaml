@@ -67,6 +67,8 @@ static_resources:
                               headers: [{ name: ":method", exact_match: POST }],
                             }
                           route: *board_route
+                        - match: { prefix: "/spine." }
+                          direct_response: { status: 404 }
                         - match: { prefix: "/" }
                           route: { cluster: web, timeout: 30s }
                 http_filters:
