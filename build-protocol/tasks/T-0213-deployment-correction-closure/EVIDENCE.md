@@ -35,4 +35,7 @@
   batch passes the removal guard, metadata 11/11, docs audience/snippets/API,
   cleanup, TSDoc, formatting, and diff checks.
 - All affected specialist re-reviews pass with no remaining P0-P2 finding.
+- First canonical release run passed deterministic gates and 4,267 tests, then
+  exposed two direct removal-fallout test assumptions. Their focused correction
+  passes 14/14 plus tooling/lint/format/diff checks.
 - Required release verification, post-merge verification, and remote cleanup.

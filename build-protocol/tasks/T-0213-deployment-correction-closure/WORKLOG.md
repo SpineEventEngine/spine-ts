@@ -104,3 +104,17 @@
   correction's verified current API inventory.
 - Final affected documentation and reliability re-reviews passed. All four
   focused review concerns are clean with no remaining P0-P2 finding.
+
+## 2026-08-19 — first canonical release run
+
+- All deterministic gates passed. The global coverage run completed 4,267
+  passing tests, 19 skips, and two direct removal-fallout failures.
+- Corrected the docs meta-test so a package README without a TypeScript
+  construction API is not required to invent a fence; every present fence
+  remains compiled and required nonempty.
+- Removed the external-consumer fixture's obsolete `node-addon-api` override.
+  It had been supplied only transitively by the deleted ZeroMQ package and is
+  unused by the packed current surface.
+- Focused regression passed 14/14 with tooling typecheck, ESLint, formatting,
+  and diff hygiene. These test-only deterministic corrections do not reopen
+  specialist review.

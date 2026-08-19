@@ -108,7 +108,6 @@ function installTarballsWithPnpm(directory: string, packages: readonly PackedPac
   );
   const overrides = {
     ...dependencies,
-    "node-addon-api": installedDependency("node-addon-api"),
   };
   writeJson(directory, "package.json", {
     name: "@external/proto-tools-cli",
@@ -123,13 +122,6 @@ function installTarballsWithPnpm(directory: string, packages: readonly PackedPac
       .join("\n")}\n`,
   );
   run("pnpm", ["install", "--offline", "--ignore-scripts"], directory);
-}
-
-function installedDependency(name: string): string {
-  const store = join(repositoryRoot, "node_modules/.pnpm");
-  const entry = readdirSync(store).find((candidate) => candidate.startsWith(`${name}@`));
-  if (entry === undefined) throw new Error(`Missing installed dependency ${name}.`);
-  return `file:${join(store, entry, "node_modules", name)}`;
 }
 
 function windowsShimCommand(shim: string): string {
