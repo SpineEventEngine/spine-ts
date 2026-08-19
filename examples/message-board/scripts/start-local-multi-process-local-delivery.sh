@@ -2,12 +2,13 @@
 # Starts the local Datastore emulator, managed replicas with local Delivery, Gateway, and stock UI.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../../.." && pwd)
-name="message-board-local-$$"
+name="message-board-local-$(node -e 'process.stdout.write(require("node:crypto").randomUUID())')"
 pids=()
 cleanup() { for pid in "${pids[@]:-}"; do kill "$pid" 2>/dev/null || true; done; docker rm -f "$name-datastore" "${MESSAGE_BOARD_DELIVERY_CONTAINER:-}" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
-docker run --rm --name "$name-datastore" -p 8081:8081 gcr.io/google.com/cloudsdktool/google-cloud-cli@sha256:cda01b8c880e9161992c3fd61d7d0e153b4dd073aa4a9d62ad79243907cf8dd4 gcloud emulators firestore start --database-mode=datastore-mode --host-port=0.0.0.0:8081 --quiet & pids+=($!)
-until curl --fail --silent http://127.0.0.1:8081 >/dev/null 2>&1; do sleep 1; done
+docker run --rm --name "$name-datastore" -p 8081:8081 gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators gcloud emulators firestore start --database-mode=datastore-mode --host-port=0.0.0.0:8081 --quiet & pids+=($!)
+for attempt in $(seq 1 30); do curl --fail --silent http://127.0.0.1:8081 >/dev/null 2>&1 && break; kill -0 "${pids[0]}" 2>/dev/null || exit 1; sleep 1; done
+curl --fail --silent http://127.0.0.1:8081 >/dev/null 2>&1 || exit 1
 pnpm -C "$root" typecheck:build
 delivery_environment=()
 test -z "${DELIVERY_SERVER_URL:-}" || delivery_environment=("DELIVERY_SERVER_URL=$DELIVERY_SERVER_URL")
