@@ -48,6 +48,23 @@
   Reliability is not reopened because the correction changes tests and
   documentation only; its earlier no-finding runtime disposition stands.
 
+## Affected re-review
+
+- TypeScript/API documentation: prior user-guide finding resolved; P1 remains
+  for deleted `ServerEnvironment.transport` and signal-binding prose in the
+  server README/reference. Declarations, TypeDoc, and seven retained transport
+  exports pass.
+- Documentation completeness: P1 remains in the runtime architecture and
+  completion-plan status, plus the same server reference prose. Threat-model
+  deferral is accepted.
+- Style: P1 agrees with the remaining prose/architecture gap. P2 remains for a
+  direct retained `InMemoryTransportFactory.close()` lifecycle assertion that
+  proves accepted publication drains, close is idempotent, and new channel
+  creation rejects after close.
+- Return this exact residual batch to the same explicitly configured
+  `implementer`, `gpt-5.6-terra` / `medium`; no runtime behavior change is
+  authorized.
+
 ## Correction disposition
 
 - In-memory message-channel validation, FIFO drain, consumer-failure
