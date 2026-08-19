@@ -190,8 +190,8 @@ export class DeliveryClient {
   }
 
   /**
-   * Starts an ACK-gated bounded Admin shard-update observation stream.
-   * @param options Bounds or cancels stream setup and lifetime.
+   * Starts an ACK-gated Admin shard-update observation stream.
+   * @param options Bounds stream setup and cancels its lifetime.
    * @returns A cancellable stream of detached shard observations.
    */
   observeShardUpdates(options: DeliveryFindOneOptions = {}): DeliveryShardObservationStream {
@@ -212,14 +212,14 @@ export class DeliveryClient {
     this.#activeReads.add(controller);
     return new ShardObservationStream({
       signal: controller.signal,
-      timeoutMs: DeliveryRequestCodec.timeout(options.timeoutMs ?? 30_000),
+      setupTimeoutMs: DeliveryRequestCodec.timeout(options.timeoutMs ?? 30_000),
       capacity: this.#observationBufferSize,
       reconnects,
       reconnectBackoffMs: this.#observationReconnectBackoffMs,
-      open: (signal, timeoutMs) =>
+      open: (signal) =>
         this.#admin.subscribeToShardUpdates(
           create(EmptySchema),
-          DeliveryRequestCodec.callOptions(signal, timeoutMs),
+          DeliveryRequestCodec.callOptions(signal),
         ),
       acknowledge: (frame) => frame.value.case === "created" && frame.value.value,
       decodeUpdate: (frame) => {

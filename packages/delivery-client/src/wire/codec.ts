@@ -766,8 +766,8 @@ type DeliveryRequestCodecApi = Readonly<{
   protocol(): DeliveryProtocolError;
   callOptions(
     signal: AbortSignal | undefined,
-    timeoutMs: number,
-  ): { readonly timeoutMs: number; readonly signal?: AbortSignal };
+    timeoutMs?: number,
+  ): { readonly timeoutMs?: number; readonly signal?: AbortSignal };
   pageSize(value: number): number;
   bounded(value: number, minimum: number, maximum: number, name: string): number;
   normalize(options: DeliveryClientOptions): DeliveryClientOptions;
@@ -835,8 +835,9 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
    */
   callOptions(
     signal: AbortSignal | undefined,
-    timeoutMs: number,
-  ): { readonly timeoutMs: number; readonly signal?: AbortSignal } {
+    timeoutMs?: number,
+  ): { readonly timeoutMs?: number; readonly signal?: AbortSignal } {
+    if (timeoutMs === undefined) return signal === undefined ? {} : { signal };
     return signal === undefined ? { timeoutMs } : { timeoutMs, signal };
   },
 

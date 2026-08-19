@@ -112,10 +112,110 @@ describe("DeliveryClient shard observation", () => {
     expect(fake.stream).toHaveBeenCalledWith(
       expect.objectContaining({ name: "SubscribeToShardUpdates" }),
       expect.anything(),
-      30_000,
+      undefined,
       undefined,
       expect.anything(),
     );
+  });
+
+  it("keeps an acknowledged Admin stream alive past its bounded setup interval", async () => {
+    vi.useFakeTimers();
+    try {
+      const fake = transport();
+      fake.streamReplyAndHold([
+        create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
+      ]);
+      const stream = DeliveryClient.usingTransport(fake.transport).observeShardUpdates({
+        timeoutMs: 5,
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fake.streamStarted).toBe(1);
+      await vi.advanceTimersByTimeAsync(6);
+      expect(fake.streamAborts).toBe(0);
+      stream.cancel();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("delivers an update emitted after the bounded setup interval", async () => {
+    vi.useFakeTimers();
+    try {
+      const controller = new AbortController();
+      const update = create(SubscriptionResponseSchema, {
+        value: {
+          case: "update",
+          value: create(ShardInfoUpdateSchema, {
+            index: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
+            newStatus: ShardStatus.NOT_PICKED,
+            newMessagesCount: 1,
+          }),
+        },
+      });
+      let emit!: (frame: typeof update) => void;
+      const stream = new ShardObservationStream({
+        signal: controller.signal,
+        setupTimeoutMs: 5,
+        capacity: 1,
+        reconnects: 0,
+        reconnectBackoffMs: 0,
+        open: async function* (signal) {
+          yield create(SubscriptionResponseSchema, { value: { case: "created", value: true } });
+          yield await new Promise<typeof update>((resolve) => {
+            emit = resolve;
+          });
+          await new Promise<void>((resolve) =>
+            signal.addEventListener("abort", resolve, { once: true }),
+          );
+        },
+        acknowledge: (frame) => frame.value.case === "created",
+        decodeUpdate: (frame) => {
+          if (frame.value.case !== "update") throw new DeliveryProtocolError();
+          return { shard: ShardIndex.single(), status: "NOT_PICKED", messages: 1 };
+        },
+        finish: () => undefined,
+        cancel: () => controller.abort(),
+      });
+
+      const next = stream[Symbol.asyncIterator]().next();
+      await vi.advanceTimersByTimeAsync(6);
+      emit(update);
+      await expect(next).resolves.toMatchObject({ done: false, value: { messages: 1 } });
+      stream.cancel();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fails a stream that does not acknowledge before its setup interval", async () => {
+    vi.useFakeTimers();
+    try {
+      const controller = new AbortController();
+      const stream = new ShardObservationStream({
+        signal: controller.signal,
+        setupTimeoutMs: 5,
+        capacity: 1,
+        reconnects: 0,
+        reconnectBackoffMs: 0,
+        open: async function* (signal) {
+          await new Promise<void>((resolve) =>
+            signal.addEventListener("abort", resolve, { once: true }),
+          );
+        },
+        acknowledge: () => true,
+        decodeUpdate: () => ({ shard: ShardIndex.single(), status: "NOT_PICKED", messages: 0 }),
+        finish: () => undefined,
+        cancel: () => controller.abort(),
+      });
+
+      const next = stream[Symbol.asyncIterator]().next();
+      const rejected = expect(next).rejects.toBeInstanceOf(DeliveryShardObservationError);
+      await vi.advanceTimersByTimeAsync(5);
+      await rejected;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("fails closed on a false or repeated Admin subscription ACK", async () => {
@@ -303,6 +403,28 @@ describe("DeliveryClient shard observation", () => {
     await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined });
   });
 
+  it("stops an acknowledged Admin stream when its caller cancels", async () => {
+    const fake = transport();
+    const caller = new AbortController();
+    fake.streamReplyAndHold([
+      create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
+    ]);
+    const stream = DeliveryClient.usingTransport(fake.transport).observeShardUpdates({
+      signal: caller.signal,
+    });
+    const iterator = stream[Symbol.asyncIterator]();
+
+    await vi.waitFor(() => {
+      expect(fake.streamStarted).toBe(1);
+    });
+    caller.abort(new Error("caller stopped observation"));
+
+    await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined });
+    await vi.waitFor(() => {
+      expect(fake.streamAborts).toBe(1);
+    });
+  });
+
   it("delivers an update buffered before the consumer asks for it", async () => {
     const controller = new AbortController();
     let processed!: () => void;
@@ -322,7 +444,7 @@ describe("DeliveryClient shard observation", () => {
     });
     const stream = new ShardObservationStream({
       signal: controller.signal,
-      timeoutMs: 1,
+      setupTimeoutMs: 1,
       capacity: 1,
       reconnects: 0,
       reconnectBackoffMs: 0,

@@ -38,14 +38,11 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
   constructor(
     private readonly config: {
       readonly signal: AbortSignal;
-      readonly timeoutMs: number;
+      readonly setupTimeoutMs: number;
       readonly capacity: number;
       readonly reconnects: number;
       readonly reconnectBackoffMs: number;
-      readonly open: (
-        signal: AbortSignal,
-        timeoutMs: number,
-      ) => AsyncIterable<SubscriptionResponse>;
+      readonly open: (signal: AbortSignal) => AsyncIterable<SubscriptionResponse>;
       readonly acknowledge: (frame: SubscriptionResponse) => boolean;
       readonly decodeUpdate: (frame: SubscriptionResponse) => RemoteShardObservation;
       readonly finish: () => void;
@@ -82,17 +79,7 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
     try {
       for (let attempt = 0; ; attempt++) {
         try {
-          let acknowledged = false;
-          for await (const frame of this.config.open(this.config.signal, this.config.timeoutMs)) {
-            if (!acknowledged) {
-              if (!this.config.acknowledge(frame)) throw new DeliveryProtocolError();
-              acknowledged = true;
-              continue;
-            }
-            this.#push(this.config.decodeUpdate(frame));
-          }
-          if (!acknowledged) throw new DeliveryProtocolError();
-          throw new DeliveryShardObservationError();
+          await this.#observeAttempt();
         } catch (error) {
           if (this.config.signal.aborted) return;
           if (
@@ -109,6 +96,34 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
         this.#error = error instanceof Error ? error : new DeliveryShardObservationError();
     } finally {
       this.#finish();
+    }
+  }
+
+  async #observeAttempt(): Promise<never> {
+    const setup = new AbortController();
+    const abort = () => setup.abort(this.config.signal.reason);
+    this.config.signal.addEventListener("abort", abort, { once: true });
+    let setupTimedOut = false;
+    const timeout = setTimeout(() => {
+      setupTimedOut = true;
+      setup.abort(new DeliveryShardObservationError());
+    }, this.config.setupTimeoutMs);
+    try {
+      let acknowledged = false;
+      for await (const frame of this.config.open(setup.signal)) {
+        if (!acknowledged) {
+          if (!this.config.acknowledge(frame)) throw new DeliveryProtocolError();
+          acknowledged = true;
+          clearTimeout(timeout);
+          continue;
+        }
+        this.#push(this.config.decodeUpdate(frame));
+      }
+      if (!acknowledged || setupTimedOut) throw new DeliveryShardObservationError();
+      throw new DeliveryShardObservationError();
+    } finally {
+      clearTimeout(timeout);
+      this.config.signal.removeEventListener("abort", abort);
     }
   }
 
