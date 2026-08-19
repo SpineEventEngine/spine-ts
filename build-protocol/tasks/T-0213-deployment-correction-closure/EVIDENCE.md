@@ -18,7 +18,7 @@
 - The Todo transport importer is absent from the lockfile; no replacement
   transport or alias was introduced.
 
-## Pending closure evidence
+## Closure evidence
 
 - A clean read-only cheap preflight passed frozen install, generated/tooling
   builds, 66 focused tests, policy/documentation/format/diff gates, and release
@@ -58,4 +58,9 @@
   coverage, and the combined process-heavy selection passes 60/60 with four
   workers. Mechanical checks and narrow reliability/documentation re-reviews
   pass.
-- Pending: final post-merge release rerun and remote cleanup.
+- Final post-merge `verify:release` passes all deterministic gates, 264 test
+  files and 4,269 tests. Coverage passes at 93.89% statements, 90.34% branches,
+  93.74% functions, and 95.04% lines. The four-worker global run completes in
+  168.04 seconds without the prior contention timeouts.
+- The correction is merged and pushed to `main`; only clean merged branch and
+  worktree removal remains as repository housekeeping.

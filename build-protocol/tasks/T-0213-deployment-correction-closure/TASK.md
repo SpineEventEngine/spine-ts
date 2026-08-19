@@ -1,6 +1,6 @@
 # T-0213 — Deployment correction closure
 
-**Status:** Release-plumbing correction implemented; focused closure in progress
+**Status:** Complete; merged, post-merge verified, and pushed
 
 **Baseline:** `origin/main@4c28e2223b89fb203709413400770944778c071c`
 

@@ -174,3 +174,14 @@
 - Narrow performance/reliability and documentation re-reviews pass. The
   reviewers confirm that worker bounding preserves coverage/test semantics and
   that the records do not overclaim the still-pending post-merge release run.
+
+## 2026-08-19 — post-merge closure
+
+- `pnpm --config.verify-deps-before-run=false verify:release` passes on merged
+  `main` with the bounded global worker profile.
+- All deterministic gates pass. Vitest reports 264 passing files, 4 skipped
+  files, 4,269 passing tests, and 19 skipped tests in 168.04 seconds.
+- Coverage passes at 93.89% statements, 90.34% branches, 93.74% functions, and
+  95.04% lines.
+- No product behavior, public API, serialized contract, or individual test
+  timeout changed in the worker-concurrency correction.
