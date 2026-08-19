@@ -122,3 +122,25 @@
   remains, diagnostics contain no credential, and stream buffers/cancellation
   remain bounded. The reviewed Message Board branch merged and was pushed to
   integration as `6aba4ffb`.
+
+## 2026-08-19 — integrated release closure
+
+- The first complete integrated release run passed every deterministic gate and
+  all 4,309 executed tests, but its 12,983/14,425 branch result sat at the exact
+  minimum required hit count.
+- A read-only coverage mapping function, explicitly dispatched as
+  `gpt-5.6-luna` / `medium`, identified the only missing branch in the changed
+  To-Do settings parser. Runtime telemetry was unavailable; the immutable
+  configured profile is the provenance.
+- A test-only correction retained the existing positive-safe-integer contract
+  with `PROCESS_COUNT=1.5`. Focused validation passed 17/17 with 100% branch
+  coverage for the settings parser, and commit `97bdb689` was pushed
+  immediately.
+- The final `pnpm verify:release` run exited zero: 270 test files passed, four
+  were intentionally skipped; 4,310 tests passed, 19 were intentionally
+  skipped, and none failed. Coverage was 93.42% statements, 90.01% branches,
+  92.94% functions, and 94.57% lines.
+- The integration worktree was clean after verification. The verified history
+  and this closure record are pushed to the correction branch and then
+  fast-forwarded to `origin/main` without touching the human-owned dirty primary
+  worktree.

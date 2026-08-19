@@ -1397,13 +1397,13 @@ in `build-protocol/tasks/T-0102-preserve-message-board-username/TASK.md`.
 
 ### T-0214: Beginner-ready To-Do and Message Board correction
 
-T-0214 is in progress from `origin/main@8c878f042`. It corrects the proven
-sustained-subscription lifetime defect, removes unrequested signing/session
-concepts from Message Board, gives To-Do and Message Board purpose-named source
-and complete commented launchers, wires one stock UI through every documented
-browser route, and verifies all locally advertised modes. Kubernetes remains a
-static cluster reference. Orders, Projects, GCE, and GKE receive a read-only
-beginner audit only. The canonical ledger is in
+T-0214 is complete, reviewed, release-verified, and pushed to `main`. It fixes
+the proven sustained-subscription lifetime defect, removes unrequested
+signing/session concepts from Message Board, gives To-Do and Message Board
+purpose-named source and complete commented launchers, wires one stock UI
+through every documented browser route, and verifies all locally advertised
+modes. Kubernetes remains a static cluster reference. Orders, Projects, GCE,
+and GKE received a read-only beginner audit only. The canonical ledger is in
 `build-protocol/tasks/T-0214-beginner-example-correction/TASK.md`.
 
 ## Parallelism Without Rework

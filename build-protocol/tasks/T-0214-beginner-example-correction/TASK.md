@@ -1,6 +1,6 @@
 # T-0214 — Beginner-ready To-Do and Message Board correction
 
-**Status:** In progress
+**Status:** Complete; release verified and pushed to `main`
 
 **Baseline:** `origin/main@8c878f0428d1b9ea959b47bf4b2155f4993a092d`
 

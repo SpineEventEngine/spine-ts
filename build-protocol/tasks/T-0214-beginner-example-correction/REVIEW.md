@@ -111,5 +111,6 @@ the final branch.
   `gpt-5.6-terra` / `high`; runtime telemetry unavailable. PASS with no P0-P2
   finding after 42 trust/stream tests and five deployment/credential checks.
 
-All canonical concerns have a recorded disposition. No review finding remains
-open before integrated release verification.
+All canonical concerns have a recorded disposition. No review finding remained
+open before integrated release verification, and the final release profile
+passed from the reviewed, integrated source.

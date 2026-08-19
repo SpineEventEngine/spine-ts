@@ -8,10 +8,24 @@
 - Focused unchanged baselines: auth subscriptions 56/56; To-Do 83/83; Message
   Board app/model/UI 131/131.
 
-## Remaining before closure
+## Integrated release verification
 
-- Integrated release verification and the final documented Message Board
-  process left running for human testing.
+- Final integration endpoint before this record-only closure:
+  `97bdb689` on `codex/second-correction-integration`.
+- `pnpm verify:release` exited successfully after all Node, Proto, generated
+  build, tooling, ESLint, cleanup, TSDoc, copyright, formatting,
+  documentation, Buf, generated-current, logging-containment, and
+  release-readiness gates passed.
+- The complete coverage-enabled test run passed 4,310 tests, with 19
+  intentional skips and no failures.
+- Global coverage was 93.42% statements (22,089/23,644), 90.01% branches
+  (12,984/14,425), 92.94% functions (5,428/5,840), and 94.57% lines
+  (20,479/21,653).
+- A focused invalid-process-count test supplies a one-branch safety margin for
+  the release branch threshold without excluding source or changing product
+  behavior.
+- The final documented Message Board process is started after the verified
+  branch is pushed so that the human can test the exact delivered application.
 
 ## Framework subscription lifetime
 
