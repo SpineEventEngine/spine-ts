@@ -7,6 +7,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -20,7 +21,12 @@ function executable(path: string, source: string): void {
   writeFileSync(path, source);
   chmodSync(path, 0o755);
 }
-function fixture(mode: string): { root: string; trace: string; release: string } {
+function fixture(mode: string): {
+  root: string;
+  trace: string;
+  release: string;
+  temporary: string;
+} {
   const root = mkdtempSync(join(tmpdir(), "todo-launcher-"));
   roots.push(root);
   const bin = join(root, "bin");
@@ -29,6 +35,8 @@ function fixture(mode: string): { root: string; trace: string; release: string }
   mkdirSync(bin);
   const trace = join(root, "trace");
   const release = join(root, "release");
+  const temporary = join(root, "temporary");
+  mkdirSync(temporary);
   executable(join(bin, "pnpm"), "#!/usr/bin/env bash\nexit 0\n");
   executable(join(bin, "uuidgen"), "#!/usr/bin/env bash\necho fixed-id\n");
   executable(
@@ -41,13 +49,13 @@ function fixture(mode: string): { root: string; trace: string; release: string }
   );
   executable(
     join(scripts, "start-delivery-server.sh"),
-    `#!/usr/bin/env bash\n${mode === "delivery-dead" ? "echo delivery-failed; exit 7" : mode === "gated" ? "while [[ ! -e $RELEASE ]]; do sleep .05; done; echo 'Delivery server listening at fake'; sleep 30" : "sleep .2; echo 'Delivery server listening at fake'; sleep 30"}\n`,
+    `#!/usr/bin/env bash\necho "delivery-pid:$BASHPID" >> "$TRACE"\n${mode === "delivery-dead" ? "echo delivery-failed; exit 7" : mode === "gated" ? "while [[ ! -e $RELEASE ]]; do sleep .05; done; echo 'Delivery server listening at fake'; sleep 30" : "sleep .2; echo 'Delivery server listening at fake'; sleep 30"}\n`,
   );
   executable(
     join(scripts, "start-multi-process-app.sh"),
-    "#!/usr/bin/env bash\necho app-start >> \"$TRACE\"; echo 'To-Do multi-process Coordinator ready at fake'; sleep 30\n",
+    '#!/usr/bin/env bash\necho "app-pid:$BASHPID" >> "$TRACE"; echo app-start >> "$TRACE"; echo \'To-Do multi-process Coordinator ready at fake\'; sleep 30\n',
   );
-  return { root, trace, release };
+  return { root, trace, release, temporary };
 }
 async function run(
   root: string,
@@ -65,6 +73,7 @@ async function run(
         TRACE: trace,
         MODE: mode,
         RELEASE: join(root, "release"),
+        TMPDIR: join(root, "temporary"),
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -92,16 +101,21 @@ async function run(
 }
 afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })));
 describe("multi-process launcher", () => {
-  it("gates app start on delayed Delivery readiness and removes only the captured container on SIGINT", async () => {
-    const { root, trace, release } = fixture("gated");
-    const pending = run(root, trace, "gated", "SIGINT");
+  it.each(["SIGINT", "SIGTERM"] as const)("gates app start and cleans on %s", async (signal) => {
+    const { root, trace, release, temporary } = fixture("gated");
+    const pending = run(root, trace, "gated", signal);
     await new Promise((resolve) => setTimeout(resolve, 250));
     expect(existsSync(trace) ? readFileSync(trace, "utf8") : "").not.toContain("app-start");
     writeFileSync(release, "ready");
     const result = await pending;
-    expect(result.code).toBe(130);
+    expect(result.code).toBe(signal === "SIGINT" ? 130 : 143);
     expect(readFileSync(trace, "utf8")).toContain("rm --force captured-container-id");
     expect(readFileSync(trace, "utf8")).not.toContain("todo-datastore-fixed-id");
+    expect(readdirSync(temporary)).toEqual([]);
+    for (const line of readFileSync(trace, "utf8").split("\n")) {
+      const match = /(?:delivery|app)-pid:(\d+)/u.exec(line);
+      if (match?.[1] !== undefined) expect(() => process.kill(Number(match[1]), 0)).toThrow();
+    }
   });
   it("prints emulator diagnostics and cleans the captured ID on early exit", async () => {
     const { root, trace } = fixture("ok");
