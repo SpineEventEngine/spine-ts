@@ -186,19 +186,51 @@ export interface ManagedServerApplicationHandle {
  * Starts a managed parent and its complete-replica child processes.
  */
 export const ManagedServerApplication: Readonly<{
+  // prettier-ignore
+
+  /**
+   *
+   * Starts a managed parent and complete-replica children without taking
+   * process-signal ownership.
+   *
+   * The caller closes the returned handle. This is for an embedding host that
+   * already owns `SIGINT` and `SIGTERM` handling.
+   *
+   * @param options Configures the managed application replicas.
+   * @returns The started managed application handle.
+   */
+  start(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle>;
+
+  /**
+   *
+   * Starts a managed parent and complete-replica children with process-signal
+   * ownership.
+   *
+   * @param options Configures the managed application replicas.
+   * @returns The started managed application handle.
+   */
   run(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle>;
 }> = Object.freeze({
+  async start(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle> {
+    return ManagedServerValues.start(options, false);
+  },
   async run(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle> {
+    return ManagedServerValues.start(options, true);
+  },
+});
+
+const ManagedServerValues = Object.freeze({
+  async start(
+    options: ManagedServerApplicationOptions,
+    manageProcessSignals: boolean,
+  ): Promise<ManagedServerApplicationHandle> {
     if (!Number.isSafeInteger(options.processCount) || options.processCount < 1) {
       throw new Error("Managed server processCount must be a positive safe integer.");
     }
     ManagedServerCoordinatorValues.coordinatorPort(options.port);
     if (process.env[childMarker] === "true") return ManagedServerValues.child(options);
-    return ManagedServerValues.parent(options);
+    return ManagedServerValues.parent(options, manageProcessSignals);
   },
-});
-
-const ManagedServerValues = Object.freeze({
   async child(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle> {
     const server = await options.createServer({ host: "127.0.0.1", port: 0 });
     try {
@@ -323,8 +355,11 @@ const ManagedServerValues = Object.freeze({
       close,
     };
   },
-  parent(options: ManagedServerApplicationOptions): Promise<ManagedServerApplicationHandle> {
-    return new ManagedServerCoordinator(options).start();
+  parent(
+    options: ManagedServerApplicationOptions,
+    manageProcessSignals: boolean,
+  ): Promise<ManagedServerApplicationHandle> {
+    return new ManagedServerCoordinator({ ...options, manageProcessSignals }).start();
   },
   closeFromEvent(close: () => Promise<void>): void {
     // spine-log-boundary: server.managed_replica_child_close
@@ -475,6 +510,7 @@ export interface ManagedServerCoordinatorDependencies {
 
 type ManagedServerCoordinatorOptions = Omit<ManagedServerApplicationOptions, "port"> & {
   readonly port?: number;
+  readonly manageProcessSignals?: boolean;
 };
 
 /**
@@ -533,7 +569,7 @@ export class ManagedServerCoordinator {
     this.#ready = new Promise<void>((resolve) => {
       this.#resolveReady = resolve;
     });
-    this.#installSignalHandlers();
+    if (this.#options.manageProcessSignals !== false) this.#installSignalHandlers();
     for (const slot of this.#slots) this.#start(slot);
     await this.#ready;
     try {
