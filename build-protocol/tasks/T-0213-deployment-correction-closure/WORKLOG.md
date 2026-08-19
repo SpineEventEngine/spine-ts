@@ -43,3 +43,16 @@
 - Read-only scope: frozen dependency state, generated/tooling builds, affected
   release metadata/removal/Todo tests, lint/policy/documentation/format/diff
   gates, and exact failure classification. No edits or subagents.
+
+## 2026-08-19 — cheap preflight and current documentation
+
+- The configured mechanical function completed with no edits. Runtime
+  telemetry was unavailable; the immutable `gpt-5.6-luna` / `low` dispatch is
+  the recorded profile.
+- Frozen installation, generated and tooling typechecks, 66 focused tests,
+  removal/cleanup/TSDoc/copyright/logging checks, documentation, release
+  readiness, formatting, and diff hygiene passed.
+- Corrected only current release-plan claims made false by the deployment
+  correction. The former local-IPC To-do packet remains as explicitly
+  superseded history; active gates now require managed complete replicas,
+  Coordinator forwarding, Delivery, and external-event acceptance.

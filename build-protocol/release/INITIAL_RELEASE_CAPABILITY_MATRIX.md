@@ -40,16 +40,33 @@ imports and 111 relative Markdown links. Older row-level T-0042 counts below
 remain historical evidence for that audit endpoint and do not override this
 addendum.
 
+## Deployment Correction Addendum
+
+The deployment correction supersedes the active interpretation of rows 15, 21,
+and 31. Same-host ZeroMQ signal routing and the To-do local-IPC demonstration
+were removed. A deployed server now uses deployer-selected complete application
+replicas, the private Node Coordinator for unary command/query forwarding,
+Gateway-owned subscription fan-out, direct Delivery observation in every
+replica, and process-local in-memory IntegrationBroker channels. The retained
+historical rows below describe their original audit endpoint; they are not
+current release requirements.
+
+Current correction evidence is the managed replica lifecycle, Coordinator,
+remote Delivery readiness, managed external-event, Message Board container and
+Compose suites, together with the removed-routing guard. The current API
+inventory includes 247 server exports and 7 transport exports; it contains no
+ZeroMQ export subpath.
+
 ## Source Inventory
 
-| Governing source                         | Active requirement groups audited                                     | Status   |
-| ---------------------------------------- | --------------------------------------------------------------------- | -------- |
-| `build-protocol/TECHNICAL_SPEC.md`       | Protobuf-first runtime, handlers, routing, processes, compatibility   | Complete |
-| `build-protocol/PROTOBUF_CONTRACT.md`    | copied wire contract, generation, metadata, type URLs, validation     | Complete |
-| `build-protocol/DEVELOPER_API.md`        | public API, transactions, delivery, services, testing                 | Complete |
-| `build-protocol/RUNTIME_ARCHITECTURE.md` | buses, storage, delivery, transport, lifecycle                        | Complete |
-| `build-protocol/TODO_EXAMPLE_SPEC.md`    | public specimen, real services, black-box and local IPC demonstration | Complete |
-| `build-protocol/CODE_QUALITY.md`         | package layout, checks, documentation, coverage, release security     | Complete |
+| Governing source                         | Active requirement groups audited                                         | Status   |
+| ---------------------------------------- | ------------------------------------------------------------------------- | -------- |
+| `build-protocol/TECHNICAL_SPEC.md`       | Protobuf-first runtime, handlers, routing, processes, compatibility       | Complete |
+| `build-protocol/PROTOBUF_CONTRACT.md`    | copied wire contract, generation, metadata, type URLs, validation         | Complete |
+| `build-protocol/DEVELOPER_API.md`        | public API, transactions, delivery, services, testing                     | Complete |
+| `build-protocol/RUNTIME_ARCHITECTURE.md` | buses, storage, delivery, transport, lifecycle                            | Complete |
+| `build-protocol/TODO_EXAMPLE_SPEC.md`    | public specimen, real services, black-box and managed deployment guidance | Complete |
+| `build-protocol/CODE_QUALITY.md`         | package layout, checks, documentation, coverage, release security         | Complete |
 
 ## Capability Traceability
 
