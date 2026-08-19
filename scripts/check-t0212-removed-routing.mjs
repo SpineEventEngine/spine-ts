@@ -20,6 +20,7 @@ const excludedPrefixes = [
   "build-protocol/",
   "node_modules/",
   "scripts/check-t0212-removed-routing.mjs",
+  "scripts/package-metadata.test.mjs",
 ];
 const currentNormativePaths = [
   "docs/USER_GUIDE.md",
@@ -41,12 +42,16 @@ const removedPaths = [
   "packages/server/test/server/server-context-transport-child.mjs",
   "packages/server/test/server/server-context-transport-cross-process.test.ts",
   "packages/server/test/server/server-context-transport-lifecycle.test.ts",
+  "packages/server/test/server/server-integration-broker-cross-process.test.ts",
+  "examples/todo/test/local-multi-process.test.ts",
+  "examples/todo/test-fixtures/local-multi-process-worker.mjs",
 ];
 const removedReferences = new RegExp(
   "ZeroMQ|ZeroMq|zeromq|SignalTransport|ContextTransport|RuntimeTransportBinding|" +
     "TransportTopics|TransportSubscription|TransportRouting|runtime-routing|" +
     "context-transport|runtime-transport|environment\\.transport|transport:\\s*" +
-    "(?:new\\s+)?(?:Local)?SignalTransport",
+    "(?:new\\s+)?(?:Local)?SignalTransport|server-integration-broker-cross-process|" +
+    "local-multi-process",
   "u",
 );
 const removedSettingProse = new RegExp(
@@ -54,6 +59,12 @@ const removedSettingProse = new RegExp(
     "(?:ServerEnvironment|environment)\\s+(?:exposes|owns|closes).{0,80}\\btransport\\b|" +
     "(?:delivery|environment)\\s+close\\s+runs.{0,80}\\btransport\\b",
   "iu",
+);
+const removedActiveRequirementProse = new RegExp(
+  "T-0213 security reconciliation|T-0213 owns.{0,80}security-record reconciliation|" +
+    "proves.{0,120}local\\s+multi-process behavior|" +
+    "real child-process/local-IPC test demonstrates.{0,120}local\\s+multi-process bus mode",
+  "isu",
 );
 const currentPaths = globSync("**/*", {
   nodir: true,
@@ -71,6 +82,10 @@ const failures = [
     .filter(existsSync)
     .filter((path) => readFileSync(path, "utf8").match(removedSettingProse) !== null)
     .map((path) => `removed routing setting prose remains: ${path}`),
+  ...["build-protocol/PROJECT_COMPLETION_PLAN.md"]
+    .filter(existsSync)
+    .filter((path) => readFileSync(path, "utf8").match(removedActiveRequirementProse) !== null)
+    .map((path) => `removed active deployment requirement remains: ${path}`),
 ];
 
 if (failures.length > 0) throw new Error(failures.join("\n"));

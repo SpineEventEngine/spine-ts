@@ -325,9 +325,6 @@ importers:
       '@spine-event-engine/testing':
         specifier: workspace:*
         version: link:../../packages/testing
-      '@spine-event-engine/transport':
-        specifier: workspace:*
-        version: link:../../packages/transport
 
   packages/auth:
     dependencies:

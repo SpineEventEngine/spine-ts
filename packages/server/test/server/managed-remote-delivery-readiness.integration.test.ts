@@ -111,7 +111,9 @@ it("RED-27/28 keeps the final managed subscription relay until fenced Delivery w
   await handlerGate.entered();
 
   const drained = receive(child, "drained");
+  const draining = receive(child, "draining");
   child.send({ type: "drain" });
+  await draining;
   await expect(
     commands.post(createTaskCommand("t0209-after-drain", "t0209-after-drain-task")),
   ).rejects.toMatchObject({ code: Code.Unavailable });

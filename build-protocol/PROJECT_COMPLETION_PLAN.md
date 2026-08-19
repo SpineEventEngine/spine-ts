@@ -2,8 +2,8 @@
 
 Status: Waves 9 through 13 are complete, release-verified, integrated, and
 remotely closed. The T-0203 complete-replica correction is implemented through
-the T-0212 generic-routing removal checkpoint; T-0213 security reconciliation
-is the remaining documented follow-up.
+the T-0212 generic-routing removal checkpoint; deployment-correction release
+closure is the remaining documented follow-up.
 
 Plan date: 2026-07-12
 
@@ -64,8 +64,8 @@ ordered deployment correction, not the next implementation task.
 The Gateway-hosted Integration Hub for physically split server applications is
 outside the first release. T-0212 completed the mandatory deletion of the
 generic signal-routing layer after replacement acceptance; it is not a
-retained fallback. T-0213 owns the explicitly deferred security-record
-reconciliation.
+retained fallback. The remaining closure reconciles only release commands,
+current documentation, and acceptance evidence for this correction.
 
 ## Purpose
 
@@ -80,8 +80,8 @@ true together:
 - the framework user guide describes supported workflows without exposing
   framework internals;
 - the to-do example is runnable, documented, and proves the required real
-  command, delivery, query, subscription, validation, refusal, gRPC, and local
-  multi-process behavior;
+  command, delivery, query, subscription, validation, refusal, gRPC, and
+  managed complete-replica behavior;
 - the final security review is clean or has explicit accepted exceptions;
 - the full repository release gate passes with at least 90% branch coverage;
 - generated output remains reproducible and untracked;
@@ -571,8 +571,8 @@ The project is complete only when every item below has evidence on final
 - The app starts a real local gRPC-compatible server.
 - Black-box tests prove acknowledgement, asynchronous handling, projection
   delivery, query, subscription, validation failure, and business refusal.
-- A real child-process/local-IPC test demonstrates the required local
-  multi-process bus mode without framework-internal application wiring.
+- Real managed-process tests demonstrate complete replicas, Coordinator
+  forwarding, direct Delivery observation, and Gateway subscription fan-out.
 - Example source passes all forbidden end-user API scans.
 - Example README and user guide are copy-paste accurate.
 
@@ -1059,8 +1059,8 @@ documented exclusion, stale historical text, or real defect.
 
 **Known checks:** command acknowledgement and asynchronous handling; aggregate,
 process manager, projection, query, subscription, validation, lifecycle,
-storage, local IPC, delivery, generated registry, default route, custom route,
-wire shape, and type URL.
+storage, managed complete-replica deployment, delivery, generated registry,
+default route, custom route, wire shape, and type URL.
 
 **Gate:** clean results for every relevant review concern and justified N/A
 dispositions for the rest over the matrix and any audit-only status changes. If
@@ -1130,8 +1130,8 @@ build and run a server application without reading internal source.
 8. Query and subscribe to state.
 9. Handle validation and business refusal.
 10. Test through `@spine-ts/testing` and real gRPC clients.
-11. Understand delivery guarantees, replay-safe handler expectations, local IPC
-    trust boundaries, and supported limitations.
+11. Understand delivery guarantees, replay-safe handler expectations, managed
+    complete-replica deployment boundaries, and supported limitations.
 
 **Prohibitions:** no framework envelopes in ordinary handlers, no schema-bearing
 decorators, no `@Apply`, no manual transactions, no internal IDs, no default
@@ -1143,7 +1143,11 @@ dispositions.
 
 ## Example Closure Packets
 
-### T-0040a: Local Multi-Process To-Do Mode
+### T-0040a: Historical Local Multi-Process To-Do Mode
+
+**Superseded:** The deployment correction removed this same-host signal-routing
+mode and its ZeroMQ implementation. The retained text below records the former
+audit requirement; it is not a current implementation or release gate.
 
 **Objective:** Satisfy the remaining example requirement by demonstrating real
 same-host multi-process bus behavior with the existing transport abstraction
@@ -1194,7 +1198,7 @@ public behavior after the final environment lifecycle lands.
 - default-route missing/invalid first-field ID rejection before handler call;
 - generated registry failure and recovery behavior;
 - server close waits for delivery lifecycle and leaves no listener/session;
-- real local multi-process test from T-0040a;
+- managed complete-replica lifecycle and Coordinator acceptance;
 - no private framework source imports except explicitly isolated framework test
   fixtures that are not presented as application code.
 
@@ -1202,20 +1206,21 @@ public behavior after the final environment lifecycle lands.
 handlers, schema-bearing decorators, aggregate `@Apply`, transaction controls,
 `EventIdSchema`, default-route extraction helpers, and handler materializers.
 
-**Gate:** example build and focused suite, native loopback/IPC run, public API
-scan, generated clean check, coverage, format/diff, clean relevant review
-concerns with justified N/A dispositions, then final task verify.
+**Gate:** example build and focused suite, native loopback and managed-process
+run, public API scan, generated clean check, coverage, format/diff, clean
+relevant review concerns with justified N/A dispositions, then final task
+verify.
 
 ### T-0040c: To-Do README And User Guide Closure
 
 **Objective:** Make the example independently runnable and accurately explain
-both single-process server use and the bounded local multi-process demonstration.
+single-process development plus deployer-configured managed complete replicas.
 
 **README:** concise prerequisites, generation/build, start, smoke command,
 focused tests, demonstrated features, and explicit non-production limitations.
 
 **User guide:** command variants, queries, subscriptions, validation/refusal,
-generated registry, lifecycle/shutdown, local multi-process test/mode, and links
+generated registry, lifecycle/shutdown, managed deployment guidance, and links
 to framework guidance.
 
 **Verification:** run every documented command from a clean generated state;
@@ -1289,8 +1294,8 @@ git status --short
 git ls-files 'packages/*/generated/**' 'examples/*/generated/**'
 ```
 
-Run the full verify gate natively because loopback and local IPC tests require
-real OS resources. Record test-file/test counts, all coverage dimensions,
+Run the full verify gate natively because loopback and managed-process tests
+require real OS resources. Record test-file/test counts, all coverage dimensions,
 TypeDoc/API counts, Proto lint, and generated-clean results.
 
 Also run explicit release smoke checks:
@@ -1299,7 +1304,7 @@ Also run explicit release smoke checks:
   export and Markdown link check: `pnpm check:release-readiness`;
 - start the to-do server on an ephemeral port;
 - post, query, subscribe, cancel, and close through real clients;
-- run the local multi-process example acceptance;
+- run managed replica, Coordinator, Delivery, and external-event acceptance;
 - run forbidden end-user API scans;
 - run stale status/docs wording scans;
 - run package build/import smoke for every public package export;
