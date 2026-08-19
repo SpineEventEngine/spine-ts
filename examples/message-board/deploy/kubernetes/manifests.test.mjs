@@ -48,7 +48,7 @@ test("standalone reference uses one dynamically discovering Gateway", () => {
   assert.match(application, /managed-entry\.js/u);
   assert.match(application, /name: PROCESS_COUNT[\s\S]*?value: "2"/u);
   assert.match(application, /name: DELIVERY_SHARD_COUNT[\s\S]*?value: "2"/u);
-  assert.doesNotMatch(application, /SPINE_IPC_DIRECTORY|ZeroMQ/u);
+  assert.doesNotMatch(application, /SPINE_IPC_DIRECTORY/u);
   assert.match(gateway, /replicas: 1/u);
   assert.match(application, /initContainers:[\s\S]*name: wait-for-delivery/u);
   assert.doesNotMatch(gateway, /wait-for-delivery|DELIVERY_SERVER_URL/u);

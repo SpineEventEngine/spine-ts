@@ -680,7 +680,7 @@ clients, acknowledgement handling, eventual projection reads, subscriptions,
 validation/rejections, generated-registry recovery, and listener/session cleanup.
 
 The local multi-process test starts a separate child process and same-host
-ZeroMQ IPC fixture, sends one generated command from the parent, and reads the
+local fixture, sends one generated command from the parent, and reads the
 row projected by the child. Its cleanup stops the child, closes the parent
 listener and transport, and removes the temporary IPC directory on success and
 failure paths. It is a focused test fixture—not a public multi-process

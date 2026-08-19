@@ -528,7 +528,7 @@ channel factory. Production resolution still requires `storageFactory` and the
 complete application `typeRegistry`; it does not fall back to in-memory storage
 or to the core-only registry. Its legacy `transport` setting is optional: when
 present, it opens legacy runtime signal bindings; when absent, none are opened.
-See the [transport reference](../transport/REFERENCE.md) for same-host ZeroMQ
+See the [transport reference](../transport/REFERENCE.md) for
 setup.
 
 `ThirdPartyContext.singleTenant(name)` or `.multitenant(name)` creates the
