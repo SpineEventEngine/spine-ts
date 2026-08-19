@@ -337,7 +337,17 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     "spine-ts/standalone-gateway:local",
   ]);
   waitForLog(gateway, /MessageBoard gateway ready/u);
-  exerciseRegistry(network, "http://gateway:18082", "http://localhost:18082", messageBoard);
+  const activationStarted = Date.now();
+  try {
+    exerciseRegistry(network, "http://gateway:18082", "http://localhost:18082", messageBoard);
+  } catch (error) {
+    throw new Error(
+      `Browser subscription activation failed after ${String(Date.now() - activationStarted)}ms.\n` +
+        `Coordinator (${application}) logs:\n${containerLogs(application)}\n` +
+        `Gateway (${gateway}) logs:\n${containerLogs(gateway)}`,
+      { cause: error },
+    );
+  }
   return [delivery, application, combined, gateway];
 }
 
