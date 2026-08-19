@@ -29,7 +29,7 @@ if (endpoint === undefined)
   throw new Error("Managed remote Delivery fixture requires an endpoint.");
 
 const delivery = RemoteDelivery.connectTo({ endpoint });
-// The application owns strategy selection; this fixture deliberately selects it
+// The application owns strategy selection; this fixture deliberately applies it
 // without comparing or serializing its identity.
 const strategy = UniformAcrossAllShards.forNumber(2);
 
@@ -45,14 +45,16 @@ const managed = await ManagedServerApplication.run({
     const server = Server.atPort(port, { host });
     const { InMemorySubscriptionRegistry } = await import("../../dist/index.js");
     server.add(
-      await createTodoContext({ subscriptionRegistry: new InMemorySubscriptionRegistry() }),
+      await createTodoContext({
+        deliveryStrategy: strategy,
+        subscriptionRegistry: new InMemorySubscriptionRegistry(),
+      }),
     );
     const running = await server.start();
     return running;
   },
   synchronize: async () => {
     await delivery.open();
-    if (strategy.shardCount !== 2) throw new Error("Fixture strategy selection was not retained.");
   },
 });
 

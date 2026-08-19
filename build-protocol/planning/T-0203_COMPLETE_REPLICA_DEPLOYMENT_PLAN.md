@@ -559,8 +559,8 @@ absence proofs.
 
 **Depends on:** T-0206 and T-0208.
 
-**Owns:** managed-child Delivery readiness admission, explicit-strategy
-validation, DRAINING lifecycle, active-work quiescence, and remote
+**Owns:** managed-child Delivery readiness admission, application-owned
+strategy configuration proof, DRAINING lifecycle, active-work quiescence, and remote
 multi-process/multi-node fixtures. It does not change lease authority.
 
 **Outcome:** every child observes Delivery directly; subscription streams stay

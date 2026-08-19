@@ -101,6 +101,8 @@ describe("Server", () => {
         close: () => Promise.resolve(),
       };
       expect(runningServerAccess.subscriptionRegistries(unrelated)).toBeUndefined();
+      await expect(runningServerAccess.drainDelivery(unrelated)).resolves.toBeUndefined();
+      await expect(runningServerAccess.drainDelivery(running)).resolves.toBeUndefined();
     } finally {
       await running.close();
     }

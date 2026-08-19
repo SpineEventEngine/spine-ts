@@ -161,6 +161,10 @@ const fakeChild = (pid: number): ChildProcess => {
   }) as unknown as ChildProcess;
 };
 
+const fakeSend = (child: ChildProcess): ReturnType<typeof vi.fn> => {
+  return Reflect.get(child, "send") as ReturnType<typeof vi.fn>;
+};
+
 describe("ManagedServerApplication", () => {
   it("keeps private Coordinator membership facts absent for opaque managed handles", () => {
     const opaque = {
@@ -592,8 +596,126 @@ describe("ManagedServerApplication", () => {
     const closing = coordinator.close();
 
     expect(managedServerCoordinatorAccess.readyMembers(coordinator)).toEqual([]);
+    child.emit("message", {
+      type: "closed",
+      slot: String(replica.slot),
+      incarnation: replica.incarnation,
+    });
     child.emit("exit");
     await closing;
+  });
+
+  it("admits a replacement when retained subscriptions were never activated", async () => {
+    const clock = new FakeClock();
+    const children: ChildProcess[] = [];
+    const incarnations: string[] = [];
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.reject(new Error("unused")),
+      },
+      {
+        clock,
+        spawn: (_url, _slot, incarnation) => {
+          const child = fakeChild(children.length + 1);
+          children.push(child);
+          incarnations.push(incarnation);
+          return child;
+        },
+        openCoordinator: () =>
+          Promise.resolve({
+            beginDrain: () => Promise.resolve(),
+            close: () => Promise.resolve(),
+          } as NodeCoordinator),
+      },
+    );
+    const started = coordinator.start();
+    const initial = itemAt(children, 0, "the initial replica");
+    initial.emit("message", {
+      type: "ready",
+      slot: "0",
+      incarnation: itemAt(incarnations, 0, "the initial incarnation"),
+      endpoint: "http://127.0.0.1:1",
+    });
+    const handle = await started;
+
+    initial.emit("exit");
+    clock.advance(250);
+    const replacement = itemAt(children, 1, "the replacement replica");
+    const incarnation = itemAt(incarnations, 1, "the replacement incarnation");
+    replacement.emit("message", {
+      type: "synchronizing",
+      slot: "0",
+      incarnation,
+      endpoint: "http://127.0.0.1:2",
+    });
+
+    await coordinator.onRelaySynchronized();
+    expect(fakeSend(replacement)).toHaveBeenCalledWith({ type: "activate" }, expect.any(Function));
+    replacement.emit("message", {
+      type: "ready",
+      slot: "0",
+      incarnation,
+      endpoint: "http://127.0.0.1:2",
+    });
+    expect(coordinator.readyMembers()).toHaveLength(1);
+    (replacement.send as ReturnType<typeof vi.fn>).mockImplementation((message: unknown) => {
+      if ((message as { readonly type?: string }).type === "close") replacement.emit("exit");
+      return true;
+    });
+    await handle.close();
+  });
+
+  it("reports graceful child close failure and permits a parent retry", async () => {
+    const clock = new FakeClock();
+    const child = fakeChild(1);
+    let incarnation = "";
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.reject(new Error("unused")),
+      },
+      {
+        clock,
+        spawn: (_url, _slot, value) => {
+          incarnation = value;
+          return child;
+        },
+      },
+    );
+    const started = coordinator.start();
+    child.emit("message", {
+      type: "ready",
+      slot: "0",
+      incarnation,
+      endpoint: "http://127.0.0.1:1",
+    });
+    const handle = await started;
+    (child.send as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      (message: { readonly type?: string }) => {
+        if (message.type === "close") {
+          child.emit("message", { type: "draining", slot: "0", incarnation });
+          child.emit("message", { type: "close-failed", slot: "0", incarnation });
+        }
+        return true;
+      },
+    );
+
+    await expect(handle.close()).rejects.toThrow("Managed child server close failed.");
+
+    (child.send as ReturnType<typeof vi.fn>).mockImplementationOnce(
+      (message: { readonly type?: string }) => {
+        if (message.type === "close") {
+          child.emit("message", { type: "draining", slot: "0", incarnation });
+          child.emit("message", { type: "closed", slot: "0", incarnation });
+          child.emit("exit");
+        }
+        return true;
+      },
+    );
+    await expect(handle.close()).resolves.toBeUndefined();
   });
 
   it("waits for the exact replacement subscription before activating Delivery", async () => {
@@ -645,10 +767,10 @@ describe("ManagedServerApplication", () => {
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: "replacement-subscription" }),
     });
-    coordinator.onChildSubscriptionCreated(member, subscription);
-    coordinator.onChildSubscriptionCreated(member, subscription);
-    coordinator.onChildSubscriptionCreated({ ...member, incarnation: "stale" }, subscription);
-    coordinator.onChildSubscriptionCreated(member, create(SubscriptionSchema));
+    coordinator.onChildSubscriptionActivated(member, subscription);
+    coordinator.onChildSubscriptionActivated(member, subscription);
+    coordinator.onChildSubscriptionActivated({ ...member, incarnation: "stale" }, subscription);
+    coordinator.onChildSubscriptionActivated(member, create(SubscriptionSchema));
 
     const synchronized = coordinator.onRelaySynchronized();
     await Promise.resolve();
@@ -693,7 +815,7 @@ describe("ManagedServerApplication", () => {
     const cancelled = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: "cancelled-subscription" }),
     });
-    coordinator.onChildSubscriptionCreated(member, cancelled);
+    coordinator.onChildSubscriptionActivated(member, cancelled);
     coordinator.onChildSubscriptionCancelled({ ...member, incarnation: "stale" }, cancelled);
     coordinator.onChildSubscriptionCancelled(member, create(SubscriptionSchema));
     coordinator.onChildSubscriptionCancelled(member, cancelled);
@@ -1044,6 +1166,7 @@ describe("ManagedServerApplication", () => {
     const priorDisconnect = Object.getOwnPropertyDescriptor(process, "disconnect");
     const disconnect = vi.fn();
     const send = vi.fn((_message: unknown, callback: (error: Error | null) => void) => {
+      Object.defineProperty(process, "connected", { configurable: true, value: false });
       callback(new Error("closed"));
       return false;
     });
@@ -1062,6 +1185,7 @@ describe("ManagedServerApplication", () => {
         }),
       ).rejects.toThrow("closed");
       expect(close).toHaveBeenCalledOnce();
+      expect(disconnect).not.toHaveBeenCalled();
     } finally {
       if (priorSend === undefined) delete (process as { send?: unknown }).send;
       else Object.defineProperty(process, "send", priorSend);
@@ -1078,13 +1202,16 @@ describe("ManagedServerApplication", () => {
     const priorChild = process.env.SPINE_MANAGED_SERVER_CHILD;
     const priorSend = Object.getOwnPropertyDescriptor(process, "send");
     const priorConnected = Object.getOwnPropertyDescriptor(process, "connected");
+    const priorDisconnect = Object.getOwnPropertyDescriptor(process, "disconnect");
     const priorMessages = new Set(process.listeners("message"));
     const send = vi.fn((_message: unknown, callback: (error: Error | null) => void) => {
       callback(null);
       return true;
     });
+    const disconnect = vi.fn();
     Object.defineProperty(process, "send", { configurable: true, value: send });
     Object.defineProperty(process, "connected", { configurable: true, value: true });
+    Object.defineProperty(process, "disconnect", { configurable: true, value: disconnect });
     process.env.SPINE_MANAGED_SERVER_CHILD = "true";
     const close = vi.fn(() => Promise.resolve());
     try {
@@ -1102,14 +1229,16 @@ describe("ManagedServerApplication", () => {
       await starting;
       onMessage({ type: "ignored" }, undefined);
       expect(close).not.toHaveBeenCalled();
-      Object.defineProperty(process, "connected", { configurable: true, value: false });
       onMessage({ type: "close" }, undefined);
       await expect.poll(() => close).toHaveBeenCalledOnce();
+      await expect.poll(() => disconnect).toHaveBeenCalledOnce();
     } finally {
       if (priorSend === undefined) delete (process as { send?: unknown }).send;
       else Object.defineProperty(process, "send", priorSend);
       if (priorConnected === undefined) delete (process as { connected?: unknown }).connected;
       else Object.defineProperty(process, "connected", priorConnected);
+      if (priorDisconnect === undefined) delete (process as { disconnect?: unknown }).disconnect;
+      else Object.defineProperty(process, "disconnect", priorDisconnect);
       for (const listener of process.listeners("message")) {
         if (!priorMessages.has(listener)) process.off("message", listener);
       }
@@ -1151,7 +1280,7 @@ describe("ManagedServerApplication", () => {
       onDisconnect();
       process.off("disconnect", onDisconnect);
       await expect.poll(() => close).toHaveBeenCalledOnce();
-      expect(disconnect).toHaveBeenCalledOnce();
+      await expect.poll(() => disconnect).toHaveBeenCalledOnce();
       expect(process.listeners("disconnect")).toEqual([...priorDisconnects]);
     } finally {
       if (priorSend === undefined) delete (process as { send?: unknown }).send;

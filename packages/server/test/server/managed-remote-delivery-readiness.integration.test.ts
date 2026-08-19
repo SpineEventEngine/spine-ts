@@ -102,6 +102,16 @@ it("RED-27/28 keeps the final managed subscription relay until fenced Delivery w
   await expect(commands.post(createTaskCommand("t0209-after-drain"))).rejects.toMatchObject({
     code: Code.Unavailable,
   });
+  await expect(
+    Promise.race([
+      drained.then(() => "drained" as const),
+      new Promise<"active">((resolve) => {
+        setTimeout(() => {
+          resolve("active");
+        }, 1_100);
+      }),
+    ]),
+  ).resolves.toBe("active");
   delivery.release();
   await expect(nextUpdate).resolves.toMatchObject({ done: false });
   await drained;

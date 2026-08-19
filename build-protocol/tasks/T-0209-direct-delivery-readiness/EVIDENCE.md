@@ -144,3 +144,25 @@ passed.
   ESLint/Prettier, diff check, cleanup, TSDoc, copyright, logging containment,
   TypeDoc/API inventory, documentation audience/snippets, Proto lint/current
   output, and release-readiness.
+
+## Specialist correction evidence
+
+- Inactive subscriptions no longer create replacement waiters; direct
+  lifecycle proof admits the replacement without a synthetic activation.
+- Active subscriptions wait for the exact child activation acknowledgement.
+  Duplicate, stale, missing, cancelled, and retired acknowledgements remain
+  bounded to the current slot/incarnation/subscription tuple.
+- Child close reports `DRAINING`, then drains the existing server-owned
+  Delivery attachment while HTTP/2 subscription sessions remain open. It sends
+  `CLOSED` only after normal server close, or `CLOSE_FAILED` on rejection. The
+  parent observes the exact outcome and permits retry; unacknowledged children
+  retain the pre-existing bounded TERM/KILL fallback.
+- Real RED 27 now holds `Inbox.findManyInShard` for more than 1.1 seconds,
+  verifies Coordinator unary admission is unavailable, releases Delivery,
+  observes the final public TaskList update, and only then observes stream and
+  managed close completion. Real RED 28 proves a replacement remains outside
+  admission until its remote snapshot and retained subscription are installed.
+- Current focused behavior is **337/337** plus real-process **2/2**. Source-mode
+  coverage behavior is **378/378**; exact changed production coverage is
+  **185/194 lines (95.36%)** and **121/134 branches (90.30%)** from
+  `/tmp/spine-t0209-cov-final.mUCpeA/lcov.info`.

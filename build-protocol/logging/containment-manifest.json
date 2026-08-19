@@ -511,6 +511,20 @@
       "operation": "managed_replica.drain_ipc",
       "disposition": "no-log",
       "test": "packages/server/test/server/managed-server-application.test.ts"
+    },
+    {
+      "id": "server.managed_replica_closed_ipc",
+      "source": "../../packages/server/src/server/managed-server-application.ts",
+      "operation": "managed_replica.closed_ipc",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/managed-server-application.test.ts"
+    },
+    {
+      "id": "server.managed_replica_close_failed_ipc",
+      "source": "../../packages/server/src/server/managed-server-application.ts",
+      "operation": "managed_replica.close_failed_ipc",
+      "disposition": "no-log",
+      "test": "packages/server/test/server/managed-server-application.test.ts"
     }
   ]
 }

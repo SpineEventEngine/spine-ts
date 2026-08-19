@@ -51,14 +51,24 @@ unready if no child remains ready. A crashed child is replaced with bounded
 exponential delay; surviving children keep serving.
 The parent listens at the configured `host` and required nonzero `port` and
 forwards generated unary Command and Query gRPC calls to one READY child.
-Subscription fan-out is introduced in the later subscription slice; it is not
-part of this Coordinator. The small parent/child channel carries only lifecycle facts such as readiness
-and close. It never carries Commands, Events, queries, subscriptions, or
+The Coordinator fans each Gateway-owned logical subscription to the complete
+replicas and merges their updates. Each child observes the application's
+configured remote/shared Delivery facility directly; the parent does not proxy
+Delivery. Application assembly must select the Delivery facility and shard
+strategy appropriate to the deployment. The framework does not infer or
+certify their provenance, and managed process count neither detects CPU cores
+nor changes Delivery shard selection.
+
+Children progress `STARTING → SYNCHRONIZING → READY`. During synchronization,
+retained definitions are recreated and active streams attach before unary or
+Delivery admission; inactive definitions do not block readiness. Shutdown
+progresses `READY → DRAINING → CLOSED`: new unary and shard admission stops,
+active Delivery work may finish while subscription relays remain connected,
+then the child closes. The small parent/child channel carries only these
+lifecycle facts. It never carries Commands, Events, queries, subscriptions, or
 Delivery notifications. The parent owns `SIGINT` and `SIGTERM` cleanup for its
-children. Child listener topology remains private. Use direct `Server.run()` for one explicit local process or
-browser-oriented hosting. The application remains free to use any
-`DeliveryStrategy`; managed process count neither detects CPU cores nor changes
-Delivery shard selection.
+children. Child listener topology remains private. Use direct `Server.run()`
+for one explicit local process or browser-oriented hosting.
 
 For detailed contracts intended for coding agents, see the
 [REFERENCE.md documentation for agents](REFERENCE.md).

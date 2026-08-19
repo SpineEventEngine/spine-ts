@@ -265,8 +265,9 @@ describe("NodeCoordinator", () => {
     const first = await backend("first", { updates: 1 });
     const second = await backend("second", { updates: 1 });
     closeables.push(first.close, second.close);
+    const members = new TestReadyMembers([first.member, second.member]);
     const coordinator = await NodeCoordinator.open({
-      members: new TestReadyMembers([first.member, second.member]),
+      members,
       port: 0,
     });
     closeables.push(() => coordinator.close());
@@ -275,6 +276,7 @@ describe("NodeCoordinator", () => {
       createGrpcTransport({ baseUrl: coordinator.baseUrl }),
     );
     const subscription = await client.subscribe(create(TopicSchema));
+    expect(members.childActivations()).toBe(0);
     const updates = client.activate(subscription)[Symbol.asyncIterator]();
 
     const firstUpdate = await updates.next();
@@ -283,6 +285,7 @@ describe("NodeCoordinator", () => {
       throw new Error("expected native subscription updates");
     expect(firstUpdate.value.subscription?.id).toEqual(subscription.id);
     expect(secondUpdate.value.subscription?.id).toEqual(subscription.id);
+    expect(members.childActivations()).toBe(2);
 
     await coordinator.close();
   });
@@ -799,6 +802,7 @@ describe("SubscriptionUpdateQueue", () => {
 
 class TestReadyMembers implements ReadyMemberSource {
   readonly #listeners = new Set<() => void>();
+  #childActivations = 0;
 
   #members: readonly ReadyMember[];
   #relays: readonly ReadyMember[];
@@ -823,6 +827,14 @@ class TestReadyMembers implements ReadyMemberSource {
   onReadyMembersChange(onChange: () => void): () => void {
     this.#listeners.add(onChange);
     return () => this.#listeners.delete(onChange);
+  }
+
+  onChildSubscriptionActivated(): void {
+    this.#childActivations++;
+  }
+
+  childActivations(): number {
+    return this.#childActivations;
   }
 
   set(members: readonly ReadyMember[]): void {

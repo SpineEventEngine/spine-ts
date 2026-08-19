@@ -173,3 +173,70 @@ packages/server/test/server/managed-remote-delivery-readiness.integration.test.t
   documentation, Proto, formatting, and release-readiness check passed. The
   task is review-ready; release verification remains correctly deferred until
   specialist convergence.
+
+## 2026-08-19 — specialist review dispatch
+
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  explicitly dispatched as `gpt-5.6-terra` / `high`, no subagents; runtime
+  telemetry unavailable unless the review surface reports otherwise.
+- TypeScript/API documentation: existing `typescript_api_docs_reviewer`,
+  explicitly dispatched as `gpt-5.6-terra` / `high`, no subagents; runtime
+  telemetry unavailable unless the review surface reports otherwise.
+- Style/maintainability: existing `style_maintainability_reviewer`, explicitly
+  dispatched as `gpt-5.6-terra` / `high`, no subagents; runtime telemetry
+  unavailable unless the review surface reports otherwise.
+- Documentation completeness will be dispatched through the existing
+  `documentation_reviewer` at `gpt-5.6-luna` / `medium` when a review slot is
+  available. These are one concern-specific wave against `e374fe494`; no
+  reviewer owns edits.
+
+## 2026-08-19 — consolidated specialist correction
+
+- Style/maintainability found that the real managed fixture constructed, but
+  did not apply, its two-shard strategy. The Todo context assembly now accepts
+  the application-owned `DeliveryStrategy`, the fixture applies it, and no
+  strategy identity/provenance mechanism was added. The stale plan wording
+  requiring runtime strategy validation was removed.
+- TypeScript/API review found inaccurate readiness TSDoc and missing registry
+  ownership text. `synchronize()` now documents child prerequisites followed
+  by parent activation and final READY; the Todo option documents that its
+  context owns and closes the supplied registry.
+- Reliability found two lifecycle gaps. Subscription waiters are now created
+  only when the normal child `Activate` call begins, so an inactive logical
+  subscription cannot block replacement. Graceful child close now reports
+  exact `draining`, `closed`, and `close-failed` outcomes. The existing bounded
+  TERM/KILL fallback remains only for a child that never acknowledges drain;
+  an acknowledged child may finish legitimate Delivery work without a new
+  timeout policy, and close failure remains observable/retryable.
+- The real >1.1-second gate exposed that public `RunningServer.close()` closes
+  HTTP/2 sessions before environment detachment drains Delivery. A private
+  `runningServerAccess.drainDelivery()` step now detaches/drains the existing
+  server-owned Delivery attachment while subscription sessions remain open;
+  managed close invokes it after unary admission is removed, then performs the
+  unchanged public server close. Ordinary `Server.close()` behavior and public
+  API are unchanged.
+- Documentation review corrections describe current unary/subscription
+  topology, the application-owned remote Delivery and strategy setup, and the
+  STARTING/SYNCHRONIZING/READY/DRAINING/CLOSED lifecycle in the server README,
+  reference, API guide, and deployment plan.
+
+## 2026-08-19 — correction verification
+
+- Systematic fork-pool diagnosis found two simulated-child tests restoring
+  Vitest's real `process.disconnect()` before the asynchronous terminal IPC
+  step completed. They now await the complete mocked disconnect sequence. The
+  full managed lifecycle suite passes **55/55** without worker exit.
+- Managed lifecycle, NodeCoordinator, child subscription, durable subscription,
+  environment attachment, and server tests pass **337/337**. The real two-process
+  managed Delivery suite passes **2/2**, including a final update after work is
+  held beyond the former one-second close grace and safe replacement admission.
+- Source-mode coverage tests pass **378/378**. Fresh LCOV at
+  `/tmp/spine-t0209-cov-final.mUCpeA/lcov.info`, intersected with the exact
+  `origin/main...working-tree` production diff, reports **185/194 executable
+  lines (95.36%)** and **121/134 branches (90.30%)**, without exclusions.
+- Generated and tooling typechecks, affected ESLint, cleanup, TSDoc, copyright,
+  logging containment, TypeDoc/API inventory, documentation audience/snippets,
+  formatting, release-readiness, and diff whitespace checks pass. The direct
+  coverage command's only nonzero condition is the intentionally irrelevant
+  whole-large-module threshold; all 378 tests pass and the required exact
+  changed-range gate is green.

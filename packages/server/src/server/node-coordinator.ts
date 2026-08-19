@@ -137,12 +137,12 @@ export interface ReadyMemberSource {
   onRelayMembersChange(onChange: () => void): () => void;
 
   /**
-   * Records the exact child subscription created during relay reconciliation.
+   * Records the exact child subscription whose activation started during reconciliation.
    *
    * @param member Supplies the member that owns the child subscription.
-   * @param subscription Supplies the created child subscription.
+   * @param subscription Supplies the activating child subscription.
    */
-  onChildSubscriptionCreated?(member: ReadyCoordinatorMember, subscription: Subscription): void;
+  onChildSubscriptionActivated?(member: ReadyCoordinatorMember, subscription: Subscription): void;
 
   /**
    * Clears a child-installation wait when the matching native child is cancelled.
@@ -651,12 +651,13 @@ const NodeCoordinatorValues = Object.freeze({
           ),
           { signal },
         );
-        members?.onChildSubscriptionCreated?.(member, created);
         return toBinary(SubscriptionSchema, created);
       },
       activate: async (child, updates, signal) => {
+        const subscription = fromBinary(SubscriptionSchema, child);
+        members?.onChildSubscriptionActivated?.(member, subscription);
         for await (const update of createClient(SubscriptionService, transport).activate(
-          fromBinary(SubscriptionSchema, child),
+          subscription,
           { signal },
         ))
           await updates(toBinary(SubscriptionUpdateSchema, update));

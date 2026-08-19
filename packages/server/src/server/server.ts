@@ -881,6 +881,14 @@ export interface RunningServerAccess {
   subscriptionRegistries(
     server: RunningServer,
   ): readonly StandSubscriptionRegistry[] | undefined;
+
+  /**
+   * Returns completion after draining Delivery before managed network close.
+   *
+   * @param server Supplies the local running server.
+   * @returns Completion after its Delivery attachment drains.
+   */
+  drainDelivery(server: RunningServer): Promise<void>;
 }
 
 /**
@@ -893,6 +901,9 @@ export const runningServerAccess: RunningServerAccess = Object.freeze({
     return runningContexts
       .get(server)
       ?.map((context) => boundedContextAccess.subscriptionRegistry(context));
+  },
+  drainDelivery(server: RunningServer): Promise<void> {
+    return server instanceof RunningHttp2Server ? server.drainDelivery() : Promise.resolve();
   },
 });
 
@@ -969,6 +980,21 @@ class RunningHttp2Server implements RunningServer {
 
   hasPendingClose(): boolean {
     return this.#closed === undefined;
+  }
+
+  /**
+   * Drains the server-owned Delivery attachment while network sessions remain available.
+   *
+   * @returns Completion after the attachment drains.
+   */
+  async drainDelivery(): Promise<void> {
+    if (this.#attachmentDetached) return;
+    if (serverEnvironmentAccess.detachRetryPending(this.#environment, this.#attachment)) {
+      await serverEnvironmentAccess.retryDetach(this.#environment, this.#attachment);
+    } else {
+      await serverEnvironmentAccess.detach(this.#environment, this.#attachment);
+    }
+    this.#attachmentDetached = true;
   }
 
   async #closeOnce(): Promise<void> {
