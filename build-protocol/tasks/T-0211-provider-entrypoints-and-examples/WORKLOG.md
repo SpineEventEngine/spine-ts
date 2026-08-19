@@ -179,3 +179,19 @@
   Delivery exercise. Earlier HTTP 503 diagnosis proved that unavailable
   Coordinator replicas, not discovery timing, caused the transient failure;
   the packaged emulator branch restored child readiness without a retry.
+
+## 2026-08-19 — integrated convergence
+
+- Merged the runtime, provider, and example lanes in the isolated T-0211
+  worktree. Deterministic integration corrections were limited to strict lint,
+  TSDoc, cleanup-ledger, snippet, and test-narrowing requirements; no new
+  runtime concept or deployment behavior was introduced.
+- The complete deterministic profile passed. The canonical bounded verifier
+  then passed 25 files and 415 tests, followed by 12/12 Node deployment
+  contracts.
+- All task-relevant specialist findings are resolved and affected lanes passed
+  re-review. The consolidated documentation and final security wave remains
+  assigned to T-0213 after the T-0212 deletion boundary.
+- T-0211 is review-complete and ready for isolated main integration. The next
+  milestone is T-0212: delete ZeroMQ and generic signal routing now that the
+  replacement deployment path has retained real acceptance.

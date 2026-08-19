@@ -152,3 +152,32 @@ Focused source coverage for `managed-server-application.ts` is 93.80%
 statements, 92.02% branches, and 96.68% lines. Its exact
 `a67daeb9b...working-tree` changed executable intersection is **10/11 lines**
 (90.91%) and **4/4 branches** (100%).
+
+## Integrated verification — 2026-08-19
+
+- `pnpm verify:generated-gates` passed the generated and tooling builds,
+  repository ESLint, cleanup/TSDoc/copyright policies, formatting, API and
+  audience documentation, TypeScript snippets, Buf, generated-output
+  cleanliness, logging containment, and release-readiness checks.
+- The canonical bounded task verifier passed **25/25 files and 415/415 tests**
+  across the affected server runtime, GCE/GKE providers, and managed examples.
+- The separate Node deployment contracts passed **12/12** for one-node and
+  multi-node topology, Kubernetes ownership, Envoy policy, and the documented
+  managed-node Delivery setup.
+- The retained live evidence remains green: managed container smoke **5/5**,
+  one-node Compose **3/3**, and two-node managed Compose **1/1**, each with
+  cleanup.
+
+## Review dispositions — 2026-08-19
+
+- Runtime TypeScript/API and performance/reliability concerns passed after the
+  optional legacy transport and caller-owned managed-start corrections.
+- Provider TypeScript/API and performance/reliability concerns passed after
+  Coordinator readiness alignment and exact provider-owned signal composition.
+- Example style/maintainability and performance/reliability concerns passed
+  after native assembly reuse, corrected deployment ownership, live lifecycle
+  fixtures, and complete Delivery setup documentation.
+- Public documentation was reviewed in the API/style lanes and is protected by
+  API inventory, audience, snippet, topology, and documented-command checks.
+  The consolidated beginner-documentation review and final security review are
+  deliberately owned by T-0213 after T-0212 removes the superseded transport.

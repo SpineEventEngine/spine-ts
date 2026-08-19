@@ -1,6 +1,6 @@
 # T-0211 — Provider entrypoints and examples
 
-**Status:** In progress
+**Status:** Review-complete; ready for isolated integration
 
 **Baseline:** `origin/main@f3a2d92b30537c8290dee2c963d079d4d2f978dc`
 
