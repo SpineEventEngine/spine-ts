@@ -185,3 +185,28 @@ only.
   a bounded semantic name), and its TypeScript transport-boundary necessity is
   recorded in the existing T-0080D ledger. The transport conformance title and
   managed acceptance titles are split without changing behavior.
+
+## 2026-08-19 — final consolidated re-review correction
+
+- The same existing `implementer` role completed this bounded correction with
+  explicit `gpt-5.6-terra` / `medium` configuration. Runtime telemetry is not
+  exposed; no subagent was used.
+- Retained RED:
+  `pnpm exec vitest run packages/server/test/server/environment-attachment.test.ts -t 'releases an admitted reservation after lease loss'`.
+  Before the hook, `retireOwners()` timed out because the admitted reservation
+  was never dispatched or settled after lease loss.
+- GREEN adds `onRunSettled` only to the internal `DeliveryControlledRun` and
+  existing `deliverySupervisorAccess` seam. The environment group releases
+  undelivered reservations for the settling shard at every controlled-run
+  terminal path; a concurrently running shard keeps its reservations. The
+  release does not acknowledge the pending Inbox row. A recovery worker then
+  delivers the row once.
+- Affected behavior and coverage command passes 4 files / 145 tests. LCOV
+  intersection against `4a6d2c2ae68348a7297efaea0eea7f27c90564e7` is 22/22
+  changed executable lines and 4/4 changed branches (100% each).
+- Generated build/typecheck, tooling typecheck, scoped ESLint, cleanup,
+  TSDoc, API docs, copyright, logging containment, workspace-local format
+  check, audience docs, Buf/generated-output checks, release-readiness, and
+  `git diff --check` pass. Emitted declarations retain the original root
+  `DeliveryRunOptions` and `DeliverySupervisorOptions`; the new hook occurs
+  only in the internal `delivery-run-control` declaration.

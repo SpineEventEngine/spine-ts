@@ -68,6 +68,7 @@ export class DeliveryRunControl {
       )
       .finally(() => {
         options.signal.removeEventListener("abort", abort);
+        options.onRunSettled?.();
       });
   }
 
@@ -100,4 +101,11 @@ export interface DeliveryControlledRun extends DeliveryRunOptions {
    * @internal
    */
   readonly acceptMessage?: (message: InboxMessage) => boolean;
+
+  /**
+   * Completes private admission cleanup when the controlled run settles before dispatch.
+   *
+   * @internal
+   */
+  readonly onRunSettled?: () => void;
 }

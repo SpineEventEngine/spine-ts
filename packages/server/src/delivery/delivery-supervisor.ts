@@ -27,6 +27,7 @@ const deliverySupervisorAdmissions = new WeakMap<
   DeliverySupervisor,
   (message: InboxMessage) => boolean
 >();
+const deliverySupervisorFinalizers = new WeakMap<DeliverySupervisor, (shard: ShardIndex) => void>();
 const deliverySupervisors = new WeakSet<DeliverySupervisor>();
 
 interface DeliverySupervisorAccess {
@@ -35,6 +36,10 @@ interface DeliverySupervisorAccess {
   installAdmission(
     supervisor: DeliverySupervisor,
     admission: (message: InboxMessage) => boolean,
+  ): void;
+  installFinalization(
+    supervisor: DeliverySupervisor,
+    onRunSettled: (shard: ShardIndex) => void,
   ): void;
 }
 
@@ -323,10 +328,12 @@ export class DeliverySupervisor {
   async #run(shard: ShardIndex, key: string): Promise<void> {
     try {
       const admission = deliverySupervisorAdmissions.get(this);
+      const finalization = deliverySupervisorFinalizers.get(this);
       await this.#runs.run({
         shard,
         onMessage: this.#onMessage,
         ...(admission === undefined ? {} : { acceptMessage: admission }),
+        ...(finalization === undefined ? {} : { onRunSettled: () => finalization(shard) }),
         signal: this.#controller.signal,
       });
     } finally {
@@ -548,6 +555,18 @@ export const deliverySupervisorAccess: DeliverySupervisorAccess = Object.freeze(
       throw new TypeError("Delivery supervisor admission requires a DeliverySupervisor instance.");
     }
     deliverySupervisorAdmissions.set(supervisor, admission);
+  },
+
+  installFinalization(
+    supervisor: DeliverySupervisor,
+    onRunSettled: (shard: ShardIndex) => void,
+  ): void {
+    if (!deliverySupervisors.has(supervisor)) {
+      throw new TypeError(
+        "Delivery supervisor finalization requires a DeliverySupervisor instance.",
+      );
+    }
+    deliverySupervisorFinalizers.set(supervisor, onRunSettled);
   },
 });
 

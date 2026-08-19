@@ -518,7 +518,7 @@ class RuntimeDeliverySupervisorGroup {
   readonly #routes = new Map<string, RuntimeDeliveryRoute[]>();
   readonly #retiringOwners = new Set<string>();
   readonly #active = new Map<string, Set<Promise<void>>>();
-  readonly #reserved = new Map<string, RuntimeDeliveryReservation>();
+  readonly #reserved: Map<string, Map<string, RuntimeDeliveryReservation>>;
   readonly shardCount: number;
   #start: Promise<void> | undefined;
   #stopped = false;
@@ -530,11 +530,11 @@ class RuntimeDeliverySupervisorGroup {
     readonly source?: DeliverySource;
     readonly logger?: ILogLayer;
   }) {
-    const first = options.shards[0];
-    if (first === undefined) {
-      throw new Error("Environment delivery supervisor group requires at least one shard.");
-    }
+    // `createSupervisorGroup()` rejects an empty shard collection before internal construction.
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const first = options.shards[0]!;
     this.shardCount = first.ofTotal;
+    this.#reserved = new Map(options.shards.map((shard) => [shard.key(), new Map()]));
     this.#source =
       options.source === undefined
         ? new LocalDeliverySource(options.shards)
@@ -545,6 +545,9 @@ class RuntimeDeliverySupervisorGroup {
       onMessage: (message) => this.#route(message),
     });
     deliverySupervisorAccess.installAdmission(this.#supervisor, (message) => this.#accept(message));
+    deliverySupervisorAccess.installFinalization(this.#supervisor, (shard) => {
+      this.#releaseUndeliveredReservations(shard);
+    });
     if (options.logger !== undefined) {
       deliverySupervisorAccess.installLogger(this.#supervisor, options.logger);
     }
@@ -579,9 +582,13 @@ class RuntimeDeliverySupervisorGroup {
 
   async awaitOwnersSettled(ownerKeys: readonly string[]): Promise<void> {
     await Promise.all(
-      Array.from(this.#reserved.values(), async (reservation) => {
-        if (ownerKeys.includes(reservation.route.ownerKey)) await reservation.settled.promise;
-      }),
+      Array.from(this.#reserved.values(), async (reservations) =>
+        Promise.all(
+          Array.from(reservations.values())
+            .filter((reservation) => ownerKeys.includes(reservation.route.ownerKey))
+            .map((reservation) => reservation.settled.promise),
+        ),
+      ),
     );
     await Promise.all(
       ownerKeys.map(async (ownerKey) => {
@@ -649,7 +656,10 @@ class RuntimeDeliverySupervisorGroup {
   #accept(message: DeliveryEndpointMessage): boolean {
     const route = this.#select(message);
     if (route !== undefined) {
-      this.#reserved.set(RuntimeDeliverySupervisorGroup.messageKey(message), {
+      // `options.shards` initializes one private reservation map per supervised shard.
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const reservations = this.#reserved.get(message.shard.key())!;
+      reservations.set(RuntimeDeliverySupervisorGroup.messageKey(message), {
         route,
         settled: Promise.withResolvers<undefined>(),
       });
@@ -661,7 +671,9 @@ class RuntimeDeliverySupervisorGroup {
     const key = RuntimeDeliverySupervisorGroup.messageKey(message);
     // `Delivery` invokes the callback only after this group's admission reserved its route.
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const reservation = this.#reserved.get(key)!;
+    const reservations = this.#reserved.get(message.shard.key())!;
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const reservation = reservations.get(key)!;
     const route = reservation.route;
     const active = this.#active.get(route.ownerKey) ?? new Set<Promise<void>>();
     this.#active.set(route.ownerKey, active);
@@ -672,9 +684,18 @@ class RuntimeDeliverySupervisorGroup {
         if (active.size === 0) this.#active.delete(route.ownerKey);
       });
     active.add(replay);
-    this.#reserved.delete(key);
+    reservations.delete(key);
     reservation.settled.resolve(undefined);
     return replay;
+  }
+
+  #releaseUndeliveredReservations(shard: ShardIndex): void {
+    // `options.shards` initializes one private reservation map per supervised shard.
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const reservations = this.#reserved.get(shard.key())!;
+    for (const reservation of reservations.values()) {
+      reservation.settled.resolve(undefined);
+    }
   }
 
   #select(message: DeliveryEndpointMessage): RuntimeDeliveryRoute | undefined {

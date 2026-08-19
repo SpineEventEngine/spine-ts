@@ -1,7 +1,7 @@
 # T-0210 — Complete-replica external-event acceptance
 
 **Status:** Review-ready
-**Baseline:** `origin/main@bc45eae2008589daf50c9b668360ed6ea65d1e2a`  
+**Baseline:** `origin/main@bc45eae2008589daf50c9b668360ed6ea65d1e2a`
 **Branch/worktree:** `codex/t0210-external-replicas` / `/tmp/spine-ts-t0210`
 
 ## Classification, owner, and scope
@@ -80,6 +80,17 @@ before callback dispatch, holds that callback, and retains a sibling route.
 The selected owner cannot retire and the Inbox row remains `TO_DELIVER` until
 the callback is released; it then replays once and settles. This proof covers
 the actual private admission/dispatch boundary without widening a public API.
+
+## Final consolidated review correction
+
+The review found one remaining terminal path: a controlled Delivery run can
+lose its lease, stop, or abort after it reserves an owner route but before it
+invokes that route's callback. The private run-settlement hook releases only
+such undelivered reservations for that settling shard. It never acknowledges the Inbox row. The
+deterministic lease-loss proof requires retirement to complete, leaves the row
+`TO_DELIVER`, and proves a later worker delivers it exactly once. The hook is
+installed through the existing internal supervisor-access seam and is absent
+from generated public declarations.
 
 ## Skill applicability
 

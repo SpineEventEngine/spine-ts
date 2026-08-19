@@ -176,7 +176,7 @@ describe("DeliverySupervisor", () => {
     await supervisor.close();
   });
 
-  it("rejects foreign logger installation and clears logger metadata on terminal close", async () => {
+  it("rejects foreign internal access installation and clears logger metadata on terminal close", async () => {
     const logger = { withMetadata: vi.fn(() => ({ warn: vi.fn() })) };
     const supervisor = new DeliverySupervisor({
       source: {
@@ -197,6 +197,9 @@ describe("DeliverySupervisor", () => {
     expect(() => {
       deliverySupervisorAccess.loggerFor({} as never);
     }).toThrow("Delivery supervisor logger requires a DeliverySupervisor instance.");
+    expect(() => {
+      deliverySupervisorAccess.installFinalization({} as never, () => undefined);
+    }).toThrow("Delivery supervisor finalization requires a DeliverySupervisor instance.");
     deliverySupervisorAccess.installLogger(supervisor, logger as never);
     expect(deliverySupervisorAccess.loggerFor(supervisor)).toBe(logger);
     await supervisor.start();

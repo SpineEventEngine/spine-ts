@@ -85,3 +85,27 @@ separately owned transport correction.
   logging-containment, local-formatter, audience/API docs, Buf, generated
   output, release-readiness, and `git diff --check` gates pass after the
   inherited transport cleanup correction.
+
+## Final lease-loss-before-dispatch correction
+
+- Retained RED:
+  `pnpm exec vitest run packages/server/test/server/environment-attachment.test.ts -t 'releases an admitted reservation after lease loss'`.
+  It timed out in `retireOwners()` before product changes: admission had
+  reserved a route, lease validation then failed, and no callback could remove
+  the reservation.
+- GREEN installs a private controlled-run settlement callback through the
+  existing supervisor access seam. It removes and settles only reservations
+  for the settling shard which never reached `#route()`; it neither replays nor
+  acknowledges their Inbox rows, and leaves another concurrently running shard
+  alone. The deterministic test proves the row stays `TO_DELIVER`, owner
+  retirement completes, and a fresh normal worker later replays it exactly
+  once.
+- `pnpm exec vitest run packages/server/test/delivery/delivery-supervisor.test.ts packages/server/test/server/environment-attachment.test.ts packages/server/test/server/managed-external-events.integration.test.ts packages/server/test/delivery/delivery-run-control.test.ts --coverage --coverage.include=packages/server/src/delivery/delivery-run-control.ts --coverage.include=packages/server/src/delivery/delivery-supervisor.ts --coverage.include=packages/server/src/server/environment-delivery-worker.ts`
+  passes 4 files / 145 tests. LCOV intersected with
+  `git diff --unified=0 4a6d2c2ae68348a7297efaea0eea7f27c90564e7 -- packages/server/src`
+  is 22/22 lines and 4/4 branches (100% each).
+- Generated declarations show no public widening: root `DeliveryRunOptions`
+  and `DeliverySupervisorOptions` are unchanged; `onRunSettled` exists only
+  in internal `DeliveryControlledRun`. Generated build/typecheck, tooling,
+  scoped ESLint, cleanup, TSDoc/API, copyright, logging, formatting, audience
+  docs, Buf/generated outputs, release readiness, and diff checks pass.

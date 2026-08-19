@@ -35,6 +35,7 @@ import {
   type OnDeliveryReady,
 } from "../../src/context/local-inbox-handoff.js";
 import { Delivery, type DeliveryEndpointMessage } from "../../src/delivery/delivery.js";
+import type { DeliveryWorkRegistry } from "../../src/delivery/delivery-ports.js";
 import type { DeliverySource } from "../../src/delivery/delivery-supervisor.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import {
@@ -979,6 +980,112 @@ describe("EnvironmentDeliveryWorker", () => {
       await new Promise((resolve) => setTimeout(resolve, 1));
     }
     expect(settled).toBe(true);
+  });
+
+  it("releases an admitted reservation after lease loss before callback dispatch", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const target = descriptor(
+      "ReservationLeaseLoss",
+      "type.example.dev/ReservationLeaseLoss",
+      storageFactory,
+    );
+    const scope = runScope("reservation-lease-loss-owner", target.ready);
+    const delivery = new Delivery({ context: target.context, storageFactory });
+    let validations = 0;
+    const losingRegistry: DeliveryWorkRegistry = {
+      sessionKind: delivery.shards.sessionKind,
+      pickUp: (shard, worker, options) => delivery.shards.pickUp(shard, worker, options),
+      validateOwnership: () => {
+        validations += 1;
+        return Promise.resolve(undefined);
+      },
+      release: (session, options) => delivery.shards.release(session, options),
+    };
+    const Worker = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly ports: {
+        readonly inbox: typeof delivery.inbox;
+        readonly workRegistry: DeliveryWorkRegistry;
+        readonly source: DeliverySource;
+      };
+    }) => EnvironmentDeliveryWorker;
+    const worker = new Worker({
+      ports: {
+        inbox: delivery.inbox,
+        workRegistry: losingRegistry,
+        source: inertDeliverySource(),
+      },
+    });
+    worker.add({
+      owner: scope.owner,
+      descriptor: target.value,
+      storageFactory,
+      tenant: {},
+      context: target.context,
+      scopes: [scope],
+    });
+    await worker.start({ scopes: [scope] }, [scope.ready.shard]);
+    let admitted = false;
+    const reservationKey = `reservation-lease-loss/${JSON.stringify([
+      target.ready.label,
+      target.ready.targetTypeUrl,
+      target.ready.shard.index,
+      target.ready.shard.ofTotal,
+    ])}`;
+    // Captures native Map#set before the temporary test spy.
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    const originalSet = Reflect.apply.bind(null, Map.prototype.set) as (
+      thisArgument: Map<unknown, unknown>,
+      argumentsList: readonly unknown[],
+    ) => Map<unknown, unknown>;
+    const mapSet = vi.spyOn(Map.prototype, "set").mockImplementation(function (
+      this: Map<unknown, unknown>,
+      key: unknown,
+      value: unknown,
+    ): Map<unknown, unknown> {
+      const result = originalSet(this, [key, value]);
+      if (key === reservationKey && value !== null && typeof value === "object") admitted = true;
+      return result;
+    });
+    await delivery.inbox.receive(message(target.ready, "reservation-lease-loss"));
+    try {
+      worker.notify(scope);
+      await until(() => admitted && validations > 0);
+    } finally {
+      mapSet.mockRestore();
+    }
+    expect(target.replayed).toEqual([]);
+    expect(
+      (await delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] })).some(
+        ({ signalId }) => signalId === "reservation-lease-loss",
+      ),
+    ).toBe(true);
+
+    worker.stopOwners([scope.owner.key]);
+    await worker.retireOwners([scope.owner.key]);
+
+    const recoveryScope = runScope("reservation-lease-recovery", target.ready);
+    const recovered = new Worker({
+      ports: {
+        inbox: delivery.inbox,
+        workRegistry: delivery.shards,
+        source: inertDeliverySource(),
+      },
+    });
+    recovered.add({
+      owner: recoveryScope.owner,
+      descriptor: target.value,
+      storageFactory,
+      tenant: {},
+      context: target.context,
+      scopes: [recoveryScope],
+    });
+    await recovered.start({ scopes: [recoveryScope] }, [recoveryScope.ready.shard]);
+    recovered.notify(recoveryScope);
+    await until(() => target.replayed.includes("reservation-lease-loss"));
+    expect(target.replayed).toEqual(["reservation-lease-loss"]);
+    recovered.stop();
+    await recovered.awaitSettled();
+    await recovered.retire();
   });
 
   it("keeps a shared group open for a sibling and closes it after the last owner retires", async () => {
