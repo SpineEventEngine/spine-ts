@@ -245,7 +245,8 @@ describe("MessageBoard deployment entrypoints", () => {
     const config = { projectId: "project", deliveryShardCount: 2 } as never;
     const options = managedReplicaOptions(config);
     await expect(options.createServer({ host: "127.0.0.1", port: 8091 } as never)).resolves.toBe(started);
-    await options.synchronize();
+    expect(options.synchronize).toBeDefined();
+    await options.synchronize?.();
     expect(configureManagedServer).toHaveBeenCalledWith(config, client, process.env, "logger");
     expect(startManagedApplication).toHaveBeenCalled();
     expect(delivery.open).toHaveBeenCalledOnce();
