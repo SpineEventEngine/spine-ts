@@ -19,3 +19,15 @@ the same 195 tests. Its whole-file branch total is 81.22% because those mature
 modules have unrelated historical branches; the exact
 `origin/main...working-tree` changed executable intersection is **5/5 lines**
 and **4/4 branches** (100% each), with no coverage exclusion.
+
+## Managed caller-owned lifecycle checkpoint
+
+| Evidence | Result                                                                                                                                                                                                                                                                                                       |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| RED      | Caller-owned managed startup retained an unexpected managed `SIGINT` listener.                                                                                                                                                                                                                               |
+| GREEN    | `pnpm exec vitest run packages/server/test/server/managed-server-application.test.ts` exited 0: 57/57. The caller-owned path installs no managed signal handlers and explicit close succeeds; run-owned shutdown removes only its own handlers and preserves an unrelated listener installed during startup. |
+
+Focused source coverage for `managed-server-application.ts` is 93.80%
+statements, 92.02% branches, and 96.68% lines. Its exact
+`a67daeb9b...working-tree` changed executable intersection is **10/11 lines**
+(90.91%) and **4/4 branches** (100%).

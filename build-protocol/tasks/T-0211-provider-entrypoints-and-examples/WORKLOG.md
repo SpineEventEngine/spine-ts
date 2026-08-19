@@ -36,3 +36,20 @@
   complete event schema registry, and supplies no legacy signal transport. Its
   domestic and ThirdParty external-event paths still complete through the
   process-local broker and Delivery.
+
+## 2026-08-19 — managed caller-owned lifecycle
+
+- Provider review required the same lifecycle distinction already exposed by
+  `Server`: `run()` owns process signals; `start()` leaves them to the caller.
+  This is a public lifecycle correction, not another managed-process role.
+- Retained RED: a coordinator selected for caller-owned startup still installed
+  one extra `SIGINT` listener. The test also retains an unrelated listener
+  registered during startup, so lifecycle teardown cannot remove listeners it
+  does not own.
+- `ManagedServerApplication.start(options)` now shares the existing validation,
+  child behavior, replica startup, and Coordinator path with `run(options)`.
+  It passes only an internal Coordinator signal-ownership flag. `run()` passes
+  `true`; `start()` passes `false`; children are unchanged.
+- Explicit caller close remains the existing idempotent/retryable coordinator
+  close path. The process-owned `run()` proof verifies that it removes only its
+  exact handlers and preserves an unrelated startup-time listener.
