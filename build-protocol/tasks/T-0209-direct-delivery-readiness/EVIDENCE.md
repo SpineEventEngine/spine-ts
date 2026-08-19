@@ -166,3 +166,23 @@ passed.
   coverage behavior is **378/378**; exact changed production coverage is
   **185/194 lines (95.36%)** and **121/134 branches (90.30%)** from
   `/tmp/spine-t0209-cov-final.mUCpeA/lcov.info`.
+
+## Final residual correction
+
+- Parent close no longer equates a private `closed` acknowledgement with OS
+  process exit. It applies the already-established bounded termination path
+  after `closed`; active `draining` work remains unbounded until its own
+  terminal outcome.
+- Real RED 27 pauses the actual application-side `TaskList` Entity commit after
+  Delivery invokes the handler. The update is observed before managed close
+  completes after a hold longer than 1.1 seconds.
+- Real RED 28 retires the non-owner process, proves the healthy shard owner
+  continues relaying, and admits the replacement only after its exact retained
+  subscription activation.
+- Three consecutive fresh real-process runs passed **2/2**. Focused server
+  regression is **338/338**; the Todo selected-storage proof is **1/1**.
+- Canonical task verification passed all non-coverage gates and **382/382**
+  selected tests. Retained `/tmp/spine-t0209-final-lcov.info` gives exact
+  changed production coverage of **186/195 lines (95.38%)** and **121/134
+  branches (90.30%)**. The verifier's reported failure is limited to applying
+  its global 90% threshold to entire unchanged large modules.

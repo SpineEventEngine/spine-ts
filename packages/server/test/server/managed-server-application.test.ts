@@ -718,6 +718,58 @@ describe("ManagedServerApplication", () => {
     await expect(handle.close()).resolves.toBeUndefined();
   });
 
+  it("bounds a closed child which does not exit before parent close", async () => {
+    const clock = new FakeClock();
+    const child = fakeChild(1);
+    let incarnation = "";
+    const coordinator = new ManagedServerCoordinator(
+      {
+        processCount: 1,
+        moduleUrl: import.meta.url,
+        createServer: () => Promise.reject(new Error("unused")),
+      },
+      {
+        clock,
+        spawn: (_url, _slot, value) => {
+          incarnation = value;
+          return child;
+        },
+      },
+    );
+    const started = coordinator.start();
+    child.emit("message", {
+      type: "ready",
+      slot: "0",
+      incarnation,
+      endpoint: "http://127.0.0.1:1",
+    });
+    const handle = await started;
+    (child.send as ReturnType<typeof vi.fn>).mockImplementation(
+      (message: { readonly type?: string }) => {
+        if (message.type === "close") {
+          child.emit("message", { type: "draining", slot: "0", incarnation });
+          child.emit("message", { type: "closed", slot: "0", incarnation });
+        }
+        return true;
+      },
+    );
+
+    let settled = false;
+    const closing = handle.close().then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(clock.delays).toEqual([1_000]);
+
+    clock.advance(1_000);
+    await closing;
+    expect((child as ChildProcess & { readonly killCalls: readonly string[] }).killCalls).toEqual([
+      "SIGTERM",
+    ]);
+  });
+
   it("waits for the exact replacement subscription before activating Delivery", async () => {
     const clock = new FakeClock();
     const children: ChildProcess[] = [];

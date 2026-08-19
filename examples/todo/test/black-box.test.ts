@@ -156,6 +156,16 @@ describe("@spine-event-engine/example-todo", () => {
     ).toEqual(["TaskAggregate", "TaskListProjection", "TaskAssigneeProjection"]);
   });
 
+  it("uses the application-selected storage factory", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const createRecordStorage = vi.spyOn(storageFactory, "createRecordStorage");
+    const context = await createTodoContext({ storageFactory });
+
+    expect(createRecordStorage).toHaveBeenCalled();
+    await context.close();
+    storageFactory.close();
+  });
+
   it("keeps generated registry discovery out of application context assembly", () => {
     const source = readFileSync(fileURLToPath(new URL("../src/index.ts", import.meta.url)), "utf8");
 

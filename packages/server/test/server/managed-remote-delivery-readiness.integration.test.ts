@@ -14,11 +14,14 @@
 
 import { fork, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { create } from "@bufbuild/protobuf";
-import { Code, createClient, type ServiceImpl } from "@connectrpc/connect";
+import { Code, createClient } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
 import { SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
@@ -35,10 +38,7 @@ import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import {
-  CreateTaskSchema,
-  RenameTaskSchema,
-} from "../../../../examples/todo/dist/generated/spine/examples/todo/task_commands_pb.js";
+import { CreateTaskSchema } from "../../../../examples/todo/dist/generated/spine/examples/todo/task_commands_pb.js";
 import {
   TaskIdSchema,
   TaskListIdSchema,
@@ -49,6 +49,7 @@ import { afterEach, expect, it } from "vitest";
 
 const children = new Set<ChildProcess>();
 const deliveries = new Set<GatedDeliveryListener>();
+const handlerGates = new Set<HandlerGate>();
 
 afterEach(async () => {
   // Release either real Delivery gate before asking the managed parent to shut
@@ -57,6 +58,7 @@ afterEach(async () => {
     delivery.release();
     delivery.releaseSnapshot();
   }
+  await Promise.all([...handlerGates].map((gate) => gate.release()));
   const exits = [...children].map(async (child) => {
     if (child.exitCode !== null || child.signalCode !== null) return;
     const exited = once(child, "exit");
@@ -67,16 +69,24 @@ afterEach(async () => {
   children.clear();
   await Promise.all([...deliveries].map((delivery) => delivery.close()));
   deliveries.clear();
+  await Promise.all([...handlerGates].map((gate) => gate.close()));
+  handlerGates.clear();
 });
 
 it("RED-27/28 keeps the final managed subscription relay until fenced Delivery work drains", async () => {
   const delivery = await new GatedDeliveryListener().start();
   deliveries.add(delivery);
+  const handlerGate = await HandlerGate.create();
+  handlerGates.add(handlerGate);
   const child = fork(
     fileURLToPath(new URL("./managed-remote-delivery-application.mjs", import.meta.url)),
     [],
     {
-      env: { ...process.env, SPINE_MANAGED_REMOTE_DELIVERY_URL: delivery.baseUrl },
+      env: {
+        ...process.env,
+        SPINE_MANAGED_REMOTE_DELIVERY_URL: delivery.baseUrl,
+        SPINE_MANAGED_HANDLER_GATE: handlerGate.directory,
+      },
       stdio: ["ignore", "ignore", "pipe", "ipc"],
     },
   );
@@ -89,19 +99,22 @@ it("RED-27/28 keeps the final managed subscription relay until fenced Delivery w
   const subscription = await subscriptions.subscribe(taskListTopic());
   const iterator = subscriptions.activate(subscription)[Symbol.asyncIterator]();
   const commands = createClient(CommandService, transport);
-  await commands.post(createTaskCommand());
-  await expect(iterator.next()).resolves.toMatchObject({ done: false });
+  await bounded(commands.post(createTaskCommand()), "initial command");
+  await expect(bounded(iterator.next(), "initial update")).resolves.toMatchObject({ done: false });
 
-  delivery.arm();
+  await handlerGate.arm();
   const nextUpdate = iterator.next();
-  await commands.post(renameTaskCommand());
-  await delivery.entered;
+  await bounded(
+    commands.post(createTaskCommand("t0209-drain-create", "t0209-drain-task")),
+    "drained command",
+  );
+  await handlerGate.entered();
 
   const drained = receive(child, "drained");
   child.send({ type: "drain" });
-  await expect(commands.post(createTaskCommand("t0209-after-drain"))).rejects.toMatchObject({
-    code: Code.Unavailable,
-  });
+  await expect(
+    commands.post(createTaskCommand("t0209-after-drain", "t0209-after-drain-task")),
+  ).rejects.toMatchObject({ code: Code.Unavailable });
   await expect(
     Promise.race([
       drained.then(() => "drained" as const),
@@ -112,8 +125,8 @@ it("RED-27/28 keeps the final managed subscription relay until fenced Delivery w
       }),
     ]),
   ).resolves.toBe("active");
-  delivery.release();
-  await expect(nextUpdate).resolves.toMatchObject({ done: false });
+  await handlerGate.release();
+  await expect(bounded(nextUpdate, "drained update")).resolves.toMatchObject({ done: false });
   await drained;
   await expect(iterator.next()).resolves.toMatchObject({ done: true });
 }, 20_000);
@@ -121,11 +134,17 @@ it("RED-27/28 keeps the final managed subscription relay until fenced Delivery w
 it("RED-28 holds a replacement outside managed admission until its remote snapshot opens", async () => {
   const delivery = await new GatedDeliveryListener().start();
   deliveries.add(delivery);
+  const handlerGate = await HandlerGate.create();
+  handlerGates.add(handlerGate);
   const child = fork(
     fileURLToPath(new URL("./managed-remote-delivery-application.mjs", import.meta.url)),
     [],
     {
-      env: { ...process.env, SPINE_MANAGED_REMOTE_DELIVERY_URL: delivery.baseUrl },
+      env: {
+        ...process.env,
+        SPINE_MANAGED_REMOTE_DELIVERY_URL: delivery.baseUrl,
+        SPINE_MANAGED_HANDLER_GATE: handlerGate.directory,
+      },
       stdio: ["ignore", "ignore", "pipe", "ipc"],
     },
   );
@@ -138,10 +157,13 @@ it("RED-28 holds a replacement outside managed admission until its remote snapsh
   const subscription = await subscriptions.subscribe(taskListTopic());
   const iterator = subscriptions.activate(subscription)[Symbol.asyncIterator]();
   const commands = createClient(CommandService, transport);
-  await commands.post(createTaskCommand());
-  await expect(iterator.next()).resolves.toMatchObject({ done: false });
+  await bounded(commands.post(createTaskCommand()), "replacement initial command");
+  await expect(bounded(iterator.next(), "replacement initial update")).resolves.toMatchObject({
+    done: false,
+  });
 
-  const removed = members[0];
+  const owner = await handlerGate.owner();
+  const removed = members.find((member) => member.pid !== owner);
   if (removed === undefined) throw new Error("Managed fixture did not report an initial replica.");
   delivery.armSnapshot();
   process.kill(removed.pid, "SIGKILL");
@@ -152,14 +174,20 @@ it("RED-28 holds a replacement outside managed admission until its remote snapsh
   await delivery.snapshotEntered;
 
   const nextUpdate = iterator.next();
-  await commands.post(renameTaskCommand("t0209-survivor"));
-  await expect(nextUpdate).resolves.toMatchObject({ done: false });
+  await bounded(
+    commands.post(createTaskCommand("t0209-survivor", "t0209-survivor-task")),
+    "survivor command",
+  );
+  await expect(bounded(nextUpdate, "survivor update")).resolves.toMatchObject({ done: false });
   delivery.releaseSnapshot();
   await expect.poll(() => currentMembers(child, "replacement"), { timeout: 2_000 }).toHaveLength(2);
 
   const afterRejoin = iterator.next();
-  await commands.post(renameTaskCommand("t0209-replacement", "Rejoined"));
-  await expect(afterRejoin).resolves.toMatchObject({ done: false });
+  await bounded(
+    commands.post(createTaskCommand("t0209-replacement", "t0209-replacement-task")),
+    "replacement command",
+  );
+  await expect(bounded(afterRejoin, "replacement update")).resolves.toMatchObject({ done: false });
 }, 20_000);
 
 function receive(
@@ -174,7 +202,7 @@ function receive(
       stderr += chunk.toString();
     });
     const timer = setTimeout(() => {
-      finish(new Error(`Managed fixture ${description} timed out.`));
+      finish(new Error(`Managed fixture ${description} timed out: ${stderr}`));
     }, 10_000);
     const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
       finish(
@@ -206,6 +234,52 @@ function receive(
   });
 }
 
+class HandlerGate {
+  readonly #arm: string;
+  readonly #entered: string;
+  readonly #release: string;
+
+  private constructor(readonly directory: string) {
+    this.#arm = join(directory, "arm");
+    this.#entered = join(directory, "entered");
+    this.#release = join(directory, "release");
+  }
+
+  static async create(): Promise<HandlerGate> {
+    return new HandlerGate(await mkdtemp(join(tmpdir(), "spine-t0209-handler-")));
+  }
+
+  async arm(): Promise<void> {
+    await writeFile(this.#arm, "");
+  }
+
+  async entered(): Promise<void> {
+    await expect.poll(() => fileExists(this.#entered), { timeout: 10_000 }).toBe(true);
+  }
+
+  async release(): Promise<void> {
+    await writeFile(this.#release, "");
+  }
+
+  async owner(): Promise<number> {
+    const owner = join(this.directory, "owner");
+    await expect.poll(() => fileExists(owner), { timeout: 10_000 }).toBe(true);
+    return Number(await readFile(owner, "utf8"));
+  }
+
+  async close(): Promise<void> {
+    await this.release();
+    await rm(this.directory, { recursive: true, force: true });
+  }
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
+
 async function currentMembers(
   child: ChildProcess,
   requestId: string,
@@ -231,45 +305,30 @@ function taskListTopic() {
     context: metadata.actorContext({ actor: create(UserIdSchema, { value: "t0209" }) }),
   });
 }
-function createTaskCommand(commandId = "t0209-create") {
+function createTaskCommand(commandId = "t0209-create", taskId = "t0209-task") {
   const actorContext = metadata.actorContext({ actor: create(UserIdSchema, { value: "t0209" }) });
   return SignalEnvelopes.command({
     id: metadata.commandId(commandId),
     context: metadata.commandContext({ actorContext }),
     schema: CreateTaskSchema,
     message: create(CreateTaskSchema, {
-      id: create(TaskIdSchema, { value: "t0209-task" }),
+      id: create(TaskIdSchema, { value: taskId }),
       taskListId: create(TaskListIdSchema, { value: "t0209-task" }),
-      title: "T-0209",
-    }),
-  });
-}
-function renameTaskCommand(commandId = "t0209-rename", title = "Drained") {
-  const actorContext = metadata.actorContext({ actor: create(UserIdSchema, { value: "t0209" }) });
-  return SignalEnvelopes.command({
-    id: metadata.commandId(commandId),
-    context: metadata.commandContext({ actorContext }),
-    schema: RenameTaskSchema,
-    message: create(RenameTaskSchema, {
-      id: create(TaskIdSchema, { value: "t0209-task" }),
-      title,
+      title: taskId,
     }),
   });
 }
 
 /**
  * A fixture-local Delivery listener assembled from the production RPC handlers.
- * It gates one real Inbox read after arming, keeping normal remote Delivery work
- * active without proxying application signals through test orchestration.
+ * It gates one real initial snapshot while keeping normal remote Delivery
+ * traffic on the production service implementation.
  */
 class GatedDeliveryListener {
   readonly #assembly = DeliveryAssembly.create();
   readonly #sessions = new Set<http2.ServerHttp2Session>();
-  readonly #entered = deferred<undefined>();
-  readonly #released = deferred<undefined>();
   readonly #snapshotEntered = deferred<undefined>();
   readonly #snapshotReleased = deferred<undefined>();
-  #armed = false;
   #snapshotArmed = false;
   #server: http2.Http2Server | undefined;
   #port: number | undefined;
@@ -279,16 +338,8 @@ class GatedDeliveryListener {
     return `http://127.0.0.1:${String(this.#port)}`;
   }
 
-  get entered(): Promise<undefined> {
-    return this.#entered.promise;
-  }
-
   get snapshotEntered(): Promise<undefined> {
     return this.#snapshotEntered.promise;
-  }
-
-  arm(): void {
-    this.#armed = true;
   }
 
   armSnapshot(): void {
@@ -296,7 +347,7 @@ class GatedDeliveryListener {
   }
 
   release(): void {
-    this.#released.resolve(undefined);
+    // The handler gate owns active work. Delivery has no work gate to release.
   }
 
   releaseSnapshot(): void {
@@ -304,21 +355,10 @@ class GatedDeliveryListener {
   }
 
   async start(): Promise<this> {
-    const inbox: ServiceImpl<typeof InboxService> = {
-      ...this.#assembly.inbox,
-      findManyInShard: async (request, context) => {
-        if (this.#armed) {
-          this.#armed = false;
-          this.#entered.resolve(undefined);
-          await this.#released.promise;
-        }
-        return this.#assembly.inbox.findManyInShard(request, context);
-      },
-    };
     const server = http2.createServer(
       connectNodeAdapter({
         routes: (router) => {
-          router.service(InboxService, inbox);
+          router.service(InboxService, this.#assembly.inbox);
           router.service(ShardService, this.#assembly.shards);
           router.service(AdminService, {
             ...this.#assembly.admin,
@@ -377,6 +417,18 @@ function deferred<T>() {
     resolve = next;
   });
   return { promise, resolve };
+}
+
+function bounded<T>(work: Promise<T>, description: string, timeout = 5_000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`${description} timed out.`));
+    }, timeout);
+  });
+  return Promise.race([work, expired]).finally(() => {
+    clearTimeout(timer);
+  });
 }
 
 function listen(server: http2.Http2Server): Promise<number> {

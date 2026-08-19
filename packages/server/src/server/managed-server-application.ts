@@ -1221,6 +1221,7 @@ const ManagedServerCoordinatorValues = Object.freeze({
             throw new Error("Managed child exited before graceful close completed.");
           }),
         ]);
+        await ManagedServerCoordinatorValues.terminate(child, clock, exited);
         return;
       }
       await ManagedServerCoordinatorValues.terminate(child, clock, exited, false);

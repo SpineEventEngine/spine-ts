@@ -309,6 +309,9 @@ importers:
       '@spine-event-engine/server':
         specifier: workspace:*
         version: link:../../packages/server
+      '@spine-event-engine/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
     devDependencies:
       '@spine-event-engine/proto-tools':
         specifier: 2.0.0-snapshot.1

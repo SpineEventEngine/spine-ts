@@ -65,10 +65,11 @@ Delivery admission; inactive definitions do not block readiness. Shutdown
 progresses `READY → DRAINING → CLOSED`: new unary and shard admission stops,
 active Delivery work may finish while subscription relays remain connected,
 then the child closes. The small parent/child channel carries only these
-lifecycle facts. It never carries Commands, Events, queries, subscriptions, or
-Delivery notifications. The parent owns `SIGINT` and `SIGTERM` cleanup for its
-children. Child listener topology remains private. Use direct `Server.run()`
-for one explicit local process or browser-oriented hosting.
+lifecycle facts, including an opaque subscription-installation acknowledgement.
+It never carries Commands, Events, queries, subscription definitions or
+updates, or Delivery notifications. The parent owns `SIGINT` and `SIGTERM`
+cleanup for its children. Child listener topology remains private. Use direct
+`Server.run()` for one explicit local process or browser-oriented hosting.
 
 For detailed contracts intended for coding agents, see the
 [REFERENCE.md documentation for agents](REFERENCE.md).

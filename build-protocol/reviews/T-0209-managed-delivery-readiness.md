@@ -1,8 +1,10 @@
 # T-0209 — Managed Delivery readiness review
 
-**Baseline:** `origin/main@722a62b4704a5d910db22e7f9934bfd5535a151b`  
-**Initial review basis:** `e374fe494`  
-**Status:** Consolidated corrections ready for affected re-review
+**Baseline:** `origin/main@722a62b4704a5d910db22e7f9934bfd5535a151b`
+
+**Initial review basis:** `e374fe494`
+
+**Status:** PASS — all accepted findings corrected and re-reviewed
 
 ## Review profiles
 
@@ -27,6 +29,8 @@ No reviewer edited product code or spawned subagents.
 | Reliability   | Parent bounded every child after one second, even after valid DRAINING; child close failure was not observable.    | Exact private terminal outcome frames preserve retryable failure. TERM/KILL remains only for no DRAINING acknowledgement. No new timeout policy exists.                                |
 | Reliability   | Child public server close terminated subscription HTTP/2 sessions before active Delivery emitted its final update. | Private running-server Delivery drain precedes managed network close. Real Delivery held beyond 1.1 seconds proves final update-before-close. Ordinary public close remains unchanged. |
 | Documentation | Current subscription/Delivery handoff and lifecycle were described as future or omitted.                           | README, reference, API guide, and deployment plan now describe current behavior and application-owned setup.                                                                           |
+| Reliability   | A child `closed` acknowledgement completed parent close before actual process exit.                                | Parent close applies the existing bounded termination sequence after `closed`; active `draining` work remains unbounded. Direct fake-child and real-process proofs cover both paths.   |
+| API           | Todo called its optional storage factory “transferred,” implying context ownership.                                | TSDoc states that the context uses the caller-owned factory and that the caller closes it after dependent contexts and servers finish.                                                 |
 
 ## Mechanical evidence
 
@@ -38,3 +42,12 @@ No reviewer edited product code or spawned subagents.
 - Generated/tooling typechecks, affected ESLint, cleanup, TSDoc, copyright,
   containment, API inventory, docs audience/snippets, formatting,
   release-readiness, and diff whitespace pass.
+- Final canonical task verification passed all deterministic gates and
+  **382/382** tests; its only nonzero result is the known whole-large-module
+  coverage threshold. Exact retained changed-range coverage is **186/195 lines
+  (95.38%)** and **121/134 branches (90.30%)** from
+  `/tmp/spine-t0209-final-lcov.info`.
+- Final affected performance/reliability, TypeScript/API, and documentation
+  re-reviews pass with no P0–P2 findings. The style lane required only record
+  whitespace formatting and was not reopened by the final internal/test and
+  documentation corrections.

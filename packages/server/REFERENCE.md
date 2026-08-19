@@ -298,8 +298,9 @@ hosting remain independent of managed Node deployment.
 
 If no child is READY, Command and Query return gRPC `UNAVAILABLE`. The
 Coordinator does not enter application intake and does not retry the selected
-call on a sibling child. Subscription fan-out is a later deployment slice and
-is not a Coordinator capability here.
+call on a sibling child. Subscription fan-out follows current READY members;
+later and replacement members attach the retained subscription before managed
+admission.
 
 `ServerOptions.browser` changes the public listener, not the bounded-context
 services. The native HTTP/2 backend binds to an ephemeral loopback port and is

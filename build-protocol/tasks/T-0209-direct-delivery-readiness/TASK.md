@@ -1,6 +1,6 @@
 # T-0209 — Direct Delivery readiness and drain
 
-**Status:** Correction ready for affected re-review
+**Status:** Complete — reviewed and ready for integration
 **Baseline:** `origin/main@722a62b4704a5d910db22e7f9934bfd5535a151b`
 **Branch/worktree:** `codex/t0209-delivery-readiness` / `/tmp/spine-ts-t0209`
 
@@ -27,9 +27,12 @@ quiescence, and proportionate real managed-process/node proof for RED 22–28.
 
 Owned product/test paths are the hot managed lifecycle/server/Delivery
 environment paths and their focused fixtures/tests under `packages/server/**`,
-plus these records. Do not change Gateway/Coordinator Delivery forwarding,
-Delivery lease/retry authority, protobuf/wire contracts, manifests,
-attestation, examples, or T-0210 external-event proof.
+plus these records. The real-process fixture's direct Todo dependency extends
+ownership only to the existing application-options object and its black-box
+proof so the fixture can select a standard `StorageFactory` before context
+construction. Do not change Gateway/Coordinator Delivery forwarding, Delivery
+lease/retry authority, protobuf/wire contracts, manifests, attestation, other
+example behavior, or T-0210 external-event proof.
 
 ## Binding behavior
 

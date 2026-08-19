@@ -240,3 +240,38 @@ packages/server/test/server/managed-remote-delivery-readiness.integration.test.t
   coverage command's only nonzero condition is the intentionally irrelevant
   whole-large-module threshold; all 378 tests pass and the required exact
   changed-range gate is green.
+
+## 2026-08-19 — final lifecycle and fixture convergence
+
+- Affected reliability re-review found that a child `closed` frame completed
+  parent close before the OS process had actually exited. Parent close now
+  invokes the existing bounded termination sequence only after `closed`; an
+  acknowledged `draining` child still has no active-work deadline. A direct
+  fake-child proof holds exit after `closed`, verifies grace/TERM/KILL, and
+  preserves shared close completion.
+- The first Delivery-server gate paused a response before the application had
+  accepted its Inbox page, so it could not prove in-process work. The final
+  real-process fixture instead wraps the existing in-memory storage provider
+  and pauses the actual `TaskList` projection commit. The wrapper and its
+  file markers are test-only; no runtime seam, wire frame, or deployment policy
+  was introduced.
+- The Todo assembly now accepts the existing `StorageFactory` concept so the
+  fixture can select that provider before the Bounded Context is built. A
+  black-box proof confirms the selected factory creates Todo storage. The
+  application, not the context, remains responsible for closing a potentially
+  shared factory.
+- The replacement fixture records which child committed the initial projection
+  and retires the other child. This proves a healthy shard owner continues
+  relaying while its sibling replacement installs the retained subscription;
+  it does not incorrectly assume that per-process in-memory entity state is
+  shared.
+- The complete real two-process suite passed three consecutive fresh runs,
+  **2/2** each. The six-file focused server matrix passes **338/338** and the
+  Todo storage-option proof passes **1/1**.
+- The canonical `verify:task` profile passed every deterministic gate and all
+  **382/382** selected tests. Its sole nonzero condition is its known
+  whole-module coverage threshold (**56.20%** lines / **41.93%** branches),
+  which instruments large unchanged modules. Retained
+  `/tmp/spine-t0209-final-lcov.info`, intersected with exact added/modified
+  production lines, reports **186/195 lines (95.38%)** and **121/134 branches
+  (90.30%)** without exclusions.
