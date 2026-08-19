@@ -13,10 +13,12 @@
  */
 
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 
 import { describe, expect, it, vi } from "vitest";
 
 import { TodoProcessSignals } from "../src/process.js";
+import { readTodoManagedDeployment } from "../src/managed-deployment.js";
 
 const examplePackages = [
   "examples/projects/package.json",
@@ -89,5 +91,77 @@ describe("To-Do process lifecycle", () => {
       expect(close).toHaveBeenCalledTimes(1);
     });
     expect(processLike.exitCode).toBe(0);
+  });
+});
+
+describe("To-Do managed entrypoint", () => {
+  it.each([
+    [{}, "HOST"],
+    [{ HOST: "127.0.0.1" }, "PORT"],
+    [
+      {
+        HOST: "127.0.0.1",
+        PORT: "0",
+        DATASTORE_PROJECT_ID: "todo",
+        DELIVERY_SERVER_URL: "http://delivery:8484",
+        PROCESS_COUNT: "1",
+        DELIVERY_SHARD_COUNT: "1",
+      },
+      "PORT",
+    ],
+    [
+      {
+        HOST: "127.0.0.1",
+        PORT: "8080",
+        DATASTORE_PROJECT_ID: "todo",
+        DELIVERY_SERVER_URL: "ftp://delivery:8484",
+        PROCESS_COUNT: "1",
+        DELIVERY_SHARD_COUNT: "1",
+      },
+      "DELIVERY_SERVER_URL",
+    ],
+  ])("rejects invalid managed deployment configuration", (environment, expected) => {
+    expect(() => readTodoManagedDeployment(environment)).toThrow(expected);
+  });
+
+  it("keeps explicit process and shard counts independent", () => {
+    expect(
+      readTodoManagedDeployment({
+        HOST: "0.0.0.0",
+        PORT: "8080",
+        DATASTORE_PROJECT_ID: "todo",
+        DELIVERY_SERVER_URL: "http://delivery:8484/",
+        PROCESS_COUNT: "3",
+        DELIVERY_SHARD_COUNT: "5",
+      }),
+    ).toMatchObject({
+      processCount: 3,
+      deliveryShardCount: 5,
+      deliveryServerUrl: "http://delivery:8484",
+    });
+  });
+
+  it("keeps the local entry independent and provides an explicit complete-replica entry", async () => {
+    const managed = "examples/todo/src/managed-entry.ts";
+    const configuration = "examples/todo/src/managed-deployment.ts";
+    expect(existsSync(managed)).toBe(true);
+    const source = await readFile(managed, "utf8");
+    const configurationSource = await readFile(configuration, "utf8");
+    const local = await readFile("examples/todo/src/index.ts", "utf8");
+    const manifest = JSON.parse(await readFile("examples/todo/package.json", "utf8")) as {
+      readonly dependencies: Readonly<Record<string, string>>;
+      readonly scripts: Readonly<Record<string, string>>;
+    };
+
+    expect(source).toContain("ManagedServerApplication.run");
+    expect(source).toContain("DatastoreStorageFactory");
+    expect(source).toContain("RemoteDelivery.connectTo");
+    expect(configurationSource).toContain("PROCESS_COUNT");
+    expect(configurationSource).toContain("DELIVERY_SHARD_COUNT");
+    expect(source).not.toMatch(/ZeroMQ|SPINE_IPC_DIRECTORY|SignalTransport/u);
+    expect(local).not.toContain("ManagedServerApplication");
+    expect(manifest.scripts["start:managed"]).toBe("node dist/src/managed-entry.js");
+    expect(manifest.dependencies["@spine-event-engine/delivery-client"]).toBe("workspace:*");
+    expect(manifest.dependencies["@spine-event-engine/storage-datastore"]).toBe("workspace:*");
   });
 });

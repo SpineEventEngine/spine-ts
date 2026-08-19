@@ -6,7 +6,6 @@ data:
   BROWSER_ORIGIN: https://message-board.example.test
   SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-production
   DELIVERY_SERVER_URL: http://simple-delivery-server:8484
-  SPINE_IPC_DIRECTORY: /tmp/spine-ipc
   MESSAGE_BOARD_SESSION_ISSUER: message-board
   MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
   MESSAGE_BOARD_SESSION_KEY_ID: replace-on-rotation
@@ -32,7 +31,7 @@ spec:
           command:
             [
               node,
-              node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js,
+              node_modules/@spine-event-engine/example-message-board-app/dist/src/managed-entry.js,
             ]
           envFrom:
             [
@@ -45,6 +44,8 @@ spec:
               { name: HOST, value: 0.0.0.0 },
               { name: PORT, value: "8080" },
               { name: NODE_ENV, value: production },
+              { name: PROCESS_COUNT, value: "2" },
+              { name: DELIVERY_SHARD_COUNT, value: "2" },
             ]
           startupProbe: { tcpSocket: { port: 8080 }, failureThreshold: 30, periodSeconds: 2 }
           readinessProbe: { tcpSocket: { port: 8080 }, periodSeconds: 2 }
@@ -75,10 +76,6 @@ spec:
     metadata: { labels: { app: message-board-gateway } }
     spec:
       terminationGracePeriodSeconds: 10
-      initContainers:
-        - name: wait-for-delivery
-          image: busybox:1.37.0
-          command: ["sh", "-c", "until nc -z simple-delivery-server 8484; do sleep 1; done"]
       containers:
         - name: gateway
           image: spine-ts/standalone-gateway:local

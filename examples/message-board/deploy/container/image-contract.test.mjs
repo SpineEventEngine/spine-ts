@@ -28,6 +28,10 @@ test("local images have a fixed build contract", () => {
     existsSync(join(process.cwd(), "examples/message-board/app/dist/src/application-entry.js")),
     true,
   );
+  assert.equal(
+    existsSync(join(process.cwd(), "examples/message-board/app/dist/src/managed-entry.js")),
+    true,
+  );
   const dockerfile = readFileSync(new URL("Dockerfile", containerRoot), "utf8");
   const helper = readFileSync(new URL("build-local-images.mjs", containerRoot), "utf8");
   assert.match(dockerfile, /corepack pnpm install --offline/u);
@@ -271,13 +275,15 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     "--env",
     "DATASTORE_EMULATOR_HOST=datastore:8081",
     "--env",
-    `SPINE_IPC_DIRECTORY=/tmp/spine-ipc-${signal}`,
-    "--env",
     "DELIVERY_SERVER_URL=http://delivery:18083",
+    "--env",
+    "PROCESS_COUNT=1",
+    "--env",
+    "DELIVERY_SHARD_COUNT=1",
     messageBoard,
-    "node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js",
+    "node_modules/@spine-event-engine/example-message-board-app/dist/src/managed-entry.js",
   ]);
-  waitForLog(application, /MessageBoard application ready/u);
+  waitForLog(application, /MessageBoard managed coordinator ready/u);
   owned.unshift(combined);
   start([
     "--name",
@@ -299,8 +305,6 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     "DATASTORE_PROJECT_ID=spine-t0095",
     "--env",
     "DATASTORE_EMULATOR_HOST=datastore:8081",
-    "--env",
-    `SPINE_IPC_DIRECTORY=/tmp/spine-ipc-${signal}`,
     "--env",
     "DELIVERY_SERVER_URL=http://delivery:18083",
     messageBoard,
@@ -329,15 +333,21 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     "DATASTORE_EMULATOR_HOST=datastore:8081",
     "--env",
     `SUBSCRIPTION_REGISTRY_NAMESPACE=message-board-smoke-${signal}`,
-    "--env",
-    `SPINE_IPC_DIRECTORY=/tmp/spine-ipc-${signal}`,
-    "--env",
-    "DELIVERY_SERVER_URL=http://delivery:18083",
     ...sessionEnvironment(),
     "spine-ts/standalone-gateway:local",
   ]);
   waitForLog(gateway, /MessageBoard gateway ready/u);
-  exerciseRegistry(network, "http://gateway:18082", "http://localhost:18082", messageBoard);
+  const activationStarted = Date.now();
+  try {
+    exerciseRegistry(network, "http://gateway:18082", "http://localhost:18082", messageBoard);
+  } catch (error) {
+    throw new Error(
+      `Browser subscription activation failed after ${String(Date.now() - activationStarted)}ms.\n` +
+        `Coordinator (${application}) logs:\n${containerLogs(application)}\n` +
+        `Gateway (${gateway}) logs:\n${containerLogs(gateway)}`,
+      { cause: error },
+    );
+  }
   return [delivery, application, combined, gateway];
 }
 

@@ -1,1 +1,11 @@
-[]
+[
+  {
+    "rule": "standalone-function",
+    "file": "examples/message-board/app/src/managed-entry.ts",
+    "kind": "function-declaration",
+    "identity": "installShutdown()#1",
+    "name": "installShutdown",
+    "disposition": "necessity",
+    "reason": "TypeScript framework boundary: installShutdown installs idempotent SIGINT and SIGTERM shutdown for the Coordinator-owned handle."
+  }
+]

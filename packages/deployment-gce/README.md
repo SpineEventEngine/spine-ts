@@ -100,15 +100,23 @@ Docker command.
 
 ## Connect your application entrypoints
 
-The application image must create its normal bounded contexts and storage
-factory. It then adds the registrar before starting the private gRPC listener.
-The server invokes the registrar only after the listener is ready.
+The application image starts a managed application node. Its private VM port is
+the Node Coordinator port; managed children are complete application replicas
+on loopback and are never discoverable directly. The deployer must set both
+`application_process_count` and `delivery_shard_count` in Terraform. They are
+independent: the first selects Node processes, while the second is passed to
+your context assembly for its explicit Delivery strategy.
 
 ```ts
 // docs-snippet-path: packages/deployment-gce/examples/application.ts
 import { LeasedNodeRegistry } from "@spine-event-engine/deployment";
 import { GceRegistrar } from "@spine-event-engine/deployment-gce";
-import { Server, type ServerOptions } from "@spine-event-engine/server";
+import {
+  ManagedServerApplication,
+  type ManagedServerApplicationHandle,
+  type ManagedServerApplicationOptions,
+  type RunningServer,
+} from "@spine-event-engine/server";
 import {
   GceDeploymentSettings,
   type DeploymentEnvironment,
@@ -116,7 +124,14 @@ import {
 } from "./deployment-settings.js";
 
 export interface ApplicationOptions {
-  readonly server: Omit<ServerOptions, "host" | "port" | "browser">;
+  readonly moduleUrl: string;
+  readonly createServer: (options: {
+    readonly host: string;
+    readonly port: number;
+    readonly deliveryShardCount: number;
+  }) => Promise<RunningServer>;
+  readonly synchronize?: ManagedServerApplicationOptions["synchronize"];
+  readonly restart?: ManagedServerApplicationOptions["restart"];
   readonly registryStorage: RegistryStorageResolver;
 }
 
@@ -124,18 +139,41 @@ export const GceApplicationEntrypoint = Object.freeze({
   async run(
     options: ApplicationOptions,
     environment: DeploymentEnvironment = process.env,
-  ): Promise<void> {
+  ): Promise<ManagedServerApplicationHandle> {
     const port = GceDeploymentSettings.port(environment, "PORT");
-    const registry = new LeasedNodeRegistry({
-      factory: options.registryStorage.storageFactoryFor(
-        GceDeploymentSettings.registryStorageReference(environment),
-      ),
-      namespace: GceDeploymentSettings.registryNamespace(environment),
+    const deliveryShardCount = GceDeploymentSettings.deliveryShardCount(environment);
+    const child = process.env.SPINE_MANAGED_SERVER_CHILD === "true";
+    const registry = child
+      ? undefined
+      : new LeasedNodeRegistry({
+          factory: options.registryStorage.storageFactoryFor(
+            GceDeploymentSettings.registryStorageReference(environment),
+          ),
+          namespace: GceDeploymentSettings.registryNamespace(environment),
+        });
+    const registrar = registry === undefined ? undefined : new GceRegistrar({ registry, port });
+    const managed = await ManagedServerApplication.start({
+      processCount: GceDeploymentSettings.processCount(environment),
+      host: "0.0.0.0",
+      port,
+      moduleUrl: options.moduleUrl,
+      createServer: async ({ host, port: childPort }) =>
+        await options.createServer({ host, port: childPort, deliveryShardCount }),
+      ...(options.synchronize === undefined ? {} : { synchronize: options.synchronize }),
+      ...(options.restart === undefined ? {} : { restart: options.restart }),
     });
-    const registrar = new GceRegistrar({ registry, port });
-    const server = Server.atPort(port, { ...options.server, host: "0.0.0.0" });
-    server.addResource(registry).addListenerLifecycle(registrar.lifecycle());
-    await server.run();
+    if (registrar === undefined || registry === undefined) return managed;
+    await registrar.start(); // Publishes only the ready Coordinator endpoint.
+    return {
+      get ready() {
+        return managed.ready;
+      },
+      async close() {
+        await registrar.close();
+        await managed.close();
+        await registry.close();
+      },
+    };
   },
 });
 ```
@@ -189,7 +227,11 @@ The complete, packaged examples are
 [`examples/application.ts`](examples/application.ts) and
 [`examples/gateway.ts`](examples/gateway.ts). They deliberately keep business
 contexts, storage configuration, identity, and durable subscription bindings
-in your application code.
+in your application code. The GCE entrypoint's returned handle withdraws its
+Coordinator lease before stopping child replicas; abrupt VM loss remains covered
+by the existing lease expiry. The managed child marker is framework-owned
+process state: it makes the shared module assemble a child replica without
+creating a competing VM lease.
 
 ## Deploy
 
@@ -229,10 +271,11 @@ Gateway address. Post a command, query its Projection, and activate a durable
 subscription. The Gateway may need one 10-second refresh interval after a
 fresh application node becomes ready.
 
-Each application process obtains a unique registration identity, renews its
-lease every 20 seconds, and leases it for 60 seconds. A graceful shutdown
-removes only the lease it created. A crash may leave a row behind temporarily, but it
-is ignored after expiry; healthy registrars perform finite cleanup.
+Each VM obtains a unique registration identity for its ready Coordinator,
+renews its lease every 20 seconds, and leases it for 60 seconds. A graceful
+entrypoint close withdraws that lease before it stops its managed children. A
+crash may leave a row behind temporarily, but it is ignored after expiry;
+healthy registrars perform finite cleanup.
 
 ## Scale application nodes
 

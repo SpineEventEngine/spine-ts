@@ -47,8 +47,10 @@ an operator-managed metadata integration.
 `gce/<project>/<zone>/<numeric-instance-id>`. `port` must be a safe TCP port.
 Without an override the endpoint is private-address HTTP; an explicit canonical
 HTTP(S) endpoint and compatible TLS server name override it. No public address
-is inferred. The registrar persists this identity through the deployment
-package's approved application-node lease record and typed node ID.
+is inferred. In a managed application entrypoint, this endpoint is the
+node-local Coordinator listener. Managed child listeners are loopback-only and
+are never published. The registrar persists this identity through the
+deployment package's approved application-node lease record and typed node ID.
 
 ## Registrar
 

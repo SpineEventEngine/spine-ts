@@ -14,7 +14,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { spineCoreRegistry } from "@spine-event-engine/core";
-import { InMemoryTransportFactory } from "@spine-event-engine/transport";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 
 import { Environment, EnvironmentType, Server, ServerEnvironment } from "../../src/index.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
@@ -36,26 +36,24 @@ describe("ServerEnvironment singleton", () => {
         "Production ServerEnvironment requires storageFactory.",
       );
 
-      const storageFactory = { close: () => undefined } as never;
+      const storageFactory = new InMemoryStorageFactory();
       production.ServerEnvironment.when(production.EnvironmentType.Production).use({
         storageFactory,
       });
-      expect(() => production.ServerEnvironment.instance()).toThrow(
-        "Production ServerEnvironment requires transport.",
-      );
-
-      const transport = { close: () => undefined } as never;
       production.ServerEnvironment.when(production.EnvironmentType.Production).use({
         storageFactory,
-        transport,
-        integrationChannelFactory: new InMemoryTransportFactory(),
         typeRegistry: spineCoreRegistry,
       });
       const environment = production.ServerEnvironment.instance();
 
       expect(environment.environment.type).toBe(production.EnvironmentType.Production);
       expect(environment.storageFactory).toBe(storageFactory);
-      expect(environment.transport).toBe(transport);
+      expect(environment.transport).toBeUndefined();
+
+      const running = await production.Server.atPort(0)
+        .add(production.BoundedContext.singleTenant("NoLegacyTransport").build())
+        .start();
+      await running.close();
     } finally {
       await testing.resetServerEnvironmentForTest();
       vi.unstubAllEnvs();

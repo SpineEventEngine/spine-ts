@@ -2694,6 +2694,7 @@ describe("Server", () => {
 
   it("removes local publish handlers when the last subscription closes", async () => {
     const environment = ServerEnvironment.instance();
+    const transport = requireTransport(environment);
     const topic = TransportTopics.create({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.TaskCreated",
@@ -2705,21 +2706,21 @@ describe("Server", () => {
     const received: unknown[] = [];
     const secondReceived: unknown[] = [];
 
-    const handlePromise = environment.transport.subscribe(subscription, (operation) => {
+    const handlePromise = transport.subscribe(subscription, (operation) => {
       received.push(operation.envelope);
     });
-    await environment.transport.publish({ topic, envelope: "before-await" });
+    await transport.publish({ topic, envelope: "before-await" });
     const handle = await handlePromise;
-    const secondHandle = await environment.transport.subscribe(subscription, (operation) => {
+    const secondHandle = await transport.subscribe(subscription, (operation) => {
       secondReceived.push(operation.envelope);
     });
 
-    await environment.transport.publish({ topic, envelope: "before-close" });
+    await transport.publish({ topic, envelope: "before-close" });
     await handle.close();
     await handle.close();
-    await environment.transport.publish({ topic, envelope: "after-first-close" });
+    await transport.publish({ topic, envelope: "after-first-close" });
     await secondHandle.close();
-    await environment.transport.publish({ topic, envelope: "after-all-close" });
+    await transport.publish({ topic, envelope: "after-all-close" });
     await environment.close();
 
     expect(received).toEqual(["before-await", "before-close"]);
@@ -2728,6 +2729,7 @@ describe("Server", () => {
 
   it("routes local request handlers and rejects duplicate responders", async () => {
     const environment = ServerEnvironment.instance();
+    const transport = requireTransport(environment);
     const topic = TransportTopics.create({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.LookupTask",
@@ -2738,7 +2740,7 @@ describe("Server", () => {
       mode: "competing-consumer",
     });
 
-    const handlePromise = environment.transport.respond<
+    const handlePromise = transport.respond<
       { readonly taskId: string },
       { readonly found: boolean; readonly taskId: string },
       "system"
@@ -2748,17 +2750,17 @@ describe("Server", () => {
     }));
 
     await expect(
-      environment.transport.request({
+      transport.request({
         topic,
         envelope: { taskId: "task-0" },
       }),
     ).resolves.toEqual({ found: true, taskId: "task-0" });
     const handle = await handlePromise;
     await expect(
-      environment.transport.respond(subscription, () => ({ found: false, taskId: "duplicate" })),
+      transport.respond(subscription, () => ({ found: false, taskId: "duplicate" })),
     ).rejects.toThrow('Local transport responder is already registered for "system:');
     await expect(
-      environment.transport.request({
+      transport.request({
         topic,
         envelope: { taskId: "task-1" },
       }),
@@ -2767,7 +2769,7 @@ describe("Server", () => {
     await handle.close();
 
     await expect(
-      environment.transport.request({
+      transport.request({
         topic,
         envelope: { taskId: "task-1" },
       }),
@@ -2777,6 +2779,7 @@ describe("Server", () => {
 
   it("rejects local transport work after environment close", async () => {
     const environment = ServerEnvironment.instance();
+    const transport = requireTransport(environment);
     const topic = TransportTopics.create({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.ClosedTransportTask",
@@ -2788,16 +2791,16 @@ describe("Server", () => {
 
     await environment.close();
 
-    await expect(environment.transport.publish({ topic, envelope: "closed" })).rejects.toThrow(
+    await expect(transport.publish({ topic, envelope: "closed" })).rejects.toThrow(
       "Local signal transport is closed.",
     );
-    await expect(environment.transport.subscribe(subscription, () => undefined)).rejects.toThrow(
+    await expect(transport.subscribe(subscription, () => undefined)).rejects.toThrow(
       "Local signal transport is closed.",
     );
-    await expect(environment.transport.request({ topic, envelope: "closed" })).rejects.toThrow(
+    await expect(transport.request({ topic, envelope: "closed" })).rejects.toThrow(
       "Local signal transport is closed.",
     );
-    await expect(environment.transport.respond(subscription, () => "closed")).rejects.toThrow(
+    await expect(transport.respond(subscription, () => "closed")).rejects.toThrow(
       "Local signal transport is closed.",
     );
   });
@@ -3047,6 +3050,12 @@ class CloseTrackingCloseable {
   close(): void {
     this.#closed.push(this.#label);
   }
+}
+
+function requireTransport(environment: ServerEnvironment): SignalTransport {
+  const transport = environment.transport;
+  if (transport === undefined) throw new Error("Expected local transport.");
+  return transport;
 }
 
 class CloseTrackingTransport implements SignalTransport {

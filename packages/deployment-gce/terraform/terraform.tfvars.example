@@ -26,6 +26,12 @@ gateway_secret_reference     = "projects/my-project/secrets/gateway-runtime"
 # Manual capacity applies while autoscaling is disabled.
 application_replicas = 2
 
+# Set both values deliberately. They are independent: one VM starts this many
+# complete application children, while the application builds its contexts with
+# this many Delivery shards.
+application_process_count = 2
+delivery_shard_count      = 2
+
 # GCE owns capacity when this is true. CPU uses a utilization target. Monitoring
 # uses a separately chosen metric name, resource/series filter, target kind,
 # and scope. Per-instance filters must use `resource.type = "gce_instance"`.

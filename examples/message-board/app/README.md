@@ -70,7 +70,8 @@ pnpm exec vitest run examples/message-board/app/test
 
 Local commands use in-memory storage, sessions, and subscription bindings.
 Prebuilt production commands require `HOST`, `PORT`, `DATASTORE_PROJECT_ID`,
-`SPINE_IPC_DIRECTORY`, and `DELIVERY_SERVER_URL`; browser modes additionally
+`DELIVERY_SERVER_URL`; managed nodes additionally require `PROCESS_COUNT` and
+`DELIVERY_SHARD_COUNT`; browser modes additionally
 require `BROWSER_ORIGIN` and `SUBSCRIPTION_REGISTRY_NAMESPACE`, while the
 standalone gateway uses `BACKEND_DISCOVERY_SERVICE` and `BACKEND_DISCOVERY_PORT`
 in Kubernetes; local Compose alone uses comma-separated `BACKEND_URLS` as an

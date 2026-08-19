@@ -42,6 +42,23 @@ await ManagedServerApplication.run({
 });
 ```
 
+When another host owns process signals, use the same options with `start()`
+and close the returned handle from that host:
+
+```ts
+import { ManagedServerApplication, Server } from "@spine-event-engine/server";
+
+const managed = await ManagedServerApplication.start({
+  processCount: 4,
+  host: "0.0.0.0",
+  port: 50051,
+  moduleUrl: import.meta.url,
+  createServer: ({ host, port }) => Server.atPort(port, { host }).start(),
+});
+
+await managed.close();
+```
+
 The parent starts four separate children. Each child runs this same entry
 module, assembles the complete application, opens its own loopback listener,
 and completes its local readiness work before it is admitted. `run()` first
@@ -67,9 +84,12 @@ active Delivery work may finish while subscription relays remain connected,
 then the child closes. The small parent/child channel carries only these
 lifecycle facts, including an opaque subscription-installation acknowledgement.
 It never carries Commands, Events, queries, subscription definitions or
-updates, or Delivery notifications. The parent owns `SIGINT` and `SIGTERM`
-cleanup for its children. Child listener topology remains private. Use direct
-`Server.run()` for one explicit local process or browser-oriented hosting.
+updates, or Delivery notifications. `ManagedServerApplication.run()` owns
+`SIGINT` and `SIGTERM` cleanup for its children. An embedding host uses
+`ManagedServerApplication.start()` instead and closes the returned managed
+handle itself; `start()` installs no process-signal handlers. Child listener
+topology remains private. Use direct `Server.run()` for one explicit local
+process or browser-oriented hosting.
 
 For detailed contracts intended for coding agents, see the
 [REFERENCE.md documentation for agents](REFERENCE.md).
@@ -504,10 +524,12 @@ The broker uses `TransportFactory` message channels, not `SignalTransport`.
 `ServerEnvironment` owns one process-wide `InMemoryTransportFactory` by
 default for private IntegrationBroker message channels, including production.
 An application may supply `integrationChannelFactory` to override that local
-channel factory. Production resolution still requires `storageFactory`,
-`transport`, and the complete application `typeRegistry`; it does not fall
-back to in-memory storage or to the core-only registry. See the [transport
-reference](../transport/REFERENCE.md) for same-host ZeroMQ setup.
+channel factory. Production resolution still requires `storageFactory` and the
+complete application `typeRegistry`; it does not fall back to in-memory storage
+or to the core-only registry. Its legacy `transport` setting is optional: when
+present, it opens legacy runtime signal bindings; when absent, none are opened.
+See the [transport reference](../transport/REFERENCE.md) for same-host ZeroMQ
+setup.
 
 `ThirdPartyContext.singleTenant(name)` or `.multitenant(name)` creates the
 public import facade. `emittedEvent(event, actor)` requires a generated event,

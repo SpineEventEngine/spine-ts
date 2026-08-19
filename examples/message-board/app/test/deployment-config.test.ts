@@ -35,10 +35,19 @@ afterEach(async () => {
 });
 
 describe("MessageBoard deployment configuration", () => {
+  it("uses console logging in the local Datastore emulator and Cloud Logging elsewhere", () => {
+    expect(
+      MessageBoardDeployment.logger("message-board-test", {
+        DATASTORE_EMULATOR_HOST: "datastore:8081",
+      }),
+    ).toBeUndefined();
+    expect(MessageBoardDeployment.logger("message-board-test", {})).toBeDefined();
+  });
+
   it("composes an application logger with the official Google Cloud transport", () => {
     const entry = vi.fn((_metadata: unknown, data: unknown) => data);
     const write = vi.fn();
-    const logger = MessageBoardDeployment.logger({ entry, write } as never);
+    const logger = MessageBoardDeployment.cloudLogger({ entry, write } as never);
 
     logger.withMetadata({ entityId: "message-1" }).warn("Message delivery was delayed.");
 
@@ -72,6 +81,33 @@ describe("MessageBoard deployment configuration", () => {
       backendUrls: ["http://application:8081"],
     });
   });
+
+  it("reads independent explicit managed process and Delivery shard counts", () => {
+    expect(
+      MessageBoardDeployment.managed({
+        ...completeEnvironment,
+        PROCESS_COUNT: "3",
+        DELIVERY_SHARD_COUNT: "5",
+      }),
+    ).toMatchObject({ processCount: 3, deliveryShardCount: 5 });
+  });
+
+  it.each([
+    [undefined, "1", "PROCESS_COUNT"],
+    ["0", "1", "PROCESS_COUNT"],
+    ["1", "1.5", "DELIVERY_SHARD_COUNT"],
+  ])(
+    "rejects invalid managed count configuration",
+    (processCount, deliveryShardCount, expected) => {
+      expect(() =>
+        MessageBoardDeployment.managed({
+          ...completeEnvironment,
+          PROCESS_COUNT: processCount,
+          DELIVERY_SHARD_COUNT: deliveryShardCount,
+        }),
+      ).toThrow(expected);
+    },
+  );
 
   it("prefers the ordered fixed BACKEND_URLS topology over the legacy backend URL", () => {
     expect(
@@ -143,7 +179,7 @@ describe("MessageBoard deployment configuration", () => {
 
   it("configures production storage and transport as environment-owned facilities", () => {
     const config = MessageBoardDeployment.application(completeEnvironment);
-    const logger = MessageBoardDeployment.logger({
+    const logger = MessageBoardDeployment.cloudLogger({
       entry: vi.fn((_metadata: unknown, data: unknown) => data),
       write: vi.fn(),
     } as never);
@@ -153,7 +189,6 @@ describe("MessageBoard deployment configuration", () => {
       {
         ...completeEnvironment,
         NODE_ENV: "production",
-        SPINE_IPC_DIRECTORY: "/tmp/spine-message-board-config-test",
       },
       logger,
     );
@@ -171,7 +206,6 @@ describe("MessageBoard deployment configuration", () => {
       MessageBoardDeployment.configureServer(config, client, {
         ...completeEnvironment,
         NODE_ENV: "production",
-        SPINE_IPC_DIRECTORY: "/tmp/spine-message-board-config-test",
         DELIVERY_SERVER_URL: deliveryUrl,
       }),
     ).toThrow(expected);

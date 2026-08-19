@@ -542,8 +542,10 @@ describe("Server lifecycle integration", () => {
         true,
       );
       expect(storageFactory.isOpen()).toBe(true);
+      const transport = fixture.environment.transport;
+      if (transport === undefined) throw new Error("Expected local transport.");
       await expect(
-        fixture.environment.transport.publish({ topic: transportTopic, envelope: "active" }),
+        transport.publish({ topic: transportTopic, envelope: "active" }),
       ).resolves.toBeUndefined();
 
       releaseActive();
@@ -565,7 +567,7 @@ describe("Server lifecycle integration", () => {
       expect(closeDelivery).toHaveBeenCalledOnce();
       expect(storageFactory.closeCalls).toBe(1);
       await expect(
-        fixture.environment.transport.publish({ topic: transportTopic, envelope: "closed" }),
+        transport.publish({ topic: transportTopic, envelope: "closed" }),
       ).rejects.toThrow("Local signal transport is closed.");
       expect(events.slice(-7)).toEqual([
         "stop",

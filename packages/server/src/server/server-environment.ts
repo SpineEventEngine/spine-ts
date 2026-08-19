@@ -97,7 +97,9 @@ export interface ServerEnvironmentSettings {
   readonly storageFactory?: StorageFactory;
 
   /**
-   * Signal transport facility selected for server assembly.
+   * Optional legacy signal transport facility selected for server assembly.
+   *
+   * When omitted, the server does not open legacy context signal bindings.
    */
   readonly transport?: SignalTransport;
 
@@ -165,9 +167,11 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   readonly storageFactory: StorageFactory;
 
   /**
-   * Transport facility selected for this environment.
+   * Optional legacy transport facility selected for this environment.
+   *
+   * When omitted, no legacy context signal bindings are opened.
    */
-  readonly transport: SignalTransport;
+  readonly transport: SignalTransport | undefined;
 
   /**
    * Message-channel factory selected for private bounded-context integration.
@@ -327,7 +331,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
 
 interface RequiredFacilities {
   readonly storageFactory: StorageFactory;
-  readonly transport: SignalTransport;
+  readonly transport: SignalTransport | undefined;
   readonly integrationChannelFactory: TransportFactory;
   readonly typeRegistry: TypeRegistryLookup;
   readonly delivery: ServerEnvironmentCloseable | undefined;
@@ -567,7 +571,7 @@ const ServerEnvironmentValues = Object.freeze({
     return Object.freeze([
       ...(options.delivery === undefined ? [] : [options.delivery]),
       options.integrationChannelFactory,
-      options.transport,
+      ...(options.transport === undefined ? [] : [options.transport]),
       ...(options.tracerFactory === undefined ? [] : [options.tracerFactory]),
       options.storageFactory,
     ]);
@@ -595,9 +599,6 @@ const ServerEnvironmentValues = Object.freeze({
     if (type === EnvironmentType.Production) {
       if (settings.storageFactory === undefined) {
         throw new Error("Production ServerEnvironment requires storageFactory.");
-      }
-      if (settings.transport === undefined) {
-        throw new Error("Production ServerEnvironment requires transport.");
       }
       if (settings.typeRegistry === undefined) {
         throw new Error("Production ServerEnvironment requires typeRegistry.");

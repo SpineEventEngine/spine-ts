@@ -124,9 +124,6 @@ importers:
       '@spine-event-engine/storage-datastore':
         specifier: 2.0.0-snapshot.1
         version: link:../../../packages/storage-datastore
-      '@spine-event-engine/transport':
-        specifier: 2.0.0-snapshot.1
-        version: link:../../../packages/transport
       loglayer:
         specifier: 9.4.0
         version: 9.4.0
@@ -297,12 +294,18 @@ importers:
       '@connectrpc/connect-node':
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
+      '@google-cloud/datastore':
+        specifier: 10.1.1
+        version: 10.1.1
       '@spine-event-engine/client-node':
         specifier: workspace:*
         version: link:../../packages/client-node
       '@spine-event-engine/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@spine-event-engine/delivery-client':
+        specifier: workspace:*
+        version: link:../../packages/delivery-client
       '@spine-event-engine/proto':
         specifier: 2.0.0-snapshot.1
         version: link:../../packages/proto
@@ -312,6 +315,9 @@ importers:
       '@spine-event-engine/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      '@spine-event-engine/storage-datastore':
+        specifier: workspace:*
+        version: link:../../packages/storage-datastore
     devDependencies:
       '@spine-event-engine/proto-tools':
         specifier: 2.0.0-snapshot.1

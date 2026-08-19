@@ -65,31 +65,29 @@ valid event with no interested external receptor is simply not delivered.
 ## Server environment facilities
 
 `ServerEnvironment.instance()` is a process-wide singleton. Production
-resolution requires three application facilities:
+resolution requires storage and the complete application schema registry:
 
 ```ts
 import { EnvironmentType, ServerEnvironment } from "@spine-event-engine/server";
 import type { TypeRegistryLookup } from "@spine-event-engine/core";
-import type { SignalTransport } from "@spine-event-engine/transport";
 import type { StorageFactory } from "@spine-event-engine/storage";
 
 declare const storageFactory: StorageFactory;
-declare const transport: SignalTransport;
 declare const typeRegistry: TypeRegistryLookup;
 
 ServerEnvironment.when(EnvironmentType.Production).use({
   storageFactory,
-  transport,
   typeRegistry,
 });
 ```
 
-`storageFactory` supplies records and events, `transport` is the existing
-signal/runtime transport, and `integrationChannelFactory` optionally overrides
-the process-wide private integration message channel factory. When it is
-absent, all local bounded contexts share one in-memory factory, including in
-production. `typeRegistry` is the complete application schema universe used by
-`ThirdPartyContext` to encode outgoing imported events. Local and test
+`storageFactory` supplies records and events. `typeRegistry` is the complete
+application schema universe used by `ThirdPartyContext` to encode outgoing
+imported events. The optional legacy `transport` setting opens legacy runtime
+signal bindings only when supplied; the Production default omits it. An
+optional `integrationChannelFactory` overrides the process-wide private
+integration message channel factory. When it is absent, all local bounded
+contexts share one in-memory factory, including in production. Local and test
 environments default storage in memory and use the core registry only as a
 fallback; those defaults are not production configuration.
 
@@ -276,7 +274,10 @@ signal or explicit-close retry, and sets `process.exitCode` to `1` after a
 signal-driven failure.
 
 `ManagedServerApplication.run()` is the Node-only deployment entrypoint for a
-complete-replica process cohort. It requires a positive safe-integer
+complete-replica process cohort when the framework owns process shutdown.
+`ManagedServerApplication.start()` starts the same cohort for an embedding host
+and installs no process signal handlers; that host closes the returned handle.
+Both require a positive safe-integer
 `processCount` and an ESM `moduleUrl`; it never derives a process count from
 the machine. Its optional `host` and required nonzero `port` bind the public
 Coordinator listener. Every child executes that same module and calls its own
@@ -288,8 +289,9 @@ degraded, and reports unready if no child is ready. It replaces an unexpected
 child exit after a bounded exponential delay (250 ms initially, capped at 30 s;
 reset after 60 s READY). It does not restart a child being closed. Restart
 values are optional `restart` settings and must be positive safe integers;
-concurrent starts default to `min(4, processCount)`. Parent `SIGINT` and
-`SIGTERM` use the same shared child-close path. This private lifecycle channel
+concurrent starts default to `min(4, processCount)`. `run()` parent `SIGINT`
+and `SIGTERM` use the same shared child-close path; `start()` leaves those
+signals to its caller. This private lifecycle channel
 does not transport application signals. The Coordinator forwards generated
 Command and Query unary calls once to a READY child; process count does not
 inspect CPU availability and does not constrain the application's independently

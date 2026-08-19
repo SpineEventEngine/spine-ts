@@ -13,6 +13,11 @@ kubeconfig_context = "gke_PROJECT_REGION_CLUSTER"
 # This value controls manual capacity while autoscaling_enabled is false.
 application_replicas = 2
 
+# Set both values deliberately. One Pod starts this many complete application
+# children, while the application builds its contexts with this many Delivery shards.
+application_process_count = 2
+delivery_shard_count      = 2
+
 # The template creates no HPA unless you explicitly enable it. Select values
 # that match an external metric adapter already operated by your platform team.
 autoscaling_enabled      = false

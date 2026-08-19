@@ -23,7 +23,9 @@ import {
   Server,
   Subscribe,
   Where,
+  type DeliveryStrategy,
   type RunningServer,
+  type StandSubscriptionRegistry,
 } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import type { StorageFactory } from "@spine-event-engine/storage";
@@ -211,23 +213,29 @@ export class MessageBoardApplication {
    * Builds the single-tenant MessageBoard context with in-memory storage by default.
    *
    * @param storageFactory The storage backend that records MessageBoard state and events.
+   * @param deliveryStrategy Optionally selects Delivery shards for the context.
+   * @param subscriptionRegistry Optionally supplies the context subscription registry.
    * @returns The assembled MessageBoard bounded context.
    */
   async createContext(
     storageFactory: StorageFactory = new InMemoryStorageFactory(),
+    deliveryStrategy?: DeliveryStrategy,
+    subscriptionRegistry?: StandSubscriptionRegistry,
   ): Promise<BoundedContext> {
     const announcementRouting = EventRouting.create<BoardId>().route(
       MessagePostedSchema,
       (event) =>
         event.board?.value === "announcements" ? [clone(BoardIdSchema, event.board)] : [],
     );
-    return BoundedContext.singleTenant("MessageBoard")
+    const builder = BoundedContext.singleTenant("MessageBoard")
       .withStorageFactory(storageFactory)
       .withGeneratedRegistryRoot(new URL("..", import.meta.url))
       .add(BoardMessageAggregate)
       .add(BoardViewProjection)
-      .add(AnnouncementBoardProjection, { eventRouting: announcementRouting })
-      .buildAsync();
+      .add(AnnouncementBoardProjection, { eventRouting: announcementRouting });
+    if (deliveryStrategy !== undefined) builder.withDeliveryStrategy(deliveryStrategy);
+    if (subscriptionRegistry !== undefined) builder.withSubscriptionRegistry(subscriptionRegistry);
+    return builder.buildAsync();
   }
 
   /**
@@ -265,6 +273,26 @@ export class MessageBoardApplication {
   }
 
   /**
+   * Starts one native complete replica without installing process shutdown handlers.
+   *
+   * @param options Supplies the child listener configuration.
+   * @param storageFactory Stores the replica state.
+   * @param deliveryStrategy Selects Delivery shards for the replica.
+   * @param subscriptionRegistry Holds volatile child subscription state.
+   * @returns The started native application server.
+   */
+  async startManagedApplication(
+    options: BoardServerOptions,
+    storageFactory: StorageFactory,
+    deliveryStrategy: DeliveryStrategy,
+    subscriptionRegistry: StandSubscriptionRegistry,
+  ): Promise<RunningServer> {
+    return (
+      await this.#server(options, storageFactory, false, deliveryStrategy, subscriptionRegistry)
+    ).start();
+  }
+
+  /**
    * Starts the combined MessageBoard browser and native application server.
    *
    * @param options Network listener and browser configuration.
@@ -282,6 +310,8 @@ export class MessageBoardApplication {
     options: BoardServerOptions,
     storageFactory: StorageFactory,
     browser: boolean,
+    deliveryStrategy?: DeliveryStrategy,
+    subscriptionRegistry?: StandSubscriptionRegistry,
   ): Promise<Server> {
     const policy = new BoardAccessPolicy();
     const server = Server.atPort(options.port ?? 0, {
@@ -301,7 +331,9 @@ export class MessageBoardApplication {
           }
         : {}),
     });
-    return server.add(await this.createContext(storageFactory));
+    return server.add(
+      await this.createContext(storageFactory, deliveryStrategy, subscriptionRegistry),
+    );
   }
 }
 

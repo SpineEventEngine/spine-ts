@@ -38,6 +38,8 @@ describe("the GKE deployment template", () => {
     expect(terraform).toMatch(/publish_not_ready_addresses\s+=\s+false/u);
     expect(terraform).toContain("readiness_probe");
     expect(terraform).toContain("BACKEND_DISCOVERY_SERVICE");
+    expect(terraform).toContain("APPLICATION_PROCESS_COUNT");
+    expect(terraform).toContain("DELIVERY_SHARD_COUNT");
     expect(terraform).toContain("service_account_name = var.service_account_name");
     expect(terraform).not.toContain('type = "LoadBalancer"');
     expect(gateway).toMatch(/replicas\s*=\s*1/u);
@@ -182,6 +184,10 @@ describe("the GKE deployment guide", () => {
     expect(settings).toContain("DeploymentSettings");
     expect(application).toContain('from "./deployment-settings.js"');
     expect(application).toContain("process.env");
+    expect(application).toContain("ManagedServerApplication");
+    expect(application).toContain("processCount");
+    expect(application).toContain("deliveryShardCount");
+    expect(application).not.toContain("Server.atPort");
     expect(gateway).toContain('from "./deployment-settings.js"');
     expect(gateway).toContain("process.env");
     expect(guide).toContain(
@@ -189,6 +195,39 @@ describe("the GKE deployment guide", () => {
     );
     expect(guide).toContain("environment: DeploymentEnvironment = process.env");
     expect(guide).not.toContain("declare const DeploymentSettings");
+  });
+
+  it("uses ready Pod Coordinator listeners as the Gateway discovery targets", async () => {
+    const terraform = await readTerraform();
+    const application = await readFile(new URL("examples/application.ts", packageRoot), "utf8");
+    const gateway = await readFile(new URL("examples/gateway.ts", packageRoot), "utf8");
+
+    expect(resource(terraform, "kubernetes_service_v1", "application")).toContain(
+      'target_port = "coordinator"',
+    );
+    expect(resource(terraform, "kubernetes_deployment_v1", "application")).toContain(
+      'name           = "coordinator"',
+    );
+    expect(resource(terraform, "kubernetes_deployment_v1", "application")).toContain(
+      'port = "coordinator"',
+    );
+    expect(application).toContain("DeploymentSettings.processCount(environment)");
+    expect(application).toContain("DeploymentSettings.deliveryShardCount(environment)");
+    expect(gateway).toContain("GkeNodeDiscovery");
+  });
+
+  it("requires deployer-selected process and Delivery shard counts", async () => {
+    const variables = await readFile(new URL("variables.tf", terraformRoot), "utf8");
+    const values = await readFile(new URL("terraform.tfvars.example", terraformRoot), "utf8");
+
+    for (const name of ["application_process_count", "delivery_shard_count"] as const) {
+      const declaration = variables.slice(
+        variables.indexOf(`variable "${name}"`),
+        variables.indexOf("\nvariable ", variables.indexOf(`variable "${name}"`) + 1),
+      );
+      expect(declaration).not.toMatch(/default\s*=/u);
+      expect(values).toMatch(new RegExp(`^${name}\\s*=`, "mu"));
+    }
   });
 
   it("packs the Terraform and entrypoint deliverables", async () => {
