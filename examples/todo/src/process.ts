@@ -42,7 +42,7 @@ export const TodoProcessSignals: Readonly<{
 }> = Object.freeze({
   install(server: Readonly<{ close(): Promise<void> }>, processLike: TodoProcess = process): void {
     let closing = false;
-    const close = () => {
+    const onSignal = () => {
       if (closing) return;
       closing = true;
       void server.close().then(
@@ -54,7 +54,7 @@ export const TodoProcessSignals: Readonly<{
         },
       );
     };
-    processLike.once("SIGINT", close);
-    processLike.once("SIGTERM", close);
+    processLike.once("SIGINT", onSignal);
+    processLike.once("SIGTERM", onSignal);
   },
 });

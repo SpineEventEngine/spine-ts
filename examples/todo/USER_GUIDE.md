@@ -48,7 +48,7 @@ message TaskUnassigned {
 `pnpm proto:generate` creates `generated/interfaces/task-event.ts`: it exports
 both a TypeScript `TaskEvent` interface and a runtime `TaskEvent` token.
 `is.ts_type` names an interface you author in the same model module as the
-message source. Here, [`src/index.ts`](src/index.ts) exports the top-level named
+message source. Here, [`src/todo-app.ts`](src/todo-app.ts) exports the top-level named
 `interface TaskAssignmentEvent { readonly assignee?: UserId }`; generation
 creates `generated/interfaces/task-assignment-event.ts`, which exports that
 type and its token. After resolving real paths, only the requested authored
@@ -75,7 +75,7 @@ runtime value as the token passed to `.route(...)`. The application aliases the
 assignment token only to make that distinction easy to read.
 
 ```ts
-// docs-snippet-path: examples/todo/src/index.ts
+// docs-snippet-path: examples/todo/src/todo-app.ts
 import { EventRouting } from "@spine-event-engine/server";
 import { TaskReassignedSchema } from "../generated/spine/examples/todo/task_events_pb.js";
 import type { TaskListId } from "../generated/spine/examples/todo/task_id_pb.js";
@@ -679,12 +679,14 @@ The black-box test starts a real loopback server and proves public generated
 clients, acknowledgement handling, eventual projection reads, subscriptions,
 validation/rejections, generated-registry recovery, and listener/session cleanup.
 
-The startup-contract test verifies both entrypoints. The normal entry remains a
-single-process in-memory server. The managed entry requires explicit process
-and Delivery shard counts and assembles complete application replicas behind
-the Node Coordinator. For a runnable three-terminal setup and a line-by-line
-map of why the file is named `managed-entry.ts`, follow the
-[managed node reference](README.md#managed-node-reference).
+The startup-contract test verifies structural commands, public exports, settings,
+and documentation contracts. Behavioral launcher coverage and the documented
+live smoke paths exercise both app modes. The single-process app uses in-memory
+storage. The multi-process app requires explicit process and Delivery shard
+counts, then starts complete replicas behind the Node Coordinator. Read
+the implementation in order: `single-process-app.ts`, `multi-process-app.ts`,
+`multi-process-coordinator.ts`, and `multi-process-replica.ts`. For the runnable
+setup, follow the [multi-process app reference](README.md#multi-process-app).
 
 ## Further reading and limits
 
@@ -695,8 +697,7 @@ map of why the file is named `managed-entry.ts`, follow the
 - [Example black-box test](test/black-box.test.ts)
 - [Example startup-contract test](test/startup-contract.test.ts)
 
-The walkthrough uses the local single-process entry, so restarting that server
-clears its tasks. The managed entry is a separate production reference with
-shared storage, direct Delivery observation, and framework-owned child-process
-supervision; application-specific authentication, tracing, and monitoring
-remain deployment concerns.
+The walkthrough uses the single-process app, so restarting it clears its tasks.
+The multi-process app uses shared storage and direct Delivery observation;
+application-specific authentication, tracing, and monitoring remain deployment
+concerns.

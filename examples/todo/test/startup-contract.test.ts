@@ -12,13 +12,24 @@
  * the License.
  */
 
-import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import {
+  chmodSync,
+  constants,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { access, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 
 import { describe, expect, it, vi } from "vitest";
 
 import { TodoProcessSignals } from "../src/process.js";
-import { readTodoManagedDeployment } from "../src/managed-deployment.js";
+import { readMultiProcessSettings } from "../dist/src/multi-process-settings.js";
 
 const examplePackages = [
   "examples/projects/package.json",
@@ -27,7 +38,7 @@ const examplePackages = [
 ] as const;
 
 describe("example executable commands", () => {
-  it.each(examplePackages)(
+  it.each(examplePackages.filter((path) => path !== "examples/todo/package.json"))(
     "makes %s own generation and TypeScript build preparation",
     async (path) => {
       const manifest = JSON.parse(await readFile(path, "utf8")) as {
@@ -39,6 +50,16 @@ describe("example executable commands", () => {
       expect(command).toContain("typecheck:build");
     },
   );
+
+  it("assigns the To-Do single-process build to its launcher exactly once", async () => {
+    const manifest = JSON.parse(await readFile("examples/todo/package.json", "utf8")) as {
+      readonly scripts: Readonly<Record<string, string>>;
+    };
+    const launcher = await readFile("examples/todo/scripts/run-single-process.sh", "utf8");
+
+    expect(manifest.scripts.start).toBe("bash scripts/run-single-process.sh");
+    expect(launcher.match(/pnpm typecheck:build/gu)).toHaveLength(1);
+  });
 });
 
 describe("MessageBoard app manifest", () => {
@@ -95,6 +116,51 @@ describe("To-Do process lifecycle", () => {
 });
 
 describe("To-Do managed entrypoint", () => {
+  it("derives local endpoints from custom host and port inputs while keeping full overrides", () => {
+    const directory = mkdtempSync(join(tmpdir(), "todo-launcher-"));
+    const capture = join(directory, "environment");
+    const node = join(directory, "node");
+    writeFileSync(
+      node,
+      `#!/usr/bin/env bash\nprintf '%s\\n' "$DATASTORE_EMULATOR_HOST" "$DELIVERY_SERVER_URL" > "$TODO_CAPTURE"\n`,
+    );
+    chmodSync(node, 0o755);
+    try {
+      const run = (environment: NodeJS.ProcessEnv) =>
+        spawnSync("bash", ["examples/todo/scripts/start-multi-process-app.sh"], {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          env: { ...process.env, ...environment, PATH: `${directory}:${process.env.PATH ?? ""}` },
+        });
+
+      expect(
+        run({
+          TODO_CAPTURE: capture,
+          TODO_DATASTORE_HOST: "datastore.test",
+          TODO_DATASTORE_PORT: "9011",
+          TODO_DELIVERY_HOST: "delivery.test",
+          TODO_DELIVERY_PORT: "9022",
+        }).status,
+      ).toBe(0);
+      expect(readFileSync(capture, "utf8")).toBe(
+        "datastore.test:9011\nhttp://delivery.test:9022\n",
+      );
+
+      expect(
+        run({
+          TODO_CAPTURE: capture,
+          TODO_DATASTORE_EMULATOR_HOST: "explicit-datastore:8000",
+          TODO_DELIVERY_URL: "https://explicit-delivery:9443/base",
+        }).status,
+      ).toBe(0);
+      expect(readFileSync(capture, "utf8")).toBe(
+        "explicit-datastore:8000\nhttps://explicit-delivery:9443/base\n",
+      );
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it.each([
     [{}, "HOST"],
     [{ HOST: "127.0.0.1" }, "PORT"],
@@ -121,12 +187,12 @@ describe("To-Do managed entrypoint", () => {
       "DELIVERY_SERVER_URL",
     ],
   ])("rejects invalid managed deployment configuration", (environment, expected) => {
-    expect(() => readTodoManagedDeployment(environment)).toThrow(expected);
+    expect(() => readMultiProcessSettings(environment)).toThrow(expected);
   });
 
   it("keeps explicit process and shard counts independent", () => {
     expect(
-      readTodoManagedDeployment({
+      readMultiProcessSettings({
         HOST: "0.0.0.0",
         PORT: "8080",
         DATASTORE_PROJECT_ID: "todo",
@@ -141,42 +207,66 @@ describe("To-Do managed entrypoint", () => {
     });
   });
 
-  it("keeps the local entry independent and provides an explicit complete-replica entry", async () => {
-    const managed = "examples/todo/src/managed-entry.ts";
-    const configuration = "examples/todo/src/managed-deployment.ts";
-    expect(existsSync(managed)).toBe(true);
-    const source = await readFile(managed, "utf8");
-    const configurationSource = await readFile(configuration, "utf8");
-    const local = await readFile("examples/todo/src/index.ts", "utf8");
+  it("keeps the barrel import side-effect free while exporting the public app API", async () => {
     const manifest = JSON.parse(await readFile("examples/todo/package.json", "utf8")) as {
       readonly dependencies: Readonly<Record<string, string>>;
       readonly scripts: Readonly<Record<string, string>>;
     };
 
-    expect(source).toContain("ManagedServerApplication.run");
-    expect(source).toContain("InMemorySubscriptionRegistry");
-    expect(source).toContain("subscriptionRegistry: new InMemorySubscriptionRegistry()");
-    expect(source).toContain("DatastoreStorageFactory");
-    expect(source).toContain("new StringifierRegistry()");
-    expect(source).toContain("stringifiers.setTypeRegistry(typeRegistry)");
-    expect(source).toContain(".setStringifierRegistry(stringifiers)");
-    expect(source).toContain("RemoteDelivery.connectTo");
-    expect(configurationSource).toContain("PROCESS_COUNT");
-    expect(configurationSource).toContain("DELIVERY_SHARD_COUNT");
-    expect(source).not.toMatch(/SPINE_IPC_DIRECTORY/u);
-    expect(local).not.toContain("ManagedServerApplication");
-    expect(manifest.scripts["start:managed"]).toContain("typecheck:build");
-    expect(manifest.scripts["start:managed"]).toContain("node dist/src/managed-entry.js");
+    const api = await import("../dist/src/index.js");
+
+    expect(api.createTodoContext).toBeTypeOf("function");
+    expect(api.startTodoServer).toBeTypeOf("function");
+    expect(manifest.scripts["start:single-process"]).toContain("run-single-process.sh");
+    expect(manifest.scripts["start:multi-process"]).toContain("run-multi-process.sh");
     expect(manifest.dependencies["@spine-event-engine/delivery-client"]).toBe("workspace:*");
     expect(manifest.dependencies["@spine-event-engine/storage-datastore"]).toBe("workspace:*");
   });
 
-  it("documents runnable local prerequisites for the managed node", async () => {
+  it("provides commented executable launchers that own multi-process cleanup", async () => {
+    const scripts = [
+      "examples/todo/scripts/run-single-process.sh",
+      "examples/todo/scripts/run-multi-process.sh",
+      "examples/todo/scripts/start-datastore-emulator.sh",
+      "examples/todo/scripts/start-delivery-server.sh",
+      "examples/todo/scripts/start-multi-process-app.sh",
+    ] as const;
+    for (const path of scripts) {
+      expect(existsSync(path), path).toBe(true);
+      if (!existsSync(path)) continue;
+      await expect(access(path, constants.X_OK)).resolves.toBeUndefined();
+      const source = await readFile(path, "utf8");
+      expect(source).toMatch(/^#!\/usr\/bin\/env bash\n(?:#.*\n)+/u);
+    }
+    if (!existsSync(scripts[1])) return;
+    const orchestrator = await readFile(scripts[1], "utf8");
+    expect(orchestrator).toContain("trap cleanup EXIT");
+    expect(orchestrator).toContain("start-datastore-emulator.sh");
+    expect(orchestrator).toContain("start-delivery-server.sh");
+    expect(orchestrator).toContain("start-multi-process-app.sh");
+    expect(orchestrator).toContain('wait "$app_pid"');
+  });
+
+  it("documents both runnable modes without warnings or internal Q&A", async () => {
     const readme = await readFile("examples/todo/README.md", "utf8");
 
-    expect(readme).toContain("DATASTORE_EMULATOR_HOST=127.0.0.1:8081");
-    expect(readme).toContain("packages/delivery-server/dist/bin/spine-delivery-server.js");
-    expect(readme).toContain("DELIVERY_SERVER_URL=http://127.0.0.1:8484");
-    expect(readme).not.toContain("delivery.example.test");
+    expect(readme).toContain("## Running the app");
+    expect(readme).toContain("### Single-process app");
+    expect(readme).toContain("### Multi-process app");
+    expect(readme).toContain("scripts/run-single-process.sh");
+    expect(readme).toContain("scripts/run-multi-process.sh");
+    expect(readme).toContain("single-process-app.ts");
+    expect(readme).toContain("multi-process-app.ts");
+    expect(readme).toContain("multi-process-coordinator.ts");
+    expect(readme).toContain("multi-process-replica.ts");
+    expect(readme).toContain("Event Store");
+    const emulatorLauncher = await readFile(
+      "examples/todo/scripts/start-datastore-emulator.sh",
+      "utf8",
+    );
+    const datastoreEmulatorImage = "google/cloud-sdk:578.0.0-emulators";
+    expect(readme).toContain(datastoreEmulatorImage);
+    expect(emulatorLauncher).toContain(datastoreEmulatorImage);
+    expect(readme).not.toMatch(/⚠️|\\bwarning\\b|Why is the file called|sha256:/iu);
   });
 });

@@ -50,9 +50,7 @@ await ManagedServerApplication.run({
 `startCompleteApplicationReplica()` is application code: it configures the
 production `ServerEnvironment`, opens the application's Delivery facility,
 assembles every Bounded Context, adds them to `Server`, and starts that server
-at the supplied private endpoint. See the complete
-[To-do managed entry](../../examples/todo/src/managed-entry.ts) for a concrete
-implementation.
+at the supplied private endpoint. See the [To-Do replica assembly](../../examples/todo/src/multi-process-replica.ts) for a concrete implementation.
 
 When another host owns process signals, use the same options with `start()`
 and close the returned handle from that host:

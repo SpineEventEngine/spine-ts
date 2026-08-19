@@ -13,10 +13,10 @@
  */
 
 /**
- * Reads only the deployer-supplied settings used by the To-Do managed entrypoint.
+ * Reads the settings used to run the To-Do app with several local processes.
  * Process count and Delivery shard count stay separate application decisions.
  */
-export interface TodoManagedDeployment {
+export interface TodoMultiProcessSettings {
   // prettier-ignore
 
   /**
@@ -62,7 +62,7 @@ export interface TodoManagedDeployment {
  * @param environment Supplies the process settings.
  * @returns The validated managed deployment settings.
  */
-export function readTodoManagedDeployment(environment: NodeJS.ProcessEnv): TodoManagedDeployment {
+export function readMultiProcessSettings(environment: NodeJS.ProcessEnv): TodoMultiProcessSettings {
   return {
     host: required(environment, "HOST"),
     port: port(required(environment, "PORT")),

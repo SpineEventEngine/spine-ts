@@ -12,6 +12,7 @@
  * the License.
  */
 
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
@@ -23,8 +24,12 @@ const beginnerModules = [
   "examples/message-board/app/src/gateway-entry.ts",
   "examples/message-board/app/src/index.ts",
   "examples/message-board/app/src/managed-entry.ts",
-  "examples/todo/src/managed-deployment.ts",
-  "examples/todo/src/managed-entry.ts",
+  "examples/todo/src/todo-app.ts",
+  "examples/todo/src/single-process-app.ts",
+  "examples/todo/src/multi-process-app.ts",
+  "examples/todo/src/multi-process-coordinator.ts",
+  "examples/todo/src/multi-process-replica.ts",
+  "examples/todo/src/multi-process-settings.ts",
   "packages/deployment-gce/examples/application.ts",
   "packages/deployment-gce/examples/deployment-settings.ts",
   "packages/deployment-gce/examples/gateway.ts",
@@ -35,6 +40,8 @@ const beginnerModules = [
 
 describe("deployment example source documentation", () => {
   it.each(beginnerModules)("orients a beginner before code begins in %s", async (path) => {
+    expect(existsSync(path), `${path} should exist`).toBe(true);
+    if (!existsSync(path)) return;
     const source = await readFile(path, "utf8");
     const afterLicense = source.slice(source.indexOf("*/") + 2);
 

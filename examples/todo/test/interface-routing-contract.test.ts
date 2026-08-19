@@ -51,7 +51,7 @@ describe("To-Do interface-routing contract", () => {
   });
 
   it("keeps TaskList routing token-based and reassignment exact", () => {
-    const application = source("src/index.ts");
+    const application = source("src/todo-app.ts");
 
     expect(application).toContain("TaskEvent");
     expect(application).toContain("TaskAssignmentEvent");
@@ -60,7 +60,7 @@ describe("To-Do interface-routing contract", () => {
   });
 
   it("routes new assignment rejections by their declared TaskListId without TaskId inference", () => {
-    const application = source("src/index.ts");
+    const application = source("src/todo-app.ts");
     const fields = (schema: {
       readonly fields: readonly { readonly localName: string; readonly number: number }[];
     }) => Object.fromEntries(schema.fields.map((field) => [field.localName, field.number]));

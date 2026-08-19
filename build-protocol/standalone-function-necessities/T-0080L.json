@@ -1,74 +1,83 @@
 [
   {
     "rule": "standalone-function",
-    "file": "examples/todo/src/index.ts",
+    "file": "examples/todo/src/multi-process-coordinator.ts",
     "kind": "function-declaration",
-    "identity": "createTodoContext()#1",
-    "name": "createTodoContext",
+    "identity": "runTodoCoordinator()#1",
+    "name": "runTodoCoordinator",
     "disposition": "necessity",
-    "reason": "createTodoContext remains a TypeScript framework boundary callable export for package consumers."
+    "reason": "TypeScript lifecycle boundary: runTodoCoordinator installs terminal shutdown ownership for the managed Coordinator handle."
   },
   {
     "rule": "standalone-function",
-    "file": "examples/todo/src/index.ts",
+    "file": "examples/todo/src/multi-process-replica.ts",
     "kind": "function-declaration",
-    "identity": "startTodoServer()#1",
-    "name": "startTodoServer",
+    "identity": "createTodoReplica()#1",
+    "name": "createTodoReplica",
     "disposition": "necessity",
-    "reason": "startTodoServer remains a TypeScript framework boundary callable export for package consumers."
+    "reason": "TypeScript framework boundary: createTodoReplica composes a complete managed child from external Datastore, Delivery, and server facilities."
   },
   {
     "rule": "standalone-function",
-    "file": "examples/todo/src/managed-deployment.ts",
+    "file": "examples/todo/src/multi-process-settings.ts",
     "kind": "function-declaration",
-    "identity": "readTodoManagedDeployment()#1",
-    "name": "readTodoManagedDeployment",
+    "identity": "readMultiProcessSettings()#1",
+    "name": "readMultiProcessSettings",
     "disposition": "necessity",
-    "reason": "TypeScript framework boundary: readTodoManagedDeployment validates deployment-owned settings before child assembly."
+    "reason": "TypeScript process boundary: readMultiProcessSettings validates the environment contract before multi-process application assembly."
   },
   {
     "rule": "standalone-function",
-    "file": "examples/todo/src/managed-deployment.ts",
+    "file": "examples/todo/src/multi-process-settings.ts",
     "kind": "function-declaration",
     "identity": "required()#1",
     "name": "required",
     "disposition": "necessity",
-    "reason": "TypeScript framework boundary: required rejects absent deployment environment values without a new configuration concept."
+    "reason": "TypeScript environment boundary: required rejects an absent setting before process assembly can use an invalid value."
   },
   {
     "rule": "standalone-function",
-    "file": "examples/todo/src/managed-deployment.ts",
+    "file": "examples/todo/src/multi-process-settings.ts",
     "kind": "function-declaration",
     "identity": "port()#1",
     "name": "port",
     "disposition": "necessity",
-    "reason": "TypeScript framework boundary: port validates the Coordinator listener port range."
+    "reason": "TypeScript network boundary: port validates the Coordinator listener value before Node creates a socket."
   },
   {
     "rule": "standalone-function",
-    "file": "examples/todo/src/managed-deployment.ts",
+    "file": "examples/todo/src/multi-process-settings.ts",
     "kind": "function-declaration",
     "identity": "positiveSafeInteger()#1",
     "name": "positiveSafeInteger",
     "disposition": "necessity",
-    "reason": "TypeScript framework boundary: positiveSafeInteger validates explicit managed process and Delivery shard counts."
+    "reason": "TypeScript environment boundary: positiveSafeInteger validates explicit replica and Delivery shard counts before managed process creation."
   },
   {
     "rule": "standalone-function",
-    "file": "examples/todo/src/managed-deployment.ts",
+    "file": "examples/todo/src/multi-process-settings.ts",
     "kind": "function-declaration",
     "identity": "httpUrl()#1",
     "name": "httpUrl",
     "disposition": "necessity",
-    "reason": "TypeScript framework boundary: httpUrl normalizes the Delivery endpoint before RemoteDelivery assembly."
+    "reason": "TypeScript network boundary: httpUrl validates the Delivery endpoint protocol before a remote client connection."
   },
   {
     "rule": "standalone-function",
-    "file": "examples/todo/src/managed-entry.ts",
+    "file": "examples/todo/src/single-process-app.ts",
     "kind": "function-declaration",
-    "identity": "installShutdown()#1",
-    "name": "installShutdown",
+    "identity": "startTodoServer()#1",
+    "name": "startTodoServer",
     "disposition": "necessity",
-    "reason": "TypeScript framework boundary: installShutdown installs idempotent SIGINT and SIGTERM shutdown for the Coordinator-owned handle."
+    "reason": "TypeScript public-factory boundary: startTodoServer creates the documented single-process listener for application callers."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/todo/src/todo-app.ts",
+    "kind": "function-declaration",
+    "identity": "createTodoContext()#1",
+    "name": "createTodoContext",
+    "disposition": "necessity",
+    "reason": "TypeScript framework boundary: createTodoContext supplies the reusable bounded-context assembly to both executable modes."
   }
 ]
