@@ -298,12 +298,10 @@ effects idempotent when appropriate.
 
 For one process, the default `InMemoryTransportFactory` is sufficient.
 `ServerEnvironment` owns one shared factory for all local contexts and closes it
-once when the environment closes. For two Node processes on one host, call `createZeroMqTransportFactory()` with
-`ZeroMqConfig.create({ ipcDirectory })` in both applications; this is local IPC,
-not a multi-machine transport. In production, configure `ServerEnvironment`
-with storage, an optional legacy signal transport, an optional
-`integrationChannelFactory`, and the complete application `typeRegistry`.
-Omitting the signal transport leaves legacy runtime signal bindings closed.
+once when the environment closes. IntegrationBroker exchange is process-local
+through this message-channel factory. In production, configure
+`ServerEnvironment` with storage, optional `integrationChannelFactory`, and
+the complete application `typeRegistry`.
 
 To import an event from a third-party producer, use `ThirdPartyContext`. The
 single-tenant form forbids an actor tenant, the multitenant form requires one,

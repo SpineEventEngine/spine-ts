@@ -39,7 +39,6 @@ describe("MessageBoard deployment entrypoints", () => {
     expect(source).toContain("moduleUrl: import.meta.url");
     expect(deployment).toContain('"PROCESS_COUNT"');
     expect(deployment).toContain('"DELIVERY_SHARD_COUNT"');
-    expect(deployment).not.toContain("createZeroMqTransport");
     expect(deployment).not.toContain('"SPINE_IPC_DIRECTORY"');
   });
 
@@ -67,7 +66,6 @@ describe("MessageBoard deployment entrypoints", () => {
     expect(deployment).toContain("ServerEnvironment.when(EnvironmentType.Production)");
     expect(deployment).toContain("RemoteDelivery.connectTo");
     expect(deployment).not.toContain('"SPINE_IPC_DIRECTORY"');
-    expect(deployment).not.toContain("createZeroMqTransport");
   });
 
   it("connects production MessageBoard processes to the configured delivery server", () => {
