@@ -35,6 +35,7 @@ describe("MessageBoard deployment entrypoints", () => {
     expect(source).toContain("ManagedServerApplication.run");
     expect(source).toContain("processCount: config.processCount");
     expect(source).toContain("UniformAcrossAllShards.forNumber(config.deliveryShardCount)");
+    expect(source).toContain("new InMemorySubscriptionRegistry()");
     expect(source).toContain("moduleUrl: import.meta.url");
     expect(deployment).toContain('"PROCESS_COUNT"');
     expect(deployment).toContain('"DELIVERY_SHARD_COUNT"');

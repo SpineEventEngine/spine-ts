@@ -72,3 +72,13 @@
   complete event schema registry, and supplies no legacy signal transport. Its
   domestic and ThirdParty external-event paths still complete through the
   process-local broker and Delivery.
+
+## 2026-08-19 — managed replica registry correction
+
+- The retained container smoke passed the optional legacy-transport gate and
+  then correctly rejected Message Board's default persistent registry. Managed
+  children require the existing volatile `InMemorySubscriptionRegistry`; the
+  Gateway remains the only durable client-subscription authority.
+- The example now injects that registry only into the managed child Context.
+  This uses the accepted framework facility and neither reintroduces a signal
+  transport nor adds a registry or transport concept.

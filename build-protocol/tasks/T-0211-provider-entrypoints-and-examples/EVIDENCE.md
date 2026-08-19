@@ -57,6 +57,18 @@ real deployment smoke, reviews, integration, and remote cleanup.
 - `pnpm docs:check`, `pnpm format:check`, and `git diff --check` completed
   cleanly after the source/documentation changes.
 
+## Managed replica registry correction
+
+- The first post-runtime container smoke reached managed child assembly and
+  failed with the framework's deliberate guard requiring an
+  `InMemorySubscriptionRegistry`. The durable client-subscription authority
+  remains the Gateway; this registry is the existing volatile per-child
+  runtime facility required by `ManagedServerApplication`.
+- RED: the managed-entrypoint contract required that existing registry and
+  failed before the entry supplied it. GREEN: Message Board deployment and
+  configuration tests passed 32/32 and `pnpm typecheck:build` passed after the
+  child supplied `new InMemorySubscriptionRegistry()` to its Bounded Context.
+
 ## Runtime prerequisite checkpoint
 
 | Evidence                                                                                                                                                                                     | Result                                                                                                                                                                                                                                                                                                                                                                                                                                  |

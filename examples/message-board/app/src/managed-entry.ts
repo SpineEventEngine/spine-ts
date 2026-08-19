@@ -14,6 +14,7 @@
 
 import {
   ManagedServerApplication,
+  InMemorySubscriptionRegistry,
   Server,
   UniformAcrossAllShards,
   type ManagedServerApplicationHandle,
@@ -49,6 +50,7 @@ const managed = await ManagedServerApplication.run({
         await new MessageBoardApplication().createContext(
           facilities.storageFactory,
           UniformAcrossAllShards.forNumber(config.deliveryShardCount),
+          new InMemorySubscriptionRegistry(),
         ),
       )
       .start();

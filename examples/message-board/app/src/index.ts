@@ -25,6 +25,7 @@ import {
   Where,
   type DeliveryStrategy,
   type RunningServer,
+  type StandSubscriptionRegistry,
 } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import type { StorageFactory } from "@spine-event-engine/storage";
@@ -217,6 +218,7 @@ export class MessageBoardApplication {
   async createContext(
     storageFactory: StorageFactory = new InMemoryStorageFactory(),
     deliveryStrategy?: DeliveryStrategy,
+    subscriptionRegistry?: StandSubscriptionRegistry,
   ): Promise<BoundedContext> {
     const announcementRouting = EventRouting.create<BoardId>().route(
       MessagePostedSchema,
@@ -230,6 +232,7 @@ export class MessageBoardApplication {
       .add(BoardViewProjection)
       .add(AnnouncementBoardProjection, { eventRouting: announcementRouting });
     if (deliveryStrategy !== undefined) builder.withDeliveryStrategy(deliveryStrategy);
+    if (subscriptionRegistry !== undefined) builder.withSubscriptionRegistry(subscriptionRegistry);
     return builder.buildAsync();
   }
 
