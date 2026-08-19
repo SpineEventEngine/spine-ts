@@ -18,12 +18,12 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 const beginnerModules = [
-  "examples/message-board/app/src/application-entry.ts",
-  "examples/message-board/app/src/combined-entry.ts",
+  "examples/message-board/app/src/application-server.ts",
+  "examples/message-board/app/src/combined-server.ts",
   "examples/message-board/app/src/deployment-config.ts",
-  "examples/message-board/app/src/gateway-entry.ts",
+  "examples/message-board/app/src/gateway-server.ts",
   "examples/message-board/app/src/index.ts",
-  "examples/message-board/app/src/managed-entry.ts",
+  "examples/message-board/app/src/multi-process-app.ts",
   "examples/todo/src/todo-app.ts",
   "examples/todo/src/single-process-app.ts",
   "examples/todo/src/multi-process-app.ts",
@@ -45,6 +45,6 @@ describe("deployment example source documentation", () => {
     const source = await readFile(path, "utf8");
     const afterLicense = source.slice(source.indexOf("*/") + 2);
 
-    expect(afterLicense).toMatch(/^\s*\/\*\*[\s\S]+?\*\/\s*(?:import|export)\b/u);
+    expect(afterLicense).toMatch(/^\s*\/\*\*[\s\S]+?\*\/\s*(?:if|import|export)\b/u);
   });
 });

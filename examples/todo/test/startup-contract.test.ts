@@ -80,7 +80,7 @@ describe("MessageBoard app manifest", () => {
     expect(manifest.dependencies["@spine-event-engine/proto"]).toBe("2.0.0-snapshot.1");
     expect(manifest.dependencies["@spine-event-engine/server"]).toBe("2.0.0-snapshot.1");
     expect(manifest.devDependencies?.["@spine-event-engine/proto-tools"]).toBe("2.0.0-snapshot.1");
-    expect(manifest.scripts.start).toBe("node dist/src/local-entry.js");
+    expect(manifest.scripts.start).toBe("node dist/src/local-application-server.js");
   });
 
   it("makes the MessageBoard web start command own workspace preparation", async () => {
