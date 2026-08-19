@@ -43,6 +43,13 @@ const targets = [
   "simple-delivery-server",
   "message-board-web",
 ];
+const requestedTarget = process.argv[2] === "--target" ? process.argv[3] : undefined;
+if (
+  process.argv.length > (requestedTarget === undefined ? 2 : 4) ||
+  (requestedTarget !== undefined && !targets.includes(requestedTarget))
+)
+  throw new Error(`Usage: ${process.argv[1]} [--target <${targets.join("|")}>]`);
+const selectedTargets = requestedTarget === undefined ? targets : [requestedTarget];
 const cleanup = new BuildContextCleanup(context);
 
 cleanup.install();
@@ -67,7 +74,7 @@ try {
   }
   phase("prepare offline installer");
   stageOfflineInstaller();
-  for (const target of targets) build(target);
+  for (const target of selectedTargets) build(target);
 } finally {
   cleanup.clean();
   cleanup.uninstall();

@@ -71,3 +71,61 @@ test("keeps live updates connected beyond the former local timeout", async ({ pa
     await sender.close();
   }
 });
+
+test("keeps two stock browser tabs live through alternating posts after the former timeout", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "chromium",
+    "This timed acceptance is required only in Chromium.",
+  );
+  test.setTimeout(120_000);
+
+  const sender = await page.context().newPage();
+  const failures: string[] = [];
+  for (const browserPage of [page, sender]) {
+    browserPage.on("console", (message) => {
+      if (message.type() === "error") failures.push(`console: ${message.text()}`);
+    });
+    browserPage.on("response", (response) => {
+      if (response.status() === 401) failures.push(`401: ${response.url()}`);
+    });
+  }
+  try {
+    await page.goto("/");
+    await sender.goto("/");
+    await expect(page.getByRole("status")).toHaveText("Updating live");
+    await expect(sender.getByRole("status")).toHaveText("Updating live");
+
+    for (let sequence = 1; sequence <= 8; sequence += 1) {
+      const writer = sequence % 2 === 0 ? sender : page;
+      const message = `alternating live message ${String(sequence)} ${String(Date.now())}`;
+      await writer.getByRole("textbox", { name: "Username" }).fill(`writer-${String(sequence)}`);
+      await writer.getByRole("textbox", { name: "Message" }).fill(message);
+      await writer.getByRole("button", { name: "Post message" }).click();
+      await expect(page.getByRole("list", { name: "Messages" }).getByText(message)).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(sender.getByRole("list", { name: "Messages" }).getByText(message)).toBeVisible({
+        timeout: 15_000,
+      });
+    }
+
+    await page.waitForTimeout(36_000);
+    const message = `after former timeout ${String(Date.now())}`;
+    await sender.getByRole("textbox", { name: "Username" }).fill("post-timeout-writer");
+    await sender.getByRole("textbox", { name: "Message" }).fill(message);
+    await sender.getByRole("button", { name: "Post message" }).click();
+    await expect(page.getByRole("list", { name: "Messages" }).getByText(message)).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(sender.getByRole("list", { name: "Messages" }).getByText(message)).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByRole("status")).toHaveText("Updating live");
+    await expect(sender.getByRole("status")).toHaveText("Updating live");
+    expect(failures).toEqual([]);
+  } finally {
+    await sender.close();
+  }
+});
