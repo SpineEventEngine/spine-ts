@@ -1,6 +1,6 @@
 # T-0213 — Security and release closure
 
-**Status:** Planning
+**Status:** Inventory
 
 **Baseline:** `origin/main@4c28e2223b89fb203709413400770944778c071c`
 
