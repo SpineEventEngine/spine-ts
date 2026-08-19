@@ -49,7 +49,13 @@
   correction passes under coverage and three additional runs plus mechanical
   checks.
 - Reliability re-review passes that correction. A subsequent global run found
-  one compiler-diagnostic test's 15-second bound marginal under full coverage
-  concurrency; its assertion file passes 16/16 under coverage after a narrow
-  30-second local test bound, plus mechanical checks.
+  a compiler-diagnostic timeout; the next exposed simultaneous To-do setup and
+  isolated-build timeouts. The migrated failures prove global worker
+  contention, not three independent product defects. The release command now
+  keeps one coverage run bounded to four workers; its metadata regression is
+  retained, and individual timeouts remain unchanged.
+- Metadata passes 11/11, the compiler-diagnostic suite passes 16/16 under
+  coverage, and the combined process-heavy selection passes 60/60 with four
+  workers. Mechanical checks and narrow reliability/documentation re-reviews
+  pass.
 - Pending: final post-merge release rerun and remote cleanup.

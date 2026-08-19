@@ -353,6 +353,7 @@ describe("package metadata", () => {
     expect(release).toContain("pnpm verify:release:generated");
     expect(releaseGenerated.match(/pnpm verify:generated-gates/gu)).toHaveLength(1);
     expect(releaseGenerated.match(/vitest run --coverage/gu)).toHaveLength(1);
+    expect(releaseGenerated).toContain("--maxWorkers=4");
     expect(releaseGenerated).not.toContain(
       "packages/server/test/server/server-integration-broker-cross-process.test.ts",
     );

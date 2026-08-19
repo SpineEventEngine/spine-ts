@@ -161,5 +161,16 @@
 - The next post-merge coverage run reached one unrelated compiler-diagnostic
   test's explicit 15-second timeout under full concurrency. Measurements were
   ~0.53 seconds normally, 3.9 seconds under isolated coverage, and 15.7 seconds
-  in the global run. Raised only that test's bound to 30 seconds; its full
-  16-test file passes under coverage, with tooling/lint/format/diff checks.
+  in the global run. A provisional local timeout increase was superseded and
+  reverted after the next run exposed simultaneous 30-second To-do setup and
+  120-second isolated-build timeouts.
+- Root cause: the global coverage command used all 10 available Vitest workers
+  while process-heavy files launch their own builds, worktrees, servers, and
+  children. Retained one global coverage invocation but bounded it to four
+  workers, matching prior repository full-run practice. A metadata RED/GREEN
+  locks the cap; individual test bounds remain unchanged.
+- The process-heavy stress selection passes 60/60 with four workers. Tooling
+  typecheck, scoped ESLint, formatting, and diff hygiene pass.
+- Narrow performance/reliability and documentation re-reviews pass. The
+  reviewers confirm that worker bounding preserves coverage/test semantics and
+  that the records do not overclaim the still-pending post-merge release run.
