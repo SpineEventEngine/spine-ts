@@ -28,9 +28,9 @@ describe("Message Board public-demo trust policy", () => {
     const sources = [
       "examples/message-board/app/src/deployment-config.ts",
       "examples/message-board/app/src/index.ts",
-      "examples/message-board/app/src/gateway-entry.ts",
+      "examples/message-board/app/src/gateway-server.ts",
       "examples/message-board/app/src/combined-server.ts",
-      "examples/message-board/web/src/local-entry.tsx",
+      "examples/message-board/web/src/browser-app.tsx",
     ] as const;
     const forbidden = [
       "SignedSessions",

@@ -22,7 +22,7 @@ const CompiledBoardProcess = Object.freeze({
     return new Promise((resolve, reject) => {
       const child = spawn(
         process.execPath,
-        ["examples/message-board/app/dist/src/local-entry.js"],
+        ["examples/message-board/app/dist/src/local-application-server.js"],
         {
           cwd: process.cwd(),
           stdio: ["ignore", "pipe", "pipe"],

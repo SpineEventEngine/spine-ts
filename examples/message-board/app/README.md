@@ -30,7 +30,7 @@ browser listener is ready. Stop it with `Ctrl-C`.
 The complete entry point is intentionally small:
 
 ```ts
-// docs-snippet-path: examples/message-board/app/src/local-entry.ts
+// docs-snippet-path: examples/message-board/app/src/local-application-server.ts
 import { MessageBoardApplication } from "./index.js";
 
 const server = await new MessageBoardApplication().run({ port: 8090 });
@@ -40,7 +40,7 @@ console.log(`MessageBoard local server ready at ${server.baseUrl}`);
 Use `start()` instead of `run()` when another host handles process signals:
 
 ```ts
-// docs-snippet-path: examples/message-board/app/src/local-entry.ts
+// docs-snippet-path: examples/message-board/app/src/local-application-server.ts
 import { MessageBoardApplication } from "./index.js";
 
 const server = await new MessageBoardApplication().start({ port: 0 });
@@ -71,7 +71,7 @@ The production-shaped source files are named for the process they start:
 | File                                               | Process role                                                                                           |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | [`application-server.ts`](src/application-server.ts) | Starts only the Message Board Bounded Context; a separate Gateway is required.                         |
-| [`gateway-entry.ts`](src/gateway-entry.ts)         | Starts only the browser-facing Gateway; it contains no Bounded Context and does not run Delivery work. |
+| [`gateway-server.ts`](src/gateway-server.ts)         | Starts only the browser-facing Gateway; it contains no Bounded Context and does not run Delivery work. |
 | [`combined-server.ts`](src/combined-server.ts)       | Starts the application and Gateway together in one process.                                            |
 | [`multi-process-app.ts`](src/multi-process-app.ts)         | Starts one Coordinator parent and the configured number of complete child replicas.                    |
 | [`deployment-config.ts`](src/deployment-config.ts) | Validates the environment and assembles facilities shared by those entrypoints.                        |

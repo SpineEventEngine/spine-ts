@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node dist/src/local-entry.js",
+    "start": "node dist/src/local-application-server.js",
     "start:application": "node dist/src/application-server.js",
     "start:multi-process": "node dist/src/multi-process-app.js",
     "start:combined": "node dist/src/combined-server.js",

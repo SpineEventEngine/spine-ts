@@ -43,7 +43,7 @@ describe("MessageBoard deployment entrypoints", () => {
   });
 
   it("configures both browser modes with one named durable binding assembly", () => {
-    const gateway = readFileSync(join(sourceRoot, "gateway-entry.ts"), "utf8");
+    const gateway = readFileSync(join(sourceRoot, "gateway-server.ts"), "utf8");
     const combined = readFileSync(join(sourceRoot, "combined-server.ts"), "utf8");
     const deployment = readFileSync(join(sourceRoot, "deployment-config.ts"), "utf8");
     expect(deployment).toContain("new DurableSubscriptionBindings");
@@ -110,7 +110,7 @@ describe("MessageBoard deployment entrypoints", () => {
   it("executes gateway startup with configured browser bindings", async () => {
     const calls = startupMocks();
 
-    await import("../src/gateway-entry.js");
+    await import("../src/gateway-server.js");
 
     expect(calls.datastore).toHaveBeenCalledWith({ projectId: "project" });
     expect(calls.storage).toHaveBeenCalledWith(calls.client);
@@ -133,7 +133,7 @@ describe("MessageBoard deployment entrypoints", () => {
     const calls = startupMocks();
     calls.gatewayConfig.discovery = { namespace: "boards" };
 
-    await import("../src/gateway-entry.js");
+    await import("../src/gateway-server.js");
 
     expect(calls.serverAtPort).toHaveBeenCalledOnce();
     expect(calls.gkeNodeDiscovery).toHaveBeenCalledWith({

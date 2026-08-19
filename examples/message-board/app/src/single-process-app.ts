@@ -4,4 +4,4 @@
  */
 
 /** Starts the local single-process Message Board application. */
-await import("./local-entry.js");
+await import("./local-application-server.js");
