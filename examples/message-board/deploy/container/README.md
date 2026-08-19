@@ -34,13 +34,13 @@ node_modules/@spine-event-engine/example-message-board-app/dist/src/managed-entr
 
 The images set `NODE_ENV=production`. Supply these values when starting them:
 
-| Process                  | Required environment variables                                                                         |
-| ------------------------ | ------------------------------------------------------------------------------------------------------ |
-| Managed application node | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `DELIVERY_SERVER_URL`, `PROCESS_COUNT`, `DELIVERY_SHARD_COUNT` |
-| Combined                 | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `DELIVERY_SERVER_URL`, `BROWSER_ORIGIN`, `SUBSCRIPTION_REGISTRY_NAMESPACE` |
-| Gateway (local)          | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `BROWSER_ORIGIN`, `SUBSCRIPTION_REGISTRY_NAMESPACE`, `BACKEND_URLS` or `BACKEND_URL` |
+| Process                  | Required environment variables                                                                                                                     |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Managed application node | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `DELIVERY_SERVER_URL`, `PROCESS_COUNT`, `DELIVERY_SHARD_COUNT`                                             |
+| Combined                 | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `DELIVERY_SERVER_URL`, `BROWSER_ORIGIN`, `SUBSCRIPTION_REGISTRY_NAMESPACE`                                 |
+| Gateway (local)          | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `BROWSER_ORIGIN`, `SUBSCRIPTION_REGISTRY_NAMESPACE`, `BACKEND_URLS` or `BACKEND_URL`                       |
 | Gateway (GKE)            | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `BROWSER_ORIGIN`, `SUBSCRIPTION_REGISTRY_NAMESPACE`, `BACKEND_DISCOVERY_SERVICE`, `BACKEND_DISCOVERY_PORT` |
-| Delivery server          | `HOST`, `PORT`                                                                                         |
+| Delivery server          | `HOST`, `PORT`                                                                                                                                     |
 
 Every browser process additionally requires one shared
 `MESSAGE_BOARD_SESSION_ISSUER`, `MESSAGE_BOARD_SESSION_AUDIENCE`,
@@ -80,6 +80,13 @@ docker run --detach --name message-board-datastore \
   gcloud emulators firestore start \
   --database-mode=datastore-mode --host-port=0.0.0.0:8081 --quiet
 
+docker run --detach --name message-board-delivery \
+  --network message-board-local --network-alias delivery \
+  --env HOST=0.0.0.0 --env PORT=8484 \
+  spine-ts/simple-delivery-server:local
+
+until docker logs message-board-delivery 2>&1 | grep -q 'Delivery server listening'; do sleep 1; done
+
 docker run --rm --name message-board-app \
   --network message-board-local --publish 8080:8080 \
   --env HOST=0.0.0.0 --env PORT=8080 \
@@ -91,9 +98,11 @@ docker run --rm --name message-board-app \
   node_modules/@spine-event-engine/example-message-board-app/dist/src/managed-entry.js
 ```
 
-Stop the application with `Ctrl-C`, then remove the emulator and network:
+Stop the application with `Ctrl-C`, then remove the Delivery server, emulator,
+and network:
 
 ```bash
+docker rm --force message-board-delivery
 docker rm --force message-board-datastore
 docker network rm message-board-local
 ```

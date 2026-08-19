@@ -321,7 +321,9 @@ export class MessageBoardApplication {
           }
         : {}),
     });
-    return server.add(await this.createContext(storageFactory, deliveryStrategy, subscriptionRegistry));
+    return server.add(
+      await this.createContext(storageFactory, deliveryStrategy, subscriptionRegistry),
+    );
   }
 }
 
