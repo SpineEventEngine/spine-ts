@@ -186,6 +186,17 @@ describe("To-Do managed entrypoint", () => {
       },
       "DELIVERY_SERVER_URL",
     ],
+    [
+      {
+        HOST: "127.0.0.1",
+        PORT: "8080",
+        DATASTORE_PROJECT_ID: "todo",
+        DELIVERY_SERVER_URL: "http://delivery:8484",
+        PROCESS_COUNT: "1.5",
+        DELIVERY_SHARD_COUNT: "1",
+      },
+      "PROCESS_COUNT",
+    ],
   ])("rejects invalid managed deployment configuration", (environment, expected) => {
     expect(() => readMultiProcessSettings(environment)).toThrow(expected);
   });
