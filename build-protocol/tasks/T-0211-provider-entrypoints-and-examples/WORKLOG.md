@@ -195,3 +195,11 @@
 - T-0211 is review-complete and ready for isolated main integration. The next
   milestone is T-0212: delete ZeroMQ and generic signal routing now that the
   replacement deployment path has retained real acceptance.
+
+## 2026-08-19 — main integration
+
+- Merged T-0211 into isolated `main` without conflict.
+- Post-merge generated build and 415/415 affected tests passed; the separate
+  deployment contracts passed 12/12.
+- Marked T-0211 complete. After pushing `main` and deleting the contained task
+  branches, work continues automatically with T-0212.

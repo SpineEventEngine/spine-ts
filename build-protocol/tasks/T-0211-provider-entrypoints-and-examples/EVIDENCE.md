@@ -181,3 +181,11 @@ statements, 92.02% branches, and 96.68% lines. Its exact
   API inventory, audience, snippet, topology, and documented-command checks.
   The consolidated beginner-documentation review and final security review are
   deliberately owned by T-0213 after T-0212 removes the superseded transport.
+
+## Post-merge verification — 2026-08-19
+
+- T-0211 merged without conflict into the isolated `main` worktree.
+- A fresh generated build passed on merged `main`, followed by the same
+  affected matrix: **25/25 files and 415/415 tests**.
+- The merged deployment contracts passed **12/12**. The worktree was clean
+  apart from the committed merge and this completion record before push.
