@@ -23,7 +23,6 @@ payload forms and throwable stacks.
 pnpm --filter @spine-event-engine/example-todo start
 pnpm --filter @spine-event-engine/example-todo smoke
 pnpm vitest run examples/todo/test/black-box.test.ts
-pnpm vitest run examples/todo/test/local-multi-process.test.ts
 ```
 
 Set `SPINE_TODO_BASE_URL` when the smoke client must use another local address.
@@ -33,9 +32,11 @@ The server reports readiness only after binding and closes on `SIGINT` or
 ## Limits
 
 The black-box suite covers command, query, and subscription behavior through a
-real loopback client. The multi-process suite is a same-host test, not an
-application CLI or a multi-machine delivery proof. Managed sandboxes may deny
-listener or IPC binding with `EPERM`.
+real loopback client. Development starts one application process. A deployment
+may instead configure a managed process count: every child is a complete
+application replica, the Coordinator forwards front-facing requests, and every
+child observes Delivery directly. Managed sandboxes may deny listener binding
+with `EPERM`.
 
 ## Interface-routing contract
 

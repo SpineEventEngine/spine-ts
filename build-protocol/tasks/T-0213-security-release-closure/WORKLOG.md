@@ -71,3 +71,19 @@
   run; do not restore ZeroMQ or invent replacement transport.
 - The owner is not alone in the repository, must preserve other edits, and may
   not spawn subagents.
+
+## 2026-08-19 — release-plumbing correction implementation
+
+- Implementer profile: existing `implementer` role, explicitly configured
+  `gpt-5.6-terra` / `medium`. Runtime telemetry was not exposed by the assigned
+  execution surface; the immutable configured profile is the available evidence.
+- RED: `pnpm exec vitest run scripts/package-metadata.test.mjs` failed exactly
+  because `verify:release:generated` still named the deleted
+  `server-integration-broker-cross-process` test and ran Vitest twice.
+- GREEN implementation reduced the release command to one global coverage run,
+  removed the stale Todo transport development dependency and lock importer,
+  expanded the T-0212 guard for the deleted broker/Todo paths and references,
+  and replaced Todo’s retired local-multiprocess guidance with the accepted
+  single-process development and managed-complete-replica deployment model.
+- Focused GREEN checks passed: package metadata 11/11, T-0212 removal guard,
+  frozen lockfile installation, and Todo startup/black-box tests 55/55.

@@ -20,6 +20,7 @@ const excludedPrefixes = [
   "build-protocol/",
   "node_modules/",
   "scripts/check-t0212-removed-routing.mjs",
+  "scripts/package-metadata.test.mjs",
 ];
 const currentNormativePaths = [
   "docs/USER_GUIDE.md",
@@ -41,12 +42,16 @@ const removedPaths = [
   "packages/server/test/server/server-context-transport-child.mjs",
   "packages/server/test/server/server-context-transport-cross-process.test.ts",
   "packages/server/test/server/server-context-transport-lifecycle.test.ts",
+  "packages/server/test/server/server-integration-broker-cross-process.test.ts",
+  "examples/todo/test/local-multi-process.test.ts",
+  "examples/todo/test-fixtures/local-multi-process-worker.mjs",
 ];
 const removedReferences = new RegExp(
   "ZeroMQ|ZeroMq|zeromq|SignalTransport|ContextTransport|RuntimeTransportBinding|" +
     "TransportTopics|TransportSubscription|TransportRouting|runtime-routing|" +
     "context-transport|runtime-transport|environment\\.transport|transport:\\s*" +
-    "(?:new\\s+)?(?:Local)?SignalTransport",
+    "(?:new\\s+)?(?:Local)?SignalTransport|server-integration-broker-cross-process|" +
+    "local-multi-process",
   "u",
 );
 const removedSettingProse = new RegExp(

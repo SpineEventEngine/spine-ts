@@ -353,6 +353,10 @@ describe("package metadata", () => {
     expect(release).toContain("pnpm verify:release:generated");
     expect(releaseGenerated.match(/pnpm verify:generated-gates/gu)).toHaveLength(1);
     expect(releaseGenerated.match(/vitest run --coverage/gu)).toHaveLength(1);
+    expect(releaseGenerated).not.toContain(
+      "packages/server/test/server/server-integration-broker-cross-process.test.ts",
+    );
+    expect(releaseGenerated.match(/vitest run/gu)).toHaveLength(1);
     expect(generatedGates.match(/pnpm typecheck:build:generated/gu)).toHaveLength(1);
     expect(generatedGates.match(/pnpm docs:check:generated/gu)).toHaveLength(1);
     expect(generatedGates).toContain("pnpm lint:cleanup");

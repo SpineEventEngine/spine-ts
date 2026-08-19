@@ -54,7 +54,8 @@ The example must demonstrate:
 - validation failure handling;
 - immediate command acknowledgement behavior;
 - asynchronous event delivery;
-- local multi-process mode through the bus abstraction when available;
+- single-process development startup, plus deployer-configured managed complete
+  application replicas for production deployment;
 - black-box tests for the bounded context.
 
 If building the example exposes a missing framework feature, implementation

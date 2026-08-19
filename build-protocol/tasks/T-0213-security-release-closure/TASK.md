@@ -1,6 +1,6 @@
 # T-0213 — Security and release closure
 
-**Status:** Inventory
+**Status:** Release-plumbing correction implemented; focused verification in progress
 
 **Baseline:** `origin/main@4c28e2223b89fb203709413400770944778c071c`
 
@@ -51,3 +51,15 @@ release evidence. It must not invent new deployment/runtime concepts.
 - No platform-level autoscaling, TLS, identity provider, secrets manager, or
   observability product.
 - No automatic process or shard-count selection.
+
+## Release-plumbing correction
+
+- `verify:release:generated` runs one global coverage-enabled Vitest command;
+  it neither excludes nor separately invokes the deleted integration-broker
+  cross-process test.
+- The removal guard rejects resurrected broker cross-process and Todo local
+  multi-process paths or current references.
+- The Todo package no longer depends on the retired transport package. Its
+  current guidance distinguishes single-process development from a deployment
+  configured with managed complete application replicas, Coordinator forwarding,
+  and direct Delivery observation.
