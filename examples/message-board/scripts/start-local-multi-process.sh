@@ -49,7 +49,7 @@ docker logs "$delivery_id" 2>&1 | grep -q 'Delivery server listening' || {
 }
 
 datastore_id=$(docker run --detach --name "$name-datastore" -p 8081:8081 \
-  gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators \
+  gcr.io/google.com/cloudsdktool/google-cloud-cli:578.0.0-emulators \
   gcloud emulators firestore start --database-mode=datastore-mode --host-port=0.0.0.0:8081 --quiet)
 for attempt in $(seq 1 30); do
   curl --fail --silent http://127.0.0.1:8081 >/dev/null 2>&1 && break
@@ -68,7 +68,7 @@ pnpm -C "$root" typecheck:build
 env NODE_ENV=production DELIVERY_SERVER_URL=http://127.0.0.1:8484 MESSAGE_BOARD_DELIVERY_MODE=shared \
   HOST=127.0.0.1 PORT=8091 DATASTORE_PROJECT_ID=message-board-local \
   DATASTORE_EMULATOR_HOST=127.0.0.1:8081 PROCESS_COUNT="${MESSAGE_BOARD_PROCESS_COUNT:-2}" \
-  DELIVERY_SHARD_COUNT=2 pnpm -C "$root/examples/message-board/app" start:multi-process \
+  DELIVERY_SHARD_COUNT=2 node "$root/examples/message-board/app/dist/src/multi-process-app.js" \
   >"$coordinator_log" 2>&1 & app_pid=$!
 for attempt in $(seq 1 30); do
   grep -q 'MessageBoard managed coordinator ready' "$coordinator_log" && break

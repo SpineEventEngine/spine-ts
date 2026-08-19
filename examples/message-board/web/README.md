@@ -111,5 +111,4 @@ The visible demo creates no browser credential. It sends the selected actor in e
 - [Complete Message Board example](../README.md)
 - [Browser client](../../../packages/client-web/README.md)
 - [React adapter](../../../packages/client-react/README.md)
-- [Browser authentication guide](../../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 - [Detailed coding-agent reference](REFERENCE.md)

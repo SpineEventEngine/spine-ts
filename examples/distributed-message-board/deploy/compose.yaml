@@ -1,6 +1,6 @@
 services:
   datastore:
-    image: gcr.io/google.com/cloudsdktool/google-cloud-cli@sha256:cda01b8c880e9161992c3fd61d7d0e153b4dd073aa4a9d62ad79243907cf8dd4
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:578.0.0-emulators
     command:
       [
         gcloud,
@@ -68,8 +68,6 @@ services:
       DATASTORE_EMULATOR_HOST: datastore:8081
     depends_on:
       datastore:
-        condition: service_healthy
-      delivery:
         condition: service_healthy
       application-node-1:
         condition: service_started

@@ -72,7 +72,7 @@ docker network create message-board-local
 
 docker run --detach --name message-board-datastore \
   --network message-board-local --network-alias datastore \
-  gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators \
+  gcr.io/google.com/cloudsdktool/google-cloud-cli:578.0.0-emulators \
   gcloud emulators firestore start \
   --database-mode=datastore-mode --host-port=0.0.0.0:8081 --quiet
 

@@ -20,6 +20,8 @@ test("managed multi-process launcher owns one shared Delivery server", () => {
   assert.match(local, /DELIVERY_SERVER_URL=http:\/\/127\.0\.0\.1:8484/u);
   assert.match(local, /MESSAGE_BOARD_DELIVERY_MODE=shared/u);
   assert.match(local, /NODE_ENV=production/u);
+  assert.match(local, /node "\$root\/examples\/message-board\/app\/dist\/src\/multi-process-app\.js"/u);
+  assert.doesNotMatch(local, /start:multi-process/u);
   assert.doesNotMatch(local, /MESSAGE_BOARD_DELIVERY_MODE="\$\{MESSAGE_BOARD_DELIVERY_MODE:-local\}"/u);
 });
 
@@ -34,8 +36,9 @@ test("local launcher refuses to start Gateway or UI after its Coordinator exits"
       docker:
         '#!/usr/bin/env bash\necho docker:$1 >>$HARNESS_LOG\n[[ "$1" == run ]] && { echo captured-id; exit 0; }\n[[ "$1" == logs ]] && { echo "Delivery server listening"; exit 0; }\n[[ "$1" == inspect ]] && { echo true; exit 0; }\nexit 0\n',
       curl: "#!/usr/bin/env bash\nexit 0\n",
-      node: "#!/usr/bin/env bash\necho node >>$HARNESS_LOG\necho fixed-id\n",
-      pnpm: '#!/usr/bin/env bash\necho "pnpm:$*" >>$HARNESS_LOG\n[[ "$*" == *start:multi-process* ]] && exit 1\nexit 0\n',
+      node:
+        '#!/usr/bin/env bash\necho "node:$*" >>$HARNESS_LOG\n[[ "$1" == -e ]] && { echo fixed-id; exit 0; }\nexit 1\n',
+      pnpm: '#!/usr/bin/env bash\necho "pnpm:$*" >>$HARNESS_LOG\nexit 0\n',
     })) {
       const path = join(bin, name);
       mkdirSync(bin, { recursive: true });
@@ -58,7 +61,7 @@ test("local launcher refuses to start Gateway or UI after its Coordinator exits"
     );
     assert.notEqual(result.status, 0);
     const calls = readFileSync(log, "utf8");
-    assert.match(calls, /start:multi-process/u, result.stderr);
+    assert.match(calls, /node:.*multi-process-app\.js/u, result.stderr);
     assert.doesNotMatch(calls, /gateway-server|web/u);
   } finally {
     rmSync(temp, { recursive: true, force: true });
