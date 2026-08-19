@@ -1,3 +1,4 @@
+// Proves temporary image-build files are removed when a build is interrupted.
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";

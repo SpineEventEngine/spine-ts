@@ -29,29 +29,29 @@ static_resources:
                               path: "/spine.auth.AuthenticationService/ResolveContext",
                               headers: [{ name: ":method", exact_match: POST }],
                             }
-                          route: &session_route
+                          route: &board_route
                             cluster: gateway
                             timeout: 30s
-                            hash_policy: &session_hash
+                            hash_policy: &board_hash
                               - header: { header_name: authorization }
                         - match:
                             {
                               path: "/spine.client.CommandService/Post",
                               headers: [{ name: ":method", exact_match: POST }],
                             }
-                          route: *session_route
+                          route: *board_route
                         - match:
                             {
                               path: "/spine.client.QueryService/Read",
                               headers: [{ name: ":method", exact_match: POST }],
                             }
-                          route: *session_route
+                          route: *board_route
                         - match:
                             {
                               path: "/spine.client.SubscriptionService/Subscribe",
                               headers: [{ name: ":method", exact_match: POST }],
                             }
-                          route: *session_route
+                          route: *board_route
                         - match:
                             {
                               path: "/spine.client.SubscriptionService/Activate",
@@ -60,13 +60,17 @@ static_resources:
                           route:
                             cluster: gateway
                             timeout: 0s
-                            hash_policy: *session_hash
+                            hash_policy: *board_hash
                         - match:
                             {
                               path: "/spine.client.SubscriptionService/Cancel",
                               headers: [{ name: ":method", exact_match: POST }],
                             }
-                          route: *session_route
+                          route: *board_route
+                        - match: { prefix: "/spine." }
+                          direct_response: { status: 404 }
+                        - match: { prefix: "/" }
+                          route: { cluster: web, timeout: 30s }
                 http_filters:
                   - name: envoy.filters.http.cors
                     typed_config:
@@ -86,3 +90,13 @@ static_resources:
               - endpoint:
                   address:
                     socket_address: { address: gateway, port_value: 8080 }
+    - name: web
+      connect_timeout: 2s
+      type: LOGICAL_DNS
+      load_assignment:
+        cluster_name: web
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: web, port_value: 8080 }

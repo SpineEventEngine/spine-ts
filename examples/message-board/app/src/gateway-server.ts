@@ -14,7 +14,7 @@
 
 /**
  * Starts the standalone browser-facing Gateway for Message Board.
- * It owns browser sessions and subscriptions, but no Bounded Context or Delivery worker.
+ * It owns browser requests and subscriptions, but no Bounded Context or Delivery worker.
  */
 
 import { Server } from "@spine-event-engine/server";
@@ -23,8 +23,8 @@ import { Datastore } from "@google-cloud/datastore";
 
 import { MessageBoardDeployment } from "./deployment-config.js";
 import { BoardAccessPolicy, BoardContextResolver } from "./board-access.js";
-import { LocalBoardSession } from "./local-session.js";
 import { typeRegistry } from "./model-registry.js";
+import { PublicBoardAdmission } from "./public-board-admission.js";
 
 const config = MessageBoardDeployment.gateway(process.env);
 const client = new Datastore({ projectId: config.projectId });
@@ -33,7 +33,6 @@ const storage = MessageBoardDeployment.storage(client);
 MessageBoardDeployment.configureGatewayServer(config, storage, logger);
 const policy = new BoardAccessPolicy();
 const bindings = MessageBoardDeployment.bindings(config, storage);
-const sessions = MessageBoardDeployment.sessions(process.env);
 const server = await Server.atPort(config.port, {
   host: config.host,
   browser: {
@@ -47,10 +46,10 @@ const server = await Server.atPort(config.port, {
         }),
     origins: [config.webOrigin],
     registry: typeRegistry,
-    sessions,
+    sessions: PublicBoardAdmission.resolver(),
     authorize: policy.authorize.bind(policy),
     contexts: new BoardContextResolver(),
-    clock: LocalBoardSession.clock,
+    clock: PublicBoardAdmission.clock,
     bindings,
   },
 }).run();

@@ -1,3 +1,4 @@
+// Checks the browser-acceptance runner's cleanup and observable test sequencing.
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { EventEmitter } from "node:events";
@@ -83,9 +84,6 @@ test("closes the topology when the Playwright child cannot spawn", async () => {
   let closed = false;
   const topology = {
     baseUrl: "https://gateway.example.test",
-    cookie: { setCookie: "cookie", csrf: "csrf" },
-    expiredCookie: { setCookie: "expired" },
-    cookieB: { setCookie: "cookie-b", csrf: "csrf-b" },
     tls: { key: "key", cert: "cert" },
     close: async () => {
       closed = true;
@@ -111,9 +109,6 @@ test("waits for a successful Playwright child close before closing a drained top
   let closed = false;
   const topology = {
     baseUrl: "https://gateway.example.test",
-    cookie: { setCookie: "cookie", csrf: "csrf" },
-    expiredCookie: { setCookie: "expired" },
-    cookieB: { setCookie: "cookie-b", csrf: "csrf-b" },
     tls: { key: "key", cert: "cert" },
     bindingCount: () => 0,
     counters: () => ({ activeStreams: 0 }),
@@ -151,9 +146,6 @@ test("requires three observed passive snapshots for a non-literal grep selection
   });
   const topology = {
     baseUrl: "https://gateway.example.test",
-    cookie: { setCookie: "cookie", csrf: "csrf" },
-    expiredCookie: { setCookie: "expired" },
-    cookieB: { setCookie: "cookie-b", csrf: "csrf-b" },
     tls: { key: "key", cert: "cert" },
     bindingCount: () => bindings,
     counters: () => ({ subscribe: 1, activate: 1, activeStreams, updates: 1 }),
@@ -204,9 +196,6 @@ test("preserves a late output failure when forced-disconnect settlement and clos
   });
   const topology = {
     baseUrl: "https://gateway.example.test",
-    cookie: { setCookie: "cookie", csrf: "csrf" },
-    expiredCookie: { setCookie: "expired" },
-    cookieB: { setCookie: "cookie-b", csrf: "csrf-b" },
     tls: { key: "key", cert: "cert" },
     bindingCount: () => {
       order.push("settlement");

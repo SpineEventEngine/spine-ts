@@ -13,16 +13,19 @@
  */
 
 /**
- * Reads the local MessageBoard gateway URL from Vite configuration.
+ * Reads the Message Board RPC base URL from Vite configuration.
  *
  * @param environment Supplies Vite environment values.
- * @returns Returns the configured loopback gateway URL.
+ * @returns Returns the configured HTTP or HTTPS RPC base URL.
  */
 export const LocalBoardGateway: Readonly<{
   url(environment: Readonly<Record<string, string | undefined>>): string;
 }> = Object.freeze({
   url(environment: Readonly<Record<string, string | undefined>>): string {
-    const value = environment.VITE_MESSAGE_BOARD_GATEWAY_URL ?? "http://127.0.0.1:8090";
+    const value =
+      environment.MESSAGE_BOARD_GATEWAY_URL ??
+      environment.VITE_MESSAGE_BOARD_GATEWAY_URL ??
+      "http://127.0.0.1:8090";
     let url: URL;
     try {
       url = new URL(value);
@@ -31,11 +34,17 @@ export const LocalBoardGateway: Readonly<{
         "VITE_MESSAGE_BOARD_GATEWAY_URL must be a loopback HTTP URL with an explicit port.",
       );
     }
-    if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || url.port === "")
+    const hasExplicitDefaultPort = /:\d+(?:\/|$)/u.test(value);
+    if (
+      (url.protocol !== "http:" && url.protocol !== "https:") ||
+      (url.port === "" && !hasExplicitDefaultPort) ||
+      url.username !== "" ||
+      url.password !== ""
+    )
       throw new Error(
-        "VITE_MESSAGE_BOARD_GATEWAY_URL must be a loopback HTTP URL with an explicit port.",
+        "VITE_MESSAGE_BOARD_GATEWAY_URL must be an HTTP or HTTPS URL with an explicit port and no credentials.",
       );
-    const port = Number(url.port);
+    const port = Number(url.port || (url.protocol === "https:" ? 443 : 80));
     if (!Number.isInteger(port) || port < 1 || port > 65_535)
       throw new Error("VITE_MESSAGE_BOARD_GATEWAY_URL must use a port from 1 through 65535.");
     return url.toString().replace(/\/$/u, "");

@@ -6,9 +6,6 @@ data:
   BROWSER_ORIGIN: https://message-board.example.test
   SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-production
   DELIVERY_SERVER_URL: http://simple-delivery-server:8484
-  MESSAGE_BOARD_SESSION_ISSUER: message-board
-  MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
-  MESSAGE_BOARD_SESSION_KEY_ID: replace-on-rotation
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -66,6 +63,31 @@ metadata: { name: simple-delivery-server }
 spec:
   selector: { app: simple-delivery-server }
   ports: [{ port: 8484, targetPort: 8484 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: message-board-web
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: message-board-web } }
+  template:
+    metadata: { labels: { app: message-board-web } }
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: web
+          image: spine-ts/message-board-web:local
+          env: [{ name: MESSAGE_BOARD_GATEWAY_URL, value: https://message-board.example.test:443 }]
+          startupProbe: { tcpSocket: { port: 8080 }, failureThreshold: 30, periodSeconds: 2 }
+          readinessProbe: { tcpSocket: { port: 8080 }, periodSeconds: 2 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: message-board-web }
+spec:
+  selector: { app: message-board-web }
+  ports: [{ port: 8080, targetPort: 8080 }]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -162,6 +184,8 @@ data:
                               route: { cluster: gateway, timeout: 0s }
                             - match: { path: "/spine.client.SubscriptionService/Cancel", headers: [{ name: ":method", exact_match: POST }] }
                               route: { cluster: gateway, timeout: 30s }
+                            - match: { prefix: "/" }
+                              route: { cluster: web, timeout: 30s }
                     http_filters:
                       - name: envoy.filters.http.cors
                         typed_config:
@@ -178,3 +202,11 @@ data:
             endpoints:
               - lb_endpoints:
                   - endpoint: { address: { socket_address: { address: message-board-combined, port_value: 8080 } } }
+        - name: web
+          connect_timeout: 5s
+          type: STRICT_DNS
+          load_assignment:
+            cluster_name: web
+            endpoints:
+              - lb_endpoints:
+                  - endpoint: { address: { socket_address: { address: message-board-web, port_value: 8080 } } }

@@ -1,11 +1,11 @@
 [
   {
     "rule": "standalone-function",
-    "file": "examples/message-board/app/src/managed-entry.ts",
+    "file": "examples/message-board/app/src/multi-process-replica.ts",
     "kind": "function-declaration",
-    "identity": "installShutdown()#1",
-    "name": "installShutdown",
+    "identity": "managedReplicaOptions()#1",
+    "name": "managedReplicaOptions",
     "disposition": "necessity",
-    "reason": "TypeScript framework boundary: installShutdown installs idempotent SIGINT and SIGTERM shutdown for the Coordinator-owned handle."
+    "reason": "TypeScript framework boundary: managedReplicaOptions supplies the Coordinator-required child factory and synchronization callbacks."
   }
 ]

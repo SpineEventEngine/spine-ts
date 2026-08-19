@@ -1,3 +1,4 @@
+// Assembles the private native and public browser test topology used by interop tests.
 import * as http2 from "node:http2";
 import * as tls from "node:tls";
 import { execFile } from "node:child_process";
@@ -6,17 +7,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import {
-  create,
-  fromBinary,
-} from "../../../../../packages/proto/node_modules/@bufbuild/protobuf/dist/esm/index.js";
-import { TimestampSchema } from "../../../../../packages/proto/node_modules/@bufbuild/protobuf/dist/esm/wkt/gen/google/protobuf/timestamp_pb.js";
+import { fromBinary } from "../../../../../packages/proto/node_modules/@bufbuild/protobuf/dist/esm/index.js";
 import {
   connectNodeAdapter,
   createGrpcTransport,
 } from "../../../../../packages/server/node_modules/@connectrpc/connect-node/dist/esm/index.js";
 import { Server } from "../../../../../packages/server/dist/index.js";
-import { AuthenticationService } from "../../../../../packages/proto/dist/src/auth/index.js";
 import { CommandSchema } from "../../../../../packages/proto/dist/src/index.js";
 import {
   QuerySchema,
@@ -31,8 +27,6 @@ import {
   DynamicUnaryForwarder,
   InMemorySubscriptionBindings,
   NativeSubscriptionCreator,
-  OpaqueSessionCookies,
-  OpaqueSessions,
   SubscriptionGateway,
   TransportFacts,
   UnaryGateway,
@@ -44,6 +38,7 @@ import {
   MessageBoardApplication,
   typeRegistry,
 } from "../../../../../examples/message-board/app/dist/src/index.js";
+import { PublicBoardAdmission } from "../../../../../examples/message-board/app/dist/src/public-board-admission.js";
 import { renderEnvoy } from "../../../../../interop/envoy/render.mjs";
 
 const run = promisify(execFile);
@@ -181,44 +176,8 @@ export async function startTopology({ lifecycle = {} } = {}) {
     };
     const policy = new BoardAccessPolicy();
     const contexts = new BoardContextResolver();
-    const clock = {
-      now: () => create(TimestampSchema, { seconds: BigInt(Math.floor(Date.now() / 1000)) }),
-    };
-    const cookieSessions = new OpaqueSessions();
-    cleanup.add("cookie sessions", 30, () => cookieSessions.close());
-    let expiredNow = 0;
-    const expiredSessions = new OpaqueSessions({
-      clock: { now: () => expiredNow },
-      ttlMilliseconds: 1,
-    });
-    cleanup.add("expired cookie sessions", 20, () => expiredSessions.close());
-    const cookieCredentials = new OpaqueSessionCookies({
-      csrfSecret: new Uint8Array(32).fill(7),
-      origins: [browserOrigin],
-    });
-    cleanup.add("cookie credential helper", 40, () => cookieCredentials.close());
-    const principal = { id: "ada", attributes: { boards: "board-a" } };
-    const principalB = { id: "bert", attributes: { boards: "board-a" } };
-    const created = await cookieSessions.create(principal);
-    if (created.kind !== "created")
-      throw new Error(`cookie session creation failed: ${created.reason}`);
-    const createdB = await cookieSessions.create(principalB);
-    if (createdB.kind !== "created")
-      throw new Error(`secondary cookie session creation failed: ${createdB.reason}`);
-    const expired = await expiredSessions.create(principal);
-    if (expired.kind !== "created")
-      throw new Error(`expired cookie session creation failed: ${expired.reason}`);
-    expiredNow = 2;
-    const bearerSession = {
-      principal,
-      expiresAt: create(TimestampSchema, { seconds: BigInt(Math.floor(Date.now() / 1000) + 60) }),
-    };
-    const sessions = {
-      resolve: async (credential) => {
-        if (credential.kind === "bearer" && credential.value === "test") return bearerSession;
-        return (await cookieSessions.resolve(credential)) ?? expiredSessions.resolve(credential);
-      },
-    };
+    const clock = PublicBoardAdmission.clock;
+    const sessions = PublicBoardAdmission.resolver();
     const unary = new UnaryGateway({
       registry: typeRegistry,
       maxRequestBytes: 1_048_576,
@@ -259,12 +218,8 @@ export async function startTopology({ lifecycle = {} } = {}) {
       unary,
       subscriptions,
       requests: {
-        credential: (context) => {
-          const extracted = cookieCredentials.extract(
-            Object.fromEntries(context.requestHeader.entries()),
-          );
-          return extracted.kind === "rejected" ? { kind: "bearer", value: "" } : extracted;
-        },
+        // The framework's empty credential variant represents this public demo's absent credential.
+        credential: () => ({ kind: "empty" }),
         transport: (context) =>
           TransportFacts.from({
             service: "browser",
@@ -279,7 +234,6 @@ export async function startTopology({ lifecycle = {} } = {}) {
       http2.createServer(
         connectNodeAdapter({
           routes(router) {
-            router.service(AuthenticationService, services.authentication);
             router.service(CommandService, services.command);
             router.service(QueryService, services.query);
             router.service(SubscriptionService, services.subscription);
@@ -337,18 +291,6 @@ export async function startTopology({ lifecycle = {} } = {}) {
     return {
       baseUrl: "https://127.0.0.1:8443",
       nativeBaseUrl: backend.baseUrl,
-      cookie: Object.freeze({
-        setCookie: cookieCredentials.issue(created.credential.value),
-        csrf: cookieCredentials.csrf(created.credential.value),
-      }),
-      cookieB: Object.freeze({
-        setCookie: cookieCredentials.issue(createdB.credential.value),
-        csrf: cookieCredentials.csrf(createdB.credential.value),
-      }),
-      expiredCookie: Object.freeze({
-        setCookie: cookieCredentials.issue(expired.credential.value),
-        csrf: cookieCredentials.csrf(expired.credential.value),
-      }),
       tls: Object.freeze({ key: join(directory, "key.pem"), cert: join(directory, "cert.pem") }),
       bindingCount: () => bindings.size,
       counters: () => Object.freeze({ ...counters }),

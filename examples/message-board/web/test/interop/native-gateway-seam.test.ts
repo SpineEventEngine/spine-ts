@@ -25,7 +25,9 @@ test("exposes ResolveContext beside the native browser services", () => {
     unary: {} as UnaryGateway,
     subscriptions: {} as SubscriptionGateway,
     requests: {
-      credential: () => ({ kind: "bearer", value: "test" }),
+      credential: () => {
+        throw new Error("This service-map construction never reads request credentials.");
+      },
       transport: () => ({ service: "test", method: "test" }),
     } satisfies NativeGatewayRequestContext,
   });

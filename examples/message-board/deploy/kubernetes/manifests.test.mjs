@@ -1,3 +1,4 @@
+// Checks that the static Kubernetes reference keeps its documented topology.
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
@@ -27,12 +28,16 @@ for (const mode of ["combined", "standalone"]) {
     assert.match(document, /terminationGracePeriodSeconds:/u);
     assert.match(document, /secretRef:/u);
     assert.match(document, /configMapRef:/u);
-    assert.match(document, /MESSAGE_BOARD_SESSION_ISSUER/u);
+    assert.doesNotMatch(document, /MESSAGE_BOARD_SESSION_/u);
     assert.match(document, /secretRef: \{ name: message-board-runtime \}/u);
     assert.doesNotMatch(document, /kind: Secret[\s\S]*name: message-board-runtime/u);
     assert.match(document, /name: message-board-envoy-config/u);
     assert.match(document, /mountPath: \/etc\/envoy\/envoy.yaml/u);
     assert.match(document, /kind: Service[\s\S]*name: message-board-envoy/u);
+    assert.match(document, /kind: Deployment[\s\S]*name: message-board-web/u);
+    assert.match(document, /kind: Service[\s\S]*name: message-board-web/u);
+    assert.match(document, /match: \{ prefix: "\/" \}[\s\S]*cluster: web/u);
+    assert.match(document, /- name: web[\s\S]*message-board-web/u);
     assert.match(document, /secretName: message-board-envoy-tls/u);
     assertEnvoy(document, "https://message-board.example.test");
     assert.doesNotMatch(document, /kind: (Datastore|MySQL|Postgres|Redis|Hazelcast)/u);
@@ -45,7 +50,7 @@ test("standalone reference uses one dynamically discovering Gateway", () => {
   const application = statefulSet(document, "message-board-application");
   const gateway = deployment(document, "message-board-gateway");
   assert.match(application, /replicas: 2/u);
-  assert.match(application, /managed-entry\.js/u);
+  assert.match(application, /multi-process-app\.js/u);
   assert.match(application, /name: PROCESS_COUNT[\s\S]*?value: "2"/u);
   assert.match(application, /name: DELIVERY_SHARD_COUNT[\s\S]*?value: "2"/u);
   assert.doesNotMatch(application, /SPINE_IPC_DIRECTORY/u);
@@ -110,6 +115,10 @@ function envoyRoutes(document) {
         const hosts = filter.typed_config?.route_config?.virtual_hosts ?? [];
         for (const host of hosts) {
           for (const item of host.routes ?? []) {
+            if (item.match?.prefix === "/" && item.route?.cluster === "web") {
+              assert.deepEqual(item.route, { cluster: "web", timeout: "30s" });
+              continue;
+            }
             if (
               Object.keys(item.match ?? {}).join(",") !== "path,headers" ||
               typeof item.match.path !== "string"

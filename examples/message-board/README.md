@@ -9,7 +9,7 @@ context, and a query-side view fit together.
 
 - ✅ How one Proto model is shared by the Node application and React UI.
 - ✅ How an Aggregate accepts a write and a Projection builds the read model.
-- ✅ Why browser traffic goes through an authenticated gateway while native
+- ✅ Why browser traffic goes through a public-demo gateway while native
   gRPC remains private.
 - ✅ How normal complete subscription payloads update rows locally and when to recover by query.
 
@@ -28,6 +28,14 @@ build outputs, so build them once before starting local processes.
 
 ## 🚀 Start locally
 
+| Mode                             | Storage            | Delivery      | Gateway/UI route       | Owner    |
+| -------------------------------- | ------------------ | ------------- | ---------------------- | -------- |
+| local single-process             | in-memory          | local         | direct UI to Gateway   | launcher |
+| local multi-process              | Datastore emulator | shared server | direct UI to Gateway   | launcher |
+| combined container               | Datastore emulator | shared server | stock UI through Envoy | Compose  |
+| one-node managed container       | Datastore emulator | shared server | stock UI through Envoy | Compose  |
+| distributed multi-node container | shared Datastore   | shared server | stock UI through Envoy | Compose  |
+
 Install and build from the repository root:
 
 ```bash
@@ -35,16 +43,32 @@ pnpm install --frozen-lockfile
 pnpm typecheck:build
 ```
 
-Start the server, then the UI, in separate terminals:
+For the local single-process mode, use the launcher. It builds the generated
+model, starts the in-memory application and Gateway, then keeps the stock UI
+in the foreground; `Ctrl-C` stops both processes:
 
 ```bash
-pnpm --dir examples/message-board/app start
-pnpm --dir examples/message-board/web start
+examples/message-board/scripts/start-local-single-process.sh
 ```
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173), enter a username and a
 message, and post it to `general`. Command+Enter on macOS, or Control+Enter
 elsewhere, posts; plain Enter adds a line. Stop either process with `Ctrl-C`.
+
+For the local multi-process mode, run:
+
+```bash
+examples/message-board/scripts/start-local-multi-process.sh
+```
+
+It builds the matching Delivery image, owns a Datastore emulator and one shared
+Delivery server, starts two managed application replicas plus the Gateway and
+stock UI, then prints [http://127.0.0.1:5173](http://127.0.0.1:5173). `Ctrl-C`
+stops every process and container that this launcher created. Multiple replicas
+share Delivery; the in-memory single-process launcher above is the local-only path.
+
+Kubernetes manifests are static deployment references, not a locally runnable
+mode. See [`deploy/kubernetes`](deploy/kubernetes) when a cluster is available.
 
 Empty fields demonstrate the validation text declared in
 [`commands.proto`](model/proto/spine/examples/messageboard/commands.proto): the
@@ -54,8 +78,8 @@ browser displays the server's structured response instead of duplicating rules.
 
 ```mermaid
 flowchart LR
-  React[React in the browser] -->|gRPC-Web or Connect| Gateway[Authenticated gateway]
-  Gateway -->|trusted context| Native[Private native gRPC services]
+  React[React in the browser] -->|gRPC-Web or Connect| Gateway[Public browser gateway]
+  Gateway --> Native[Private native gRPC services]
   Native --> Context[Message Board bounded context]
   Context --> Aggregate[BoardMessageAggregate]
   Aggregate -->|MessagePosted| Projection[BoardViewProjection]
@@ -72,10 +96,10 @@ flowchart LR
 
 The browser never receives the native backend address. For local development,
 `Server` starts a private native HTTP/2 backend and a public loopback browser
-gateway on port 8090. The gateway authenticates first, resolves a trusted actor
-context, then forwards approved traffic; the bounded context does not read
-credentials. The React client may use either gRPC-Web or Connect at that public
-boundary.
+gateway on port 8090. The public-demo Gateway rebuilds the selected actor context
+from the request actor and forwards only approved traffic; the bounded context
+does not read browser credentials. The React client may use either gRPC-Web or
+Connect at that public boundary.
 
 `BoardMessageAggregate` represents one message ID and refuses a duplicate before it
 changes state. This is the `postMessage()` handler excerpt from
@@ -152,8 +176,12 @@ pnpm --config.verify-deps-before-run=false --dir examples/message-board/web test
 The browser suite needs Playwright browsers; install them once with
 `pnpm exec playwright install chromium firefox webkit`.
 
-Local mode uses in-memory application storage, sessions, and subscription
-bindings plus a fixed, non-secret identity for `ada`. It is not a sign-in flow.
+Local mode uses in-memory application storage and subscription bindings. It is
+a public demonstration: the actor ID in each command, query, and subscription
+context becomes the actor reconstructed by the Gateway; no browser credential is
+used. After a reconnect, the UI first queries the current board and then listens
+again. Think of live updates as a doorbell: Gateway remembers which doorbell the
+browser rang, but does not store every ring while the browser is away.
 After a reconnect, the UI must re-query; no subscription stream supplies a
 complete historical record.
 
@@ -168,7 +196,6 @@ replica-oriented standalone application modes.
 - [Message Board server](app/README.md)
 - [Message Board model](model/README.md)
 - [Message Board web UI](web/README.md)
-- [Browser client, authentication, and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 - [Detailed coding-agent reference](REFERENCE.md)
 
 ## Deployment
@@ -184,7 +211,7 @@ flowchart LR
   Browser[Browser] --> Envoy[Envoy / public TLS edge]
   D[Simple delivery server]
   subgraph Combined[Combined topology]
-    C[Message Board app + authenticated gateway]
+    C[Message Board app + public browser gateway]
     C --> CS[(Application storage)]
     C --> CR[(Subscription registry)]
     C --> D
@@ -208,10 +235,8 @@ request selects one private application node. The
 registry and delivery connections represent shared topology and subscription
 fan-in, not additional unary request routes.
 
-Application code selects and manages its storage. The example has no persisted
-session-revocation facility. Gateway code manages the separate durable subscription
-registry in one namespace, and browser-capable processes share session signing
-values. Operators configure TLS, identity-provider setup, secrets,
+Application code selects and manages its storage. Gateway code manages the separate durable subscription
+registry in one namespace. Operators configure TLS,
 image distribution, network policy, and production delivery infrastructure.
 The reference simple delivery server is in-memory and not highly available;
 the Gateway remembers what a browser watches, not a replayable history of every

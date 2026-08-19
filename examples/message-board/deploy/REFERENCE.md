@@ -24,10 +24,11 @@ wait for the delivery server before startup; the Gateway does not use Delivery.
 References use TCP startup/readiness probes and deliberately omit liveness
 probes and application health endpoints.
 
-All browser processes use one shared signed-session issuer, audience, key ID,
-and P-256 private key. The Gateway preserves the logical definition of what a
-client watches, but not a history of every update delivered to that client.
-After an interruption, clients reconnect and query the current Projection state.
+The public demo creates no browser credential. The Gateway remembers the
+logical definition of what a browser watches, but not a history of every update
+delivered to that browser. Like a doorbell, a notification only helps when the
+browser is present: after an interruption it queries the current board state,
+then resumes live updates.
 
 `message-board-storage`, `message-board-runtime`, and `message-board-envoy-tls`
 are external Secrets managed by the operator; the reference YAML deliberately does not

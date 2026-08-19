@@ -1,3 +1,4 @@
+// Loads each Envoy example in the pinned image before readers copy its configuration.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";

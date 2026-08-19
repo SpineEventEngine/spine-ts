@@ -15,7 +15,7 @@ aborts active reads and observation streams and closes its session once.
 Options default to page size 100, no read retry, no retry backoff, no observation
 reconnect, no reconnect backoff, observation buffer 100, and operation timeout
 30000 ms. Page size is 1–1000; retry/reconnect counts are 0–5; backoffs are
-0–10000 ms; observation buffers are 1–1000; per-operation timeouts are
+0–10000 ms; observation buffers are 1–1000; finite-operation and observation-setup timeouts are
 1–120000 ms.
 
 Worker `nodeId` and `value` must be non-blank and together at most 128 UTF-8
@@ -41,7 +41,7 @@ Protocol-invalid data throws `DeliveryProtocolError`.
 `observeShardUpdates()` requires one acknowledgement, has a bounded queue, and
 reconnects only within configured limits. A slow consumer can receive
 `ShardObservationOverflowError`; an unrecoverable stream ends with
-`DeliveryShardObservationError`. Observation is a hint: reconcile a known
+`DeliveryShardObservationError`. Its setup timeout never limits an acknowledged active stream. Observation is a hint: reconcile a known
 mutation with `shardSnapshot()` before a later action.
 
 The remote protocol has no renewable lease fence or separate per-pickup-time

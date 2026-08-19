@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node dist/src/local-entry.js",
-    "start:application": "node dist/src/application-entry.js",
-    "start:managed": "node dist/src/managed-entry.js",
-    "start:combined": "node dist/src/combined-entry.js",
+    "start": "node dist/src/local-application-server.js",
+    "start:application": "node dist/src/application-server.js",
+    "start:multi-process": "node dist/src/multi-process-app.js",
+    "start:combined": "node dist/src/combined-server.js",
     "proto:compose": "spine-proto compose",
     "handlers:generate": "spine-proto handlers",
     "prepack": "pnpm handlers:generate && tsc -b"

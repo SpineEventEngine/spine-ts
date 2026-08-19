@@ -27,7 +27,7 @@ The Message Board image also contains application-only and managed entrypoints. 
 deployment can override its command with:
 
 ```text
-node_modules/@spine-event-engine/example-message-board-app/dist/src/managed-entry.js
+node_modules/@spine-event-engine/example-message-board-app/dist/src/multi-process-app.js
 ```
 
 ## ⚙️ Configure the processes
@@ -42,13 +42,10 @@ The images set `NODE_ENV=production`. Supply these values when starting them:
 | Gateway (GKE)            | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `BROWSER_ORIGIN`, `SUBSCRIPTION_REGISTRY_NAMESPACE`, `BACKEND_DISCOVERY_SERVICE`, `BACKEND_DISCOVERY_PORT` |
 | Delivery server          | `HOST`, `PORT`                                                                                                                                     |
 
-Every browser process additionally requires one shared
-`MESSAGE_BOARD_SESSION_ISSUER`, `MESSAGE_BOARD_SESSION_AUDIENCE`,
-`MESSAGE_BOARD_SESSION_KEY_ID`, and `MESSAGE_BOARD_SESSION_PRIVATE_KEY`.
+No browser login setup is required for this public demo.
 Each process constructs a Datastore client from
 `DATASTORE_PROJECT_ID` and passes that same client into its storage factory.
-Browser-capable replicas must share both the signing values and the registry
-namespace.
+Browser-capable replicas share the registry namespace.
 
 `DELIVERY_SERVER_URL` is the sole application Delivery setting. In these
 references it is `http://delivery:8484` for Compose and
@@ -68,15 +65,14 @@ remains its legacy single-backend form. Production Kubernetes gateways use
 `BACKEND_DISCOVERY_SERVICE` and `BACKEND_DISCOVERY_PORT` for GKE service DNS;
 they do not configure a fixed backend list.
 
-For example, start the native application against a disposable Datastore
-emulator:
+For example, start the native application against the local Datastore emulator:
 
 ```bash
 docker network create message-board-local
 
 docker run --detach --name message-board-datastore \
   --network message-board-local --network-alias datastore \
-  gcr.io/google.com/cloudsdktool/google-cloud-cli@sha256:cda01b8c880e9161992c3fd61d7d0e153b4dd073aa4a9d62ad79243907cf8dd4 \
+  google/cloud-sdk:578.0.0-emulators \
   gcloud emulators firestore start \
   --database-mode=datastore-mode --host-port=0.0.0.0:8081 --quiet
 
@@ -95,7 +91,7 @@ docker run --rm --name message-board-app \
   --env DELIVERY_SERVER_URL=http://delivery:8484 \
   --env PROCESS_COUNT=2 --env DELIVERY_SHARD_COUNT=2 \
   spine-ts/message-board:local \
-  node_modules/@spine-event-engine/example-message-board-app/dist/src/managed-entry.js
+  node_modules/@spine-event-engine/example-message-board-app/dist/src/multi-process-app.js
 ```
 
 Stop the application with `Ctrl-C`, then remove the Delivery server, emulator,
@@ -107,12 +103,14 @@ docker rm --force message-board-datastore
 docker network rm message-board-local
 ```
 
+This is a backend-only container exercise. Use the [complete Compose browser workflow](../README.md) for the stock UI through Envoy.
+
 Node runs as PID 1. `SIGINT` and `SIGTERM` stop intake, close the server
 environment facilities, and must finish within ten seconds. The images do not
 add application health endpoints. Readiness is the process listener becoming
 available.
 
-## ⚠️ Limits
+## Limits
 
 - No image or npm package is published by these commands.
 - The simple delivery server keeps state only in memory and is neither durable

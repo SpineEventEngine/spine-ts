@@ -1,8 +1,8 @@
+// Exercises Message Board RPCs from inside a Compose network during live checks.
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { createGrpcWebTransport } from "@connectrpc/connect-web";
-import { SignedSessions } from "@spine-event-engine/auth";
 import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
@@ -34,28 +34,16 @@ import {
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
 import { UserIdSchema as BoardUserIdSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/user_pb.js";
 import { Buffer } from "node:buffer";
-import { createPrivateKey } from "node:crypto";
 import process from "node:process";
 
 const target = required("TARGET");
 const origin = required("ORIGIN");
 const mode = required("MODE");
 const runId = required("RUN_ID");
-const signer = new SignedSessions({
-  issuer: "message-board",
-  audience: "message-board-web",
-  activeKey: {
-    kid: "compose-fixture",
-    privateKey: createPrivateKey(required("MESSAGE_BOARD_SESSION_PRIVATE_KEY")),
-  },
-});
-const issued = await signer.issue({ id: "ada", attributes: { boards: "general" } });
-if (issued.kind !== "issued") throw new Error("Could not issue the Compose fixture session.");
 const transport = createGrpcWebTransport({
   baseUrl: target,
   interceptors: [
     (next) => async (request) => {
-      request.header.set("authorization", `Bearer ${issued.credential.value}`);
       request.header.set("origin", origin);
       return next(request);
     },
@@ -97,17 +85,13 @@ const topic = create(TopicSchema, {
   context,
 });
 
-try {
-  if (mode === "full") await fullFlow();
-  else if (mode === "distributed-full") await distributedFlow();
-  else if (mode === "subscribe") await createSubscription();
-  else if (mode === "cancel") await cancelSubscription();
-  else if (mode === "assert-cancelled") await assertCancelled();
-  else if (mode === "query") await authoritativeQuery();
-  else throw new Error(`Unknown Compose RPC client mode: ${mode}.`);
-} finally {
-  await signer.close();
-}
+if (mode === "full") await fullFlow();
+else if (mode === "distributed-full") await distributedFlow();
+else if (mode === "subscribe") await createSubscription();
+else if (mode === "cancel") await cancelSubscription();
+else if (mode === "assert-cancelled") await assertCancelled();
+else if (mode === "query") await authoritativeQuery();
+else throw new Error(`Unknown Compose RPC client mode: ${mode}.`);
 
 async function fullFlow() {
   await post("initial", "Compose public query");

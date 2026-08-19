@@ -23,10 +23,13 @@ RUN find ./node_modules -type f \( -name '*.ts' -o -name '*.map' -o -name '*.tsb
 ENTRYPOINT ["node"]
 
 FROM runtime AS message-board
-CMD ["node_modules/@spine-event-engine/example-message-board-app/dist/src/combined-entry.js"]
+CMD ["node_modules/@spine-event-engine/example-message-board-app/dist/src/combined-server.js"]
 
 FROM runtime AS standalone-gateway
-CMD ["node_modules/@spine-event-engine/example-message-board-app/dist/src/gateway-entry.js"]
+CMD ["node_modules/@spine-event-engine/example-message-board-app/dist/src/gateway-server.js"]
 
 FROM runtime AS simple-delivery-server
 CMD ["node_modules/@spine-event-engine/delivery-server/dist/bin/spine-delivery-server.js"]
+
+FROM runtime AS message-board-web
+CMD ["node_modules/@spine-event-engine/example-message-board-web/scripts/static-server.mjs"]

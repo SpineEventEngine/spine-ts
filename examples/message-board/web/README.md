@@ -57,7 +57,7 @@ Open the browser console while learning locally to see structured messages for
 activation, connection, reconnects, received server updates, command sending,
 and command results. They include the board, subscription target, complete
 local command/outcome, and received server update so a beginner can inspect the
-flow; they never include the bearer credential or request metadata. Treat the
+flow; they never include request metadata. Treat the
 local console like other local diagnostics because commands and updates may
 contain user-visible message text. One initial `Activate` belongs to the page's
 logical subscription; another means a reconnect. Each accepted server
@@ -102,18 +102,13 @@ pnpm --config.verify-deps-before-run=false --dir examples/message-board/web test
 Install Playwright browsers once with
 `pnpm exec playwright install chromium firefox webkit`.
 
-## ⚠️ Development session
+## Public demo
 
-The visible demo uses a fixed, non-secret bearer and an eight-hour in-memory
-session for loopback development, so normal local use does not renew it every
-minute. A real host signs the user in, creates a new request scope, and selects
-gRPC-Web or Connect explicitly. The session object shown to React is
-informational and is never itself a credential.
+The visible demo creates no browser credential. It sends the selected actor in each request, and the Gateway rebuilds that actor context before forwarding it. Production hosts choose their own admission policy.
 
 ## 🔗 Learn more
 
 - [Complete Message Board example](../README.md)
 - [Browser client](../../../packages/client-web/README.md)
 - [React adapter](../../../packages/client-react/README.md)
-- [Browser authentication guide](../../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 - [Detailed coding-agent reference](REFERENCE.md)

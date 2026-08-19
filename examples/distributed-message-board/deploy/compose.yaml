@@ -1,6 +1,6 @@
 services:
   datastore:
-    image: gcr.io/google.com/cloudsdktool/google-cloud-cli@sha256:cda01b8c880e9161992c3fd61d7d0e153b4dd073aa4a9d62ad79243907cf8dd4
+    image: google/cloud-sdk:578.0.0-emulators
     command:
       [
         gcloud,
@@ -34,7 +34,7 @@ services:
 
   application-node-1: &application
     image: spine-ts/message-board:local
-    command: [node_modules/@spine-event-engine/example-message-board-app/dist/src/managed-entry.js]
+    command: [node_modules/@spine-event-engine/example-message-board-app/dist/src/multi-process-app.js]
     environment: &application-environment
       HOST: 0.0.0.0
       PORT: 8080
@@ -44,10 +44,6 @@ services:
       DELIVERY_SERVER_URL: http://delivery:8484
       PROCESS_COUNT: "2"
       DELIVERY_SHARD_COUNT: "2"
-      MESSAGE_BOARD_SESSION_ISSUER: message-board
-      MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
-      MESSAGE_BOARD_SESSION_KEY_ID: compose-fixture
-      MESSAGE_BOARD_SESSION_PRIVATE_KEY: ${MESSAGE_BOARD_SESSION_PRIVATE_KEY:?Set a P-256 PKCS8 PEM.}
     depends_on:
       datastore:
         condition: service_healthy
@@ -70,14 +66,8 @@ services:
       SUBSCRIPTION_REGISTRY_NAMESPACE: distributed-message-board
       DATASTORE_PROJECT_ID: distributed-message-board
       DATASTORE_EMULATOR_HOST: datastore:8081
-      MESSAGE_BOARD_SESSION_ISSUER: message-board
-      MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
-      MESSAGE_BOARD_SESSION_KEY_ID: compose-fixture
-      MESSAGE_BOARD_SESSION_PRIVATE_KEY: ${MESSAGE_BOARD_SESSION_PRIVATE_KEY:?Set a P-256 PKCS8 PEM.}
     depends_on:
       datastore:
-        condition: service_healthy
-      delivery:
         condition: service_healthy
       application-node-1:
         condition: service_started

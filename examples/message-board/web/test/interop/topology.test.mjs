@@ -1,13 +1,10 @@
+// Verifies browser-to-Gateway behavior against a live, test-owned Message Board topology.
 import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createClient } from "../../../../../packages/server/node_modules/@connectrpc/connect/dist/esm/index.js";
 import { createGrpcTransport as createNativeTransport } from "../../../../../packages/server/node_modules/@connectrpc/connect-node/dist/esm/index.js";
 import { createGrpcWebTransport } from "../../../../../packages/client-web/node_modules/@connectrpc/connect-web/dist/esm/index.js";
-import {
-  AuthenticationService,
-  ResolveContextRequestSchema,
-} from "../../../../../packages/proto/dist/src/auth/index.js";
 import {
   create,
   toBinary,
@@ -45,31 +42,14 @@ import { UserIdSchema as BoardUserIdSchema } from "../../../model/dist/generated
 
 import { startTopology } from "./harness.mjs";
 
-test("routes gRPC-Web ResolveContext through Envoy and the native gateway", async () => {
+test("routes credential-free gRPC-Web commands, queries, and subscriptions through Envoy", async () => {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
   const topology = await startTopology();
   try {
-    const bearerTransport = () =>
-      createGrpcWebTransport({
-        baseUrl: topology.baseUrl,
-        interceptors: [
-          (next) => async (request) => {
-            request.header.set("authorization", "Bearer test");
-            return next(request);
-          },
-        ],
-      });
-    const anonymous = createClient(
-      AuthenticationService,
-      createGrpcWebTransport({ baseUrl: topology.baseUrl }),
-    );
-    await assert.rejects(anonymous.resolveContext(create(ResolveContextRequestSchema)));
-    const client = createClient(AuthenticationService, bearerTransport());
-    const response = await client.resolveContext(create(ResolveContextRequestSchema));
-    assert.equal(response.actor?.value, "ada");
-    const commands = createClient(CommandService, bearerTransport());
-    const queries = createClient(QueryService, bearerTransport());
-    const subscriptions = createClient(SubscriptionService, bearerTransport());
+    const transport = createGrpcWebTransport({ baseUrl: topology.baseUrl });
+    const commands = createClient(CommandService, transport);
+    const queries = createClient(QueryService, transport);
+    const subscriptions = createClient(SubscriptionService, transport);
     const context = create(ActorContextSchema, { actor: create(UserIdSchema, { value: "ada" }) });
     const acknowledgement = await commands.post(
       create(CommandSchema, {
@@ -79,7 +59,7 @@ test("routes gRPC-Web ResolveContext through Envoy and the native gateway", asyn
           PostMessageSchema,
           create(PostMessageSchema, {
             id: create(MessageIdSchema, { value: "interop-1" }),
-            board: create(BoardIdSchema, { value: "board-a" }),
+            board: create(BoardIdSchema, { value: "general" }),
             author: create(BoardUserIdSchema, { value: "ada" }),
             username: "Ada",
             text: "interop",
@@ -104,7 +84,7 @@ test("routes gRPC-Web ResolveContext through Envoy and the native gateway", asyn
                     operator: Filter_Operator.EQUAL,
                     value: AnyMessages.pack(
                       BoardIdSchema,
-                      create(BoardIdSchema, { value: "board-a" }),
+                      create(BoardIdSchema, { value: "general" }),
                     ),
                   }),
                 ],
@@ -144,7 +124,7 @@ test("routes gRPC-Web ResolveContext through Envoy and the native gateway", asyn
             PostMessageSchema,
             create(PostMessageSchema, {
               id: create(MessageIdSchema, { value: `interop-${probe}` }),
-              board: create(BoardIdSchema, { value: "board-a" }),
+              board: create(BoardIdSchema, { value: "general" }),
               author: create(BoardUserIdSchema, { value: "ada" }),
               username: "Ada",
               text: "subscription",
@@ -210,7 +190,7 @@ test("terminates accepted and missing-origin preflight without Gateway admission
       ],
     ]) {
       const response = await globalThis.fetch(
-        `${topology.baseUrl}/spine.auth.AuthenticationService/ResolveContext`,
+        `${topology.baseUrl}/spine.client.CommandService/Post`,
         { method: "OPTIONS", headers },
       );
       assert.equal(response.status, status);
@@ -247,7 +227,7 @@ test("keeps a direct native passive subscription alive for three sequential writ
                     operator: Filter_Operator.EQUAL,
                     value: AnyMessages.pack(
                       BoardIdSchema,
-                      create(BoardIdSchema, { value: "board-a" }),
+                      create(BoardIdSchema, { value: "general" }),
                     ),
                   }),
                 ],
@@ -276,7 +256,7 @@ test("keeps a direct native passive subscription alive for three sequential writ
             PostMessageSchema,
             create(PostMessageSchema, {
               id: create(MessageIdSchema, { value: `native-passive-${updateNumber}` }),
-              board: create(BoardIdSchema, { value: "board-a" }),
+              board: create(BoardIdSchema, { value: "general" }),
               author: create(BoardUserIdSchema, { value: "bert" }),
               username: "Bert",
               text: "native passive",

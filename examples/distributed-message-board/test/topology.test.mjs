@@ -1,3 +1,4 @@
+// Checks the files that describe the separate two-node Message Board example.
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
@@ -8,7 +9,6 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const compose = join(root, "deploy", "compose.yaml");
 const reference = join(root, "REFERENCE.md");
 const readme = join(root, "README.md");
-const gitignore = join(root, ".gitignore");
 
 test("declares one Gateway, two managed complete-replica nodes, shared storage, and simple delivery", () => {
   assert.equal(existsSync(compose), true, "the distributed Compose topology must exist");
@@ -31,23 +31,17 @@ test("declares one Gateway, two managed complete-replica nodes, shared storage, 
   );
   assert.match(source, /PROCESS_COUNT: "2"/u);
   assert.match(source, /DELIVERY_SHARD_COUNT: "2"/u);
-  assert.match(source, /managed-entry\.js/u);
+  assert.match(source, /multi-process-app\.js/u);
+  assert.doesNotMatch(source, /MESSAGE_BOARD_SESSION_|PRIVATE KEY|signing|bearer|cookie|token/iu);
   assert.doesNotMatch(source, /SPINE_IPC_DIRECTORY/u);
   assert.match(source, /condition: service_healthy/u);
 });
 
-test("creates a local development signing key instead of referring to an absent fixture", () => {
+test("starts without creating or supplying browser credentials", () => {
   const source = readFileSync(readme, "utf8");
 
-  assert.match(source, /openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256/u);
-  assert.match(source, /fixture-private-key\.pem/u);
-  assert.doesNotMatch(source, /BEGIN PRIVATE KEY/u);
-  assert.match(readFileSync(gitignore, "utf8"), /^fixture-private-key\.pem$/mu);
-  const command = source.match(
-    /openssl genpkey[^\n]*\\\n\s+-out examples\/distributed-message-board\/fixture-private-key\.pem\nMESSAGE_BOARD_SESSION_PRIVATE_KEY=[^\n]*\\\n\s+pnpm --dir examples\/distributed-message-board start/u,
-  );
-  assert.notEqual(command, null, "the key and startup command must retain their continuations");
-  assert.equal(command[0].match(/\\+$/gmu)?.length, 2);
+  assert.match(source, /pnpm --dir examples\/distributed-message-board start/u);
+  assert.doesNotMatch(source, /key|credential|session|bearer|cookie|token|signing/iu);
 });
 
 test("documents the reuse boundary and finite operator lifecycle", () => {

@@ -35,6 +35,18 @@ afterEach(async () => {
 });
 
 describe("MessageBoard deployment configuration", () => {
+  it("requires shared Delivery for a managed replica", () => {
+    expect(() =>
+      MessageBoardDeployment.configureManagedServer(
+        { host: "127.0.0.1", port: 8080, projectId: "message-board-test" },
+        client,
+        {
+          ...completeEnvironment,
+          DELIVERY_SERVER_URL: undefined,
+        },
+      ),
+    ).toThrow("DELIVERY_SERVER_URL");
+  });
   it("uses console logging in the local Datastore emulator and Cloud Logging elsewhere", () => {
     expect(
       MessageBoardDeployment.logger("message-board-test", {
@@ -137,15 +149,6 @@ describe("MessageBoard deployment configuration", () => {
         BACKEND_URLS: "http://application-a:8081,",
       }),
     ).toThrow("Invalid required configuration: BACKEND_URLS.");
-  });
-
-  it("rejects signed sessions outside production", () => {
-    expect(() =>
-      MessageBoardDeployment.sessions({
-        ...completeEnvironment,
-        NODE_ENV: "development",
-      }),
-    ).toThrow("require production configuration");
   });
 
   it.each([

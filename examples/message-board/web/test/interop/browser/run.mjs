@@ -1,3 +1,4 @@
+// Owns the live topology and Playwright process for the two-tab browser check.
 import { spawn } from "node:child_process";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
@@ -22,11 +23,6 @@ export async function runBrowserAcceptance({
     const environment = {
       ...process.env,
       E1_ENVOY_BASE_URL: topology.baseUrl,
-      E1_COOKIE_SET_COOKIE: JSON.stringify(topology.cookie.setCookie),
-      E1_EXPIRED_COOKIE_SET_COOKIE: JSON.stringify(topology.expiredCookie.setCookie),
-      E1_CSRF: topology.cookie.csrf,
-      E1_COOKIE_B_SET_COOKIE: JSON.stringify(topology.cookieB.setCookie),
-      E1_CSRF_B: topology.cookieB.csrf,
       E1_VITE_TLS_KEY: topology.tls.key,
       E1_VITE_TLS_CERT: topology.tls.cert,
     };
@@ -45,11 +41,7 @@ export async function runBrowserAcceptance({
         },
       });
     if (requestedPlaywrightArguments.length === 0) {
-      for (const pattern of [
-        "invalid, expired, and CSRF-invalid",
-        "non-allowlisted browser Origin",
-        "unauthorized board and fabricated",
-      ]) {
+      for (const pattern of ["non-allowlisted browser origin"]) {
         const before = topology.counters();
         const code = await playwright(["--project", "chromium", "--grep", pattern]);
         if (code !== 0) throw new Error(`negative browser group failed: ${pattern}`);

@@ -1,3 +1,4 @@
+// Checks that Compose files describe the services beginners start together.
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
@@ -18,15 +19,12 @@ test("declares a combined topology with its durable registry and one delivery se
   assert.match(document, /^services:/mu);
   assert.match(document, /^ {2}combined:/mu);
   assert.match(document, /^ {2}envoy:/mu);
+  assert.match(document, /^ {2}web:/mu);
   assert.match(document, /^ {2}delivery:/mu);
   assert.match(document, /^ {2}datastore:/mu);
   assert.match(document, /SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-combined/mu);
   assert.match(document, /spine-ts\/simple-delivery-server:local/u);
-  assert.match(
-    document,
-    /MESSAGE_BOARD_SESSION_PRIVATE_KEY: \$\{MESSAGE_BOARD_SESSION_PRIVATE_KEY:\?/u,
-  );
-  assert.doesNotMatch(document, /BEGIN PRIVATE KEY/u);
+  assert.doesNotMatch(document, /MESSAGE_BOARD_SESSION_/u);
   assert.doesNotMatch(document, /replicas:/u);
 });
 
@@ -38,39 +36,46 @@ test("declares one local-fixture gateway and one managed complete-replica node",
   assert.match(document, /^ {2}gateway:/mu);
   assert.doesNotMatch(document, /^ {2}gateway-[0-9]+:/mu);
   assert.match(document, /^ {2}envoy:/mu);
+  assert.match(document, /^ {2}web:/mu);
   assert.match(document, /^ {2}delivery:/mu);
   assert.match(document, /BACKEND_URLS: http:\/\/application-node:8080/mu);
   assert.match(document, /PROCESS_COUNT: "2"/u);
   assert.match(document, /DELIVERY_SHARD_COUNT: "2"/u);
-  assert.match(document, /managed-entry\.js/u);
+  assert.match(document, /multi-process-app\.js/u);
   assert.doesNotMatch(document, /SPINE_IPC_DIRECTORY/u);
   assert.doesNotMatch(document, /LOCAL_STATIC_BACKENDS/u);
   assert.match(document, /SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-standalone/mu);
   assert.match(document, /DATASTORE_EMULATOR_HOST: datastore:8081/mu);
-  assert.match(document, /MESSAGE_BOARD_SESSION_ISSUER: message-board/mu);
-  assert.match(document, /MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web/mu);
-  assert.match(document, /MESSAGE_BOARD_SESSION_KEY_ID: compose-fixture/mu);
   assert.match(
     document,
     /application-node:[\s\S]*?depends_on:[\s\S]*?delivery:[\s\S]*?condition: service_healthy/mu,
   );
-  assert.match(
+  assert.doesNotMatch(
     document,
-    /MESSAGE_BOARD_SESSION_PRIVATE_KEY: \$\{MESSAGE_BOARD_SESSION_PRIVATE_KEY:\?/u,
+    /gateway:[\s\S]*?depends_on:[\s\S]*?delivery:[\s\S]*?condition: service_healthy/mu,
   );
-  assert.doesNotMatch(document, /BEGIN PRIVATE KEY/u);
+  assert.doesNotMatch(document, /MESSAGE_BOARD_SESSION_/u);
   assert.equal((document.match(/spine-ts\/simple-delivery-server:local/gu) ?? []).length, 1);
 });
 
 for (const envoy of [combinedEnvoy, standaloneEnvoy]) {
-  test(`${envoy.split("/").at(-1)} admits only browser RPCs and restricted preflight`, () => {
+  test(`${envoy.split("/").at(-1)} serves the stock UI and admits browser RPCs`, () => {
     const configuration = parseDocument(readFileSync(envoy, "utf8")).toJSON();
     const httpConnectionManager = httpConnectionManagers(configuration).at(0);
     assert.notEqual(httpConnectionManager, undefined, "missing HTTP connection manager");
     assert.equal(httpConnectionManager.stream_idle_timeout, "0s");
-    assert.deepEqual(routes(httpConnectionManager), browserRoutes);
+    assert.deepEqual(routes(httpConnectionManager), [
+      ...browserRoutes,
+      ["/spine.", 404],
+      ["/", "30s"],
+    ]);
   });
 }
+
+test("documents the Envoy browser port published by both Compose topologies", () => {
+  const deployment = readFileSync(join(composeRoot, "..", "README.md"), "utf8");
+  assert.match(deployment, /http:\/\/localhost:18080/gu);
+});
 
 const browserRoutes = [
   ["/spine.auth.AuthenticationService/ResolveContext", "30s"],
@@ -97,6 +102,8 @@ function httpConnectionManagers(configuration) {
 function routes(httpConnectionManager) {
   return (httpConnectionManager.route_config?.virtual_hosts ?? []).flatMap((host) =>
     (host.routes ?? []).map((route) => {
+      if (route.match?.prefix === "/") return ["/", route.route?.timeout];
+      if (route.match?.prefix === "/spine.") return ["/spine.", route.direct_response?.status];
       assert.deepEqual(Object.keys(route.match ?? {}), ["path", "headers"]);
       assert.deepEqual(route.match.headers, [{ name: ":method", exact_match: "POST" }]);
       return [route.match.path, route.route?.timeout];

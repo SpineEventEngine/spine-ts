@@ -12,7 +12,13 @@
  * the License.
  */
 
-import { MessageBoardApplication } from "./index.js";
+/**
+ * Selects the parent Coordinator or one complete managed replica for the
+ * Message Board multi-process deployment.
+ */
 
-const server = await new MessageBoardApplication().run({ port: 8090 });
-console.log(`MessageBoard local server ready at ${server.baseUrl}`);
+if (process.env.SPINE_MANAGED_SERVER_CHILD === "true") {
+  await import("./multi-process-replica.js");
+} else {
+  await import("./multi-process-coordinator.js");
+}

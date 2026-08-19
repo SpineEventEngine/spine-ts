@@ -309,7 +309,7 @@ export interface DeliveryFindOneOptions {
   readonly signal?: AbortSignal;
 
   /**
-   * Limits the operation duration in milliseconds.
+   * Limits finite reads and stream setup in milliseconds; it never limits an acknowledged active stream.
    */
   readonly timeoutMs?: number;
 }

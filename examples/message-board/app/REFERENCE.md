@@ -10,7 +10,7 @@ with the [Message Board app README](README.md).
 and one Projection. `start()` embeds the server and leaves closing to
 the caller. `run()` delegates `SIGINT` and `SIGTERM` shutdown to `Server`.
 
-Browser configuration supplies the Message Board type registry, `LocalBoardSession`
+Browser configuration supplies the Message Board type registry, `PublicBoardAdmission`
 resolver and clock, `BoardAccessPolicy`, `BoardContextResolver`, exact
 Vite origin. Generic listener, CORS, router,
 subscription-binding, rollback, and lifecycle modules must remain in the

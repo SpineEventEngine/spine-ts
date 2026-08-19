@@ -22,29 +22,41 @@ const sourceRoot = join(process.cwd(), "examples/message-board/app/src");
 
 describe("MessageBoard deployment entrypoints", () => {
   it("provides explicit combined and application-only startup sources", () => {
-    expect(existsSync(join(sourceRoot, "application-entry.ts"))).toBe(true);
-    expect(existsSync(join(sourceRoot, "combined-entry.ts"))).toBe(true);
+    expect(existsSync(join(sourceRoot, "application-server.ts"))).toBe(true);
+    expect(existsSync(join(sourceRoot, "combined-server.ts"))).toBe(true);
   });
 
-  it("provides a managed complete-replica entrypoint without the retired signal transport", () => {
-    const managed = join(sourceRoot, "managed-entry.ts");
+  it("splits multi-process coordination from complete-replica assembly without the retired signal transport", () => {
+    const managed = join(sourceRoot, "multi-process-app.ts");
+    const coordinator = join(sourceRoot, "multi-process-coordinator.ts");
+    const replica = join(sourceRoot, "multi-process-replica.ts");
     expect(existsSync(managed)).toBe(true);
+    expect(existsSync(coordinator)).toBe(true);
+    expect(existsSync(replica)).toBe(true);
     const source = readFileSync(managed, "utf8");
+    const coordinatorSource = readFileSync(coordinator, "utf8");
+    const replicaSource = readFileSync(replica, "utf8");
     const deployment = readFileSync(join(sourceRoot, "deployment-config.ts"), "utf8");
 
-    expect(source).toContain("ManagedServerApplication.run");
-    expect(source).toContain("processCount: config.processCount");
-    expect(source).toContain("UniformAcrossAllShards.forNumber(config.deliveryShardCount)");
-    expect(source).toContain("new InMemorySubscriptionRegistry()");
-    expect(source).toContain("moduleUrl: import.meta.url");
+    expect(source).toContain('import("./multi-process-coordinator.js")');
+    expect(source).toContain('import("./multi-process-replica.js")');
+    expect(coordinatorSource).toContain("ManagedServerApplication.run");
+    expect(coordinatorSource).toContain("processCount: config.processCount");
+    expect(coordinatorSource).toContain(
+      'moduleUrl: new URL("./multi-process-app.js", import.meta.url).href',
+    );
+    expect(coordinatorSource).not.toContain("process.once");
+    expect(replicaSource).toContain("UniformAcrossAllShards.forNumber(config.deliveryShardCount)");
+    expect(replicaSource).toContain("new InMemorySubscriptionRegistry()");
+    expect(replicaSource).toContain("MessageBoardDeployment.configureManagedServer");
     expect(deployment).toContain('"PROCESS_COUNT"');
     expect(deployment).toContain('"DELIVERY_SHARD_COUNT"');
     expect(deployment).not.toContain('"SPINE_IPC_DIRECTORY"');
   });
 
   it("configures both browser modes with one named durable binding assembly", () => {
-    const gateway = readFileSync(join(sourceRoot, "gateway-entry.ts"), "utf8");
-    const combined = readFileSync(join(sourceRoot, "combined-entry.ts"), "utf8");
+    const gateway = readFileSync(join(sourceRoot, "gateway-server.ts"), "utf8");
+    const combined = readFileSync(join(sourceRoot, "combined-server.ts"), "utf8");
     const deployment = readFileSync(join(sourceRoot, "deployment-config.ts"), "utf8");
     expect(deployment).toContain("new DurableSubscriptionBindings");
     expect(deployment).toContain("storageFactory,");
@@ -56,7 +68,7 @@ describe("MessageBoard deployment entrypoints", () => {
 
   it("configures production storage and transport before resolving a server", () => {
     const deployment = readFileSync(join(sourceRoot, "deployment-config.ts"), "utf8");
-    for (const entrypoint of ["application-entry.ts", "combined-entry.ts"]) {
+    for (const entrypoint of ["application-server.ts", "combined-server.ts"]) {
       const source = readFileSync(join(sourceRoot, entrypoint), "utf8");
       expect(source).toContain(
         "MessageBoardDeployment.configureServer(config, client, process.env, logger)",
@@ -79,7 +91,7 @@ describe("MessageBoard deployment entrypoints", () => {
   it("executes application and combined startup entries with caller-owned Datastore clients", async () => {
     const calls = startupMocks();
 
-    await import("../src/application-entry.js");
+    await import("../src/application-server.js");
     expect(calls.datastore).toHaveBeenCalledWith({ projectId: "project" });
     expect(calls.createLogger).toHaveBeenCalledWith("project", process.env);
     expect(calls.storage).toHaveBeenCalledWith(calls.client);
@@ -92,7 +104,7 @@ describe("MessageBoard deployment entrypoints", () => {
     expect(calls.runApplication).toHaveBeenCalledWith(calls.applicationConfig, calls.storageResult);
 
     vi.resetModules();
-    await import("../src/combined-entry.js");
+    await import("../src/combined-server.js");
     expect(calls.datastore).toHaveBeenCalledWith({ projectId: "project" });
     expect(calls.storage).toHaveBeenCalledWith(calls.client);
     expect(calls.configureServer).toHaveBeenCalledWith(
@@ -102,7 +114,7 @@ describe("MessageBoard deployment entrypoints", () => {
       calls.logger,
     );
     expect(calls.runCombined).toHaveBeenCalledWith(
-      expect.objectContaining({ bindings: calls.bindings, sessions: calls.sessions }),
+      expect.objectContaining({ bindings: calls.bindings }),
       calls.storageResult,
     );
   });
@@ -110,7 +122,7 @@ describe("MessageBoard deployment entrypoints", () => {
   it("executes gateway startup with configured browser bindings", async () => {
     const calls = startupMocks();
 
-    await import("../src/gateway-entry.js");
+    await import("../src/gateway-server.js");
 
     expect(calls.datastore).toHaveBeenCalledWith({ projectId: "project" });
     expect(calls.storage).toHaveBeenCalledWith(calls.client);
@@ -133,7 +145,7 @@ describe("MessageBoard deployment entrypoints", () => {
     const calls = startupMocks();
     calls.gatewayConfig.discovery = { namespace: "boards" };
 
-    await import("../src/gateway-entry.js");
+    await import("../src/gateway-server.js");
 
     expect(calls.serverAtPort).toHaveBeenCalledOnce();
     expect(calls.gkeNodeDiscovery).toHaveBeenCalledWith({
@@ -141,13 +153,114 @@ describe("MessageBoard deployment entrypoints", () => {
       logger: calls.logger,
     });
   });
+
+  it("loads the Coordinator parent or replica child branch without starting both", async () => {
+    vi.resetModules();
+    const coordinator = vi.fn();
+    const replica = vi.fn();
+    vi.doMock("../src/multi-process-coordinator.js", () => {
+      coordinator();
+      return {};
+    });
+    vi.doMock("../src/multi-process-replica.js", () => {
+      replica();
+      return {};
+    });
+    delete process.env.SPINE_MANAGED_SERVER_CHILD;
+    await import("../src/multi-process-app.js");
+    expect(coordinator).toHaveBeenCalledOnce();
+    expect(replica).not.toHaveBeenCalled();
+
+    vi.resetModules();
+    vi.doMock("../src/multi-process-coordinator.js", () => {
+      coordinator();
+      return {};
+    });
+    vi.doMock("../src/multi-process-replica.js", () => {
+      replica();
+      return {};
+    });
+    process.env.SPINE_MANAGED_SERVER_CHILD = "true";
+    await import("../src/multi-process-app.js");
+    expect(replica).toHaveBeenCalledOnce();
+    delete process.env.SPINE_MANAGED_SERVER_CHILD;
+  });
+
+  it("starts the Coordinator with its complete-replica callbacks and framework-owned lifecycle", async () => {
+    vi.resetModules();
+    vi.doUnmock("../src/multi-process-coordinator.js");
+    const run = vi.fn().mockResolvedValue(undefined);
+    const config = { processCount: 2, host: "127.0.0.1", port: 8090 };
+    const options = { createServer: vi.fn(), synchronize: vi.fn() };
+    vi.doMock("@spine-event-engine/server", () => ({ ManagedServerApplication: { run } }));
+    vi.doMock("../src/deployment-config.js", () => ({
+      MessageBoardDeployment: { managed: () => config },
+    }));
+    vi.doMock("../src/multi-process-replica.js", () => ({ managedReplicaOptions: () => options }));
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await import("../src/multi-process-coordinator.js");
+
+    expect(run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        processCount: 2,
+        host: "127.0.0.1",
+        port: 8090,
+        ...options,
+      }),
+    );
+    expect(log).toHaveBeenCalledWith("MessageBoard managed coordinator ready at 127.0.0.1:8090");
+    log.mockRestore();
+  });
+
+  it("builds one complete replica and opens its configured shared Delivery", async () => {
+    vi.resetModules();
+    vi.doUnmock("../src/multi-process-replica.js");
+    const client = {};
+    const delivery = { open: vi.fn().mockResolvedValue(undefined) };
+    const facilities = { delivery, storageFactory: {} };
+    const started = {};
+    const startManagedApplication = vi.fn().mockResolvedValue(started);
+    const configureManagedServer = vi.fn(() => facilities);
+    vi.doMock("@google-cloud/datastore", () => ({
+      Datastore: vi.fn(function Datastore() {
+        return client;
+      }),
+    }));
+    vi.doMock("@spine-event-engine/server", () => ({
+      InMemorySubscriptionRegistry: class {
+        readonly namespace = "test";
+      },
+      ManagedServerApplication: { run: vi.fn() },
+      UniformAcrossAllShards: { forNumber: vi.fn(() => "shards") },
+    }));
+    vi.doMock("../src/deployment-config.js", () => ({
+      MessageBoardDeployment: {
+        logger: vi.fn(() => "logger"),
+        configureManagedServer,
+      },
+    }));
+    vi.doMock("../src/index.js", () => ({
+      MessageBoardApplication: class {
+        startManagedApplication = startManagedApplication;
+      },
+    }));
+    const { managedReplicaOptions } = await import("../src/multi-process-replica.js");
+    const config = { projectId: "project", deliveryShardCount: 2 } as never;
+    const options = managedReplicaOptions(config);
+    await expect(options.createServer({ host: "127.0.0.1", port: 8091 })).resolves.toBe(started);
+    expect(options.synchronize).toBeDefined();
+    await options.synchronize?.();
+    expect(configureManagedServer).toHaveBeenCalledWith(config, client, process.env, "logger");
+    expect(startManagedApplication).toHaveBeenCalled();
+    expect(delivery.open).toHaveBeenCalledOnce();
+  });
 });
 
 function startupMocks() {
   vi.resetModules();
   const storage = {};
   const bindings = {};
-  const sessions = {};
   const applicationConfig = { projectId: "project", port: 0 };
   const combinedConfig = { projectId: "project", port: 0 };
   const gatewayConfig: {
@@ -192,7 +305,6 @@ function startupMocks() {
       logger: createLogger,
       storage: storageFactory,
       bindings: () => bindings,
-      sessions: () => sessions,
     },
   }));
   vi.doMock("../src/index.js", () => ({
@@ -211,7 +323,6 @@ function startupMocks() {
     },
     BoardContextResolver: class {},
   }));
-  vi.doMock("../src/local-session.js", () => ({ LocalBoardSession: { clock: {} } }));
   vi.doMock("../src/model-registry.js", () => ({ typeRegistry: {} }));
   /* eslint-enable @typescript-eslint/no-extraneous-class, @typescript-eslint/no-empty-function */
 
@@ -233,7 +344,6 @@ function startupMocks() {
     runApplication,
     runCombined,
     serverAtPort,
-    sessions,
     storage: storageFactory,
     storageResult: storage,
   };
