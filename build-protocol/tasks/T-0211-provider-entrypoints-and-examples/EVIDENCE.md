@@ -40,3 +40,19 @@ real deployment smoke, reviews, integration, and remote cleanup.
   `pnpm vitest run --coverage --coverage.include='examples/message-board/app/src/deployment-config.ts' --coverage.include='examples/todo/src/managed-deployment.ts' examples/message-board/app/test/deployment-config.test.ts examples/todo/test/startup-contract.test.ts`.
 - The static deployment gate passed 11/11 and the combined Message Board/Todo
   focused suites passed 45/45 after the configuration extraction.
+
+## Deferred managed-node smoke
+
+- The retained live command is:
+  `script -q -e /tmp/t0211-image-contract.log pnpm exec node --test examples/message-board/deploy/container/image-contract.test.mjs`.
+  It captures the terminal TAP result while exercising the real image, managed
+  Coordinator, Datastore emulator, Delivery server, browser Gateway, and clean
+  shutdown. It is deferred only until the runtime removes the obsolete required
+  Production signal transport; the current captured failure is the exact
+  `Production ServerEnvironment requires transport.` error, not an example
+  configuration workaround opportunity.
+- RED-31 retained local proof: `pnpm vitest run examples/message-board/app/test/local-entry.test.ts --reporter=dot`
+  passed 2/2. It starts the explicit local single-process entry, accepts both
+  termination signals, and proves port release independently of managed mode.
+- `pnpm docs:check`, `pnpm format:check`, and `git diff --check` completed
+  cleanly after the source/documentation changes.
