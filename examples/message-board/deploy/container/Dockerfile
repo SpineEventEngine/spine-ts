@@ -30,3 +30,6 @@ CMD ["node_modules/@spine-event-engine/example-message-board-app/dist/src/gatewa
 
 FROM runtime AS simple-delivery-server
 CMD ["node_modules/@spine-event-engine/delivery-server/dist/bin/spine-delivery-server.js"]
+
+FROM runtime AS message-board-web
+CMD ["node_modules/@spine-event-engine/example-message-board-web/scripts/static-server.mjs"]

@@ -38,6 +38,16 @@ test("local images have a fixed build contract", () => {
   assert.match(datastoreEmulator, /@sha256:[a-f0-9]{64}$/u);
 });
 
+test("stock Message Board UI image serves the built single-page application", () => {
+  const dockerfile = readFileSync(new URL("Dockerfile", containerRoot), "utf8");
+  const helper = readFileSync(new URL("build-local-images.mjs", containerRoot), "utf8");
+
+  assert.match(helper, /"build"/u);
+  assert.match(helper, /packages\/client-react/u);
+  assert.match(helper, /examples\/message-board\/web/u);
+  assert.match(dockerfile, /message-board-web[\s\S]*scripts\/static-server\.mjs/u);
+});
+
 test("final images contain only runtime artifacts and no runtime secret", () => {
   const directory = mkdtempSync(join(tmpdir(), "spine-t0095-image-inspection-"));
   const sentinel = "spine-t0095-runtime-secret-sentinel";

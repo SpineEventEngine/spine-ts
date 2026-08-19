@@ -85,3 +85,4 @@ services:
       - ./standalone-envoy.yaml:/etc/envoy/envoy.yaml:ro
     depends_on:
       - gateway
+      - web

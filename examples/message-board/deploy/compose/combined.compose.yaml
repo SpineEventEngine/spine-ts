@@ -60,3 +60,4 @@ services:
       - ./combined-envoy.yaml:/etc/envoy/envoy.yaml:ro
     depends_on:
       - combined
+      - web

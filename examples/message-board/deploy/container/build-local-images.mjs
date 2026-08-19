@@ -20,6 +20,7 @@ const store = join(context, "pnpm-store");
 const packages = [
   "packages/auth",
   "packages/client-node",
+  "packages/client-react",
   "packages/client-web",
   "packages/core",
   "packages/delivery-client",
@@ -33,13 +34,18 @@ const packages = [
   "packages/transport",
   "examples/message-board/model",
   "examples/message-board/app",
+  "examples/message-board/web",
 ];
-const targets = ["message-board", "standalone-gateway", "simple-delivery-server"];
+const targets = ["message-board", "standalone-gateway", "simple-delivery-server", "message-board-web"];
 const cleanup = new BuildContextCleanup(context);
 
 cleanup.install();
 try {
   mkdirSync(tarballs);
+  phase("build stock browser UI");
+  run("pnpm", ["--dir", "examples/message-board/web", "build"], {
+    VITE_MESSAGE_BOARD_GATEWAY_URL: "http://localhost:18080",
+  });
   phase("pack local artifacts");
   for (const source of packages) {
     run("pnpm", [

@@ -54,12 +54,12 @@ test("declares one local-fixture gateway and one managed complete-replica node",
 });
 
 for (const envoy of [combinedEnvoy, standaloneEnvoy]) {
-  test(`${envoy.split("/").at(-1)} admits only browser RPCs and restricted preflight`, () => {
+  test(`${envoy.split("/").at(-1)} serves the stock UI and admits browser RPCs`, () => {
     const configuration = parseDocument(readFileSync(envoy, "utf8")).toJSON();
     const httpConnectionManager = httpConnectionManagers(configuration).at(0);
     assert.notEqual(httpConnectionManager, undefined, "missing HTTP connection manager");
     assert.equal(httpConnectionManager.stream_idle_timeout, "0s");
-    assert.deepEqual(routes(httpConnectionManager), browserRoutes);
+    assert.deepEqual(routes(httpConnectionManager), [...browserRoutes, ["/", "30s"]]);
   });
 }
 
@@ -88,6 +88,7 @@ function httpConnectionManagers(configuration) {
 function routes(httpConnectionManager) {
   return (httpConnectionManager.route_config?.virtual_hosts ?? []).flatMap((host) =>
     (host.routes ?? []).map((route) => {
+      if (route.match?.prefix === "/") return ["/", route.route?.timeout];
       assert.deepEqual(Object.keys(route.match ?? {}), ["path", "headers"]);
       assert.deepEqual(route.match.headers, [{ name: ":method", exact_match: "POST" }]);
       return [route.match.path, route.route?.timeout];
