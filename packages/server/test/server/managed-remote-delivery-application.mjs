@@ -141,7 +141,9 @@ if (!isManagedChild) {
       return;
     }
     if (message?.type !== "drain") return;
-    void close();
+    const drained = close();
+    process.send?.({ type: "draining" });
+    void drained;
   });
   process.once("SIGTERM", () => {
     void close().finally(() => process.exit(0));

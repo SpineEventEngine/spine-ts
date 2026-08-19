@@ -38,4 +38,8 @@
 - First canonical release run passed deterministic gates and 4,267 tests, then
   exposed two direct removal-fallout test assumptions. Their focused correction
   passes 14/14 plus tooling/lint/format/diff checks.
+- Second canonical run passed the prior corrections and 4,268 tests, then
+  exposed a missing private drain-IPC causal boundary. The exact assertion
+  passes under coverage and the full real-process file passes three consecutive
+  runs after a test-only acknowledgement; mechanical checks pass.
 - Required release verification, post-merge verification, and remote cleanup.

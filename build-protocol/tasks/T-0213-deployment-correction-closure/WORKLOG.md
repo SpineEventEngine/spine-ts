@@ -118,3 +118,16 @@
 - Focused regression passed 14/14 with tooling typecheck, ESLint, formatting,
   and diff hygiene. These test-only deterministic corrections do not reopen
   specialist review.
+
+## 2026-08-19 — second canonical release run
+
+- Deterministic gates and the two prior regressions passed. The coverage run
+  completed 4,268 passing tests and exposed one managed-drain fixture race:
+  the test posted immediately after sending private drain IPC, before the
+  parent had necessarily processed it, and could observe client cancellation.
+- Added a private test-fixture `draining` acknowledgement emitted only after
+  `managed.close()` synchronously begins drain. The assertion still requires
+  the public command call to return `Unavailable` after that causal boundary.
+- Exact assertion passed under coverage. The two-test real-process file passed
+  three consecutive fresh runs. Tooling typecheck, scoped ESLint, formatting,
+  and diff hygiene passed. No production code or public contract changed.
