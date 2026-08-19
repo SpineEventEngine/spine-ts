@@ -183,7 +183,7 @@ export interface SubscriptionGatewayLimits {
   readonly pendingOperationLimit?: number;
 
   /**
-   * Limits one backend operation duration in milliseconds.
+   * Limits finite backend operations and setup in milliseconds; it never limits an acknowledged active callback.
    */
   readonly operationTimeoutMs?: number;
 

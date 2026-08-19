@@ -35,18 +35,17 @@ afterEach(async () => {
 });
 
 describe("MessageBoard deployment configuration", () => {
-  it("keeps Delivery process-owned in the beginner local mode without a server URL", () => {
-    const facilities = MessageBoardDeployment.configureManagedServer(
-      { host: "127.0.0.1", port: 8080, projectId: "message-board-test" },
-      client,
-      {
-        ...completeEnvironment,
-        MESSAGE_BOARD_DELIVERY_MODE: "local",
-        DELIVERY_SERVER_URL: undefined,
-      },
-    );
-
-    expect(facilities.delivery).toBeUndefined();
+  it("requires shared Delivery for a managed replica", () => {
+    expect(() =>
+      MessageBoardDeployment.configureManagedServer(
+        { host: "127.0.0.1", port: 8080, projectId: "message-board-test" },
+        client,
+        {
+          ...completeEnvironment,
+          DELIVERY_SERVER_URL: undefined,
+        },
+      ),
+    ).toThrow("DELIVERY_SERVER_URL");
   });
   it("uses console logging in the local Datastore emulator and Cloud Logging elsewhere", () => {
     expect(

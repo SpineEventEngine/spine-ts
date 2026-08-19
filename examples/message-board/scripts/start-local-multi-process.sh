@@ -65,7 +65,7 @@ curl --fail --silent http://127.0.0.1:8081 >/dev/null 2>&1 || {
 }
 
 pnpm -C "$root" typecheck:build
-env NODE_ENV=production DELIVERY_SERVER_URL=http://127.0.0.1:8484 MESSAGE_BOARD_DELIVERY_MODE=shared \
+env NODE_ENV=production DELIVERY_SERVER_URL=http://127.0.0.1:8484 \
   HOST=127.0.0.1 PORT=8091 DATASTORE_PROJECT_ID=message-board-local \
   DATASTORE_EMULATOR_HOST=127.0.0.1:8081 PROCESS_COUNT="${MESSAGE_BOARD_PROCESS_COUNT:-2}" \
   DELIVERY_SHARD_COUNT=2 node "$root/examples/message-board/app/dist/src/multi-process-app.js" \
