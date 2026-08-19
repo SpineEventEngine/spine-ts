@@ -60,8 +60,8 @@ Connect factories plus synchronous per-call metadata), the
 context `Repository` registration,
 set-once transition validation, explicit handler metadata APIs,
 command/event bus exports, the server runtime lifecycle/async queue
-kernel, write-side signal intake result exports, the runtime-routing planner
-seam, the real Connect/Node `SpineServices` route registrar for the raw Spine
+kernel, write-side signal intake result exports, the real Connect/Node
+`SpineServices` route registrar for the raw Spine
 command/query/subscription services with storage-backed Stand subscription
 definitions and local active streams, a small local `Server` lifecycle owner for real
 Connect/gRPC-compatible services, `@spine-event-engine/transport`
@@ -488,7 +488,7 @@ when attached to a production `ServerEnvironment`.
 `Server`, `ServerOptions`, and `RunningServer` form the small public lifecycle
 owner for hosting those routes over Node HTTP/2. `Environment`, `EnvironmentType`,
 `ServerEnvironment`, and `ServerEnvironmentSettings` select one process-wide
-storage, transport, optional delivery, and optional tracing facility set through
+storage, integration-channel, optional delivery, and optional tracing facility set through
 `ServerEnvironment.when(type).use(settings)`. `Server`
 accepts built contexts and `BoundedContextBuilder` values; builders added
 through `Server` use the environment storage factory unless
@@ -500,14 +500,14 @@ before first resolution, and production selection itself requires
 `NODE_ENV=production` before that first resolution. `RunningServer` exposes
 `host`, `port`, `baseUrl`, and
 idempotent `close()`. Close stops listener intake and active HTTP/2 sessions,
-closes context transport intake and drains accepted work, then detaches and
+closes service intake and drains accepted work, then detaches and
 quiesces environment delivery before closing contexts and explicit resources.
 Shared facilities remain open when a server closes. Network or context-intake
 close failure is a hard gate: delivery detach and dependency cleanup do not begin
 until a later `close()` retry completes that step. After the hard gate,
 remaining phases are attempted in order; failures are combined, and a later
-close retries only unfinished cleanup. The API deliberately hides ZeroMQ, IPC
-endpoint names, worker/process supervision, durable scheduling, and Java-style
+close retries only unfinished cleanup. The API deliberately hides private child
+listener details, worker/process supervision, durable scheduling, and Java-style
 delivery-topology configuration; it intentionally exposes this one JVM-style
 global process environment configuration.
 
@@ -519,9 +519,9 @@ schema lookup used by `ThirdPartyContext`. Local/test resolution supplies
 in-memory storage and `spineCoreRegistry` when omitted. Production resolution
 rejects omitted storage or type registry, so production applications must
 compose and configure their own schema universe (for example with
-`TypeRegistry.from(...)`). The existing optional `transport: SignalTransport`
-setting remains separate: when supplied it opens legacy runtime command/event
-intake; when omitted no such bindings are opened.
+`TypeRegistry.from(...)`). Commands, queries, and subscriptions enter through
+the normal generated services and their Buses; the integration channel factory
+does not provide another application-signal ingress path.
 
 The server root exports `External<T>` (a type-only alias), `HandlerOrigin`,
 `ThirdPartyContext`, and the generated registry v3 contract. The canonical
@@ -778,38 +778,6 @@ have run. If dispatch rejects, earlier dispatchers may already have run, later
 dispatchers are skipped, and the stored event remains. The bus layer does not
 instantiate entities, invoke entity methods directly, create repositories, map
 `Ack`, or introduce delivery/inbox behavior.
-Runtime routing exports include `createRoutingPlan()`,
-`ServerRuntimeRoutingPlan`, `RoutingPlanInput`,
-`CommandRuntimeRoutingPlan`, `EventRuntimeRoutingPlan`, and
-`DeferredRoutingSeam`. The planner requires a built
-`BoundedContext`, plus optional concrete `CommandRegistrationReadiness` /
-`EventRegistrationReadiness` instances, and derives immutable
-`@spine-event-engine/transport` topics, subscriptions, and planner-local worker IDs plus
-small sanitized route descriptors. Command routing produces one planner-local
-command-worker competing-consumer subscription over registered command topics.
-Event routing produces fan-out subscriptions and event-worker IDs
-for subscriber, reactor, and application receiver groups while keeping handler
-invocation from runtime workers, integrated runtime wiring, service hosting,
-IPC endpoint naming, and process supervision outside the planner. Public route descriptors
-expose only planner-local route and worker IDs, message full type names/type
-URLs, stable receiver groups, and transport correlation keys back to the
-top-level topics/subscriptions;
-they do not retain raw readiness metadata, entity names, handler method names,
-ZeroMQ endpoint data, socket topology, or duplicate full transport contracts on
-each route. Query, subscription, and system routing remain explicit reserved
-seams until concrete server readiness metadata exists.
-Runtime transport exports include `RuntimeTransportBinding`,
-`RuntimeTransportBindingInput`, `RuntimeTransportBindingHandle`,
-`CommandRuntimeTransportHandler`, `EventRuntimeTransportHandler`, and
-`RuntimeTransportEnvelopeError`. `RuntimeTransportBinding.open()` registers
-command routes with `SignalTransport.respond()` and event routes with
-`SignalTransport.subscribe()`, validates generated Spine command/event
-envelope shape and enclosed message type URL before runtime intake, and enqueues
-accepted callbacks through the supplied `SingleProcessServerRuntime`. Its close
-handle is idempotent and closes transport registrations before the runtime. It
-does not manage the transport instance, open IPC endpoints, expose ZeroMQ details,
-supervise processes, retry work, store events, or create a public server
-environment.
 Server runtime exports include `SingleProcessServerRuntime`,
 `ServerRuntimeLifecycle`, `ServerRuntimeState`, `ServerRuntimeWork`,
 `ServerRuntimeStateOperation`, `ServerRuntimeRejectedState`,
@@ -831,7 +799,7 @@ are rejected with `state: "running-work"` to avoid queue self-deadlocks. This
 surface is a server-runtime kernel only; it is not a process-wide singleton,
 process supervisor, generic job framework, command/event/import bus, durable
 storage or inbox, read-side stand, repository dispatcher, integration broker,
-broad gRPC server lifecycle, ZeroMQ transport, or worker-process runtime.
+broad gRPC server lifecycle, or worker-process runtime.
 Runtime metadata exports include `SignalMetadata`, `SignalIds`, `Clock`,
 `SystemClock`, `FixedClock`, `SignalMetadataOptions`, `ActorContextInput`,
 `CommandContextInput`, and `EventContextInput`. `SignalMetadata` creates
@@ -848,20 +816,15 @@ does not reintroduce `@Apply`, and does not expose manual transaction-control
 APIs.
 Copied Proto semantic-tag options are wire metadata only. They are not
 TypeScript `TypeRegistry` or entity metadata, repository-routing input, or
-runtime-topic input. `TransportTopics.create()` and its routing key use only a
-signal kind and payload type URL. Broader handler materialization remains
-outside this runtime metadata surface.
-The public runtime closure smoke path composes these exports with
-`BoundedContext`, `Repository`, `HandlerMetadataRegistry`,
-`CommandRegistrationReadiness`, `EventRegistrationReadiness`, and
-`createRoutingPlan()` to prove the metadata and lifecycle
-interfaces fit together. That composition produces context-scoped metadata,
-command/event readiness views, immutable runtime-routing plans, and
-deterministic runtime state only. The public `Server` export is a
-separate local HTTP/2 service host over `SpineServices`; it does not broaden the
-runtime-routing plan into service routing, command/event/import bus behavior,
-handler invocation, read-side execution, transport lifecycle, validation,
-delivery, integration-broker behavior, or Spine `Ack` mapping.
+runtime work input. Broader handler materialization remains outside this
+runtime metadata surface. The public runtime closure smoke path composes these
+exports with `BoundedContext`, `Repository`, `HandlerMetadataRegistry`,
+`CommandRegistrationReadiness`, and `EventRegistrationReadiness` to prove the
+metadata and lifecycle interfaces fit together. The public `Server` export is
+a separate local HTTP/2 service host over `SpineServices`; it does not broaden
+the runtime kernel into command/event/import bus behavior, handler invocation,
+read-side execution, delivery, integration-broker behavior, or Spine `Ack`
+mapping.
 Write-side signal intake exports include `SignalKind`, `SignalIntakeResult`,
 `SignalIntakeAccepted`, `SignalIntakeAcceptedFor`, `SignalIntakeFailure`,
 `SignalIntakeFailureCode`, `SignalIntakeFailureDetails`,
@@ -927,106 +890,17 @@ IDs on the local append path, and can run `OnEventAccepted` between precheck
 and append with one captured storage context. It does not dispatch events,
 manage delivery, or fan out to subscribers.
 
-Transport exports include `TransportSignalKind`, `TransportTopicInput`,
-`TransportTopic`, `TransportRoutingDescriptor`,
-`TransportSubscriptionInput`, `TransportSubscription`, `TransportSubscriptionMode`,
-`TransportSignalEnvelope`,
-`PublishTransportOperation`, `RequestTransportOperation`,
-`PublishTransportHandler`, `RequestTransportHandler`, `AsyncCloseable`,
-`TransportSubscriptionHandle`, `SignalTransport`, `TransportTopics.create()`, and
-`TransportSubscriptions.create()`, `TransportOperations.hasKind()`, and
-`TransportTopics.hasKind()`. This root surface is contract-only: it defines
-immutable topic/subscription value objects, deterministic adapter-agnostic
-routing keys, handler callback signatures, and graceful async close behavior.
-It does not expose ZeroMQ socket types, endpoint strings, multipart frames,
-production endpoint topology, broker processes, child process supervision,
-participant lifecycle values, worker registrations, delivery attempt/result
-values, retry policy, durable storage, runtime handler invocation, or server
-runtime wiring.
-
-The same root also exports the separate integration message-channel contracts:
-`MessageChannel`, `Publisher`, `Subscriber`, `ExternalMessageConsumer`, and
-`TransportFactory`, plus `InMemoryTransportFactory`; generated `ChannelId`
-comes from `@spine-event-engine/proto`, and the ZeroMQ adapter subpath exports
-`createZeroMqTransportFactory()`. These channels carry only exact generated
-`ExternalMessage` Protobuf frames for the private context-owned integration
-broker. They are not `SignalTransport` and expose no routing plans, signal
-kinds, request/reply operations, subscriber IDs, sockets, endpoint paths, or
-manifests. The ZeroMQ message adapter uses a unique manifest-backed PULL
-endpoint per subscriber and dedicated PUSH connections for discovered
-subscribers. Bind-before-manifest and remove-before-close ordering protects
-discovery; delivery is best effort, not durable or exactly once. The private
-manifest is discovery metadata, never a wire frame or broker persistence.
-The transport package pins `zeromq@6.5.0` for local IPC adapter work, but that
-native dependency remains outside the root TypeDoc entry point. The
-adapter-scoped `@spine-event-engine/transport/zeromq` subpath exports exactly
-`ZeroMqConfig`, `ZeroMqConfigInput`, `createZeroMqTransport()`,
-`createZeroMqTransportFactory()`, `ZeroMqTransportScope`, and
-`ZeroMqTransportOptions` for local IPC deployments. It derives deterministic
-IPC endpoints from adapter config and transport routing descriptors internally,
-then exposes only the
-`SignalTransport` contract to runtime binding code. Socket creation, endpoint
-strings, multipart frames, and native binding types remain absent from the root
-API; remote signal transport, process supervision, worker
-registration handshakes, delivery retries, and broad health checks are outside
-this API. The adapter provides no exactly-once, durable-redelivery,
-retry, restart, or remote-delivery guarantee. For transport topics marked
-`command` or `event`, the private adapter uses generated Buf Protobuf binary;
-the reserved `query`, `subscription`, and `system` kinds have no Protobuf wire
-contract and currently retain private V8 encoding. `TransportSignalEnvelope`
-correlates command/event operations and handlers with generated `Command` and
-`Event` while preserving caller-selected types for other kinds. Widened or
-union operations and topics can be narrowed through their fixed canonical kind
-paths:
-
-```ts
-// docs-snippet-path: packages/transport/test/index.test.ts
-import {
-  TransportOperations,
-  TransportTopics,
-  type RequestTransportOperation,
-  type TransportTopic,
-} from "@spine-event-engine/transport";
-
-function onTransportRequest(operation: RequestTransportOperation<{ readonly id: string }>): void {
-  if (TransportOperations.hasKind(operation, "command")) {
-    operation.envelope; // Inferred as the generated Command type.
-  }
-}
-
-function onTransportTopic(topic: TransportTopic): void {
-  if (TransportTopics.hasKind(topic, "event")) {
-    topic.signalKind; // Inferred as "event".
-  }
-}
-```
-
-`TransportOperations.hasKind()` always compares `operation.topic.signalKind`, and
-`TransportTopics.hasKind()` always compares `topic.signalKind`. They provide type
-narrowing, not validation of untrusted input or envelope content, and neither
-inspects the envelope. The topic helper narrows only the top-level
-`signalKind`; it does not validate or narrow the routing descriptor or
-`routing.signalKind`. Every inbound
-`Subscriber`, `Request`, and `Reply` frame has an exact 8,388,608-byte rejection
-ceiling, not a fixed allocation. Publish and request messages use route frame 1
-and payload frame 2: command/event payloads use Buf, while reserved
-query/subscription/system payloads use private V8. A successful request result
-uses the private V8 wrapper in reply frame 1 and is not Spine `Ack`; generated-
-message-shaped results, including objects with a string `$typeName`, are
-rejected before V8 serialization. Trailers are ignored only after zeromq.js
-materializes the full multipart message, so SF-013 remains accepted and
-unbounded in aggregate. Old V8 command/event peers are wire-incompatible with
-Buf peers and cooperating peers must upgrade together. The adapter is for
-trusted same-host runtime peers only; `ipcDirectory` must be private to those
-peers. Managed sandboxes may reject ZeroMQ `ipc://` binds with `EPERM`, so live
-local IPC tests can require native IPC filesystem/socket permissions outside
-the sandbox. `requestTimeoutMs` defaults to 2,000 milliseconds and accepts only
-integers from 1 through 2,147,483,647; invalid values fail before filesystem or
-socket work. It bounds request/reply send and receive but does not actively
-cancel an already-sent request, while `receiveTimeoutMs` remains the separate
-background-worker setting. Runtime transport tests include a native
-ZeroMQ-backed command and event callback proof through the public
-`SignalTransport` contract.
+The transport package exports only the private integration message-channel
+contracts used by context-owned integration brokers: `MessageChannel`,
+`Publisher`, `Subscriber`, `ExternalMessageConsumer`, `ConsumerHandle`, and
+`TransportFactory`, plus `InMemoryTransportFactory`. Generated `ChannelId`
+comes from `@spine-event-engine/proto`. Channels carry exact generated
+`ExternalMessage` Protobuf values selected by canonical target type URL. The
+factory is process-local, has no application command/query/subscription ingress,
+and provides neither durable delivery nor a cross-application network protocol.
+Managed replicas therefore exchange domestic/external integration events only
+among the complete Bounded Context set inside each process; entity work and
+client subscription updates use Delivery and the generated service path.
 
 The generated Protobuf-ES implementation files themselves remain excluded from
 TypeDoc output and are not broadly re-exported from the package root.
@@ -1059,14 +933,7 @@ pnpm docs:check
 
 Generated output is written to `docs/api/reference`.
 
-`docs:check` also emits temporary TypeDoc JSON and verifies ten expected
-entry points in the API model: `@spine-event-engine/proto`, `@spine-event-engine/client-web`, `@spine-event-engine/core`,
-`@spine-event-engine/server`, `@spine-event-engine/storage`, `@spine-event-engine/storage-datastore`,
-`@spine-event-engine/storage-rdbms`, `@spine-event-engine/transport`,
-`@spine-event-engine/transport/zeromq`, and `@spine-event-engine/testing`. The
-`@spine-event-engine/transport/zeromq` entry point has an exact six-export
-gate. It also checks
-`@spine-event-engine/server`, `@spine-event-engine/storage`, `@spine-event-engine/storage-datastore`, and
-`@spine-event-engine/storage-rdbms` root exports against source
-allowlists, and rejects broad generated wildcard re-exports from the proto
-package root.
+`docs:check` also emits temporary TypeDoc JSON and validates every curated
+package entry point and exact root inventory, including the small integration
+message-channel surface of `@spine-event-engine/transport`. It rejects broad
+generated wildcard re-exports from the proto package root.
