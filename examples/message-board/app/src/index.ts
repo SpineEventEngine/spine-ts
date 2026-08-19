@@ -198,7 +198,6 @@ export interface BoardServerOptions {
    * in-memory implementation.
    */
   readonly bindings?: SubscriptionBindings;
-
 }
 
 /**

@@ -18,7 +18,8 @@ test("local image builds regenerate application output before packing it", () =>
   assert.match(builder, /phase\("build Message Board application"\)/u);
   assert.match(builder, /\["typecheck:build"\]/u);
   assert.ok(
-    builder.indexOf('phase("build Message Board application")') < builder.indexOf('phase("pack local artifacts")'),
+    builder.indexOf('phase("build Message Board application")') <
+      builder.indexOf('phase("pack local artifacts")'),
   );
 });
 
@@ -84,7 +85,10 @@ test("final images contain only runtime artifacts and no runtime secret", () => 
       try {
         execFileSync("sh", ["-c", `docker export ${container} > ${archive}`]);
         const listing = join(directory, `${target}.files`);
-        execFileSync("sh", ["-c", `tar -tf ${JSON.stringify(archive)} > ${JSON.stringify(listing)}`]);
+        execFileSync("sh", [
+          "-c",
+          `tar -tf ${JSON.stringify(archive)} > ${JSON.stringify(listing)}`,
+        ]);
         const files = readFileSync(listing, "utf8");
         assert.doesNotMatch(
           files,

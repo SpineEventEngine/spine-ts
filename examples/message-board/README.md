@@ -28,15 +28,15 @@ build outputs, so build them once before starting local processes.
 
 ## 🚀 Start locally
 
-| Mode | Storage | Delivery | Gateway/UI route | Owner |
-| --- | --- | --- | --- | --- |
-| local single-process | in-memory | local | direct UI to Gateway | launcher |
-| local multi-process | Datastore emulator | local per replica | direct UI to Gateway | coordinator |
-| local multi-process shared Delivery | Datastore emulator | shared server | direct UI to Gateway | coordinator |
-| combined container | Datastore emulator | shared server | stock UI through Envoy | Compose |
-| one-node managed container | Datastore emulator | shared server | stock UI through Envoy | Compose |
-| distributed multi-node container | shared Datastore | shared server | stock UI through Envoy | Compose |
-| Kubernetes cluster | shared Datastore | shared server | stock UI through Envoy | cluster operator |
+| Mode                                | Storage            | Delivery          | Gateway/UI route       | Owner            |
+| ----------------------------------- | ------------------ | ----------------- | ---------------------- | ---------------- |
+| local single-process                | in-memory          | local             | direct UI to Gateway   | launcher         |
+| local multi-process                 | Datastore emulator | local per replica | direct UI to Gateway   | coordinator      |
+| local multi-process shared Delivery | Datastore emulator | shared server     | direct UI to Gateway   | coordinator      |
+| combined container                  | Datastore emulator | shared server     | stock UI through Envoy | Compose          |
+| one-node managed container          | Datastore emulator | shared server     | stock UI through Envoy | Compose          |
+| distributed multi-node container    | shared Datastore   | shared server     | stock UI through Envoy | Compose          |
+| Kubernetes cluster                  | shared Datastore   | shared server     | stock UI through Envoy | cluster operator |
 
 Install and build from the repository root:
 

@@ -44,9 +44,7 @@ test("posts and reads a real MessageBoard Projection through the local gateway",
   await expect(messages.getByRole("listitem").last()).toContainText(message);
 });
 
-test("keeps live updates connected beyond the former local timeout", async ({
-  page,
-}, testInfo) => {
+test("keeps live updates connected beyond the former local timeout", async ({ page }, testInfo) => {
   test.skip(
     testInfo.project.name !== "chromium",
     "This timed acceptance is required only in Chromium.",

@@ -68,14 +68,14 @@ pnpm exec vitest run examples/message-board/app/test
 
 The production-shaped source files are named for the process they start:
 
-| File                                               | Process role                                                                                           |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| File                                                 | Process role                                                                                           |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | [`application-server.ts`](src/application-server.ts) | Starts only the Message Board Bounded Context; a separate Gateway is required.                         |
 | [`gateway-server.ts`](src/gateway-server.ts)         | Starts only the browser-facing Gateway; it contains no Bounded Context and does not run Delivery work. |
 | [`combined-server.ts`](src/combined-server.ts)       | Starts the application and Gateway together in one process.                                            |
-| [`multi-process-app.ts`](src/multi-process-app.ts)         | Starts one Coordinator parent and the configured number of complete child replicas.                    |
-| [`deployment-config.ts`](src/deployment-config.ts) | Validates the environment and assembles facilities shared by those entrypoints.                        |
-| [`index.ts`](src/index.ts)                         | Defines the domain handlers and reusable complete application assembly.                                |
+| [`multi-process-app.ts`](src/multi-process-app.ts)   | Starts one Coordinator parent and the configured number of complete child replicas.                    |
+| [`deployment-config.ts`](src/deployment-config.ts)   | Validates the environment and assembles facilities shared by those entrypoints.                        |
+| [`index.ts`](src/index.ts)                           | Defines the domain handlers and reusable complete application assembly.                                |
 
 Start with `combined-server.ts` to see the fewest production-shaped processes.
 Read `multi-process-app.ts` when learning how one machine uses several CPU cores.

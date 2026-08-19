@@ -72,7 +72,10 @@ export class BoardAccessPolicy implements AuthorizationPolicy {
     }
   }
 
-  private actorFor(principal: AuthenticatedPrincipal, request: IncomingRequest): string | undefined {
+  private actorFor(
+    principal: AuthenticatedPrincipal,
+    request: IncomingRequest,
+  ): string | undefined {
     return principal.id === "message-board-public-demo"
       ? request.requestedContext.actor?.value
       : principal.id;

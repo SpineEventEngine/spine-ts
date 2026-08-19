@@ -53,10 +53,7 @@ const messageIdPrefix = parameters.get("messageIdPrefix") ?? crypto.randomUUID()
 
 const createBrowserTransport =
   protocol === "connect" ? createConnectTransport : createGrpcWebTransport;
-const wireSubscriptions = createClient(
-  SubscriptionService,
-  createBrowserTransport({ baseUrl }),
-);
+const wireSubscriptions = createClient(SubscriptionService, createBrowserTransport({ baseUrl }));
 const client = (
   protocol === "connect" ? Client.forConnect.bind(Client) : Client.forGrpcWeb.bind(Client)
 )(baseUrl, { ...(tenant === null ? {} : { tenant }) });

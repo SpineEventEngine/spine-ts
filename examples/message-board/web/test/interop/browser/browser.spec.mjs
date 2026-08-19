@@ -40,8 +40,13 @@ test("runs the public demo command, query, and subscription through Envoy", asyn
   }
 });
 
-test("keeps a passive public viewer alive for three sequential writer updates", async ({ browser }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium", "two-tab stream lifecycle is covered by Chromium");
+test("keeps a passive public viewer alive for three sequential writer updates", async ({
+  browser,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "chromium",
+    "two-tab stream lifecycle is covered by Chromium",
+  );
   const viewer = await browser.newContext({ ignoreHTTPSErrors: true });
   const writer = await browser.newContext({ ignoreHTTPSErrors: true });
   let viewerPage;
@@ -85,7 +90,9 @@ test("rejects a non-allowlisted browser origin before Gateway admission", async 
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
   try {
     const page = await context.newPage();
-    await page.goto(`https://localhost:4175/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}`);
+    await page.goto(
+      `https://localhost:4175/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}`,
+    );
     await expect(page.evaluate(() => window.post())).rejects.toThrow();
   } finally {
     await context.close();

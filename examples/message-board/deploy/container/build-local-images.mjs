@@ -37,7 +37,12 @@ const packages = [
   "examples/message-board/app",
   "examples/message-board/web",
 ];
-const targets = ["message-board", "standalone-gateway", "simple-delivery-server", "message-board-web"];
+const targets = [
+  "message-board",
+  "standalone-gateway",
+  "simple-delivery-server",
+  "message-board-web",
+];
 const cleanup = new BuildContextCleanup(context);
 
 cleanup.install();

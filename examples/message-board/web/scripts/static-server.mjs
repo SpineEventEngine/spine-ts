@@ -19,15 +19,23 @@ const server = createServer((request, response) => {
   const path = new URL(request.url ?? "/", "http://localhost").pathname;
   if (path === "/message-board-runtime-config.js") {
     const gateway = process.env.MESSAGE_BOARD_GATEWAY_URL ?? "http://localhost:18080";
-    response.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" });
-    response.end(`window.MESSAGE_BOARD_RUNTIME_CONFIG=${JSON.stringify({ MESSAGE_BOARD_GATEWAY_URL: gateway })};`);
+    response.writeHead(200, {
+      "content-type": "text/javascript; charset=utf-8",
+      "cache-control": "no-store",
+    });
+    response.end(
+      `window.MESSAGE_BOARD_RUNTIME_CONFIG=${JSON.stringify({ MESSAGE_BOARD_GATEWAY_URL: gateway })};`,
+    );
     return;
   }
   const candidate = resolve(root, `.${path}`);
-  const chosen = candidate.startsWith(`${root}/`) && existsSync(candidate) && statSync(candidate).isFile()
-    ? candidate
-    : resolve(root, "index.html");
-  response.writeHead(200, { "content-type": contentTypes.get(extname(chosen)) ?? "application/octet-stream" });
+  const chosen =
+    candidate.startsWith(`${root}/`) && existsSync(candidate) && statSync(candidate).isFile()
+      ? candidate
+      : resolve(root, "index.html");
+  response.writeHead(200, {
+    "content-type": contentTypes.get(extname(chosen)) ?? "application/octet-stream",
+  });
   createReadStream(chosen).pipe(response);
 });
 

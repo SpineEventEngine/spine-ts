@@ -44,11 +44,14 @@ describe("Message Board public-demo trust policy", () => {
       for (const token of forbidden) expect(text, `${source}: ${token}`).not.toContain(token);
     }
 
-    expect(existsSync(join(repositoryRoot, "examples/message-board/app/src/local-session.ts"))).toBe(
-      false,
-    );
     expect(
-      readFileSync(join(repositoryRoot, "examples/message-board/app/src/public-board-admission.ts"), "utf8"),
+      existsSync(join(repositoryRoot, "examples/message-board/app/src/local-session.ts")),
+    ).toBe(false);
+    expect(
+      readFileSync(
+        join(repositoryRoot, "examples/message-board/app/src/public-board-admission.ts"),
+        "utf8",
+      ),
     ).toContain("PublicBoardAdmission");
   });
 
@@ -59,9 +62,15 @@ describe("Message Board public-demo trust policy", () => {
       "examples/message-board/app/src/multi-process-replica.ts",
       "examples/message-board/scripts/start-local-single-process.sh",
       "examples/message-board/scripts/start-local-multi-process.sh",
-    ]) expect(existsSync(join(repositoryRoot, source)), source).toBe(true);
+    ])
+      expect(existsSync(join(repositoryRoot, source)), source).toBe(true);
     const readme = readFileSync(join(repositoryRoot, "examples/message-board/README.md"), "utf8");
-    for (const mode of ["local single-process", "local multi-process", "combined container", "Kubernetes cluster"])
+    for (const mode of [
+      "local single-process",
+      "local multi-process",
+      "combined container",
+      "Kubernetes cluster",
+    ])
       expect(readme).toContain(mode);
   });
 });
