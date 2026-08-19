@@ -185,6 +185,33 @@ describe("MessageBoard deployment entrypoints", () => {
     expect(replica).toHaveBeenCalledOnce();
     delete process.env.SPINE_MANAGED_SERVER_CHILD;
   });
+
+  it("starts the Coordinator with its complete-replica callbacks and framework-owned lifecycle", async () => {
+    vi.resetModules();
+    vi.doUnmock("../src/multi-process-coordinator.js");
+    const run = vi.fn().mockResolvedValue(undefined);
+    const config = { processCount: 2, host: "127.0.0.1", port: 8090 };
+    const options = { createServer: vi.fn(), synchronize: vi.fn() };
+    vi.doMock("@spine-event-engine/server", () => ({ ManagedServerApplication: { run } }));
+    vi.doMock("../src/deployment-config.js", () => ({
+      MessageBoardDeployment: { managed: () => config },
+    }));
+    vi.doMock("../src/multi-process-replica.js", () => ({ managedReplicaOptions: () => options }));
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await import("../src/multi-process-coordinator.js");
+
+    expect(run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        processCount: 2,
+        host: "127.0.0.1",
+        port: 8090,
+        ...options,
+      }),
+    );
+    expect(log).toHaveBeenCalledWith("MessageBoard managed coordinator ready at 127.0.0.1:8090");
+    log.mockRestore();
+  });
 });
 
 function startupMocks() {
