@@ -67,3 +67,14 @@
   (framework-owned `SIGINT`/`SIGTERM`) from `start()` (caller-owned signals and
   explicit handle close). No product code or public shape changed in this
   correction.
+
+## 2026-08-19 — reliability review P2 public-facade proof
+
+- Review concern: `performance_reliability_reviewer`, configured
+  `gpt-5.6-terra` / `high`; runtime telemetry unavailable. Disposition:
+  accepted test-only P2.
+- A separate real parent process now calls the public
+  `ManagedServerApplication.start()` facade. It proves neither `SIGINT` nor
+  `SIGTERM` gains a managed listener, and it calls the returned handle's
+  `close()` twice before reporting completion. Existing direct coordinator and
+  public `run()` listener-ownership proofs remain intact.

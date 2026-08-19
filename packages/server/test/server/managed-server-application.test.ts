@@ -313,6 +313,40 @@ describe("ManagedServerApplication", () => {
     20_000,
   );
 
+  it("starts a public managed cohort without process signals and closes it idempotently", async () => {
+    const parent = fork(
+      fileURLToPath(new URL("./managed-server-application-start-parent.mjs", import.meta.url)),
+      [],
+      { silent: true },
+    );
+    const result = await new Promise<{
+      readonly addedAtStart: { readonly sigint: number; readonly sigterm: number };
+      readonly addedAfterClose: { readonly sigint: number; readonly sigterm: number };
+    }>((resolve, reject) => {
+      parent.once("message", (message: unknown) => {
+        if (
+          typeof message === "object" &&
+          message !== null &&
+          (message as { readonly type?: unknown }).type === "start-closed"
+        )
+          resolve(
+            message as {
+              readonly addedAtStart: { readonly sigint: number; readonly sigterm: number };
+              readonly addedAfterClose: { readonly sigint: number; readonly sigterm: number };
+            },
+          );
+        else reject(new Error("Managed start parent did not report closure."));
+      });
+      parent.once("error", reject);
+    });
+    await childExit(parent);
+
+    expect(result).toMatchObject({
+      addedAtStart: { sigint: 0, sigterm: 0 },
+      addedAfterClose: { sigint: 0, sigterm: 0 },
+    });
+  }, 15_000);
+
   it("forwards a command through the managed Coordinator to the child normal service", async () => {
     const parent = fork(
       fileURLToPath(new URL("./managed-server-application-parent.mjs", import.meta.url)),
