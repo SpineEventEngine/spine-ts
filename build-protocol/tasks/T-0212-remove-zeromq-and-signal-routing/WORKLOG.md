@@ -38,3 +38,14 @@
 - Focused retained server and memory-channel tests pass (126 tests). The
   canonical task verifier was started with coverage after this green gate; its
   final result must be recorded separately before completion.
+
+## 2026-08-19 — cleanup-policy convergence
+
+- The first retained canonical verifier passed generated build, tooling
+  typecheck, and repository ESLint, then stopped at the cleanup-policy gate.
+- Removed only obsolete semantic-name and standalone-function dispositions for
+  the deleted ZeroMQ adapter and runtime-routing functions. Wrapped the RED-30
+  reference expression to satisfy the line-length policy.
+- `pnpm lint:cleanup`, `pnpm check:t0212-removed-routing`, the affected Prettier
+  check, and `git diff --check` now pass. No production behavior changed in
+  this correction.

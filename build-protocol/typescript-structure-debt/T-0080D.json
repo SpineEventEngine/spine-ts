@@ -1,12 +1,1 @@
-[
-  {
-    "rule": "semantic-name",
-    "file": "packages/transport/src/zeromq/message-transport.ts",
-    "kind": "FunctionDeclaration",
-    "identity": "FunctionDeclaration:createZeroMqTransportFactory#1",
-    "name": "createZeroMqTransportFactory",
-    "disposition": "compatibility-exception",
-    "reason": "The createZeroMqTransportFactory export preserves the frozen typed TransportFactory public factory vocabulary.",
-    "sourceContract": "Spine JVM io.spine.server.integration.TransportFactory"
-  }
-]
+[]

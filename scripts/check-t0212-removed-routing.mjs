@@ -35,8 +35,12 @@ const removedPaths = [
   "packages/server/test/server/server-context-transport-cross-process.test.ts",
   "packages/server/test/server/server-context-transport-lifecycle.test.ts",
 ];
-const removedReferences =
-  /(?:ZeroMQ|zeromq|SignalTransport|ContextTransport|RuntimeTransportBinding|TransportTopics|TransportSubscription|TransportRouting|runtime-routing|context-transport|runtime-transport)/u;
+const removedReferences = new RegExp(
+  "ZeroMQ|zeromq|SignalTransport|ContextTransport|RuntimeTransportBinding|" +
+    "TransportTopics|TransportSubscription|TransportRouting|runtime-routing|" +
+    "context-transport|runtime-transport",
+  "u",
+);
 const currentPaths = globSync("**/*", {
   nodir: true,
   ignore: ["**/node_modules/**", "**/dist/**", ".git/**"],
