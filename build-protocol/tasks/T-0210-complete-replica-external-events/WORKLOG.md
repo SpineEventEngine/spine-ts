@@ -123,3 +123,21 @@ only.
   quiescence, admission, tenant selection, retirement fencing, and empty-group
   closure are resolved by the focused regressions above. No new reviewer was
   dispatched in this continuation.
+
+## 2026-08-19 — consolidated review correction
+
+- Accepted consolidated findings: reliability review required Command-envelope
+  tenant admission and an admission-to-owner-fence race proof; TypeScript/API
+  review required removing the predicate from exported supervisor/delivery
+  option surfaces. Review profiles: existing reliability and TypeScript/API
+  reviewers, `gpt-5.6-terra`/`high`; runtime telemetry unavailable.
+- The predicate is now installed only through the existing internal
+  `deliverySupervisorAccess` seam. It is absent from root-exported
+  `DeliverySupervisorOptions` and public `DeliveryRunOptions`.
+- Route selection decodes Event origins first and Command actor-context tenants
+  second. Admission reserves its selected owner route, so a concurrent owner
+  fence cannot reselect the message into the default failure/acknowledgment
+  path; retirement observes the reserved callback as active.
+- Focused tooling typecheck and the environment worker suite pass after the
+  correction. Remaining final changed-coverage and full mechanical gates are
+  pending this continuation's final command budget.

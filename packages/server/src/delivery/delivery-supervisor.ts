@@ -23,11 +23,16 @@ import type { ILogLayer } from "loglayer";
 import { emitServerWarning } from "../server/server-log.js";
 
 const deliverySupervisorLoggers = new WeakMap<DeliverySupervisor, ILogLayer>();
+const deliverySupervisorAdmissions = new WeakMap<
+  DeliverySupervisor,
+  (message: InboxMessage) => boolean
+>();
 const deliverySupervisors = new WeakSet<DeliverySupervisor>();
 
 interface DeliverySupervisorAccess {
   installLogger(supervisor: DeliverySupervisor, logger: ILogLayer): void;
   loggerFor(supervisor: DeliverySupervisor): ILogLayer;
+  installAdmission(supervisor: DeliverySupervisor, admission: (message: InboxMessage) => boolean): void;
 }
 
 /**
@@ -120,7 +125,6 @@ export class DeliverySupervisor {
   readonly #source: DeliverySource;
   readonly #runs: DeliveryRunControl;
   readonly #onMessage: OnDeliveryMessage;
-  readonly #acceptMessage: ((message: InboxMessage) => boolean) | undefined;
   readonly #concurrency: number;
   readonly #pendingLimit: number;
   readonly #recoveryMs: number;
@@ -155,7 +159,6 @@ export class DeliverySupervisor {
     this.#source = options.source;
     this.#runs = new DeliveryRunControl(options.delivery);
     this.#onMessage = options.onMessage;
-    this.#acceptMessage = options.acceptMessage;
     this.#concurrency = DeliverySupervisor.#requireBound(
       "Delivery supervisor concurrency",
       options.concurrency ?? 1,
@@ -316,10 +319,11 @@ export class DeliverySupervisor {
 
   async #run(shard: ShardIndex, key: string): Promise<void> {
     try {
+      const admission = deliverySupervisorAdmissions.get(this);
       await this.#runs.run({
         shard,
         onMessage: this.#onMessage,
-        ...(this.#acceptMessage === undefined ? {} : { acceptMessage: this.#acceptMessage }),
+        ...(admission === undefined ? {} : { acceptMessage: admission }),
         signal: this.#controller.signal,
       });
     } finally {
@@ -532,6 +536,13 @@ export const deliverySupervisorAccess: DeliverySupervisorAccess = Object.freeze(
     }
     return logger;
   },
+
+  installAdmission(supervisor: DeliverySupervisor, admission: (message: InboxMessage) => boolean): void {
+    if (!deliverySupervisors.has(supervisor)) {
+      throw new TypeError("Delivery supervisor admission requires a DeliverySupervisor instance.");
+    }
+    deliverySupervisorAdmissions.set(supervisor, admission);
+  },
 });
 
 /**
@@ -555,12 +566,6 @@ export interface DeliverySupervisorOptions {
    */
   readonly onMessage: OnDeliveryMessage;
 
-  /**
-   * Selects pending rows owned by this supervisor before they are dispatched or acknowledged.
-   *
-   * @internal
-   */
-  readonly acceptMessage?: (message: InboxMessage) => boolean;
 
   /**
    * Positive safe-integer active-shard limit. Defaults to `1`.

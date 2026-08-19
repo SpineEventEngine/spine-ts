@@ -18,7 +18,7 @@ import {
   type StorageFactory,
 } from "@spine-event-engine/storage";
 import { fromBinary } from "@bufbuild/protobuf";
-import { EventSchema } from "@spine-event-engine/proto";
+import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import type { ILogLayer } from "loglayer";
 
 import type { ContextDeliveryDescriptor, DeliveryTenantScope } from "../context/bounded-context.js";
@@ -518,6 +518,7 @@ class RuntimeDeliverySupervisorGroup {
   readonly #routes = new Map<string, RuntimeDeliveryRoute[]>();
   readonly #retiringOwners = new Set<string>();
   readonly #active = new Map<string, Set<Promise<void>>>();
+  readonly #reserved = new Map<string, RuntimeDeliveryRoute>();
   readonly shardCount: number;
   #start: Promise<void> | undefined;
   #stopped = false;
@@ -542,8 +543,8 @@ class RuntimeDeliverySupervisorGroup {
       source: this.#source,
       delivery: options.delivery,
       onMessage: (message) => this.#route(message),
-      acceptMessage: (message) => this.#accept(message),
     });
+    deliverySupervisorAccess.installAdmission(this.#supervisor, (message) => this.#accept(message));
     if (options.logger !== undefined) {
       deliverySupervisorAccess.installLogger(this.#supervisor, options.logger);
     }
@@ -641,11 +642,15 @@ class RuntimeDeliverySupervisorGroup {
   }
 
   #accept(message: DeliveryEndpointMessage): boolean {
-    return this.#select(message) !== undefined;
+    const route = this.#select(message);
+    if (route !== undefined) this.#reserved.set(RuntimeDeliverySupervisorGroup.messageKey(message), route);
+    return route !== undefined;
   }
 
   #route(message: Parameters<OnDeliveryMessage>[0]): void | Promise<void> {
-    const route = this.#select(message);
+    const route =
+      this.#reserved.get(RuntimeDeliverySupervisorGroup.messageKey(message)) ?? this.#select(message);
+    this.#reserved.delete(RuntimeDeliverySupervisorGroup.messageKey(message));
     if (route === undefined) throw new Error("Environment delivery endpoint is not configured.");
     const active = this.#active.get(route.ownerKey) ?? new Set<Promise<void>>();
     this.#active.set(route.ownerKey, active);
@@ -679,7 +684,8 @@ class RuntimeDeliverySupervisorGroup {
   static tenantKey(message: DeliveryEndpointMessage): string | undefined {
     if (message.signal === undefined) return undefined;
     try {
-      const tenantId = fromBinary(EventSchema, message.signal.value).context?.origin;
+      const event = fromBinary(EventSchema, message.signal.value);
+      const tenantId = event.context?.origin;
       if (tenantId?.case === "importContext") {
         const value = tenantId.value.tenantId;
         return value === undefined ? undefined : String(TenantBoundary.from(value).key);
@@ -688,6 +694,9 @@ class RuntimeDeliverySupervisorGroup {
         const value = tenantId.value.actorContext?.tenantId;
         return value === undefined ? undefined : String(TenantBoundary.from(value).key);
       }
+      const commandTenant = fromBinary(CommandSchema, message.signal.value).context?.actorContext
+        ?.tenantId;
+      return commandTenant === undefined ? undefined : String(TenantBoundary.from(commandTenant).key);
     } catch {
       return undefined;
     }
@@ -704,6 +713,10 @@ class RuntimeDeliverySupervisorGroup {
     if (targetTypeUrl === undefined)
       throw new Error("Environment delivery route has no target type.");
     return JSON.stringify([route.label, targetTypeUrl, route.shard.index, route.shard.ofTotal]);
+  }
+
+  static messageKey(message: DeliveryEndpointMessage): string {
+    return `${message.signalId}/${RuntimeDeliverySupervisorGroup.key(message)}`;
   }
 }
 
