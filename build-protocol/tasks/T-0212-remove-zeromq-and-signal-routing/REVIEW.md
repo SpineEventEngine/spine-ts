@@ -38,6 +38,16 @@
 - Do not modify runtime behavior, restore ZeroMQ, introduce compatibility
   aliases, or pre-empt the T-0213 security review.
 
+## Correction checkpoint
+
+- Correction head: `2e5d6f9c3`.
+- The removal guard, six retained in-memory message-channel tests, TSDoc,
+  documentation audience, API inventory, formatting, and diff checks pass.
+- Affected re-review returns to the same style, TypeScript/API documentation,
+  and documentation-completeness roles with their original explicit profiles.
+  Reliability is not reopened because the correction changes tests and
+  documentation only; its earlier no-finding runtime disposition stands.
+
 ## Correction disposition
 
 - In-memory message-channel validation, FIFO drain, consumer-failure
