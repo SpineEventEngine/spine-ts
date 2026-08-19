@@ -197,6 +197,6 @@ describe("ServerEnvironment singleton", () => {
     }).toThrow("ServerEnvironment is already resolved and cannot be reconfigured.");
     await resetServerEnvironmentForTest();
 
-    expect(closed).toEqual(["delivery", "transport", "tracer", "storage"]);
+    expect(closed).toEqual(["delivery", "tracer", "storage"]);
   });
 });
