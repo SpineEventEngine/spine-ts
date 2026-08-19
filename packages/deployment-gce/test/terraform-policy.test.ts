@@ -185,15 +185,13 @@ describe("the GCE deployment guide", () => {
     expect(guide).not.toMatch(/\bT-0127\b|\bWave 7\b/u);
   });
 
-  it("points entrypoint snippets to packaged examples", async () => {
+  it("links to the packaged entrypoint examples", async () => {
     const guide = await readOptional(new URL("README.md", packageRoot));
     const application = await readOptional(new URL("examples/application.ts", packageRoot));
     const gateway = await readOptional(new URL("examples/gateway.ts", packageRoot));
 
-    expect(guide).toContain(
-      "// docs-snippet-path: packages/deployment-gce/examples/application.ts",
-    );
-    expect(guide).toContain("// docs-snippet-path: packages/deployment-gce/examples/gateway.ts");
+    expect(guide).toContain("[`GceApplicationEntrypoint`](examples/application.ts)");
+    expect(guide).toContain("[`examples/gateway.ts`](examples/gateway.ts)");
     expect(application).toContain("ManagedServerApplication");
     expect(application).toContain("GceRegistrar");
     expect(application).toContain("processCount");

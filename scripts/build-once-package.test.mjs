@@ -10,9 +10,9 @@ const applicationPackage = JSON.parse(readFileSync(join(applicationRoot, "packag
 describe("MessageBoard packed runtime", () => {
   it("declares compiled runtime commands without a workspace build at startup", () => {
     expect(applicationPackage.scripts).toMatchObject({
-      start: "node dist/src/local-entry.js",
-      "start:application": "node dist/src/application-entry.js",
-      "start:combined": "node dist/src/combined-entry.js",
+      start: "node dist/src/local-application-server.js",
+      "start:application": "node dist/src/application-server.js",
+      "start:combined": "node dist/src/combined-server.js",
     });
     expect(applicationPackage.files).toContain("dist");
     expect(applicationPackage.scripts.start).not.toMatch(/pnpm|tsc|spine-proto/u);

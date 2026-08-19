@@ -51,9 +51,8 @@ describe("MessageBoard family workspace migration", () => {
     expect(browserHarness).toContain('from "../../../../../interop/envoy/render.mjs"');
     expect(browserTypeScript).toContain('"extends": "../../../../../tsconfig.base.json"');
     expect(interopBrowserTypeScript).toContain('"extends": "../../../../../../tsconfig.base.json"');
-    expect(familyReadme).toContain(
-      "[Browser client, authentication, and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)",
-    );
+    expect(familyReadme).not.toContain("BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md");
+    expect(familyReadme).toContain("[deployment guide](deploy/README.md)");
     expect(familyReadme).toContain("Proto model is shared by the Node application and React UI");
     expect(references.map(({ path }) => path)).toEqual(
       expect.arrayContaining(
