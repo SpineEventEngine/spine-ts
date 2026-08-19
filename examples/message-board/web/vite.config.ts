@@ -13,8 +13,24 @@
  */
 
 import tailwindcss from "@tailwindcss/vite";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
+
+const runtimeConfig = (): Plugin => ({
+  name: "message-board-runtime-config",
+  configureServer(server) {
+    server.middlewares.use("/message-board-runtime-config.js", (_request, response) => {
+      const gateway = process.env.VITE_MESSAGE_BOARD_GATEWAY_URL ?? "http://127.0.0.1:8090";
+      response.writeHead(200, {
+        "content-type": "text/javascript; charset=utf-8",
+        "cache-control": "no-store",
+      });
+      response.end(
+        `window.MESSAGE_BOARD_RUNTIME_CONFIG=${JSON.stringify({ MESSAGE_BOARD_GATEWAY_URL: gateway })};`,
+      );
+    });
+  },
+});
 
 export default defineConfig({
-  plugins: [tailwindcss()],
+  plugins: [tailwindcss(), runtimeConfig()],
 });

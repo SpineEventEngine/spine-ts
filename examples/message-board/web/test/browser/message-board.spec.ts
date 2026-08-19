@@ -88,6 +88,7 @@ test("keeps two stock browser tabs live through alternating posts after the form
       if (message.type() === "error") failures.push(`console: ${message.text()}`);
     });
     browserPage.on("response", (response) => {
+      if (response.status() === 404) failures.push(`404: ${response.url()}`);
       if (response.status() === 401) failures.push(`401: ${response.url()}`);
     });
   }
