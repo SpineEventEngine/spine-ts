@@ -103,8 +103,7 @@ function routes(httpConnectionManager) {
   return (httpConnectionManager.route_config?.virtual_hosts ?? []).flatMap((host) =>
     (host.routes ?? []).map((route) => {
       if (route.match?.prefix === "/") return ["/", route.route?.timeout];
-      if (route.match?.prefix === "/spine.")
-        return ["/spine.", route.direct_response?.status];
+      if (route.match?.prefix === "/spine.") return ["/spine.", route.direct_response?.status];
       assert.deepEqual(Object.keys(route.match ?? {}), ["path", "headers"]);
       assert.deepEqual(route.match.headers, [{ name: ":method", exact_match: "POST" }]);
       return [route.match.path, route.route?.timeout];
