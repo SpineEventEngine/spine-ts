@@ -56,3 +56,23 @@
 - The affected documentation preflight and release-readiness check pass after
   this correction. A fresh terminal canonical verifier result is still
   required.
+
+## 2026-08-19 — review-ready verification
+
+- The fresh canonical bounded verifier completed with exit code zero. It passed
+  Node and Proto checks, generated build, tooling typecheck, cleanup, TSDoc,
+  copyright, logging containment, formatting, documentation audience and API
+  inventory, Buf, generated-output currency, release-readiness, and 557 tests
+  in 33 files.
+- Serialized process-heavy acceptance passed separately: managed lifecycle
+  58/58 and real managed external-event/remote-Delivery fixtures 4/4. This
+  avoids test-runner process contention without weakening the covered behavior.
+- RED-30 passes, the dependency and lock audit contains no ZeroMQ reference,
+  and the worktree is clean.
+- Exact changed executable coverage is 3/3 lines and 5/5 branch outcomes in
+  `server.ts`; the remaining runtime changes are deletions, declarations, or
+  error-text cleanup. The relevant broader source run passed 212 tests and
+  reported 94.38% lines and 89.68% branches across whole legacy files.
+- T-0212 is ready for the required style, TypeScript/API, documentation, and
+  performance/reliability review wave. Security remains the final T-0213
+  release-readiness concern per the project protocol.
