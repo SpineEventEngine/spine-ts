@@ -45,6 +45,9 @@ describe("the GKE managed application entrypoint", () => {
     ).resolves.toBe(handle);
 
     const options = managed.run.mock.calls[0]?.[0];
+    if (options === undefined) {
+      throw new Error("Managed application options were not passed.");
+    }
     expect(options).toMatchObject({
       processCount: 2,
       host: "0.0.0.0",
