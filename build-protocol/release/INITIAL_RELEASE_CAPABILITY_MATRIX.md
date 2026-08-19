@@ -105,9 +105,10 @@ ZeroMQ export subpath.
 | 30  | Malformed caller-supplied fallback prefixes are rejected by public `getTypeUrlPrefix()` and `deriveTypeUrl()`                                               | `packages/core/src/index.ts` (`getTypeUrlPrefix()`, `deriveTypeUrl()`) normalizes valid trailing separators and rejects empty or whitespace-containing selected fallbacks      | `packages/core/test/index.test.ts` — malformed, valid custom, default, and Spine-option-precedence cases; T-0038a full and post-merge verification: 68 files / 1,610 tests                                                                   | `packages/core/README.md` Type URLs; public TSDoc in `packages/core/src/index.ts`                                           | IMPLEMENTED          | —                     |
 | 31  | HISTORICAL/SUPERSEDED: framework-owned same-host command/event execution                                                                                    | Removed by the deployment correction                                                                                                                                           | Historical T-0038b evidence only                                                                                                                                                                                                             | Deployment Correction Addendum                                                                                              | STALE_DOC_STATUS     | Deployment correction |
 
-## Public Surface And Compatibility
+## Historical T-0042 Public Surface And Compatibility
 
-- `scripts/check-api-docs.mjs` checks TypeDoc presence for expected root symbols
+- At the T-0042 audit endpoint, `scripts/check-api-docs.mjs` checked TypeDoc
+  presence for expected root symbols
   for all six packages. It also compares exact declared root exports for server,
   storage, and testing, and rejects broad generated re-export from the proto
   root. It does not provide exact source allowlists for proto, core, or transport
@@ -119,11 +120,13 @@ ZeroMQ export subpath.
   registry/type-URL cases in `packages/core/test/index.test.ts`, envelope
   validation in command/event/runtime transport tests, and copied-proto checks.
 
-## Package Export-Subpath Inventory
+## Historical T-0042 Package Export-Subpath Inventory
 
-Every `exports` entry in the six package manifests is listed below. “TypeDoc
-exempt” means the subpath is intentionally outside root TypeDoc entry points and
-has separate declaration/import evidence.
+Every `exports` entry in the six package manifests at the T-0042 audit endpoint
+is listed below. “TypeDoc exempt” meant the subpath was intentionally outside
+root TypeDoc entry points and had separate declaration/import evidence. This
+table is historical; the deployment-correction addendum contains the current
+server/transport inventory.
 
 | Package               | Export entry                            | Designation               | Runtime/type targets                                           | TypeDoc/import/declaration evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | --------------------- | --------------------------------------- | ------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -145,9 +148,9 @@ schema-bearing decorator, `@Apply`, manual transaction, event-ID, default-ID
 extraction, or registry-materialization usage. Matches in low-level framework,
 testing, legacy, and explanatory docs remain outside ordinary handler code.
 
-## Accepted Exclusions
+## Historical T-0042 Accepted Exclusions
 
-The active plan excludes distributed multi-host transport, production process
+At the T-0042 audit endpoint, the active plan excluded distributed multi-host transport, production process
 supervision, retry timing/backoff/jitter, public monitoring/scheduler/health/
 action/dead-letter APIs, production topology/adapter policy, projection inbox
 catch-up, legacy `IMPORT_EVENT`, aggregate import/importers, `ImportBus`, new
@@ -155,7 +158,7 @@ aggregate `@Apply`, JVM source compatibility, and production persistence,
 authentication, deployment, tracing, or health in the example. Rows 24–27 are
 accepted exclusions, not defects.
 
-Current exact taxonomy: 31 rows — 27 `IMPLEMENTED`, 4
+Historical T-0042 taxonomy: 31 rows — 27 `IMPLEMENTED`, 4
 `DOCUMENTED_EXCLUSION`, 0 `STALE_DOC_STATUS`, 0 `EXAMPLE_GAP`, 0
 `SECURITY_GATE`, and 0 `FRAMEWORK_DEFECT`. All routes are em dashes.
 

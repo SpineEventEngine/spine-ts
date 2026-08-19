@@ -44,3 +44,12 @@ Correction verification passed: removal guard; metadata 11/11; audience and
 TypeScript snippet checks; exact API inventory; cleanup; TSDoc; formatting; and
 diff hygiene. Only affected documentation/API/style/reliability concerns need
 re-review.
+
+## Re-review residual and disposition
+
+- Style and TypeScript/API-doc re-reviews passed.
+- Documentation/reliability found that the matrix's lower T-0042 inventory and
+  taxonomy summaries still appeared current. Accepted: the affected section
+  headings and prose now explicitly identify the entire inventory, exclusions,
+  and taxonomy as historical T-0042 evidence. The current addendum remains the
+  sole current server/transport inventory.

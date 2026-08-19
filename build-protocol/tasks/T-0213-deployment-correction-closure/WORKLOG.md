@@ -94,3 +94,11 @@
   explicitly historical records remain permitted.
 - Guard, metadata 11/11, documentation audience/snippets/API, cleanup, TSDoc,
   format, and diff checks passed.
+
+## 2026-08-19 — re-review residual
+
+- Style and TypeScript/API-doc re-reviews passed.
+- Documentation/reliability identified one record-only residual: the lower
+  T-0042 package inventory, accepted exclusions, and taxonomy still looked
+  current. Labeled those sections explicitly historical without altering the
+  correction's verified current API inventory.
