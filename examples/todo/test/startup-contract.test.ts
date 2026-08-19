@@ -158,7 +158,7 @@ describe("To-Do managed entrypoint", () => {
     expect(source).toContain("RemoteDelivery.connectTo");
     expect(configurationSource).toContain("PROCESS_COUNT");
     expect(configurationSource).toContain("DELIVERY_SHARD_COUNT");
-    expect(source).not.toMatch(/ZeroMQ|SPINE_IPC_DIRECTORY|SignalTransport/u);
+    expect(source).not.toMatch(/SPINE_IPC_DIRECTORY/u);
     expect(local).not.toContain("ManagedServerApplication");
     expect(manifest.scripts["start:managed"]).toBe("node dist/src/managed-entry.js");
     expect(manifest.dependencies["@spine-event-engine/delivery-client"]).toBe("workspace:*");

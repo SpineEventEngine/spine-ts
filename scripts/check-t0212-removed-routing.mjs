@@ -39,6 +39,7 @@ const currentPaths = globSync("**/*", {
 const failures = [
   ...removedPaths.filter(existsSync).map((path) => `removed path remains: ${path}`),
   ...currentPaths
+    .filter((path) => !path.includes("/node_modules/"))
     .filter((path) => statSync(path).isFile())
     .filter((path) => !excludedPrefixes.some((prefix) => path.startsWith(prefix)))
     .filter((path) => readFileSync(path, "utf8").match(removedReferences) !== null)

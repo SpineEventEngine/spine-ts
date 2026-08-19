@@ -520,7 +520,7 @@ loop-prevention rule: there is no hop counter, broker Inbox, retry, replay,
 deduplication, or producer election. Delivery is best effort; many consumers
 may observe one domain producer at a time.
 
-The broker uses `TransportFactory` message channels, not `SignalTransport`.
+The broker uses `TransportFactory` message channels.
 `ServerEnvironment` owns one process-wide `InMemoryTransportFactory` by
 default for private IntegrationBroker message channels, including production.
 An application may supply `integrationChannelFactory` to override that local

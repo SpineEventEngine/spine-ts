@@ -274,8 +274,6 @@ describe("@spine-event-engine/server", () => {
         "Projection",
         "Repository",
         "RepositoryIdentityError",
-        "RuntimeTransportBinding",
-        "RuntimeTransportEnvelopeError",
         "Server",
         "ServerEnvironment",
         "ServerRuntimeStateError",
@@ -545,7 +543,7 @@ describe("@spine-event-engine/server", () => {
       "system",
     ]);
 
-    for (const member of ["ImportBus", "GrpcServer", "ZeroMqTransport"]) {
+    for (const member of ["ImportBus", "GrpcServer"]) {
       expect(Object.hasOwn(serverRoot, member)).toBe(false);
     }
 

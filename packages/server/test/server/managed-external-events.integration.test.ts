@@ -73,7 +73,7 @@ it(
     expect(source).toContain("createTodoContext");
     expect(source).toContain('origin: "external"');
     expect(source).not.toMatch(
-      /ZeroMQ|SignalTransport|ContextTransport|RuntimeTransportBinding|ExternalMessage|forwarder/iu,
+      /ExternalMessage|forwarder/iu,
     );
 
     const { child, endpoint } = await start();
