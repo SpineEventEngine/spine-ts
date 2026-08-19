@@ -495,8 +495,8 @@ through `Server` use the environment storage factory unless
 `withStorageFactory()` already selected a more specific local factory.
 `Server.atPort(port)` defaults to local-only `127.0.0.1`; broader hosts are
 explicit through `ServerOptions`. All servers share the lazily resolved
-singleton; production configuration requires `storageFactory`, `transport`,
-and `typeRegistry` before first resolution, and production selection itself requires
+singleton; production configuration requires `storageFactory` and `typeRegistry`
+before first resolution, and production selection itself requires
 `NODE_ENV=production` before that first resolution. `RunningServer` exposes
 `host`, `port`, `baseUrl`, and
 idempotent `close()`. Close stops listener intake and active HTTP/2 sessions,
@@ -517,11 +517,11 @@ when omitted, all local contexts use the same environment-owned
 `InMemoryTransportFactory`. `typeRegistry` remains the complete application
 schema lookup used by `ThirdPartyContext`. Local/test resolution supplies
 in-memory storage and `spineCoreRegistry` when omitted. Production resolution
-rejects omitted storage, signal transport, or type registry, so production
-applications must compose and configure their own schema universe (for example
-with `TypeRegistry.from(...)`) and message
-transport. The existing `transport: SignalTransport` setting remains separate
-and continues to configure runtime command/event intake.
+rejects omitted storage or type registry, so production applications must
+compose and configure their own schema universe (for example with
+`TypeRegistry.from(...)`). The existing optional `transport: SignalTransport`
+setting remains separate: when supplied it opens legacy runtime command/event
+intake; when omitted no such bindings are opened.
 
 The server root exports `External<T>` (a type-only alias), `HandlerOrigin`,
 `ThirdPartyContext`, and the generated registry v3 contract. The canonical

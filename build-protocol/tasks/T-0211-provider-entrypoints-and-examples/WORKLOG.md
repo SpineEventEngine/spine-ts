@@ -53,3 +53,22 @@
   invalid and independent process/shard choices are behaviorally tested without
   exposing a framework API. Message Board’s existing deployment configuration
   already provides the equivalent private application seam.
+
+## 2026-08-19 — runtime prerequisite: optional legacy signal transport
+
+- Runtime lane assignment: existing `implementer` role, configured
+  `gpt-5.6-terra` / `medium`; runtime telemetry unavailable and subagents
+  prohibited.
+- Retained RED: a Production `ServerEnvironment` configured with storage and a
+  complete schema registry, but no generic `SignalTransport`, failed with
+  `Production ServerEnvironment requires transport.` The managed external-event
+  child could not use Production under that requirement.
+- Minimal bridge: Production now requires only storage and the complete type
+  registry. `transport` remains an optional legacy facility. `Server` creates
+  and opens `ContextTransportGroup` only when that facility was explicitly
+  supplied. Local/default and explicitly configured legacy transport behavior
+  remain unchanged until T-0212 removes the subsystem.
+- A real managed child now selects Production, supplies storage plus its
+  complete event schema registry, and supplies no legacy signal transport. Its
+  domestic and ThirdParty external-event paths still complete through the
+  process-local broker and Delivery.

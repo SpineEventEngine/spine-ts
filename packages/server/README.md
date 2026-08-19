@@ -504,10 +504,12 @@ The broker uses `TransportFactory` message channels, not `SignalTransport`.
 `ServerEnvironment` owns one process-wide `InMemoryTransportFactory` by
 default for private IntegrationBroker message channels, including production.
 An application may supply `integrationChannelFactory` to override that local
-channel factory. Production resolution still requires `storageFactory`,
-`transport`, and the complete application `typeRegistry`; it does not fall
-back to in-memory storage or to the core-only registry. See the [transport
-reference](../transport/REFERENCE.md) for same-host ZeroMQ setup.
+channel factory. Production resolution still requires `storageFactory` and the
+complete application `typeRegistry`; it does not fall back to in-memory storage
+or to the core-only registry. Its legacy `transport` setting is optional: when
+present, it opens legacy runtime signal bindings; when absent, none are opened.
+See the [transport reference](../transport/REFERENCE.md) for same-host ZeroMQ
+setup.
 
 `ThirdPartyContext.singleTenant(name)` or `.multitenant(name)` creates the
 public import facade. `emittedEvent(event, actor)` requires a generated event,

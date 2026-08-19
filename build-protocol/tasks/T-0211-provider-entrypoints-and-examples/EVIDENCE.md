@@ -56,3 +56,20 @@ real deployment smoke, reviews, integration, and remote cleanup.
   termination signals, and proves port release independently of managed mode.
 - `pnpm docs:check`, `pnpm format:check`, and `git diff --check` completed
   cleanly after the source/documentation changes.
+
+## Runtime prerequisite checkpoint
+
+| Evidence                                                                                                                                                                                     | Result                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RED — `pnpm exec vitest run packages/server/test/server/server-environment-singleton.test.ts packages/server/test/server/managed-external-events.integration.test.ts` before product changes | Production environment expectation failed exactly with `Production ServerEnvironment requires transport.` The managed fixture could not load before Todo build output existed; that setup failure is separate from the retained runtime RED.                                                                                                                                                                                            |
+| Generated build plus focused lifecycle suite                                                                                                                                                 | `pnpm typecheck:build:generated && pnpm typecheck:tooling && pnpm exec vitest run packages/server/test/server/server-environment-singleton.test.ts packages/server/test/server/server-context-transport-lifecycle.test.ts packages/server/test/server/server-lifecycle-integration.test.ts packages/server/test/server/server.test.ts packages/server/test/server/managed-external-events.integration.test.ts` exited 0: 195/195 tests. |
+| Real managed Production child                                                                                                                                                                | `pnpm typecheck:build:generated && pnpm exec vitest run packages/server/test/server/managed-external-events.integration.test.ts` exited 0: 2/2 tests. The child had storage/type registry/remote Delivery but no legacy generic signal transport.                                                                                                                                                                                       |
+
+The Production warning about volatile in-memory managed-child subscription
+registries is expected for the accepted Gateway-owned registry design.
+
+Focused source coverage over `server-environment.ts` and `server.ts` executes
+the same 195 tests. Its whole-file branch total is 81.22% because those mature
+modules have unrelated historical branches; the exact
+`origin/main...working-tree` changed executable intersection is **5/5 lines**
+and **4/4 branches** (100% each), with no coverage exclusion.
