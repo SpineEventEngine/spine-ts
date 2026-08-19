@@ -26,15 +26,15 @@ test("local images have a fixed build contract", () => {
   assert.equal(existsSync(new URL("Dockerfile", containerRoot)), true);
   assert.equal(existsSync(new URL("build-local-images.mjs", containerRoot)), true);
   assert.equal(
-    existsSync(join(process.cwd(), "examples/message-board/app/dist/src/combined-entry.js")),
+    existsSync(join(process.cwd(), "examples/message-board/app/dist/src/combined-server.js")),
     true,
   );
   assert.equal(
-    existsSync(join(process.cwd(), "examples/message-board/app/dist/src/application-entry.js")),
+    existsSync(join(process.cwd(), "examples/message-board/app/dist/src/application-server.js")),
     true,
   );
   assert.equal(
-    existsSync(join(process.cwd(), "examples/message-board/app/dist/src/managed-entry.js")),
+    existsSync(join(process.cwd(), "examples/message-board/app/dist/src/multi-process-app.js")),
     true,
   );
   const dockerfile = readFileSync(new URL("Dockerfile", containerRoot), "utf8");
@@ -298,7 +298,7 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     "--env",
     "DELIVERY_SHARD_COUNT=1",
     messageBoard,
-    "node_modules/@spine-event-engine/example-message-board-app/dist/src/managed-entry.js",
+    "node_modules/@spine-event-engine/example-message-board-app/dist/src/multi-process-app.js",
   ]);
   waitForLog(application, /MessageBoard managed coordinator ready/u);
   owned.unshift(combined);

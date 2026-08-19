@@ -14,7 +14,7 @@
 
 /**
  * Starts the standalone browser-facing Gateway for Message Board.
- * It owns browser sessions and subscriptions, but no Bounded Context or Delivery worker.
+ * It owns browser requests and subscriptions, but no Bounded Context or Delivery worker.
  */
 
 import { Server } from "@spine-event-engine/server";

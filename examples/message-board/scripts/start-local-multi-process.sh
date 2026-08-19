@@ -3,4 +3,4 @@
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../../.." && pwd)
 pnpm -C "$root" typecheck:build
-exec pnpm -C "$root/examples/message-board/app" start:managed
+exec pnpm -C "$root/examples/message-board/app" start:multi-process

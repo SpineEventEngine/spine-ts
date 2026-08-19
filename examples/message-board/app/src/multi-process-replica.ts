@@ -3,5 +3,5 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
-/** Starts one managed Message Board replica through the coordinator entrypoint. */
-await import("./managed-entry.js");
+/** Starts one complete Message Board replica through the multi-process application. */
+await import("./multi-process-app.js");

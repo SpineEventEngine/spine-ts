@@ -9,11 +9,6 @@ import test from "node:test";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const compose = join(root, "deploy", "compose.yaml");
 const client = join(root, "..", "message-board", "deploy", "compose", "rpc-client.mjs");
-const key = `-----BEGIN PRIVATE KEY-----
-MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQguffSvDX1/JxpSa58
-umttcOhLktfYmydcd8IV4+hm9zGhRANCAASbBkf9sjyAX3qpSQ0s3nh3pIK2IbeY
-WOYLX8/ohZI0479Vp6ZOV1NXnKt1c0e9ovpoGmfUuccITMasHL/rbs+3
------END PRIVATE KEY-----`;
 let cleanupDeadlineAt = 0;
 let operationDeadlineAt = 0;
 
@@ -48,7 +43,7 @@ function composeRun(project, arguments_, ignoreFailure = false, cleanup = false)
       ["compose", "--project-name", project, "--file", compose, ...arguments_],
       {
         encoding: "utf8",
-        env: { ...process.env, GATEWAY_PORT: "0", MESSAGE_BOARD_SESSION_PRIVATE_KEY: key },
+        env: { ...process.env, GATEWAY_PORT: "0" },
         timeout: remaining(cleanup),
       },
     );
@@ -143,8 +138,6 @@ function clientRun(project, runId) {
       "MODE=distributed-full",
       "--env",
       `RUN_ID=${runId}`,
-      "--env",
-      `MESSAGE_BOARD_SESSION_PRIVATE_KEY=${key}`,
       "--entrypoint",
       "node",
       "spine-ts/message-board:local",

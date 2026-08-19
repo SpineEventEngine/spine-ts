@@ -2,7 +2,7 @@
 
 This package turns the Message Board model into a runnable Spine bounded context.
 The framework handles the network and process plumbing; the example contains only
-Message Board domain code, local session policy, and concise server configuration.
+Message Board domain code, public-demo admission, and concise server configuration.
 
 ## 💡 What is here?
 
@@ -51,13 +51,11 @@ try {
 }
 ```
 
-## 🔐 Authentication boundary
+## Public demo boundary
 
-The local command uses a fixed eight-hour in-memory session for `ada` and admits
-only board `general`. It avoids routine local session renewal traffic; it is not
-a production sign-in policy. The bounded context never reads credentials. The
-framework gateway authenticates first, replaces caller-supplied actor and tenant
-data with trusted values, then forwards the request.
+The demo creates no browser credential. Its Gateway admits the public board and
+rebuilds the actor context from each decoded request before forwarding it. It
+does not copy browser-supplied tenant or other trusted fields.
 
 ## 🧪 Test the application
 
@@ -72,17 +70,17 @@ The production-shaped source files are named for the process they start:
 
 | File                                               | Process role                                                                                           |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| [`application-entry.ts`](src/application-entry.ts) | Starts only the Message Board Bounded Context; a separate Gateway is required.                         |
+| [`application-server.ts`](src/application-server.ts) | Starts only the Message Board Bounded Context; a separate Gateway is required.                         |
 | [`gateway-entry.ts`](src/gateway-entry.ts)         | Starts only the browser-facing Gateway; it contains no Bounded Context and does not run Delivery work. |
-| [`combined-entry.ts`](src/combined-entry.ts)       | Starts the application and Gateway together in one process.                                            |
-| [`managed-entry.ts`](src/managed-entry.ts)         | Starts one Coordinator parent and the configured number of complete child replicas.                    |
+| [`combined-server.ts`](src/combined-server.ts)       | Starts the application and Gateway together in one process.                                            |
+| [`multi-process-app.ts`](src/multi-process-app.ts)         | Starts one Coordinator parent and the configured number of complete child replicas.                    |
 | [`deployment-config.ts`](src/deployment-config.ts) | Validates the environment and assembles facilities shared by those entrypoints.                        |
 | [`index.ts`](src/index.ts)                         | Defines the domain handlers and reusable complete application assembly.                                |
 
-Start with `combined-entry.ts` to see the fewest production-shaped processes.
-Read `managed-entry.ts` when learning how one machine uses several CPU cores.
+Start with `combined-server.ts` to see the fewest production-shaped processes.
+Read `multi-process-app.ts` when learning how one machine uses several CPU cores.
 
-Local commands use in-memory storage, sessions, and subscription bindings.
+Local commands use in-memory storage and subscription bindings.
 Prebuilt production commands require `HOST`, `PORT`, `DATASTORE_PROJECT_ID`,
 `DELIVERY_SERVER_URL`; managed nodes additionally require `PROCESS_COUNT` and
 `DELIVERY_SHARD_COUNT`; browser modes additionally
@@ -101,8 +99,7 @@ registry. This lets message-valued IDs and `(column)` values inside `Any`
 metadata use the same compact JSON representation when they are written and
 queried. See the small setup in
 [`deployment-config.ts`](src/deployment-config.ts).
-Changing signing values per browser-capable replica breaks session validation;
-changing the registry namespace splits subscription state.
+Changing the registry namespace splits subscription state.
 The [container image guide](../deploy/container/README.md) lists the production
 commands, fixed image tags, and runtime values.
 

@@ -22,12 +22,12 @@ const sourceRoot = join(process.cwd(), "examples/message-board/app/src");
 
 describe("MessageBoard deployment entrypoints", () => {
   it("provides explicit combined and application-only startup sources", () => {
-    expect(existsSync(join(sourceRoot, "application-entry.ts"))).toBe(true);
-    expect(existsSync(join(sourceRoot, "combined-entry.ts"))).toBe(true);
+    expect(existsSync(join(sourceRoot, "application-server.ts"))).toBe(true);
+    expect(existsSync(join(sourceRoot, "combined-server.ts"))).toBe(true);
   });
 
-  it("provides a managed complete-replica entrypoint without the retired signal transport", () => {
-    const managed = join(sourceRoot, "managed-entry.ts");
+  it("provides a named multi-process complete-replica entrypoint without the retired signal transport", () => {
+    const managed = join(sourceRoot, "multi-process-app.ts");
     expect(existsSync(managed)).toBe(true);
     const source = readFileSync(managed, "utf8");
     const deployment = readFileSync(join(sourceRoot, "deployment-config.ts"), "utf8");
@@ -44,7 +44,7 @@ describe("MessageBoard deployment entrypoints", () => {
 
   it("configures both browser modes with one named durable binding assembly", () => {
     const gateway = readFileSync(join(sourceRoot, "gateway-entry.ts"), "utf8");
-    const combined = readFileSync(join(sourceRoot, "combined-entry.ts"), "utf8");
+    const combined = readFileSync(join(sourceRoot, "combined-server.ts"), "utf8");
     const deployment = readFileSync(join(sourceRoot, "deployment-config.ts"), "utf8");
     expect(deployment).toContain("new DurableSubscriptionBindings");
     expect(deployment).toContain("storageFactory,");
@@ -56,7 +56,7 @@ describe("MessageBoard deployment entrypoints", () => {
 
   it("configures production storage and transport before resolving a server", () => {
     const deployment = readFileSync(join(sourceRoot, "deployment-config.ts"), "utf8");
-    for (const entrypoint of ["application-entry.ts", "combined-entry.ts"]) {
+    for (const entrypoint of ["application-server.ts", "combined-server.ts"]) {
       const source = readFileSync(join(sourceRoot, entrypoint), "utf8");
       expect(source).toContain(
         "MessageBoardDeployment.configureServer(config, client, process.env, logger)",
@@ -79,7 +79,7 @@ describe("MessageBoard deployment entrypoints", () => {
   it("executes application and combined startup entries with caller-owned Datastore clients", async () => {
     const calls = startupMocks();
 
-    await import("../src/application-entry.js");
+    await import("../src/application-server.js");
     expect(calls.datastore).toHaveBeenCalledWith({ projectId: "project" });
     expect(calls.createLogger).toHaveBeenCalledWith("project", process.env);
     expect(calls.storage).toHaveBeenCalledWith(calls.client);
@@ -92,7 +92,7 @@ describe("MessageBoard deployment entrypoints", () => {
     expect(calls.runApplication).toHaveBeenCalledWith(calls.applicationConfig, calls.storageResult);
 
     vi.resetModules();
-    await import("../src/combined-entry.js");
+    await import("../src/combined-server.js");
     expect(calls.datastore).toHaveBeenCalledWith({ projectId: "project" });
     expect(calls.storage).toHaveBeenCalledWith(calls.client);
     expect(calls.configureServer).toHaveBeenCalledWith(

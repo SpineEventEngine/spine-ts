@@ -48,7 +48,7 @@ if (protocol !== "connect" && protocol !== "grpc-web")
   throw new Error("protocol must be connect or grpc-web");
 const actor = parameters.get("actor") ?? "ada";
 const tenant = parameters.get("tenant");
-const board = parameters.get("board") ?? "board-a";
+const board = parameters.get("board") ?? "general";
 const messageIdPrefix = parameters.get("messageIdPrefix") ?? crypto.randomUUID();
 
 const createBrowserTransport =
@@ -84,7 +84,7 @@ const query = create(QuerySchema, {
   }),
 });
 const topic = create(TopicSchema, {
-  id: create(TopicIdSchema, { value: "browser-board-a" }),
+  id: create(TopicIdSchema, { value: "browser-general" }),
   target: query.target,
   context: create(ActorContextSchema, {
     actor: create(UserIdSchema, { value: actor }),

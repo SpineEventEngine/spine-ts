@@ -29,7 +29,7 @@ describe("Message Board public-demo trust policy", () => {
       "examples/message-board/app/src/deployment-config.ts",
       "examples/message-board/app/src/index.ts",
       "examples/message-board/app/src/gateway-entry.ts",
-      "examples/message-board/app/src/combined-entry.ts",
+      "examples/message-board/app/src/combined-server.ts",
       "examples/message-board/web/src/local-entry.tsx",
     ] as const;
     const forbidden = [

@@ -232,7 +232,7 @@ export const PostForm = (props: PostFormProps): ReactElement => {
 };
 
 /**
- * Creates a post command for one board and signed-in actor.
+ * Creates a post command for one board and public-demo actor.
  */
 class BoardPost {
   // prettier-ignore
@@ -241,7 +241,7 @@ class BoardPost {
    * Creates a board-bound command factory.
    *
    * @param board The board that receives each command.
-   * @param actor The signed-in actor that authors each command.
+   * @param actor The public-demo actor that authors each command.
    */
   constructor(
     private readonly board: string,

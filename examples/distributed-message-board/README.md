@@ -6,7 +6,7 @@ code: use the packages under `../message-board/` for both.
 
 ```mermaid
 flowchart LR
-  Browser --> Gateway[One authenticated Gateway]
+  Browser --> Gateway[One public-demo Gateway]
   Gateway -->|commands and queries select one Coordinator| AppOne[Managed node 1]
   Gateway -->|commands and queries select one Coordinator| AppTwo[Managed node 2]
   AppOne --> ReplicaOne[Complete replicas]
@@ -22,15 +22,11 @@ flowchart LR
 ## Start
 
 Build the local images once from the repository root, then start all topology
-processes with one command. Generate a local development key first; do not
-commit it:
+processes with one command:
 
 ```bash
 pnpm images:build:local
-openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \
-  -out examples/distributed-message-board/fixture-private-key.pem
-MESSAGE_BOARD_SESSION_PRIVATE_KEY="$(cat examples/distributed-message-board/fixture-private-key.pem)" \
-  pnpm --dir examples/distributed-message-board start
+pnpm --dir examples/distributed-message-board start
 ```
 
 Start the existing UI separately with its Gateway URL:

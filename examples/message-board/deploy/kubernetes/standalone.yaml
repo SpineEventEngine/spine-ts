@@ -28,7 +28,7 @@ spec:
           command:
             [
               node,
-              node_modules/@spine-event-engine/example-message-board-app/dist/src/managed-entry.js,
+              node_modules/@spine-event-engine/example-message-board-app/dist/src/multi-process-app.js,
             ]
           envFrom:
             [

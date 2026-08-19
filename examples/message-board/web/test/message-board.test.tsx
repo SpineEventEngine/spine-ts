@@ -44,7 +44,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { MessageBoardApp, type BoardSession } from "../src/index.js";
+import { MessageBoardApp } from "../src/index.js";
 
 type FixtureOptions = ClientOperationOptions;
 type FixtureSend = (
@@ -66,7 +66,7 @@ describe("MessageBoardApp", () => {
   it("posts a PostMessage command and renders only the selected board query", async () => {
     const request = requestFixture();
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
 
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
@@ -96,7 +96,7 @@ describe("MessageBoardApp", () => {
   it("re-queries authoritatively after a lifecycle gap", async () => {
     const request = requestFixture();
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.subscription.activate).toHaveBeenCalledTimes(1));
     request.subscription.emitLifecycle({ state: "gapPossible", generation: 1 });
@@ -107,7 +107,7 @@ describe("MessageBoardApp", () => {
   it("renders one authoritative recovery response without a duplicate board Query", async () => {
     const request = requestFixture();
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.subscription.activate).toHaveBeenCalledTimes(1));
     request.subscription.authoritativeQuery?.();
@@ -120,7 +120,7 @@ describe("MessageBoardApp", () => {
   it("coalesces raw update hints into one in-flight refresh and one follow-up", async () => {
     const request = requestFixture({ queuedQueries: true });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     request.query.resolve(responseRows("initial"));
@@ -138,7 +138,7 @@ describe("MessageBoardApp", () => {
   it("applies valid subscription payloads locally without another board query", async () => {
     const request = requestFixture({ initialRows: responseRows("initial") });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
 
     await screen.findByText("initial");
@@ -153,7 +153,7 @@ describe("MessageBoardApp", () => {
   it("applies every payload from a burst before React renders", async () => {
     const request = requestFixture({ initialRows: responseRows("initial") });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await screen.findByText("initial");
 
@@ -168,7 +168,7 @@ describe("MessageBoardApp", () => {
   it("coalesces malformed subscription payload recovery into one board query", async () => {
     const request = requestFixture({ queuedQueries: true });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     request.query.resolveAt(0, responseRows("initial"));
@@ -184,7 +184,7 @@ describe("MessageBoardApp", () => {
   it("replaces local rows from reconnect recovery and coalesces a gap query", async () => {
     const request = requestFixture({ queuedQueries: true });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     request.query.resolveAt(0, responseRows("initial"));
@@ -205,7 +205,7 @@ describe("MessageBoardApp", () => {
   it("keeps a newer live payload when an older recovery query completes", async () => {
     const request = requestFixture({ queuedQueries: true });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     request.query.resolveAt(0, responseRows("initial"));
@@ -226,7 +226,7 @@ describe("MessageBoardApp", () => {
   it("keeps reconnect recovery when an older ordinary recovery completes", async () => {
     const request = requestFixture({ queuedQueries: true });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     request.query.resolveAt(0, responseRows("initial"));
@@ -246,7 +246,7 @@ describe("MessageBoardApp", () => {
   it("coalesces multiple live payloads during one recovery into one follow-up query", async () => {
     const request = requestFixture({ queuedQueries: true });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     request.query.resolveAt(0, responseRows("initial"));
@@ -267,7 +267,7 @@ describe("MessageBoardApp", () => {
   it("ignores a board A recovery completion after switching boards", async () => {
     const request = requestFixture({ queuedQueries: true });
     const rendered = render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "board-a" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "board-a" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     request.query.resolveAt(0, responseBoardRows("board-a initial", "board-a"));
@@ -276,7 +276,7 @@ describe("MessageBoardApp", () => {
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
 
     rendered.rerender(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "board-b" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "board-b" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(3));
     request.query.resolveAt(1, responseBoardRows("board-a stale", "board-a"));
@@ -289,7 +289,7 @@ describe("MessageBoardApp", () => {
   it("ignores a recovery completion after unmount", async () => {
     const request = requestFixture({ queuedQueries: true });
     const rendered = render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     request.query.resolveAt(0, responseRows("initial"));
@@ -309,7 +309,7 @@ describe("MessageBoardApp", () => {
   it("keeps a post-success refresh queued when an earlier hint refresh rejects", async () => {
     const request = requestFixture({ queuedQueries: true });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     request.query.resolveAt(0, responseRows("initial"));
@@ -330,7 +330,7 @@ describe("MessageBoardApp", () => {
   it("does not start a second raw-hint refresh until the deferred first refresh settles", async () => {
     const request = requestFixture({ queuedQueries: true });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     request.query.resolveAt(0, responseRows("initial"));
@@ -348,7 +348,7 @@ describe("MessageBoardApp", () => {
   it("aborts an in-flight hint refresh on unmount and ignores its late result", async () => {
     const request = requestFixture({ queuedQueries: true });
     const rendered = render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     request.query.resolveAt(0, responseRows("initial"));
@@ -366,7 +366,7 @@ describe("MessageBoardApp", () => {
   it("keeps the initial board state when a best-effort hint refresh rejects", async () => {
     const request = requestFixture({ queuedQueries: true });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     request.query.resolveAt(0, responseRows("initial"));
@@ -381,7 +381,7 @@ describe("MessageBoardApp", () => {
   it("supersedes recovered state with a later normal board refresh", async () => {
     const request = requestFixture({ queuedQueries: true });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     request.query.resolveAt(0, responseRows("initial"));
@@ -399,7 +399,7 @@ describe("MessageBoardApp", () => {
     const request = requestFixture({ postFailure: true });
     render(
       createElement(MessageBoardApp, {
-        session: signedInSession(),
+        actor: "ada",
         request,
         board: "general",
         createMessageId: () => "message-1",
@@ -429,7 +429,7 @@ describe("MessageBoardApp", () => {
   it("submits blank fields to the server instead of duplicating Proto validation", async () => {
     const request = requestFixture();
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await screen.findByText("general message");
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
@@ -440,7 +440,7 @@ describe("MessageBoardApp", () => {
   it("preserves entered whitespace for server-owned validation", async () => {
     const request = requestFixture();
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await screen.findByText("general message");
     fillPost(" keep this text ", " Ada ");
@@ -457,7 +457,7 @@ describe("MessageBoardApp", () => {
   it("refreshes authoritative messages after a successful post while disconnected", async () => {
     const request = requestFixture({ queuedQueries: true });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     request.query.resolveAt(0, responseRows("initial"));
@@ -476,7 +476,7 @@ describe("MessageBoardApp", () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const request = requestFixture({ queuedQueries: true });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     request.query.resolveAt(0, responseRows("initial"));
@@ -501,7 +501,7 @@ describe("MessageBoardApp", () => {
   it("refreshes when live updates disconnect before a successful post completes", async () => {
     const request = requestFixture({ queuedQueries: true, deferredPost: true });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     request.query.resolveAt(0, responseRows("initial"));
@@ -525,7 +525,7 @@ describe("MessageBoardApp", () => {
   it("avoids refresh when live updates connect before a successful post completes", async () => {
     const request = requestFixture({ queuedQueries: true, deferredPost: true });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     request.query.resolveAt(0, responseRows("initial"));
@@ -545,7 +545,7 @@ describe("MessageBoardApp", () => {
   it("does not refresh after a failed post", async () => {
     const request = requestFixture({ postFailure: true });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await screen.findByText("general message");
     fillPost("failed post");
@@ -559,7 +559,7 @@ describe("MessageBoardApp", () => {
   it("shows the username and message errors returned by the server", async () => {
     const request = requestFixture({ validationFailure: true });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await screen.findByText("general message");
 
@@ -581,7 +581,7 @@ describe("MessageBoardApp", () => {
       ]),
     });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
 
     await screen.findByText("newest");
@@ -596,7 +596,7 @@ describe("MessageBoardApp", () => {
   it("shows one lifecycle badge that only calls connected updates live", async () => {
     const request = requestFixture();
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.subscription.activate).toHaveBeenCalledTimes(1));
     expect(screen.getByText("No live updates")).toBeTruthy();
@@ -618,7 +618,7 @@ describe("MessageBoardApp", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const request = requestFixture();
     const rendered = render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
 
     await waitFor(() => expect(request.subscription.activate).toHaveBeenCalledTimes(1));
@@ -692,7 +692,7 @@ describe("MessageBoardApp", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const request = requestFixture({ postResultFailure: true });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
 
     await screen.findByText("general message");
@@ -709,7 +709,7 @@ describe("MessageBoardApp", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const request = requestFixture({ postFailure: true });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
 
     await screen.findByText("general message");
@@ -726,7 +726,7 @@ describe("MessageBoardApp", () => {
   it("posts only on the platform shortcut and leaves composing Enter untouched", async () => {
     const request = requestFixture();
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await screen.findByText("general message");
     const message = screen.getByRole("textbox", { name: "Message" });
@@ -750,7 +750,7 @@ describe("MessageBoardApp", () => {
   it("refreshes the authoritative board after shortcut posting with a failed subscription", async () => {
     const request = requestFixture({ queuedQueries: true });
     render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     request.query.resolveAt(0, responseRows("initial"));
@@ -779,7 +779,7 @@ describe("MessageBoardApp", () => {
     const request = requestFixture({ postResultFailure: true });
     render(
       createElement(MessageBoardApp, {
-        session: signedInSession(),
+        actor: "ada",
         request,
         board: "general",
         createMessageId: () => "message-result-failure",
@@ -797,7 +797,7 @@ describe("MessageBoardApp", () => {
   it("aborts a deferred post and suppresses its late completion after unmount", async () => {
     const request = requestFixture({ deferredPost: true });
     const rendered = render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await screen.findByText("general message");
     fillPost("late post");
@@ -814,7 +814,7 @@ describe("MessageBoardApp", () => {
   it("suppresses a late rejected post after unmount", async () => {
     const request = requestFixture({ deferredPost: true });
     const rendered = render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await screen.findByText("general message");
     fillPost("late post");
@@ -832,7 +832,7 @@ describe("MessageBoardApp", () => {
       retainCancelledSubscription: true,
     });
     const rendered = render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "board-a" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "board-a" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     request.query.resolveAt(0, responseBoardRows("board-a initial", "board-a"));
@@ -847,7 +847,7 @@ describe("MessageBoardApp", () => {
     const postOptions = postedOptions(request.post, 0);
 
     rendered.rerender(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "board-b" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "board-b" }),
     );
 
     expect(refreshOptions.signal.aborted).toBe(true);
@@ -878,7 +878,7 @@ describe("MessageBoardApp", () => {
   it("publishes neither late query state nor retained subscription after unmount", async () => {
     const request = requestFixture({ deferredQuery: true });
     const rendered = render(
-      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+      createElement(MessageBoardApp, { actor: "ada", request, board: "general" }),
     );
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
     rendered.unmount();
@@ -888,13 +888,6 @@ describe("MessageBoardApp", () => {
   });
 });
 
-function guestSession(signIn: () => Promise<BoardSession>): BoardSession {
-  return { status: "guest", signIn };
-}
-
-function signedInSession(): BoardSession {
-  return { status: "signedIn", actor: "ada", signIn: async () => signedInSession() };
-}
 
 function fillPost(text: string, username = "Ada"): void {
   fireEvent.change(screen.getByLabelText("Username"), { target: { value: username } });

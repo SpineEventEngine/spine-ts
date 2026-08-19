@@ -37,7 +37,7 @@ services:
   application-node:
     image: spine-ts/message-board:local
     command:
-      ["node_modules/@spine-event-engine/example-message-board-app/dist/src/managed-entry.js"]
+      ["node_modules/@spine-event-engine/example-message-board-app/dist/src/multi-process-app.js"]
     environment: &application-environment
       HOST: 0.0.0.0
       PORT: 8080

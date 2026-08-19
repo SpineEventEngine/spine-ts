@@ -33,7 +33,7 @@ test("Compose readiness ignores a prior container incarnation's readiness log", 
   );
 });
 
-test("combined Compose serves signed MessageBoard behavior through Envoy", () => {
+test("combined Compose serves public MessageBoard behavior through Envoy", () => {
   const project = projectName();
   try {
     run(project, combined, ["up", "--detach"]);

@@ -25,8 +25,8 @@ describe("Wave 8 MessageBoard and Orders example migration", () => {
       "examples/orders/src/index.ts",
       "examples/message-board/app/src/deployment-config.ts",
       "examples/message-board/app/src/index.ts",
-      "examples/message-board/app/src/application-entry.ts",
-      "examples/message-board/app/src/combined-entry.ts",
+      "examples/message-board/app/src/application-server.ts",
+      "examples/message-board/app/src/combined-server.ts",
       "examples/message-board/app/src/gateway-entry.ts",
       "examples/message-board/web/test/interop/harness.mjs",
     ] as const;

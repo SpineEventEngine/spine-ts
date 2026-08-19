@@ -46,7 +46,7 @@ test("standalone reference uses one dynamically discovering Gateway", () => {
   const application = statefulSet(document, "message-board-application");
   const gateway = deployment(document, "message-board-gateway");
   assert.match(application, /replicas: 2/u);
-  assert.match(application, /managed-entry\.js/u);
+  assert.match(application, /multi-process-app\.js/u);
   assert.match(application, /name: PROCESS_COUNT[\s\S]*?value: "2"/u);
   assert.match(application, /name: DELIVERY_SHARD_COUNT[\s\S]*?value: "2"/u);
   assert.doesNotMatch(application, /SPINE_IPC_DIRECTORY/u);

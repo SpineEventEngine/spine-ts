@@ -25,7 +25,7 @@ test("exposes ResolveContext beside the native browser services", () => {
     unary: {} as UnaryGateway,
     subscriptions: {} as SubscriptionGateway,
     requests: {
-      credential: () => ({ kind: "bearer", value: "test" }),
+      credential: () => ({ kind: "empty" }),
       transport: () => ({ service: "test", method: "test" }),
     } satisfies NativeGatewayRequestContext,
   });

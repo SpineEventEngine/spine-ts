@@ -5,8 +5,8 @@ with the [Message Board web README](README.md).
 
 ## Composition
 
-`MessageBoardApp` receives a browser session supplied by the application and
-`ClientRequest`. Production hosts may supply gRPC-Web or Connect through
+`MessageBoardApp` receives its actor display name and `ClientRequest`.
+Production hosts may supply gRPC-Web or Connect through
 `client-web`; the visible local entry uses the real Connect gateway. Blank
 username and message values are submitted to the server so its Proto validation
 messages can be shown, but the server does not accept them.
@@ -17,8 +17,7 @@ The gateway URL defaults to `http://127.0.0.1:8090` and accepts only an
 
 ## UI and recovery behavior
 
-The host creates a fresh request only after sign-in. Late sign-in completions
-after unmount are ignored. Command transport failures and resolved `error` or
+The host creates one request for the public demo. Command transport failures and resolved `error` or
 `rejection` outcomes preserve the generated message ID and raw field values for
 one single-flight retry. Blank values are sent to the server for validation.
 

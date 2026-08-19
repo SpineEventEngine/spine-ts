@@ -127,7 +127,7 @@ describe("MessageBoard gateway policy", () => {
       unary,
       subscriptions,
       requests: {
-        credential: () => ({ kind: "bearer", value: "session" }),
+        credential: () => ({ kind: "empty" }),
         transport: () => ({ service: "ignored", method: "ignored" }),
       },
     });

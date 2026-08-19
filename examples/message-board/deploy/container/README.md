@@ -27,7 +27,7 @@ The Message Board image also contains application-only and managed entrypoints. 
 deployment can override its command with:
 
 ```text
-node_modules/@spine-event-engine/example-message-board-app/dist/src/managed-entry.js
+node_modules/@spine-event-engine/example-message-board-app/dist/src/multi-process-app.js
 ```
 
 ## ⚙️ Configure the processes
@@ -42,12 +42,10 @@ The images set `NODE_ENV=production`. Supply these values when starting them:
 | Gateway (GKE)            | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `BROWSER_ORIGIN`, `SUBSCRIPTION_REGISTRY_NAMESPACE`, `BACKEND_DISCOVERY_SERVICE`, `BACKEND_DISCOVERY_PORT` |
 | Delivery server          | `HOST`, `PORT`                                                                                                                                     |
 
-Every browser process additionally requires one shared
 No browser credential or signing value is required for this public demo.
 Each process constructs a Datastore client from
 `DATASTORE_PROJECT_ID` and passes that same client into its storage factory.
-Browser-capable replicas must share both the signing values and the registry
-namespace.
+Browser-capable replicas share the registry namespace.
 
 `DELIVERY_SERVER_URL` is the sole application Delivery setting. In these
 references it is `http://delivery:8484` for Compose and
@@ -94,7 +92,7 @@ docker run --rm --name message-board-app \
   --env DELIVERY_SERVER_URL=http://delivery:8484 \
   --env PROCESS_COUNT=2 --env DELIVERY_SHARD_COUNT=2 \
   spine-ts/message-board:local \
-  node_modules/@spine-event-engine/example-message-board-app/dist/src/managed-entry.js
+  node_modules/@spine-event-engine/example-message-board-app/dist/src/multi-process-app.js
 ```
 
 Stop the application with `Ctrl-C`, then remove the Delivery server, emulator,
