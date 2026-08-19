@@ -518,7 +518,7 @@ class RuntimeDeliverySupervisorGroup {
   readonly #routes = new Map<string, RuntimeDeliveryRoute[]>();
   readonly #retiringOwners = new Set<string>();
   readonly #active = new Map<string, Set<Promise<void>>>();
-  readonly #reserved = new Map<string, RuntimeDeliveryRoute>();
+  readonly #reserved = new Map<string, RuntimeDeliveryReservation>();
   readonly shardCount: number;
   #start: Promise<void> | undefined;
   #stopped = false;
@@ -584,6 +584,11 @@ class RuntimeDeliverySupervisorGroup {
         if (active !== undefined) await Promise.allSettled(active);
       }),
     );
+    await Promise.all(
+      Array.from(this.#reserved.values(), async (reservation) => {
+        if (ownerKeys.includes(reservation.route.ownerKey)) await reservation.settled.promise;
+      }),
+    );
   }
 
   async retireOwners(ownerKeys: readonly string[]): Promise<void> {
@@ -643,14 +648,20 @@ class RuntimeDeliverySupervisorGroup {
 
   #accept(message: DeliveryEndpointMessage): boolean {
     const route = this.#select(message);
-    if (route !== undefined) this.#reserved.set(RuntimeDeliverySupervisorGroup.messageKey(message), route);
+    if (route !== undefined) {
+      this.#reserved.set(RuntimeDeliverySupervisorGroup.messageKey(message), {
+        route,
+        settled: Promise.withResolvers<undefined>(),
+      });
+    }
     return route !== undefined;
   }
 
   #route(message: Parameters<OnDeliveryMessage>[0]): void | Promise<void> {
-    const route =
-      this.#reserved.get(RuntimeDeliverySupervisorGroup.messageKey(message)) ?? this.#select(message);
+    const reservation = this.#reserved.get(RuntimeDeliverySupervisorGroup.messageKey(message));
+    const route = reservation?.route ?? this.#select(message);
     this.#reserved.delete(RuntimeDeliverySupervisorGroup.messageKey(message));
+    reservation?.settled.resolve(undefined);
     if (route === undefined) throw new Error("Environment delivery endpoint is not configured.");
     const active = this.#active.get(route.ownerKey) ?? new Set<Promise<void>>();
     this.#active.set(route.ownerKey, active);
@@ -725,6 +736,11 @@ interface RuntimeDeliveryRoute {
   readonly descriptor: ContextDeliveryDescriptor;
   readonly tenant: DeliveryTenantScope;
   readonly tenantKey: string | undefined;
+}
+
+interface RuntimeDeliveryReservation {
+  readonly route: RuntimeDeliveryRoute;
+  readonly settled: PromiseWithResolvers<undefined>;
 }
 
 class LocalDeliverySource {

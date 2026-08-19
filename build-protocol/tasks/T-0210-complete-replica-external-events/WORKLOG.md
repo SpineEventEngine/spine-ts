@@ -144,3 +144,8 @@ only.
 - Added deterministic shared-remote `HANDLE_COMMAND` regressions: actor-context
   tenant match replays to the configured multitenant runtime; mismatch remains
   `TO_DELIVER`. Focused environment suite: 92 passing.
+- Admission now retains a per-message owner reservation until dispatch consumes
+  it. Selected-owner settlement awaits these reservations as well as active
+  callbacks, closing the accept-to-fence TOCTOU without a public API addition.
+- Focused environment plus managed acceptance passes 94 tests / 2 files,
+  including the managed domestic and ThirdParty cases.
