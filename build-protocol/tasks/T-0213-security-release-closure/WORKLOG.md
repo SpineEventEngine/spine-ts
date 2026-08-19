@@ -37,3 +37,37 @@
 - Runtime telemetry is recorded if exposed; otherwise each explicit immutable
   dispatch profile and its limitation are retained. Inventories are read-only
   and may not spawn subagents.
+
+## 2026-08-19 — inventory convergence
+
+- Security/source inventory mapped the current Gateway/auth, private
+  Coordinator/managed-child, services/buses, tenant storage, Delivery,
+  subscription, process-local IntegrationBroker, generated-module,
+  diagnostics, and build boundaries. ZeroMQ assumptions are retired.
+- Dependency inventory confirmed minimal build approval (`@bufbuild/buf` only,
+  `protobufjs` denied), 501 verified registry signatures, one unused Todo
+  transport dev dependency, and seven transitive advisories requiring
+  classification/remediation before the security gate.
+- Documentation/status inventory found stale current release requirements,
+  capability rows, Todo guidance, security records, and T-0204 through T-0212
+  status mirrors. T000/T001 are already correctly historical.
+- Smoke inventory confirmed managed lifecycle, managed external-event/Delivery,
+  Todo standalone, Message Board image contract, one-node Compose, and
+  distributed Compose as the retained real proofs.
+- Direct inspection resolved one inventory discrepancy: root
+  `verify:release:generated` still excludes and then invokes the deleted broker
+  cross-process test. The metadata test only checks one coverage invocation and
+  does not reject this stale second command.
+
+## 2026-08-19 — release-plumbing implementation assignment
+
+- Owner: existing `implementer` role, explicitly configured
+  `gpt-5.6-terra` / `medium`; runtime telemetry is recorded if available,
+  otherwise the immutable configured profile and limitation are evidence.
+- Owned scope: root release scripts/metadata test, T-0212 removal guard, Todo
+  manifest/lock/reference/spec, and T-0213 records only.
+- Behavior-first acceptance: retain failing proof for the stale second test
+  invocation/deleted paths/dependency, then leave exactly one global coverage
+  run; do not restore ZeroMQ or invent replacement transport.
+- The owner is not alone in the repository, must preserve other edits, and may
+  not spawn subagents.
