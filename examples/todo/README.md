@@ -1,14 +1,14 @@
 # To-Do — your first Spine TS application
 
 This small application accepts task commands, records Events, updates a task-list
-Projection, and serves commands, queries, and subscriptions on a local server.
+Projection (a read model), and serves commands, queries, and subscriptions on a local server.
 
 ## Running the app
 
 Install the workspace dependencies first. Use `pnpm install --frozen-lockfile`
 when you need the lockfile-exact dependency set, or `pnpm install` for normal
-local development. The multi-process app also requires Docker to run its local
-Datastore emulator container.
+local development. The multi-process app also requires Docker to be installed
+and running so it can run its local Datastore emulator container.
 
 ### Single-process app
 
@@ -20,7 +20,7 @@ examples/todo/scripts/run-single-process.sh
 
 The launcher builds the workspace once and starts one Node process from
 [`single-process-app.ts`](src/single-process-app.ts). It assembles the reusable
-To-Do Bounded Context in [`todo-app.ts`](src/todo-app.ts), listens at
+To-Do application area (a Bounded Context) in [`todo-app.ts`](src/todo-app.ts), listens at
 `http://127.0.0.1:8080`, and keeps its Event Store in memory. Run the smoke
 client in another terminal:
 
@@ -48,11 +48,13 @@ examples/todo/scripts/run-multi-process.sh
 The launcher builds the workspace, creates a uniquely named Datastore emulator
 container from `gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators`,
 starts the repository's Delivery server, waits for both, then starts the
-Coordinator in [`multi-process-app.ts`](src/multi-process-app.ts). The
-Coordinator uses [`multi-process-coordinator.ts`](src/multi-process-coordinator.ts)
-for readiness and shutdown, while every child uses
+parent process that accepts requests and forwards them to workers (the
+Coordinator) in [`multi-process-app.ts`](src/multi-process-app.ts). The parent
+uses [`multi-process-coordinator.ts`](src/multi-process-coordinator.ts)
+for readiness and shutdown, while every worker (a replica) uses
 [`multi-process-replica.ts`](src/multi-process-replica.ts) to assemble a full
-To-Do Bounded Context with Datastore and Delivery. Settings are parsed in
+To-Do application area with Datastore and Delivery. A Delivery shard is one
+independent partition of Delivery work. Settings are parsed in
 [`multi-process-settings.ts`](src/multi-process-settings.ts).
 
 ```mermaid
