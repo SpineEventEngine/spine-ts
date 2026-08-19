@@ -37,6 +37,35 @@ import type { DeliveryWorkerEvidence } from "../delivery/delivery-worker.js";
 import { DeliveryWorker } from "../delivery/delivery-worker.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 
+const managedChild = process.env.SPINE_MANAGED_SERVER_CHILD === "true";
+let activateManagedDelivery: (() => void) | undefined;
+let cancelManagedDelivery = false;
+let managedDeliveryActivated = !managedChild;
+const waitingManagedSupervisors = new Set<() => void>();
+const managedDeliveryActivation = managedChild
+  ? new Promise<void>((resolve) => {
+      activateManagedDelivery = resolve;
+    })
+  : Promise.resolve();
+
+/** @internal Private managed-child Delivery admission control. */
+export const environmentDeliveryWorkerAccess: Readonly<{
+  activateManagedChild(): void;
+  cancelManagedChild(): void;
+}> = Object.freeze({
+  activateManagedChild(): void {
+    managedDeliveryActivated = true;
+    activateManagedDelivery?.();
+    for (const start of waitingManagedSupervisors) start();
+    waitingManagedSupervisors.clear();
+  },
+  cancelManagedChild(): void {
+    cancelManagedDelivery = true;
+    activateManagedDelivery?.();
+    waitingManagedSupervisors.clear();
+  },
+});
+
 /**
  * Defines one descriptor, storage, and tenant runtime in an environment generation.
  *
@@ -397,6 +426,14 @@ class RuntimeDeliverySupervisor {
   }
 
   async start(): Promise<void> {
+    if (!managedDeliveryActivated) {
+      waitingManagedSupervisors.add(() => {
+        void this.start();
+      });
+      return;
+    }
+    await managedDeliveryActivation;
+    if (cancelManagedDelivery) return;
     await Promise.all(this.#groups.map((group) => group.start()));
   }
 

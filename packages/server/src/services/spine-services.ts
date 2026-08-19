@@ -105,6 +105,7 @@ import type { EntityFamily } from "../entity/entity.js";
 import { TransitionValidationError } from "../repository/command-errors.js";
 import { type StandReadResult, type StandUpdate } from "../stand/stand.js";
 import { emitServerWarning } from "../server/server-log.js";
+import { managedChildSubscriptionAccess } from "../server/managed-child-subscription.js";
 import {
   InMemorySubscriptionRegistry,
   type StandSubscriptionRegistry,
@@ -483,6 +484,7 @@ export class SpineServices {
     const registry = this.#subscriptionRegistry(record.route.context);
     if (registry === undefined) {
       this.#createSubscriptionAttachment(record);
+      managedChildSubscriptionAccess.installed(record.id);
       return;
     }
     try {
@@ -507,6 +509,7 @@ export class SpineServices {
       }
       this.#createSubscriptionAttachment(record);
     }
+    managedChildSubscriptionAccess.installed(record.id);
   }
 
   #createSubscriptionAttachment(record: SubscriptionRecord): SubscriptionAttachment {

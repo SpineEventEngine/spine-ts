@@ -13,6 +13,7 @@
  */
 
 import { fork, type ChildProcess } from "node:child_process";
+import { once } from "node:events";
 import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
@@ -50,7 +51,19 @@ const children = new Set<ChildProcess>();
 const deliveries = new Set<GatedDeliveryListener>();
 
 afterEach(async () => {
-  for (const child of children) child.kill("SIGTERM");
+  // Release either real Delivery gate before asking the managed parent to shut
+  // down: a replacement can still be opening its initial snapshot.
+  for (const delivery of deliveries) {
+    delivery.release();
+    delivery.releaseSnapshot();
+  }
+  const exits = [...children].map(async (child) => {
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    const exited = once(child, "exit");
+    child.kill("SIGTERM");
+    await exited;
+  });
+  await Promise.all(exits);
   children.clear();
   await Promise.all([...deliveries].map((delivery) => delivery.close()));
   deliveries.clear();
@@ -95,14 +108,63 @@ it("RED-27/28 keeps the final managed subscription relay until fenced Delivery w
   await expect(iterator.next()).resolves.toMatchObject({ done: true });
 }, 20_000);
 
-function receive(child: ChildProcess, type: string): Promise<Record<string, unknown>> {
+it("RED-28 holds a replacement outside managed admission until its remote snapshot opens", async () => {
+  const delivery = await new GatedDeliveryListener().start();
+  deliveries.add(delivery);
+  const child = fork(
+    fileURLToPath(new URL("./managed-remote-delivery-application.mjs", import.meta.url)),
+    [],
+    {
+      env: { ...process.env, SPINE_MANAGED_REMOTE_DELIVERY_URL: delivery.baseUrl },
+      stdio: ["ignore", "ignore", "pipe", "ipc"],
+    },
+  );
+  children.add(child);
+  const ready = await receive(child, "managed-ready");
+  const members = memberFacts(ready);
+  const endpoint = String(ready.endpoint);
+  const transport = createGrpcTransport({ baseUrl: endpoint });
+  const subscriptions = createClient(SubscriptionService, transport);
+  const subscription = await subscriptions.subscribe(taskListTopic());
+  const iterator = subscriptions.activate(subscription)[Symbol.asyncIterator]();
+  const commands = createClient(CommandService, transport);
+  await commands.post(createTaskCommand());
+  await expect(iterator.next()).resolves.toMatchObject({ done: false });
+
+  const removed = members[0];
+  if (removed === undefined) throw new Error("Managed fixture did not report an initial replica.");
+  delivery.armSnapshot();
+  process.kill(removed.pid, "SIGKILL");
+  await expect.poll(() => currentMembers(child, "retired")).toHaveLength(1);
+  const whileSnapshotHeld = await currentMembers(child, "retired-confirmed");
+  expect(whileSnapshotHeld).toHaveLength(1);
+  expect(whileSnapshotHeld[0]?.pid).not.toBe(removed.pid);
+  await delivery.snapshotEntered;
+
+  const nextUpdate = iterator.next();
+  await commands.post(renameTaskCommand("t0209-survivor"));
+  await expect(nextUpdate).resolves.toMatchObject({ done: false });
+  delivery.releaseSnapshot();
+  await expect.poll(() => currentMembers(child, "replacement"), { timeout: 2_000 }).toHaveLength(2);
+
+  const afterRejoin = iterator.next();
+  await commands.post(renameTaskCommand("t0209-replacement", "Rejoined"));
+  await expect(afterRejoin).resolves.toMatchObject({ done: false });
+}, 20_000);
+
+function receive(
+  child: ChildProcess,
+  type: string,
+  description = type,
+  matches: (value: Record<string, unknown>) => boolean = () => true,
+): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     let stderr = "";
     child.stderr?.on("data", (chunk: Buffer) => {
       stderr += chunk.toString();
     });
     const timer = setTimeout(() => {
-      finish(new Error("Managed fixture readiness timed out."));
+      finish(new Error(`Managed fixture ${description} timed out.`));
     }, 10_000);
     const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
       finish(
@@ -118,7 +180,8 @@ function receive(child: ChildProcess, type: string): Promise<Record<string, unkn
         (value as { type?: unknown }).type !== type
       )
         return;
-      finish(undefined, value as Record<string, unknown>);
+      const frame = value as Record<string, unknown>;
+      if (matches(frame)) finish(undefined, frame);
     };
     const finish = (error?: Error, value?: Record<string, unknown>) => {
       clearTimeout(timer);
@@ -131,6 +194,20 @@ function receive(child: ChildProcess, type: string): Promise<Record<string, unkn
     child.once("exit", onExit);
     child.on("message", onMessage);
   });
+}
+
+async function currentMembers(
+  child: ChildProcess,
+  requestId: string,
+): Promise<readonly { readonly pid: number; readonly slot: number }[]> {
+  const response = receive(
+    child,
+    "managed-members",
+    `members ${requestId}`,
+    (message) => message.requestId === requestId,
+  );
+  child.send({ type: "members", requestId });
+  return memberFacts(await response);
 }
 
 const metadata = new SignalMetadata();
@@ -157,15 +234,15 @@ function createTaskCommand(commandId = "t0209-create") {
     }),
   });
 }
-function renameTaskCommand() {
+function renameTaskCommand(commandId = "t0209-rename", title = "Drained") {
   const actorContext = metadata.actorContext({ actor: create(UserIdSchema, { value: "t0209" }) });
   return SignalEnvelopes.command({
-    id: metadata.commandId("t0209-rename"),
+    id: metadata.commandId(commandId),
     context: metadata.commandContext({ actorContext }),
     schema: RenameTaskSchema,
     message: create(RenameTaskSchema, {
       id: create(TaskIdSchema, { value: "t0209-task" }),
-      title: "Drained",
+      title,
     }),
   });
 }
@@ -180,7 +257,10 @@ class GatedDeliveryListener {
   readonly #sessions = new Set<http2.ServerHttp2Session>();
   readonly #entered = deferred<undefined>();
   readonly #released = deferred<undefined>();
+  readonly #snapshotEntered = deferred<undefined>();
+  readonly #snapshotReleased = deferred<undefined>();
   #armed = false;
+  #snapshotArmed = false;
   #server: http2.Http2Server | undefined;
   #port: number | undefined;
 
@@ -193,12 +273,24 @@ class GatedDeliveryListener {
     return this.#entered.promise;
   }
 
+  get snapshotEntered(): Promise<undefined> {
+    return this.#snapshotEntered.promise;
+  }
+
   arm(): void {
     this.#armed = true;
   }
 
+  armSnapshot(): void {
+    this.#snapshotArmed = true;
+  }
+
   release(): void {
     this.#released.resolve(undefined);
+  }
+
+  releaseSnapshot(): void {
+    this.#snapshotReleased.resolve(undefined);
   }
 
   async start(): Promise<this> {
@@ -218,7 +310,17 @@ class GatedDeliveryListener {
         routes: (router) => {
           router.service(InboxService, inbox);
           router.service(ShardService, this.#assembly.shards);
-          router.service(AdminService, this.#assembly.admin);
+          router.service(AdminService, {
+            ...this.#assembly.admin,
+            getShardInfo: async (request, context) => {
+              if (this.#snapshotArmed) {
+                this.#snapshotArmed = false;
+                this.#snapshotEntered.resolve(undefined);
+                await this.#snapshotReleased.promise;
+              }
+              return this.#assembly.admin.getShardInfo(request, context);
+            },
+          });
         },
       }),
     );
@@ -233,12 +335,30 @@ class GatedDeliveryListener {
 
   async close(): Promise<void> {
     this.release();
+    this.releaseSnapshot();
     this.#assembly.closeAdmission();
     this.#assembly.closeAdmin();
     for (const session of this.#sessions) session.close();
     const server = this.#server;
     if (server?.listening) await closeListener(server);
   }
+}
+
+function memberFacts(
+  message: Record<string, unknown>,
+): readonly { readonly pid: number; readonly slot: number }[] {
+  const members = message.members;
+  if (!Array.isArray(members)) throw new Error("Managed fixture members were missing.");
+  return members.map((member) => {
+    if (
+      typeof member !== "object" ||
+      member === null ||
+      typeof (member as { pid?: unknown }).pid !== "number" ||
+      typeof (member as { slot?: unknown }).slot !== "number"
+    )
+      throw new Error("Managed fixture member was malformed.");
+    return member as { readonly pid: number; readonly slot: number };
+  });
 }
 
 function deferred<T>() {

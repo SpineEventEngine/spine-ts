@@ -1,6 +1,6 @@
 # T-0209 — Direct Delivery readiness and drain
 
-**Status:** In progress
+**Status:** Review ready
 **Baseline:** `origin/main@722a62b4704a5d910db22e7f9934bfd5535a151b`
 **Branch/worktree:** `codex/t0209-delivery-readiness` / `/tmp/spine-ts-t0209`
 

@@ -25,7 +25,8 @@ import { managedServerApplicationAccess } from "../../dist/server/managed-server
 import process from "node:process";
 
 const endpoint = process.env.SPINE_MANAGED_REMOTE_DELIVERY_URL;
-if (endpoint === undefined) throw new Error("Managed remote Delivery fixture requires an endpoint.");
+if (endpoint === undefined)
+  throw new Error("Managed remote Delivery fixture requires an endpoint.");
 
 const delivery = RemoteDelivery.connectTo({ endpoint });
 // The application owns strategy selection; this fixture deliberately selects it
@@ -43,7 +44,9 @@ const managed = await ManagedServerApplication.run({
   createServer: async ({ host, port }) => {
     const server = Server.atPort(port, { host });
     const { InMemorySubscriptionRegistry } = await import("../../dist/index.js");
-    server.add(await createTodoContext({ subscriptionRegistry: new InMemorySubscriptionRegistry() }));
+    server.add(
+      await createTodoContext({ subscriptionRegistry: new InMemorySubscriptionRegistry() }),
+    );
     const running = await server.start();
     return running;
   },
@@ -54,6 +57,14 @@ const managed = await ManagedServerApplication.run({
 });
 
 if (process.env.SPINE_MANAGED_SERVER_CHILD !== "true") {
+  let closing;
+  const close = () => {
+    closing ??= managed.close().then(
+      () => process.send?.({ type: "drained" }),
+      () => process.send?.({ type: "drain-error" }),
+    );
+    return closing;
+  };
   process.send?.({
     type: "managed-ready",
     members: managedServerApplicationAccess.readyMembers(managed).map((member) => ({
@@ -63,10 +74,21 @@ if (process.env.SPINE_MANAGED_SERVER_CHILD !== "true") {
     endpoint: managedServerApplicationAccess.coordinatorEndpoint(managed),
   });
   process.on("message", (message) => {
+    if (message?.type === "members") {
+      process.send?.({
+        type: "managed-members",
+        requestId: message.requestId,
+        members: managedServerApplicationAccess.readyMembers(managed).map((member) => ({
+          slot: member.slot,
+          pid: member.pid,
+        })),
+      });
+      return;
+    }
     if (message?.type !== "drain") return;
-    void managed.close().then(
-      () => process.send?.({ type: "drained" }),
-      () => process.send?.({ type: "drain-error" }),
-    );
+    void close();
+  });
+  process.once("SIGTERM", () => {
+    void close().finally(() => process.exit(0));
   });
 }

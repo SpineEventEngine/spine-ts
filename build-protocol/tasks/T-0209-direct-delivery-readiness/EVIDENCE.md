@@ -24,6 +24,20 @@
 
 No test-forwarder or direct fake notification will be recorded as complete-replica acceptance.
 
+## RED/GREEN: exact child subscription installation before READY
+
+- RED: a replacement could open its real Delivery connection before its normal
+  local retained subscription attached, allowing an intervening state update to
+  miss that local relay.
+- GREEN: private exact-ID lifecycle acknowledgement waits for the ordinary
+  `SpineServices.#activateRecord()` attachment. The joined fixture holds the
+  real snapshot, observes the survivor update, releases it, then observes a
+  later normal update after replacement joins. No public API, Proto, retry,
+  configuration, or payload IPC was added.
+- Evidence: three fresh real-process runs passed **2/2** each; NodeCoordinator
+  **31/31**; hook + managed Delivery **4/4**; server typecheck/build, focused
+  ESLint, and Prettier passed.
+
 ## Superseded provenance investigation
 
 `ManagedServerApplicationOptions` has `createServer` and optional opaque

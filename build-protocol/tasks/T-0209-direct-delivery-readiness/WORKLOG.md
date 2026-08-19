@@ -129,3 +129,20 @@
   NodeCoordinator, and durable subscription bindings. Server typecheck and
   focused ESLint passed. The result uses no test-forwarded Delivery signal or
   payload IPC.
+
+## 2026-08-19 — exact retained-subscription handshake
+
+- The replacement RED exposed a real ordering gap: a managed child could open
+  Delivery and report READY before the Coordinator-created child subscription
+  had completed `SpineServices.#activateRecord()`. The correction is private
+  lifecycle IPC, not a public protocol or Delivery policy.
+- The Coordinator records the actual child `SubscriptionId` returned by its
+  normal `Subscribe` call before opening child `Activate`. The managed child
+  reports `subscription-installed` only after the existing local activation
+  path attaches its consumer. The parent accepts only exact
+  slot/incarnation/ID acknowledgement, then admits Delivery and receives READY.
+- The real two-child Todo fixture holds the replacement's initial Delivery
+  snapshot, proves the survivor still publishes a normal subscription update,
+  releases the snapshot, and observes another normal update after replacement
+  join. It passed **3/3** fresh runs. SIGTERM teardown now performs normal
+  managed close, avoiding child/port leakage.

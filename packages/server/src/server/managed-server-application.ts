@@ -19,7 +19,10 @@ import { LogLayer, StructuredTransport, type ILogLayer } from "loglayer";
 import { runningServerAccess, type RunningServer } from "./server.js";
 import { emitServerWarning } from "./server-log.js";
 import { NodeCoordinator, type ReadyCoordinatorMember } from "./node-coordinator.js";
+import { environmentDeliveryWorkerAccess } from "./environment-delivery-worker.js";
+import { managedChildSubscriptionAccess } from "./managed-child-subscription.js";
 import { InMemorySubscriptionRegistry } from "../stand/subscription-registry.js";
+import type { Subscription } from "@spine-event-engine/proto/client";
 
 const childMarker = "SPINE_MANAGED_SERVER_CHILD";
 const slotMarker = "SPINE_MANAGED_SERVER_SLOT";
@@ -215,18 +218,19 @@ const ManagedServerValues = Object.freeze({
     // transport detail from becoming an unhandled child-process exception.
     const containIpcError = () => undefined;
     process.on("error", containIpcError);
-    try {
-      await ManagedServerValues.send({
-        type: "ready",
+    managedChildSubscriptionAccess.install((subscriptionId) => {
+      void ManagedServerValues.send({
+        type: "subscription-installed",
         slot: process.env[slotMarker],
         incarnation: process.env[incarnationMarker],
-        endpoint: server.baseUrl,
-      });
-    } catch (error) {
-      await server.close();
-      process.off("error", containIpcError);
-      throw error;
-    }
+        subscriptionId,
+      }).catch(() => undefined);
+    });
+    let activated = false;
+    let releaseActivation!: () => void;
+    const activation = new Promise<void>((resolve) => {
+      releaseActivation = resolve;
+    });
     let closing: Promise<void> | undefined;
     const close = () => {
       if (closing !== undefined) return closing;
@@ -236,7 +240,12 @@ const ManagedServerValues = Object.freeze({
         incarnation: process.env[incarnationMarker],
       })
         .catch(() => undefined)
-        .then(() => server.close())
+        .then(() => {
+          environmentDeliveryWorkerAccess.cancelManagedChild();
+          managedChildSubscriptionAccess.clear();
+          releaseActivation();
+          return server.close();
+        })
         .then(
           () => {
             if (process.connected && typeof process.disconnect === "function") process.disconnect();
@@ -252,13 +261,35 @@ const ManagedServerValues = Object.freeze({
       return attempt;
     };
     const onMessage = (message: { readonly type?: string }) => {
-      if (message.type === "close") {
+      if (message.type === "activate" && !activated) {
+        activated = true;
+        environmentDeliveryWorkerAccess.activateManagedChild();
+        releaseActivation();
+      } else if (message.type === "close") {
         ManagedServerValues.closeFromEvent(close);
       }
     };
     process.on("message", onMessage);
     process.once("disconnect", () => {
       ManagedServerValues.closeFromEvent(close);
+    });
+    try {
+      await ManagedServerValues.send({
+        type: "synchronizing",
+        slot: process.env[slotMarker],
+        incarnation: process.env[incarnationMarker],
+        endpoint: server.baseUrl,
+      });
+    } catch (error) {
+      await close();
+      throw error;
+    }
+    await activation;
+    await ManagedServerValues.send({
+      type: "ready",
+      slot: process.env[slotMarker],
+      incarnation: process.env[incarnationMarker],
+      endpoint: server.baseUrl,
     });
     return {
       ready: true,
@@ -289,10 +320,11 @@ const ManagedServerValues = Object.freeze({
       );
   },
   send(message: {
-    readonly type: "ready" | "draining";
+    readonly type: "ready" | "synchronizing" | "draining" | "subscription-installed";
     readonly slot: string | undefined;
     readonly incarnation: string | undefined;
     readonly endpoint?: string;
+    readonly subscriptionId?: string;
   }): Promise<void> {
     return new Promise((resolve, reject) => {
       if (process.send === undefined || !process.connected) {
@@ -317,9 +349,17 @@ interface ReplicaRecord {
   readonly child: ChildProcess;
   endpoint: string | undefined;
   readyAt: number | undefined;
+  synchronizing: boolean;
   draining: boolean;
+  readonly subscriptionWaiters: Map<string, Deferred<undefined>>;
   expectedExit: boolean;
   terminal: boolean;
+}
+
+interface Deferred<Value> {
+  readonly promise: Promise<Value>;
+  resolve(value: Value): void;
+  reject(reason: unknown): void;
 }
 
 interface SlotRecord {
@@ -527,7 +567,9 @@ export class ManagedServerCoordinator {
       child,
       endpoint: undefined,
       readyAt: undefined,
+      synchronizing: false,
       draining: false,
+      subscriptionWaiters: new Map(),
       expectedExit: false,
       terminal: false,
     };
@@ -546,6 +588,28 @@ export class ManagedServerCoordinator {
   }
 
   #onMessage(slot: SlotRecord, replica: ReplicaRecord, message: unknown): void {
+    if (
+      ManagedServerCoordinatorValues.subscriptionInstalledMessage(
+        message,
+        slot.slot,
+        replica.incarnation,
+      )
+    ) {
+      if (slot.replica !== replica) return;
+      this.#settleSubscriptionWaiter(replica, message.subscriptionId);
+      return;
+    }
+    if (
+      ManagedServerCoordinatorValues.synchronizingMessage(message, slot.slot, replica.incarnation)
+    ) {
+      if (slot.replica !== replica || replica.endpoint !== undefined) return;
+      replica.endpoint = message.endpoint;
+      replica.synchronizing = true;
+      this.#notifyReadyMembers();
+      if (this.#nodeCoordinator === undefined)
+        replica.child.send({ type: "activate" }, () => undefined);
+      return;
+    }
     if (ManagedServerCoordinatorValues.drainingMessage(message, slot.slot, replica.incarnation)) {
       if (slot.replica !== replica || replica.draining) return;
       replica.draining = true;
@@ -558,6 +622,7 @@ export class ManagedServerCoordinator {
     if (slot.replica !== replica || replica.readyAt !== undefined || this.#closing) return;
     slot.starting = false;
     this.#starts--;
+    replica.synchronizing = false;
     replica.endpoint = message.endpoint;
     replica.readyAt = this.#dependencies.clock.now();
     slot.initialReady = true;
@@ -569,6 +634,10 @@ export class ManagedServerCoordinator {
   #onExit(slot: SlotRecord, replica: ReplicaRecord): void {
     if (slot.replica !== replica || replica.terminal) return;
     replica.terminal = true;
+    this.#clearSubscriptionWaiters(
+      replica,
+      new Error("Managed child exited before subscription installed."),
+    );
     slot.replica = undefined;
     this.#notifyReadyMembers();
     if (slot.starting) {
@@ -651,6 +720,12 @@ export class ManagedServerCoordinator {
       // child close IPC must be issued in this turn, while the Coordinator keeps
       // subscription relays alive until every child has settled.
       const draining = this.#nodeCoordinator?.beginDrain();
+      for (const slot of this.#slots)
+        if (slot.replica !== undefined)
+          this.#clearSubscriptionWaiters(
+            slot.replica,
+            new Error("Managed application is closing before subscription installed."),
+          );
       const childCloses = [
         ...this.#slots.map((slot) => this.#closeReplica(slot.replica)),
         ...[...this.#retired].map((replica) => this.#closeRetired(replica)),
@@ -727,11 +802,58 @@ export class ManagedServerCoordinator {
     return this.#members(true);
   }
 
+  onChildSubscriptionCreated(member: ReadyCoordinatorMember, subscription: Subscription): void {
+    const replica = this.#replica(member);
+    const id = subscription.id?.value;
+    if (replica === undefined || id === undefined || replica.subscriptionWaiters.has(id)) return;
+    replica.subscriptionWaiters.set(id, ManagedServerCoordinatorValues.deferred<undefined>());
+  }
+
+  onChildSubscriptionCancelled(member: ReadyCoordinatorMember, subscription: Subscription): void {
+    const replica = this.#replica(member);
+    const id = subscription.id?.value;
+    if (replica !== undefined && id !== undefined) this.#settleSubscriptionWaiter(replica, id);
+  }
+
+  async onRelaySynchronized(): Promise<void> {
+    const synchronizing = this.#slots
+      .map((slot) => slot.replica)
+      .filter(
+        (replica): replica is ReplicaRecord =>
+          replica !== undefined && replica.synchronizing && replica.readyAt === undefined,
+      );
+    await Promise.all(
+      synchronizing.flatMap((replica) =>
+        [...replica.subscriptionWaiters.values()].map((waiter) => waiter.promise),
+      ),
+    );
+    for (const replica of synchronizing)
+      if (!replica.terminal && replica.synchronizing && replica.readyAt === undefined)
+        replica.child.send({ type: "activate" }, () => undefined);
+  }
+
+  #replica(member: ReadyCoordinatorMember): ReplicaRecord | undefined {
+    const replica = this.#slots[member.slot]?.replica;
+    return replica?.incarnation === member.incarnation ? replica : undefined;
+  }
+
+  #clearSubscriptionWaiters(replica: ReplicaRecord, error: Error): void {
+    for (const waiter of replica.subscriptionWaiters.values()) waiter.reject(error);
+    replica.subscriptionWaiters.clear();
+  }
+
+  #settleSubscriptionWaiter(replica: ReplicaRecord, id: string): void {
+    const waiter = replica.subscriptionWaiters.get(id);
+    if (waiter === undefined) return;
+    replica.subscriptionWaiters.delete(id);
+    waiter.resolve(undefined);
+  }
+
   #members(includeDraining: boolean): readonly ReadyCoordinatorMember[] {
     return this.#slots.flatMap((slot) => {
       const replica = slot.replica;
       if (
-        replica?.readyAt === undefined ||
+        (replica?.readyAt === undefined && !(includeDraining && replica?.synchronizing)) ||
         (!includeDraining && replica.draining) ||
         replica.endpoint === undefined ||
         replica.child.pid === undefined
@@ -860,6 +982,15 @@ export const managedServerApplicationAccess: Readonly<{
 });
 
 const ManagedServerCoordinatorValues = Object.freeze({
+  deferred<Value>(): Deferred<Value> {
+    let resolve!: (value: Value) => void;
+    let reject!: (reason: unknown) => void;
+    const promise = new Promise<Value>((next, fail) => {
+      resolve = next;
+      reject = fail;
+    });
+    return { promise, resolve, reject };
+  },
   coordinatorPort(value: number): number {
     if (!Number.isSafeInteger(value) || value < 1 || value > 65_535)
       throw new Error(
@@ -917,6 +1048,36 @@ const ManagedServerCoordinatorValues = Object.freeze({
       candidate.incarnation === incarnation &&
       typeof candidate.endpoint === "string" &&
       canonicalLoopbackEndpoint(candidate.endpoint) !== undefined
+    );
+  },
+  synchronizingMessage(
+    message: unknown,
+    slot: number,
+    incarnation: string,
+  ): message is { readonly endpoint: string } {
+    if (typeof message !== "object" || message === null) return false;
+    const candidate = message as Record<string, unknown>;
+    return (
+      candidate.type === "synchronizing" &&
+      candidate.slot === String(slot) &&
+      candidate.incarnation === incarnation &&
+      typeof candidate.endpoint === "string" &&
+      canonicalLoopbackEndpoint(candidate.endpoint) !== undefined
+    );
+  },
+  subscriptionInstalledMessage(
+    message: unknown,
+    slot: number,
+    incarnation: string,
+  ): message is { readonly subscriptionId: string } {
+    if (typeof message !== "object" || message === null) return false;
+    const candidate = message as Record<string, unknown>;
+    return (
+      candidate.type === "subscription-installed" &&
+      candidate.slot === String(slot) &&
+      candidate.incarnation === incarnation &&
+      typeof candidate.subscriptionId === "string" &&
+      candidate.subscriptionId.length > 0
     );
   },
   drainingMessage(

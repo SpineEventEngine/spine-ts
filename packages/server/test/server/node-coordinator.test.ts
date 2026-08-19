@@ -457,6 +457,46 @@ describe("NodeCoordinator", () => {
     await coordinator.close();
   });
 
+  it("keeps a joining replica out of unary selection while its retained subscription installs", async () => {
+    const releaseSubscription = deferred<undefined>();
+    const subscriptionStarted = deferred<undefined>();
+    const current = await backend("current");
+    const joining = await backend("joining", {
+      subscribeGate: releaseSubscription.promise,
+      subscriptionStarted,
+    });
+    const members = new TestReadyMembers([current.member]);
+    const coordinator = await NodeCoordinator.open({ members, port: 0 });
+    closeables.push(async () => {
+      await coordinator.close();
+      await Promise.all([current.close(), joining.close()]);
+    });
+    const transport = createGrpcTransport({ baseUrl: coordinator.baseUrl });
+    await createClient(SubscriptionService, transport).subscribe(create(TopicSchema));
+
+    members.setReady([current.member], [current.member, joining.member]);
+    await subscriptionStarted.promise;
+
+    try {
+      const commands = createClient(CommandService, transport);
+      await commands.post(create(CommandService.method.post.input));
+      await commands.post(create(CommandService.method.post.input));
+      expect(current.commands()).toBe(2);
+      expect(joining.commands()).toBe(0);
+
+      releaseSubscription.resolve(undefined);
+      members.set([current.member, joining.member]);
+      await expect
+        .poll(async () => {
+          await commands.post(create(CommandService.method.post.input));
+          return joining.commands();
+        })
+        .toBe(1);
+    } finally {
+      releaseSubscription.resolve(undefined);
+    }
+  });
+
   it("removes a draining child from unary admission while retaining its subscription relay", async () => {
     const draining = await backend("draining");
     closeables.push(draining.close);
@@ -469,7 +509,9 @@ describe("NodeCoordinator", () => {
 
     members.setReady([], [draining.member]);
 
-    await expect(createClient(CommandService, transport).post(create(CommandService.method.post.input))).rejects.toMatchObject({ code: Code.Unavailable });
+    await expect(
+      createClient(CommandService, transport).post(create(CommandService.method.post.input)),
+    ).rejects.toMatchObject({ code: Code.Unavailable });
     expect(draining.subscriptions()).toBe(1);
     members.setReady([], []);
     await expect.poll(() => draining.cancellations()).toBe(1);
@@ -766,9 +808,13 @@ class TestReadyMembers implements ReadyMemberSource {
     this.#relays = members;
   }
 
-  relayMembers(): readonly ReadyMember[] { return this.#relays; }
+  relayMembers(): readonly ReadyMember[] {
+    return this.#relays;
+  }
 
-  onRelayMembersChange(onChange: () => void): () => void { return this.onReadyMembersChange(onChange); }
+  onRelayMembersChange(onChange: () => void): () => void {
+    return this.onReadyMembersChange(onChange);
+  }
 
   readyMembers(): readonly ReadyMember[] {
     return this.#members;
@@ -837,6 +883,8 @@ async function backend(
     readonly ignoreActivationAbort?: boolean;
     readonly releaseActivation?: Promise<void>;
     readonly observeActivationAbort?: boolean;
+    readonly subscribeGate?: Promise<undefined>;
+    readonly subscriptionStarted?: { readonly resolve: (value: undefined) => void };
   } = {},
 ): Promise<{
   readonly member: ReadyMember;
@@ -872,10 +920,12 @@ async function backend(
         router.service(SubscriptionService, {
           subscribe: (topic) => {
             value.subscriptions++;
-            return create(SubscriptionSchema, {
+            options.subscriptionStarted?.resolve(undefined);
+            const subscription = create(SubscriptionSchema, {
               id: create(SubscriptionIdSchema, { value: `${name}-native` }),
               topic,
             });
+            return options.subscribeGate?.then(() => subscription) ?? subscription;
           },
           activate: async function* (subscription, context) {
             value.activations++;

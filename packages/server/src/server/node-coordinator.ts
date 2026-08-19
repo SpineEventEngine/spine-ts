@@ -126,6 +126,15 @@ export interface ReadyMemberSource {
 
   /** Subscribes relay-membership reconciliation. */
   onRelayMembersChange(onChange: () => void): () => void;
+
+  /** Records the exact child subscription created during relay reconciliation. */
+  onChildSubscriptionCreated?(member: ReadyCoordinatorMember, subscription: Subscription): void;
+
+  /** Clears a child-installation wait when the matching native child is cancelled. */
+  onChildSubscriptionCancelled?(member: ReadyCoordinatorMember, subscription: Subscription): void;
+
+  /** Completes private child activation before the member becomes unary-ready. */
+  onRelaySynchronized?(): Promise<void>;
 }
 
 /**
@@ -229,7 +238,7 @@ export class NodeCoordinator {
     this.#members = options.members;
     this.#unaryKernel = new BackendMembershipKernel(NodeCoordinatorValues.unaryKernelOptions());
     this.#subscriptionKernel = new BackendMembershipKernel(
-      NodeCoordinatorValues.unaryKernelOptions(),
+      NodeCoordinatorValues.unaryKernelOptions(options.members),
     );
     this.#server = server;
     this.#sessions = sessions;
@@ -417,6 +426,14 @@ export class NodeCoordinator {
   }
 
   #reconcile(): Promise<void> {
+    if (this.#members.onRelaySynchronized !== undefined)
+      return this.#subscriptionKernel
+        .reconcile(this.#members.relayMembers())
+        .then(() =>
+          Promise.resolve(this.#members.onRelaySynchronized?.()).then(() =>
+            this.#unaryKernel.reconcile(this.#members.readyMembers()),
+          ),
+        );
     return Promise.all([
       this.#unaryKernel.reconcile(this.#members.readyMembers()),
       this.#subscriptionKernel.reconcile(this.#members.relayMembers()),
@@ -525,7 +542,9 @@ export class SubscriptionUpdateQueue implements AsyncIterable<SubscriptionUpdate
 }
 
 const NodeCoordinatorValues = Object.freeze({
-  unaryKernelOptions(): BackendMembershipKernelOptions<
+  unaryKernelOptions(
+    members?: ReadyMemberSource,
+  ): BackendMembershipKernelOptions<
     ReadyCoordinatorMember,
     CoordinatorRequest,
     Uint8Array,
@@ -535,7 +554,7 @@ const NodeCoordinatorValues = Object.freeze({
     // one-shot forwarding operations. Subscription fan-out is owned by T-0208.
     return {
       create: (member: ReadyCoordinatorMember) =>
-        Promise.resolve(NodeCoordinatorValues.client(member)),
+        Promise.resolve(NodeCoordinatorValues.client(member, members)),
       memberKey: (member: ReadyCoordinatorMember) =>
         `${member.slot.toString()}/${member.incarnation}`,
       sameMember: (left: ReadyCoordinatorMember, right: ReadyCoordinatorMember) =>
@@ -555,6 +574,7 @@ const NodeCoordinatorValues = Object.freeze({
   },
   client(
     member: ReadyCoordinatorMember,
+    members: ReadyMemberSource | undefined,
   ): BackendMemberClient<CoordinatorRequest, Uint8Array, Uint8Array> {
     const manager = new Http2SessionManager(member.endpoint);
     const transport = createGrpcTransport({ baseUrl: member.endpoint, sessionManager: manager });
@@ -604,6 +624,7 @@ const NodeCoordinatorValues = Object.freeze({
           ),
           { signal },
         );
+        members?.onChildSubscriptionCreated?.(member, created);
         return toBinary(SubscriptionSchema, created);
       },
       activate: async (child, updates, signal) => {
@@ -614,10 +635,9 @@ const NodeCoordinatorValues = Object.freeze({
           await updates(toBinary(SubscriptionUpdateSchema, update));
       },
       dispose: async (child, signal) => {
-        await createClient(SubscriptionService, transport).cancel(
-          fromBinary(SubscriptionSchema, child),
-          { signal },
-        );
+        const subscription = fromBinary(SubscriptionSchema, child);
+        members?.onChildSubscriptionCancelled?.(member, subscription);
+        await createClient(SubscriptionService, transport).cancel(subscription, { signal });
       },
     };
   },
