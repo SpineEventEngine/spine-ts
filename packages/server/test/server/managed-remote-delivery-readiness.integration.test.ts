@@ -13,18 +13,38 @@
  */
 
 import { fork, type ChildProcess } from "node:child_process";
+import * as http2 from "node:http2";
+import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
-import { DeliveryServer } from "../../../delivery-server/src/index.js";
 import { create } from "@bufbuild/protobuf";
-import { createClient } from "@connectrpc/connect";
-import { createGrpcTransport } from "@connectrpc/connect-node";
+import { createClient, type ServiceImpl } from "@connectrpc/connect";
+import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
 import { SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
+import {
+  AdminService,
+  InboxService,
+  ShardService,
+} from "@spine-event-engine/proto/delivery-server";
 import { SignalMetadata } from "../../src/index.js";
 import { UserIdSchema } from "@spine-event-engine/proto";
-import { CommandService, SubscriptionService, TargetSchema, TopicIdSchema, TopicSchema } from "@spine-event-engine/proto/client";
-import { CreateTaskSchema } from "../../../../examples/todo/dist/generated/spine/examples/todo/task_commands_pb.js";
-import { TaskIdSchema, TaskListIdSchema } from "../../../../examples/todo/dist/generated/spine/examples/todo/task_id_pb.js";
+import {
+  CommandService,
+  SubscriptionService,
+  TargetSchema,
+  TopicIdSchema,
+  TopicSchema,
+} from "@spine-event-engine/proto/client";
+import {
+  CreateTaskSchema,
+  RenameTaskSchema,
+} from "../../../../examples/todo/dist/generated/spine/examples/todo/task_commands_pb.js";
+import {
+  TaskIdSchema,
+  TaskListIdSchema,
+} from "../../../../examples/todo/dist/generated/spine/examples/todo/task_id_pb.js";
 import { TaskListSchema } from "../../../../examples/todo/dist/generated/spine/examples/todo/task_list_pb.js";
+import { DeliveryAssembly } from "../../../delivery-server/src/server/assembly.js";
+import { DeliveryServer } from "../../../delivery-server/src/index.js";
 import { afterEach, expect, it } from "vitest";
 
 const children = new Set<ChildProcess>();
@@ -59,10 +79,12 @@ it("RED-27/28 keeps the final managed subscription relay until fenced Delivery w
   const iterator = subscriptions.activate(subscription)[Symbol.asyncIterator]();
   await createClient(CommandService, transport).post(createTaskCommand());
   await expect(iterator.next()).resolves.toMatchObject({ done: false });
-
-  // Intentionally RED: the fixture supplies real managed children and remote
-  // Delivery readiness, but T-0209 has not yet exposed final relay/drain facts.
-  expect(ready.finalRelayAfterDrain).toBe(true);
+  const nextUpdate = iterator.next();
+  await createClient(CommandService, transport).post(renameTaskCommand());
+  const drained = receive(child, "drained");
+  child.send({ type: "drain" });
+  await expect(nextUpdate).resolves.toMatchObject({ done: false });
+  await drained;
 }, 20_000);
 
 function receive(child: ChildProcess, type: string): Promise<Record<string, unknown>> {
@@ -71,11 +93,22 @@ function receive(child: ChildProcess, type: string): Promise<Record<string, unkn
     child.stderr?.on("data", (chunk: Buffer) => {
       stderr += chunk.toString();
     });
-    const timer = setTimeout(() => finish(new Error("Managed fixture readiness timed out.")), 10_000);
-    const onExit = (code: number | null, signal: NodeJS.Signals | null) =>
-      finish(new Error(`Managed fixture exited before readiness (code ${String(code)}, signal ${String(signal)}): ${stderr}`));
+    const timer = setTimeout(() => {
+      finish(new Error("Managed fixture readiness timed out."));
+    }, 10_000);
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      finish(
+        new Error(
+          `Managed fixture exited before readiness (code ${String(code)}, signal ${String(signal)}): ${stderr}`,
+        ),
+      );
+    };
     const onMessage = (value: unknown) => {
-      if (typeof value !== "object" || value === null || (value as { type?: unknown }).type !== type)
+      if (
+        typeof value !== "object" ||
+        value === null ||
+        (value as { type?: unknown }).type !== type
+      )
         return;
       finish(undefined, value as Record<string, unknown>);
     };
@@ -84,7 +117,8 @@ function receive(child: ChildProcess, type: string): Promise<Record<string, unkn
       child.off("exit", onExit);
       child.off("message", onMessage);
       if (error !== undefined) reject(error);
-      else resolve(value as Record<string, unknown>);
+      else if (value !== undefined) resolve(value);
+      else reject(new Error("Managed fixture message was missing."));
     };
     child.once("exit", onExit);
     child.on("message", onMessage);
@@ -93,9 +127,146 @@ function receive(child: ChildProcess, type: string): Promise<Record<string, unkn
 
 const metadata = new SignalMetadata();
 function taskListTopic() {
-  return create(TopicSchema, { id: create(TopicIdSchema, { value: "t0209" }), target: create(TargetSchema, { type: TypeUrls.derive(TaskListSchema), criterion: { case: "includeAll", value: true } }), context: metadata.actorContext({ actor: create(UserIdSchema, { value: "t0209" }) }) });
+  return create(TopicSchema, {
+    id: create(TopicIdSchema, { value: "t0209" }),
+    target: create(TargetSchema, {
+      type: TypeUrls.derive(TaskListSchema),
+      criterion: { case: "includeAll", value: true },
+    }),
+    context: metadata.actorContext({ actor: create(UserIdSchema, { value: "t0209" }) }),
+  });
 }
 function createTaskCommand() {
   const actorContext = metadata.actorContext({ actor: create(UserIdSchema, { value: "t0209" }) });
-  return SignalEnvelopes.command({ id: metadata.commandId("t0209-create"), context: metadata.commandContext({ actorContext }), schema: CreateTaskSchema, message: create(CreateTaskSchema, { id: create(TaskIdSchema, { value: "t0209-task" }), taskListId: create(TaskListIdSchema, { value: "t0209-task" }), title: "T-0209" }) });
+  return SignalEnvelopes.command({
+    id: metadata.commandId("t0209-create"),
+    context: metadata.commandContext({ actorContext }),
+    schema: CreateTaskSchema,
+    message: create(CreateTaskSchema, {
+      id: create(TaskIdSchema, { value: "t0209-task" }),
+      taskListId: create(TaskListIdSchema, { value: "t0209-task" }),
+      title: "T-0209",
+    }),
+  });
+}
+function renameTaskCommand() {
+  const actorContext = metadata.actorContext({ actor: create(UserIdSchema, { value: "t0209" }) });
+  return SignalEnvelopes.command({
+    id: metadata.commandId("t0209-rename"),
+    context: metadata.commandContext({ actorContext }),
+    schema: RenameTaskSchema,
+    message: create(RenameTaskSchema, {
+      id: create(TaskIdSchema, { value: "t0209-task" }),
+      title: "Drained",
+    }),
+  });
+}
+
+/**
+ * A fixture-local Delivery listener assembled from the production RPC handlers.
+ * It gates one real Inbox read after arming, keeping normal remote Delivery work
+ * active without proxying application signals through test orchestration.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- wired by the next drain assertion.
+class GatedDeliveryListener {
+  readonly #assembly = DeliveryAssembly.create();
+  readonly #sessions = new Set<http2.ServerHttp2Session>();
+  readonly #entered = deferred<undefined>();
+  readonly #released = deferred<undefined>();
+  #armed = false;
+  #server: http2.Http2Server | undefined;
+  #port: number | undefined;
+
+  get baseUrl(): string {
+    if (this.#port === undefined) throw new Error("Gated Delivery listener has not started.");
+    return `http://127.0.0.1:${String(this.#port)}`;
+  }
+
+  get entered(): Promise<undefined> {
+    return this.#entered.promise;
+  }
+
+  arm(): void {
+    this.#armed = true;
+  }
+
+  release(): void {
+    this.#released.resolve(undefined);
+  }
+
+  async start(): Promise<this> {
+    const inbox: ServiceImpl<typeof InboxService> = {
+      ...this.#assembly.inbox,
+      findManyInShard: async (request, context) => {
+        if (this.#armed) {
+          this.#armed = false;
+          this.#entered.resolve(undefined);
+          await this.#released.promise;
+        }
+        return this.#assembly.inbox.findManyInShard(request, context);
+      },
+    };
+    const server = http2.createServer(
+      connectNodeAdapter({
+        routes: (router) => {
+          router.service(InboxService, inbox);
+          router.service(ShardService, this.#assembly.shards);
+          router.service(AdminService, this.#assembly.admin);
+        },
+      }),
+    );
+    server.on("session", (session) => {
+      this.#sessions.add(session);
+      session.on("close", () => this.#sessions.delete(session));
+    });
+    this.#server = server;
+    this.#port = await listen(server);
+    return this;
+  }
+
+  async close(): Promise<void> {
+    this.release();
+    this.#assembly.closeAdmission();
+    this.#assembly.closeAdmin();
+    for (const session of this.#sessions) session.close();
+    const server = this.#server;
+    if (server?.listening) await closeListener(server);
+  }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
+function listen(server: http2.Http2Server): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const done = () => {
+      server.off("error", fail);
+      server.off("listening", ready);
+    };
+    const fail = (error: Error) => {
+      done();
+      reject(error);
+    };
+    const ready = () => {
+      done();
+      resolve((server.address() as AddressInfo).port);
+    };
+    server.once("error", fail);
+    server.once("listening", ready);
+    server.listen(0, "127.0.0.1");
+  });
+}
+
+function closeListener(server: http2.Http2Server): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error === undefined) resolve();
+      else reject(error);
+    });
+  });
 }

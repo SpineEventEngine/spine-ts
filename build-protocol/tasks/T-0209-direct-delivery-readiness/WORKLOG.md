@@ -89,3 +89,19 @@
   drain/relay observation: `ready.finalRelayAfterDrain` is `undefined`, where
   the acceptance requires `true`. Earlier module-resolution failures were
   corrected before accepting this RED.
+
+## 2026-08-19 — deterministic active-Delivery gate fixture checkpoint
+
+- Added, but deliberately did not yet wire, `GatedDeliveryListener` inside the
+  joined managed integration test. It composes production `DeliveryAssembly`
+  handlers through a real cleartext HTTP/2 `connectNodeAdapter` listener,
+  registers Inbox/Shard/Admin services, binds an ephemeral loopback port, and
+  closes tracked HTTP/2 sessions.
+- After `arm()`, its one wrapped `Inbox.findManyInShard` reports `entered` and
+  waits for explicit test-local `release()` before delegating. This is a real
+  remote Delivery worker gate; it neither forwards application payloads over
+  IPC nor changes production Delivery APIs.
+- Focused tooling passed: `pnpm exec tsc --noEmit -p packages/server/tsconfig.json`
+  and `pnpm exec eslint packages/server/test/server/managed-remote-delivery-readiness.integration.test.ts`.
+  The next step wires the listener into the joined test and captures the
+  lifecycle RED deterministically.

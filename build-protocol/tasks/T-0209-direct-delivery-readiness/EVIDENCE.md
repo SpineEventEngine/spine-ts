@@ -66,3 +66,13 @@ synchronization before READY. Its focused test confirms two READY members and
 then intentionally fails `finalRelayAfterDrain === true`: received
 `undefined`. This is valid RED evidence for the still-missing joined
 subscription/drain observation, not acceptance credit.
+
+## Deterministic gated Delivery fixture
+
+`GatedDeliveryListener` is a test-local copy of the production listener
+composition only: production `DeliveryAssembly.create()` handlers are mounted
+as Inbox/Shard/Admin services behind `connectNodeAdapter` on an ephemeral
+loopback HTTP/2 listener. It tracks and closes HTTP/2 sessions. Its gate wraps
+only `Inbox.findManyInShard`, allowing the test to establish genuine active
+remote Delivery work before starting managed drain; no signal/update crosses
+test IPC. It passed package typecheck and ESLint before wiring.
