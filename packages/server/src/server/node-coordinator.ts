@@ -188,7 +188,10 @@ export class NodeCoordinator {
     Uint8Array
   >;
   readonly #subscriptionKernel: BackendMembershipKernel<
-    ReadyCoordinatorMember, CoordinatorRequest, Uint8Array, Uint8Array
+    ReadyCoordinatorMember,
+    CoordinatorRequest,
+    Uint8Array,
+    Uint8Array
   >;
   readonly #server: http2.Http2Server;
   readonly #sessions: Set<http2.ServerHttp2Session>;
@@ -225,7 +228,9 @@ export class NodeCoordinator {
   ) {
     this.#members = options.members;
     this.#unaryKernel = new BackendMembershipKernel(NodeCoordinatorValues.unaryKernelOptions());
-    this.#subscriptionKernel = new BackendMembershipKernel(NodeCoordinatorValues.unaryKernelOptions());
+    this.#subscriptionKernel = new BackendMembershipKernel(
+      NodeCoordinatorValues.unaryKernelOptions(),
+    );
     this.#server = server;
     this.#sessions = sessions;
     this.host = address.address;
@@ -239,8 +244,10 @@ export class NodeCoordinator {
         )
         .catch(() => undefined);
     };
-    const relayChange = options.members.onRelayMembersChange?.bind(options.members) ?? options.members.onReadyMembersChange.bind(options.members);
-    this.#stopMembers = [options.members.onReadyMembersChange(reconcile), relayChange(reconcile)];
+    this.#stopMembers = [
+      options.members.onReadyMembersChange(reconcile),
+      options.members.onRelayMembersChange(reconcile),
+    ];
   }
 
   /**
@@ -307,6 +314,11 @@ export class NodeCoordinator {
     return this.#close;
   }
 
+  /** Removes unary admission while retaining active subscription relays. */
+  beginDrain(): Promise<void> {
+    return this.#unaryKernel.reconcile([]);
+  }
+
   async #post(command: Command, context: HandlerContext): Promise<Ack> {
     const request: CoordinatorCommand = {
       kind: "command",
@@ -335,7 +347,10 @@ export class NodeCoordinator {
       topic,
     });
     try {
-      await this.#subscriptionKernel.subscribe(toBinary(SubscriptionSchema, subscription), context.signal);
+      await this.#subscriptionKernel.subscribe(
+        toBinary(SubscriptionSchema, subscription),
+        context.signal,
+      );
     } catch (error) {
       throw this.#availabilityError(error);
     }
@@ -378,7 +393,10 @@ export class NodeCoordinator {
   }
 
   async #cancel(subscription: Subscription, context: HandlerContext): Promise<Response> {
-    await this.#subscriptionKernel.cancel(toBinary(SubscriptionSchema, subscription), context.signal);
+    await this.#subscriptionKernel.cancel(
+      toBinary(SubscriptionSchema, subscription),
+      context.signal,
+    );
     return create(ResponseSchema, {
       status: create(StatusSchema, { status: { case: "ok", value: create(EmptySchema) } }),
     });
@@ -401,12 +419,14 @@ export class NodeCoordinator {
   #reconcile(): Promise<void> {
     return Promise.all([
       this.#unaryKernel.reconcile(this.#members.readyMembers()),
-      this.#subscriptionKernel.reconcile(this.#members.relayMembers?.() ?? this.#members.readyMembers()),
+      this.#subscriptionKernel.reconcile(this.#members.relayMembers()),
     ]).then(() => undefined);
   }
 
   async #closeOnce(): Promise<void> {
-    this.#stopMembers.forEach((stop) => stop());
+    this.#stopMembers.forEach((stop) => {
+      stop();
+    });
     await this.#membershipReconciliation;
     const network = NodeCoordinatorValues.closeNetwork(this.#server, this.#sessions);
     await Promise.all([network, this.#unaryKernel.close(), this.#subscriptionKernel.close()]);

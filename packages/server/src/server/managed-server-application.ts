@@ -646,11 +646,22 @@ export class ManagedServerCoordinator {
           this.#dependencies.clock.clearTimeout(slot.replacementTimer);
         slot.replacementTimer = undefined;
       }
-      const childClose = Promise.all(this.#slots.map((slot) => this.#closeReplica(slot.replica)));
-      const coordinatorClose = this.#nodeCoordinator?.close();
-      if (coordinatorClose === undefined) await childClose;
-      else await Promise.all([coordinatorClose, childClose]);
-      await Promise.all([...this.#retired].map((replica) => this.#closeRetired(replica)));
+      // `beginDrain()` makes the unary snapshot empty synchronously. Start every
+      // child quiescence attempt without waiting for its reconciliation promise:
+      // child close IPC must be issued in this turn, while the Coordinator keeps
+      // subscription relays alive until every child has settled.
+      const draining = this.#nodeCoordinator?.beginDrain();
+      const childCloses = [
+        ...this.#slots.map((slot) => this.#closeReplica(slot.replica)),
+        ...[...this.#retired].map((replica) => this.#closeRetired(replica)),
+      ];
+      const results = await Promise.allSettled([draining, ...childCloses]);
+      const failures: unknown[] = [];
+      for (const result of results) if (result.status === "rejected") failures.push(result.reason);
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1)
+        throw new AggregateError(failures, "Managed child quiescence failed during drain.");
+      await this.#nodeCoordinator?.close();
     })();
     this.#close = close;
     void close.then(undefined, () => {

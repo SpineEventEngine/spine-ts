@@ -76,3 +76,21 @@ loopback HTTP/2 listener. It tracks and closes HTTP/2 sessions. Its gate wraps
 only `Inbox.findManyInShard`, allowing the test to establish genuine active
 remote Delivery work before starting managed drain; no signal/update crosses
 test IPC. It passed package typecheck and ESLint before wiring.
+
+## RED/GREEN: real gated drain relay
+
+The joined fixture now proves the following on normal public paths: a baseline
+Todo command produces a native TaskList subscription update; an armed real
+`Inbox.findManyInShard` gate holds the next remote Delivery worker after a
+normal RenameTask is accepted; managed drain makes a new Coordinator command
+return `Code.Unavailable`; releasing the real worker yields the final public
+TaskList update before the parent reports drain completion and the iterator
+closes. The exact integration test passed **three sequential fresh runs**.
+
+The close implementation invokes private unary `beginDrain()` and all child
+quiescence attempts without an asynchronous admission gap. It retains the
+Coordinator's subscription owner until all child and retired-child settlements
+succeed; a rejection avoids Coordinator close and permits a later retry.
+Focused regression evidence: managed lifecycle + NodeCoordinator + durable
+subscription bindings passed **120/120**; server typecheck and focused ESLint
+passed.

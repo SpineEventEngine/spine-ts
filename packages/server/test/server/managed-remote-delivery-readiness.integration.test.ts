@@ -17,7 +17,7 @@ import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { create } from "@bufbuild/protobuf";
-import { createClient, type ServiceImpl } from "@connectrpc/connect";
+import { Code, createClient, type ServiceImpl } from "@connectrpc/connect";
 import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
 import { SignalEnvelopes, TypeUrls } from "@spine-event-engine/core";
 import {
@@ -44,23 +44,21 @@ import {
 } from "../../../../examples/todo/dist/generated/spine/examples/todo/task_id_pb.js";
 import { TaskListSchema } from "../../../../examples/todo/dist/generated/spine/examples/todo/task_list_pb.js";
 import { DeliveryAssembly } from "../../../delivery-server/src/server/assembly.js";
-import { DeliveryServer } from "../../../delivery-server/src/index.js";
 import { afterEach, expect, it } from "vitest";
 
 const children = new Set<ChildProcess>();
-const servers = new Set<DeliveryServer>();
+const deliveries = new Set<GatedDeliveryListener>();
 
 afterEach(async () => {
   for (const child of children) child.kill("SIGTERM");
   children.clear();
-  await Promise.all([...servers].map((server) => server.close()));
-  servers.clear();
+  await Promise.all([...deliveries].map((delivery) => delivery.close()));
+  deliveries.clear();
 });
 
 it("RED-27/28 keeps the final managed subscription relay until fenced Delivery work drains", async () => {
-  const delivery = new DeliveryServer({ host: "127.0.0.1", port: 0 });
-  servers.add(delivery);
-  await delivery.start();
+  const delivery = await new GatedDeliveryListener().start();
+  deliveries.add(delivery);
   const child = fork(
     fileURLToPath(new URL("./managed-remote-delivery-application.mjs", import.meta.url)),
     [],
@@ -77,14 +75,24 @@ it("RED-27/28 keeps the final managed subscription relay until fenced Delivery w
   const subscriptions = createClient(SubscriptionService, transport);
   const subscription = await subscriptions.subscribe(taskListTopic());
   const iterator = subscriptions.activate(subscription)[Symbol.asyncIterator]();
-  await createClient(CommandService, transport).post(createTaskCommand());
+  const commands = createClient(CommandService, transport);
+  await commands.post(createTaskCommand());
   await expect(iterator.next()).resolves.toMatchObject({ done: false });
+
+  delivery.arm();
   const nextUpdate = iterator.next();
-  await createClient(CommandService, transport).post(renameTaskCommand());
+  await commands.post(renameTaskCommand());
+  await delivery.entered;
+
   const drained = receive(child, "drained");
   child.send({ type: "drain" });
+  await expect(commands.post(createTaskCommand("t0209-after-drain"))).rejects.toMatchObject({
+    code: Code.Unavailable,
+  });
+  delivery.release();
   await expect(nextUpdate).resolves.toMatchObject({ done: false });
   await drained;
+  await expect(iterator.next()).resolves.toMatchObject({ done: true });
 }, 20_000);
 
 function receive(child: ChildProcess, type: string): Promise<Record<string, unknown>> {
@@ -136,10 +144,10 @@ function taskListTopic() {
     context: metadata.actorContext({ actor: create(UserIdSchema, { value: "t0209" }) }),
   });
 }
-function createTaskCommand() {
+function createTaskCommand(commandId = "t0209-create") {
   const actorContext = metadata.actorContext({ actor: create(UserIdSchema, { value: "t0209" }) });
   return SignalEnvelopes.command({
-    id: metadata.commandId("t0209-create"),
+    id: metadata.commandId(commandId),
     context: metadata.commandContext({ actorContext }),
     schema: CreateTaskSchema,
     message: create(CreateTaskSchema, {
@@ -167,7 +175,6 @@ function renameTaskCommand() {
  * It gates one real Inbox read after arming, keeping normal remote Delivery work
  * active without proxying application signals through test orchestration.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- wired by the next drain assertion.
 class GatedDeliveryListener {
   readonly #assembly = DeliveryAssembly.create();
   readonly #sessions = new Set<http2.ServerHttp2Session>();

@@ -62,4 +62,11 @@ if (process.env.SPINE_MANAGED_SERVER_CHILD !== "true") {
     })),
     endpoint: managedServerApplicationAccess.coordinatorEndpoint(managed),
   });
+  process.on("message", (message) => {
+    if (message?.type !== "drain") return;
+    void managed.close().then(
+      () => process.send?.({ type: "drained" }),
+      () => process.send?.({ type: "drain-error" }),
+    );
+  });
 }

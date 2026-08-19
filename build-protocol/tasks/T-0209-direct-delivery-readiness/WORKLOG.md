@@ -105,3 +105,27 @@
   and `pnpm exec eslint packages/server/test/server/managed-remote-delivery-readiness.integration.test.ts`.
   The next step wires the listener into the joined test and captures the
   lifecycle RED deterministically.
+
+## 2026-08-19 — RED/GREEN: gated joined drain relay
+
+- Wired the real production-assembled `GatedDeliveryListener` into the joined
+  fixture. After the initial normal Todo projection update, the test arms the
+  `findManyInShard` gate, posts a normal `RenameTask`, waits for the real
+  remote worker to enter, and then requests managed drain. A new public
+  `CommandService` call through the Coordinator receives `UNAVAILABLE` while
+  the work is held. Releasing the gate permits the native `TaskList` update;
+  the test observes it before the managed drain completion and stream close.
+- The first gate run was green, but focused lifecycle regression revealed the
+  initial close ordering waited on asynchronous unary reconciliation before
+  issuing child-close IPC. This delayed immediate admission removal and broke
+  failure timing tests. The correction starts `beginDrain()` (whose unary
+  snapshot changes synchronously) and all active/retired child quiescence
+  attempts in the same turn; it closes the Coordinator/subscription kernel
+  only after every attempt settles successfully. A failed child settlement
+  leaves that owner open and resets the close promise for retry. Multiple child
+  failures aggregate; one preserves the prior error identity.
+- Fresh real-process runs: the joined test passed **3/3** sequentially. Focused
+  regression command passed **120/120** across managed lifecycle,
+  NodeCoordinator, and durable subscription bindings. Server typecheck and
+  focused ESLint passed. The result uses no test-forwarded Delivery signal or
+  payload IPC.
