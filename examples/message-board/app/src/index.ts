@@ -213,6 +213,8 @@ export class MessageBoardApplication {
    * Builds the single-tenant MessageBoard context with in-memory storage by default.
    *
    * @param storageFactory The storage backend that records MessageBoard state and events.
+   * @param deliveryStrategy Optionally selects Delivery shards for the context.
+   * @param subscriptionRegistry Optionally supplies the context subscription registry.
    * @returns The assembled MessageBoard bounded context.
    */
   async createContext(

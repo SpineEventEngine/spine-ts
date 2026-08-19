@@ -16,5 +16,59 @@
     "name": "startTodoServer",
     "disposition": "necessity",
     "reason": "startTodoServer remains a TypeScript framework boundary callable export for package consumers."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/todo/src/managed-deployment.ts",
+    "kind": "function-declaration",
+    "identity": "readTodoManagedDeployment()#1",
+    "name": "readTodoManagedDeployment",
+    "disposition": "necessity",
+    "reason": "TypeScript framework boundary: readTodoManagedDeployment validates deployment-owned settings before child assembly."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/todo/src/managed-deployment.ts",
+    "kind": "function-declaration",
+    "identity": "required()#1",
+    "name": "required",
+    "disposition": "necessity",
+    "reason": "TypeScript framework boundary: required rejects absent deployment environment values without a new configuration concept."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/todo/src/managed-deployment.ts",
+    "kind": "function-declaration",
+    "identity": "port()#1",
+    "name": "port",
+    "disposition": "necessity",
+    "reason": "TypeScript framework boundary: port validates the Coordinator listener port range."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/todo/src/managed-deployment.ts",
+    "kind": "function-declaration",
+    "identity": "positiveSafeInteger()#1",
+    "name": "positiveSafeInteger",
+    "disposition": "necessity",
+    "reason": "TypeScript framework boundary: positiveSafeInteger validates explicit managed process and Delivery shard counts."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/todo/src/managed-deployment.ts",
+    "kind": "function-declaration",
+    "identity": "httpUrl()#1",
+    "name": "httpUrl",
+    "disposition": "necessity",
+    "reason": "TypeScript framework boundary: httpUrl normalizes the Delivery endpoint before RemoteDelivery assembly."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/todo/src/managed-entry.ts",
+    "kind": "function-declaration",
+    "identity": "installShutdown()#1",
+    "name": "installShutdown",
+    "disposition": "necessity",
+    "reason": "TypeScript framework boundary: installShutdown installs idempotent SIGINT and SIGTERM shutdown for the Coordinator-owned handle."
   }
 ]
