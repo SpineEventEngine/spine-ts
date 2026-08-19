@@ -28,13 +28,13 @@ build outputs, so build them once before starting local processes.
 
 ## 🚀 Start locally
 
-| Mode                                | Storage            | Delivery          | Gateway/UI route       | Owner            |
-| ----------------------------------- | ------------------ | ----------------- | ---------------------- | ---------------- |
-| local single-process                | in-memory          | local             | direct UI to Gateway   | launcher         |
-| local multi-process                 | Datastore emulator | shared server     | direct UI to Gateway   | launcher         |
-| combined container                  | Datastore emulator | shared server     | stock UI through Envoy | Compose          |
-| one-node managed container          | Datastore emulator | shared server     | stock UI through Envoy | Compose          |
-| distributed multi-node container    | shared Datastore   | shared server     | stock UI through Envoy | Compose          |
+| Mode                             | Storage            | Delivery      | Gateway/UI route       | Owner    |
+| -------------------------------- | ------------------ | ------------- | ---------------------- | -------- |
+| local single-process             | in-memory          | local         | direct UI to Gateway   | launcher |
+| local multi-process              | Datastore emulator | shared server | direct UI to Gateway   | launcher |
+| combined container               | Datastore emulator | shared server | stock UI through Envoy | Compose  |
+| one-node managed container       | Datastore emulator | shared server | stock UI through Envoy | Compose  |
+| distributed multi-node container | shared Datastore   | shared server | stock UI through Envoy | Compose  |
 
 Install and build from the repository root:
 

@@ -68,16 +68,16 @@ pnpm exec vitest run examples/message-board/app/test
 
 The production-shaped source files are named for the process they start:
 
-| File                                                 | Process role                                                                                           |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| [`application-server.ts`](src/application-server.ts) | Starts only the Message Board Bounded Context; a separate Gateway is required.                         |
-| [`gateway-server.ts`](src/gateway-server.ts)         | Starts only the browser-facing Gateway; it contains no Bounded Context and does not run Delivery work. |
-| [`combined-server.ts`](src/combined-server.ts)       | Starts the application and Gateway together in one process.                                            |
-| [`multi-process-app.ts`](src/multi-process-app.ts)   | Selects the Coordinator parent or complete replica startup role.                                       |
-| [`multi-process-coordinator.ts`](src/multi-process-coordinator.ts) | Owns parent lifecycle and starts the configured child replicas.                         |
-| [`multi-process-replica.ts`](src/multi-process-replica.ts) | Builds and synchronizes one complete replica with shared Delivery.                         |
-| [`deployment-config.ts`](src/deployment-config.ts)   | Validates the environment and assembles facilities shared by those entrypoints.                        |
-| [`index.ts`](src/index.ts)                           | Defines the domain handlers and reusable complete application assembly.                                |
+| File                                                               | Process role                                                                                           |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| [`application-server.ts`](src/application-server.ts)               | Starts only the Message Board Bounded Context; a separate Gateway is required.                         |
+| [`gateway-server.ts`](src/gateway-server.ts)                       | Starts only the browser-facing Gateway; it contains no Bounded Context and does not run Delivery work. |
+| [`combined-server.ts`](src/combined-server.ts)                     | Starts the application and Gateway together in one process.                                            |
+| [`multi-process-app.ts`](src/multi-process-app.ts)                 | Selects the Coordinator parent or complete replica startup role.                                       |
+| [`multi-process-coordinator.ts`](src/multi-process-coordinator.ts) | Owns parent lifecycle and starts the configured child replicas.                                        |
+| [`multi-process-replica.ts`](src/multi-process-replica.ts)         | Builds and synchronizes one complete replica with shared Delivery.                                     |
+| [`deployment-config.ts`](src/deployment-config.ts)                 | Validates the environment and assembles facilities shared by those entrypoints.                        |
+| [`index.ts`](src/index.ts)                                         | Defines the domain handlers and reusable complete application assembly.                                |
 
 Start with `combined-server.ts` to see the fewest production-shaped processes.
 Read `multi-process-app.ts` when learning how one machine uses several CPU cores.

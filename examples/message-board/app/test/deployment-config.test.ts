@@ -39,7 +39,11 @@ describe("MessageBoard deployment configuration", () => {
     const facilities = MessageBoardDeployment.configureManagedServer(
       { host: "127.0.0.1", port: 8080, projectId: "message-board-test" },
       client,
-      { ...completeEnvironment, MESSAGE_BOARD_DELIVERY_MODE: "local", DELIVERY_SERVER_URL: undefined },
+      {
+        ...completeEnvironment,
+        MESSAGE_BOARD_DELIVERY_MODE: "local",
+        DELIVERY_SERVER_URL: undefined,
+      },
     );
 
     expect(facilities.delivery).toBeUndefined();
