@@ -51,4 +51,17 @@ describe("Message Board public-demo trust policy", () => {
       readFileSync(join(repositoryRoot, "examples/message-board/app/src/public-board-admission.ts"), "utf8"),
     ).toContain("PublicBoardAdmission");
   });
+
+  it("documents purpose-named startup modules, launchers, and every supported mode", () => {
+    for (const source of [
+      "examples/message-board/app/src/single-process-app.ts",
+      "examples/message-board/app/src/multi-process-coordinator.ts",
+      "examples/message-board/app/src/multi-process-replica.ts",
+      "examples/message-board/scripts/start-local-single-process.sh",
+      "examples/message-board/scripts/start-local-multi-process.sh",
+    ]) expect(existsSync(join(repositoryRoot, source)), source).toBe(true);
+    const readme = readFileSync(join(repositoryRoot, "examples/message-board/README.md"), "utf8");
+    for (const mode of ["local single-process", "local multi-process", "combined container", "Kubernetes cluster"])
+      expect(readme).toContain(mode);
+  });
 });
