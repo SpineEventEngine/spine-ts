@@ -21,8 +21,10 @@ import {
   Projection,
   Server,
   Subscribe,
+  type DeliveryStrategy,
   type RunningServer,
 } from "@spine-event-engine/server";
+import type { StorageFactory } from "@spine-event-engine/storage";
 import { type EventContext, UserIdSchema, type UserId } from "@spine-event-engine/proto";
 
 import {
@@ -600,9 +602,39 @@ export class TaskAssigneeProjection extends Projection<UserId, typeof TaskAssign
 /**
  * Creates the in-memory single-tenant Tasks bounded context.
  *
+ * @param options Supplies application-owned bounded-context facilities.
  * @returns The assembled Tasks bounded context.
  */
-export async function createTodoContext(): Promise<BoundedContext> {
+export async function createTodoContext(
+  options: {
+    // prettier-ignore
+
+    /**
+     *
+     * Selects the Delivery shard strategy used by the Tasks context.
+     */
+    readonly deliveryStrategy?: DeliveryStrategy;
+
+    // prettier-ignore
+
+    /**
+     *
+     * Transfers the subscription registry to the Tasks context.
+     *
+     * The context owns and closes the supplied registry during shutdown.
+     */
+    readonly subscriptionRegistry?: import("@spine-event-engine/server").StandSubscriptionRegistry;
+
+    // prettier-ignore
+
+    /**
+     *
+     * Supplies the caller-owned storage factory used by the Tasks context.
+     * The caller closes it after all dependent contexts and servers finish.
+     */
+    readonly storageFactory?: StorageFactory;
+  } = {},
+): Promise<BoundedContext> {
   const taskListRouting = EventRouting.create<TaskListId>()
     .route(TaskEvent, (event) => [taskListIds.require(event.taskListId)])
     .route(TaskAlreadyDoneSchema, (event) => taskListIds.fromTaskId(event.id))
@@ -614,12 +646,17 @@ export async function createTodoContext(): Promise<BoundedContext> {
     .route(TaskReassignedSchema, (event) => {
       return [assignees.require(event.previousAssignee), assignees.require(event.assignee)];
     });
-  return BoundedContext.singleTenant("Tasks")
+  const builder = BoundedContext.singleTenant("Tasks")
     .withGeneratedRegistryRoot(new URL("..", import.meta.url))
     .add(TaskAggregate)
     .add(TaskListProjection, { eventRouting: taskListRouting })
-    .add(TaskAssigneeProjection, { eventRouting: assigneeRouting })
-    .buildAsync();
+    .add(TaskAssigneeProjection, { eventRouting: assigneeRouting });
+  if (options.deliveryStrategy !== undefined)
+    builder.withDeliveryStrategy(options.deliveryStrategy);
+  if (options.subscriptionRegistry !== undefined)
+    builder.withSubscriptionRegistry(options.subscriptionRegistry);
+  if (options.storageFactory !== undefined) builder.withStorageFactory(options.storageFactory);
+  return builder.buildAsync();
 }
 
 /**

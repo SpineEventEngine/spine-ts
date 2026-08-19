@@ -50,8 +50,9 @@ Consequences:
   retains durable logical bindings.
 - GKE/GCE discovery points to ready Node Coordinators rather than individual
   application workers.
-- Managed deployment requires explicitly configured remote/shared Delivery and
-  shard strategy, but process and shard counts remain independent.
+- Managed deployment users choose remote/shared Delivery and shard strategy in
+  application assembly, but the framework neither requires nor certifies their
+  provenance at runtime; process and shard counts remain independent.
 - The future Gateway-hosted Integration Hub for physically split server
   applications is outside the first release.
 - An unexpected child exit does not terminate the deployment node. Surviving

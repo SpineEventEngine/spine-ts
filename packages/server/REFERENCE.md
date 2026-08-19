@@ -154,9 +154,13 @@ and the assembled child is closed before READY. Durable logical bindings remain
 Gateway-only. The Coordinator fans each logical definition to ready children,
 merges updates, propagates cancellation, and carries no subscription payload on
 parent/child IPC. A late or replacement child synchronizes retained definitions
-before it is eligible for normal requests. This subscription-fan-out contract
-does not itself claim real-process event and Delivery handoff acceptance; that
-acceptance remains future work in the correction sequence.
+before it is eligible for normal requests. Active definitions attach their
+child streams before admission; subscribed but inactive definitions do not
+block readiness. Each child observes application-configured remote/shared
+Delivery directly. During DRAINING, new unary and shard admission stops while
+active Delivery and its subscription updates finish before child close. The
+application owns Delivery facility and shard-strategy selection; managed mode
+does not infer or certify configuration provenance.
 
 Create records begin `pending` and expire after 30 seconds unless activated.
 Active records have no framework TTL. Cancellation physically deletes the
@@ -294,8 +298,9 @@ hosting remain independent of managed Node deployment.
 
 If no child is READY, Command and Query return gRPC `UNAVAILABLE`. The
 Coordinator does not enter application intake and does not retry the selected
-call on a sibling child. Subscription fan-out is a later deployment slice and
-is not a Coordinator capability here.
+call on a sibling child. Subscription fan-out follows current READY members;
+later and replacement members attach the retained subscription before managed
+admission.
 
 `ServerOptions.browser` changes the public listener, not the bounded-context
 services. The native HTTP/2 backend binds to an ephemeral loopback port and is

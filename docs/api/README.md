@@ -78,9 +78,12 @@ and replacement replicas synchronize retained definitions before they become
 eligible. Standalone Servers retain the persistent registry default; framework-
 owned managed children require each actual context registry to be
 `InMemorySubscriptionRegistry`, rejecting and closing persistent or custom
-registries before READY. This subscription-fan-out contract does not itself
-claim real-process event and Delivery handoff acceptance; that acceptance
-remains future work in the correction sequence.
+registries before READY. Active definitions attach before admission; inactive
+definitions do not block readiness. Each child observes application-configured
+remote/shared Delivery directly. DRAINING stops new unary and shard admission,
+retains subscription relays through active work, and closes the child after the
+final updates. The application owns Delivery facility and shard-strategy
+selection; managed mode does not infer or certify their provenance.
 
 The reference has 15 entry points, including `@spine-event-engine/client-web`,
 `@spine-event-engine/client-node`, `@spine-event-engine/delivery-client`, and

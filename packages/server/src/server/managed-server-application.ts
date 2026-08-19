@@ -19,7 +19,10 @@ import { LogLayer, StructuredTransport, type ILogLayer } from "loglayer";
 import { runningServerAccess, type RunningServer } from "./server.js";
 import { emitServerWarning } from "./server-log.js";
 import { NodeCoordinator, type ReadyCoordinatorMember } from "./node-coordinator.js";
+import { environmentDeliveryWorkerAccess } from "./environment-delivery-worker.js";
+import { managedChildSubscriptionAccess } from "./managed-child-subscription.js";
 import { InMemorySubscriptionRegistry } from "../stand/subscription-registry.js";
+import type { Subscription } from "@spine-event-engine/proto/client";
 
 const childMarker = "SPINE_MANAGED_SERVER_CHILD";
 const slotMarker = "SPINE_MANAGED_SERVER_SLOT";
@@ -138,12 +141,14 @@ export interface ManagedServerApplicationOptions {
 
   /**
    *
-   * Starts child-local readiness work after local server assembly.
+   * Completes child-local prerequisites after local server assembly.
    *
    * This callback runs only in a managed child. It is deliberately lazy so a
-   * parent never starts application synchronization work.
+   * parent never starts application synchronization work. Completion lets the
+   * child report `SYNCHRONIZING`; final Delivery admission and `READY` still
+   * wait for the parent Coordinator to activate the child.
    *
-   * @returns Completion after the child is ready for local intake.
+   * @returns Completion after child-local prerequisites are established.
    */
   readonly synchronize?: () => Promise<void>;
 
@@ -215,43 +220,103 @@ const ManagedServerValues = Object.freeze({
     // transport detail from becoming an unhandled child-process exception.
     const containIpcError = () => undefined;
     process.on("error", containIpcError);
+    managedChildSubscriptionAccess.install((subscriptionId) => {
+      const notification = ManagedServerValues.send({
+        type: "subscription-installed",
+        slot: process.env[slotMarker],
+        incarnation: process.env[incarnationMarker],
+        subscriptionId,
+      });
+      // spine-log-boundary: server.managed_replica_subscription_ipc
+      void notification.catch(() => undefined);
+    });
+    let activated = false;
+    let releaseActivation!: () => void;
+    const activation = new Promise<void>((resolve) => {
+      releaseActivation = resolve;
+    });
+    let closing: Promise<void> | undefined;
+    const close = () => {
+      if (closing !== undefined) return closing;
+      const draining = ManagedServerValues.send({
+        type: "draining",
+        slot: process.env[slotMarker],
+        incarnation: process.env[incarnationMarker],
+      });
+      // spine-log-boundary: server.managed_replica_drain_ipc
+      const attempt = draining
+        .catch(() => undefined)
+        .then(() => {
+          environmentDeliveryWorkerAccess.cancelManagedChild();
+          managedChildSubscriptionAccess.clear();
+          releaseActivation();
+          return runningServerAccess.drainDelivery(server);
+        })
+        .then(() => {
+          return server.close();
+        })
+        .then(
+          () => {
+            const closed = ManagedServerValues.send({
+              type: "closed",
+              slot: process.env[slotMarker],
+              incarnation: process.env[incarnationMarker],
+            });
+            // spine-log-boundary: server.managed_replica_closed_ipc
+            return closed.catch(() => undefined);
+          },
+          (error: unknown) => {
+            const failed = ManagedServerValues.send({
+              type: "close-failed",
+              slot: process.env[slotMarker],
+              incarnation: process.env[incarnationMarker],
+            });
+            // spine-log-boundary: server.managed_replica_close_failed_ipc
+            void failed.catch(() => undefined);
+            if (closing === attempt) closing = undefined;
+            throw error;
+          },
+        )
+        .then(() => {
+          process.off("disconnect", onDisconnect);
+          if (process.connected && typeof process.disconnect === "function") process.disconnect();
+          process.off("error", containIpcError);
+          process.off("message", onMessage);
+        });
+      closing = attempt;
+      return attempt;
+    };
+    const onMessage = (message: { readonly type?: string }) => {
+      if (message.type === "activate" && !activated) {
+        activated = true;
+        environmentDeliveryWorkerAccess.activateManagedChild();
+        releaseActivation();
+      } else if (message.type === "close") {
+        ManagedServerValues.closeFromEvent(close);
+      }
+    };
+    const onDisconnect = () => {
+      ManagedServerValues.closeFromEvent(close);
+    };
+    process.on("message", onMessage);
+    process.once("disconnect", onDisconnect);
     try {
       await ManagedServerValues.send({
-        type: "ready",
+        type: "synchronizing",
         slot: process.env[slotMarker],
         incarnation: process.env[incarnationMarker],
         endpoint: server.baseUrl,
       });
     } catch (error) {
-      await server.close();
-      process.off("error", containIpcError);
+      await close();
       throw error;
     }
-    let closing: Promise<void> | undefined;
-    const close = () => {
-      if (closing !== undefined) return closing;
-      const attempt = server.close().then(
-        () => {
-          if (process.connected && typeof process.disconnect === "function") process.disconnect();
-          process.off("error", containIpcError);
-          process.off("message", onMessage);
-        },
-        (error: unknown) => {
-          if (closing === attempt) closing = undefined;
-          throw error;
-        },
-      );
-      closing = attempt;
-      return attempt;
-    };
-    const onMessage = (message: { readonly type?: string }) => {
-      if (message.type === "close") {
-        ManagedServerValues.closeFromEvent(close);
-      }
-    };
-    process.on("message", onMessage);
-    process.once("disconnect", () => {
-      ManagedServerValues.closeFromEvent(close);
+    await activation;
+    await ManagedServerValues.send({
+      type: "ready",
+      slot: process.env[slotMarker],
+      incarnation: process.env[incarnationMarker],
+      endpoint: server.baseUrl,
     });
     return {
       ready: true,
@@ -282,10 +347,12 @@ const ManagedServerValues = Object.freeze({
       );
   },
   send(message: {
-    readonly type: "ready";
+    readonly type:
+      "ready" | "synchronizing" | "draining" | "closed" | "close-failed" | "subscription-installed";
     readonly slot: string | undefined;
     readonly incarnation: string | undefined;
-    readonly endpoint: string;
+    readonly endpoint?: string;
+    readonly subscriptionId?: string;
   }): Promise<void> {
     return new Promise((resolve, reject) => {
       if (process.send === undefined || !process.connected) {
@@ -310,8 +377,23 @@ interface ReplicaRecord {
   readonly child: ChildProcess;
   endpoint: string | undefined;
   readyAt: number | undefined;
+  synchronizing: boolean;
+  draining: boolean;
+  readonly subscriptionWaiters: Map<string, Deferred<undefined>>;
+  closeAttempt: ReplicaCloseAttempt | undefined;
   expectedExit: boolean;
   terminal: boolean;
+}
+
+interface ReplicaCloseAttempt {
+  readonly acknowledged: Deferred<undefined>;
+  readonly outcome: Deferred<undefined>;
+}
+
+interface Deferred<Value> {
+  readonly promise: Promise<Value>;
+  resolve(value: Value): void;
+  reject(reason: unknown): void;
 }
 
 interface SlotRecord {
@@ -519,6 +601,10 @@ export class ManagedServerCoordinator {
       child,
       endpoint: undefined,
       readyAt: undefined,
+      synchronizing: false,
+      draining: false,
+      subscriptionWaiters: new Map(),
+      closeAttempt: undefined,
       expectedExit: false,
       terminal: false,
     };
@@ -537,11 +623,55 @@ export class ManagedServerCoordinator {
   }
 
   #onMessage(slot: SlotRecord, replica: ReplicaRecord, message: unknown): void {
+    const closeResult = ManagedServerCoordinatorValues.closeResultMessage(
+      message,
+      slot.slot,
+      replica.incarnation,
+    );
+    if (closeResult !== undefined) {
+      if (slot.replica !== replica || !replica.draining || replica.closeAttempt === undefined)
+        return;
+      if (closeResult === "closed") replica.closeAttempt.outcome.resolve(undefined);
+      else replica.closeAttempt.outcome.reject(new Error("Managed child server close failed."));
+      return;
+    }
+    if (
+      ManagedServerCoordinatorValues.subscriptionInstalledMessage(
+        message,
+        slot.slot,
+        replica.incarnation,
+      )
+    ) {
+      if (slot.replica !== replica) return;
+      this.#settleSubscriptionWaiter(replica, message.subscriptionId);
+      return;
+    }
+    if (
+      ManagedServerCoordinatorValues.synchronizingMessage(message, slot.slot, replica.incarnation)
+    ) {
+      if (slot.replica !== replica || replica.endpoint !== undefined) return;
+      replica.endpoint = message.endpoint;
+      replica.synchronizing = true;
+      this.#notifyReadyMembers();
+      if (this.#nodeCoordinator === undefined)
+        replica.child.send({ type: "activate" }, () => undefined);
+      return;
+    }
+    if (ManagedServerCoordinatorValues.drainingMessage(message, slot.slot, replica.incarnation)) {
+      if (slot.replica !== replica) return;
+      replica.closeAttempt?.acknowledged.resolve(undefined);
+      if (replica.draining) return;
+      replica.draining = true;
+      replica.expectedExit = true;
+      this.#notifyReadyMembers();
+      return;
+    }
     if (!ManagedServerCoordinatorValues.readyMessage(message, slot.slot, replica.incarnation))
       return;
     if (slot.replica !== replica || replica.readyAt !== undefined || this.#closing) return;
     slot.starting = false;
     this.#starts--;
+    replica.synchronizing = false;
     replica.endpoint = message.endpoint;
     replica.readyAt = this.#dependencies.clock.now();
     slot.initialReady = true;
@@ -553,6 +683,10 @@ export class ManagedServerCoordinator {
   #onExit(slot: SlotRecord, replica: ReplicaRecord): void {
     if (slot.replica !== replica || replica.terminal) return;
     replica.terminal = true;
+    this.#clearSubscriptionWaiters(
+      replica,
+      new Error("Managed child exited before subscription installed."),
+    );
     slot.replica = undefined;
     this.#notifyReadyMembers();
     if (slot.starting) {
@@ -630,11 +764,28 @@ export class ManagedServerCoordinator {
           this.#dependencies.clock.clearTimeout(slot.replacementTimer);
         slot.replacementTimer = undefined;
       }
-      const childClose = Promise.all(this.#slots.map((slot) => this.#closeReplica(slot.replica)));
-      const coordinatorClose = this.#nodeCoordinator?.close();
-      if (coordinatorClose === undefined) await childClose;
-      else await Promise.all([coordinatorClose, childClose]);
-      await Promise.all([...this.#retired].map((replica) => this.#closeRetired(replica)));
+      // `beginDrain()` makes the unary snapshot empty synchronously. Start every
+      // child quiescence attempt without waiting for its reconciliation promise:
+      // child close IPC must be issued in this turn, while the Coordinator keeps
+      // subscription relays alive until every child has settled.
+      const draining = this.#nodeCoordinator?.beginDrain();
+      for (const slot of this.#slots)
+        if (slot.replica !== undefined)
+          this.#clearSubscriptionWaiters(
+            slot.replica,
+            new Error("Managed application is closing before subscription installed."),
+          );
+      const childCloses = [
+        ...this.#slots.map((slot) => this.#closeReplica(slot.replica)),
+        ...[...this.#retired].map((replica) => this.#closeRetired(replica)),
+      ];
+      const results = await Promise.allSettled([draining, ...childCloses]);
+      const failures: unknown[] = [];
+      for (const result of results) if (result.status === "rejected") failures.push(result.reason);
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1)
+        throw new AggregateError(failures, "Managed child quiescence failed during drain.");
+      await this.#nodeCoordinator?.close();
     })();
     this.#close = close;
     void close.then(undefined, () => {
@@ -693,10 +844,88 @@ export class ManagedServerCoordinator {
    * @internal
    */
   readyMembers(): readonly ReadyCoordinatorMember[] {
+    return this.#members(false);
+  }
+
+  /**
+   * Returns READY and synchronizing members whose relays remain eligible.
+   *
+   * @returns Private relay member facts.
+   */
+  relayMembers(): readonly ReadyCoordinatorMember[] {
+    return this.#members(true);
+  }
+
+  /**
+   * Records an exact native subscription whose activation started for a member.
+   *
+   * @param member Supplies the member that owns the child subscription.
+   * @param subscription Supplies the activating native subscription.
+   */
+  onChildSubscriptionActivated(member: ReadyCoordinatorMember, subscription: Subscription): void {
+    const replica = this.#replica(member);
+    const id = subscription.id?.value;
+    if (replica === undefined || id === undefined || replica.subscriptionWaiters.has(id)) return;
+    replica.subscriptionWaiters.set(id, ManagedServerCoordinatorValues.deferred<undefined>());
+  }
+
+  /**
+   * Clears a pending child-installation wait after cancellation.
+   *
+   * @param member Supplies the member that owns the cancelled subscription.
+   * @param subscription Supplies the cancelled native subscription.
+   */
+  onChildSubscriptionCancelled(member: ReadyCoordinatorMember, subscription: Subscription): void {
+    const replica = this.#replica(member);
+    const id = subscription.id?.value;
+    if (replica !== undefined && id !== undefined) this.#settleSubscriptionWaiter(replica, id);
+  }
+
+  /**
+   * Activates synchronizing children after their retained relay children install.
+   *
+   * @returns Completion after each current child receives private activation.
+   */
+  async onRelaySynchronized(): Promise<void> {
+    const synchronizing = this.#slots
+      .map((slot) => slot.replica)
+      .filter(
+        (replica): replica is ReplicaRecord =>
+          replica !== undefined && replica.synchronizing && replica.readyAt === undefined,
+      );
+    await Promise.all(
+      synchronizing.flatMap((replica) =>
+        [...replica.subscriptionWaiters.values()].map((waiter) => waiter.promise),
+      ),
+    );
+    for (const replica of synchronizing)
+      if (!replica.terminal && replica.synchronizing && replica.readyAt === undefined)
+        replica.child.send({ type: "activate" }, () => undefined);
+  }
+
+  #replica(member: ReadyCoordinatorMember): ReplicaRecord | undefined {
+    const replica = this.#slots[member.slot]?.replica;
+    return replica?.incarnation === member.incarnation ? replica : undefined;
+  }
+
+  #clearSubscriptionWaiters(replica: ReplicaRecord, error: Error): void {
+    for (const waiter of replica.subscriptionWaiters.values()) waiter.reject(error);
+    replica.subscriptionWaiters.clear();
+  }
+
+  #settleSubscriptionWaiter(replica: ReplicaRecord, id: string): void {
+    const waiter = replica.subscriptionWaiters.get(id);
+    if (waiter === undefined) return;
+    replica.subscriptionWaiters.delete(id);
+    waiter.resolve(undefined);
+  }
+
+  #members(includeDraining: boolean): readonly ReadyCoordinatorMember[] {
     return this.#slots.flatMap((slot) => {
       const replica = slot.replica;
       if (
-        replica?.readyAt === undefined ||
+        (replica?.readyAt === undefined && !(includeDraining && replica?.synchronizing)) ||
+        (!includeDraining && replica.draining) ||
         replica.endpoint === undefined ||
         replica.child.pid === undefined
       )
@@ -722,6 +951,16 @@ export class ManagedServerCoordinator {
   onReadyMembersChange(onChange: () => void): () => void {
     this.#memberListeners.add(onChange);
     return () => this.#memberListeners.delete(onChange);
+  }
+
+  /**
+   * Subscribes one private Coordinator to relay-membership changes.
+   *
+   * @param onChange Runs after a relay member is admitted or removed.
+   * @returns Stops later relay-membership callbacks.
+   */
+  onRelayMembersChange(onChange: () => void): () => void {
+    return this.onReadyMembersChange(onChange);
   }
 
   /**
@@ -820,6 +1059,15 @@ export const managedServerApplicationAccess: Readonly<{
 });
 
 const ManagedServerCoordinatorValues = Object.freeze({
+  deferred<Value>(): Deferred<Value> {
+    let resolve!: (value: Value) => void;
+    let reject!: (reason: unknown) => void;
+    const promise = new Promise<Value>((next, fail) => {
+      resolve = next;
+      reject = fail;
+    });
+    return { promise, resolve, reject };
+  },
   coordinatorPort(value: number): number {
     if (!Number.isSafeInteger(value) || value < 1 || value > 65_535)
       throw new Error(
@@ -879,6 +1127,68 @@ const ManagedServerCoordinatorValues = Object.freeze({
       canonicalLoopbackEndpoint(candidate.endpoint) !== undefined
     );
   },
+  synchronizingMessage(
+    message: unknown,
+    slot: number,
+    incarnation: string,
+  ): message is { readonly endpoint: string } {
+    if (typeof message !== "object" || message === null) return false;
+    const candidate = message as Record<string, unknown>;
+    return (
+      candidate.type === "synchronizing" &&
+      candidate.slot === String(slot) &&
+      candidate.incarnation === incarnation &&
+      typeof candidate.endpoint === "string" &&
+      canonicalLoopbackEndpoint(candidate.endpoint) !== undefined
+    );
+  },
+  subscriptionInstalledMessage(
+    message: unknown,
+    slot: number,
+    incarnation: string,
+  ): message is { readonly subscriptionId: string } {
+    if (typeof message !== "object" || message === null) return false;
+    const candidate = message as Record<string, unknown>;
+    return (
+      candidate.type === "subscription-installed" &&
+      candidate.slot === String(slot) &&
+      candidate.incarnation === incarnation &&
+      typeof candidate.subscriptionId === "string" &&
+      candidate.subscriptionId.length > 0
+    );
+  },
+  drainingMessage(
+    message: unknown,
+    slot: number,
+    incarnation: string,
+  ): message is {
+    readonly type: "draining";
+    readonly slot: string;
+    readonly incarnation: string;
+  } {
+    if (typeof message !== "object" || message === null) return false;
+    const candidate = message as Record<string, unknown>;
+    return (
+      candidate.type === "draining" &&
+      candidate.slot === String(slot) &&
+      candidate.incarnation === incarnation
+    );
+  },
+  closeResultMessage(
+    message: unknown,
+    slot: number,
+    incarnation: string,
+  ): "closed" | "close-failed" | undefined {
+    if (typeof message !== "object" || message === null) return undefined;
+    const candidate = message as Record<string, unknown>;
+    if (
+      (candidate.type !== "closed" && candidate.type !== "close-failed") ||
+      candidate.slot !== String(slot) ||
+      candidate.incarnation !== incarnation
+    )
+      return undefined;
+    return candidate.type;
+  },
   async close(
     replica: ReplicaRecord | undefined,
     clock: ManagedServerCoordinatorDependencies["clock"],
@@ -892,13 +1202,38 @@ const ManagedServerCoordinatorValues = Object.freeze({
         resolve();
       }),
     );
-    if (child.connected) child.send({ type: "close" }, () => undefined);
-    await ManagedServerCoordinatorValues.terminate(child, clock, exited);
+    const closeAttempt: ReplicaCloseAttempt = {
+      acknowledged: ManagedServerCoordinatorValues.deferred<undefined>(),
+      outcome: ManagedServerCoordinatorValues.deferred<undefined>(),
+    };
+    replica.closeAttempt = closeAttempt;
+    try {
+      if (child.connected) child.send({ type: "close" }, () => undefined);
+      const observation = Promise.race([
+        closeAttempt.acknowledged.promise.then(() => "acknowledged" as const),
+        exited.then(() => "exited" as const),
+      ]);
+      if (await ManagedServerCoordinatorValues.within(observation, closeGraceMs, clock)) {
+        if ((await observation) === "exited") return;
+        await Promise.race([
+          closeAttempt.outcome.promise,
+          exited.then(() => {
+            throw new Error("Managed child exited before graceful close completed.");
+          }),
+        ]);
+        await ManagedServerCoordinatorValues.terminate(child, clock, exited);
+        return;
+      }
+      await ManagedServerCoordinatorValues.terminate(child, clock, exited, false);
+    } finally {
+      if (replica.closeAttempt === closeAttempt) replica.closeAttempt = undefined;
+    }
   },
   async terminate(
     child: ChildProcess,
     clock: ManagedServerCoordinatorDependencies["clock"],
     knownExit?: Promise<void>,
+    allowGrace = true,
   ): Promise<void> {
     if (child.exitCode !== null || child.signalCode !== null) return;
     const exited =
@@ -908,7 +1243,8 @@ const ManagedServerCoordinatorValues = Object.freeze({
           resolve();
         }),
       );
-    if (await ManagedServerCoordinatorValues.within(exited, closeGraceMs, clock)) return;
+    if (allowGrace && (await ManagedServerCoordinatorValues.within(exited, closeGraceMs, clock)))
+      return;
     child.kill("SIGTERM");
     if (await ManagedServerCoordinatorValues.within(exited, closeKillMs, clock)) return;
     child.kill("SIGKILL");
@@ -916,7 +1252,7 @@ const ManagedServerCoordinatorValues = Object.freeze({
     throw new Error("Managed child did not exit after SIGKILL.");
   },
   within(
-    promise: Promise<void>,
+    promise: Promise<unknown>,
     delay: number,
     clock: ManagedServerCoordinatorDependencies["clock"],
   ): Promise<boolean> {
