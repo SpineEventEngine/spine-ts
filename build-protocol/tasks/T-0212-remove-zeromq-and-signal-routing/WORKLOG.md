@@ -49,3 +49,10 @@
 - `pnpm lint:cleanup`, `pnpm check:t0212-removed-routing`, the affected Prettier
   check, and `git diff --check` now pass. No production behavior changed in
   this correction.
+- The next canonical verifier reached release-readiness after every preceding
+  gate passed, then found one obsolete Todo guide link to the deleted bypass
+  fixture. The Todo README and guide now point to the retained startup-contract
+  test and distinguish the local entry from the managed production reference.
+- The affected documentation preflight and release-readiness check pass after
+  this correction. A fresh terminal canonical verifier result is still
+  required.
