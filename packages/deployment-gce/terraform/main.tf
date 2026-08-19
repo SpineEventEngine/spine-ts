@@ -102,7 +102,9 @@ resource "google_compute_instance_template" "application" {
     docker --config "$DOCKER_CONFIG" run --rm --network host \
       -e HOST=0.0.0.0 \
       -e PORT=${var.application_port} \
+      -e APPLICATION_PROCESS_COUNT=${var.application_process_count} \
       -e DELIVERY_SERVER_URL=http://${google_compute_forwarding_rule.delivery.ip_address}:${var.delivery_port} \
+      -e DELIVERY_SHARD_COUNT=${var.delivery_shard_count} \
       -e REGISTRY_NAMESPACE=${var.registry_namespace} \
       -e REGISTRY_STORAGE_REFERENCE=${var.registry_storage_reference} \
       -e APPLICATION_SECRET_REFERENCE=${var.application_secret_reference} \

@@ -36,10 +36,11 @@ Gateway Secret holds separate identity and session settings.
 ## What this deployment creates
 
 The Terraform module creates three private Kubernetes Deployments and three
-ClusterIP Services. One Service is headless: Kubernetes publishes the IP
-addresses of ready application Pods in DNS. The Gateway uses that DNS name with
-`GkeNodeDiscovery`; it does not call the Kubernetes API or maintain a separate
-node registry.
+ClusterIP Services. One Service is headless: Kubernetes publishes the ready
+Node Coordinator endpoint of each application Pod in DNS. The Gateway uses that
+DNS name with `GkeNodeDiscovery`; it does not call the Kubernetes API or
+maintain a separate node registry. Managed application children remain
+loopback-only and are not Service endpoints.
 
 ```mermaid
 flowchart LR
@@ -163,29 +164,49 @@ browser collaborators as `GatewayOptions`. Supply sessions, authorization,
 trusted actor-context resolution, allowed origins, a clock, type registry, and
 named durable subscription bindings there.
 
-The application entrypoint uses the same configuration source for its
-listener:
+The application entrypoint uses the same configuration source for its managed
+Coordinator. Set `application_process_count` and `delivery_shard_count`
+explicitly in Terraform. The former starts complete local replicas; the latter
+is passed to your context assembly and is not inferred from hardware:
 
 ```ts
 // docs-snippet-path: packages/deployment-gke/examples/application.ts
-import { Server, type ServerOptions } from "@spine-event-engine/server";
+import {
+  ManagedServerApplication,
+  type ManagedServerApplicationHandle,
+  type ManagedServerApplicationOptions,
+  type RunningServer,
+} from "@spine-event-engine/server";
 
 import { DeploymentSettings, type DeploymentEnvironment } from "./deployment-settings.js";
 
 export interface ApplicationOptions {
-  readonly server: Omit<ServerOptions, "host" | "port" | "browser">;
+  readonly moduleUrl: string;
+  readonly createServer: (options: {
+    readonly host: string;
+    readonly port: number;
+    readonly deliveryShardCount: number;
+  }) => Promise<RunningServer>;
+  readonly synchronize?: ManagedServerApplicationOptions["synchronize"];
+  readonly restart?: ManagedServerApplicationOptions["restart"];
 }
 
 export const ApplicationEntrypoint = Object.freeze({
   async run(
     options: ApplicationOptions,
     environment: DeploymentEnvironment = process.env,
-  ): Promise<void> {
-    const server = Server.atPort(DeploymentSettings.port(environment, "PORT"), {
-      ...options.server,
+  ): Promise<ManagedServerApplicationHandle> {
+    const deliveryShardCount = DeploymentSettings.deliveryShardCount(environment);
+    return await ManagedServerApplication.run({
+      processCount: DeploymentSettings.processCount(environment),
       host: "0.0.0.0",
+      port: DeploymentSettings.port(environment, "PORT"),
+      moduleUrl: options.moduleUrl,
+      createServer: async ({ host, port }) =>
+        await options.createServer({ host, port, deliveryShardCount }),
+      ...(options.synchronize === undefined ? {} : { synchronize: options.synchronize }),
+      ...(options.restart === undefined ? {} : { restart: options.restart }),
     });
-    await server.run();
   },
 });
 ```

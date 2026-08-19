@@ -13,9 +13,11 @@ resource "kubernetes_config_map_v1" "runtime" {
 
   data = {
     APPLICATION_PORT          = tostring(var.application_port)
+    APPLICATION_PROCESS_COUNT = tostring(var.application_process_count)
     BACKEND_DISCOVERY_PORT    = tostring(var.application_port)
     BACKEND_DISCOVERY_SERVICE = "application.${var.namespace}.svc.cluster.local"
     DELIVERY_SERVER_URL       = "http://delivery.${var.namespace}.svc.cluster.local:${var.delivery_port}"
+    DELIVERY_SHARD_COUNT      = tostring(var.delivery_shard_count)
     GATEWAY_PORT              = tostring(var.gateway_port)
     NODE_ENV                  = "production"
   }
@@ -36,7 +38,7 @@ resource "kubernetes_service_v1" "application" {
     port {
       name        = "grpc"
       port        = var.application_port
-      target_port = "grpc"
+      target_port = "coordinator"
     }
   }
 }
@@ -111,7 +113,7 @@ resource "kubernetes_deployment_v1" "application" {
           image = var.application_image
 
           port {
-            name           = "grpc"
+            name           = "coordinator"
             container_port = var.application_port
           }
 
