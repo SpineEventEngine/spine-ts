@@ -118,6 +118,16 @@
   performance/reliability now all pass with no P0–P2 findings. Final
   post-review verification is next.
 
+## 2026-08-19 — integration-ready
+
+- The post-review canonical verifier passed every deterministic gate and
+  562/562 tests. Serialized managed lifecycle and real managed
+  external-event/Delivery acceptance passed 58/58 and 4/4 respectively.
+- RED-30 and the ZeroMQ dependency/lock/workspace audit pass; the task worktree
+  is clean. Total final retained acceptance is 624/624 tests.
+- T-0212 is integration-ready. T-0213 remains the next and final coordinated
+  documentation, security, and release-closure milestone.
+
 ## 2026-08-19 — residual affected-review correction
 
 - Removed the remaining current server README/reference claims that
