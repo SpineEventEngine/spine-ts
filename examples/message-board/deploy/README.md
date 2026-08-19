@@ -7,7 +7,7 @@ Use this guide to run the local Message Board deployment examples. The nearby
 
 ```mermaid
 flowchart LR
-  Browser --> Gateway[Authenticated Gateway]
+  Browser --> Gateway[Public-demo Gateway]
   Gateway --> Coordinator[Node Coordinator]
   Coordinator -->|one request| AppOne[Complete replica 1]
   Coordinator -->|one request| AppTwo[Complete replica 2]
@@ -17,14 +17,15 @@ flowchart LR
 The two application connections shown for unary routing are alternatives, not
 fan-out: one command or query is sent to one selected backend without retry.
 
-Combined mode runs one Message Board application and authenticated browser
+Combined mode runs one Message Board application and public-demo browser
 gateway in the same process. Use it to understand the smallest browser-facing
 deployment. Standalone mode runs a managed application node separately from one
 Gateway; Envoy is the only public service and the Gateway reaches its private
 Coordinator, never a child listener.
 
-Both modes require application-selected storage and a delivery server. Browser
-processes share the session signing values and subscription-registry namespace.
+Both modes require application-selected storage and a delivery server. The
+Gateway admits this example's requests from their request actor and uses one
+subscription-registry namespace per topology.
 The Gateway remembers each logical subscription, such as “Ada watches board
 `general`,” in durable storage. It does **not** store a history of every update
 sent to Ada's browser. If the browser disconnects while a message is posted, it
@@ -49,14 +50,6 @@ pnpm typecheck:build
 pnpm images:build:local
 ```
 
-Create the signing key once; keep this file out of source control:
-
-```bash
-openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out session-key.pem
-```
-
-Set a P-256 PKCS#8 private key, then start the combined reference:
-
 ```bash
 docker compose --file examples/message-board/deploy/compose/combined.compose.yaml up --detach
 docker compose --file examples/message-board/deploy/compose/combined.compose.yaml down --volumes --remove-orphans
@@ -68,35 +61,17 @@ starts one Coordinator, one Gateway, Envoy, one shared registry namespace, and
 exactly one in-memory delivery server. `BACKEND_URLS` names that Coordinator in
 this local-only static fixture, not a child listener.
 
-The Kubernetes YAML files are storage-neutral references. Image distribution is
-managed by the operator and out of scope: for Kind, load local images instead of
-publishing them; for Minikube, load the same local tags:
-
-```bash
-kind load docker-image spine-ts/message-board:local spine-ts/standalone-gateway:local spine-ts/simple-delivery-server:local
-minikube image load spine-ts/message-board:local spine-ts/standalone-gateway:local spine-ts/simple-delivery-server:local
-```
-
-Create the operator-managed prerequisites in the target namespace before applying
-the references:
-
-```bash
-kubectl create secret generic message-board-storage --from-literal=DATASTORE_PROJECT_ID=message-board-production
-# Add DATASTORE_EMULATOR_HOST only for a local emulator test.
-kubectl create secret tls message-board-envoy-tls --cert=tls.crt --key=tls.key
-```
-
-Every browser-capable combined process and standalone gateway uses the same
-issuer, audience, key ID, private key, and registry namespace; separate values
-break authenticated failover. Application-only standalone processes do not
-configure browser sessions or the subscription registry. The example does not
-persist session revocations; the gateway registry is the durable browser
-subscription state. Each process creates its Datastore client and
-passes that exact client to its storage factory.
+The Kubernetes YAML files are static references, not local-Kubernetes
+instructions. They show the same stock UI routed through Envoy and leave image
+distribution, storage provisioning, and TLS material to the cluster operator.
 
 ```bash
 kubectl apply --filename examples/message-board/deploy/kubernetes/combined.yaml
 ```
+
+Application and Gateway processes use the same Datastore configuration and
+registry namespace for their topology. Each process creates its Datastore client
+and passes that exact client to its storage factory.
 
 For multiple managed nodes, apply `standalone.yaml`. Each pod chooses its own
 explicit process and shard counts. Its public LoadBalancer service exposes Envoy
