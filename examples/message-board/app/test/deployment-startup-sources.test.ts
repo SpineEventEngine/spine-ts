@@ -26,17 +26,26 @@ describe("MessageBoard deployment entrypoints", () => {
     expect(existsSync(join(sourceRoot, "combined-server.ts"))).toBe(true);
   });
 
-  it("provides a named multi-process complete-replica entrypoint without the retired signal transport", () => {
+  it("splits multi-process coordination from complete-replica assembly without the retired signal transport", () => {
     const managed = join(sourceRoot, "multi-process-app.ts");
+    const coordinator = join(sourceRoot, "multi-process-coordinator.ts");
+    const replica = join(sourceRoot, "multi-process-replica.ts");
     expect(existsSync(managed)).toBe(true);
+    expect(existsSync(coordinator)).toBe(true);
+    expect(existsSync(replica)).toBe(true);
     const source = readFileSync(managed, "utf8");
+    const coordinatorSource = readFileSync(coordinator, "utf8");
+    const replicaSource = readFileSync(replica, "utf8");
     const deployment = readFileSync(join(sourceRoot, "deployment-config.ts"), "utf8");
 
-    expect(source).toContain("ManagedServerApplication.run");
-    expect(source).toContain("processCount: config.processCount");
-    expect(source).toContain("UniformAcrossAllShards.forNumber(config.deliveryShardCount)");
-    expect(source).toContain("new InMemorySubscriptionRegistry()");
-    expect(source).toContain("moduleUrl: import.meta.url");
+    expect(source).toContain('import("./multi-process-coordinator.js")');
+    expect(source).toContain('import("./multi-process-replica.js")');
+    expect(coordinatorSource).toContain("ManagedServerApplication.run");
+    expect(coordinatorSource).toContain("processCount: config.processCount");
+    expect(coordinatorSource).toContain('moduleUrl: new URL("./multi-process-app.js", import.meta.url).href');
+    expect(replicaSource).toContain("UniformAcrossAllShards.forNumber(config.deliveryShardCount)");
+    expect(replicaSource).toContain("new InMemorySubscriptionRegistry()");
+    expect(replicaSource).toContain("MessageBoardDeployment.configureManagedServer");
     expect(deployment).toContain('"PROCESS_COUNT"');
     expect(deployment).toContain('"DELIVERY_SHARD_COUNT"');
     expect(deployment).not.toContain('"SPINE_IPC_DIRECTORY"');
