@@ -17,6 +17,8 @@
  * Internal configuration for the To-Do managed executable.
  */
 export interface TodoManagedDeployment {
+  // prettier-ignore
+
   /**
    *
    * The managed Coordinator listener host.
