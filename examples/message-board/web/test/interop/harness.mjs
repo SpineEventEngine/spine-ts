@@ -7,11 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import {
-  create,
-  fromBinary,
-} from "../../../../../packages/proto/node_modules/@bufbuild/protobuf/dist/esm/index.js";
-import { TimestampSchema } from "../../../../../packages/proto/node_modules/@bufbuild/protobuf/dist/esm/wkt/gen/google/protobuf/timestamp_pb.js";
+import { fromBinary } from "../../../../../packages/proto/node_modules/@bufbuild/protobuf/dist/esm/index.js";
 import {
   connectNodeAdapter,
   createGrpcTransport,

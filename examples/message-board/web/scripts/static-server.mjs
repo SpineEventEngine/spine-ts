@@ -7,6 +7,8 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, resolve } from "node:path";
+import process from "node:process";
+import { URL } from "node:url";
 
 const root = resolve(import.meta.dirname, "..", "dist");
 const contentTypes = new Map([

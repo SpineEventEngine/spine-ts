@@ -1064,7 +1064,9 @@ describe("DurableSubscriptionBindings", () => {
       const settled = Promise.race([
         active.then(() => "activated"),
         new Promise<string>((resolve) => {
-          setTimeout(() => resolve("timed out"), 1);
+          setTimeout(() => {
+            resolve("timed out");
+          }, 1);
         }),
       ]);
 

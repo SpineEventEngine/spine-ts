@@ -96,7 +96,7 @@ let passiveUpdates: AsyncIterator<unknown> | undefined;
 const bigintAsString = (_key: string, value: unknown): unknown =>
   typeof value === "bigint" ? value.toString() : value;
 
-const resolveContext = async () => ({ actor });
+const resolveContext = () => Promise.resolve({ actor });
 
 const createPublicSubscription = async () =>
   Array.from(toBinary(SubscriptionSchema, await wireSubscriptions.subscribe(topic)));

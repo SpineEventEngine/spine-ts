@@ -101,11 +101,11 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
 
   async #observeAttempt(): Promise<never> {
     const setup = new AbortController();
-    const abort = () => setup.abort(this.config.signal.reason);
+    const abort = () => {
+      setup.abort(this.config.signal.reason);
+    };
     this.config.signal.addEventListener("abort", abort, { once: true });
-    let setupTimedOut = false;
     const timeout = setTimeout(() => {
-      setupTimedOut = true;
       setup.abort(new DeliveryShardObservationError());
     }, this.config.setupTimeoutMs);
     try {
@@ -119,7 +119,6 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
         }
         this.#push(this.config.decodeUpdate(frame));
       }
-      if (!acknowledged || setupTimedOut) throw new DeliveryShardObservationError();
       throw new DeliveryShardObservationError();
     } finally {
       clearTimeout(timeout);

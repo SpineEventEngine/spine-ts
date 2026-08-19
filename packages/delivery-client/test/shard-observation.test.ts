@@ -165,17 +165,27 @@ describe("DeliveryClient shard observation", () => {
           yield await new Promise<typeof update>((resolve) => {
             emit = resolve;
           });
-          await new Promise<void>((resolve) =>
-            signal.addEventListener("abort", () => resolve(), { once: true }),
-          );
+          await new Promise<void>((resolve) => {
+            signal.addEventListener(
+              "abort",
+              () => {
+                resolve();
+              },
+              { once: true },
+            );
+          });
         },
         acknowledge: (frame) => frame.value.case === "created",
         decodeUpdate: (frame) => {
           if (frame.value.case !== "update") throw new DeliveryProtocolError();
           return { shard: ShardIndex.single(), status: "NOT_PICKED", messages: 1 };
         },
-        finish: () => undefined,
-        cancel: () => controller.abort(),
+        finish: () => {
+          return undefined;
+        },
+        cancel: () => {
+          controller.abort();
+        },
       });
 
       const next = stream[Symbol.asyncIterator]().next();
@@ -199,14 +209,25 @@ describe("DeliveryClient shard observation", () => {
         reconnects: 0,
         reconnectBackoffMs: 0,
         open: async function* (signal) {
-          await new Promise<void>((resolve) =>
-            signal.addEventListener("abort", () => resolve(), { once: true }),
-          );
+          await new Promise<void>((resolve) => {
+            signal.addEventListener(
+              "abort",
+              () => {
+                resolve();
+              },
+              { once: true },
+            );
+          });
+          yield* [];
         },
         acknowledge: () => true,
         decodeUpdate: () => ({ shard: ShardIndex.single(), status: "NOT_PICKED", messages: 0 }),
-        finish: () => undefined,
-        cancel: () => controller.abort(),
+        finish: () => {
+          return undefined;
+        },
+        cancel: () => {
+          controller.abort();
+        },
       });
 
       const next = stream[Symbol.asyncIterator]().next();

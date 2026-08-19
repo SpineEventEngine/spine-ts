@@ -9,7 +9,6 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const compose = join(root, "deploy", "compose.yaml");
 const reference = join(root, "REFERENCE.md");
 const readme = join(root, "README.md");
-const gitignore = join(root, ".gitignore");
 
 test("declares one Gateway, two managed complete-replica nodes, shared storage, and simple delivery", () => {
   assert.equal(existsSync(compose), true, "the distributed Compose topology must exist");

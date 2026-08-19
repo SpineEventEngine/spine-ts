@@ -4,7 +4,8 @@ import { mkdtempSync, writeFileSync, chmodSync, rmSync, mkdirSync, readFileSync 
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { URL, fileURLToPath } from "node:url";
+import process from "node:process";
 import test from "node:test";
 
 const local = readFileSync(
