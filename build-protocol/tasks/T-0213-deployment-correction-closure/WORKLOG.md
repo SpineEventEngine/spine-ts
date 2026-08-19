@@ -34,3 +34,12 @@
 - Continued on `codex/deployment-correction-closure` from the last
   correction-related checkpoint without rewriting the previously published
   over-scoped branch.
+
+## 2026-08-19 — cheap preflight assignment
+
+- Mechanical verification function explicitly configured
+  `gpt-5.6-luna` / `low`; runtime telemetry is recorded if exposed, otherwise
+  the immutable configured profile and limitation are evidence.
+- Read-only scope: frozen dependency state, generated/tooling builds, affected
+  release metadata/removal/Todo tests, lint/policy/documentation/format/diff
+  gates, and exact failure classification. No edits or subagents.
