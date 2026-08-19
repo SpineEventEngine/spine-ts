@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Starts the local Datastore emulator, real shared Delivery, managed replicas, Gateway, and stock UI.
 set -euo pipefail
-root=$(cd "$(dirname "$0")/../../.." && pwd)
+root=${MESSAGE_BOARD_REPO_ROOT:-$(cd "$(dirname "$0")/../../.." && pwd)}
 name="message-board-delivery-$(node -e 'process.stdout.write(require("node:crypto").randomUUID())')"
 docker run --rm --name "$name" -p 8484:8484 spine-ts/simple-delivery-server:local & delivery=$!
 trap 'kill "$delivery" 2>/dev/null || true; docker rm -f "$name" 2>/dev/null || true' EXIT INT TERM
