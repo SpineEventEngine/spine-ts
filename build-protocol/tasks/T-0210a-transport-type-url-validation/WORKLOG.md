@@ -59,5 +59,6 @@ type URL.`
   pre-existing branches. Every changed executable line and every branch of the
   corrected predicate is covered on both outcomes (100%).
 
-Next: run the focused correction gates, record changed coverage, commit and
-push the correction, then return it for affected re-review.
+The correction evidence above was committed and pushed as
+`a6b3c5732 fix(transport): validate canonical type URL grammar` to
+`origin/codex/t0210a-type-url`. It is ready for affected re-review.
