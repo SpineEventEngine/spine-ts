@@ -69,6 +69,18 @@ real deployment smoke, reviews, integration, and remote cleanup.
   configuration tests passed 32/32 and `pnpm typecheck:build` passed after the
   child supplied `new InMemorySubscriptionRegistry()` to its Bounded Context.
 
+## Converged managed-container acceptance
+
+- `script -q -e /tmp/t0211-image-contract-artifact-20260819.log pnpm exec node --test examples/message-board/deploy/container/image-contract.test.mjs`
+  passed 5/5 after a clean emitted-artifact check confirmed the local image
+  contains the emulator-aware logging branch. It exercises real managed
+  Coordinator startup, Gateway forwarding, command/query/subscription/Delivery
+  behavior, and PID-1 shutdown.
+- Final focused suites passed 47/47; Compose/Kubernetes topology checks passed
+  11/11; changed configuration coverage passed 38/38 at 92.75% lines and
+  90.74% branches. Replacement deployment paths contain no retired IPC or
+  ZeroMQ configuration.
+
 ## Runtime prerequisite checkpoint
 
 | Evidence                                                                                                                                                                                     | Result                                                                                                                                                                                                                                                                                                                                                                                                                                  |

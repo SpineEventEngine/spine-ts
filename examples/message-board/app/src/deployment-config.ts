@@ -170,7 +170,7 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
 
   logger(projectId: string, environment: NodeJS.ProcessEnv): ILogLayer | undefined {
     if (environment.DATASTORE_EMULATOR_HOST !== undefined) return undefined;
-    return DeploymentValues.cloudLogger(new Logging({ projectId }).log("message-board"));
+    return MessageBoardDeployment.cloudLogger(new Logging({ projectId }).log("message-board"));
   },
 
   cloudLogger(log: Log): ILogLayer {

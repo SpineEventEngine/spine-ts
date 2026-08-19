@@ -82,3 +82,14 @@
 - The example now injects that registry only into the managed child Context.
   This uses the accepted framework facility and neither reintroduces a signal
   transport nor adds a registry or transport concept.
+
+## 2026-08-19 — converged example acceptance
+
+- Local emulator mode now retains the normal structured console logger and
+  avoids constructing the Cloud Logging transport; real cloud mode retains the
+  Cloud Logging transport. This is private Message Board composition applied
+  consistently to application, combined, Gateway, and managed entries.
+- The final retained image smoke passed 5/5 with command/query/subscription/
+  Delivery exercise. Earlier HTTP 503 diagnosis proved that unavailable
+  Coordinator replicas, not discovery timing, caused the transient failure;
+  the packaged emulator branch restored child readiness without a retry.

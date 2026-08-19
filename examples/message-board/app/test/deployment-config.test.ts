@@ -35,6 +35,15 @@ afterEach(async () => {
 });
 
 describe("MessageBoard deployment configuration", () => {
+  it("uses console logging in the local Datastore emulator and Cloud Logging elsewhere", () => {
+    expect(
+      MessageBoardDeployment.logger("message-board-test", {
+        DATASTORE_EMULATOR_HOST: "datastore:8081",
+      }),
+    ).toBeUndefined();
+    expect(MessageBoardDeployment.logger("message-board-test", {})).toBeDefined();
+  });
+
   it("composes an application logger with the official Google Cloud transport", () => {
     const entry = vi.fn((_metadata: unknown, data: unknown) => data);
     const write = vi.fn();
