@@ -3,82 +3,24 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, chmodSync, rmSync, mkdirSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const local = readFileSync(
-  new URL("./start-local-multi-process-local-delivery.sh", import.meta.url),
-  "utf8",
-);
-const shared = readFileSync(
-  new URL("./start-local-multi-process-shared-delivery.sh", import.meta.url),
+  new URL("./start-local-multi-process.sh", import.meta.url),
   "utf8",
 );
 
-test("shared Delivery launcher builds only its matching image before exact-ID startup", () => {
-  assert.match(shared, /images:build:local --target simple-delivery-server/u);
-  assert.match(shared, /delivery_id=\$\(docker run --detach/u);
-  assert.match(shared, /--env HOST=0\.0\.0\.0 --env PORT=8484/u);
-  assert.match(shared, /docker logs "\$delivery_id"/u);
-  assert.match(shared, /MESSAGE_BOARD_DELIVERY_CONTAINER="\$delivery_id"/u);
-  assert.doesNotMatch(shared, /curl --fail --silent http:\/\/127\.0\.0\.1:8484/u);
-});
-
-test("local managed launcher starts without an optional remote Delivery URL", () => {
-  assert.match(local, /if test -n "\$\{DELIVERY_SERVER_URL:-\}"/u);
-  assert.match(local, /MESSAGE_BOARD_DELIVERY_MODE="\$\{MESSAGE_BOARD_DELIVERY_MODE:-local\}"/u);
-  assert.doesNotMatch(local, /delivery_environment\[@\]/u);
-});
-
-test("shared Delivery launcher starts managed replicas in the production environment", () => {
-  const temp = mkdtempSync(join(tmpdir(), "message-board-shared-launcher-"));
-  const bin = join(temp, "bin");
-  const log = join(temp, "log");
-  const localLauncher = join(
-    temp,
-    "examples",
-    "message-board",
-    "scripts",
-    "start-local-multi-process-local-delivery.sh",
-  );
-  try {
-    mkdirSync(dirname(localLauncher), { recursive: true });
-    writeFileSync(
-      localLauncher,
-      '#!/usr/bin/env bash\nprintf "NODE_ENV=%s DELIVERY_SERVER_URL=%s MODE=%s\\n" "${NODE_ENV:-}" "${DELIVERY_SERVER_URL:-}" "${MESSAGE_BOARD_DELIVERY_MODE:-}" >>"$HARNESS_LOG"\n',
-    );
-    chmodSync(localLauncher, 0o755);
-    for (const [name, body] of Object.entries({
-      docker:
-        '#!/usr/bin/env bash\n[[ "$1" == run ]] && { echo captured-id; exit 0; }\n[[ "$1" == logs ]] && { echo "Delivery server listening"; exit 0; }\n[[ "$1" == inspect ]] && { echo true; exit 0; }\nexit 0\n',
-      pnpm: "#!/usr/bin/env bash\nexit 0\n",
-      node: "#!/usr/bin/env bash\necho fixed-id\n",
-    })) {
-      mkdirSync(bin, { recursive: true });
-      const path = join(bin, name);
-      writeFileSync(path, body);
-      chmodSync(path, 0o755);
-    }
-    const result = spawnSync(
-      "bash",
-      [fileURLToPath(new URL("./start-local-multi-process-shared-delivery.sh", import.meta.url))],
-      {
-        env: {
-          ...process.env,
-          PATH: `${bin}:${process.env.PATH}`,
-          HARNESS_LOG: log,
-          MESSAGE_BOARD_REPO_ROOT: temp,
-        },
-        encoding: "utf8",
-        timeout: 5_000,
-      },
-    );
-    assert.equal(result.status, 0, result.stderr);
-    assert.match(readFileSync(log, "utf8"), /NODE_ENV=production DELIVERY_SERVER_URL=http:\/\/127\.0\.0\.1:8484 MODE=shared/u);
-  } finally {
-    rmSync(temp, { recursive: true, force: true });
-  }
+test("managed multi-process launcher owns one shared Delivery server", () => {
+  assert.match(local, /images:build:local --target simple-delivery-server/u);
+  assert.match(local, /delivery_id=\$\(docker run --detach/u);
+  assert.match(local, /--env HOST=0\.0\.0\.0 --env PORT=8484/u);
+  assert.match(local, /docker logs "\$delivery_id"/u);
+  assert.match(local, /DELIVERY_SERVER_URL=http:\/\/127\.0\.0\.1:8484/u);
+  assert.match(local, /MESSAGE_BOARD_DELIVERY_MODE=shared/u);
+  assert.match(local, /NODE_ENV=production/u);
+  assert.doesNotMatch(local, /MESSAGE_BOARD_DELIVERY_MODE="\$\{MESSAGE_BOARD_DELIVERY_MODE:-local\}"/u);
 });
 
 test("local launcher refuses to start Gateway or UI after its Coordinator exits", () => {
@@ -90,7 +32,7 @@ test("local launcher refuses to start Gateway or UI after its Coordinator exits"
     writeFileSync(join(temp, "setup"), "", "utf8");
     for (const [name, body] of Object.entries({
       docker:
-        '#!/usr/bin/env bash\necho docker:$1 >>$HARNESS_LOG\n[[ "$1" == run ]] && { echo captured-id; exit 0; }\n[[ "$1" == inspect ]] && { echo true; exit 0; }\nexit 0\n',
+        '#!/usr/bin/env bash\necho docker:$1 >>$HARNESS_LOG\n[[ "$1" == run ]] && { echo captured-id; exit 0; }\n[[ "$1" == logs ]] && { echo "Delivery server listening"; exit 0; }\n[[ "$1" == inspect ]] && { echo true; exit 0; }\nexit 0\n',
       curl: "#!/usr/bin/env bash\nexit 0\n",
       node: "#!/usr/bin/env bash\necho node >>$HARNESS_LOG\necho fixed-id\n",
       pnpm: '#!/usr/bin/env bash\necho "pnpm:$*" >>$HARNESS_LOG\n[[ "$*" == *start:multi-process* ]] && exit 1\nexit 0\n',
@@ -102,7 +44,7 @@ test("local launcher refuses to start Gateway or UI after its Coordinator exits"
     }
     const result = spawnSync(
       "bash",
-      [fileURLToPath(new URL("./start-local-multi-process-local-delivery.sh", import.meta.url))],
+      [fileURLToPath(new URL("./start-local-multi-process.sh", import.meta.url))],
       {
         env: {
           ...process.env,
