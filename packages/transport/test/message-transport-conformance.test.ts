@@ -125,10 +125,14 @@ async function assertConformance(factory: Factory): Promise<void> {
 }
 
 async function assertChannelTypeUrlContract(factory: Factory): Promise<void> {
-  const custom = { targetType: "type.spine.examples.todo/spine.examples.todo.TaskCreated" };
-  const publisher = await factory.createPublisher(custom);
-  const subscriber = await factory.createSubscriber(custom);
-  await Promise.all([publisher.close(), subscriber.close()]);
+  for (const targetType of [
+    "type.spine.examples.todo/spine.examples.todo.TaskCreated",
+    "https://types.example/v1/spine.todo.TaskCreated",
+  ]) {
+    const publisher = await factory.createPublisher({ targetType });
+    const subscriber = await factory.createSubscriber({ targetType });
+    await Promise.all([publisher.close(), subscriber.close()]);
+  }
 
   for (const targetType of [
     "",
@@ -137,6 +141,9 @@ async function assertChannelTypeUrlContract(factory: Factory): Promise<void> {
     "type.spine.examples.todo",
     "type.spine.examples.todo/",
     "type.spine.examples.todo//spine.examples.todo.TaskCreated",
+    "type.spine.examples.todo/spine.examples.todo.",
+    "type.spine.examples.todo/spine.examples.todo..TaskCreated",
+    "type.spine.examples.todo/spine.examples.todo.1TaskCreated",
   ]) {
     await expect(factory.createPublisher({ targetType })).rejects.toThrow(/targetType|canonical/u);
     await expect(factory.createSubscriber({ targetType })).rejects.toThrow(/targetType|canonical/u);

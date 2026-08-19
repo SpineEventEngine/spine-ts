@@ -28,7 +28,15 @@ import type { ChannelId, ExternalMessage } from "@spine-event-engine/proto";
  * @internal
  */
 export function isCanonicalChannelTargetType(targetType: string): boolean {
-  return /^[^\s/]+\/[A-Za-z_][A-Za-z0-9_.]*$/u.test(targetType);
+  const separator = targetType.lastIndexOf("/");
+  if (separator <= 0) return false;
+  const prefix = targetType.slice(0, separator);
+  const fullName = targetType.slice(separator + 1);
+  return (
+    !/\s/u.test(prefix) &&
+    !prefix.endsWith("/") &&
+    /^(?:[A-Za-z_][A-Za-z0-9_]*)(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/u.test(fullName)
+  );
 }
 
 /**

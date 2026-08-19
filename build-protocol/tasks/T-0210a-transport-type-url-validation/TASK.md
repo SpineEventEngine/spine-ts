@@ -1,6 +1,6 @@
 # T-0210a — Transport channel type-URL validation
 
-**Status:** Review-ready
+**Status:** Review correction in progress
 
 ## Scope
 
@@ -28,8 +28,9 @@ No public API, Proto, configuration, registry, or transport concept is added.
   `type.spine.examples.todo/spine.examples.todo.TaskCreated` in the in-memory
   factory before product code changed.
 - GREEN: the same test executes against both in-memory and ZeroMQ factories;
-  it accepts the custom type URL and rejects empty, whitespace-bearing,
-  prefix-less, type-less, and doubled-separator values.
+  it accepts ordinary and URI/path-prefixed custom type URLs and rejects empty,
+  whitespace-bearing, prefix-less, type-less, doubled-separator, and malformed
+  Protobuf-name values.
 - Focused suite: conformance, in-memory, and ZeroMQ manifest tests.
 - Required mechanical gates: generated build, tooling typecheck, lint, format,
   documentation checks, diff hygiene, and changed-code coverage.
