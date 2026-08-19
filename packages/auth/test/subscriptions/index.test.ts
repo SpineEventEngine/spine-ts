@@ -26,7 +26,7 @@ import {
   TargetSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   InMemorySubscriptionBindings,
   SubscriptionGateway,
@@ -255,6 +255,7 @@ describe("SubscriptionGateway", () => {
             { once: true },
           );
         });
+        throw new Error("native activation stopped during cancellation");
       },
     });
     await tick();
@@ -271,6 +272,85 @@ describe("SubscriptionGateway", () => {
     await expect(cancelled).resolves.toEqual({ kind: "closed" });
     expect(cancels).toBe(1);
     expect(bindings.size).toBe(0);
+  });
+
+  it("keeps an active update stream open beyond the finite-operation timeout", async () => {
+    const bindings = new InMemorySubscriptionBindings({
+      nextId: () => "long-lived-activation",
+      limits: { operationTimeoutMs: 5 },
+      dispose: () => Promise.resolve(),
+    });
+    await bindings.create(canonicalBinding("long-lived-activation", 100));
+    const controller = new AbortController();
+    let settled = false;
+    const active = bindings.activate({
+      id: "long-lived-activation",
+      context: trustedContext(),
+      nowMs: 1,
+      signal: controller.signal,
+      onDefinition: async (_definition, signal) => {
+        await new Promise<void>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              resolve();
+            },
+            { once: true },
+          );
+        });
+      },
+    });
+    void active.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(settled).toBe(false);
+    controller.abort();
+
+    await expect(active).rejects.toThrow("aborted");
+  });
+
+  it("observes browser cancellation triggered synchronously by active work", async () => {
+    vi.useFakeTimers();
+    try {
+      const bindings = new InMemorySubscriptionBindings({
+        nextId: () => "synchronous-cancellation",
+        dispose: () => Promise.resolve(),
+      });
+      await bindings.create(canonicalBinding("synchronous-cancellation", 100));
+      const controller = new AbortController();
+      const active = bindings.activate({
+        id: "synchronous-cancellation",
+        context: trustedContext(),
+        nowMs: 1,
+        signal: controller.signal,
+        onDefinition: () => {
+          controller.abort();
+          return new Promise<void>(() => undefined);
+        },
+      });
+      const cancellation = Promise.race([
+        active,
+        new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error("activation did not observe synchronous cancellation"));
+          }, 1);
+        }),
+      ]);
+      const assertion = expect(cancellation).rejects.toThrow("subscription operation aborted");
+
+      await vi.advanceTimersByTimeAsync(1);
+
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("retains a naturally completed native activation until cancellation or expiry", async () => {
@@ -899,7 +979,7 @@ describe("SubscriptionGateway", () => {
     expect(bindings.size).toBe(0);
   });
 
-  it("waits for an abort-ignoring activation before disposing an expired binding", async () => {
+  it("disposes an expired binding once when close overlaps its active effect", async () => {
     let releaseActivation: (() => void) | undefined;
     let disposeCalls = 0;
     const bindings = new InMemorySubscriptionBindings({
@@ -923,11 +1003,13 @@ describe("SubscriptionGateway", () => {
     await tick();
     const activationOutcome = activating.catch((error: unknown) => error);
     await bindings.purgeExpired(1);
+    await bindings.purgeExpired(1);
+    const closing = bindings.close();
     await tick();
     expect(disposeCalls).toBe(0);
     defined(releaseActivation, "expected held activation")();
     await expect(activationOutcome).resolves.toBeInstanceOf(Error);
-    await tick();
+    await closing;
     expect(disposeCalls).toBe(1);
     expect(bindings.size).toBe(0);
   });

@@ -414,7 +414,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
       };
       input.signal.addEventListener("abort", abort, { once: true });
       try {
-        await this.#runEffect(binding, input.onDefinition);
+        await this.#runActiveEffect(binding, input.onDefinition);
       } catch (error) {
         if (binding.cancelRequested) return { kind: "activated" };
         binding.state = "inactive";
@@ -498,6 +498,32 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     this.#bindings.delete(id);
   }
   async #runEffect(binding: Binding, callback: OnSubscriptionDefinition): Promise<void> {
+    const effect = this.#startEffect(binding, callback);
+    await SubscriptionGatewayValues.withTimeout(
+      effect,
+      this.#limits.operationTimeoutMs,
+      binding.controller,
+    );
+  }
+  async #runActiveEffect(binding: Binding, callback: OnSubscriptionDefinition): Promise<void> {
+    let observeAbort = () => undefined;
+    const aborted = new Promise<"aborted">((resolve) => {
+      observeAbort = () => {
+        resolve("aborted");
+      };
+      binding.controller.signal.addEventListener("abort", observeAbort, { once: true });
+    });
+    try {
+      if (binding.controller.signal.aborted) throw new Error("subscription operation aborted");
+      const effect = this.#startEffect(binding, callback);
+      const result = await Promise.race([effect.then(() => "settled" as const), aborted]);
+      if (result === "settled" || binding.cancelRequested) return;
+    } finally {
+      binding.controller.signal.removeEventListener("abort", observeAbort);
+    }
+    throw new Error("subscription operation aborted");
+  }
+  #startEffect(binding: Binding, callback: OnSubscriptionDefinition): Promise<void> {
     const definition = SubscriptionGatewayValues.copyPublic({
       kind: "public-subscription",
       bytes: binding.definition,
@@ -518,15 +544,8 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
       () => undefined,
     );
     binding.effectTail = binding.effectTail.then(() => settled);
-    try {
-      await SubscriptionGatewayValues.withTimeout(
-        effect,
-        this.#limits.operationTimeoutMs,
-        binding.controller,
-      );
-    } finally {
-      void settled.then(() => definition.bytes.fill(0));
-    }
+    void settled.then(() => definition.bytes.fill(0));
+    return effect;
   }
   #disposeAfterWork(id: string, binding: Binding): Promise<void> {
     const cleanup = binding.tail
