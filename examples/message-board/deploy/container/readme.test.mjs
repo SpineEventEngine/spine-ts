@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, URL } from "node:url";
 import test from "node:test";
 
 const readme = readFileSync(fileURLToPath(new URL("./README.md", import.meta.url)), "utf8");
