@@ -228,7 +228,9 @@ describe("MessageBoard deployment entrypoints", () => {
       }),
     }));
     vi.doMock("@spine-event-engine/server", () => ({
-      InMemorySubscriptionRegistry: class {},
+      InMemorySubscriptionRegistry: class {
+        readonly namespace = "test";
+      },
       ManagedServerApplication: { run: vi.fn() },
       UniformAcrossAllShards: { forNumber: vi.fn(() => "shards") },
     }));
@@ -239,12 +241,14 @@ describe("MessageBoard deployment entrypoints", () => {
       },
     }));
     vi.doMock("../src/index.js", () => ({
-      MessageBoardApplication: class { startManagedApplication = startManagedApplication; },
+      MessageBoardApplication: class {
+        startManagedApplication = startManagedApplication;
+      },
     }));
     const { managedReplicaOptions } = await import("../src/multi-process-replica.js");
     const config = { projectId: "project", deliveryShardCount: 2 } as never;
     const options = managedReplicaOptions(config);
-    await expect(options.createServer({ host: "127.0.0.1", port: 8091 } as never)).resolves.toBe(started);
+    await expect(options.createServer({ host: "127.0.0.1", port: 8091 })).resolves.toBe(started);
     expect(options.synchronize).toBeDefined();
     await options.synchronize?.();
     expect(configureManagedServer).toHaveBeenCalledWith(config, client, process.env, "logger");
