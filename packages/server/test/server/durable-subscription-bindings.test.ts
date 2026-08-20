@@ -13,7 +13,10 @@
  */
 
 import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
-import { GatewayAuthenticatedSubscriptionSchema } from "@spine-event-engine/proto/auth";
+import {
+  GatewayAuthenticatedSubscriptionSchema,
+  GatewayPublicSubscriptionSchema,
+} from "@spine-event-engine/proto/auth";
 import { SubscriptionSchema, TopicSchema } from "@spine-event-engine/proto/client";
 import { ActorContextSchema, TenantIdSchema } from "@spine-event-engine/proto";
 import {
@@ -24,6 +27,7 @@ import {
 } from "@spine-event-engine/storage";
 import { describe, expect, it, vi } from "vitest";
 
+import * as Server from "../../src/index.js";
 import { DurableSubscriptionBindings, isDurableSubscriptionBindings } from "../../src/index.js";
 import { attachDurableSubscriptionCleanup } from "../../src/server/durable-subscription-bindings.js";
 
@@ -60,6 +64,99 @@ function rawRecord(input: {
 }
 
 describe("DurableSubscriptionBindings", () => {
+  it("stores a public orphan cleanup record before native subscription admission", async () => {
+    const factory = new InMemoryStorageFactory();
+    const open = factory.createRecordStorage.bind(factory);
+    let spec: RecordSpec<unknown, never> | undefined;
+    factory.createRecordStorage = ((
+      context: StorageContext,
+      candidate: RecordSpec<unknown, never>,
+    ) => {
+      spec = candidate;
+      return open(context, candidate as never);
+    }) as never;
+
+    expect(Server.DurablePublicSubscriptionBindings).toBeDefined();
+    const bindings = new Server.DurablePublicSubscriptionBindings!({
+      storageFactory: factory,
+      namespace: "public-approved-record",
+      nextId: () => "public-one",
+      cleanup: () => Promise.resolve(),
+    });
+    await bindings.create({ topic: { kind: "subscription-topic", bytes: topic() } });
+
+    expect(spec?.recordType).toBe(GatewayPublicSubscriptionSchema);
+    expect(spec?.sourceType).toBe(GatewayPublicSubscriptionSchema);
+    expect(spec?.columns).toEqual([]);
+    await bindings.close();
+  });
+
+  it("retains a failed public orphan cleanup row for a later bounded retry", async () => {
+    let sequence = 0;
+    let attempts = 0;
+    const bindings = new Server.DurablePublicSubscriptionBindings!({
+      storageFactory: new InMemoryStorageFactory(),
+      namespace: "public-retry",
+      nextId: () => `public-${(++sequence).toString()}`,
+      cleanup: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("native unavailable");
+      },
+    });
+    await bindings.create({ topic: { kind: "subscription-topic", bytes: topic() } });
+
+    await expect(bindings.cleanupOrphans()).rejects.toThrow("native unavailable");
+    await expect(bindings.cleanupOrphans()).resolves.toBeUndefined();
+    expect(attempts).toBe(2);
+    await bindings.close();
+  });
+
+  it("cancels public definitions before deleting their durable cleanup rows", async () => {
+    let sequence = 0;
+    const cancelled: string[] = [];
+    const bindings = new Server.DurablePublicSubscriptionBindings!({
+      storageFactory: new InMemoryStorageFactory(),
+      namespace: "public-cancel",
+      nextId: () => `public-${(++sequence).toString()}`,
+      cleanup: () => Promise.resolve(),
+    });
+    const wire = await bindings.create({ topic: { kind: "subscription-topic", bytes: topic() } });
+    const id = subscriptionId(wire.bytes);
+
+    await expect(
+      bindings.cancel({
+        id,
+        context,
+        nowMs: 0,
+        onDefinition: async (definition) => {
+          cancelled.push(subscriptionId(definition.bytes));
+        },
+      }),
+    ).resolves.toEqual({ kind: "closed" });
+    await expect(bindings.cleanupOrphans()).resolves.toBeUndefined();
+    expect(cancelled).toEqual([id]);
+    await bindings.close();
+  });
+
+  it("aborts an active public definition before its queued cancellation", async () => {
+    const bindings = new Server.DurablePublicSubscriptionBindings!({
+      storageFactory: new InMemoryStorageFactory(), namespace: "public-active", nextId: () => "public-active", cleanup: () => Promise.resolve(),
+    });
+    const wire = await bindings.create({ topic: { kind: "subscription-topic", bytes: topic() } });
+    const id = subscriptionId(wire.bytes);
+    let started: (() => void) | undefined;
+    const activeStarted = new Promise<void>((resolve) => { started = resolve; });
+    const active = bindings.activate({ id, context, nowMs: 0, signal: new AbortController().signal, onDefinition: (_wire, signal) => new Promise((resolve) => {
+      signal.addEventListener("abort", () => { resolve(); }, { once: true });
+      started?.();
+    }) });
+    await activeStarted;
+    const cancelled = bindings.cancel({ id, context, nowMs: 0, onDefinition: () => Promise.resolve() });
+    await expect(cancelled).resolves.toEqual({ kind: "closed" });
+    await expect(active).resolves.toEqual({ kind: "activated" });
+    await bindings.close();
+  });
+
   it("stores the approved authenticated subscription record directly", () => {
     const factory = new InMemoryStorageFactory();
     const open = factory.createRecordStorage.bind(factory);

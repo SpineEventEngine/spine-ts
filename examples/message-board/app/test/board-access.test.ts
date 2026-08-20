@@ -127,7 +127,7 @@ describe("MessageBoard gateway policy", () => {
       unary,
       subscriptions,
       requests: {
-        // Mirrors BrowserServer's missing-Authorization sentinel; PublicBoardAdmission ignores it.
+        // Mirrors BrowserServer's missing-Authorization sentinel in public-access mode.
         credential: () => ({ kind: "bearer", value: "" }),
         transport: () => ({ service: "ignored", method: "ignored" }),
       },

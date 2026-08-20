@@ -54,14 +54,14 @@ describe("MessageBoard deployment entrypoints", () => {
     expect(deployment).not.toContain('"SPINE_IPC_DIRECTORY"');
   });
 
-  it("configures both browser modes with one named durable binding assembly", () => {
+  it("configures the standalone Gateway with the public cleanup ledger and leaves combined in memory", () => {
     const gateway = readFileSync(join(sourceRoot, "gateway-server.ts"), "utf8");
     const combined = readFileSync(join(sourceRoot, "combined-server.ts"), "utf8");
     const deployment = readFileSync(join(sourceRoot, "deployment-config.ts"), "utf8");
-    expect(deployment).toContain("new DurableSubscriptionBindings");
+    expect(deployment).toContain("new DurablePublicSubscriptionBindings");
     expect(deployment).toContain("storageFactory,");
-    expect(gateway).toContain("MessageBoardDeployment.bindings(config, storage)");
-    expect(combined).toContain("bindings: MessageBoardDeployment.bindings(config, storage)");
+    expect(gateway).toContain("MessageBoardDeployment.publicBindings(config, storage)");
+    expect(combined).not.toContain("bindings:");
     expect(gateway).toContain("bindings,");
     expect(deployment).toContain('"SUBSCRIPTION_REGISTRY_NAMESPACE"');
   });
@@ -113,10 +113,7 @@ describe("MessageBoard deployment entrypoints", () => {
       process.env,
       calls.logger,
     );
-    expect(calls.runCombined).toHaveBeenCalledWith(
-      expect.objectContaining({ bindings: calls.bindings }),
-      calls.storageResult,
-    );
+    expect(calls.runCombined).toHaveBeenCalledWith(calls.combinedConfig, calls.storageResult);
   });
 
   it("executes gateway startup with configured browser bindings", async () => {
@@ -304,7 +301,7 @@ function startupMocks() {
       configureGatewayServer,
       logger: createLogger,
       storage: storageFactory,
-      bindings: () => bindings,
+      publicBindings: () => bindings,
     },
   }));
   vi.doMock("../src/index.js", () => ({

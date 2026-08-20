@@ -366,7 +366,9 @@ can be retried without repeating completed native cleanup.
 Browser subscription bindings are separate from service subscription
 records. `BrowserServerOptions.bindings` accepts the `SubscriptionBindings`
 contract from `@spine-event-engine/auth`. Production browser assembly requires
-the Server package's `DurableSubscriptionBindings`; it rejects a missing or
+the Server package's `DurableSubscriptionBindings`. Public standalone listeners
+instead require `DurablePublicSubscriptionBindings`, which cancels orphaned
+native definitions before listener intake; it rejects a missing or
 in-memory binding store before listener open. The durable registry receives an explicit
 application namespace, storage factory, identifier source, and cleanup callback. It closes only
 its independently opened record-storage handle, not the application storage

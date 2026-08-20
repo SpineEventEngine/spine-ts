@@ -45,6 +45,19 @@
   affected Gateway/subscription/Message Board paths. Runtime telemetry will be
   recorded if the surface exposes it.
 
+## 2026-08-20 — implementation ownership transfer
+
+- The first implementer pushed the purge, public Subscription/Unary/Browser
+  access, Message Board fake-session deletion, and approved public-record Proto
+  checkpoints through `175b26ea`.
+- Its later turns terminated immediately at the generated-output seam without
+  implementing the assigned ledger. There was no technical blocker, but the
+  context was no longer productive, so overlapping ownership was closed.
+- Transferred only the remaining durable public ledger, BrowserServer startup
+  orphan cleanup, standalone Message Board wiring, tests/docs/coverage/preflight
+  to a new existing `implementer` role with explicit `gpt-5.6-terra` / `medium`.
+  The new owner may not spawn subagents or rewrite published checkpoints.
+
 ## 2026-08-20 — durable maintenance correction checkpoint
 
 - Preserved and ran the supplied RED tests. The durable test failed with the
@@ -72,6 +85,22 @@
   authenticated mode retains its exact timestamp and timer behavior.
 - This is only the auth subscription layer. Unary Gateway, Browser Server,
   durable public orphan cleanup, Proto, and Message Board composition remain.
+
+## 2026-08-20 — public orphan ledger implementation checkpoint
+
+- Replacement implementer accepted the existing `implementer` role with the
+  explicitly configured `gpt-5.6-terra` / `medium` profile. Runtime telemetry
+  is not exposed by this surface, so immutable dispatch configuration is the
+  available provenance.
+- Observed RED tests for the missing `DurablePublicSubscriptionBindings` export,
+  then for rejecting authenticated durable bindings in production public
+  standalone mode. Both now pass.
+- Added the direct approved-record public ledger. It atomically persists before
+  native Subscribe, has no expiry/recovery path, cancels before CAS deletion,
+  and scans bounded pages on standalone startup; a cleanup failure leaves its
+  row intact and fails startup.
+- Standalone Message Board now selects the public durable ledger; combined
+  mode intentionally leaves public bindings framework-owned and in-memory.
 
 ## 2026-08-20 — unary public admission checkpoint
 

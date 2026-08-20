@@ -20,7 +20,7 @@
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import { StringifierRegistry } from "@spine-event-engine/core";
 import {
-  DurableSubscriptionBindings,
+  DurablePublicSubscriptionBindings,
   EnvironmentType,
   ServerEnvironment,
   type ServerEnvironmentDelivery,
@@ -68,7 +68,10 @@ interface DeploymentContract {
   gateway(environment: NodeJS.ProcessEnv): GatewayConfig;
   managed(environment: NodeJS.ProcessEnv): ManagedConfig;
   storage(client: Datastore): StorageFactory;
-  bindings(config: CombinedConfig, storageFactory: StorageFactory): DurableSubscriptionBindings;
+  publicBindings(
+    config: GatewayConfig,
+    storageFactory: StorageFactory,
+  ): DurablePublicSubscriptionBindings;
   logger(projectId: string, environment: NodeJS.ProcessEnv): ILogLayer | undefined;
   cloudLogger(log: Log): ILogLayer;
 
@@ -155,8 +158,11 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
       .build();
   },
 
-  bindings(config: CombinedConfig, storageFactory: StorageFactory): DurableSubscriptionBindings {
-    return new DurableSubscriptionBindings({
+  publicBindings(
+    config: GatewayConfig,
+    storageFactory: StorageFactory,
+  ): DurablePublicSubscriptionBindings {
+    return new DurablePublicSubscriptionBindings({
       storageFactory,
       namespace: config.subscriptionNamespace,
       nextId: randomUUID,

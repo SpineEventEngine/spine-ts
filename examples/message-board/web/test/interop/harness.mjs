@@ -38,7 +38,7 @@ import {
   MessageBoardApplication,
   typeRegistry,
 } from "../../../../../examples/message-board/app/dist/src/index.js";
-import { PublicBoardAdmission } from "../../../../../examples/message-board/app/dist/src/public-board-admission.js";
+import { SystemClock } from "../../../../../examples/message-board/app/dist/src/system-clock.js";
 import { renderEnvoy } from "../../../../../interop/envoy/render.mjs";
 
 const run = promisify(execFile);
@@ -176,12 +176,11 @@ export async function startTopology({ lifecycle = {} } = {}) {
     };
     const policy = new BoardAccessPolicy();
     const contexts = new BoardContextResolver();
-    const clock = PublicBoardAdmission.clock;
-    const sessions = PublicBoardAdmission.resolver();
+    const clock = new SystemClock();
     const unary = new UnaryGateway({
       registry: typeRegistry,
       maxRequestBytes: 1_048_576,
-      sessions,
+      publicAccess: true,
       authorize: policy.authorize.bind(policy),
       contexts,
       clock,
@@ -207,7 +206,7 @@ export async function startTopology({ lifecycle = {} } = {}) {
     cleanup.add("subscription bindings", 80, () => bindings.close());
     const subscriptions = createSubscriptions({
       bindings,
-      sessions,
+      publicAccess: true,
       authorize: policy.authorize.bind(policy),
       contexts,
       clock,
