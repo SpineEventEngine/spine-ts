@@ -361,7 +361,7 @@ export interface NativeGatewayRequestContext {
    * @param context The incoming Connect handler context.
    * @returns The extracted request credential.
    */
-  credential(context: HandlerContext): RequestCredential;
+  credential(context: HandlerContext): RequestCredential | undefined;
 
   /**
    * Reads the allowlisted authorization and diagnostic transport view for the gateway only.

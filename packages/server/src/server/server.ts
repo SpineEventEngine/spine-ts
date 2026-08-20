@@ -697,7 +697,10 @@ export interface BrowserServerOptions {
   /**
    * Resolves bearer or opaque-cookie sessions selected by the application.
    */
-  readonly sessions: SessionResolver;
+  readonly sessions?: SessionResolver;
+
+  /** Enables framework-owned non-session public admission. */
+  readonly publicAccess?: true;
 
   /**
    * Applies application authorization after authentication.

@@ -77,7 +77,7 @@ export const BrowserServer: Readonly<{
     credential(context: { readonly requestHeader: Headers }): {
       readonly kind: "bearer" | "cookie";
       readonly value: string;
-    };
+    } | undefined;
     transport(context: { readonly requestHeader: Headers }): ReturnType<typeof TransportFacts.from>;
   };
   origins(origins: readonly string[]): ReadonlySet<string>;
@@ -167,7 +167,8 @@ export const BrowserServer: Readonly<{
     const unary = new UnaryGateway({
       ...(options.registry === undefined ? {} : { registry: options.registry }),
       maxRequestBytes: 1_048_576,
-      sessions: options.sessions,
+      ...(options.sessions === undefined ? {} : { sessions: options.sessions }),
+      ...(options.publicAccess === true ? { publicAccess: true } : {}),
       authorize: options.authorize,
       contexts: options.contexts,
       clock: options.clock,
@@ -175,7 +176,8 @@ export const BrowserServer: Readonly<{
     });
     const subscriptions = new SubscriptionGateway({
       bindings,
-      sessions: options.sessions,
+      ...(options.sessions === undefined ? {} : { sessions: options.sessions }),
+      ...(options.publicAccess === true ? { publicAccess: true } : {}),
       authorize: options.authorize,
       contexts: options.contexts,
       clock: options.clock,
@@ -323,7 +325,7 @@ export const BrowserServer: Readonly<{
           return extracted.kind === "rejected" ? { kind: "bearer" as const, value: "" } : extracted;
         }
         const bearer = /^Bearer ([^\s]+)$/.exec(context.requestHeader.get("authorization") ?? "");
-        return { kind: "bearer" as const, value: bearer?.[1] ?? "" };
+        return bearer === null ? undefined : { kind: "bearer" as const, value: bearer[1] ?? "" };
       },
       transport: (context: { readonly requestHeader: Headers }) => {
         const origin = context.requestHeader.get("origin");
@@ -404,8 +406,8 @@ export const BrowserServer: Readonly<{
       BrowserServer.backendUrls(BrowserServerValues.backendUrlsFor(options.backend));
     }
     if (standalone) {
-      if (supplied.sessions === undefined || typeof supplied.sessions.resolve !== "function")
-        throw new Error("Standalone browser server requires sessions.");
+      if ((supplied.sessions === undefined) === (options.publicAccess !== true))
+        throw new Error("Standalone browser server requires exactly one of sessions or publicAccess.");
       if (typeof options.authorize !== "function")
         throw new Error("Standalone browser server requires authorization.");
       if (

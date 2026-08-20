@@ -629,7 +629,7 @@ export interface SubscriptionGatewayRequest {
   /**
    * Carries the credential used for this admission.
    */
-  readonly credential: RequestCredential;
+  readonly credential?: RequestCredential | undefined;
 
   /**
    * Carries allowlisted transport facts.
@@ -945,7 +945,9 @@ export class SubscriptionGateway {
     const session =
       this.#options.publicAccess === true
         ? { principal: SubscriptionGatewayValues.publicPrincipal }
-        : await this.#options.sessions?.resolve(request.credential);
+        : request.credential === undefined
+          ? undefined
+          : await this.#options.sessions?.resolve(request.credential);
     if (session === undefined) return SubscriptionGatewayValues.rejected("unauthenticated");
     const authorization = SubscriptionGatewayValues.decode(
       kind,
@@ -1326,7 +1328,9 @@ const SubscriptionGatewayValues = Object.freeze({
       service: request.service,
       method: request.method,
       wire: { kind: request.wire.kind, bytes: request.wire.bytes.slice() },
-      credential: { kind: request.credential.kind, value: request.credential.value },
+      ...(request.credential === undefined
+        ? {}
+        : { credential: { kind: request.credential.kind, value: request.credential.value } }),
       transport: SubscriptionGatewayValues.snapshotTransport(request),
       ...(request.updates === undefined ? {} : { updates: request.updates }),
       ...(request.signal === undefined ? {} : { signal: request.signal }),

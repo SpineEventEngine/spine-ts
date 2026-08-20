@@ -64,7 +64,7 @@ export interface UnaryGatewayRequest {
   /**
    * Holds the credential resolved by the gateway.
    */
-  readonly credential?: RequestCredential;
+  readonly credential?: RequestCredential | undefined;
 
   /**
    * Holds the allowlisted request transport facts.
