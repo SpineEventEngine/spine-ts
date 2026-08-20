@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { dependencyFirstOrder, packedManifestProblems } from "./package-artifacts.mjs";
+import {
+  dependencyFirstOrder,
+  packedArchiveProblems,
+  packedManifestProblems,
+} from "./package-artifacts.mjs";
 
 describe("package artifacts", () => {
   it("rejects a packed manifest with a workspace dependency", () => {
@@ -12,6 +16,18 @@ describe("package artifacts", () => {
       }),
     ).toEqual([
       "@spine-event-engine/example dependencies @spine-event-engine/core must not use workspace:*",
+    ]);
+  });
+
+  it("requires package metadata and reader files in every archive", () => {
+    expect(
+      packedArchiveProblems({ name: "@spine-event-engine/example" }, [
+        "package/package.json",
+        "package/README.md",
+      ]),
+    ).toEqual([
+      "@spine-event-engine/example archive is missing LICENSE",
+      "@spine-event-engine/example archive is missing REFERENCE.md",
     ]);
   });
 
