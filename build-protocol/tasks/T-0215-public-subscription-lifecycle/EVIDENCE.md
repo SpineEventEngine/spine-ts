@@ -141,6 +141,16 @@
   formatting, TypeDoc/API, audience, snippets, Buf, generated cleanliness,
   logging containment, and release readiness.
 
+## Integration
+
+- `origin/main` remained at the reviewed baseline with no divergent commits, so
+  integration was a conflict-free fast-forward of the verified branch.
+- The dirty, stale local `main` worktree was not modified. Remote `main` and the
+  feature branch were advanced directly from the isolated verified worktree.
+- Private planning notes were restored locally after verification as untracked
+  files with their pre-removal SHA-256 hashes unchanged; they are absent from
+  the product branch.
+
 ## Cheap-preflight containment evidence
 
 - `pnpm check:logging-containment` initially failed only because

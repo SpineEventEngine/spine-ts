@@ -176,6 +176,15 @@
   files skipped by their existing gates. Global coverage is 93.47% statements,
   90.07% branches, 93.02% functions, and 94.61% lines.
 
+## 2026-08-20 — integration and closure
+
+- Confirmed `origin/main` was still the reviewed baseline and the feature was a
+  pure fast-forward with no divergent commit or conflict.
+- Advanced remote `main` from the isolated verified worktree, leaving the dirty
+  and stale local `main` worktree untouched.
+- Restored the preserved private planning notes locally as untracked files and
+  confirmed their hashes were unchanged. The task is complete and closed.
+
 ## 2026-08-20 — cheap-preflight containment correction
 
 - Registered the existing public pending-subscription cleanup log boundary as a

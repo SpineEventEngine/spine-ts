@@ -1,6 +1,6 @@
 # T-0215 — Public subscription lifecycle and cleanup contention
 
-**Status:** Implementation and live acceptance green; specialist review in progress
+**Status:** Complete, reviewed, release-verified, and integrated into `main`
 
 **Baseline:** `origin/main@fb79e3a4b637b44bc7ec7a5c03fb8dde1c19e102`
 
