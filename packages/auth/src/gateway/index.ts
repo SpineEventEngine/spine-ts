@@ -117,7 +117,9 @@ export interface UnaryGatewayOptions {
    */
   readonly sessions?: SessionResolver;
 
-  /** Admits requests under the framework-owned non-session public principal. */
+  /**
+   * Admits requests under the framework-owned non-session public principal.
+   */
   readonly publicAccess?: true;
 
   /**
@@ -313,9 +315,13 @@ export class UnaryGateway {
     };
   }
 
-  async #session(
-    credential: RequestCredential | undefined,
-  ): Promise<{ readonly principal: { readonly id: string }; readonly expiresAt?: import("@bufbuild/protobuf/wkt").Timestamp } | undefined> {
+  async #session(credential: RequestCredential | undefined): Promise<
+    | {
+        readonly principal: { readonly id: string };
+        readonly expiresAt?: import("@bufbuild/protobuf/wkt").Timestamp;
+      }
+    | undefined
+  > {
     if (this.#options.publicAccess === true)
       return { principal: UnaryGatewayValues.publicPrincipal };
     if (credential === undefined) return undefined;

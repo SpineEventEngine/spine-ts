@@ -699,7 +699,9 @@ export interface BrowserServerOptions {
    */
   readonly sessions?: SessionResolver;
 
-  /** Enables framework-owned non-session public admission. */
+  /**
+   * Enables framework-owned non-session public admission.
+   */
   readonly publicAccess?: true;
 
   /**

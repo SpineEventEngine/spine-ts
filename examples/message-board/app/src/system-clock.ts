@@ -16,8 +16,19 @@ import { create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type { Clock } from "@spine-event-engine/auth";
 
-/** Supplies the current wall-clock timestamp for Message Board Gateway decisions. */
+/**
+ *
+ * Supplies the current wall-clock timestamp for Message Board Gateway decisions.
+ */
 export class SystemClock implements Clock {
+  // prettier-ignore
+
+  /**
+   *
+   * Returns the current wall-clock time.
+   *
+   * @returns The current time as a Protobuf timestamp.
+   */
   now(): ReturnType<Clock["now"]> {
     const milliseconds = Date.now();
     return create(TimestampSchema, {

@@ -12,5 +12,9 @@
  * the License.
  */
 
-/** Bounds setup resources while a subscribed definition waits for Activate. @internal */
+/**
+ * Bounds setup resources while a subscribed definition waits for activation.
+ *
+ * @internal
+ */
 export const SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS = 30_000;
