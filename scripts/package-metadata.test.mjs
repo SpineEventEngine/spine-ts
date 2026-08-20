@@ -187,6 +187,37 @@ describe("package metadata", () => {
     ).toBe(true);
   });
 
+  it("makes exactly the framework packages publishable to the snapshot registry", () => {
+    const frameworkPackages = productionPackagePaths(repoRoot);
+    const publicationConfig = {
+      registry: "https://registry.npmjs.org/",
+      access: "public",
+      tag: "snapshot",
+    };
+
+    expect(frameworkPackages).toHaveLength(18);
+    for (const packagePath of frameworkPackages) {
+      const packageJson = readJson(`${packagePath}/package.json`);
+
+      expect(packageJson.private).not.toBe(true);
+      expect(packageJson.description).toEqual(expect.any(String));
+      expect(packageJson.description.trim()).not.toBe("");
+      expect(packageJson.publishConfig).toEqual(publicationConfig);
+      expect(packageJson.repository).toEqual({
+        type: "git",
+        url: "https://github.com/SpineEventEngine/spine-ts",
+        directory: packagePath,
+      });
+    }
+
+    expect(readJson("package.json").private).toBe(true);
+    for (const workspacePackage of readWorkspacePackages(repoRoot).filter((workspacePackage) =>
+      workspacePackage.path.startsWith("examples/"),
+    )) {
+      expect(workspacePackage.manifest.private).toBe(true);
+    }
+  });
+
   it("derives every workspace version from the root package version", () => {
     const rootPackage = readJson("package.json");
     const workspacePackages = readWorkspacePackages(repoRoot);

@@ -5,7 +5,14 @@ ready. Start with a fixed list for a combined or local distributed deployment;
 move to a leased registry when nodes can be replaced independently. The
 [reference](REFERENCE.md) holds the exact discovery and lease contract.
 
-This package is currently private to this workspace rather than published for npm installation. Workspace consumers create `ApplicationNode` values and publish initial and replacement complete sets with `StaticNodeDiscovery`. Each snapshot is authoritative membership input; the consumer reconciler compares stable IDs, canonical HTTP(S) origins, and HTTPS TLS names. The expected 32 nodes is an operational expectation, never a routing cap.
+Install this experimental package as
+`@spine-event-engine/deployment@2.0.0-snapshot.2` or with the explicit
+`@spine-event-engine/deployment@snapshot` tag. Consumers create
+`ApplicationNode` values and publish initial and replacement complete sets
+with `StaticNodeDiscovery`. Each snapshot is authoritative membership input;
+the consumer reconciler compares stable IDs, canonical HTTP(S) origins, and
+HTTPS TLS names. The expected 32 nodes is an operational expectation, never a
+routing cap.
 
 ```ts
 import { ApplicationNode, StaticNodeDiscovery } from "@spine-event-engine/deployment";

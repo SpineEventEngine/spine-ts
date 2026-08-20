@@ -353,6 +353,18 @@ describe("check-release-readiness", () => {
     });
   });
 
+  it("allows explicit experimental snapshot package installation", () => {
+    withTempRepository((repoRoot) => {
+      writeFileSync(
+        join(repoRoot, "README.md"),
+        "Run pnpm add @spine-event-engine/core@2.0.0-snapshot.2.\n",
+      );
+      execFileSync("git", ["add", "README.md"], { cwd: repoRoot });
+
+      expect(collectUserFacingDocumentationProblems(repoRoot)).toEqual([]);
+    });
+  });
+
   it("rejects retired delivery observer and batch APIs in reader documentation", () => {
     withTempRepository((repoRoot) => {
       writeFileSync(

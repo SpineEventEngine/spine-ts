@@ -5,8 +5,10 @@ Spine backend. Start here after the package READMEs when you need to compose
 sign-in, Commands, Queries, and subscriptions without exposing a native
 backend. For declarations, use the [API index](api/README.md).
 
-The packages are not published to npm yet. This repository's workspace is the
-supported source for the commands and examples below.
+The framework packages are available as experimental npm snapshots. Install
+`@spine-event-engine/client-web@2.0.0-snapshot.2` (or the explicit
+`@spine-event-engine/client-web@snapshot` tag); do not use an unqualified
+npm install.
 
 ## Responsibilities
 

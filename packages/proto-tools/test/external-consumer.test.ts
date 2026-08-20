@@ -29,17 +29,44 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { packFrameworkArtifacts } from "../../../scripts/snapshot-artifacts.mjs";
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const spineVersion = (
   JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")) as { version: string }
 ).version;
 const processTimeoutMs = 30_000;
+const frameworkPackageRoots = [
+  "@spine-event-engine/auth",
+  "@spine-event-engine/client-node",
+  "@spine-event-engine/client-react",
+  "@spine-event-engine/client-web",
+  "@spine-event-engine/core",
+  "@spine-event-engine/delivery-client",
+  "@spine-event-engine/delivery-server",
+  "@spine-event-engine/deployment",
+  "@spine-event-engine/deployment-gce",
+  "@spine-event-engine/deployment-gke",
+  "@spine-event-engine/proto",
+  "@spine-event-engine/proto-tools",
+  "@spine-event-engine/server",
+  "@spine-event-engine/storage",
+  "@spine-event-engine/storage-datastore",
+  "@spine-event-engine/storage-rdbms",
+  "@spine-event-engine/testing",
+  "@spine-event-engine/transport",
+] as const;
 
 interface PackedPackage {
   readonly name: string;
   readonly tarball: string;
 }
+
+const typedPackFrameworkArtifacts = packFrameworkArtifacts as unknown as (options: {
+  root: string;
+  destination: string;
+  run: (command: string, args: readonly string[], cwd: string) => void;
+}) => readonly PackedPackage[];
 
 describe("Windows spine-proto shim", () => {
   it("requires one quoted command string for a shim path containing spaces", () => {
@@ -74,46 +101,30 @@ function run(command: string, args: readonly string[], cwd: string): void {
 }
 
 function packSpinePackages(destination: string): readonly PackedPackage[] {
-  run("pnpm", ["--dir", "packages/proto-tools", "exec", "tsc", "-b"], repositoryRoot);
-  const sources = [
-    "packages/proto-tools",
-    "packages/server",
-    "packages/deployment",
-    "packages/auth",
-    "packages/proto",
-    "packages/core",
-    "packages/storage",
-    "packages/transport",
-  ];
-  for (const source of sources) {
-    run(
-      "pnpm",
-      ["--dir", source, "pack", "--config.ignore-scripts=true", "--pack-destination", destination],
-      repositoryRoot,
-    );
-  }
-
-  return readdirSync(destination)
-    .filter((name) => name.endsWith(".tgz"))
-    .map((name) => {
-      const tarball = join(destination, name);
-      const packageName = readPackedName(tarball);
-      return { name: packageName, tarball };
-    });
+  return typedPackFrameworkArtifacts({
+    root: repositoryRoot,
+    destination,
+    run: (command, args, cwd) => {
+      run(command, args, cwd);
+    },
+  });
 }
 
 function installTarballsWithPnpm(directory: string, packages: readonly PackedPackage[]): void {
-  const dependencies = Object.fromEntries(
-    packages.map(({ name, tarball }) => [name, `file:${tarball}`]),
-  );
+  const dependencies = {
+    "@bufbuild/protobuf": "2.12.1",
+    ...Object.fromEntries(packages.map(({ name, tarball }) => [name, `file:${tarball}`])),
+  };
   const overrides = {
     ...dependencies,
   };
   writeJson(directory, "package.json", {
     name: "@external/proto-tools-cli",
+    version: "1.0.0",
     private: true,
     type: "module",
     dependencies,
+    devDependencies: { typescript: "6.0.3" },
   });
   writeFileSync(
     join(directory, "pnpm-workspace.yaml"),
@@ -121,7 +132,7 @@ function installTarballsWithPnpm(directory: string, packages: readonly PackedPac
       .map(([name, tarball]) => `  ${JSON.stringify(name)}: ${JSON.stringify(tarball)}`)
       .join("\n")}\n`,
   );
-  run("pnpm", ["install", "--offline", "--ignore-scripts"], directory);
+  run("pnpm", ["install", "--prod=false", "--ignore-scripts"], directory);
 }
 
 function windowsShimCommand(shim: string): string {
@@ -260,17 +271,24 @@ function linkRuntimeDependencies(directory: string, declared: ReadonlySet<string
   }
 }
 
-function assertIsolatedInstalledTree(directory: string): void {
+function assertIsolatedInstalledTree(directory: string, allowLocalSymlinks = false): void {
   const pending = [join(directory, "node_modules")];
+  const resolvedDirectory = realpathSync(directory);
   while (pending.length > 0) {
     const current = pending.pop();
     if (current === undefined) break;
     for (const entry of readdirSync(current, { withFileTypes: true })) {
       const path = join(current, entry.name);
-      expect(lstatSync(path).isSymbolicLink(), relative(directory, path)).toBe(false);
-      expect(resolve(path).startsWith(resolve(repositoryRoot)), relative(directory, path)).toBe(
-        false,
-      );
+      if (allowLocalSymlinks) {
+        expect(realpathSync(path).startsWith(resolvedDirectory), relative(directory, path)).toBe(
+          true,
+        );
+      } else {
+        expect(lstatSync(path).isSymbolicLink(), relative(directory, path)).toBe(false);
+        expect(resolve(path).startsWith(resolve(repositoryRoot)), relative(directory, path)).toBe(
+          false,
+        );
+      }
       if (entry.isDirectory()) pending.push(path);
     }
   }
@@ -411,9 +429,6 @@ describe("packed external model consumer", () => {
       );
       installTarballs(users, spinePackages);
       assertIsolatedInstalledTree(users);
-      expect(existsSync(join(users, "node_modules/@spine-event-engine/delivery-client"))).toBe(
-        false,
-      );
       writeJson(
         users,
         "spine-proto.json",
@@ -549,13 +564,32 @@ describe("packed external model consumer", () => {
         version: "1.0.0",
         type: "module",
         dependencies: {
+          "@bufbuild/protobuf": "2.12.1",
           "@external/chat-model": "1.0.0",
           "@external/users-model": "1.0.0",
           "@spine-event-engine/proto-tools": spineVersion,
+          react: "19.2.8",
         },
+        devDependencies: { typescript: "6.0.3" },
       });
-      installTarballs(app, [...spinePackages, usersPacked, chatPacked]);
-      assertIsolatedInstalledTree(app);
+      installTarballsWithPnpm(app, [...spinePackages, usersPacked, chatPacked]);
+      writeJson(app, "package.json", {
+        name: "@external/chat-app",
+        version: "1.0.0",
+        type: "module",
+        dependencies: {
+          "@bufbuild/protobuf": "2.12.1",
+          ...Object.fromEntries(
+            frameworkPackageRoots.map((packageName) => [packageName, spineVersion]),
+          ),
+          "@external/chat-model": "1.0.0",
+          "@external/users-model": "1.0.0",
+          "@spine-event-engine/proto-tools": spineVersion,
+          react: "19.2.8",
+        },
+        devDependencies: { typescript: "6.0.3" },
+      });
+      assertIsolatedInstalledTree(app, true);
       writeJson(app, "spine-proto.json", {
         formatVersion: 1,
         mode: "application",
@@ -618,9 +652,16 @@ describe("packed external model consumer", () => {
       );
       run(
         process.execPath,
-        [join(app, "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"],
+        [join(repositoryRoot, "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"],
         app,
       );
+      for (const packageName of frameworkPackageRoots) {
+        run(
+          process.execPath,
+          ["--input-type=module", "--eval", "await import(process.argv[1])", packageName],
+          app,
+        );
+      }
       run(process.execPath, [join(app, "dist/index.js")], app);
       assertPortableModel(app);
     } finally {
