@@ -61,3 +61,14 @@
   processed after the active bounded pass, and close joins coalesced purge work
   before storage close. The single-flight observer handles both settlement
   paths so it does not introduce an unhandled rejected observer promise.
+
+## 2026-08-20 — public subscription admission RED/GREEN checkpoint
+
+- Added and observed a RED test for a Subscription Gateway constructed with
+  `publicAccess` and no `sessions`; it failed at the previous unconditional
+  session resolver call.
+- Public mode is now explicitly exclusive with sessions, resolves a frozen
+  framework-owned principal, and has no binding or activation expiry. The
+  authenticated mode retains its exact timestamp and timer behavior.
+- This is only the auth subscription layer. Unary Gateway, Browser Server,
+  durable public orphan cleanup, Proto, and Message Board composition remain.

@@ -25,3 +25,5 @@
 - `pnpm exec vitest run packages/server/test/server/durable-subscription-bindings.test.ts --pool=forks --reporter=dot -t "later bounded purge horizon|joins a coalesced purge"` passed.
 - Runtime metadata is not exposed by this surface. Dispatch provenance is the
   immutable configured existing `implementer` role, `gpt-5.6-terra` / `medium`.
+- `pnpm exec vitest run packages/auth/test/subscriptions/index.test.ts --pool=forks --reporter=dot -t "keeps a public subscription active"` passed after a prior RED failure at the missing session resolver.
+- `pnpm typecheck:build:generated --filter @spine-event-engine/auth` passed.

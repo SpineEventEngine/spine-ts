@@ -38,7 +38,7 @@ type BindingState = "inactive" | "active" | "cancelling" | "closed";
 interface Binding {
   readonly definition: Uint8Array;
   readonly context: ActorContext;
-  readonly expiresAtMs: number;
+  readonly expiresAtMs: number | undefined;
   state: BindingState;
   controller: AbortController;
   tail: Promise<void>;
@@ -157,7 +157,7 @@ type SubscriptionOperation = "subscribe" | "activate" | "cancel";
 interface PreparedOperation {
   readonly source: Extract<IncomingRequest, { readonly kind: SubscriptionOperation }>;
   readonly context: ActorContext;
-  readonly expiresAtMs: number;
+  readonly expiresAtMs: number | undefined;
   readonly nowMs: number;
 }
 
@@ -214,7 +214,7 @@ export interface SubscriptionBindings {
    */
   create(input: {
     readonly topic: SubscriptionTopicWire;
-    readonly whenExpires: number;
+    readonly whenExpires?: number;
   }): Promise<PublicSubscriptionWire>;
 
   /**
@@ -323,7 +323,8 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
    */
   purgeExpired(nowMs: number): Promise<void> {
     for (const [id, binding] of this.#bindings)
-      if (binding.expiresAtMs <= nowMs) this.#expire(id, binding);
+      if (binding.expiresAtMs !== undefined && binding.expiresAtMs <= nowMs)
+        this.#expire(id, binding);
     return Promise.resolve();
   }
 
@@ -359,7 +360,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
    */
   create(input: {
     readonly topic: SubscriptionTopicWire;
-    readonly whenExpires: number;
+    readonly whenExpires?: number;
   }): Promise<PublicSubscriptionWire> {
     try {
       if (this.#closed) throw new Error("subscription bindings are closed");
@@ -463,7 +464,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
   }): Promise<Binding | undefined> {
     const binding = this.#bindings.get(input.id);
     if (binding === undefined) return Promise.resolve(undefined);
-    if (binding.expiresAtMs <= input.nowMs) {
+    if (binding.expiresAtMs !== undefined && binding.expiresAtMs <= input.nowMs) {
       this.#expire(input.id, binding);
       return Promise.resolve(undefined);
     }
@@ -479,7 +480,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     const binding = this.#bindings.get(input.id);
     if (binding === undefined) return "absent";
     if (!SubscriptionGatewayValues.contextsEqual(binding.context, input.context)) return "denied";
-    if (binding.expiring || binding.expiresAtMs <= input.nowMs) {
+    if (binding.expiring || (binding.expiresAtMs !== undefined && binding.expiresAtMs <= input.nowMs)) {
       this.#expire(input.id, binding);
       return "denied";
     }
@@ -760,7 +761,13 @@ export interface SubscriptionGatewayOptions {
   /**
    * Resolves credential sessions.
    */
-  readonly sessions: SessionResolver;
+  readonly sessions?: SessionResolver;
+
+  /**
+   * Admits requests with the framework-owned public principal and no session expiry.
+   * This mode is mutually exclusive with sessions.
+   */
+  readonly publicAccess?: true;
 
   /**
    * Authorizes each resolved request.
@@ -863,6 +870,8 @@ export class SubscriptionGateway {
    * @param options Supplies authenticated gateway collaborators.
    */
   constructor(options: SubscriptionGatewayOptions) {
+    if ((options.sessions === undefined) === (options.publicAccess !== true))
+      throw new Error("Subscription gateway requires exactly one of sessions or publicAccess.");
     this.#options = options;
     this.#limits = SubscriptionGatewayValues.limits(options.limits);
   }
@@ -933,7 +942,10 @@ export class SubscriptionGateway {
   ): Promise<PreparedOperation | SubscriptionGatewayResult> {
     const source = SubscriptionGatewayValues.decode(kind, request.wire.bytes, request.transport);
     if (source === undefined) return SubscriptionGatewayValues.rejected("malformed-request");
-    const session = await this.#options.sessions.resolve(request.credential);
+    const session =
+      this.#options.publicAccess === true
+        ? { principal: SubscriptionGatewayValues.publicPrincipal }
+        : await this.#options.sessions?.resolve(request.credential);
     if (session === undefined) return SubscriptionGatewayValues.rejected("unauthenticated");
     const authorization = SubscriptionGatewayValues.decode(
       kind,
@@ -951,9 +963,11 @@ export class SubscriptionGateway {
     kind: SubscriptionOperation,
     request: SubscriptionGatewayRequest,
     source: Extract<IncomingRequest, { readonly kind: SubscriptionOperation }>,
-    session: Awaited<ReturnType<SessionResolver["resolve"]>>,
+    session: {
+      readonly principal: Parameters<AuthorizationPolicy["authorize"]>[0];
+      readonly expiresAt?: { readonly seconds: bigint; readonly nanos: number };
+    },
   ): Promise<PreparedOperation | SubscriptionGatewayResult> {
-    if (session === undefined) return SubscriptionGatewayValues.rejected("unauthenticated");
     const contextRequest = SubscriptionGatewayValues.decode(
       kind,
       request.wire.bytes,
@@ -965,14 +979,13 @@ export class SubscriptionGateway {
       await this.#options.contexts.resolve(session.principal, contextRequest, this.#options.clock),
     );
     const nowMs = this.#nowMs();
-    const expiresAtMs = SubscriptionGatewayValues.timestampMs(
-      session.expiresAt.seconds,
-      session.expiresAt.nanos,
-    );
+    const expiresAtMs =
+      session.expiresAt === undefined
+        ? undefined
+        : SubscriptionGatewayValues.timestampMs(session.expiresAt.seconds, session.expiresAt.nanos);
     if (
       nowMs === undefined ||
-      expiresAtMs === undefined ||
-      expiresAtMs <= nowMs ||
+      (expiresAtMs !== undefined && expiresAtMs <= nowMs) ||
       !SubscriptionGatewayValues.matches(source.requestedContext, context)
     )
       return SubscriptionGatewayValues.rejected("denied");
@@ -1012,7 +1025,7 @@ export class SubscriptionGateway {
     id: string,
     context: ActorContext,
     nowMs: number,
-    expiresAtMs: number,
+    expiresAtMs: number | undefined,
     updates: SubscriptionUpdateSink,
     signal: AbortSignal | undefined,
   ): Promise<SubscriptionGatewayResult> {
@@ -1023,12 +1036,10 @@ export class SubscriptionGateway {
     };
     if (signal?.aborted) return SubscriptionGatewayValues.rejected("denied");
     signal?.addEventListener("abort", abort, { once: true });
-    const expiry = setTimeout(
-      () => {
-        activeController.abort();
-      },
-      Math.max(0, expiresAtMs - nowMs),
-    );
+    const expiry =
+      expiresAtMs === undefined
+        ? undefined
+        : setTimeout(() => activeController.abort(), Math.max(0, expiresAtMs - nowMs));
     try {
       const result = await this.#options.bindings.activate({
         id,
@@ -1045,7 +1056,7 @@ export class SubscriptionGateway {
         return SubscriptionGatewayValues.rejected("binding-busy");
       throw error;
     } finally {
-      clearTimeout(expiry);
+      if (expiry !== undefined) clearTimeout(expiry);
       signal?.removeEventListener("abort", abort);
     }
   }
@@ -1073,11 +1084,11 @@ export class SubscriptionGateway {
   async #subscribe(
     bytes: Uint8Array,
     context: ActorContext,
-    expiresAtMs: number,
+    expiresAtMs: number | undefined,
   ): Promise<SubscriptionGatewayResult> {
     const wire = await this.#options.bindings.create({
       topic: { kind: "subscription-topic", bytes: bytes.slice() },
-      whenExpires: expiresAtMs,
+      ...(expiresAtMs === undefined ? {} : { whenExpires: expiresAtMs }),
     });
     const id = fromBinary(SubscriptionSchema, wire.bytes).id?.value;
     if (id === undefined || id.length === 0) throw new Error("retained subscription has no ID");
@@ -1085,17 +1096,17 @@ export class SubscriptionGateway {
     try {
       await this.#receiveBackend(wire, controller);
       const nowMs = this.#nowMs();
-      if (nowMs === undefined || expiresAtMs <= nowMs) {
+      if (nowMs === undefined || (expiresAtMs !== undefined && expiresAtMs <= nowMs)) {
         await this.#compensateDefinition(wire, controller);
         await this.#options.bindings.cancel({
           id,
           context,
-          nowMs: nowMs ?? expiresAtMs,
+          nowMs: nowMs ?? expiresAtMs ?? 0,
           onDefinition: () => Promise.resolve(),
         });
         return SubscriptionGatewayValues.rejected("denied");
       }
-      this.scheduleExpiry(expiresAtMs);
+      if (expiresAtMs !== undefined) this.scheduleExpiry(expiresAtMs);
       return { kind: "subscribed", wire: SubscriptionGatewayValues.copyPublic(wire) };
     } catch (error) {
       try {
@@ -1103,7 +1114,7 @@ export class SubscriptionGateway {
         await this.#options.bindings.cancel({
           id,
           context,
-          nowMs: this.#nowMs() ?? expiresAtMs,
+          nowMs: this.#nowMs() ?? expiresAtMs ?? 0,
           onDefinition: () => Promise.resolve(),
         });
         // spine-log-boundary: auth.subscription_recovered_cleanup
@@ -1181,6 +1192,7 @@ export class SubscriptionGateway {
  * Builds validated subscription gateway inputs and isolated wire values.
  */
 const SubscriptionGatewayValues = Object.freeze({
+  publicPrincipal: Object.freeze({ id: "spine-gateway-public" }),
   discardUpdate(update: SubscriptionUpdateWire): Promise<void> {
     update.bytes.fill(0);
     return Promise.resolve();

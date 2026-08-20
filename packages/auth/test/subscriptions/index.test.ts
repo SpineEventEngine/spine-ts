@@ -177,6 +177,24 @@ function trustedContext() {
 }
 
 describe("SubscriptionGateway", () => {
+  it("keeps a public subscription active beyond five minutes without a session expiry", async () => {
+    let now = 10n;
+    const fixture = setup();
+    fixture.options.clock = { now: () => create(TimestampSchema, { seconds: now }) };
+    const publicGateway = new SubscriptionGateway({
+      ...fixture.options,
+      sessions: undefined,
+      publicAccess: true,
+    } as unknown as SubscriptionGatewayOptions);
+
+    const wire = await subscribe(publicGateway);
+    now = 10n + 5n * 60n + 1n;
+
+    await expect(publicGateway.handle(request("Activate", wire))).resolves.toEqual({
+      kind: "activated",
+    });
+  });
+
   it("does not start native activation for a pre-aborted downstream request", async () => {
     const fixture = setup();
     const subscriptionGateway = gateway(fixture);
