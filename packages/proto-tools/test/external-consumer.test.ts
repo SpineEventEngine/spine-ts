@@ -36,6 +36,7 @@ import {
   publicManifestProblems,
   internalRuntimeDependencyProblems,
 } from "../../../scripts/package-artifacts.mjs";
+import { packFrameworkArtifacts } from "../../../scripts/snapshot-artifacts.mjs";
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 const spineVersion = (
@@ -101,43 +102,7 @@ function run(command: string, args: readonly string[], cwd: string): void {
 }
 
 function packSpinePackages(destination: string): readonly PackedPackage[] {
-  run("pnpm", ["--dir", "packages/proto-tools", "exec", "tsc", "-b"], repositoryRoot);
-  const sources = [
-    "packages/auth",
-    "packages/client-node",
-    "packages/client-react",
-    "packages/client-web",
-    "packages/core",
-    "packages/delivery-client",
-    "packages/delivery-server",
-    "packages/deployment",
-    "packages/deployment-gce",
-    "packages/deployment-gke",
-    "packages/proto",
-    "packages/proto-tools",
-    "packages/server",
-    "packages/storage",
-    "packages/storage-datastore",
-    "packages/storage-rdbms",
-    "packages/testing",
-    "packages/transport",
-  ];
-  for (const source of sources) {
-    run(
-      "pnpm",
-      ["--dir", source, "pack", "--config.ignore-scripts=true", "--pack-destination", destination],
-      repositoryRoot,
-    );
-  }
-
-  return readdirSync(destination)
-    .filter((name) => name.endsWith(".tgz"))
-    .map((name) => {
-      const tarball = join(destination, name);
-      assertPackedArtifact(tarball);
-      const packageName = readPackedName(tarball);
-      return { name: packageName, tarball };
-    });
+  return packFrameworkArtifacts({ root: repositoryRoot, destination, run });
 }
 
 function installTarballsWithPnpm(directory: string, packages: readonly PackedPackage[]): void {
