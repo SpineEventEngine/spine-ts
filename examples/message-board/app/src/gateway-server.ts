@@ -24,7 +24,7 @@ import { Datastore } from "@google-cloud/datastore";
 import { MessageBoardDeployment } from "./deployment-config.js";
 import { BoardAccessPolicy, BoardContextResolver } from "./board-access.js";
 import { typeRegistry } from "./model-registry.js";
-import { PublicBoardAdmission } from "./public-board-admission.js";
+import { SystemClock } from "./system-clock.js";
 
 const config = MessageBoardDeployment.gateway(process.env);
 const client = new Datastore({ projectId: config.projectId });
@@ -46,10 +46,10 @@ const server = await Server.atPort(config.port, {
         }),
     origins: [config.webOrigin],
     registry: typeRegistry,
-    sessions: PublicBoardAdmission.resolver(),
+    publicAccess: true,
     authorize: policy.authorize.bind(policy),
     contexts: new BoardContextResolver(),
-    clock: PublicBoardAdmission.clock,
+    clock: new SystemClock(),
     bindings,
   },
 }).run();

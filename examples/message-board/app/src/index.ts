@@ -55,7 +55,7 @@ import {
 import { MessageAlreadyPosted } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/rejections.js";
 
 import { BoardAccessPolicy, BoardContextResolver } from "./board-access.js";
-import { PublicBoardAdmission } from "./public-board-admission.js";
+import { SystemClock } from "./system-clock.js";
 import { typeRegistry } from "./model-registry.js";
 
 export { typeRegistry } from "./model-registry.js";
@@ -319,10 +319,10 @@ export class MessageBoardApplication {
             browser: {
               origins: [options.webOrigin ?? "http://127.0.0.1:5173"],
               registry: typeRegistry,
-              sessions: PublicBoardAdmission.resolver(),
+              publicAccess: true,
               authorize: policy.authorize.bind(policy),
               contexts: new BoardContextResolver(),
-              clock: PublicBoardAdmission.clock,
+              clock: new SystemClock(),
               ...(options.bindings === undefined ? {} : { bindings: options.bindings }),
             },
           }
