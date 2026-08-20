@@ -427,6 +427,10 @@
       "sha256": "b6436714f754e6d7c1a6bbd177c5a4f0b606d3c7c1adc4b86fa3c299210ffc76"
     },
     {
+      "localPath": "packages/proto/proto/spine/auth/public_subscription.proto",
+      "sha256": "f1f19964bcf0cb51025c893d14048407f3772ebda346e0c623c7b15d64c0cb6a"
+    },
+    {
       "localPath": "packages/proto/proto/spine/client/subscription_record.proto",
       "sha256": "4e760681afba8d531b00ae08f09e52fb298c969e24aeb830fc72d7292afedaf5"
     },

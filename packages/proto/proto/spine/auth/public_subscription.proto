@@ -11,10 +11,18 @@
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
  */
+syntax = "proto3";
 
-/**
- * Authentication gateway Protobuf contracts owned by Spine TS.
- */
-export * from "../../generated/spine/auth/authenticated_subscription_pb.js";
-export * from "../../generated/spine/auth/public_subscription_pb.js";
-export * from "../../generated/spine/auth/authentication_service_pb.js";
+package spine.auth;
+
+import "spine/client/subscription.proto";
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.io";
+option java_multiple_files = true;
+
+// A public Gateway definition retained solely for abrupt-process orphan cleanup.
+message GatewayPublicSubscription {
+    spine.client.SubscriptionId id = 1 [(required) = true, (validate) = true];
+    spine.client.Subscription subscription = 2 [(required) = true, (validate) = true];
+}
