@@ -197,7 +197,9 @@ export function installCleanupHandlers({ signals, cleanup, exit }) {
   };
 }
 
-/** Polls npm's public registry, retrying only an explicit not-found response. */
+/**
+ * Polls npm's public registry, retrying only an explicit not-found response.
+ */
 export async function waitForRegistryVisibility({ runner, sleep, name, version, attempts = 6 }) {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {

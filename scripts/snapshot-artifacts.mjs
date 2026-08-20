@@ -22,7 +22,9 @@ import {
 
 const packageDirectories = frameworkPackageNames.map((name) => "packages/" + name.split("/")[1]);
 
-/** Packs the public inventory once and derives publication entries from its archives. */
+/**
+ * Packs the public inventory once and derives publication entries from its archives.
+ */
 export function packFrameworkArtifacts({ root, destination, run }) {
   run("pnpm", ["--dir", "packages/proto-tools", "exec", "tsc", "-b"], root);
   for (const directory of packageDirectories)
@@ -46,7 +48,9 @@ export function packFrameworkArtifacts({ root, destination, run }) {
   return entries;
 }
 
-/** Validates one archive and returns the exact bytes and runtime dependency edges. */
+/**
+ * Validates one archive and returns the exact bytes and runtime dependency edges.
+ */
 export function inspectPackedArtifact({ root, tarball, run }) {
   const stage = mkdtempSync(join(tmpdir(), "spine-snapshot-artifact-"));
   try {
@@ -80,7 +84,9 @@ export function inspectPackedArtifact({ root, tarball, run }) {
   }
 }
 
-/** Proves the exact packed tarballs resolve in a fresh non-workspace consumer. */
+/**
+ * Proves the exact packed tarballs resolve in a fresh non-workspace consumer.
+ */
 export function proveExactTarballConsumer({ root, destination, run }) {
   const packages = packFrameworkArtifacts({ root, destination, run });
   const consumer = join(destination, "consumer");

@@ -26,7 +26,9 @@ export const frameworkPackageNames = [
   "@spine-event-engine/transport",
 ];
 
-/** Returns deterministic errors for the public inventory in a checkout root. */
+/**
+ * Returns deterministic errors for the public inventory in a checkout root.
+ */
 export function validatePublicationInventory(root) {
   const rootManifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
   const actual = readdirSync(join(root, "packages"), { withFileTypes: true })
