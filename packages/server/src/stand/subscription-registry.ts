@@ -13,6 +13,7 @@
  */
 
 import { clone, ScalarType, toBinary } from "@bufbuild/protobuf";
+import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/internal/subscription-lifecycle";
 import {
   SubscriptionIdSchema,
   SubscriptionSchema,
@@ -32,7 +33,6 @@ import {
 
 import { StandSubscriptionRecords } from "./subscription-records.js";
 
-const pendingMilliseconds = 30_000;
 const cleanupPageSize = 25;
 
 /**
@@ -280,7 +280,7 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
       subscription: clone(SubscriptionSchema, subscription),
       phase: "pending" as const,
       createdAt,
-      pendingUntil: createdAt + pendingMilliseconds,
+      pendingUntil: createdAt + SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS,
     });
     this.#entries.set(id, entry);
     return Promise.resolve({ kind: "created", entry: copy(entry) });
@@ -471,7 +471,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         subscription: clone(SubscriptionSchema, subscription),
         phase: "pending" as const,
         createdAt,
-        pendingUntil: createdAt + pendingMilliseconds,
+        pendingUntil: createdAt + SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS,
       });
       const next = StandSubscriptionRecords.write(entry);
       try {

@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./internal/subscription-lifecycle": {
+      "types": "./dist/internal/subscription-lifecycle.d.ts",
+      "default": "./dist/internal/subscription-lifecycle.js"
     }
   },
   "files": [

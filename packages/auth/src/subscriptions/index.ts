@@ -13,6 +13,7 @@
  */
 
 import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/internal/subscription-lifecycle";
 import { ActorContextSchema, TenantIdSchema, type ActorContext } from "@spine-event-engine/proto";
 import {
   SubscriptionSchema,
@@ -863,6 +864,7 @@ export class SubscriptionGateway {
   readonly #options: SubscriptionGatewayOptions;
   readonly #limits: Required<SubscriptionGatewayLimits>;
   readonly #expiryTimers = new Set<unknown>();
+  readonly #publicPendingTimers = new Map<string, unknown>();
   #closed = false;
 
   /**
@@ -900,6 +902,8 @@ export class SubscriptionGateway {
     this.#closed = true;
     for (const timer of this.#expiryTimers) clearTimeout(timer);
     this.#expiryTimers.clear();
+    for (const timer of this.#publicPendingTimers.values()) clearTimeout(timer);
+    this.#publicPendingTimers.clear();
     await this.#options.bindings.close();
   }
 
@@ -1037,6 +1041,7 @@ export class SubscriptionGateway {
       activeController.abort();
     };
     if (signal?.aborted) return SubscriptionGatewayValues.rejected("denied");
+    if (this.#options.publicAccess === true) this.#clearPublicPending(id);
     signal?.addEventListener("abort", abort, { once: true });
     const expiry =
       expiresAtMs === undefined
@@ -1060,6 +1065,8 @@ export class SubscriptionGateway {
     } finally {
       if (expiry !== undefined) clearTimeout(expiry);
       signal?.removeEventListener("abort", abort);
+      if (this.#options.publicAccess === true)
+        await this.#cancel(id, context, this.#nowMs() ?? nowMs).catch(() => undefined);
     }
   }
   async #cancel(
@@ -1067,6 +1074,7 @@ export class SubscriptionGateway {
     context: ActorContext,
     nowMs: number,
   ): Promise<SubscriptionGatewayResult> {
+    this.#clearPublicPending(id);
     try {
       const result = await this.#options.bindings.cancel({
         id,
@@ -1109,6 +1117,7 @@ export class SubscriptionGateway {
         return SubscriptionGatewayValues.rejected("denied");
       }
       if (expiresAtMs !== undefined) this.scheduleExpiry(expiresAtMs);
+      if (this.#options.publicAccess === true) this.#schedulePublicPending(id, context);
       return { kind: "subscribed", wire: SubscriptionGatewayValues.copyPublic(wire) };
     } catch (error) {
       try {
@@ -1125,6 +1134,18 @@ export class SubscriptionGateway {
       }
       throw error;
     }
+  }
+  #schedulePublicPending(id: string, context: ActorContext): void {
+    const timer = setTimeout(() => {
+      this.#publicPendingTimers.delete(id);
+      void this.#cancel(id, context, this.#nowMs() ?? 0).catch(() => undefined);
+    }, SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS);
+    this.#publicPendingTimers.set(id, timer);
+  }
+  #clearPublicPending(id: string): void {
+    const timer = this.#publicPendingTimers.get(id);
+    if (timer !== undefined) clearTimeout(timer);
+    this.#publicPendingTimers.delete(id);
   }
   async #receiveBackend(wire: PublicSubscriptionWire, controller: AbortController): Promise<void> {
     return SubscriptionGatewayValues.withTimeout(
