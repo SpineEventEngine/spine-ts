@@ -14,6 +14,7 @@
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS } from "@spine-event-engine/core/internal/subscription-lifecycle";
 import {
   ActorContextSchema,
   TenantIdSchema,
@@ -193,6 +194,183 @@ describe("SubscriptionGateway", () => {
     await expect(publicGateway.handle(request("Activate", wire))).resolves.toEqual({
       kind: "activated",
     });
+  });
+
+  it("cleans a public definition that never reaches Activate", async () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = setup();
+      const publicGateway = new SubscriptionGateway({
+        ...fixture.options,
+        sessions: undefined,
+        publicAccess: true,
+      });
+
+      await subscribe(publicGateway);
+      await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS - 1);
+      expect(fixture.calls).toEqual(["subscribe"]);
+      expect(fixture.bindings.size).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fixture.calls).toEqual(["subscribe", "cancel"]);
+      expect(fixture.bindings.size).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+      await publicGateway.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries one failed pending cleanup without accumulating timers", async () => {
+    vi.useFakeTimers();
+    try {
+      let attempts = 0;
+      const fixture = setup({
+        cancel: () => {
+          attempts++;
+          return attempts === 1
+            ? Promise.reject(new Error("pending cleanup failed"))
+            : Promise.resolve();
+        },
+      });
+      const publicGateway = new SubscriptionGateway({
+        ...fixture.options,
+        sessions: undefined,
+        publicAccess: true,
+      });
+
+      await subscribe(publicGateway);
+      await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS);
+      expect(attempts).toBe(1);
+      expect(fixture.bindings.size).toBe(1);
+      expect(vi.getTimerCount()).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS);
+      expect(attempts).toBe(2);
+      expect(fixture.bindings.size).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+      await publicGateway.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps an activated public stream alive beyond the handshake window", async () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = setup();
+      fixture.options.sessions = undefined;
+      fixture.options.publicAccess = true;
+      fixture.options.creator.activate = (_request, signal) => {
+        fixture.calls.push("activate");
+        return new Promise<void>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              resolve();
+            },
+            { once: true },
+          );
+        });
+      };
+      const publicGateway = gateway(fixture);
+      const wire = await subscribe(publicGateway);
+      await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS - 1);
+      const downstream = new AbortController();
+      const active = publicGateway.handle({
+        ...request("Activate", wire),
+        signal: downstream.signal,
+      });
+      await Promise.resolve();
+
+      await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS * 2);
+      expect(fixture.calls).toEqual(["subscribe", "activate"]);
+      expect(fixture.bindings.size).toBe(1);
+      expect(vi.getTimerCount()).toBe(0);
+
+      downstream.abort();
+      await expect(active).rejects.toThrow("subscription operation aborted");
+      expect(fixture.calls).toEqual(["subscribe", "activate", "cancel"]);
+      expect(fixture.bindings.size).toBe(0);
+      await publicGateway.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("surfaces public activation cleanup failure", async () => {
+    const cleanupFailure = new Error("public cleanup failed");
+    const fixture = setup({ cancel: () => Promise.reject(cleanupFailure) });
+    fixture.options.sessions = undefined;
+    fixture.options.publicAccess = true;
+    const publicGateway = gateway(fixture);
+    const wire = await subscribe(publicGateway);
+
+    await expect(publicGateway.handle(request("Activate", wire))).rejects.toBe(cleanupFailure);
+    expect(fixture.calls).toEqual(["subscribe", "activate", "cancel"]);
+    expect(fixture.bindings.size).toBe(1);
+  });
+
+  it("preserves activation failure before public cleanup failure", async () => {
+    const activationFailure = new Error("public activation failed");
+    const cleanupFailure = new Error("public cleanup failed");
+    const fixture = setup({
+      activate: () => Promise.reject(activationFailure),
+      cancel: () => Promise.reject(cleanupFailure),
+    });
+    fixture.options.sessions = undefined;
+    fixture.options.publicAccess = true;
+    const publicGateway = gateway(fixture);
+    const wire = await subscribe(publicGateway);
+
+    const outcome = publicGateway
+      .handle(request("Activate", wire))
+      .catch((error: unknown) => error);
+    await expect(outcome).resolves.toBeInstanceOf(AggregateError);
+    const error = (await outcome) as AggregateError;
+    expect(error.errors).toEqual([activationFailure, cleanupFailure]);
+    expect(fixture.bindings.size).toBe(1);
+  });
+
+  it("clears public pending timers during close", async () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = setup();
+      fixture.options.sessions = undefined;
+      fixture.options.publicAccess = true;
+      const publicGateway = gateway(fixture);
+      await subscribe(publicGateway);
+      expect(vi.getTimerCount()).toBe(1);
+
+      await publicGateway.close();
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS * 2);
+      expect(fixture.calls).toEqual(["subscribe"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears only the explicitly cancelled public pending timer", async () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = setup();
+      fixture.options.sessions = undefined;
+      fixture.options.publicAccess = true;
+      const publicGateway = gateway(fixture);
+      const first = await subscribe(publicGateway);
+      await subscribe(publicGateway);
+      expect(vi.getTimerCount()).toBe(2);
+
+      await expect(publicGateway.handle(request("Cancel", first))).resolves.toEqual({
+        kind: "cancelled",
+      });
+      expect(vi.getTimerCount()).toBe(1);
+      await publicGateway.close();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does not start native activation for a pre-aborted downstream request", async () => {

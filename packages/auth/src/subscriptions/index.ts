@@ -481,7 +481,10 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     const binding = this.#bindings.get(input.id);
     if (binding === undefined) return "absent";
     if (!SubscriptionGatewayValues.contextsEqual(binding.context, input.context)) return "denied";
-    if (binding.expiring || (binding.expiresAtMs !== undefined && binding.expiresAtMs <= input.nowMs)) {
+    if (
+      binding.expiring ||
+      (binding.expiresAtMs !== undefined && binding.expiresAtMs <= input.nowMs)
+    ) {
       this.#expire(input.id, binding);
       return "denied";
     }
@@ -991,6 +994,7 @@ export class SubscriptionGateway {
         : SubscriptionGatewayValues.timestampMs(session.expiresAt.seconds, session.expiresAt.nanos);
     if (
       nowMs === undefined ||
+      (this.#options.publicAccess !== true && expiresAtMs === undefined) ||
       (expiresAtMs !== undefined && expiresAtMs <= nowMs) ||
       !SubscriptionGatewayValues.matches(source.requestedContext, context)
     )
@@ -1046,8 +1050,14 @@ export class SubscriptionGateway {
     const expiry =
       expiresAtMs === undefined
         ? undefined
-        : setTimeout(() => activeController.abort(), Math.max(0, expiresAtMs - nowMs));
-    let activationFailure: unknown;
+        : setTimeout(
+            () => {
+              activeController.abort();
+            },
+            Math.max(0, expiresAtMs - nowMs),
+          );
+    let activationFailure: Error | undefined;
+    let outcome: SubscriptionGatewayResult | undefined;
     try {
       const result = await this.#options.bindings.activate({
         id,
@@ -1057,24 +1067,46 @@ export class SubscriptionGateway {
         onDefinition: (definition, effectSignal) =>
           this.#forwardActivate(definition, updates, effectSignal),
       });
-      if (result.kind !== "activated") return SubscriptionGatewayValues.rejected("denied");
-      return { kind: "activated" };
+      outcome =
+        result.kind === "activated"
+          ? { kind: "activated" }
+          : SubscriptionGatewayValues.rejected("denied");
     } catch (error) {
-      activationFailure = error;
       if (error instanceof Error && error.message === "binding-busy")
-        return SubscriptionGatewayValues.rejected("binding-busy");
-      throw error;
+        outcome = SubscriptionGatewayValues.rejected("binding-busy");
+      else
+        activationFailure =
+          error instanceof Error
+            ? error
+            : new Error("Public subscription activation failed with a non-Error value.", {
+                cause: error,
+              });
     } finally {
       if (expiry !== undefined) clearTimeout(expiry);
       signal?.removeEventListener("abort", abort);
-      if (this.#options.publicAccess === true)
-        try {
-          await this.#cancel(id, context, this.#nowMs() ?? nowMs);
-        } catch (cleanupFailure) {
-          if (activationFailure === undefined) throw cleanupFailure;
-          throw new AggregateError([activationFailure, cleanupFailure], "public subscription cleanup failed");
-        }
     }
+    let cleanupFailure: Error | undefined;
+    if (this.#options.publicAccess === true)
+      try {
+        await this.#cancel(id, context, this.#nowMs() ?? nowMs);
+      } catch (error) {
+        cleanupFailure =
+          error instanceof Error
+            ? error
+            : new Error("Public subscription cleanup failed with a non-Error value.", {
+                cause: error,
+              });
+      }
+    if (activationFailure !== undefined) {
+      if (cleanupFailure !== undefined)
+        throw new AggregateError(
+          [activationFailure, cleanupFailure],
+          "public subscription cleanup failed",
+        );
+      throw activationFailure;
+    }
+    if (cleanupFailure !== undefined) throw cleanupFailure;
+    return outcome ?? SubscriptionGatewayValues.rejected("denied");
   }
   async #cancel(
     id: string,
@@ -1143,11 +1175,25 @@ export class SubscriptionGateway {
     }
   }
   #schedulePublicPending(id: string, context: ActorContext): void {
+    this.#clearPublicPending(id);
     const timer = setTimeout(() => {
+      if (this.#publicPendingTimers.get(id) !== timer) return;
       this.#publicPendingTimers.delete(id);
-      void this.#cancel(id, context, this.#nowMs() ?? 0).catch(() => undefined);
+      // spine-log-boundary: auth.public_pending_subscription_cleanup
+      void this.#cancel(id, context, this.#nowMs() ?? 0).then(
+        (result) => {
+          if (result.kind === "rejected") this.#retryPublicPending(id, context);
+        },
+        () => {
+          this.#retryPublicPending(id, context);
+        },
+      );
     }, SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS);
     this.#publicPendingTimers.set(id, timer);
+  }
+  #retryPublicPending(id: string, context: ActorContext): void {
+    if (!this.#closed && !this.#publicPendingTimers.has(id))
+      this.#schedulePublicPending(id, context);
   }
   #clearPublicPending(id: string): void {
     const timer = this.#publicPendingTimers.get(id);
