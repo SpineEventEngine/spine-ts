@@ -914,6 +914,26 @@ describe("SubscriptionGateway", () => {
     });
   });
 
+  it("maps maintenance contention before cancellation instead of leaking an internal failure", async () => {
+    const fixture = setup();
+    const subscriptionGateway = gateway(fixture);
+    const wire = await subscribe(subscriptionGateway);
+    const original = fixture.bindings;
+    fixture.options.bindings = {
+      create: original.create.bind(original),
+      activate: original.activate.bind(original),
+      cancel: original.cancel.bind(original),
+      purgeExpired: () => Promise.reject(new Error("binding-busy")),
+      close: original.close.bind(original),
+    };
+    const guarded = gateway(fixture);
+
+    await expect(guarded.handle(request("Cancel", wire))).resolves.toEqual({
+      kind: "rejected",
+      reason: "binding-busy",
+    });
+  });
+
   it("runs mandatory cancellation cleanup after an activation callback rejects", async () => {
     const failure = new Error("activate failed");
     const fixture = setup({ activate: async () => Promise.reject(failure) });

@@ -916,7 +916,13 @@ export class SubscriptionGateway {
     if (kind === undefined) return SubscriptionGatewayValues.rejected("unknown-operation");
     const nowMs = this.#nowMs();
     if (nowMs === undefined) return SubscriptionGatewayValues.rejected("denied");
-    await this.#options.bindings.purgeExpired(nowMs);
+    try {
+      await this.#options.bindings.purgeExpired(nowMs);
+    } catch (error) {
+      if (error instanceof Error && error.message === "binding-busy")
+        return SubscriptionGatewayValues.rejected("binding-busy");
+      throw error;
+    }
     const prepared = await this.#prepareSecurity(kind, request);
     if ("kind" in prepared) return prepared;
     return this.#perform(prepared, request.updates, request.signal);

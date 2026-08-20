@@ -1185,6 +1185,132 @@ describe("DurableSubscriptionBindings", () => {
     expect(restored).toEqual([]);
   });
 
+  it("coalesces overlapping expiry purges instead of exhausting the per-binding queue", async () => {
+    let cleanupStarted: (() => void) | undefined;
+    const started = new Promise<undefined>((resolve) => {
+      cleanupStarted = () => resolve(undefined);
+    });
+    let releaseCleanup: (() => void) | undefined;
+    const heldCleanup = new Promise<undefined>((resolve) => {
+      releaseCleanup = () => resolve(undefined);
+    });
+    let cleanups = 0;
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: new InMemoryStorageFactory(),
+      namespace: "overlapping-expiry-purges",
+      nextId: () => "expired",
+      cleanup: async () => {
+        cleanups++;
+        cleanupStarted?.();
+        await heldCleanup;
+      },
+    });
+    await bindings.create({
+      topic: { kind: "subscription-topic", bytes: topic() },
+      whenExpires: 1,
+    });
+
+    const first = bindings.purgeExpired(1);
+    await started;
+    const second = bindings.purgeExpired(1);
+    const third = bindings.purgeExpired(1);
+    releaseCleanup?.();
+
+    await expect(Promise.all([first, second, third])).resolves.toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(cleanups).toBe(1);
+  });
+
+  it("runs one later bounded purge horizon after an overlapping cleanup", async () => {
+    let releaseCleanup: (() => void) | undefined;
+    const heldCleanup = new Promise<void>((resolve) => {
+      releaseCleanup = resolve;
+    });
+    let first = true;
+    const cleaned: string[] = [];
+    let next = 0;
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: new InMemoryStorageFactory(),
+      namespace: "later-expiry-purge-horizon",
+      nextId: () => `expired-${String(++next)}`,
+      cleanup: async (wire) => {
+        cleaned.push(subscriptionId(wire.bytes));
+        if (first) {
+          first = false;
+          await heldCleanup;
+        }
+      },
+    });
+    await bindings.create({
+      topic: { kind: "subscription-topic", bytes: topic() },
+      whenExpires: 1,
+    });
+    await bindings.create({
+      topic: { kind: "subscription-topic", bytes: topic() },
+      whenExpires: 2,
+    });
+
+    const initial = bindings.purgeExpired(1);
+    await vi.waitFor(() => expect(cleaned).toEqual(["expired-1"]));
+    const later = bindings.purgeExpired(2);
+    releaseCleanup?.();
+
+    await expect(Promise.all([initial, later])).resolves.toEqual([undefined, undefined]);
+    expect(cleaned).toEqual(["expired-1", "expired-2"]);
+  });
+
+  it("joins a coalesced purge before closing storage", async () => {
+    let releaseCleanup: (() => void) | undefined;
+    const heldCleanup = new Promise<void>((resolve) => {
+      releaseCleanup = resolve;
+    });
+    let closes = 0;
+    const backing = new InMemoryStorageFactory();
+    // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
+    const factory: StorageFactory = {
+      createRecordStorage: ((storageContext: StorageContext, spec: RecordSpec<unknown, unknown>) => {
+        const storage = backing.createRecordStorage(storageContext, spec);
+        const close = storage.close.bind(storage);
+        Object.assign(storage, {
+          close: () => {
+            closes++;
+            close();
+          },
+        });
+        return storage;
+      }) as never,
+    };
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: factory,
+      namespace: "close-joins-coalesced-purge",
+      nextId: () => "expired",
+      cleanup: () => heldCleanup,
+      limits: { shutdownTimeoutMs: 100 },
+    });
+    await bindings.create({
+      topic: { kind: "subscription-topic", bytes: topic() },
+      whenExpires: 1,
+    });
+
+    const first = bindings.purgeExpired(1);
+    await vi.waitFor(() => expect(releaseCleanup).toBeTypeOf("function"));
+    const second = bindings.purgeExpired(1);
+    const closing = bindings.close();
+    await Promise.resolve();
+    expect(closes).toBe(0);
+    releaseCleanup?.();
+
+    await expect(Promise.all([first, second, closing])).resolves.toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(closes).toBe(1);
+  });
+
   it("stops a raw expiry scan at its first unexpired row", async () => {
     const backing = new InMemoryStorageFactory();
     let cleanups = 0;
