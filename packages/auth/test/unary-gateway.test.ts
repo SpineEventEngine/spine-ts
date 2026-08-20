@@ -48,6 +48,21 @@ const requestedContext = create(ActorContextSchema, {
   language: 1,
 });
 
+function verifyUnaryAdmissionTypes(options: UnaryGatewayOptions): void {
+  const { sessions: _sessions, publicAccess: _publicAccess, ...common } = options;
+  void [_sessions, _publicAccess];
+  // @ts-expect-error Unary admission requires either sessions or public access.
+  const neither: UnaryGatewayOptions = common;
+  // @ts-expect-error Unary admission does not permit both sessions and public access.
+  const both: UnaryGatewayOptions = {
+    ...common,
+    sessions: { resolve: () => Promise.resolve(undefined) },
+    publicAccess: true,
+  };
+  void [neither, both];
+}
+void verifyUnaryAdmissionTypes;
+
 function tenant(value: string) {
   return create(TenantIdSchema, { kind: { case: "value", value } });
 }

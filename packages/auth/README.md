@@ -26,7 +26,7 @@ collaborators. The gateway replaces a matching caller context with a freshly
 resolved trusted `ActorContext`; it never forwards the credential.
 
 ```ts
-import { UnaryGateway } from "@spine-event-engine/auth";
+import { type SessionResolver, UnaryGateway } from "@spine-event-engine/auth";
 
 const gateway = new UnaryGateway({
   maxRequestBytes: 1_048_576,
@@ -37,7 +37,7 @@ const gateway = new UnaryGateway({
   forward: applicationBackend.forward,
 });
 
-declare const applicationSessions: ConstructorParameters<typeof UnaryGateway>[0]["sessions"];
+declare const applicationSessions: SessionResolver;
 declare const applicationPolicy: {
   authorize: ConstructorParameters<typeof UnaryGateway>[0]["authorize"];
 };
@@ -48,6 +48,11 @@ declare const applicationBackend: {
 };
 void gateway;
 ```
+
+For an intentionally public endpoint, replace `sessions` with
+`publicAccess: true`. The two admission modes are mutually exclusive. Public
+mode has no login session or synthetic expiry; the application still authorizes
+every operation and rebuilds trusted context.
 
 The package gives applications extension points, not a deployment mandate or an
 identity-provider configuration. Applications choose their listener, routes,

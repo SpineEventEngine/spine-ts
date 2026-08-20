@@ -59,3 +59,15 @@
   telemetry was unavailable. Its accepted findings corrected public admission,
   session-only activation wording, pending-handshake versus active-stream
   lifetime, authenticated durable purge, and reconnect semantics.
+
+## Specialist correction evidence
+
+- Exact bounded-purge regression passed after first reproducing 26 removals
+  instead of 25.
+- Exact public-binding validation regression passed after first reproducing
+  acceptance of the invalid configuration.
+- `pnpm typecheck:tooling` passed with compile-time XOR proofs.
+- `pnpm typecheck:build:generated` passed.
+- Affected Auth/Server wave: 300/300 tests passed.
+- Type-aware ESLint over every baseline-to-worktree TypeScript/JavaScript file
+  passed after deterministic test-fixture corrections.

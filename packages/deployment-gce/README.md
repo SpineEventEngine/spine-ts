@@ -129,6 +129,12 @@ import { LeasedNodeRegistry } from "@spine-event-engine/deployment";
 import { GceNodeDiscovery } from "@spine-event-engine/deployment-gce";
 import { Server, type BrowserServerOptions } from "@spine-event-engine/server";
 
+type GatewayBrowserOptions = BrowserServerOptions extends infer Options
+  ? Options extends BrowserServerOptions
+    ? Omit<Options, "host" | "port" | "discovery">
+    : never
+  : never;
+
 import {
   GceDeploymentSettings,
   type DeploymentEnvironment,
@@ -136,7 +142,7 @@ import {
 } from "./deployment-settings.js";
 
 export interface GatewayOptions {
-  readonly browser: Omit<BrowserServerOptions, "host" | "port" | "discovery">;
+  readonly browser: GatewayBrowserOptions;
   readonly registryStorage: RegistryStorageResolver;
 }
 

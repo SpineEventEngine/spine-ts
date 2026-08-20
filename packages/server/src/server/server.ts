@@ -621,7 +621,7 @@ export interface ServerOptions {
   readonly resources?: readonly { close(): unknown }[];
 
   /**
-   * Authenticated browser listener configuration. When present, the native
+   * Browser admission and listener configuration. When present, the native
    * HTTP/2 listener remains private on loopback and this public listener
    * becomes the returned server URL.
    */
@@ -629,16 +629,31 @@ export interface ServerOptions {
 }
 
 /**
- * Configures the authenticated browser-facing Connect and gRPC-Web listener.
+ * Selects exactly one browser admission mode and its binding ownership.
+ */
+type BrowserAdmission =
+  | {
+      readonly sessions: SessionResolver;
+      readonly publicAccess?: never;
+      readonly bindings?: SubscriptionBindings;
+    }
+  | {
+      readonly sessions?: never;
+      readonly publicAccess: true;
+      readonly bindings?: never;
+    };
+
+/**
+ * Configures the browser-facing Connect and gRPC-Web listener.
  */
 type BrowserBackend =
   | { readonly baseUrl: string; readonly baseUrls?: never }
   | { readonly baseUrl?: never; readonly baseUrls: readonly string[] };
 
 /**
- * Configures the authenticated browser-facing Connect and gRPC-Web listener.
+ * Configures the browser-facing Connect and gRPC-Web listener.
  */
-export interface BrowserServerOptions {
+interface BrowserServerCollaborators {
   // prettier-ignore
 
   /**
@@ -695,17 +710,7 @@ export interface BrowserServerOptions {
   readonly registry?: TypeRegistryLookup;
 
   /**
-   * Resolves bearer or opaque-cookie sessions selected by the application.
-   */
-  readonly sessions?: SessionResolver;
-
-  /**
-   * Enables framework-owned non-session public admission.
-   */
-  readonly publicAccess?: true;
-
-  /**
-   * Applies application authorization after authentication.
+   * Applies application authorization after admission.
    */
   readonly authorize: AuthorizationPolicy["authorize"];
 
@@ -720,18 +725,15 @@ export interface BrowserServerOptions {
   readonly clock: Clock;
 
   /**
-   * Supplies the registry that owns opaque browser-subscription bindings.
-   *
-   * Production requires bindings that declare durable registry capability.
-   * Local development may omit it and use an explicit in-memory registry.
-   */
-  readonly bindings?: SubscriptionBindings;
-
-  /**
    * Enables strict opaque-cookie extraction alongside bearer credentials.
    */
   readonly cookies?: OpaqueSessionCookies;
 }
+
+/**
+ * Browser collaborators with exactly one admission and binding-ownership mode.
+ */
+export type BrowserServerOptions = BrowserServerCollaborators & BrowserAdmission;
 
 /**
  * Configures one bounded application authentication request.

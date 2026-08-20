@@ -84,3 +84,19 @@
   `gpt-5.6-luna` / `low` or `medium`.
 - Runtime telemetry was unavailable on these surfaces; immutable configured
   profiles are the recorded evidence.
+
+## 2026-08-20 — specialist review correction
+
+- The parallel reliability, TypeScript/API, and maintainability wave used the
+  existing reviewer roles with explicit `gpt-5.6-terra` / `high` profiles.
+- Public Browser Server configuration now rejects any supplied binding and owns
+  process-local public bindings exclusively.
+- Unary, Subscription, and Browser option declarations encode the same
+  session/public XOR already enforced at runtime. Deployment example aliases
+  preserve the union with a distributive omit.
+- Duplicate or older purge horizons no longer extend the active bounded pass;
+  a genuinely later horizon still schedules one following pass.
+- Admission-neutral TypeDoc replaces stale session-only wording.
+- The internal Core subpath finding was dispositioned as consistent with the
+  repository's private-package `./internal/*` convention; no new public root
+  export was added.

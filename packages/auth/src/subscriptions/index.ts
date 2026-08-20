@@ -27,9 +27,9 @@ import type {
   ContextResolver,
   IncomingRequest,
   RequestCredential,
-  SessionResolver,
   TransportRequestContext,
 } from "../index.js";
+import type { GatewayAdmission } from "../gateway/index.js";
 import { IncomingRequests } from "../request/index.js";
 
 declare const setTimeout: (callback: () => void, milliseconds: number) => unknown;
@@ -751,27 +751,13 @@ export interface SubscriptionCoordinator {
   ): Promise<void>;
 }
 
-/**
- * Collaborators for independently authenticated and authorized subscription operations.
- */
-export interface SubscriptionGatewayOptions {
+interface SubscriptionGatewayCollaborators {
   // prettier-ignore
 
   /**
    * Stores opaque subscription ownership bindings.
    */
   readonly bindings: SubscriptionBindings;
-
-  /**
-   * Resolves credential sessions.
-   */
-  readonly sessions?: SessionResolver;
-
-  /**
-   * Admits requests with the framework-owned public principal and no session expiry.
-   * This mode is mutually exclusive with sessions.
-   */
-  readonly publicAccess?: true;
 
   /**
    * Authorizes each resolved request.
@@ -804,6 +790,11 @@ export interface SubscriptionGatewayOptions {
    */
   readonly logger?: ILogLayer;
 }
+
+/**
+ * Collaborators for independently admitted and authorized subscription operations.
+ */
+export type SubscriptionGatewayOptions = SubscriptionGatewayCollaborators & GatewayAdmission;
 
 /**
  * Opaque browser-facing operation result.
@@ -872,7 +863,7 @@ export class SubscriptionGateway {
 
   /**
    * Creates the subscription gateway.
-   * @param options Supplies authenticated gateway collaborators.
+   * @param options Supplies admission, authorization, binding, and backend collaborators.
    */
   constructor(options: SubscriptionGatewayOptions) {
     if ((options.sessions === undefined) === (options.publicAccess !== true))
@@ -882,7 +873,7 @@ export class SubscriptionGateway {
   }
 
   /**
-   * Handles one authenticated subscription RPC request.
+   * Handles one admitted subscription RPC request.
    * @param request Supplies the copied request admission facts.
    * @returns Returns the opaque operation result.
    */
@@ -954,7 +945,7 @@ export class SubscriptionGateway {
         ? { principal: SubscriptionGatewayValues.publicPrincipal }
         : request.credential === undefined
           ? undefined
-          : await this.#options.sessions?.resolve(request.credential);
+          : await this.#options.sessions.resolve(request.credential);
     if (session === undefined) return SubscriptionGatewayValues.rejected("unauthenticated");
     const authorization = SubscriptionGatewayValues.decode(
       kind,

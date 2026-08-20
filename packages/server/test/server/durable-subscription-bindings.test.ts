@@ -1188,11 +1188,15 @@ describe("DurableSubscriptionBindings", () => {
   it("coalesces overlapping expiry purges instead of exhausting the per-binding queue", async () => {
     let cleanupStarted: (() => void) | undefined;
     const started = new Promise<undefined>((resolve) => {
-      cleanupStarted = () => resolve(undefined);
+      cleanupStarted = () => {
+        resolve(undefined);
+      };
     });
     let releaseCleanup: (() => void) | undefined;
     const heldCleanup = new Promise<undefined>((resolve) => {
-      releaseCleanup = () => resolve(undefined);
+      releaseCleanup = () => {
+        resolve(undefined);
+      };
     });
     let cleanups = 0;
     const bindings = new DurableSubscriptionBindings({
@@ -1222,6 +1226,40 @@ describe("DurableSubscriptionBindings", () => {
       undefined,
     ]);
     expect(cleanups).toBe(1);
+  });
+
+  it("does not extend a bounded purge for duplicate active horizons", async () => {
+    let releaseCleanup: (() => void) | undefined;
+    const heldCleanup = new Promise<void>((resolve) => {
+      releaseCleanup = resolve;
+    });
+    const cleaned: string[] = [];
+    let next = 0;
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: new InMemoryStorageFactory(),
+      namespace: "duplicate-expiry-purge-horizon",
+      nextId: () => `expired-${String(++next)}`,
+      cleanup: async (wire) => {
+        cleaned.push(subscriptionId(wire.bytes));
+        if (cleaned.length === 1) await heldCleanup;
+      },
+    });
+    for (let index = 0; index < 26; index += 1) {
+      await bindings.create({
+        topic: { kind: "subscription-topic", bytes: topic() },
+        whenExpires: 1,
+      });
+    }
+
+    const initial = bindings.purgeExpired(1);
+    await vi.waitFor(() => {
+      expect(cleaned).toHaveLength(1);
+    });
+    const duplicate = bindings.purgeExpired(1);
+    releaseCleanup?.();
+
+    await expect(Promise.all([initial, duplicate])).resolves.toEqual([undefined, undefined]);
+    expect(cleaned).toHaveLength(25);
   });
 
   it("runs one later bounded purge horizon after an overlapping cleanup", async () => {
@@ -1254,7 +1292,9 @@ describe("DurableSubscriptionBindings", () => {
     });
 
     const initial = bindings.purgeExpired(1);
-    await vi.waitFor(() => expect(cleaned).toEqual(["expired-1"]));
+    await vi.waitFor(() => {
+      expect(cleaned).toEqual(["expired-1"]);
+    });
     const later = bindings.purgeExpired(2);
     releaseCleanup?.();
 
@@ -1271,7 +1311,10 @@ describe("DurableSubscriptionBindings", () => {
     const backing = new InMemoryStorageFactory();
     // @ts-expect-error Port-fault fixture intentionally supplies only record storage.
     const factory: StorageFactory = {
-      createRecordStorage: ((storageContext: StorageContext, spec: RecordSpec<unknown, unknown>) => {
+      createRecordStorage: ((
+        storageContext: StorageContext,
+        spec: RecordSpec<unknown, unknown>,
+      ) => {
         const storage = backing.createRecordStorage(storageContext, spec);
         const close = storage.close.bind(storage);
         Object.assign(storage, {
@@ -1296,7 +1339,9 @@ describe("DurableSubscriptionBindings", () => {
     });
 
     const first = bindings.purgeExpired(1);
-    await vi.waitFor(() => expect(releaseCleanup).toBeTypeOf("function"));
+    await vi.waitFor(() => {
+      expect(releaseCleanup).toBeTypeOf("function");
+    });
     const second = bindings.purgeExpired(1);
     const closing = bindings.close();
     await Promise.resolve();

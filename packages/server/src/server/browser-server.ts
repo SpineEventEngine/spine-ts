@@ -27,6 +27,9 @@ import {
   NativeSubscriptionCreator,
   SubscriptionGateway,
   TransportFacts,
+  type Clock,
+  type ContextResolver,
+  type SessionResolver,
   type SubscriptionBindings,
   UnaryGateway,
 } from "@spine-event-engine/auth";
@@ -54,17 +57,25 @@ import reservedSpineRpcPaths from "./reserved-spine-rpc-paths.json" with { type:
 const gracefulBrowserDrainMs = 100;
 const reservedPathSet = new Set(reservedSpineRpcPaths);
 
-interface BrowserHostOptions extends Omit<BrowserServerOptions, "host" | "port"> {
+interface UncheckedBrowserAdmission {
+  readonly sessions?: SessionResolver;
+  readonly publicAccess?: true;
+  readonly bindings?: SubscriptionBindings;
+  readonly contexts?: ContextResolver;
+  readonly clock?: Clock;
+}
+
+type BrowserHostOptions = BrowserServerOptions & {
   readonly host: string;
   readonly port: number;
   readonly readMaxBytes: number;
   readonly writeMaxBytes: number;
   readonly production: boolean;
   readonly dynamicManagerFactory?: (node: ApplicationNode) => Http2SessionManager;
-}
+};
 
 /**
- * Runs the private native endpoint behind one authenticated browser listener.
+ * Runs the private native endpoint behind one admitted browser listener.
  *
  * @internal
  */
@@ -166,11 +177,14 @@ export const BrowserServer: Readonly<{
         dispose: (definition, signal) => creator.cancel({ wire: definition }, signal),
       });
     const requests = BrowserServer.requests(options);
+    const admission =
+      options.publicAccess === true
+        ? ({ publicAccess: true } as const)
+        : ({ sessions: options.sessions } as const);
     const unary = new UnaryGateway({
       ...(options.registry === undefined ? {} : { registry: options.registry }),
       maxRequestBytes: 1_048_576,
-      ...(options.sessions === undefined ? {} : { sessions: options.sessions }),
-      ...(options.publicAccess === true ? { publicAccess: true } : {}),
+      ...admission,
       authorize: options.authorize,
       contexts: options.contexts,
       clock: options.clock,
@@ -178,8 +192,7 @@ export const BrowserServer: Readonly<{
     });
     const subscriptions = new SubscriptionGateway({
       bindings,
-      ...(options.sessions === undefined ? {} : { sessions: options.sessions }),
-      ...(options.publicAccess === true ? { publicAccess: true } : {}),
+      ...admission,
       authorize: options.authorize,
       contexts: options.contexts,
       clock: options.clock,
@@ -404,7 +417,7 @@ export const BrowserServer: Readonly<{
     };
   },
   requireDurableBindings(options: BrowserServerOptions, production: boolean): void {
-    const supplied = options as Partial<BrowserServerOptions>;
+    const supplied = options as unknown as UncheckedBrowserAdmission;
     const standalone = options.backend !== undefined || options.discovery !== undefined;
     if (options.backend !== undefined) {
       BrowserServer.backendUrls(BrowserServerValues.backendUrlsFor(options.backend));
@@ -429,6 +442,8 @@ export const BrowserServer: Readonly<{
       if (options.bindings === undefined && options.publicAccess !== true)
         throw new Error("Standalone browser server requires explicit subscription bindings.");
     }
+    if (supplied.publicAccess === true && supplied.bindings !== undefined)
+      throw new Error("Public browser access owns process-local subscription bindings.");
     if (standalone && production && options.registry === undefined)
       throw new Error("Production standalone browser server requires a type registry.");
     const bindings = options.bindings;

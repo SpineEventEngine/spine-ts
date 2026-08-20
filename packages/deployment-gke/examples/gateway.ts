@@ -22,6 +22,12 @@ import { Server, type BrowserServerOptions } from "@spine-event-engine/server";
 
 import { DeploymentSettings, type DeploymentEnvironment } from "./deployment-settings.js";
 
+type GatewayBrowserOptions = BrowserServerOptions extends infer Options
+  ? Options extends BrowserServerOptions
+    ? Omit<Options, "host" | "port" | "discovery">
+    : never
+  : never;
+
 /**
  * Supplies application-owned browser collaborators for one Gateway process.
  */
@@ -31,7 +37,7 @@ export interface GatewayOptions {
   /**
    * Configures browser authentication, authorization, context, registry, and bindings.
    */
-  readonly browser: Omit<BrowserServerOptions, "host" | "port" | "discovery">;
+  readonly browser: GatewayBrowserOptions;
 }
 
 /**

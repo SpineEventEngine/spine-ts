@@ -26,7 +26,7 @@ import {
   OpaqueSessionCookies,
   SubscriptionGateway,
 } from "@spine-event-engine/auth";
-import type { RequestCredential } from "@spine-event-engine/auth";
+import type { RequestCredential, SessionResolver } from "@spine-event-engine/auth";
 import { spineCoreRegistry, TypeRegistry } from "@spine-event-engine/core";
 import { ApplicationNode } from "@spine-event-engine/deployment";
 import { AuthenticationService, ResolveContextRequestSchema } from "@spine-event-engine/proto/auth";
@@ -72,6 +72,38 @@ import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { attachDurableSubscriptionCleanup } from "../../src/server/durable-subscription-bindings.js";
 import { EnvironmentTests } from "../../src/server/environment.js";
 import type { ILogLayer } from "loglayer";
+
+type AuthenticatedBrowserServerOptions = Extract<
+  BrowserServerOptions,
+  { readonly sessions: SessionResolver }
+>;
+type PublicBrowserServerOptions = Extract<BrowserServerOptions, { readonly publicAccess: true }>;
+
+function verifyBrowserAdmissionTypes(options: BrowserServerOptions): void {
+  const {
+    sessions: _sessions,
+    publicAccess: _publicAccess,
+    bindings: _bindings,
+    ...common
+  } = options;
+  void [_sessions, _publicAccess, _bindings];
+  // @ts-expect-error Browser admission requires either sessions or public access.
+  const neither: BrowserServerOptions = common;
+  // @ts-expect-error Browser admission does not permit both sessions and public access.
+  const both: BrowserServerOptions = {
+    ...common,
+    sessions: { resolve: () => Promise.resolve(undefined) },
+    publicAccess: true,
+  };
+  // @ts-expect-error Public browser admission owns its process-local bindings.
+  const publicWithBindings: BrowserServerOptions = {
+    ...common,
+    publicAccess: true,
+    bindings: inMemoryBindings(),
+  };
+  void [neither, both, publicWithBindings];
+}
+void verifyBrowserAdmissionTypes;
 
 describe("Server", () => {
   it("exposes subscription registry facts only for framework-owned running servers", async () => {
@@ -722,6 +754,19 @@ describe("Server", () => {
     const server = await BrowserServer.open("http://127.0.0.1:65534", options);
 
     await server.close();
+  });
+
+  it("rejects caller-supplied bindings for public access", () => {
+    expect(() => {
+      BrowserServer.requireDurableBindings(
+        {
+          ...publicBrowserGateway(),
+          backend: { baseUrl: "http://127.0.0.1:65534" },
+          bindings: inMemoryBindings(),
+        } as unknown as BrowserServerOptions,
+        false,
+      );
+    }).toThrow("Public browser access owns process-local subscription bindings");
   });
 
   it("does not attach a standalone browser gateway to a native server environment", async () => {
@@ -2835,7 +2880,7 @@ async function waitFor(predicate: () => boolean): Promise<void> {
   throw new Error("Timed out waiting for signal shutdown.");
 }
 
-function browserGateway(): BrowserServerOptions {
+function browserGateway(): AuthenticatedBrowserServerOptions {
   return {
     origins: ["http://127.0.0.1:5173"],
     sessions: { resolve: () => Promise.resolve(undefined) },
@@ -2856,7 +2901,7 @@ function browserGateway(): BrowserServerOptions {
   };
 }
 
-function publicBrowserGateway(): BrowserServerOptions {
+function publicBrowserGateway(): PublicBrowserServerOptions {
   return {
     origins: ["http://127.0.0.1:5173"],
     publicAccess: true,

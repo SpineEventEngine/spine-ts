@@ -132,10 +132,16 @@ explain those application integration points.
 import { GkeNodeDiscovery } from "@spine-event-engine/deployment-gke";
 import { Server, type BrowserServerOptions } from "@spine-event-engine/server";
 
+type GatewayBrowserOptions = BrowserServerOptions extends infer Options
+  ? Options extends BrowserServerOptions
+    ? Omit<Options, "host" | "port" | "discovery">
+    : never
+  : never;
+
 import { DeploymentSettings, type DeploymentEnvironment } from "./deployment-settings.js";
 
 export interface GatewayOptions {
-  readonly browser: Omit<BrowserServerOptions, "host" | "port" | "discovery">;
+  readonly browser: GatewayBrowserOptions;
 }
 
 export const GatewayEntrypoint = Object.freeze({

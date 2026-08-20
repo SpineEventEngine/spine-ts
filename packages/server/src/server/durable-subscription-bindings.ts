@@ -112,6 +112,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   readonly #queued = new Map<string, number>();
   readonly #running = new Set<Promise<unknown>>();
   #purgeHorizon: number | undefined;
+  #activePurgeHorizon: number | undefined;
   #purging: Promise<void> | undefined;
   #closed = false;
   #closing: Promise<void> | undefined;
@@ -288,8 +289,15 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     } catch {
       return Promise.reject(new Error("authenticated subscription store is closed"));
     }
-    this.#purgeHorizon = Math.max(this.#purgeHorizon ?? nowMs, nowMs);
-    if (this.#purging !== undefined) return this.#purging;
+    if (this.#purging !== undefined) {
+      const coveredHorizon = Math.max(
+        this.#activePurgeHorizon ?? Number.NEGATIVE_INFINITY,
+        this.#purgeHorizon ?? Number.NEGATIVE_INFINITY,
+      );
+      if (nowMs > coveredHorizon) this.#purgeHorizon = nowMs;
+      return this.#purging;
+    }
+    this.#purgeHorizon = nowMs;
     const task = this.#drainPurges();
     this.#purging = task;
     this.#track(task);
@@ -308,7 +316,12 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     while (this.#purgeHorizon !== undefined) {
       const horizon = this.#purgeHorizon;
       this.#purgeHorizon = undefined;
-      await this.#purgeExpired(horizon);
+      this.#activePurgeHorizon = horizon;
+      try {
+        await this.#purgeExpired(horizon);
+      } finally {
+        this.#activePurgeHorizon = undefined;
+      }
     }
   }
 

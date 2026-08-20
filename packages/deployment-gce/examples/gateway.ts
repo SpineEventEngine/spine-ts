@@ -27,6 +27,12 @@ import {
   type RegistryStorageResolver,
 } from "./deployment-settings.js";
 
+type GatewayBrowserOptions = BrowserServerOptions extends infer Options
+  ? Options extends BrowserServerOptions
+    ? Omit<Options, "host" | "port" | "discovery">
+    : never
+  : never;
+
 /**
  * Supplies application-owned collaborators for one standalone Gateway process.
  */
@@ -36,7 +42,7 @@ export interface GatewayOptions {
   /**
    * Configures browser authentication, authorization, context, registry, and bindings.
    */
-  readonly browser: Omit<BrowserServerOptions, "host" | "port" | "discovery">;
+  readonly browser: GatewayBrowserOptions;
 
   /**
    * Resolves the application-selected durable registry storage factory.

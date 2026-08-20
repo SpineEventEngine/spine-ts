@@ -97,9 +97,35 @@ export interface UnaryForwarder {
 }
 
 /**
- * Gateway collaborators and finite byte ownership limit.
+ * Selects exactly one Gateway admission mode.
+ *
+ * @internal
  */
-export interface UnaryGatewayOptions {
+export type GatewayAdmission =
+  | {
+      // prettier-ignore
+
+      /**
+       * Resolves authenticated application sessions from incoming credentials.
+       */ readonly sessions: SessionResolver;
+
+      /**
+       * Excludes non-session public admission from authenticated mode.
+       */ readonly publicAccess?: never;
+    }
+  | {
+      // prettier-ignore
+
+      /**
+       * Excludes session resolution from public mode.
+       */ readonly sessions?: never;
+
+      /**
+       * Admits requests under the framework-owned non-session public principal.
+       */ readonly publicAccess: true;
+    };
+
+interface UnaryGatewayCollaborators {
   // prettier-ignore
 
   /**
@@ -111,16 +137,6 @@ export interface UnaryGatewayOptions {
    * Limits the number of request bytes accepted by the gateway.
    */
   readonly maxRequestBytes: number;
-
-  /**
-   * Resolves application sessions from incoming credentials.
-   */
-  readonly sessions?: SessionResolver;
-
-  /**
-   * Admits requests under the framework-owned non-session public principal.
-   */
-  readonly publicAccess?: true;
 
   /**
    * Authorizes a principal for each decoded request.
@@ -142,6 +158,11 @@ export interface UnaryGatewayOptions {
    */
   readonly forward: UnaryForwarder["forward"];
 }
+
+/**
+ * Gateway collaborators, one admission mode, and a finite byte ownership limit.
+ */
+export type UnaryGatewayOptions = UnaryGatewayCollaborators & GatewayAdmission;
 
 /**
  * Transport-neutral B4-mappable rejection reasons.
@@ -217,14 +238,14 @@ type Operation =
 type ForwardOperation = Exclude<Operation, { readonly kind: "resolve-context" }>;
 
 /**
- * Transport-neutral B2 unary authentication and context-replacement pipeline.
+ * Transport-neutral B2 unary admission and context-replacement pipeline.
  */
 export class UnaryGateway {
   readonly #options: UnaryGatewayOptions;
 
   /**
-   * Creates a unary authentication gateway.
-   * @param options Configures session, authorization, context, and forwarding collaborators.
+   * Creates a unary admission gateway.
+   * @param options Configures admission, authorization, context, and forwarding collaborators.
    */
   constructor(options: UnaryGatewayOptions) {
     if (!Number.isSafeInteger(options.maxRequestBytes) || options.maxRequestBytes < 0)
@@ -235,7 +256,7 @@ export class UnaryGateway {
   }
 
   /**
-   * Handles one authenticated unary request.
+   * Handles one admitted unary request.
    * @param request Supplies owned request bytes, credential, and transport facts.
    * @returns Resolves to forwarded bytes, a trusted context, or a rejection.
    */
@@ -325,7 +346,7 @@ export class UnaryGateway {
     if (this.#options.publicAccess === true)
       return { principal: UnaryGatewayValues.publicPrincipal };
     if (credential === undefined) return undefined;
-    return this.#options.sessions?.resolve(credential);
+    return this.#options.sessions.resolve(credential);
   }
 }
 const UnaryGatewayValues = Object.freeze({

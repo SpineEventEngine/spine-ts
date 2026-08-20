@@ -34,11 +34,21 @@ import {
   SubscriptionUpdateRelay,
   TransportFacts,
 } from "../../src/index.js";
-import type { SubscriptionGatewayOptions } from "../../src/index.js";
+import type { SessionResolver, SubscriptionGatewayOptions } from "../../src/index.js";
 
+type AuthenticatedSubscriptionGatewayOptions = Extract<
+  SubscriptionGatewayOptions,
+  { readonly sessions: SessionResolver }
+>;
+type PublicSubscriptionGatewayOptions = Extract<
+  SubscriptionGatewayOptions,
+  { readonly publicAccess: true }
+>;
 type MutableFixtureOptions = {
-  -readonly [Key in keyof SubscriptionGatewayOptions]: SubscriptionGatewayOptions[Key];
-};
+  -readonly [
+    Key in keyof Omit<AuthenticatedSubscriptionGatewayOptions, "publicAccess">
+  ]: AuthenticatedSubscriptionGatewayOptions[Key];
+} & { publicAccess?: true };
 
 const service = "spine.client.SubscriptionService";
 const topic = toBinary(
@@ -51,6 +61,22 @@ const topic = toBinary(
     }),
   }),
 );
+
+function verifySubscriptionAdmissionTypes(options: SubscriptionGatewayOptions): void {
+  const { sessions: _sessions, publicAccess: _publicAccess, ...common } = options;
+  void [_sessions, _publicAccess];
+  // @ts-expect-error Subscription admission requires either sessions or public access.
+  const neither: SubscriptionGatewayOptions = common;
+  // @ts-expect-error Subscription admission does not permit both sessions and public access.
+  const both: SubscriptionGatewayOptions = {
+    ...common,
+    sessions: { resolve: () => Promise.resolve(undefined) },
+    publicAccess: true,
+  };
+  void [neither, both];
+}
+void verifySubscriptionAdmissionTypes;
+
 function tenant(value: string) {
   return create(TenantIdSchema, { kind: { case: "value", value } });
 }
@@ -133,9 +159,19 @@ function gateway(
   fixture: ReturnType<typeof setup>,
   limits?: { readonly maxRequestBytes?: number },
 ) {
-  return new SubscriptionGateway(
-    limits === undefined ? fixture.options : { ...fixture.options, limits },
-  );
+  const options =
+    fixture.options.publicAccess === true ? publicOptions(fixture) : authenticatedOptions(fixture);
+  return new SubscriptionGateway(limits === undefined ? options : { ...options, limits });
+}
+function authenticatedOptions(
+  fixture: ReturnType<typeof setup>,
+): AuthenticatedSubscriptionGatewayOptions {
+  return fixture.options as AuthenticatedSubscriptionGatewayOptions;
+}
+function publicOptions(fixture: ReturnType<typeof setup>): PublicSubscriptionGatewayOptions {
+  const { sessions: _sessions, publicAccess: _publicAccess, ...options } = fixture.options;
+  void [_sessions, _publicAccess];
+  return { ...options, publicAccess: true };
 }
 async function subscribe(gateway: SubscriptionGateway) {
   const result = await gateway.handle(request("Subscribe", topic));
@@ -207,11 +243,7 @@ describe("SubscriptionGateway", () => {
     let now = 10n;
     const fixture = setup();
     fixture.options.clock = { now: () => create(TimestampSchema, { seconds: now }) };
-    const publicGateway = new SubscriptionGateway({
-      ...fixture.options,
-      sessions: undefined,
-      publicAccess: true,
-    } as unknown as SubscriptionGatewayOptions);
+    const publicGateway = new SubscriptionGateway(publicOptions(fixture));
 
     const subscribed = await publicGateway.handle({
       ...request("Subscribe", topic),
@@ -231,9 +263,7 @@ describe("SubscriptionGateway", () => {
     try {
       const fixture = setup();
       const publicGateway = new SubscriptionGateway({
-        ...fixture.options,
-        sessions: undefined,
-        publicAccess: true,
+        ...publicOptions(fixture),
       });
 
       await subscribe(publicGateway);
@@ -264,9 +294,7 @@ describe("SubscriptionGateway", () => {
         },
       });
       const publicGateway = new SubscriptionGateway({
-        ...fixture.options,
-        sessions: undefined,
-        publicAccess: true,
+        ...publicOptions(fixture),
       });
 
       await subscribe(publicGateway);
@@ -303,7 +331,6 @@ describe("SubscriptionGateway", () => {
         purgeExpired: original.purgeExpired.bind(original),
         close: original.close.bind(original),
       };
-      fixture.options.sessions = undefined;
       fixture.options.publicAccess = true;
       const publicGateway = gateway(fixture);
 
@@ -326,7 +353,6 @@ describe("SubscriptionGateway", () => {
     vi.useFakeTimers();
     try {
       const fixture = setup();
-      fixture.options.sessions = undefined;
       fixture.options.publicAccess = true;
       fixture.options.creator.activate = (_request, signal) => {
         fixture.calls.push("activate");
@@ -368,7 +394,6 @@ describe("SubscriptionGateway", () => {
   it("surfaces public activation cleanup failure", async () => {
     const cleanupFailure = new Error("public cleanup failed");
     const fixture = setup({ cancel: () => Promise.reject(cleanupFailure) });
-    fixture.options.sessions = undefined;
     fixture.options.publicAccess = true;
     const publicGateway = gateway(fixture);
     const wire = await subscribe(publicGateway);
@@ -385,7 +410,6 @@ describe("SubscriptionGateway", () => {
       activate: () => Promise.reject(activationFailure),
       cancel: () => Promise.reject(cleanupFailure),
     });
-    fixture.options.sessions = undefined;
     fixture.options.publicAccess = true;
     const publicGateway = gateway(fixture);
     const wire = await subscribe(publicGateway);
@@ -408,7 +432,6 @@ describe("SubscriptionGateway", () => {
       // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
       cancel: () => Promise.reject("cleanup primitive"),
     });
-    fixture.options.sessions = undefined;
     fixture.options.publicAccess = true;
     const publicGateway = gateway(fixture);
     const wire = await subscribe(publicGateway);
@@ -433,7 +456,6 @@ describe("SubscriptionGateway", () => {
     vi.useFakeTimers();
     try {
       const fixture = setup();
-      fixture.options.sessions = undefined;
       fixture.options.publicAccess = true;
       const publicGateway = gateway(fixture);
       await subscribe(publicGateway);
@@ -452,7 +474,6 @@ describe("SubscriptionGateway", () => {
     vi.useFakeTimers();
     try {
       const fixture = setup();
-      fixture.options.sessions = undefined;
       fixture.options.publicAccess = true;
       const publicGateway = gateway(fixture);
       const first = await subscribe(publicGateway);
@@ -989,7 +1010,7 @@ describe("SubscriptionGateway", () => {
     });
     fixture.options.creator.subscribe = () => Promise.resolve();
     const subscriptionGateway = new SubscriptionGateway({
-      ...fixture.options,
+      ...authenticatedOptions(fixture),
       bindings,
       limits: { maxBackendEnvelopeBytes: 1 },
     });
@@ -1450,7 +1471,7 @@ describe("SubscriptionGateway", () => {
     let sessionCalls = 0;
     const fixture = setup();
     const subscriptionGateway = new SubscriptionGateway({
-      ...fixture.options,
+      ...authenticatedOptions(fixture),
       sessions: { resolve: () => Promise.resolve((++sessionCalls, undefined)) },
       limits: { maxRequestBytes: 1 },
     });
@@ -1667,7 +1688,6 @@ describe("SubscriptionGateway", () => {
         return Promise.resolve();
       };
       if (mode === "public") {
-        fixture.options.sessions = undefined;
         fixture.options.publicAccess = true;
       }
       const incoming = {
@@ -1699,7 +1719,6 @@ describe("SubscriptionGateway", () => {
         return Promise.reject(failure);
       };
       if (mode === "public") {
-        fixture.options.sessions = undefined;
         fixture.options.publicAccess = true;
       }
       const incoming = {
@@ -1808,7 +1827,7 @@ describe("SubscriptionGateway", () => {
       await new Promise<void>(() => undefined);
     };
     const subscriptionGateway = new SubscriptionGateway({
-      ...fixture.options,
+      ...authenticatedOptions(fixture),
       bindings,
       limits: { operationTimeoutMs: 1 },
     });
@@ -1826,7 +1845,7 @@ describe("SubscriptionGateway", () => {
     const fixture = setup();
     fixture.options.creator.subscribe = () => Promise.resolve();
     const subscriptionGateway = new SubscriptionGateway({
-      ...fixture.options,
+      ...authenticatedOptions(fixture),
       limits: { operationTimeoutMs: 1, maxBackendEnvelopeBytes: 1 },
     });
     await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toMatchObject({
@@ -1842,7 +1861,7 @@ describe("SubscriptionGateway", () => {
       close: fixture.bindings.close.bind(fixture.bindings),
     };
     const createFailureGateway = new SubscriptionGateway({
-      ...fixture.options,
+      ...authenticatedOptions(fixture),
       bindings: failingBindings,
       limits: { operationTimeoutMs: 1 },
     });
@@ -1859,7 +1878,7 @@ describe("SubscriptionGateway", () => {
       return Promise.resolve();
     };
     const subscriptionGateway = new SubscriptionGateway({
-      ...fixture.options,
+      ...authenticatedOptions(fixture),
       bindings: {
         create: () => {
           throw new Error("durable binding write failed");
@@ -1962,7 +1981,7 @@ describe("SubscriptionGateway", () => {
       });
     };
     const subscriptionGateway = new SubscriptionGateway({
-      ...fixture.options,
+      ...authenticatedOptions(fixture),
       bindings,
       limits: { shutdownTimeoutMs: 1 },
     });
