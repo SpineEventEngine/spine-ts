@@ -383,6 +383,9 @@ importers:
       '@spine-event-engine/client-web':
         specifier: workspace:*
         version: link:../client-web
+      '@types/react':
+        specifier: ^19.2.7
+        version: 19.2.17
       react:
         specifier: ^19.2.8
         version: 19.2.8
