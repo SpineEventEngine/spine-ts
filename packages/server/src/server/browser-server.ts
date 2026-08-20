@@ -74,10 +74,12 @@ export const BrowserServer: Readonly<{
     options: BrowserHostOptions,
   ): Promise<RunningServer>;
   requests(options: BrowserServerOptions): {
-    credential(context: { readonly requestHeader: Headers }): {
-      readonly kind: "bearer" | "cookie";
-      readonly value: string;
-    } | undefined;
+    credential(context: { readonly requestHeader: Headers }):
+      | {
+          readonly kind: "bearer" | "cookie";
+          readonly value: string;
+        }
+      | undefined;
     transport(context: { readonly requestHeader: Headers }): ReturnType<typeof TransportFacts.from>;
   };
   origins(origins: readonly string[]): ReadonlySet<string>;
@@ -407,7 +409,11 @@ export const BrowserServer: Readonly<{
     }
     if (standalone) {
       if ((supplied.sessions === undefined) === (options.publicAccess !== true))
-        throw new Error("Standalone browser server requires exactly one of sessions or publicAccess.");
+        throw new Error(
+          "Standalone browser server requires exactly one of sessions or publicAccess.",
+        );
+      if (supplied.sessions !== undefined && typeof supplied.sessions.resolve !== "function")
+        throw new Error("Standalone browser server requires sessions with a resolver.");
       if (typeof options.authorize !== "function")
         throw new Error("Standalone browser server requires authorization.");
       if (
@@ -427,7 +433,8 @@ export const BrowserServer: Readonly<{
     if (production && options.publicAccess !== true && !isDurableSubscriptionBindings(bindings))
       throw new Error("Production browser server requires durable subscription bindings.");
     if (
-      standalone && options.publicAccess !== true &&
+      standalone &&
+      options.publicAccess !== true &&
       production &&
       (bindings === undefined ||
         !("namespace" in bindings) ||

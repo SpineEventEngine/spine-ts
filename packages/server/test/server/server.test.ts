@@ -494,7 +494,7 @@ describe("Server", () => {
     const requests = BrowserServer.requests(browserGateway());
     const requestHeader = new Headers();
 
-    expect(requests.credential({ requestHeader })).toEqual({ kind: "bearer", value: "" });
+    expect(requests.credential({ requestHeader })).toBeUndefined();
     expect(requests.transport({ requestHeader })).toBeDefined();
 
     const unopened = http.createServer();
