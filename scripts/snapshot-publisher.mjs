@@ -13,7 +13,7 @@ export async function runSnapshotPublication({
   cleanup = async () => {},
 }) {
   try {
-    await runner("npm", ["whoami"]);
+    await runner("npm", ["whoami", "--registry=https://registry.npmjs.org/"]);
     const preparedPackages = prepare === undefined ? packages : await prepare();
     const report = {
       prepared: preparedPackages.length,
@@ -52,7 +52,7 @@ export async function runSnapshotPublication({
       const dependencies = typeof entry === "string" ? [] : entry.dependencies || [];
       for (const dependency of dependencies)
         await waitForVisibility(dependency, "2.0.0-snapshot.2");
-      await runner("npm", ["publish", tarball, "--access", "public", "--tag", "snapshot"], {
+      await runner("npm", ["publish", tarball, "--access", "public", "--tag", "snapshot", "--registry=https://registry.npmjs.org/"], {
         stdio: "inherit",
       });
       report.published.push(name ?? tarball);

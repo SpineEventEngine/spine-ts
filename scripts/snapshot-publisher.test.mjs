@@ -65,7 +65,7 @@ describe("snapshot publisher", () => {
         return [];
       },
     });
-    expect(calls).toEqual(["npm whoami", "prepare"]);
+    expect(calls).toEqual(["npm whoami --registry=https://registry.npmjs.org/", "prepare"]);
   });
 
   it("checks the checkout, installs once, gates once, packs, and proves the exact tarballs", async () => {
@@ -132,8 +132,8 @@ describe("snapshot publisher", () => {
     });
 
     expect(commands).toEqual([
-      ["npm", ["whoami"]],
-      ["npm", ["publish", "core.tgz", "--access", "public", "--tag", "snapshot"]],
+      ["npm", ["whoami", "--registry=https://registry.npmjs.org/"]],
+      ["npm", ["publish", "core.tgz", "--access", "public", "--tag", "snapshot", "--registry=https://registry.npmjs.org/"]],
     ]);
   });
 
@@ -159,8 +159,8 @@ describe("snapshot publisher", () => {
 
     expect(report.published).toEqual(["@spine-event-engine/core", "@spine-event-engine/server"]);
     expect(calls).toContain("wait @spine-event-engine/core@2.0.0-snapshot.2");
-    expect(calls.indexOf("npm publish core.tgz --access public --tag snapshot")).toBeLessThan(
-      calls.indexOf("npm publish server.tgz --access public --tag snapshot"),
+    expect(calls.indexOf("npm publish core.tgz --access public --tag snapshot --registry=https://registry.npmjs.org/")).toBeLessThan(
+      calls.indexOf("npm publish server.tgz --access public --tag snapshot --registry=https://registry.npmjs.org/"),
     );
   });
 
