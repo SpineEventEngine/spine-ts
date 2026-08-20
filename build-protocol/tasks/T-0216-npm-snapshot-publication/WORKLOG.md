@@ -76,6 +76,22 @@ all task work is isolated in `.worktrees/wave14-npm-publication` from exact
   release-readiness registry-install prohibition must narrowly allow exact
   snapshot or `@snapshot` examples while continuing to reject unqualified
   installs.
+- Authoring agent `/root/t0216_implement`, the existing `implementer` role with
+  explicit `gpt-5.6-terra`/medium dispatch, completed the permanent publication
+  policy, exact artifact validator, reusable all-18 pack/consumer proof,
+  injectable publisher, reader docs, and the two external disposable files.
+  Permanent implementation converged at `d5317979e`; every feature-branch
+  commit was pushed immediately and local/remote refs match.
+- The reusable artifact path packs exact tarball bytes, validates all 18
+  archives, installs those bytes in a fresh non-workspace consumer, compiles
+  TypeScript, imports all package roots, and executes the public testing/server
+  reset path. The disposable publisher uses that same path before any optional
+  registry mutation.
+- The publisher defaults to preparation, requires explicit `--publish`, uses
+  captured public-registry reads and inherited publish stdio, computes SHA-512
+  integrity, skips only identical published artifacts, aborts mismatches, polls
+  dependency visibility, and cleans temporary artifacts on normal, error, and
+  signal exits without handling credentials.
 
 ## Verification notes
 
@@ -93,3 +109,26 @@ all task work is isolated in `.worktrees/wave14-npm-publication` from exact
   earlier manifest-only constraint correctly caused the implementer to restore
   those files. Ownership now explicitly includes exactly the five paired marker
   files; generated TypeScript and generator behavior remain out of scope.
+- Fresh pre-review evidence at `d5317979e`: generated build/typecheck passed;
+  focused ESLint passed; six focused suites passed 67/67; the combined
+  publisher/artifact/consumer subset passed 17/17; formatting passed; docs
+  audience and current generated-output checks passed; wrapper syntax and
+  `git diff --check` passed. Clean-checkout release readiness passed with 87
+  imports, 54 assets, and 404 Markdown links. The untracked planning directory
+  was temporarily held outside the checkout for that reader scan and restored.
+- Selected final verification profile: one `verify:release` after review
+  convergence because dependencies, all public package artifacts, and shared
+  release tooling changed. No earlier full release profile was used.
+
+## Implementation files
+
+- All 26 workspace manifests and `pnpm-lock.yaml`.
+- Five tracked Proto package manifests, their paired generated-root markers,
+  and the existing To-Do manifest contract test.
+- Package metadata, artifact, consumer, publisher, and release-readiness scripts
+  and tests.
+- Root/browser guidance plus the six package READMEs whose unpublished/private
+  claims became false.
+- External disposable publisher and instructions under
+  `/Users/armiol/development/experiments/spine-ts-wave14-publication/`; neither
+  path appears in Git status.
