@@ -1,8 +1,19 @@
 /**
+ * @typedef {object} SnapshotPublicationOptions
+ * @property {(command: string, args: string[], options?: object) => Promise<string>} runner
+ * @property {readonly unknown[]} [packages]
+ * @property {() => Promise<readonly unknown[]>} [prepare]
+ * @property {boolean} [publish]
+ * @property {(name: string, version: string) => Promise<void>} [waitForVisibility]
+ * @property {() => Promise<void>} [cleanup]
+ * @property {(entry: unknown) => Promise<string> | string} [integrityFor]
+ */
+
+/**
  * Runs the non-mutating publication preparation by default.
  *
- * @param {{runner: (command: string, args: string[]) => Promise<string>, packages?: readonly unknown[], prepare?: () => Promise<readonly unknown[]>, publish?: boolean, waitForVisibility?: (name: string, version: string) => Promise<void>, cleanup?: () => Promise<void>}} options
- * @returns {Promise<{prepared: number, published: string[], skipped: string[]}>}
+ * @param {SnapshotPublicationOptions} options
+ * @returns {Promise<object>}
  */
 export async function runSnapshotPublication({
   runner,
@@ -116,10 +127,20 @@ function orderPackages(entries) {
 }
 
 /**
+ * @typedef {object} PreparationOptions
+ * @property {(command: string, args: string[]) => Promise<unknown>} runner
+ * @property {() => Promise<void>} checkRoot
+ * @property {() => Promise<void>} checkClean
+ * @property {() => Promise<void>} checkInventory
+ * @property {() => Promise<readonly unknown[]>} packAndValidate
+ * @property {(packages: readonly unknown[]) => Promise<void>} verifyExternalConsumer
+ */
+
+/**
  * Executes the non-registry preparation gates and returns the exact tarballs
  * that have been packed, validated, and proven in an external consumer.
  *
- * @param {{runner: (command: string, args: string[]) => Promise<unknown>, checkRoot: () => Promise<void>, checkClean: () => Promise<void>, checkInventory: () => Promise<void>, packAndValidate: () => Promise<readonly unknown[]>, verifyExternalConsumer: (packages: readonly unknown[]) => Promise<void>}} options
+ * @param {PreparationOptions} options
  * @returns {Promise<readonly unknown[]>}
  */
 export async function prepareSnapshotPublication({
@@ -141,9 +162,22 @@ export async function prepareSnapshotPublication({
 }
 
 /**
+ * @typedef {object} SignalSource
+ * @property {(signal: string, handler: () => void) => void} on
+ * @property {(signal: string, handler: () => void) => void} off
+ */
+
+/**
+ * @typedef {object} CleanupHandlerOptions
+ * @property {SignalSource} signals
+ * @property {() => Promise<void>} cleanup
+ * @property {(code: number) => void} exit
+ */
+
+/**
  * Installs interruption cleanup without coupling the publisher to process.
  *
- * @param {{signals: {on: (signal: string, handler: () => void) => void, off: (signal: string, handler: () => void) => void}, cleanup: () => Promise<void>, exit: (code: number) => void}} options
+ * @param {CleanupHandlerOptions} options
  * @returns {() => void}
  */
 export function installCleanupHandlers({ signals, cleanup, exit }) {

@@ -123,8 +123,16 @@ export function proveExactTarballConsumer({ root, destination, run }) {
   );
   writeFileSync(
     join(consumer, "index.ts"),
-    frameworkPackageNames.map((name) => "import " + JSON.stringify(name) + ";").join("\n") +
-      "\nimport { BlackBox } from '@spine-event-engine/testing';\nimport { resetServerEnvironmentForTest } from '@spine-event-engine/server/testing';\nif (typeof BlackBox !== 'function' || typeof resetServerEnvironmentForTest !== 'function') throw new Error('Public runtime path is unavailable');\nawait resetServerEnvironmentForTest();\n",
+    [
+      ...frameworkPackageNames.map((name) => "import " + JSON.stringify(name) + ";"),
+      "import { BlackBox } from '@spine-event-engine/testing';",
+      "import { resetServerEnvironmentForTest } from '@spine-event-engine/server/testing';",
+      "if (typeof BlackBox !== 'function') throw new Error('Testing path is unavailable');",
+      "if (typeof resetServerEnvironmentForTest !== 'function') " +
+        "throw new Error('Server testing path is unavailable');",
+      "await resetServerEnvironmentForTest();",
+      "",
+    ].join("\n"),
   );
   run(
     process.execPath,
