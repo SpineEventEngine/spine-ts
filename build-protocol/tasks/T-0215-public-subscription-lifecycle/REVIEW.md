@@ -211,6 +211,30 @@ converges. Review dispatch and dispositions are recorded here as they complete.
 - Final correction estimate: 0.5–1 hour, including RED/GREEN behavior tests,
   exact documentation, affected security/docs re-review, and push.
 
+## 2026-08-20 security/documentation correction
+
+- Correction head: `9189e9e7`.
+- Actorless and whitespace-only public Read, Subscribe, Activate, and Cancel now
+  fail with permission denial before context resolution, forwarding, or binding
+  creation. Auth reference names the 30-second incomplete activation cleanup and
+  states that active public streams have no framework TTL.
+- Focused evidence passes 118/118 together with generated/tooling typechecks,
+  API inventory, audience, snippets, TSDoc, ESLint, formatting, and diff checks.
+- Affected security/documentation re-review estimate: 10–20 minutes. Existing
+  reviewer profiles remain security `gpt-5.6-terra` / `high` and documentation
+  `gpt-5.6-luna` / `medium`; runtime telemetry may be unavailable.
+
+## 2026-08-20 security/documentation re-review
+
+- **Security — pass:** actorless and whitespace-only public operations are
+  denied before context resolution, forwarding, or binding work; no P0–P2
+  findings remain.
+- **Documentation P1 — accepted:** Auth reference overgeneralizes the 30-second
+  pending-activation cleanup to all modes. It applies only to public mode;
+  authenticated durable subscriptions retain session-derived expiry.
+- Exact documentation correction estimate: 5–10 minutes, including deterministic
+  documentation checks, push, and narrow documentation re-review.
+
 ## 2026-08-20 final TypeDoc correction implementation assignment
 
 - Existing `implementer` role, explicit configured `gpt-5.6-terra` / `medium`,
@@ -251,3 +275,10 @@ converges. Review dispatch and dispositions are recorded here as they complete.
   now rejects missing or whitespace-only public actors before context resolution,
   forwarding, or binding work. Native adapter regressions prove Read, Subscribe,
   Activate, and Cancel are normal `PermissionDenied` failures.
+
+## 2026-08-20 final lifecycle wording correction
+
+- **Documentation P2 — accepted:** the 30-second incomplete
+  Subscribe-to-Activate cleanup is now explicitly scoped to public,
+  process-local definitions. Authenticated durable definitions instead use their
+  stored session-derived expiry; healthy active public streams have no TTL.

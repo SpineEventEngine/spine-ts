@@ -105,3 +105,9 @@
 - GREEN: adapter-level actorless Read, Subscribe, Activate, and Cancel reject
   with code 7; no unary forward or subscription binding creation occurs. Missing
   and whitespace-only actors are denied for every public operation.
+
+## Final lifecycle wording evidence
+
+- Auth reference now scopes the shared 30-second pending
+  Subscribe-to-Activate cleanup to public definitions and documents
+  session-derived expiry for authenticated durable definitions.

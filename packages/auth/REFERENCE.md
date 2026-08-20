@@ -59,21 +59,21 @@ includes the trusted Actor and Tenant, so Activate and Cancel compare that pair
 with the newly resolved request context. It is single-Gateway persistence, not
 cross-process quota, reservation, lease, fence, or fingerprint coordination.
 
-Subscription creation has two stages. `Subscribe` stores a definition and
-returns its ID; `Activate` must arrive within the shared 30-second incomplete
-Subscribe-to-Activate handshake. If activation never arrives, the incomplete
-definition is cancelled. Once activated, a healthy public stream has no
-framework time-to-live. It ends only when the caller cancels or disconnects,
-the backend ends the stream, or the Gateway shuts down.
+Public subscription creation has two stages. `Subscribe` stores a process-local
+definition and returns its ID; `Activate` must arrive within the shared
+30-second incomplete Subscribe-to-Activate handshake. If activation never
+arrives, that public definition is cancelled. Once activated, a healthy public
+stream has no framework time-to-live. It ends only when the caller cancels or
+disconnects, the backend ends the stream, or the Gateway shuts down.
 
-Authenticated durable definitions use the real session expiry stored with the
-definition. Expiry maintenance first stops an active binding, waits for its
-serialized work, cancels the backend subscription once, and then deletes the
-stored record. Concurrent maintenance callers join the same purge operation.
-Public mode has no session expiry and does not use that durable authenticated
-record; its process-local definitions disappear when the Gateway process ends.
-Neither mode stores a replayable history of emitted updates, so a reconnecting
-browser queries authoritative state before subscribing again.
+Authenticated durable definitions instead use the real session-derived expiry
+stored with the definition. Expiry maintenance first stops an active binding,
+waits for its serialized work, cancels the backend subscription once, and then
+deletes the stored record. Concurrent maintenance callers join the same purge
+operation. Public mode has no session expiry and does not use that durable
+authenticated record; its process-local definitions disappear when the Gateway
+process ends. Neither mode stores a replayable history of emitted updates, so a
+reconnecting browser queries authoritative state before subscribing again.
 
 ## Errors, lifecycle, and extension
 

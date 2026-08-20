@@ -146,3 +146,10 @@
   all four operations. The reference now names the shared 30-second incomplete
   Subscribe-to-Activate cleanup and explicitly states that active public
   subscriptions have no TTL.
+
+## 2026-08-20 — final lifecycle wording correction
+
+- Scoped the shared 30-second pending activation cleanup to public
+  process-local definitions and contrasted it with authenticated durable
+  session-derived expiry, while retaining the explicit no-TTL active public
+  stream rule.
