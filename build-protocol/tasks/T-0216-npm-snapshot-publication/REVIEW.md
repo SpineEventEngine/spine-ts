@@ -130,3 +130,22 @@ reviewed security contract.
   with a modified `assume-unchanged` tracked file so this bypass is executable.
   This changes only the external disposable wrapper and will be security
   re-reviewed; permanent/package code remains converged.
+
+## Accepted final result
+
+All relevant canonical concerns are clean after affected re-review:
+
+- Style/maintainability: clean after executable wrapper and real traversal
+  regressions.
+- TypeScript/API documentation: clean after the React declaration dependency
+  and exact consumer proof.
+- Documentation completeness: clean in the original complete wave and not
+  reopened because corrections did not change reader claims.
+- Performance/reliability: clean after cross-platform containment, lifecycle,
+  polling, resumption, integrity timing, and cleanup review.
+- Security: clean after public-registry pinning, exact commit and independent
+  worktree-tree authentication, pre-import module hashes, two artifact integrity
+  boundaries, and credential/stdio review.
+
+No P0-P3 finding remains. The implementation is ready for the mandatory cheap
+preflight followed by the single `verify:release` profile.

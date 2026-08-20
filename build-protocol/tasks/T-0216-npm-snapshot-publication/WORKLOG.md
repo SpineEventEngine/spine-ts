@@ -147,6 +147,10 @@ all task work is isolated in `.worktrees/wave14-npm-publication` from exact
   accepted external-only correction forces untracked/ignored visibility and
   independently authenticates tracked worktree bytes and modes against the
   pinned commit tree, with an `assume-unchanged` fixture.
+- The external-only authentication correction passes syntax and its embedded
+  untracked/concealed-mutation fixture. Final security re-review is clean, as
+  are all other relevant concern dispositions. No P0-P3 finding remains before
+  final mechanical verification.
 
 ## Implementation files
 
