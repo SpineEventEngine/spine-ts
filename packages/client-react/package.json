@@ -29,6 +29,7 @@
     "check:dependencies": "node ../../scripts/check-client-react-dependencies.mjs"
   },
   "peerDependencies": {
+    "@types/react": "^19.2.7",
     "react": "^19.2.8"
   },
   "dependencies": {
