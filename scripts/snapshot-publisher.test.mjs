@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { runSnapshotPublication } from "./snapshot-publisher.mjs";
+import {
+  installCleanupHandlers,
+  prepareSnapshotPublication,
+  runSnapshotPublication,
+} from "./snapshot-publisher.mjs";
 
 describe("snapshot publisher", () => {
   it("prepares by default without mutating the npm registry", async () => {
@@ -33,6 +37,36 @@ describe("snapshot publisher", () => {
       },
     });
     expect(calls).toEqual(["npm whoami", "prepare"]);
+  });
+
+  it("checks the checkout, installs once, gates once, packs, and proves the exact tarballs", async () => {
+    const calls = [];
+    const tarballs = [{ name: "@spine-event-engine/core", tarball: "core.tgz" }];
+    await expect(
+      prepareSnapshotPublication({
+        runner: async (command, args) => calls.push(command + " " + args.join(" ")),
+        checkRoot: async () => calls.push("root"),
+        checkClean: async () => calls.push("clean"),
+        checkInventory: async () => calls.push("inventory"),
+        packAndValidate: async () => {
+          calls.push("pack");
+          return tarballs;
+        },
+        verifyExternalConsumer: async (actual) => {
+          expect(actual).toBe(tarballs);
+          calls.push("consumer");
+        },
+      }),
+    ).resolves.toBe(tarballs);
+    expect(calls).toEqual([
+      "root",
+      "clean",
+      "inventory",
+      "pnpm install --frozen-lockfile",
+      "pnpm verify:release",
+      "pack",
+      "consumer",
+    ]);
   });
 
   it("skips only a tarball whose registry integrity matches its local SRI", async () => {
@@ -118,5 +152,22 @@ describe("snapshot publisher", () => {
       }),
     ).rejects.toThrow("registry rejected artifact");
     expect(cleanups).toEqual(["cleanup"]);
+  });
+
+  it("cleans up and preserves conventional exit codes for interruption signals", async () => {
+    const handlers = new Map();
+    const calls = [];
+    const dispose = installCleanupHandlers({
+      signals: {
+        on: (signal, handler) => handlers.set(signal, handler),
+        off: (signal) => handlers.delete(signal),
+      },
+      cleanup: async () => calls.push("cleanup"),
+      exit: (code) => calls.push("exit " + code),
+    });
+    await handlers.get("SIGINT")();
+    dispose();
+    expect(calls).toEqual(["cleanup", "exit 130"]);
+    expect(handlers.size).toBe(0);
   });
 });

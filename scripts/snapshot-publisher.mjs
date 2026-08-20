@@ -65,3 +65,51 @@ function orderPackages(entries) {
   for (const entry of entries) visit(entry);
   return ordered;
 }
+
+/**
+ * Executes the non-registry preparation gates and returns the exact tarballs
+ * that have been packed, validated, and proven in an external consumer.
+ *
+ * @param {{runner: (command: string, args: string[]) => Promise<unknown>, checkRoot: () => Promise<void>, checkClean: () => Promise<void>, checkInventory: () => Promise<void>, packAndValidate: () => Promise<readonly unknown[]>, verifyExternalConsumer: (packages: readonly unknown[]) => Promise<void>}} options
+ * @returns {Promise<readonly unknown[]>}
+ */
+export async function prepareSnapshotPublication({
+  runner,
+  checkRoot,
+  checkClean,
+  checkInventory,
+  packAndValidate,
+  verifyExternalConsumer,
+}) {
+  await checkRoot();
+  await checkClean();
+  await checkInventory();
+  await runner("pnpm", ["install", "--frozen-lockfile"]);
+  await runner("pnpm", ["verify:release"]);
+  const packages = await packAndValidate();
+  await verifyExternalConsumer(packages);
+  return packages;
+}
+
+/**
+ * Installs interruption cleanup without coupling the publisher to process.
+ *
+ * @param {{signals: {on: (signal: string, handler: () => void) => void, off: (signal: string, handler: () => void) => void}, cleanup: () => Promise<void>, exit: (code: number) => void}} options
+ * @returns {() => void}
+ */
+export function installCleanupHandlers({ signals, cleanup, exit }) {
+  const handlers = new Map();
+  for (const [signal, code] of [
+    ["SIGINT", 130],
+    ["SIGTERM", 143],
+  ]) {
+    const handler = () => {
+      void cleanup().finally(() => exit(code));
+    };
+    handlers.set(signal, handler);
+    signals.on(signal, handler);
+  }
+  return () => {
+    for (const [signal, handler] of handlers) signals.off(signal, handler);
+  };
+}
