@@ -707,6 +707,23 @@ describe("Server", () => {
     await server.close();
   });
 
+  it("owns process-local bindings for a production public standalone gateway", async () => {
+    const options = {
+      ...publicBrowserGateway(),
+      backend: { baseUrl: "http://127.0.0.1:65534" },
+      registry: spineCoreRegistry,
+      host: "127.0.0.1",
+      port: 0,
+      readMaxBytes: 1_048_576,
+      writeMaxBytes: 1_048_576,
+      production: true,
+    } satisfies Parameters<typeof BrowserServer.open>[1];
+    BrowserServer.requireDurableBindings(options, true);
+    const server = await BrowserServer.open("http://127.0.0.1:65534", options);
+
+    await server.close();
+  });
+
   it("does not attach a standalone browser gateway to a native server environment", async () => {
     const server = await new Server({
       browser: {
@@ -2832,6 +2849,27 @@ function browserGateway(): BrowserServerOptions {
       resolveContext: () =>
         Promise.resolve({
           actor: create(UserIdSchema, { value: "test" }),
+          timestamp: create(TimestampSchema),
+        }),
+    },
+    clock: { now: () => create(TimestampSchema) },
+  };
+}
+
+function publicBrowserGateway(): BrowserServerOptions {
+  return {
+    origins: ["http://127.0.0.1:5173"],
+    publicAccess: true,
+    authorize: () => Promise.resolve(true),
+    contexts: {
+      resolve: () =>
+        Promise.resolve({
+          actor: create(UserIdSchema, { value: "public" }),
+          timestamp: create(TimestampSchema),
+        }),
+      resolveContext: () =>
+        Promise.resolve({
+          actor: create(UserIdSchema, { value: "public" }),
           timestamp: create(TimestampSchema),
         }),
     },

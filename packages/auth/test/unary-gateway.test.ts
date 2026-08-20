@@ -33,6 +33,7 @@ import { describe, expect, it } from "vitest";
 import {
   type IncomingRequest,
   type UnaryGatewayRequest,
+  type UnaryGatewayOptions,
   UnaryGateway,
   TransportFacts,
 } from "../src/index.js";
@@ -68,7 +69,7 @@ function setup(
 ) {
   const calls: string[] = [];
   const forwarded: { service: string; method: string; value: Uint8Array }[] = [];
-  const options = {
+  const options: UnaryGatewayOptions = {
     ...(overrides.registry === undefined ? {} : { registry: overrides.registry }),
     maxRequestBytes: overrides.maxRequestBytes ?? 1024,
     sessions: {
@@ -130,6 +131,32 @@ function request(service: string, method: string, value: Uint8Array): UnaryGatew
 }
 
 describe("UnaryGateway", () => {
+  it.each([
+    ["neither", { sessions: undefined }],
+    ["both", { publicAccess: true }],
+  ] as const)("rejects %s authenticated/public admission configuration", (_name, override) => {
+    const fixture = setup();
+
+    expect(
+      () => new UnaryGateway({ ...fixture.options, ...override } as UnaryGatewayOptions),
+    ).toThrow("exactly one of sessions or publicAccess");
+  });
+
+  it("rejects an authenticated request when no credential was supplied", async () => {
+    const fixture = setup();
+    const incoming = request(
+      "spine.auth.AuthenticationService",
+      "ResolveContext",
+      toBinary(ResolveContextRequestSchema, create(ResolveContextRequestSchema)),
+    );
+
+    await expect(fixture.gateway.handle({ ...incoming, credential: undefined })).resolves.toEqual({
+      kind: "rejected",
+      reason: "unauthenticated",
+    });
+    expect(fixture.calls).toEqual([]);
+  });
+
   it("resolves public context without a session expiry", async () => {
     const fixture = setup();
     const gateway = new UnaryGateway({
@@ -138,13 +165,14 @@ describe("UnaryGateway", () => {
       publicAccess: true,
     } as unknown as UnaryGatewayOptions);
 
-    const result = await gateway.handle(
-      request(
+    const result = await gateway.handle({
+      ...request(
         "spine.auth.AuthenticationService",
         "ResolveContext",
         toBinary(ResolveContextRequestSchema, create(ResolveContextRequestSchema)),
       ),
-    );
+      credential: undefined,
+    });
 
     expect(result.kind).toBe("resolved");
     if (result.kind !== "resolved") return;

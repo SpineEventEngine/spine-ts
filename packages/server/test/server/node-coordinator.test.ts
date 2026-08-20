@@ -405,6 +405,22 @@ describe("NodeCoordinator", () => {
     await coordinator.close();
   });
 
+  it("rejects cancellation without a Coordinator subscription ID", async () => {
+    const coordinator = await NodeCoordinator.open({
+      members: new TestReadyMembers([]),
+      port: 0,
+    });
+    closeables.push(() => coordinator.close());
+    const client = createClient(
+      SubscriptionService,
+      createGrpcTransport({ baseUrl: coordinator.baseUrl }),
+    );
+
+    await expect(client.cancel(create(SubscriptionSchema))).rejects.toMatchObject({
+      code: Code.Internal,
+    });
+  });
+
   it("bounds Coordinator close when a native activation ignores abort", async () => {
     vi.useFakeTimers();
     const replica = await backend("close-ignores-abort", {

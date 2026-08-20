@@ -1057,7 +1057,7 @@ export class SubscriptionGateway {
             Math.max(0, expiresAtMs - nowMs),
           );
     let activationFailure: Error | undefined;
-    let outcome: SubscriptionGatewayResult | undefined;
+    let outcome: SubscriptionGatewayResult = SubscriptionGatewayValues.rejected("denied");
     try {
       const result = await this.#options.bindings.activate({
         id,
@@ -1106,7 +1106,7 @@ export class SubscriptionGateway {
       throw activationFailure;
     }
     if (cleanupFailure !== undefined) throw cleanupFailure;
-    return outcome ?? SubscriptionGatewayValues.rejected("denied");
+    return outcome;
   }
   async #cancel(
     id: string,

@@ -326,8 +326,10 @@ export const BrowserServer: Readonly<{
         if (extracted !== undefined) {
           return extracted.kind === "rejected" ? { kind: "bearer" as const, value: "" } : extracted;
         }
-        const bearer = /^Bearer ([^\s]+)$/.exec(context.requestHeader.get("authorization") ?? "");
-        return bearer === null ? undefined : { kind: "bearer" as const, value: bearer[1] ?? "" };
+        const authorization = context.requestHeader.get("authorization") ?? "";
+        return /^Bearer [^\s]+$/.test(authorization)
+          ? { kind: "bearer" as const, value: authorization.slice("Bearer ".length) }
+          : undefined;
       },
       transport: (context: { readonly requestHeader: Headers }) => {
         const origin = context.requestHeader.get("origin");
@@ -424,7 +426,7 @@ export const BrowserServer: Readonly<{
         throw new Error("Standalone browser server requires context resolution.");
       if (supplied.clock === undefined || typeof supplied.clock.now !== "function")
         throw new Error("Standalone browser server requires a clock.");
-      if (options.bindings === undefined)
+      if (options.bindings === undefined && options.publicAccess !== true)
         throw new Error("Standalone browser server requires explicit subscription bindings.");
     }
     if (standalone && production && options.registry === undefined)

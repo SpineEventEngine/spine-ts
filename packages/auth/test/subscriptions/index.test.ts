@@ -178,6 +178,31 @@ function trustedContext() {
 }
 
 describe("SubscriptionGateway", () => {
+  it.each([
+    ["neither", { sessions: undefined }],
+    ["both", { publicAccess: true }],
+  ] as const)("rejects %s authenticated/public admission configuration", (_name, override) => {
+    const fixture = setup();
+
+    expect(
+      () =>
+        new SubscriptionGateway({
+          ...fixture.options,
+          ...override,
+        } as SubscriptionGatewayOptions),
+    ).toThrow("exactly one of sessions or publicAccess");
+  });
+
+  it("rejects an authenticated subscription request without a credential", async () => {
+    const fixture = setup();
+
+    await expect(
+      gateway(fixture).handle({ ...request("Subscribe", topic), credential: undefined }),
+    ).resolves.toEqual({ kind: "rejected", reason: "unauthenticated" });
+    expect(fixture.calls).toEqual([]);
+    expect(fixture.bindings.size).toBe(0);
+  });
+
   it("keeps a public subscription active beyond five minutes without a session expiry", async () => {
     let now = 10n;
     const fixture = setup();
@@ -188,12 +213,17 @@ describe("SubscriptionGateway", () => {
       publicAccess: true,
     } as unknown as SubscriptionGatewayOptions);
 
-    const wire = await subscribe(publicGateway);
+    const subscribed = await publicGateway.handle({
+      ...request("Subscribe", topic),
+      credential: undefined,
+    });
+    if (subscribed.kind !== "subscribed") throw new Error("public subscription rejected");
+    const wire = subscribed.wire.bytes;
     now = 10n + 5n * 60n + 1n;
 
-    await expect(publicGateway.handle(request("Activate", wire))).resolves.toEqual({
-      kind: "activated",
-    });
+    await expect(
+      publicGateway.handle({ ...request("Activate", wire), credential: undefined }),
+    ).resolves.toEqual({ kind: "activated" });
   });
 
   it("cleans a public definition that never reaches Activate", async () => {
@@ -243,6 +273,43 @@ describe("SubscriptionGateway", () => {
       await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS);
       expect(attempts).toBe(1);
       expect(fixture.bindings.size).toBe(1);
+      expect(vi.getTimerCount()).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS);
+      expect(attempts).toBe(2);
+      expect(fixture.bindings.size).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+      await publicGateway.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries a denied pending cleanup result without accumulating timers", async () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = setup();
+      const original = fixture.bindings;
+      let attempts = 0;
+      fixture.options.bindings = {
+        create: original.create.bind(original),
+        activate: original.activate.bind(original),
+        cancel: (input) => {
+          attempts++;
+          return attempts === 1
+            ? Promise.resolve({ kind: "denied" as const })
+            : original.cancel(input);
+        },
+        purgeExpired: original.purgeExpired.bind(original),
+        close: original.close.bind(original),
+      };
+      fixture.options.sessions = undefined;
+      fixture.options.publicAccess = true;
+      const publicGateway = gateway(fixture);
+
+      await subscribe(publicGateway);
+      await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS);
+      expect(attempts).toBe(1);
       expect(vi.getTimerCount()).toBe(1);
 
       await vi.advanceTimersByTimeAsync(SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS);
@@ -330,6 +397,36 @@ describe("SubscriptionGateway", () => {
     const error = (await outcome) as AggregateError;
     expect(error.errors).toEqual([activationFailure, cleanupFailure]);
     expect(fixture.bindings.size).toBe(1);
+  });
+
+  it("normalizes non-Error public activation and cleanup failures", async () => {
+    const fixture = setup({
+      // Deliberately covers defensive normalization of third-party non-Error rejections.
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+      activate: () => Promise.reject("activation primitive"),
+      // Deliberately covers defensive normalization of third-party non-Error rejections.
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+      cancel: () => Promise.reject("cleanup primitive"),
+    });
+    fixture.options.sessions = undefined;
+    fixture.options.publicAccess = true;
+    const publicGateway = gateway(fixture);
+    const wire = await subscribe(publicGateway);
+
+    const outcome = await publicGateway
+      .handle(request("Activate", wire))
+      .catch((error: unknown) => error);
+
+    expect(outcome).toBeInstanceOf(AggregateError);
+    const [activation, cleanup] = (outcome as AggregateError).errors as Error[];
+    expect(activation).toMatchObject({
+      message: "Public subscription activation failed with a non-Error value.",
+      cause: "activation primitive",
+    });
+    expect(cleanup).toMatchObject({
+      message: "Public subscription cleanup failed with a non-Error value.",
+      cause: "cleanup primitive",
+    });
   });
 
   it("clears public pending timers during close", async () => {
@@ -1130,6 +1227,21 @@ describe("SubscriptionGateway", () => {
     });
   });
 
+  it("propagates a non-contention binding maintenance failure", async () => {
+    const failure = new Error("binding maintenance failed");
+    const fixture = setup();
+    const original = fixture.bindings;
+    fixture.options.bindings = {
+      create: original.create.bind(original),
+      activate: original.activate.bind(original),
+      cancel: original.cancel.bind(original),
+      purgeExpired: () => Promise.reject(failure),
+      close: original.close.bind(original),
+    };
+
+    await expect(gateway(fixture).handle(request("Subscribe", topic))).rejects.toBe(failure);
+  });
+
   it("runs mandatory cancellation cleanup after an activation callback rejects", async () => {
     const failure = new Error("activate failed");
     const fixture = setup({ activate: async () => Promise.reject(failure) });
@@ -1540,6 +1652,66 @@ describe("SubscriptionGateway", () => {
     expect(bindings.size).toBe(1);
     await subscriptionGateway.close();
   });
+
+  it.each(["authenticated", "public"] as const)(
+    "compensates a %s-mode Subscribe when the trusted clock becomes invalid after backend creation",
+    async (mode) => {
+      let clockValid = true;
+      const fixture = setup();
+      fixture.options.clock = {
+        now: () =>
+          create(TimestampSchema, clockValid ? { seconds: 10n } : { seconds: 10n, nanos: -1 }),
+      };
+      fixture.options.creator.subscribe = () => {
+        clockValid = false;
+        return Promise.resolve();
+      };
+      if (mode === "public") {
+        fixture.options.sessions = undefined;
+        fixture.options.publicAccess = true;
+      }
+      const incoming = {
+        ...request("Subscribe", topic),
+        ...(mode === "public" ? { credential: undefined } : {}),
+      };
+
+      await expect(gateway(fixture).handle(incoming)).resolves.toEqual({
+        kind: "rejected",
+        reason: "denied",
+      });
+      expect(fixture.calls).toEqual(["cancel"]);
+      expect(fixture.bindings.size).toBe(0);
+    },
+  );
+
+  it.each(["authenticated", "public"] as const)(
+    "cleans a failed %s-mode Subscribe when the trusted clock becomes invalid",
+    async (mode) => {
+      let clockValid = true;
+      const failure = new Error("backend Subscribe failed");
+      const fixture = setup();
+      fixture.options.clock = {
+        now: () =>
+          create(TimestampSchema, clockValid ? { seconds: 10n } : { seconds: 10n, nanos: -1 }),
+      };
+      fixture.options.creator.subscribe = () => {
+        clockValid = false;
+        return Promise.reject(failure);
+      };
+      if (mode === "public") {
+        fixture.options.sessions = undefined;
+        fixture.options.publicAccess = true;
+      }
+      const incoming = {
+        ...request("Subscribe", topic),
+        ...(mode === "public" ? { credential: undefined } : {}),
+      };
+
+      await expect(gateway(fixture).handle(incoming)).rejects.toBe(failure);
+      expect(fixture.calls).toEqual(["cancel"]);
+      expect(fixture.bindings.size).toBe(0);
+    },
+  );
 
   it("rejects Activate when an awaited authorization gate outlives the session", async () => {
     let now = 10n;
