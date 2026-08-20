@@ -12,11 +12,10 @@ export async function runSnapshotPublication({
   waitForVisibility = async () => {},
   cleanup = async () => {},
 }) {
-  await runner("npm", ["whoami"]);
-  const preparedPackages = prepare === undefined ? packages : await prepare();
-  const report = { prepared: preparedPackages.length, published: [], skipped: [] };
-
   try {
+    await runner("npm", ["whoami"]);
+    const preparedPackages = prepare === undefined ? packages : await prepare();
+    const report = { prepared: preparedPackages.length, artifacts: preparedPackages, published: [], skipped: [] };
     if (!publish) return report;
 
     for (const entry of orderPackages(preparedPackages)) {

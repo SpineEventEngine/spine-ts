@@ -23,6 +23,24 @@ describe("snapshot publisher", () => {
     );
   });
 
+  it("reports the exact prepared artifact identity before cleanup", async () => {
+    const artifact = { name: "@spine-event-engine/core", tarball: "core.tgz", integrity: "sha512-core" };
+    await expect(runSnapshotPublication({ runner: async () => "", packages: [artifact] })).resolves.toMatchObject({
+      prepared: 1,
+      artifacts: [artifact],
+    });
+  });
+
+  it("cleans up when preparation fails", async () => {
+    const cleanup = [];
+    await expect(runSnapshotPublication({
+      runner: async () => "",
+      prepare: async () => { throw new Error("packing failed"); },
+      cleanup: async () => cleanup.push("cleanup"),
+    })).rejects.toThrow("packing failed");
+    expect(cleanup).toEqual(["cleanup"]);
+  });
+
   it("runs preparation gates once before any publication command", async () => {
     const calls = [];
     await runSnapshotPublication({
