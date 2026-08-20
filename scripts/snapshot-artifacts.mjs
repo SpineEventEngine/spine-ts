@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import {
   frameworkPackageNames,
   internalRuntimeDependencyProblems,
@@ -69,7 +69,25 @@ export function proveExactTarballConsumer({ root, destination, run }) {
   writeFileSync(join(consumer, "package.json"), JSON.stringify({ name: "@external/snapshot-proof", private: true, type: "module", dependencies, devDependencies: { typescript: "6.0.3" } }));
   writeFileSync(join(consumer, "pnpm-workspace.yaml"), "overrides:\n" + Object.entries(dependencies).map(([name, value]) => "  " + JSON.stringify(name) + ": " + JSON.stringify(value)).join("\n") + "\n");
   run("pnpm", ["install", "--offline", "--ignore-scripts"], consumer);
-  writeFileSync(join(consumer, "index.mjs"), frameworkPackageNames.map((name) => "await import(" + JSON.stringify(name) + ");").join("\n") + "\nawait import('@spine-event-engine/testing');\nawait import('@spine-event-engine/server');\n");
-  run(process.execPath, ["index.mjs"], consumer);
+  assertConsumerIsolation(consumer, root);
+  writeFileSync(join(consumer, "tsconfig.json"), JSON.stringify({ compilerOptions: { module: "NodeNext", moduleResolution: "NodeNext", target: "ES2024", outDir: "dist", strict: true }, include: ["index.ts"] }));
+  writeFileSync(join(consumer, "index.ts"), frameworkPackageNames.map((name) => "import " + JSON.stringify(name) + ";").join("\n") + "\nimport { BlackBox } from '@spine-event-engine/testing';\nimport { resetServerEnvironmentForTest } from '@spine-event-engine/server/testing';\nif (typeof BlackBox !== 'function' || typeof resetServerEnvironmentForTest !== 'function') throw new Error('Public runtime path is unavailable');\nawait resetServerEnvironmentForTest();\n");
+  run(process.execPath, [join("node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.json"], consumer);
+  run(process.execPath, ["dist/index.js"], consumer);
   return packages;
+}
+
+function assertConsumerIsolation(consumer, root) {
+  const pending = [join(consumer, "node_modules")];
+  const consumerRoot = realpathSync(consumer);
+  while (pending.length) {
+    const current = pending.pop();
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const path = join(current, entry.name);
+      const actual = realpathSync(path);
+      if (!actual.startsWith(consumerRoot)) throw new Error("Consumer resolved repository path: " + relative(consumer, path));
+      if (lstatSync(path).isSymbolicLink() && !actual.startsWith(consumerRoot)) throw new Error("Consumer has workspace link");
+      if (entry.isDirectory()) pending.push(path);
+    }
+  }
 }

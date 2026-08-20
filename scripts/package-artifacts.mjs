@@ -77,6 +77,8 @@ export function publicManifestProblems(manifest) {
     repository.url !== "https://github.com/SpineEventEngine/spine-ts"
   )
     problems.push(name + " has invalid repository");
+  if (repository?.directory !== "packages/" + name.split("/")[1])
+    problems.push(name + " has invalid repository directory");
   return problems.sort((left, right) => left.localeCompare(right));
 }
 

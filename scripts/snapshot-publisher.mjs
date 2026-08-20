@@ -23,7 +23,12 @@ export async function runSnapshotPublication({
     const name = typeof entry === "string" ? undefined : entry.name;
     const integrity = typeof entry === "string" ? undefined : entry.integrity;
     if (name !== undefined && integrity !== undefined) {
-      const existing = await runner("npm", ["view", name + "@2.0.0-snapshot.2", "dist.integrity"]);
+      let existing = "";
+      try {
+        existing = await runner("npm", ["view", name + "@2.0.0-snapshot.2", "dist.integrity", "--registry=https://registry.npmjs.org/"], { stdio: "pipe" });
+      } catch (error) {
+        if (error?.status !== 404) throw error;
+      }
       if (existing.trim()) {
         if (existing.trim() !== integrity) throw new Error("Integrity mismatch for " + name);
         report.skipped.push(name);
@@ -32,7 +37,7 @@ export async function runSnapshotPublication({
     }
       const dependencies = typeof entry === "string" ? [] : entry.dependencies || [];
       for (const dependency of dependencies) await waitForVisibility(dependency, "2.0.0-snapshot.2");
-      await runner("npm", ["publish", tarball, "--access", "public", "--tag", "snapshot"]);
+      await runner("npm", ["publish", tarball, "--access", "public", "--tag", "snapshot"], { stdio: "inherit" });
       report.published.push(name ?? tarball);
     }
     return report;
