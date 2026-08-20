@@ -137,6 +137,11 @@ all task work is isolated in `.worktrees/wave14-npm-publication` from exact
   integrity/containment subset passes 15/15 with ESLint clean; the exact all-18
   tarball consumer passes 2/2 in 29.99 seconds; wrapper syntax passes; Git status
   contains only the preserved untracked planning directory.
+- First affected re-review: TypeScript/API is clean and integrity/porcelain
+  corrections are confirmed. Style, reliability, and security require one
+  final narrow batch: Windows-separator containment, a real escaping-symlink
+  regression, an executable embedded wrapper cleanliness fixture, and immutable
+  reviewed-commit authentication before the wrapper installs or packs.
 
 ## Implementation files
 

@@ -86,3 +86,32 @@ changes reader-facing claims.
 | TypeScript/API docs     | `typescript_api_docs_reviewer`     | React declaration dependency and exact consumer only                                               | `gpt-5.6-terra` | high               | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable. |
 | Performance/reliability | `performance_reliability_reviewer` | Complete checkout gate, two integrity timing boundaries, isolation containment, and cleanup impact | `gpt-5.6-terra` | high               | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable. |
 | Security                | `security_reviewer`                | Public-registry pin, pre-import trust, tarball integrity timing, and path containment              | `gpt-5.6-terra` | high               | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable. |
+
+## First affected re-review result
+
+- TypeScript/API documentation is clean; the React declaration dependency and
+  exact tarball consumer resolve the prior finding.
+- Both integrity timing boundaries and complete porcelain checkout gating are
+  confirmed correct.
+- One final deduplicated correction batch remains:
+  1. make containment separator-safe and add explicit Windows semantics;
+  2. exercise the real `realpath` traversal with an escaping symlink fixture;
+  3. preserve the disposable wrapper's untracked-checkout behavior as an
+     executable embedded fixture/self-test without committing the wrapper;
+  4. authenticate the entire reviewed checkout by pinning its immutable Git
+     commit before install or packing, in addition to the existing clean state,
+     inventory, and module hashes.
+
+## Final correction and re-review gate
+
+| Function/concern        | Existing role                      | Bounded scope                                                                       | Explicit model  | Explicit reasoning | Child spawning | Runtime telemetry                                                                                                   |
+| ----------------------- | ---------------------------------- | ----------------------------------------------------------------------------------- | --------------- | ------------------ | -------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Correction owner        | `implementer`                      | The four final corrections above in artifact helper/tests and external wrapper only | `gpt-5.6-terra` | medium             | Prohibited     | Explicit follow-up dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable. |
+| Style/maintainability   | `style_maintainability_reviewer`   | Executable wrapper and real symlink regressions only                                | `gpt-5.6-terra` | high               | Prohibited     | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable.           |
+| Performance/reliability | `performance_reliability_reviewer` | Cross-platform containment and symlink traversal only                               | `gpt-5.6-terra` | high               | Prohibited     | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable.           |
+| Security                | `security_reviewer`                | Immutable checkout identity and cross-platform containment only                     | `gpt-5.6-terra` | high               | Prohibited     | Explicit dispatch and immutable configured role/profile are visible; child self-telemetry is unavailable.           |
+
+No other concern is reopened. The wrapper's final immutable commit value may be
+refreshed deterministically after integration so the human's fresh `main`
+checkout is the authenticated candidate; the validation behavior itself is the
+reviewed security contract.
