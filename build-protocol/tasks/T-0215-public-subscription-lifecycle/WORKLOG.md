@@ -1,92 +1,86 @@
 # T-0215 work log
 
-## 2026-08-20 — diagnosis and architecture dispatch
+## 2026-08-20 — diagnosis
 
-- Confirmed the live Message Board's repeated cancellation is driven by
-  `PublicBoardAdmission` fabricating a five-minute `ResolvedSession`.
-- Traced expiry through Gateway activation abort, browser recovery, old-wire
-  Cancel, Subscribe, authoritative Read, and Activate.
-- Proved the HTTP 500 separately: three overlapping durable expiry purges for
-  one record exhaust the per-ID queue and the pre-operation purge throws
-  `binding-busy` outside request-specific mapping.
-- Retained a focused failing test with the exact third-purge rejection.
-- Dispatched the existing `requirements_splitter` role read-only for the public
-  contract and purge-ownership design. The dispatch explicitly selected
-  `gpt-5.6-sol` / `high`; runtime telemetry is not exposed, so the immutable
-  configured role/profile is the available provenance. The agent was forbidden
-  from editing or spawning subagents.
-- No production code has been changed at this checkpoint.
+- Traced the repeated five-minute browser cancellation to Message Board's
+  `PublicBoardAdmission`, which fabricated a five-minute `ResolvedSession`.
+- Traced the HTTP 500 independently: overlapping durable authenticated-expiry
+  purges competed through the per-ID queue until pre-operation maintenance
+  raised `binding-busy` outside request-specific mapping.
+- Recorded the human invariants: public access has no login session or expiry;
+  no replacement TTL, infinity sentinel, quota, rollout change, or example-only
+  retry is permitted.
 
-## 2026-08-20 — architecture result and bounded follow-up
+## 2026-08-20 — public access and purge ownership
 
-- Accepted the requirements splitter's principal recommendations: mutually
-  exclusive `sessions` / `publicAccess`, no fake session, no public durable
-  authenticated record, and a store-wide purge single-flight owner.
-- Rejected its suggested new 30-second pending-public activation lifetime. The
-  human explicitly prohibited replacing one arbitrary lifetime with another.
-- Reused the same read-only requirements-splitter context, again under its
-  immutable `gpt-5.6-sol` / `high` profile, to verify abrupt Gateway-loss
-  cleanup of native definitions and identify a non-time-based pending owner.
+- Added mutually exclusive `sessions` and `publicAccess: true` modes to Unary
+  and Subscription Gateways and Browser Server. Missing browser authorization
+  is represented as credential absence, not an empty bearer value.
+- Deleted Message Board's example admission/session fixture. Its policy and
+  context resolver now authorize the framework public principal and rebuild the
+  actor from request context.
+- Added one store-wide durable purge owner. Concurrent callers share the active
+  purge; a later greater horizon is drained in the same owner. Authenticated
+  expiry stops active work, joins serialized operations, cancels the backend
+  once, and deletes the durable record only after successful cleanup. Failures
+  remain retryable.
+- Mapped known pre-operation maintenance contention to the existing intentional
+  Gateway rejection instead of allowing a raw HTTP 500.
 
-## 2026-08-20 — implementation dispatch
+## 2026-08-20 — rejected durable-public experiment
 
-- Follow-up source audit proved active child definitions are removed when their
-  activation stream terminates, but a Gateway crash after Subscribe and before
-  Activate has no stream owner; Coordinator state can also outlive the lost
-  Gateway definition.
-- Selected a separate durable public orphan-cleanup ledger with no expiry. A
-  normal Cancel removes it; startup cancels and deletes any surviving row before
-  public intake. It is not rehydrated and does not represent a session.
-- Explicitly rejected both a new pending-public TTL and the splitter's optional
-  capacity suggestion. The former violates the human lifetime invariant; the
-  latter is a separately rejected quota feature.
-- Dispatched the existing `implementer` role with explicit
-  `gpt-5.6-terra` / `medium`, no subagents, and sole production ownership of the
-  affected Gateway/subscription/Message Board paths. Runtime telemetry will be
-  recorded if the surface exposes it.
+- An intermediate design added a durable public orphan-cleanup Proto and ledger.
+  Further lifecycle analysis proved it could not safely rehydrate native
+  subscriptions and contradicted the approved process-local public model.
+- Reverted the implementation in forward commits, removed the Proto source,
+  facade, manifests, ledger, and startup recovery, and restored generated
+  metadata to the baseline. No serialized public record remains.
+- Final public Gateway bindings are process-local. Gateway restart is handled by
+  browser reconnect, authoritative query, and a fresh subscription.
 
-## 2026-08-20 — durable maintenance correction checkpoint
+## 2026-08-20 — activation lifecycle
 
-- Preserved and ran the supplied RED tests. The durable test failed with the
-  expected third `binding-busy`; the Gateway test failed by leaking that error
-  before operation-specific rejection mapping.
-- Added one store-wide coalesced purge owner. Concurrent callers share an
-  active purge, while a later caller's greater horizon is retained for a
-  following bounded pass. Per-ID external-operation queue limits are unchanged.
-- Mapped only the known pre-operation `binding-busy` error to the existing
-  Gateway rejection. Other maintenance failures still propagate.
-- Focused tests are green. Public-access mode, durable public orphan cleanup,
-  Proto output, Message Board migration, broader coverage, and preflight remain.
-- Extended the focused behavior proof: a higher overlapping purge horizon is
-  processed after the active bounded pass, and close joins coalesced purge work
-  before storage close. The single-flight observer handles both settlement
-  paths so it does not introduce an unhandled rejected observer promise.
+- Added internal-only `SUBSCRIPTION_ACTIVATION_HANDSHAKE_MS` in Core and reused
+  it in Auth, Stand, and NodeCoordinator. It bounds only the incomplete interval
+  after `Subscribe` and before `Activate`; it is not an active-stream lifetime.
+- Public pending cleanup retries after failure, is cancelled by Activate,
+  Cancel, or shutdown, and aggregates activation and cleanup failures.
+- NodeCoordinator removes pending definitions on failed setup and removes active
+  definitions when activation ends. Deterministic fake-timer, cancellation,
+  malformed-error, and retry tests cover the boundaries.
 
-## 2026-08-20 — public subscription admission RED/GREEN checkpoint
+## 2026-08-20 — Message Board convergence
 
-- Added and observed a RED test for a Subscription Gateway constructed with
-  `publicAccess` and no `sessions`; it failed at the previous unconditional
-  session resolver call.
-- Public mode is now explicitly exclusive with sessions, resolves a frozen
-  framework-owned principal, and has no binding or activation expiry. The
-  authenticated mode retains its exact timestamp and timer behavior.
-- This is only the auth subscription layer. Unary Gateway, Browser Server,
-  durable public orphan cleanup, Proto, and Message Board composition remain.
+- Browser Server now owns correctly wired process-local public bindings. Message
+  Board no longer supplies durable bindings, namespace settings, fake sessions,
+  browser credentials, or public-binding deployment environment variables.
+- Beginner docs explain that Gateway restart drops live definitions and the UI
+  recovers by authoritative query followed by resubscription.
+- A repository audit found no other active-subscription TTL. Remaining timers
+  bound requests, cleanup, reconciliation, retries, or incomplete activation.
 
-## 2026-08-20 — unary public admission checkpoint
+## 2026-08-20 — live acceptance and protocol correction
 
-- Added and observed a RED `ResolveContext` public-mode test, which failed at
-  the unconditional session resolver access.
-- Unary Gateway now accepts an absent transport credential in public mode,
-  uses the frozen framework principal, and omits `expiresAt` from its public
-  response. Authenticated session resolution remains source-compatible.
+- Ran the documented two-replica local launcher with shared Delivery and the
+  Datastore emulator.
+- Two Chromium tabs exchanged eight alternating posts, remained connected for
+  310 seconds, then both received a post after the former boundary. The test
+  recorded no healthy-period Cancel response, HTTP 500/401/404, or console
+  error.
+- Sent real Ctrl-C to the launcher. Its Coordinator, two replicas, Gateway,
+  Vite process, Datastore container, Delivery container, and listeners on
+  5173/8081/8090/8091/8484 were all gone afterward.
+- Added a governing protocol rule requiring an hours estimate, included work,
+  and duration explanation before every future task, wave, or correction unless
+  the human explicitly waives it.
 
-## 2026-08-20 — browser and Message Board composition checkpoint
+## Provenance
 
-- Browser request extraction now represents a missing Authorization header as
-  actual credential absence and passes `publicAccess` through to both Gateway
-  layers. Its standalone validation requires exactly public access or sessions.
-- Deleted Message Board's `PublicBoardAdmission`; both entrypoints now select
-  `publicAccess` and use a wall-clock adapter instead of an invented expiry.
-- Server and Message Board package typechecks passed. Durable public orphan
-  cleanup remains required before standalone public mode is complete.
+- Requirements/public-contract analysis: existing requirements-splitting role,
+  explicit `gpt-5.6-sol` / `high`.
+- Normal implementation: existing implementer role, explicit
+  `gpt-5.6-terra` / `medium`.
+- Repository and documentation audits: read-only functions, explicit
+  `gpt-5.6-luna` / `low` or `medium`.
+- Runtime telemetry was unavailable on these surfaces; immutable configured
+  profiles are the recorded evidence.

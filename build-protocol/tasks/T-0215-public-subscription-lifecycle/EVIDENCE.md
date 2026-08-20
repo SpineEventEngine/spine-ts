@@ -2,29 +2,60 @@
 
 ## RED evidence
 
-- Direct production-class reproduction: three overlapping
-  `DurableSubscriptionBindings.purgeExpired(1)` calls produced
-  `thirdOutcome=binding-busy`.
-- Retained Vitest regression:
-  `pnpm exec vitest run packages/server/test/server/durable-subscription-bindings.test.ts --pool=forks --reporter=dot -t "coalesces overlapping expiry purges"`
-  failed because the third promise rejected `binding-busy`.
-- Retained Gateway regression:
-  `pnpm exec vitest run packages/auth/test/subscriptions/index.test.ts --pool=forks --reporter=dot -t "maps maintenance contention before cancellation"`
-  failed because pre-operation purge contention escaped as a raw `Error`
-  instead of the existing `binding-busy` Gateway result.
+- Direct reproduction: three overlapping
+  `DurableSubscriptionBindings.purgeExpired(1)` calls made the third operation
+  reject `binding-busy`.
+- Retained durable regression originally failed at that third rejection.
+- Retained Gateway regression originally exposed raw pre-operation maintenance
+  contention instead of the intentional `binding-busy` result.
+- Retained public-mode tests originally failed because the Gateways always
+  required a session resolver and Message Board fabricated a five-minute
+  `ResolvedSession`.
+- Deterministic lifecycle REDs covered pending activation expiry, cleanup retry,
+  synchronous abort, active-stream termination, malformed backend failure, and
+  missing Authorization handling.
 
-## Live evidence
+## Focused green evidence
 
-- The UI, Gateway, Coordinator, Delivery, Datastore, and two replicas remained
-  alive during the HTTP 500; no provider or backend crash accompanied it.
+- Auth, server, durable binding, NodeCoordinator, Stand, and browser regression
+  wave: 334 tests passed.
+- Earlier combined framework regression wave: 229 tests passed; later browser
+  and server wave: 175 tests passed.
+- Message Board app: 58 tests passed; web: 39 tests passed; interop/lifecycle:
+  7 tests passed; deployment/static contracts: 11 tests passed.
+- Auth, Server, Message Board app, and Message Board web TypeScript checks
+  passed.
+- TSDoc enforcement, API inventory, docs audience, formatting, ESLint, and diff
+  hygiene passed at the recorded checkpoints.
+- Affected-module coverage: 94.63% statements, 90.70% branches, 92.81%
+  functions, and 96.68% lines.
+- Exact changed-production intersection against baseline, including the final
+  behavior changes: 125/128 lines (97.66%) and 129/143 branches (90.21%).
+- Proto diff against the baseline is empty after removal of the invalid
+  durable-public experiment.
 
-## Green checkpoint evidence
+## Live browser and shutdown evidence
 
-- `pnpm exec vitest run packages/server/test/server/durable-subscription-bindings.test.ts --pool=forks --reporter=dot -t "coalesces overlapping expiry purges"` passed.
-- `pnpm exec vitest run packages/auth/test/subscriptions/index.test.ts --pool=forks --reporter=dot -t "maps maintenance contention before cancellation"` passed.
-- `pnpm exec vitest run packages/server/test/server/durable-subscription-bindings.test.ts --pool=forks --reporter=dot -t "later bounded purge horizon|joins a coalesced purge"` passed.
-- Runtime metadata is not exposed by this surface. Dispatch provenance is the
-  immutable configured existing `implementer` role, `gpt-5.6-terra` / `medium`.
-- `pnpm exec vitest run packages/auth/test/subscriptions/index.test.ts --pool=forks --reporter=dot -t "keeps a public subscription active"` passed after a prior RED failure at the missing session resolver.
-- `pnpm typecheck:build:generated --filter @spine-event-engine/auth` passed.
-- `pnpm exec vitest run packages/auth/test/unary-gateway.test.ts --pool=forks --reporter=dot -t "resolves public context"` passed after its missing-resolver RED failure.
+- Command:
+  `MESSAGE_BOARD_STABILITY_OBSERVATION_MS=310000 PLAYWRIGHT_REUSE_EXISTING_SERVER=true pnpm --dir examples/message-board/web exec playwright test -c test/browser/playwright.config.ts --project chromium --grep "keeps two stock browser tabs live" --reporter=line`
+- Result: 1/1 passed in 5.2 minutes.
+- Both tabs received eight alternating posts, stayed `Updating live` for 310
+  seconds, and both received the post sent afterward.
+- During the healthy observed interval: zero `SubscriptionService.Cancel`
+  responses, HTTP 500, HTTP 401, HTTP 404, and console errors.
+- Before shutdown the launcher owned Coordinator PID 13643, replica PIDs 13647
+  and 13648, Gateway PID 13653, Vite PID 13678, and exact Datastore and Delivery
+  container IDs.
+- Real Ctrl-C returned exit 130 and printed both exact removed container IDs.
+  Subsequent process, listener, and container audits found no owned resource and
+  no listener on 5173, 8081, 8090, 8091, or 8484.
+
+## Documentation evidence
+
+- `pnpm docs:audience:check` passed.
+- `pnpm docs:api:check` passed with 106 expected Auth and 247 expected Server
+  exports.
+- Read-only documentation audit used explicit `gpt-5.6-luna` / `medium`; runtime
+  telemetry was unavailable. Its accepted findings corrected public admission,
+  session-only activation wording, pending-handshake versus active-stream
+  lifetime, authenticated durable purge, and reconnect semantics.

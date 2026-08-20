@@ -1,6 +1,6 @@
 # T-0215 review
 
-## Planned concern wave
+## Concern wave
 
 - TypeScript/API documentation: explicit public access contract, session
   compatibility, declarations, TSDoc, and no accidental wire expansion.
@@ -11,5 +11,6 @@
 - Documentation: beginner explanation of public versus authenticated access and
   cancellation behavior.
 
-Security review is N/A as a separate task lane unless implementation broadens
-the trust boundary beyond the already approved Message Board public policy.
+The changed behavior includes an explicit unauthenticated public Gateway mode,
+so the final security reviewer is required after the specialist finding batch
+converges. Review dispatch and dispositions are recorded here as they complete.

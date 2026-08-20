@@ -1,11 +1,20 @@
 # T-0215 plan
 
-1. Freeze the root-cause evidence and choose the smallest explicit public
-   access contract.
-2. Retain RED behavior for the public non-expiring lifecycle, overlapping
-   durable purges, and non-500 native error mapping.
-3. Implement one public access path and one bounded durable maintenance owner.
-4. Run focused coverage, mechanical preflight, and a real two-tab browser run
-   beyond five minutes.
-5. Run the relevant review wave, apply one finding batch, release-verify,
-   integrate, push, and report.
+1. **Complete:** retain exact RED evidence for fabricated five-minute public
+   expiry and overlapping authenticated purge contention.
+2. **Complete:** add mutually exclusive authenticated-session and public-access
+   Gateway modes without a sentinel timestamp or browser credential.
+3. **Complete:** coalesce authenticated durable purge work and preserve its
+   ordered stop, cancel, delete, failure, and retry semantics.
+4. **Complete:** bound only incomplete subscription activation by one shared
+   internal handshake fact; remove active definitions when their streams end.
+5. **Complete:** migrate Message Board to framework public access and
+   process-local bindings; remove the example admission/session fixture and
+   durable public-binding configuration.
+6. **Complete:** run focused regression and changed-code coverage, document the
+   lifecycle, and pass a real two-tab browser run beyond five minutes followed
+   by an exact launcher cleanup audit.
+7. **In progress:** run the relevant specialist review wave, apply one accepted
+   finding batch, and re-review affected concerns.
+8. **Pending:** run cheap preflight, one release verifier, integrate and push,
+   then deliver the requested systematic report.
