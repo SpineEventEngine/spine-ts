@@ -154,6 +154,17 @@
   session-derived expiry, while retaining the explicit no-TTL active public
   stream rule.
 
+## 2026-08-20 — final preflight
+
+- Registered the existing `auth.public_pending_subscription_cleanup` no-log
+  containment boundary after the canonical checker exposed the missing manifest
+  entry; no runtime behavior changed.
+- Restarted the full cheap preflight after that correction. All deterministic
+  gates pass, the focused lifecycle wave passes 350/350, and the expanded
+  coverage wave passes 447/447.
+- Fresh exact changed-code coverage is 144/150 executable lines (96.00%) and
+  146/161 branches (90.68%).
+
 ## 2026-08-20 — cheap-preflight containment correction
 
 - Registered the existing public pending-subscription cleanup log boundary as a

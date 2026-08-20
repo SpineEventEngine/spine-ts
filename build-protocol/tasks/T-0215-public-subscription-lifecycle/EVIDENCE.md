@@ -112,6 +112,19 @@
   Subscribe-to-Activate cleanup to public definitions and documents
   session-derived expiry for authenticated durable definitions.
 
+## Final cheap preflight
+
+- After registering the existing public pending-cleanup no-log boundary, the
+  entire cheap preflight was restarted.
+- Changed-file formatting, shell syntax, branch/local diff hygiene, generated
+  build, tooling typecheck, changed-file ESLint, cleanup enforcement, TSDoc,
+  logging containment, API inventory, audience, and generated snippets pass.
+- Focused lifecycle regression wave: 8 files / 350 tests pass.
+- Expanded focused coverage wave: 14 files / 447 tests pass.
+- Whole selected-module coverage is diluted by unchanged legacy branches and is
+  not the acceptance metric. Exact baseline-to-head changed executable coverage
+  from the fresh LCOV is 144/150 lines (96.00%) and 146/161 branches (90.68%).
+
 ## Cheap-preflight containment evidence
 
 - `pnpm check:logging-containment` initially failed only because
