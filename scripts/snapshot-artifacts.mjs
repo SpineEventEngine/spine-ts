@@ -154,5 +154,5 @@ function assertConsumerIsolation(consumer) {
 
 export function isContainedPath(parent, child) {
   const path = relative(parent, child);
-  return path === "" || (!path.startsWith(".." + "/") && path !== ".." && !isAbsolute(path));
+  return path === "" || (path !== ".." && !path.startsWith("../") && !path.startsWith("..\\") && !isAbsolute(path));
 }
