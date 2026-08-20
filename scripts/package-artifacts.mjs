@@ -71,3 +71,22 @@ export function dependencyFirstOrder(manifests) {
     visit(name);
   return ordered;
 }
+
+/**
+ * Reports required package files missing from a packed tar archive entry list.
+ *
+ * @param {Record<string, unknown>} manifest packed package manifest
+ * @param {readonly string[]} entries tar entry paths
+ * @returns {string[]} sorted policy violations
+ */
+export function packedArchiveProblems(manifest, entries) {
+  const name = typeof manifest.name === "string" ? manifest.name : "<unnamed package>";
+  const files = new Set(entries.map((entry) => entry.replace(/^package\//u, "")));
+  const problems = [];
+
+  for (const required of ["package.json", "README.md", "REFERENCE.md", "LICENSE"]) {
+    if (!files.has(required)) problems.push(`${name} archive is missing ${required}`);
+  }
+
+  return problems.sort((left, right) => left.localeCompare(right));
+}
